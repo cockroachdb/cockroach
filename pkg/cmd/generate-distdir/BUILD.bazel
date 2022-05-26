@@ -10,7 +10,7 @@ go_library(
         "//c-deps:archived.bzl",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-distdir",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/build/starlarkutil",
@@ -21,5 +21,7 @@ go_library(
 go_binary(
     name = "generate-distdir",
     embed = [":generate-distdir_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

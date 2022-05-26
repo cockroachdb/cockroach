@@ -45,6 +45,7 @@ go_test(
         "partitioned_stream_client_test.go",
     ],
     embed = [":streamclient"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

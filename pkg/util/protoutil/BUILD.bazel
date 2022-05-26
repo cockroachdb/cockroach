@@ -26,6 +26,7 @@ go_test(
     name = "protoutil_test",
     size = "small",
     srcs = ["clone_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":protoutil",
         "//pkg/config/zonepb",

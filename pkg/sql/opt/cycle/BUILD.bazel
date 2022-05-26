@@ -11,4 +11,5 @@ go_test(
     name = "cycle_test",
     srcs = ["detector_test.go"],
     embed = [":cycle"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

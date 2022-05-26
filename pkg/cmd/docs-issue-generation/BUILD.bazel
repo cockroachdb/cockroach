@@ -7,14 +7,16 @@ go_library(
         "main.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docs-issue-generation",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_spf13_cobra//:cobra"],
 )
 
 go_binary(
     name = "docs-issue-generation",
     embed = [":docs-issue-generation_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -22,5 +24,6 @@ go_test(
     srcs = ["docs_issue_generation_test.go"],
     data = glob(["testdata/**"]),
     embed = [":docs-issue-generation_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

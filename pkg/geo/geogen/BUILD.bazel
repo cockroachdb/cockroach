@@ -19,6 +19,7 @@ go_test(
     size = "small",
     srcs = ["geogen_test.go"],
     embed = [":geogen"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geopb",
         "//pkg/util/randutil",

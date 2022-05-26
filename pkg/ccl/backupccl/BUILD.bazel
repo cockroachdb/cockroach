@@ -169,6 +169,7 @@ go_test(
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

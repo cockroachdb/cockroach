@@ -4,7 +4,7 @@ go_library(
     name = "whoownsit_lib",
     srcs = ["whoownsit.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/whoownsit",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/internal/codeowners",
         "//pkg/internal/reporoot",
@@ -14,5 +14,7 @@ go_library(
 go_binary(
     name = "whoownsit",
     embed = [":whoownsit_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

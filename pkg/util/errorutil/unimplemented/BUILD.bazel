@@ -18,6 +18,7 @@ go_test(
     size = "small",
     srcs = ["unimplemented_test.go"],
     embed = [":unimplemented"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "@com_github_cockroachdb_errors//:errors",

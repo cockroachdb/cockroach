@@ -44,6 +44,7 @@ go_test(
     size = "small",
     srcs = ["structured_test.go"],
     embed = [":descpb"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )
 
 proto_library(

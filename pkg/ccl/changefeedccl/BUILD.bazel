@@ -156,6 +156,7 @@ go_test(
     ],
     embed = [":changefeedccl"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

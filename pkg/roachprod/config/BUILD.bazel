@@ -15,4 +15,5 @@ go_test(
     name = "config_test",
     srcs = ["config_test.go"],
     embed = [":config"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

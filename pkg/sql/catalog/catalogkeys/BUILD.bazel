@@ -22,6 +22,7 @@ go_test(
     size = "small",
     srcs = ["keys_test.go"],
     embed = [":catalogkeys"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

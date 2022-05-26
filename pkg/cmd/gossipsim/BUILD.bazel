@@ -4,7 +4,7 @@ go_library(
     name = "gossipsim_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/gossipsim",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/gossip",
@@ -20,5 +20,7 @@ go_library(
 go_binary(
     name = "gossipsim",
     embed = [":gossipsim_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

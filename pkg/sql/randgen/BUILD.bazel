@@ -61,6 +61,7 @@ go_test(
         "schema_test.go",
     ],
     embed = [":randgen"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

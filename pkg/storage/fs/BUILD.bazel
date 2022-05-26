@@ -25,6 +25,7 @@ go_test(
         "temp_dir_test.go",
     ],
     embed = [":fs"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

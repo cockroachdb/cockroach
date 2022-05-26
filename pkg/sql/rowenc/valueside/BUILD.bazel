@@ -39,6 +39,7 @@ go_test(
         "valueside_test.go",
     ],
     embed = [":valueside"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",

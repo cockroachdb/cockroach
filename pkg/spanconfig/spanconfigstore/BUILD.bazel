@@ -37,6 +37,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

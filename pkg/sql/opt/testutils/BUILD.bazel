@@ -28,6 +28,7 @@ go_test(
     size = "small",
     srcs = ["scalar_vars_test.go"],
     embed = [":testutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/opt",
         "@com_github_stretchr_testify//assert",

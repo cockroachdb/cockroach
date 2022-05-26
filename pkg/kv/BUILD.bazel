@@ -58,6 +58,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":kv"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

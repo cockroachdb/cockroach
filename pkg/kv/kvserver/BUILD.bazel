@@ -315,6 +315,7 @@ go_test(
     embed = [":kvserver"],
     shard_count = 8,
     tags = ["cpu:2"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",

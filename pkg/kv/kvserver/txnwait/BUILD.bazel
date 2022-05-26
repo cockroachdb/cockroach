@@ -31,6 +31,7 @@ go_test(
     size = "small",
     srcs = ["queue_test.go"],
     embed = [":txnwait"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/kv",
         "//pkg/roachpb",

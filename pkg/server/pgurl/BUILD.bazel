@@ -22,6 +22,7 @@ go_test(
     srcs = ["pgurl_test.go"],
     data = glob(["testdata/**"]),
     embed = [":pgurl"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

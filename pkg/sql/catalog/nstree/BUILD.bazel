@@ -35,6 +35,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":nstree"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

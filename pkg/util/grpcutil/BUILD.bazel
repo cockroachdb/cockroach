@@ -32,6 +32,7 @@ go_test(
         "grpc_util_test.go",
     ],
     embed = [":grpcutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",

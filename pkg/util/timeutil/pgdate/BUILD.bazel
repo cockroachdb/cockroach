@@ -40,6 +40,7 @@ go_test(
         "pgdate_test.go",
     ],
     embed = [":pgdate"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

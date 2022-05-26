@@ -19,6 +19,7 @@ go_test(
     name = "decodeusername_test",
     srcs = ["role_spec_test.go"],
     embed = [":decodeusername"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/security/username",
         "//pkg/sql/pgwire/pgcode",

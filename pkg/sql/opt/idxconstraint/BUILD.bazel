@@ -24,6 +24,7 @@ go_test(
     size = "small",
     srcs = ["index_constraints_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":idxconstraint",
         "//pkg/settings/cluster",

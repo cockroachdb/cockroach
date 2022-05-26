@@ -4,12 +4,14 @@ go_library(
     name = "stub-schema-registry_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/stub-schema-registry",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/ccl/changefeedccl/cdctest"],
 )
 
 go_binary(
     name = "stub-schema-registry",
     embed = [":stub-schema-registry_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

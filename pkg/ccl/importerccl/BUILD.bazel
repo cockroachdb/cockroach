@@ -10,6 +10,7 @@ go_test(
         "//c-deps:libgeos",
         "//pkg/sql/importer:testdata",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

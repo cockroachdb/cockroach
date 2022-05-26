@@ -42,6 +42,7 @@ go_test(
         "s3_storage_test.go",
     ],
     embed = [":amazon"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

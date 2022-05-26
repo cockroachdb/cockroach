@@ -22,6 +22,7 @@ go_test(
     srcs = [":example_interval_btree_test.go"],
     embed = [":generic"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

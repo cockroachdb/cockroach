@@ -40,6 +40,7 @@ go_test(
     ],
     embed = [":ptstorage"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

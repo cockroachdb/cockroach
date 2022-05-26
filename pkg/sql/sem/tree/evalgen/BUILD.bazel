@@ -9,7 +9,7 @@ go_library(
         "string_set.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/evalgen",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_tools//go/ast/inspector",
@@ -19,5 +19,8 @@ go_library(
 go_binary(
     name = "evalgen",
     embed = [":evalgen_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/sem/tree:__subpackages__",
+    ],
 )

@@ -53,6 +53,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":parser"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",

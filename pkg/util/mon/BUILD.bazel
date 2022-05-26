@@ -30,6 +30,7 @@ go_test(
     size = "small",
     srcs = ["bytes_usage_test.go"],
     embed = [":mon"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/util/leaktest",

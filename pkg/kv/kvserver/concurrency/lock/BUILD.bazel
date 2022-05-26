@@ -44,6 +44,7 @@ go_proto_library(
 go_test(
     name = "lock_test",
     srcs = ["lock_waiter_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":lock",
         "//pkg/roachpb",

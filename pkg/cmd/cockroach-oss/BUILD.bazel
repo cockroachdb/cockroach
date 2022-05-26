@@ -5,7 +5,7 @@ go_library(
     name = "cockroach-oss_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach-oss",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli",
         "//pkg/ui/distoss",
@@ -15,7 +15,9 @@ go_library(
 go_binary(
     name = "cockroach-oss",
     embed = [":cockroach-oss_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 disallowed_imports_test(

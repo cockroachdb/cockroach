@@ -43,6 +43,7 @@ go_test(
     name = "colexecprojconst_test",
     srcs = ["projection_ops_test.go"],
     embed = [":colexecprojconst"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/colexecop",
         "//pkg/sql/sem/tree",

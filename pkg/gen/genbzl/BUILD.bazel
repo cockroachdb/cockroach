@@ -8,7 +8,7 @@ go_library(
         "targets.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/gen/genbzl",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",
@@ -18,5 +18,7 @@ go_library(
 go_binary(
     name = "genbzl",
     embed = [":genbzl_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

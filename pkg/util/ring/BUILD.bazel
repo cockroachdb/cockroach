@@ -15,6 +15,7 @@ go_test(
         "ring_buffer_test.go",
     ],
     embed = [":ring"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

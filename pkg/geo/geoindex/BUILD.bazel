@@ -39,6 +39,7 @@ go_test(
     ],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":geoindex"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geogfn",

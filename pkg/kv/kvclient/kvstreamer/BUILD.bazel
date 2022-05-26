@@ -45,6 +45,7 @@ go_test(
         "streamer_test.go",
     ],
     embed = [":kvstreamer"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/kv",

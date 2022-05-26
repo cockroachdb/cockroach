@@ -27,6 +27,7 @@ go_test(
         "range_group_test.go",
     ],
     embed = [":interval"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",

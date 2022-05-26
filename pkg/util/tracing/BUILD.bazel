@@ -65,6 +65,7 @@ go_test(
         "tracer_test.go",
     ],
     embed = [":tracing"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

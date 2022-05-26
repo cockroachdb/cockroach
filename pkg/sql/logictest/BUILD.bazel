@@ -70,6 +70,7 @@ go_test(
     ],
     embed = [":logictest"],
     tags = ["cpu:4"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

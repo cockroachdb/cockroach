@@ -29,6 +29,7 @@ go_test(
     size = "small",
     srcs = ["zone_test.go"],
     embed = [":zonepb"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

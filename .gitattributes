@@ -1,2 +1,2 @@
 build/bazelutil/distdir_files.bzl -diff
-pkg/BUILD.bazel -diff
+build/bazelutil/targets.bzl -diff

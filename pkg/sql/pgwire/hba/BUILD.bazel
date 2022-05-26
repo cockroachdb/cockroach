@@ -29,6 +29,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":hba"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

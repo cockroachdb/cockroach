@@ -68,6 +68,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

@@ -17,5 +17,6 @@ go_test(
     embed = [":compose"],
     gotags = ["compose"],
     tags = ["integration"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/build/bazel"],
 )

@@ -38,6 +38,7 @@ go_test(
         "gcs_storage_test.go",
     ],
     embed = [":gcp"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/cloud",

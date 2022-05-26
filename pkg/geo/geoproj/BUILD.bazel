@@ -52,6 +52,7 @@ go_test(
     size = "small",
     srcs = ["geoproj_test.go"],
     embed = [":geoproj"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geoprojbase",
         "@com_github_stretchr_testify//assert",

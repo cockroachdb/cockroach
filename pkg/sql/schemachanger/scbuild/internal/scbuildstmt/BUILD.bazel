@@ -19,7 +19,10 @@ go_library(
         "process.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
-    visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/schemachanger/scbuild:__subpackages__",
+    ],
     deps = [
         "//pkg/security/username",
         "//pkg/server/telemetry",

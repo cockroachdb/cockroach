@@ -4,12 +4,14 @@ go_library(
     name = "generate-test-suites_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-test-suites",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_alessio_shellescape//:shellescape"],
 )
 
 go_binary(
     name = "generate-test-suites",
     embed = [":generate-test-suites_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

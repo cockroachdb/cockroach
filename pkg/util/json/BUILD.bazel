@@ -40,6 +40,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":json"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",

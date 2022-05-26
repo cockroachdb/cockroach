@@ -17,4 +17,5 @@ go_test(
     size = "small",
     srcs = ["codes_test.go"],
     embed = [":exit"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

@@ -46,6 +46,7 @@ go_test(
     name = "contentionpb_test",
     srcs = ["contention_test.go"],
     embed = [":contentionpb"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util",
         "//pkg/util/timeutil",

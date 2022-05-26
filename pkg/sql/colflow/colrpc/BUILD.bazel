@@ -45,6 +45,7 @@ go_test(
         "outbox_test.go",
     ],
     embed = [":colrpc"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/col/coldata",

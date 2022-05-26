@@ -365,6 +365,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":server"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/build",

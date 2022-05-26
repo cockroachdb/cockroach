@@ -18,6 +18,7 @@ go_library(
 go_test(
     name = "seqexpr_test",
     srcs = ["sequence_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":seqexpr",
         "//pkg/sql/parser",

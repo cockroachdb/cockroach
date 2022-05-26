@@ -20,6 +20,7 @@ go_test(
     name = "sessionrevival_test",
     srcs = ["token_test.go"],
     embed = [":sessionrevival"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/security/username",
         "//pkg/sql/sessiondatapb",

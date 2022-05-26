@@ -23,4 +23,5 @@ go_test(
     size = "small",
     srcs = ["error_test.go"],
     embed = [":errorutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

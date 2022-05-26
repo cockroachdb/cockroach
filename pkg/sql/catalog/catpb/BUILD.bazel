@@ -59,6 +59,7 @@ go_library(
 go_test(
     name = "catpb_test",
     srcs = ["privilege_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":catpb",
         "//pkg/keys",

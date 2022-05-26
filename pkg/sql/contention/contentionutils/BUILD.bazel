@@ -12,6 +12,7 @@ go_test(
     name = "contentionutils_test",
     srcs = ["concurrent_buffer_guard_test.go"],
     embed = [":contentionutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/syncutil",
         "//pkg/util/uuid",

@@ -16,6 +16,7 @@ go_test(
         "resolver_test.go",
     ],
     embed = [":caller"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",

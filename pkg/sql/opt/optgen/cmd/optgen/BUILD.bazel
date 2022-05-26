@@ -20,7 +20,7 @@ go_library(
         "validator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/optgen",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/opt/optgen/lang",
         "@com_github_cockroachdb_errors//:errors",
@@ -30,7 +30,10 @@ go_library(
 go_binary(
     name = "optgen",
     embed = [":optgen_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/opt:__subpackages__",
+    ],
 )
 
 go_test(
@@ -39,6 +42,7 @@ go_test(
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":optgen_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",

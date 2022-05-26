@@ -47,6 +47,7 @@ go_test(
     name = "poison_test",
     srcs = ["error_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":poison",
         "//pkg/keys",

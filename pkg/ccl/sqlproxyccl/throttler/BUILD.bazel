@@ -24,6 +24,7 @@ go_test(
         "throttle_test.go",
     ],
     embed = [":throttler"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

@@ -6,7 +6,10 @@ go_binary(
     name = "gen",
     srcs = ["gen.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logconfig",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//docs/generated:__pkg__",
+    ],
     deps = [
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",
@@ -43,6 +46,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":logconfig"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_kr_pretty//:pretty",

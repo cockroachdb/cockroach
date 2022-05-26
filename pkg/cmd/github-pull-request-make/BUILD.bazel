@@ -4,7 +4,7 @@ go_library(
     name = "github-pull-request-make_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/github-pull-request-make",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/testutils/buildutil",
@@ -16,7 +16,9 @@ go_library(
 go_binary(
     name = "github-pull-request-make",
     embed = [":github-pull-request-make_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -25,6 +27,7 @@ go_test(
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":github-pull-request-make_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",

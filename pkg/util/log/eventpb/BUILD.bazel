@@ -13,7 +13,10 @@ go_binary(
     name = "gen",
     srcs = ["gen.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//docs/generated:__pkg__",
+    ],
     deps = [
         "//pkg/cli/exit",
         "//pkg/util/log/logpb",
@@ -47,6 +50,7 @@ go_test(
     size = "small",
     srcs = ["event_test.go"],
     embed = [":eventpb"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",

@@ -52,6 +52,7 @@ go_test(
         "volatility_test.go",
     ],
     embed = [":props"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt",

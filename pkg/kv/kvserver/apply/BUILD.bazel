@@ -22,6 +22,7 @@ go_test(
         "doc_test.go",
         "task_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":apply",
         "@com_github_cockroachdb_errors//:errors",

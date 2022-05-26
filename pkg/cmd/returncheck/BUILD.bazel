@@ -4,7 +4,7 @@ go_library(
     name = "returncheck_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/returncheck",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_returncheck//:returncheck",
         "@com_github_kisielk_gotool//:gotool",
@@ -14,5 +14,7 @@ go_library(
 go_binary(
     name = "returncheck",
     embed = [":returncheck_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

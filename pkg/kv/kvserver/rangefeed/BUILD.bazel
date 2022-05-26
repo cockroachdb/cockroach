@@ -51,6 +51,7 @@ go_test(
         "task_test.go",
     ],
     embed = [":rangefeed"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

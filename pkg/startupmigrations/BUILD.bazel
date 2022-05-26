@@ -42,6 +42,7 @@ go_test(
         "migrations_test.go",
     ],
     embed = [":startupmigrations"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",

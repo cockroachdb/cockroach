@@ -23,6 +23,7 @@ go_test(
     name = "lexbase_test",
     size = "small",
     srcs = ["encode_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":lexbase",
         "//pkg/sql/parser",

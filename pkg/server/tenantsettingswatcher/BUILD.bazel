@@ -42,6 +42,7 @@ go_test(
         "watcher_test.go",
     ],
     embed = [":tenantsettingswatcher"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

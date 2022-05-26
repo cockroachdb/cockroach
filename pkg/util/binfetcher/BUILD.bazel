@@ -21,6 +21,7 @@ go_test(
     size = "small",
     srcs = ["binfetcher_test.go"],
     embed = [":binfetcher"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",

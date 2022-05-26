@@ -46,6 +46,7 @@ go_test(
         "workload_test.go",
     ],
     embed = [":workload"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/security/securityassets",

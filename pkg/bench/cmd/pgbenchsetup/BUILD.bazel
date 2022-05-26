@@ -4,7 +4,7 @@ go_library(
     name = "pgbenchsetup_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/bench/cmd/pgbenchsetup",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/bench",
         "@com_github_lib_pq//:pq",
@@ -14,5 +14,7 @@ go_library(
 go_binary(
     name = "pgbenchsetup",
     embed = [":pgbenchsetup_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

@@ -86,6 +86,7 @@ go_test(
     ],
     embed = [":execinfra"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -16,6 +16,7 @@ go_test(
         "overlap_merge_test.go",
     ],
     embed = [":covering"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",

@@ -4,7 +4,7 @@ go_library(
     name = "gen_library",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/gen",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",
@@ -15,5 +15,9 @@ go_library(
 go_binary(
     name = "gen",
     embed = [":gen_library"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//docs/generated:__pkg__",
+        "//pkg/util/log:__subpackages__",
+    ],
 )

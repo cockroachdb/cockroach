@@ -78,6 +78,7 @@ go_test(
     ],
     embed = [":colflow"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/col/coldata",

@@ -13,6 +13,7 @@ go_test(
     size = "small",
     srcs = ["ctxgroup_test.go"],
     embed = [":ctxgroup"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/util/leaktest",

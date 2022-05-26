@@ -25,6 +25,7 @@ go_test(
     size = "small",
     srcs = ["query_cache_test.go"],
     embed = [":querycache"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/opt/memo",
         "//pkg/util/randutil",

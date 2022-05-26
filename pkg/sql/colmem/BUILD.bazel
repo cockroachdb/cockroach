@@ -22,6 +22,7 @@ go_test(
     name = "colmem_test",
     size = "small",
     srcs = ["allocator_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":colmem",
         "//pkg/col/coldata",

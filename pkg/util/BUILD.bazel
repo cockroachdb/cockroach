@@ -58,6 +58,7 @@ go_test(
         "unresolved_addr_test.go",
     ],
     embed = [":util"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/randutil",
         "//pkg/util/timeutil",

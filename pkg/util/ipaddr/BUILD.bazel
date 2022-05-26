@@ -21,5 +21,6 @@ go_test(
     size = "small",
     srcs = ["ipaddr_test.go"],
     embed = [":ipaddr"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/util/uint128"],
 )

@@ -4,7 +4,7 @@ go_library(
     name = "cockroach-sql_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach-sql",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "//pkg/cli/clicfg",
@@ -26,5 +26,7 @@ go_library(
 go_binary(
     name = "cockroach-sql",
     embed = [":cockroach-sql_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

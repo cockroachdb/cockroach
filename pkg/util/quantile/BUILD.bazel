@@ -11,4 +11,5 @@ go_test(
     name = "quantile_test",
     srcs = ["stream_test.go"],
     embed = [":quantile"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

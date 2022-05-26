@@ -86,6 +86,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":roachpb"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/kv/kvserver/concurrency/lock",
@@ -126,6 +127,7 @@ go_test(
     size = "small",
     srcs = ["string_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":roachpb",  # keep
         "//pkg/cli/exit",

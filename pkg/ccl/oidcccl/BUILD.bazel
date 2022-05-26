@@ -37,6 +37,7 @@ go_test(
         "settings_test.go",
     ],
     embed = [":oidcccl"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl",

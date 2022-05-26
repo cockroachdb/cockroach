@@ -23,6 +23,7 @@ go_test(
         "finder_test.go",
     ],
     embed = [":split"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

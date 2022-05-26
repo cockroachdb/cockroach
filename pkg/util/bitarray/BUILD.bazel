@@ -17,5 +17,6 @@ go_test(
     size = "small",
     srcs = ["bitarray_test.go"],
     embed = [":bitarray"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/util/randutil"],
 )

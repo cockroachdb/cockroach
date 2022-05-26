@@ -18,6 +18,7 @@ go_test(
     name = "distribution_test",
     srcs = ["distribution_test.go"],
     embed = [":distribution"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt/memo",

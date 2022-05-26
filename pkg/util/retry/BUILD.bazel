@@ -19,6 +19,7 @@ go_test(
         "retry_test.go",
     ],
     embed = [":retry"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

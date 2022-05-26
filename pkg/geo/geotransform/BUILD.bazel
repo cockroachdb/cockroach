@@ -21,6 +21,7 @@ go_test(
     size = "small",
     srcs = ["geotransform_test.go"],
     embed = [":geotransform"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",

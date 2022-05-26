@@ -4,7 +4,7 @@ go_library(
     name = "cmp-sql_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmp-sql",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/randutil",
         "@com_github_cockroachdb_apd_v3//:apd",
@@ -16,5 +16,7 @@ go_library(
 go_binary(
     name = "cmp-sql",
     embed = [":cmp-sql_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

@@ -45,6 +45,7 @@ go_test(
         "zone_test.go",
     ],
     embed = [":partitionccl"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/storageccl",

@@ -25,5 +25,6 @@ go_test(
     name = "spanconfigtestutils_test",
     srcs = ["utils_test.go"],
     embed = [":spanconfigtestutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

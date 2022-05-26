@@ -75,6 +75,6 @@ fi
 if files_unchanged_from_upstream $(find_relevant ./pkg/cmd/generate-test-suites -name BUILD.bazel -or -name '*.go') $(find_relevant ./pkg -name BUILD.bazel) $(find_relevant ./pkg -name '*.bzl'); then
   echo "Skipping //pkg/cmd/generate-test-suites (relevant files are unchanged from upstream)."
 else
-  CONTENTS=$(bazel run //pkg/cmd/generate-test-suites --run_under="cd $PWD && ")
-  echo "$CONTENTS" > pkg/BUILD.bazel
+  bazel build @com_github_bazelbuild_buildtools//buildozer:buildozer --//build/toolchains:nogo_disable_flag
+  bazel run //pkg/cmd/generate-test-suites --run_under="cd $PWD && "
 fi

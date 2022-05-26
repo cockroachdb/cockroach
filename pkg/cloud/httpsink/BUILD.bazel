@@ -23,6 +23,7 @@ go_test(
     name = "httpsink_test",
     srcs = ["http_storage_test.go"],
     embed = [":httpsink"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",

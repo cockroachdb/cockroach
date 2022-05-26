@@ -22,6 +22,7 @@ go_test(
     srcs = ["expression_test.go"],
     data = glob(["testdata/**"]),
     embed = [":inverted"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/util/encoding",

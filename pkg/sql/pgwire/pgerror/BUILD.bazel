@@ -41,6 +41,7 @@ go_test(
         "wrap_test.go",
     ],
     embed = [":pgerror"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/sql/pgwire/pgcode",

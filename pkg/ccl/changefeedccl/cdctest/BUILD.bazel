@@ -46,6 +46,7 @@ go_test(
         "validator_test.go",
     ],
     embed = [":cdctest"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/storageccl",

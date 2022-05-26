@@ -25,6 +25,7 @@ go_test(
     size = "small",
     srcs = ["result_test.go"],
     embed = [":result"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/util/leaktest",

@@ -7,7 +7,7 @@ go_library(
         "main.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/geoviz",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoindex",
@@ -19,5 +19,7 @@ go_library(
 go_binary(
     name = "geoviz",
     embed = [":geoviz_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

@@ -22,6 +22,7 @@ go_test(
     size = "small",
     srcs = ["notifier_test.go"],
     embed = [":gcjobnotifier"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/config",
         "//pkg/config/zonepb",

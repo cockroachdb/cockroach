@@ -23,6 +23,7 @@ go_test(
     size = "small",
     srcs = ["oracle_test.go"],
     embed = [":replicaoracle"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/gossip",

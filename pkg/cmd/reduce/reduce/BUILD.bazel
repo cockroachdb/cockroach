@@ -22,5 +22,6 @@ go_test(
     size = "small",
     srcs = ["reduce_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [":reduce"],
 )

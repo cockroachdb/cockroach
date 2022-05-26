@@ -160,6 +160,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":log"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "//pkg/cli/exit",

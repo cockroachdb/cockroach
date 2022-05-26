@@ -4,7 +4,7 @@ go_library(
     name = "allocsim_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/allocsim",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/acceptance/localcluster",
         "//pkg/acceptance/localcluster/tc",
@@ -23,5 +23,7 @@ go_library(
 go_binary(
     name = "allocsim",
     embed = [":allocsim_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

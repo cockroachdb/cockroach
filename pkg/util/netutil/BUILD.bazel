@@ -29,6 +29,7 @@ go_test(
         "srv_test.go",
     ],
     embed = [":netutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/contextutil",
         "@com_github_cockroachdb_cmux//:cmux",

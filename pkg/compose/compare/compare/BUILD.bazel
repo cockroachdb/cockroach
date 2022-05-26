@@ -13,7 +13,10 @@ go_test(
     embed = [":compare"],
     gotags = ["compose"],
     tags = ["integration"],
-    visibility = ["//pkg/compose:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/compose:__subpackages__",
+    ],
     deps = [
         "//pkg/cmd/cmpconn",
         "//pkg/internal/sqlsmith",

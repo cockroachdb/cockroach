@@ -49,6 +49,7 @@ go_test(
         "json_array_test.go",
         "trigram_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":invertedidx",
         "//pkg/geo",

@@ -55,6 +55,7 @@ go_test(
     ],
     embed = [":catalog"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",

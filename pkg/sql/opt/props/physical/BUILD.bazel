@@ -27,6 +27,7 @@ go_test(
         "required_test.go",
     ],
     embed = [":physical"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/roachpb",

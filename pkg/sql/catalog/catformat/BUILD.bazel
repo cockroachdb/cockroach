@@ -21,6 +21,7 @@ go_test(
     size = "small",
     srcs = ["index_test.go"],
     embed = [":catformat"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

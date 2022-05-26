@@ -38,6 +38,7 @@ go_test(
         "types_text_marshal_test.go",
     ],
     embed = [":types"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geopb",
         "//pkg/sql/catalog/descpb",

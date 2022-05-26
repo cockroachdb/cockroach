@@ -18,6 +18,7 @@ go_test(
     size = "small",
     srcs = ["limiter_test.go"],
     embed = [":limit"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",

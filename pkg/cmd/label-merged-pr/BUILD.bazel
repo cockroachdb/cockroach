@@ -4,19 +4,22 @@ go_library(
     name = "label-merged-pr_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/label-merged-pr",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )
 
 go_binary(
     name = "label-merged-pr",
     embed = [":label-merged-pr_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
     name = "label-merged-pr_test",
     srcs = ["main_test.go"],
     embed = [":label-merged-pr_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils/skip",
         "@com_github_stretchr_testify//assert",

@@ -4,7 +4,7 @@ go_library(
     name = "enc_utils_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/enc_utils",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl/storageccl/engineccl/enginepbccl",
         "//pkg/storage/enginepb",
@@ -17,5 +17,7 @@ go_library(
 go_binary(
     name = "enc_utils",
     embed = [":enc_utils_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

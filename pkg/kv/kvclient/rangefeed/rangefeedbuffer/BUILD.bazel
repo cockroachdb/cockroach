@@ -24,6 +24,7 @@ go_test(
         "kvs_test.go",
     ],
     embed = [":rangefeedbuffer"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

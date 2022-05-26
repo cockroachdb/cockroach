@@ -16,6 +16,7 @@ go_library(
 go_test(
     name = "username_test",
     srcs = ["username_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":username",
         "//pkg/testutils",

@@ -50,6 +50,7 @@ go_test(
         "reporter_test.go",
     ],
     embed = [":reports"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/config",

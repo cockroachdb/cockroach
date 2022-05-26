@@ -26,6 +26,7 @@ go_test(
     name = "syntheticprivilege_test",
     srcs = ["synthetic_privilege_registry_test.go"],
     embed = [":syntheticprivilege"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/catalog",
         "@com_github_stretchr_testify//require",

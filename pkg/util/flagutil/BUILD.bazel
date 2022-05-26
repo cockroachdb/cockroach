@@ -17,6 +17,7 @@ go_test(
     size = "small",
     srcs = ["flagutil_test.go"],
     embed = [":flagutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",

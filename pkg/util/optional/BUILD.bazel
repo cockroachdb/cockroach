@@ -20,6 +20,7 @@ go_test(
         "duration_test.go",
         "uint_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":optional",
         "@com_github_stretchr_testify//require",

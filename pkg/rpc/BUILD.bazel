@@ -87,6 +87,7 @@ go_test(
         "tls_test.go",
     ],
     embed = [":rpc"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",

@@ -70,6 +70,7 @@ go_test(
         "x509_test.go",
     ],
     embed = [":security"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/roachpb",

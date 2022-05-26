@@ -46,6 +46,7 @@ go_test(
         "zonesdecoder_test.go",
     ],
     embed = [":spanconfigsqlwatcher"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

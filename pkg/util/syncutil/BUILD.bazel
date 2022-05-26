@@ -27,5 +27,6 @@ go_test(
         "mutex_sync_race_test.go",  # keep
     ],
     embed = [":syncutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

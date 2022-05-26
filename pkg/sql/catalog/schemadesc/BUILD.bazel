@@ -37,6 +37,7 @@ go_test(
     name = "schemadesc_test",
     size = "small",
     srcs = ["schema_desc_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":schemadesc",
         "//pkg/clusterversion",

@@ -27,6 +27,7 @@ go_test(
         "tracedumper_test.go",
     ],
     embed = [":tracedumper"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

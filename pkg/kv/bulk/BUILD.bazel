@@ -47,6 +47,7 @@ go_test(
         "sst_batcher_test.go",
     ],
     embed = [":bulk"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

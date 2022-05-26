@@ -13,6 +13,7 @@ go_test(
     size = "small",
     srcs = ["search_test.go"],
     embed = [":search"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

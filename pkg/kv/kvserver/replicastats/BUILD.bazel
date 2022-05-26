@@ -18,6 +18,7 @@ go_test(
     name = "replicastats_test",
     srcs = ["replica_stats_test.go"],
     embed = [":replicastats"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",

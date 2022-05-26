@@ -53,6 +53,7 @@ go_test(
         "ordering_test.go",
     ],
     embed = [":opt"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt/cat",

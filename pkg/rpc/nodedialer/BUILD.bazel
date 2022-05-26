@@ -25,6 +25,7 @@ go_test(
     size = "small",
     srcs = ["nodedialer_test.go"],
     embed = [":nodedialer"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",

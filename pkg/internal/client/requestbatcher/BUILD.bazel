@@ -4,7 +4,10 @@ go_library(
     name = "requestbatcher",
     srcs = ["batcher.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher",
-    visibility = ["//pkg:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg:__subpackages__",
+    ],
     deps = [
         "//pkg/kv",
         "//pkg/roachpb",
@@ -20,6 +23,7 @@ go_test(
     size = "small",
     srcs = ["batcher_test.go"],
     embed = [":requestbatcher"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",

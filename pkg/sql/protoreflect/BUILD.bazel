@@ -25,6 +25,7 @@ go_test(
         "utils_test.go",
     ],
     embed = [":protoreflect"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/security/securityassets",

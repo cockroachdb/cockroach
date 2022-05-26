@@ -138,6 +138,7 @@ go_test(
     embed = [":kvcoord"],
     shard_count = 16,
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//build/bazelutil:noop",
         "//pkg/base",

@@ -37,6 +37,7 @@ go_test(
     ],
     embed = [":spanlatch"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/poison",

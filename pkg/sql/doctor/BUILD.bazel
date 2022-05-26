@@ -28,6 +28,7 @@ go_test(
     name = "doctor_test",
     size = "small",
     srcs = ["doctor_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":doctor",
         "//pkg/clusterversion",

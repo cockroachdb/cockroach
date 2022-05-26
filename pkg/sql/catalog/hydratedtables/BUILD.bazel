@@ -29,6 +29,7 @@ go_test(
     size = "small",
     srcs = ["hydratedcache_test.go"],
     embed = [":hydratedtables"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/security/username",
         "//pkg/settings/cluster",

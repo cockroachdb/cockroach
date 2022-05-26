@@ -4,12 +4,14 @@ go_library(
     name = "fuzz_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/fuzz",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@org_golang_x_tools//go/packages"],
 )
 
 go_binary(
     name = "fuzz",
     embed = [":fuzz_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

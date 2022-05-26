@@ -65,7 +65,7 @@ go_library(
         "window_peer_grouper_gen.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen/cmd/execgen",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/col/typeconv",
         "//pkg/sql/colexec/execgen",

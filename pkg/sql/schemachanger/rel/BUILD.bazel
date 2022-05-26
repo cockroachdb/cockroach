@@ -54,6 +54,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":rel"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/schemachanger/rel/internal/comparetest",
         "//pkg/sql/schemachanger/rel/internal/cyclegraphtest",

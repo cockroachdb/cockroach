@@ -24,6 +24,7 @@ go_test(
     name = "nodelocal_test",
     srcs = ["nodelocal_storage_test.go"],
     embed = [":nodelocal"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cloud/cloudtestutils",
         "//pkg/security/username",

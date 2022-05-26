@@ -5,7 +5,7 @@ go_library(
     name = "protoc-gen-gogoroach_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/protoc-gen-gogoroach",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_gogo_protobuf//protoc-gen-gogo/descriptor",
         "@com_github_gogo_protobuf//vanity",
@@ -16,7 +16,7 @@ go_library(
 go_binary(
     name = "protoc-gen-gogoroach",
     embed = [":protoc-gen-gogoroach_lib"],
-    visibility = ["//visibility:public"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )
 
 # Ref:

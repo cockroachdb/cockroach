@@ -31,4 +31,5 @@ go_test(
     name = "spanconfigreconciler_test",
     srcs = ["reconciler_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

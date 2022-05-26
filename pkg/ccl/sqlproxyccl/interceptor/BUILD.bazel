@@ -30,6 +30,7 @@ go_test(
         "pg_conn_test.go",
     ],
     embed = [":interceptor"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/util/leaktest",

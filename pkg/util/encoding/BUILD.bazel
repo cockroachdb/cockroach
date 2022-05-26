@@ -39,6 +39,7 @@ go_test(
         "printer_test.go",
     ],
     embed = [":encoding"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geographiclib",

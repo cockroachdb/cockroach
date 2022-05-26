@@ -65,4 +65,5 @@ go_test(
     name = "delegate_test",
     srcs = ["show_completions_test.go"],
     embed = [":delegate"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

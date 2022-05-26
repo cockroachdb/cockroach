@@ -45,6 +45,7 @@ go_test(
         "table_gen_test.go",
     ],
     embed = [":sqlutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

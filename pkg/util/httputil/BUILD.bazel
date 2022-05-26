@@ -24,6 +24,7 @@ go_test(
         "etag_handler_test.go",
     ],
     embed = [":httputil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/targz",

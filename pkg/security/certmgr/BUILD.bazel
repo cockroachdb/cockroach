@@ -30,6 +30,7 @@ go_test(
         ":mocks_certmgr",  # keep
     ],
     embed = [":certmgr"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/util/leaktest",

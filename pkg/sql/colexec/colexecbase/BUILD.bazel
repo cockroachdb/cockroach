@@ -52,6 +52,7 @@ go_test(
         "simple_project_test.go",
     ],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":colexecbase",
         "//pkg/col/coldata",

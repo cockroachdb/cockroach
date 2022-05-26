@@ -195,6 +195,7 @@ go_test(
     ],
     data = glob(["testdata/**"]) + ["//pkg/sql/parser:sql.y"],
     embed = [":tree"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/internal/rsg",

@@ -22,4 +22,5 @@ go_test(
     size = "small",
     srcs = ["extract_test.go"],
     embed = [":extract"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

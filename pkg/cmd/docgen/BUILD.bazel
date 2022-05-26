@@ -10,7 +10,7 @@ go_library(
         "main.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docgen",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/cmd/docgen/extract",
@@ -27,5 +27,8 @@ go_library(
 go_binary(
     name = "docgen",
     embed = [":docgen_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//docs/generated:__subpackages__",
+    ],
 )

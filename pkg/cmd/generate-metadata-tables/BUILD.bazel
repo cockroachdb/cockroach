@@ -4,7 +4,7 @@ go_library(
     name = "generate-metadata-tables_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-metadata-tables",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/generate-metadata-tables/rdbms:generate-metadata-tables-rdbms_lib",
         "//pkg/sql",
@@ -14,5 +14,7 @@ go_library(
 go_binary(
     name = "generate-metadata-tables",
     embed = [":generate-metadata-tables_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

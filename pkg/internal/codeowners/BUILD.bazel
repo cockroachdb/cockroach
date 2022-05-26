@@ -7,7 +7,10 @@ go_library(
         "lint.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/codeowners",
-    visibility = ["//pkg:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg:__subpackages__",
+    ],
     deps = [
         "//pkg/internal/reporoot",
         "//pkg/internal/team",
@@ -26,6 +29,7 @@ go_test(
         "//.github:CODEOWNERS",
     ],
     embed = [":codeowners"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/internal/reporoot",
         "//pkg/internal/team",

@@ -62,6 +62,7 @@ go_test(
         "util_test.go",
     ],
     embed = [":gossip"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/config",

@@ -32,6 +32,7 @@ go_test(
         "resolver_bench_test.go",
         "resolver_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":resolver",
         "//pkg/base",

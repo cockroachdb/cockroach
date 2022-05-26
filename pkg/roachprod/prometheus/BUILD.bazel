@@ -20,6 +20,7 @@ go_test(
     srcs = ["prometheus_test.go"],
     data = glob(["testdata/**"]),
     embed = [":prometheus"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachprod/install",
         "//pkg/testutils",

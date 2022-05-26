@@ -9,6 +9,7 @@ go_test(
         "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",
     ],
     gotags = ["docker"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/contextutil",
         "//pkg/util/log",

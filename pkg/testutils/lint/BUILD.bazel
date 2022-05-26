@@ -22,7 +22,10 @@ go_test(
     embed = [":lint"],
     gotags = ["lint"],
     tags = ["integration"],
-    visibility = ["//build/bazelutil:__subpackages__"],
+    visibility = [
+        "//build/bazelutil:__subpackages__",
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
     deps = [
         "//pkg/build/bazel",
         "//pkg/cmd/urlcheck/lib/urlcheck",

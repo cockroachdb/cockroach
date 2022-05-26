@@ -9,7 +9,10 @@ go_library(
         ":gen-testattr-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/internal/entitynodetest",
-    visibility = ["//pkg/sql/schemachanger/rel:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/schemachanger/rel:__subpackages__",
+    ],
     deps = [
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/rel/reltest",

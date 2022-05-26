@@ -46,6 +46,7 @@ go_test(
     name = "backfill_test",
     srcs = ["index_backfiller_cols_test.go"],
     embed = [":backfill"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

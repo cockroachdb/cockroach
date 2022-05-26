@@ -50,6 +50,7 @@ go_test(
         "row_container_test.go",
     ],
     embed = [":rowcontainer"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/kv/kvclient/kvstreamer",

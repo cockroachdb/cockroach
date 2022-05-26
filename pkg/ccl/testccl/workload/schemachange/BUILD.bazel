@@ -9,6 +9,7 @@ go_test(
     data = [
         "//c-deps:libgeos",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

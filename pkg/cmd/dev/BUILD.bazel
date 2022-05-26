@@ -23,7 +23,7 @@ go_library(
         "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/util",
         "//pkg/cmd/dev/io/exec",
@@ -37,7 +37,9 @@ go_library(
 go_binary(
     name = "dev",
     embed = [":dev_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -48,6 +50,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/cmd/dev/io/exec",

@@ -4,7 +4,7 @@ go_library(
     name = "optfmt_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/optfmt",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/opt/optgen/lang",
         "//pkg/util/pretty",
@@ -15,7 +15,9 @@ go_library(
 go_binary(
     name = "optfmt",
     embed = [":optfmt_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -24,6 +26,7 @@ go_test(
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":optfmt_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

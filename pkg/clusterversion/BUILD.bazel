@@ -38,6 +38,7 @@ go_test(
         "cockroach_versions_test.go",
     ],
     embed = [":clusterversion"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",

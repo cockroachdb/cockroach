@@ -19,6 +19,7 @@ go_test(
     name = "nullsink_test",
     srcs = ["nullsink_storage_test.go"],
     embed = [":nullsink"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/cloud",

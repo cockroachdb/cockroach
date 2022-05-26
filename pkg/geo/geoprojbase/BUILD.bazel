@@ -24,6 +24,7 @@ go_test(
     name = "geoprojbase_test",
     size = "small",
     srcs = ["projections_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":geoprojbase",
         "//pkg/geo/geographiclib",

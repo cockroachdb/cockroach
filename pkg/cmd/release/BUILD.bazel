@@ -17,7 +17,7 @@ go_library(
         "versionmap.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_andygrunwald_go_jira//:go-jira",
         "@com_github_google_go_github_v42//github",
@@ -32,7 +32,9 @@ go_library(
 go_binary(
     name = "release",
     embed = [":release_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -46,5 +48,6 @@ go_test(
         "testdata/**",
     ]),
     embed = [":release_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

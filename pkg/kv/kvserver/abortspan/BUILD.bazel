@@ -23,6 +23,7 @@ go_test(
     size = "small",
     srcs = ["abortspan_test.go"],
     embed = [":abortspan"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

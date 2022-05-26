@@ -35,6 +35,7 @@ go_test(
     size = "small",
     srcs = ["intent_resolver_test.go"],
     embed = [":intentresolver"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/batcheval/result",

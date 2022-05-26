@@ -69,6 +69,7 @@ go_test(
     srcs = ["geos_test.go"],
     data = ["//c-deps:libgeos"],
     embed = [":geos"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

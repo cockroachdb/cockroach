@@ -20,6 +20,7 @@ go_test(
     name = "cdcutils_test",
     srcs = ["throttle_test.go"],
     embed = [":cdcutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/settings/cluster",

@@ -23,6 +23,7 @@ go_test(
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":loopvarcapture",
         "//pkg/build/bazel",

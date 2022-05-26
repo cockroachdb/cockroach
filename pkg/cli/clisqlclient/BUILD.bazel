@@ -46,6 +46,7 @@ go_test(
         "string_to_duration_test.go",
     ],
     embed = [":clisqlclient"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "//pkg/cli",

@@ -34,6 +34,7 @@ go_test(
         "timer_test.go",
     ],
     embed = [":timeutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

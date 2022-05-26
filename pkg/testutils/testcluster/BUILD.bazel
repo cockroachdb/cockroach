@@ -44,6 +44,7 @@ go_test(
         "testcluster_test.go",
     ],
     embed = [":testcluster"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

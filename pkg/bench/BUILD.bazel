@@ -29,6 +29,7 @@ go_test(
         "pgbench_test.go",
     ],
     embed = [":bench"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/security/securityassets",

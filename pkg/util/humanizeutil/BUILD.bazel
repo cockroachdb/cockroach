@@ -25,6 +25,7 @@ go_test(
         "humanize_test.go",
     ],
     embed = [":humanizeutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_redact//:redact",

@@ -26,4 +26,5 @@ go_test(
     name = "spanconfigsqltranslator_test",
     srcs = ["sqltranslator_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

@@ -35,6 +35,7 @@ go_test(
         "plan_test.go",
     ],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":scplan",
         "//pkg/base",

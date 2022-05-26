@@ -14,6 +14,7 @@ go_library(
 go_test(
     name = "addr_test",
     srcs = ["addr_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":addr",
         "//pkg/testutils",

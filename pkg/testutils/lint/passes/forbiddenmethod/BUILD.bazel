@@ -35,6 +35,7 @@ go_test(
         ":testdata",
         "@go_sdk//:files",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":forbiddenmethod",
         "//pkg/build/bazel",

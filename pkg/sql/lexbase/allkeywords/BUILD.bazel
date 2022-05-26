@@ -4,11 +4,14 @@ go_library(
     name = "allkeywords_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/lexbase/allkeywords",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )
 
 go_binary(
     name = "allkeywords",
     embed = [":allkeywords_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/lexbase:__pkg__",
+    ],
 )

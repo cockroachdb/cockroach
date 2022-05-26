@@ -41,6 +41,7 @@ go_test(
         "state_test.go",
     ],
     embed = [":state"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",

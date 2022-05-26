@@ -9,7 +9,10 @@ go_library(
         "render.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/internal/issues",
-    visibility = ["//pkg/cmd:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/cmd:__subpackages__",
+    ],
     deps = [
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
@@ -28,6 +31,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":issues"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",

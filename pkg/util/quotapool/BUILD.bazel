@@ -34,6 +34,7 @@ go_test(
         "token_bucket_test.go",
     ],
     embed = [":quotapool"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/util/ctxgroup",

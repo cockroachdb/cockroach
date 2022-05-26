@@ -7,7 +7,10 @@ go_library(
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate",
-    visibility = ["//pkg/sql/catalog:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/catalog:__subpackages__",
+    ],
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
@@ -29,6 +32,7 @@ go_test(
         "schema_changer_state_test.go",
     ],
     embed = [":validate"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog",

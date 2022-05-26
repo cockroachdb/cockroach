@@ -18,4 +18,5 @@ go_test(
         "soundex_test.go",
     ],
     embed = [":fuzzystrmatch"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

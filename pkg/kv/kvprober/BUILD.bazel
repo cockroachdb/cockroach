@@ -38,6 +38,7 @@ go_test(
         "planner_test.go",
     ],
     embed = [":kvprober"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

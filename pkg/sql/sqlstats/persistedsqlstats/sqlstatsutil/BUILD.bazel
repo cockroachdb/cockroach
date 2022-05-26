@@ -27,6 +27,7 @@ go_test(
     name = "sqlstatsutil_test",
     srcs = ["json_encoding_test.go"],
     embed = [":sqlstatsutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/util/json",

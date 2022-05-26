@@ -12,5 +12,6 @@ go_test(
     size = "small",
     srcs = ["shuffle_test.go"],
     embed = [":shuffle"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/util/leaktest"],
 )

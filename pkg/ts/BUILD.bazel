@@ -65,6 +65,7 @@ go_test(
         "timeseries_test.go",
     ],
     embed = [":ts"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

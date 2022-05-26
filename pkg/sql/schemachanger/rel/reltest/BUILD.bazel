@@ -10,7 +10,10 @@ go_library(
         "reltest.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/reltest",
-    visibility = ["//pkg/sql/schemachanger/rel:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/schemachanger/rel:__subpackages__",
+    ],
     deps = [
         "//pkg/sql/schemachanger/rel",
         "//pkg/testutils",

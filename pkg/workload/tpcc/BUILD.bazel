@@ -54,6 +54,7 @@ go_test(
         "stats_test.go",
     ],
     embed = [":tpcc"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/workload",

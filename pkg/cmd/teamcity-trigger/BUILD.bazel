@@ -4,7 +4,7 @@ go_library(
     name = "teamcity-trigger_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/teamcity-trigger",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/cmd/cmdutil",
@@ -16,7 +16,9 @@ go_library(
 go_binary(
     name = "teamcity-trigger",
     embed = [":teamcity-trigger_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -25,4 +27,5 @@ go_test(
     srcs = ["main_test.go"],
     embed = [":teamcity-trigger_lib"],
     tags = ["broken_in_bazel"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

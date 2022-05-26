@@ -4,6 +4,7 @@ go_test(
     name = "testshout_test",
     size = "small",
     srcs = ["shout_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "//pkg/util/log/logconfig",

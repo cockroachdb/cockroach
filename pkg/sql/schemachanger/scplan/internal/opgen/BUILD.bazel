@@ -76,5 +76,6 @@ go_test(
     size = "small",
     srcs = ["register_test.go"],
     embed = [":opgen"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/sql/schemachanger/scpb"],
 )

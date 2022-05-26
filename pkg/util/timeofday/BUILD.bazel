@@ -16,5 +16,6 @@ go_test(
     size = "small",
     srcs = ["time_of_day_test.go"],
     embed = [":timeofday"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/util/duration"],
 )

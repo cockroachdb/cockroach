@@ -50,6 +50,7 @@ go_test(
     name = "backupinfo_test",
     srcs = ["main_test.go"],
     embed = [":backupinfo"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl/utilccl",
         "//pkg/security/securityassets",

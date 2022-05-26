@@ -20,6 +20,7 @@ go_test(
         "writer_test.go",
     ],
     embed = [":csv"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

@@ -46,6 +46,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":spanconfigkvsubscriber"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

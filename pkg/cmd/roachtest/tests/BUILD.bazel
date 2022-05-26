@@ -238,6 +238,7 @@ go_test(
         ":mocks_drt",  # keep
     ],
     embed = [":tests"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/spec",

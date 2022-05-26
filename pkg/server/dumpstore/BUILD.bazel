@@ -17,6 +17,7 @@ go_test(
     size = "small",
     srcs = ["dumpstore_test.go"],
     embed = [":dumpstore"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

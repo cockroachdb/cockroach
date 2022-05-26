@@ -13,6 +13,7 @@ go_test(
     size = "small",
     srcs = ["cloudinfo_test.go"],
     embed = [":cloudinfo"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/httputil",
         "//pkg/util/leaktest",

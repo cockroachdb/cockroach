@@ -16,6 +16,7 @@ go_test(
     name = "service_test",
     srcs = ["service_test.go"],
     embed = [":service"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/tracing",

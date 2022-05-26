@@ -29,6 +29,7 @@ go_test(
     size = "small",
     srcs = ["initial_test.go"],
     embed = [":stateloader"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/storage",

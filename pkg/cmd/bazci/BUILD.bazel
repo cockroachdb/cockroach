@@ -8,7 +8,7 @@ go_library(
         "watch.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/util",
         "@com_github_alessio_shellescape//:shellescape",
@@ -20,7 +20,9 @@ go_library(
 go_binary(
     name = "bazci",
     embed = [":bazci_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -31,6 +33,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":bazci_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "@com_github_stretchr_testify//assert",

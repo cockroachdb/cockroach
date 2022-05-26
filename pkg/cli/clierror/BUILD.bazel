@@ -31,6 +31,7 @@ go_test(
         "syntax_error_test.go",
     ],
     embed = [":clierror"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "//pkg/cli",

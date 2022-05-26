@@ -20,6 +20,7 @@ go_test(
         "//pkg/testutils/lint/passes/unconvert:testdata",
         "@go_sdk//:files",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/testutils/lint/passes/forbiddenmethod",

@@ -67,6 +67,7 @@ go_test(
     ],
     embed = [":flowinfra"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

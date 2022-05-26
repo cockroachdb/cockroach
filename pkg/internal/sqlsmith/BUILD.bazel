@@ -17,7 +17,10 @@ go_library(
         "type.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/sqlsmith",
-    visibility = ["//pkg:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg:__subpackages__",
+    ],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
@@ -48,6 +51,7 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":sqlsmith"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

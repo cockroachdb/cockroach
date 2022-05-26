@@ -33,6 +33,7 @@ go_test(
         "timestamp_test.go",
     ],
     embed = [":hlc"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/util/leaktest",

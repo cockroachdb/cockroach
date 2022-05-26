@@ -37,6 +37,7 @@ go_test(
         "sender_test.go",
     ],
     embed = [":sidetransport"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/closedts",

@@ -8,7 +8,10 @@ go_library(
         "namespace.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv",
-    visibility = ["//pkg/sql/catalog:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/catalog:__subpackages__",
+    ],
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",

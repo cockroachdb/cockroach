@@ -36,6 +36,7 @@ go_test(
         "pod_test.go",
     ],
     embed = [":balancer"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/roachpb",

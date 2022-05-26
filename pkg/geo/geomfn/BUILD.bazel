@@ -102,6 +102,7 @@ go_test(
     ],
     data = ["//c-deps:libgeos"],
     embed = [":geomfn"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",

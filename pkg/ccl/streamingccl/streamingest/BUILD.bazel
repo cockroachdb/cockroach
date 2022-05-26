@@ -71,6 +71,7 @@ go_test(
         "stream_replication_e2e_test.go",
     ],
     embed = [":streamingest"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/backupccl",

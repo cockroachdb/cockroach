@@ -4,7 +4,7 @@ go_library(
     name = "mirror_lib",
     srcs = ["mirror.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/mirror",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/build/starlarkutil",
@@ -25,12 +25,15 @@ go_binary(
         "@go_sdk//:files",
     ],
     embed = [":mirror_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
     name = "mirror_test",
     srcs = ["mirror_test.go"],
     embed = [":mirror_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

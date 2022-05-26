@@ -613,6 +613,7 @@ go_test(
     ],
     embed = [":sql"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

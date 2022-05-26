@@ -24,6 +24,7 @@ go_library(
 go_test(
     name = "multiregion_test",
     srcs = ["region_config_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":multiregion",
         "//pkg/config/zonepb",

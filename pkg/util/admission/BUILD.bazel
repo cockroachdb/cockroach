@@ -35,6 +35,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":admission"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",

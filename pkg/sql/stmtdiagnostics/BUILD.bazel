@@ -37,6 +37,7 @@ go_test(
     ],
     embed = [":stmtdiagnostics"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/keys",

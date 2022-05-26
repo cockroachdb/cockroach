@@ -63,6 +63,7 @@ go_test(
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":execbuilder"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

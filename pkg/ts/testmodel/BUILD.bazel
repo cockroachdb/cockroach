@@ -21,5 +21,6 @@ go_test(
         "functions_test.go",
     ],
     embed = [":testmodel"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/ts/tspb"],
 )

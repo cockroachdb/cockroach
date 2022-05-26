@@ -4,7 +4,7 @@ go_library(
     name = "gen_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb/gen",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@org_golang_x_tools//go/ast/inspector"],
 )
 

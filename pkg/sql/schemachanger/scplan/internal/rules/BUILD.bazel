@@ -10,7 +10,10 @@ go_library(
         "registry.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules",
-    visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg/sql/schemachanger/scplan:__subpackages__",
+    ],
     deps = [
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
@@ -33,6 +36,7 @@ go_test(
     srcs = ["rules_test.go"],
     data = glob(["testdata/**"]),
     embed = [":rules"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/screl",

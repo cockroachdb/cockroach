@@ -19,6 +19,7 @@ go_test(
         "precomputedrand_test.go",
         "random_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":workloadimpl",
         "//pkg/util/timeutil",

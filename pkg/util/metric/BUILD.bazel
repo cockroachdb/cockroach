@@ -47,6 +47,7 @@ go_test(
         "rule_test.go",
     ],
     embed = [":metric"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/log",
         "@com_github_kr_pretty//:pretty",

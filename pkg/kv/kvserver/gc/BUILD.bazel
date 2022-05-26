@@ -39,6 +39,7 @@ go_test(
         "gc_test.go",
     ],
     embed = [":gc"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverbase",

@@ -29,6 +29,7 @@ go_library(
 go_test(
     name = "instanceprovider_test",
     srcs = ["instanceprovider_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":instanceprovider",
         "//pkg/base",

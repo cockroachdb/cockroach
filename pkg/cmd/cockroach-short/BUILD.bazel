@@ -4,7 +4,7 @@ go_library(
     name = "cockroach-short_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach-short",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl",
         "//pkg/cli",
@@ -14,5 +14,8 @@ go_library(
 go_binary(
     name = "cockroach-short",
     embed = [":cockroach-short_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//docs/generated/settings:__pkg__",
+    ],
 )

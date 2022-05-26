@@ -124,6 +124,7 @@ go_test(
     ],
     embed = [":colexec"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

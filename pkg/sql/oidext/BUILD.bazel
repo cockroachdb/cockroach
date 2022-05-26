@@ -13,6 +13,7 @@ go_test(
     size = "small",
     srcs = ["oidext_test.go"],
     embed = [":oidext"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",

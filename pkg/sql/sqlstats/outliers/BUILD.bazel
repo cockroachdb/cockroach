@@ -30,6 +30,7 @@ go_test(
         "outliers_test.go",
     ],
     embed = [":outliers"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/settings/cluster",

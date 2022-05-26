@@ -140,6 +140,7 @@ go_test(
     ],
     embed = [":rowexec"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/gossip",

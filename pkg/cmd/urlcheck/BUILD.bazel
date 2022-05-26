@@ -4,12 +4,14 @@ go_library(
     name = "urlcheck_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/urlcheck",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["//pkg/cmd/urlcheck/lib/urlcheck"],
 )
 
 go_binary(
     name = "urlcheck",
     embed = [":urlcheck_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

@@ -28,6 +28,7 @@ go_test(
         "local_index_usage_stats_test.go",
     ],
     embed = [":idxusage"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/server/serverpb",

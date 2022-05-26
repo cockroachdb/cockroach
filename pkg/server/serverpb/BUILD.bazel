@@ -100,5 +100,6 @@ go_test(
     size = "medium",
     srcs = ["admin_test.go"],
     embed = [":serverpb"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

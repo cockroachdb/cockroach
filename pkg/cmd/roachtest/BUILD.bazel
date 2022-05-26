@@ -13,7 +13,7 @@ go_library(
         "work_pool.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "//pkg/cmd/internal/issues",
@@ -55,7 +55,9 @@ go_library(
 go_binary(
     name = "roachtest",
     embed = [":roachtest_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -68,6 +70,7 @@ go_test(
         "test_test.go",
     ],
     embed = [":roachtest_lib"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",

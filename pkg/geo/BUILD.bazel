@@ -53,6 +53,7 @@ go_test(
         "parse_test.go",
     ],
     embed = [":geo"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",

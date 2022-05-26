@@ -4,7 +4,7 @@ go_library(
     name = "generate-binary_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-binary",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/cmp-protocol/pgconnect",
         "//pkg/sql/pgwire/pgwirebase",
@@ -14,5 +14,7 @@ go_library(
 go_binary(
     name = "generate-binary",
     embed = [":generate-binary_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

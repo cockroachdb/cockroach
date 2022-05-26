@@ -32,6 +32,7 @@ go_test(
     size = "small",
     srcs = ["value_encoding_test.go"],
     embed = [":colencoding"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

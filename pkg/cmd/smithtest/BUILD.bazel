@@ -4,7 +4,7 @@ go_library(
     name = "smithtest_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/smithtest",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/internal/sqlsmith",
         "//pkg/util/ctxgroup",
@@ -22,5 +22,7 @@ go_library(
 go_binary(
     name = "smithtest",
     embed = [":smithtest_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

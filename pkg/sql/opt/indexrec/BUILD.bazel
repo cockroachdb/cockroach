@@ -34,6 +34,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":indexrec"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",

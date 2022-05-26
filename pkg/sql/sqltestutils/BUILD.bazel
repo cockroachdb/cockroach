@@ -47,6 +47,7 @@ go_test(
     srcs = ["large_schema_test.go"],
     data = glob(["testdata/**"]),
     embed = [":sqltestutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

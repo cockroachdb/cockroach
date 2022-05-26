@@ -50,6 +50,7 @@ go_test(
     ],
     embed = [":colexecjoin"],
     tags = ["no-remote"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

@@ -4,7 +4,7 @@ go_library(
     name = "uptodate_lib",
     srcs = ["uptodate.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/uptodate",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_michaeltjones_walk//:walk",
@@ -15,5 +15,7 @@ go_library(
 go_binary(
     name = "uptodate",
     embed = [":uptodate_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

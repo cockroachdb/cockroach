@@ -4,7 +4,7 @@ go_library(
     name = "smithcmp_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/smithcmp",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/cmpconn",
         "//pkg/internal/sqlsmith",
@@ -20,5 +20,7 @@ go_library(
 go_binary(
     name = "smithcmp",
     embed = [":smithcmp_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

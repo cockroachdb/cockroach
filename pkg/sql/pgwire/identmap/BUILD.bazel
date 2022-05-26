@@ -16,5 +16,6 @@ go_test(
     name = "identmap_test",
     srcs = ["ident_map_test.go"],
     embed = [":identmap"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

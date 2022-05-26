@@ -55,6 +55,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":concurrency"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/batcheval",

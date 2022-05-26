@@ -37,7 +37,6 @@ test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
 
 # CI should always run with `--config=ci`.
-build:ci --experimental_convenience_symlinks=ignore
 build:ci --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456

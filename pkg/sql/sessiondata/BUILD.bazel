@@ -34,6 +34,7 @@ go_test(
         "session_data_test.go",
     ],
     embed = [":sessiondata"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/sessiondatapb",
         "@com_github_stretchr_testify//assert",

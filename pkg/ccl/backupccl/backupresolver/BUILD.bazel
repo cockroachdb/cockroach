@@ -29,6 +29,7 @@ go_test(
         "targets_test.go",
     ],
     embed = [":backupresolver"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",

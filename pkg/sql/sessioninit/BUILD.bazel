@@ -34,6 +34,7 @@ go_test(
         "cache_test.go",
         "main_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":sessioninit",
         "//pkg/base",

@@ -36,6 +36,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":txnidcache"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/kv",
         "//pkg/roachpb",

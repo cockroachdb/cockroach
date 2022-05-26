@@ -4,7 +4,7 @@ go_library(
     name = "github-post_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/github-post",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/internal/issues",
         "//pkg/internal/codeowners",
@@ -16,7 +16,9 @@ go_library(
 go_binary(
     name = "github-post",
     embed = [":github-post_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )
 
 go_test(
@@ -26,6 +28,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":github-post_lib"],
     tags = ["broken_in_bazel"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/internal/issues",
         "//pkg/testutils",

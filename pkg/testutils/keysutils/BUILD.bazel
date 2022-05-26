@@ -20,6 +20,7 @@ go_test(
     size = "small",
     srcs = ["pretty_scanner_test.go"],
     embed = [":keysutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",

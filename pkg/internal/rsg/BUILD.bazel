@@ -4,7 +4,10 @@ go_library(
     name = "rsg",
     srcs = ["rsg.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/rsg",
-    visibility = ["//pkg:__subpackages__"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+        "//pkg:__subpackages__",
+    ],
     deps = [
         "//pkg/internal/rsg/yacc",
         "//pkg/sql/randgen",
@@ -19,4 +22,5 @@ go_test(
     size = "small",
     srcs = ["rsg_test.go"],
     embed = [":rsg"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

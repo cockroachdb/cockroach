@@ -16,6 +16,7 @@ go_test(
     ],
     data = [":testdata"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

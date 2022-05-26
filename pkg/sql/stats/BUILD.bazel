@@ -71,6 +71,7 @@ go_test(
         "stats_cache_test.go",
     ],
     embed = [":stats"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/jobs",

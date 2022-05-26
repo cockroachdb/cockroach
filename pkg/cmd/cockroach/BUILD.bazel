@@ -4,7 +4,7 @@ go_library(
     name = "cockroach_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl",
         "//pkg/ccl/cliccl",
@@ -16,5 +16,7 @@ go_library(
 go_binary(
     name = "cockroach",
     embed = [":cockroach_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

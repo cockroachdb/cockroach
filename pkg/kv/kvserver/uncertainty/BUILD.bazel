@@ -23,6 +23,7 @@ go_test(
         "interval_test.go",
     ],
     embed = [":uncertainty"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",

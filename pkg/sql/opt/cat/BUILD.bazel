@@ -40,6 +40,7 @@ go_test(
     name = "cat_test",
     size = "small",
     srcs = ["utils_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":cat",
         "//pkg/sql/catalog/descpb",

@@ -4,7 +4,7 @@ go_library(
     name = "cr2pg_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cr2pg",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cmd/cr2pg/sqlstream",
         "//pkg/sql/sem/tree",
@@ -16,5 +16,7 @@ go_library(
 go_binary(
     name = "cr2pg",
     embed = [":cr2pg_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

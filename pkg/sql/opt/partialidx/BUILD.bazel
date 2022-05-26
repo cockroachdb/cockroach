@@ -21,6 +21,7 @@ go_test(
     size = "small",
     srcs = ["implicator_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":partialidx",
         "//pkg/settings/cluster",

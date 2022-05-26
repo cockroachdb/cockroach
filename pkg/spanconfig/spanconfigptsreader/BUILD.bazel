@@ -21,6 +21,7 @@ go_test(
     name = "spanconfigptsreader_test",
     srcs = ["adapter_test.go"],
     embed = [":spanconfigptsreader"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/protectedts",

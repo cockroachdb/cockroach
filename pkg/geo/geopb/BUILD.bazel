@@ -34,5 +34,6 @@ go_test(
     name = "geopb_test",
     srcs = ["types_test.go"],
     embed = [":geopb"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

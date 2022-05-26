@@ -21,5 +21,6 @@ go_test(
         "match_test.go",
     ],
     embed = [":fsm"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

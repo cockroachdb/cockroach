@@ -122,6 +122,7 @@ go_test(
         "transaction_test.go",
     ],
     embed = [":batcheval"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

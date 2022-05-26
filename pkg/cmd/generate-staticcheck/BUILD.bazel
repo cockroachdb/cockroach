@@ -4,7 +4,7 @@ go_library(
     name = "generate-staticcheck_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-staticcheck",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@co_honnef_go_tools//analysis/lint",
         "@co_honnef_go_tools//simple",
@@ -17,5 +17,7 @@ go_library(
 go_binary(
     name = "generate-staticcheck",
     embed = [":generate-staticcheck_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

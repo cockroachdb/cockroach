@@ -54,6 +54,7 @@ go_test(
         "roundtrip_format_test.go",
     ],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":rowenc",
         "//pkg/base",

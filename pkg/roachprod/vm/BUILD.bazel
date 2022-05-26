@@ -19,5 +19,6 @@ go_test(
     size = "small",
     srcs = ["vm_test.go"],
     embed = [":vm"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//assert"],
 )

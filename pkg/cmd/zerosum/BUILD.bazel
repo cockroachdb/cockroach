@@ -4,7 +4,7 @@ go_library(
     name = "zerosum_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/zerosum",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/acceptance/localcluster",
@@ -22,5 +22,7 @@ go_library(
 go_binary(
     name = "zerosum",
     embed = [":zerosum_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

@@ -19,6 +19,7 @@ go_test(
     size = "small",
     srcs = ["timetz_test.go"],
     embed = [":timetz"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",

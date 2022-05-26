@@ -4,7 +4,7 @@ go_library(
     name = "workload_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/workload",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/ccl/workloadccl/allccl",
         "//pkg/ccl/workloadccl/cliccl",
@@ -15,5 +15,7 @@ go_library(
 go_binary(
     name = "workload",
     embed = [":workload_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

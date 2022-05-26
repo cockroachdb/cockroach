@@ -127,6 +127,7 @@ go_test(
         "runtime_test.go",
     ],
     embed = [":status"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/build",

@@ -99,6 +99,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",

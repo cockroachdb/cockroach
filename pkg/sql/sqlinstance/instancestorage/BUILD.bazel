@@ -44,6 +44,7 @@ go_test(
         "instancestorage_test.go",
         "main_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":instancestorage",
         "//pkg/base",

@@ -16,6 +16,7 @@ go_library(
 go_test(
     name = "colexecerror_test",
     srcs = ["error_test.go"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":colexecerror",
         "//pkg/util/leaktest",

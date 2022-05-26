@@ -27,6 +27,7 @@ go_test(
     name = "changefeedbase_test",
     srcs = ["options_test.go"],
     embed = [":changefeedbase"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",

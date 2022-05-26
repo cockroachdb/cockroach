@@ -4,7 +4,7 @@ go_library(
     name = "obsservice_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/cmd/obsservice",
-    visibility = ["//visibility:private"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/obsservice/obslib/httpproxy",
@@ -16,5 +16,7 @@ go_library(
 go_binary(
     name = "obsservice",
     embed = [":obsservice_lib"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//build/bazelutil/unused_checker:__pkg__",
+    ],
 )

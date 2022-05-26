@@ -57,6 +57,7 @@ go_test(
     srcs = ["demo_cluster_test.go"],
     embed = [":democluster"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

@@ -49,6 +49,7 @@ go_test(
         "table_event_filter_test.go",
     ],
     embed = [":schemafeed"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",

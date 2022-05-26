@@ -11,5 +11,6 @@ go_test(
     name = "workload_test",
     srcs = ["workload_test.go"],
     embed = [":workload"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = ["@com_github_stretchr_testify//require"],
 )

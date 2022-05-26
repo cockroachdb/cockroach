@@ -12,6 +12,7 @@ go_test(
     ],
     embed = [":schemachangerccl"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

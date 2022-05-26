@@ -12,6 +12,7 @@ go_test(
     name = "scanner_test",
     srcs = ["scan_test.go"],
     embed = [":scanner"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/lexbase",
         "@com_github_stretchr_testify//require",

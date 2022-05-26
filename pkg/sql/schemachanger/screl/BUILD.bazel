@@ -41,6 +41,7 @@ go_test(
         "walk_test.go",
     ],
     embed = [":screl"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

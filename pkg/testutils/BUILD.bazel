@@ -48,6 +48,7 @@ go_test(
         "soon_test.go",
     ],
     embed = [":testutils"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util",
         "//pkg/util/grpcutil",

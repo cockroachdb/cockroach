@@ -37,6 +37,7 @@ go_test(
         "service_test.go",
     ],
     embed = [":blobs"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/blobs/blobspb",

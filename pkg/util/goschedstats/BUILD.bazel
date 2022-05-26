@@ -21,6 +21,7 @@ go_test(
     name = "goschedstats_test",
     srcs = ["runnable_test.go"],
     embed = [":goschedstats"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "//pkg/util/timeutil",

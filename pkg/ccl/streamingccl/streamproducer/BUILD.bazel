@@ -56,6 +56,7 @@ go_test(
         "replication_stream_test.go",
     ],
     embed = [":streamproducer"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl",

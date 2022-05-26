@@ -16,4 +16,5 @@ go_test(
     size = "small",
     srcs = ["floatcmp_test.go"],
     embed = [":floatcmp"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

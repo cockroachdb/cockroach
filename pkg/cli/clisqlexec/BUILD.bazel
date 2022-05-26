@@ -38,6 +38,7 @@ go_test(
         "run_query_test.go",
     ],
     embed = [":clisqlexec"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/build",
         "//pkg/cli",

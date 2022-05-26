@@ -29,4 +29,5 @@ go_test(
     size = "small",
     srcs = ["protectedts_test.go"],
     embed = [":protectedts"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

@@ -71,6 +71,7 @@ go_test(
         "sysutil_unix_test.go",
     ],
     embed = [":sysutil"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
     ] + select({

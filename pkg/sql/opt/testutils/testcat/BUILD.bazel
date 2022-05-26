@@ -58,6 +58,7 @@ go_test(
     size = "small",
     srcs = ["test_catalog_test.go"],
     data = glob(["testdata/**"]),
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":testcat",
         "//pkg/sql/opt/testutils/opttester",

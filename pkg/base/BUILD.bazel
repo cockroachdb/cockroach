@@ -54,6 +54,7 @@ go_test(
         "node_id_test.go",
         "store_spec_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         ":base",
         "//pkg/roachpb",

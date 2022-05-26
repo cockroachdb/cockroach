@@ -37,6 +37,7 @@ go_test(
         "tree_impl_test.go",
     ],
     embed = [":tscache"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",

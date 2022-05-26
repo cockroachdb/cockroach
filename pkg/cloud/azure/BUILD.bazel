@@ -25,6 +25,7 @@ go_test(
     name = "azure_test",
     srcs = ["azure_storage_test.go"],
     embed = [":azure"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/cloud",
         "//pkg/cloud/cloudtestutils",

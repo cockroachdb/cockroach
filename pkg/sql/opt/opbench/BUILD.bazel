@@ -21,6 +21,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":opbench"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/opttester",

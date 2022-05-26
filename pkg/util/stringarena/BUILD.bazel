@@ -13,4 +13,5 @@ go_test(
     size = "small",
     srcs = ["arena_test.go"],
     embed = [":stringarena"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
 )

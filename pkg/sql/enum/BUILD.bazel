@@ -12,6 +12,7 @@ go_test(
     size = "small",
     srcs = ["enum_test.go"],
     embed = [":enum"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

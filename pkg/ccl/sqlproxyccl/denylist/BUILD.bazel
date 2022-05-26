@@ -26,6 +26,7 @@ go_test(
         "watcher_test.go",
     ],
     embed = [":denylist"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",

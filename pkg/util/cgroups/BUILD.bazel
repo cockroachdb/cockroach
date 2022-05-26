@@ -17,6 +17,7 @@ go_test(
     size = "small",
     srcs = ["cgroups_test.go"],
     embed = [":cgroups"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/testutils",
         "@com_github_stretchr_testify//require",

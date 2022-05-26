@@ -44,6 +44,7 @@ go_test(
         "scanner_test.go",
     ],
     embed = [":kvfeed"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/changefeedbase",

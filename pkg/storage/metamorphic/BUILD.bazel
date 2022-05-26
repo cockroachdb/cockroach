@@ -37,6 +37,7 @@ go_test(
     ],
     embed = [":metamorphic"],
     shard_count = 16,
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/testutils",

@@ -51,6 +51,7 @@ go_test(
         "ttljob_test.go",
     ],
     embed = [":ttljob"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

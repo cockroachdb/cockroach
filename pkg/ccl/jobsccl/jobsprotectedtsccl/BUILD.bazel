@@ -6,6 +6,7 @@ go_test(
         "jobs_protected_ts_test.go",
         "main_test.go",
     ],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

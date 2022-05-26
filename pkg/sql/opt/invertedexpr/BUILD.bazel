@@ -26,6 +26,7 @@ go_test(
     srcs = ["geo_expression_test.go"],
     data = glob(["testdata/**"]),
     embed = [":invertedexpr"],
+    visibility = ["//build/bazelutil/unused_checker:__pkg__"],
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/inverted",
