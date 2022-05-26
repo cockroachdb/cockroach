@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTruncate(t *testing.T) {
@@ -187,6 +190,60 @@ func TestTruncate(t *testing.T) {
 		if !reflect.DeepEqual(original, goldenOriginal) {
 			t.Errorf("%d: truncation mutated original:\nexpected: %s\nactual: %s",
 				i, goldenOriginal, original)
+		}
+	}
+}
+
+func BenchmarkTruncate(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	rng, _ := randutil.NewTestRand()
+	// For simplicity, we'll work with single-byte keys, so we divide up the
+	// single-byte key space into three parts, and we'll be truncating the
+	// requests according to the middle part.
+	rs := roachpb.RSpan{Key: roachpb.RKey([]byte{85}), EndKey: roachpb.RKey([]byte{170})}
+	randomKeyByte := func() byte {
+		// Plus two is needed to skip local key space.
+		return byte(2 + rng.Intn(253))
+	}
+	for _, numRequests := range []int{1 << 5, 1 << 10, 1 << 15} {
+		for _, requestType := range []string{"get", "scan"} {
+			b.Run(fmt.Sprintf("reqs=%d/type=%s", numRequests, requestType), func(b *testing.B) {
+				reqs := make([]roachpb.RequestUnion, numRequests)
+				switch requestType {
+				case "get":
+					for i := 0; i < numRequests; i++ {
+						var get roachpb.GetRequest
+						var union roachpb.RequestUnion_Get
+						get.Key = []byte{randomKeyByte()}
+						union.Get = &get
+						reqs[i].Value = &union
+					}
+				case "scan":
+					for i := 0; i < numRequests; i++ {
+						var scan roachpb.ScanRequest
+						var union roachpb.RequestUnion_Scan
+						startKey := randomKeyByte()
+						endKey := randomKeyByte()
+						if endKey < startKey {
+							if startKey == 255 {
+								startKey--
+							}
+							endKey = startKey + 1
+						}
+						scan.Key = []byte{startKey}
+						scan.EndKey = []byte{endKey}
+						union.Scan = &scan
+						reqs[i].Value = &union
+					}
+				}
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					_, _, err := Truncate(reqs, rs)
+					require.NoError(b, err)
+				}
+			})
 		}
 	}
 }
