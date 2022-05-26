@@ -2060,7 +2060,7 @@ func (j jsonArray) RemoveString(s string) (JSON, bool, error) {
 			if err != nil {
 				return nil, false, err
 			}
-			if *t != s {
+			if t == nil || *t != s {
 				b.Add(el)
 			} else {
 				removed = true

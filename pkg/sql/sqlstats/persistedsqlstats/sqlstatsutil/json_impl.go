@@ -414,7 +414,11 @@ func (s *jsonString) decodeJSON(js json.JSON) error {
 	if err != nil {
 		return err
 	}
-	*s = (jsonString)(*text)
+	if text != nil {
+		*s = (jsonString)(*text)
+	} else {
+		*s = "<null>"
+	}
 	return nil
 }
 
