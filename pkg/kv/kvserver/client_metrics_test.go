@@ -137,6 +137,12 @@ func verifyStorageStats(t *testing.T, s *kvserver.Store) {
 		t.Fatal(err)
 	}
 
+	// TODO(jackson): Adjust TestStoreMetrics to reliably construct multiple
+	// levels within the LSM so that we can assert non-zero bloom filter
+	// statistics. At the time of writing, the engines in TestStoreMetrics
+	// sometimes contain files only in L6, which do not use bloom filters except
+	// when explicitly opted into.
+
 	m := s.Metrics()
 	testcases := []struct {
 		gauge *metric.Gauge
@@ -146,8 +152,8 @@ func verifyStorageStats(t *testing.T, s *kvserver.Store) {
 		{m.RdbBlockCacheMisses, 0},
 		{m.RdbBlockCacheUsage, 0},
 		{m.RdbBlockCachePinnedUsage, 0},
-		{m.RdbBloomFilterPrefixChecked, 1},
-		{m.RdbBloomFilterPrefixUseful, 1},
+		{m.RdbBloomFilterPrefixChecked, 0},
+		{m.RdbBloomFilterPrefixUseful, 0},
 		{m.RdbMemtableTotalSize, 5000},
 		{m.RdbFlushes, 1},
 		{m.RdbCompactions, 0},
