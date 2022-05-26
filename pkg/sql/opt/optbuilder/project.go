@@ -352,7 +352,7 @@ func (pb *projectionBuilder) Add(
 		pb.outScope = pb.inScope.replace()
 		pb.outScope.appendColumnsFromScope(pb.inScope)
 	}
-	typedExpr := pb.inScope.resolveAndRequireType(expr, desiredType)
+	typedExpr := pb.inScope.resolveType(expr, desiredType)
 	scopeCol := pb.outScope.addColumn(name, typedExpr)
 	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
 
