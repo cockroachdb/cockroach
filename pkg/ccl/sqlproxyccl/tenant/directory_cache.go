@@ -462,12 +462,7 @@ func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 		} else {
 			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
 		}
-	// Update entries of UNKNOWN pods only if they are already present.
-	case UNKNOWN:
-		if entry.UpdatePod(pod) {
-			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
-		}
-	default:
+	case DELETING:
 		// Remove addresses of DELETING pods.
 		if entry.RemovePodByAddr(pod.Addr) {
 			log.Infof(ctx, "deleted IP address %s for tenant %d", pod.Addr, pod.TenantID)
