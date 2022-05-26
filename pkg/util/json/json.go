@@ -2060,6 +2060,9 @@ func (j jsonArray) RemoveString(s string) (JSON, bool, error) {
 			if err != nil {
 				return nil, false, err
 			}
+			if t == nil {
+				return nil, false, errors.AssertionFailedf("StringJSONType should not be nil here")
+			}
 			if *t != s {
 				b.Add(el)
 			} else {
