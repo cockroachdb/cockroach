@@ -29,6 +29,12 @@ import (
 // singleRangeBatch.
 type singleRangeBatch struct {
 	reqs []roachpb.RequestUnion
+	// reqsKeys stores the start key of the corresponding request in reqs. It is
+	// only set prior to sorting reqs within this object (currently, this is
+	// done only in the OutOfOrder mode for the original requests - resume
+	// requests don't set this), and the reference is niled out right after
+	// sorting is complete. Thus, this slice doesn't have to be accounted for.
+	reqsKeys []roachpb.Key
 	// positions is a 1-to-1 mapping with reqs to indicate which ordinal among
 	// the originally enqueued requests a particular reqs[i] corresponds to. In
 	// other words, if reqs[i] is (or a part of) enqueuedReqs[j], then
@@ -90,6 +96,9 @@ func (r *singleRangeBatch) Len() int {
 
 func (r *singleRangeBatch) Swap(i, j int) {
 	r.reqs[i], r.reqs[j] = r.reqs[j], r.reqs[i]
+	if r.reqsKeys != nil {
+		r.reqsKeys[i], r.reqsKeys[j] = r.reqsKeys[j], r.reqsKeys[i]
+	}
 	r.positions[i], r.positions[j] = r.positions[j], r.positions[i]
 	if r.subRequestIdx != nil {
 		r.subRequestIdx[i], r.subRequestIdx[j] = r.subRequestIdx[j], r.subRequestIdx[i]
@@ -98,9 +107,7 @@ func (r *singleRangeBatch) Swap(i, j int) {
 
 // Less returns true if r.reqs[i]'s key comes before r.reqs[j]'s key.
 func (r *singleRangeBatch) Less(i, j int) bool {
-	// TODO(yuzefovich): figure out whether it's worth extracting the keys when
-	// constructing singleRangeBatch object.
-	return r.reqs[i].GetInner().Header().Key.Compare(r.reqs[j].GetInner().Header().Key) < 0
+	return r.reqsKeys[i].Compare(r.reqsKeys[j]) < 0
 }
 
 // priority returns the priority value of this batch.
