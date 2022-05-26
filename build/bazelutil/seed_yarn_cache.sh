@@ -14,8 +14,8 @@ yarn \
   --cwd $rootDir \
   --modules-folder $moduleDir \
   --offline \
-  --ignore-optional \
   --no-progress \
+  --ignore-scripts \
   --mutex network \
   install
 

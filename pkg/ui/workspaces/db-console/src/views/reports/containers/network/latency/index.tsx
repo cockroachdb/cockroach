@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import { Divider, Tooltip } from "antd";
+import "antd/lib/divider/style";
+import "antd/lib/tooltip/style";
 import classNames from "classnames";
 import _ from "lodash";
 import { util } from "@cockroachlabs/cluster-ui";

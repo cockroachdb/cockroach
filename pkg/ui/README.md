@@ -225,10 +225,8 @@ contingent upon resolving the above TODO.
 
 [cockroachdb/yarn-vendored]: https://github.com/cockroachdb/yarn-vendored
 [dcodeIO/protobuf.js#716]: https://github.com/dcodeIO/protobuf.js#716
-[main app bundle]: ./webpack.app.js
+[main app bundle]: ./webpack.config.js
 [Git LFS]: https://git-lfs.github.com
 [offline mirror]: https://yarnpkg.com/blog/2016/11/24/offline-mirror/
-[protos DLL]: ./webpack.protos.js
-[vendor DLL]: ./webpack.vendor.js
 [.yarnrc]: ./yarnrc
 [yarn-vendor]: ./yarn-vendor

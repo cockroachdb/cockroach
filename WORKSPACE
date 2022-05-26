@@ -4,7 +4,7 @@ workspace(
     name = "com_github_cockroachdb_cockroach",
     managed_directories = {
         "@yarn_vendor": ["pkg/ui/yarn-vendor"],
-        "@npm_eslint_rules": ["pkg/ui/workspaces/eslint-rules/node_modules"],
+        "@npm_eslint_plugin_crdb": ["pkg/ui/workspaces/eslint-plugin-crdb/node_modules"],
         "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
         "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
         "@npm_db_console": ["pkg/ui/workspaces/db-console/node_modules"],
@@ -248,7 +248,7 @@ seed_yarn_cache(name = "yarn_cache")
 # packages have isolated dependencies and must be installed as isolated
 # Bazel repositories.
 yarn_install(
-    name = "npm_eslint_rules",
+    name = "npm_eslint_plugin_crdb",
     args = [
         "--offline",
         "--ignore-optional",
@@ -257,9 +257,9 @@ yarn_install(
       "//pkg/ui:.yarnrc",
       "@yarn_cache//:.seed",
     ],
-    package_json = "//pkg/ui/workspaces/eslint-rules:package.json",
+    package_json = "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui/workspaces/eslint-rules:yarn.lock",
+    yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
     symlink_node_modules = True,
 )
 

@@ -10,6 +10,9 @@
 
 import React, { ReactNode } from "react";
 import { Col, Row, Tabs } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
+import "antd/lib/tabs/style";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Text, InlineAlert } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";

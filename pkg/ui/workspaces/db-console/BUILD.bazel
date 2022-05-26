@@ -71,6 +71,7 @@ DEV_DEPENDENCIES = [
     "@npm_db_console//eslint-plugin-prettier",
     "@npm_db_console//eslint-plugin-react",
     "@npm_db_console//eslint-plugin-react-hooks",
+    "@npm_db_console//esbuild-loader",
     "@npm_db_console//espree",
     "@npm_db_console//estraverse",
     "@npm_db_console//express",
@@ -88,6 +89,7 @@ DEV_DEPENDENCIES = [
     "@npm_db_console//karma-sinon",
     "@npm_db_console//karma-sourcemap-loader",
     "@npm_db_console//karma-webpack",
+    "@npm_db_console//less-loader",
     "@npm_db_console//minimist",
     "@npm_db_console//mocha",
     "@npm_db_console//nib",
@@ -169,7 +171,7 @@ WEBPACK_DATA_COMMON = [
     "src",
     "styl",
     "tsconfig.json",
-    "webpack.app.js",
+    "webpack.config.js",
     "//pkg/ui/workspaces/cluster-ui:cluster-ui",
     "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
 ]
@@ -184,7 +186,7 @@ WEBPACK_DATA_CCL = WEBPACK_DATA_COMMON + [
 webpack(
     name = "db-console-ccl",
     args = [
-        "--config $(execpath webpack.app.js)",
+        "--config $(execpath webpack.config.js)",
         "--env.dist=ccl",
         "--mode production",
         "--env.output=$(RULEDIR)/db-console-ccl",
@@ -200,7 +202,7 @@ webpack(
 webpack(
     name = "db-console-oss",
     args = [
-        "--config $(execpath webpack.app.js)",
+        "--config $(execpath webpack.config.js)",
         "--env.dist=oss",
         "--mode production",
         "--env.output=$(RULEDIR)/db-console-oss",
@@ -335,7 +337,7 @@ KARMA_DEPS = [
     "fonts",
     "styl",
     "tsconfig.json",
-    "webpack.app.js",
+    "webpack.config.js",
     "karma.conf.js",
     "tests-loader.js",
     "//pkg/ui/workspaces/cluster-ui:cluster-ui",

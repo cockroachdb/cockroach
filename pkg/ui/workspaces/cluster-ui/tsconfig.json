@@ -4,6 +4,7 @@
     "allowJs": false,
     "emitDeclarationOnly": true,
     "esModuleInterop": true,
+    "isolatedModules": true,
     "declaration": true,
     "jsx": "react",
     "module": "ESNext",
