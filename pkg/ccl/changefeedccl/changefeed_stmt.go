@@ -1288,7 +1288,7 @@ func getCommonChangefeedEventDetails(
 	resolvedValue, resolvedSet := opts[changefeedbase.OptResolvedTimestamps]
 	if !resolvedSet {
 		resolved = "no"
-	} else if resolved == `` {
+	} else if resolvedValue == `` {
 		resolved = "yes"
 	} else {
 		resolved = resolvedValue

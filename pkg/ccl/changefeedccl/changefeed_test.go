@@ -6466,14 +6466,14 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 	t.Run(`gcpubsub_sink_type with options`, func(t *testing.T) {
 		pubsubFeedFactory := makePubsubFeedFactory(s, db)
 		beforeCreatePubsub := timeutil.Now()
-		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED FOR foo, bar WITH resolved, no_initial_scan`)
+		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED FOR foo, bar WITH resolved="10s", no_initial_scan`)
 		defer closeFeed(t, pubsubFeed)
 
 		createLogs := checkCreateChangefeedLogs(t, beforeCreatePubsub.UnixNano())
 		require.Equal(t, 1, len(createLogs))
 		require.Equal(t, createLogs[0].SinkType, `gcpubsub`)
 		require.Equal(t, createLogs[0].NumTables, int32(2))
-		require.Equal(t, createLogs[0].Resolved, `yes`)
+		require.Equal(t, createLogs[0].Resolved, `10s`)
 		require.Equal(t, createLogs[0].InitialScan, `no`)
 	})
 }
