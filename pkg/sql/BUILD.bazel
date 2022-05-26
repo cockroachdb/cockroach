@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 load("//pkg/util/fsm/gen:REPORTS.bzl", "gen_reports")
 
@@ -811,3 +812,5 @@ disallowed_imports_test(
     # TODO(#81380): This should be flipped to "True".
     disallow_cdeps = False,
 )
+
+get_x_data(name = "get_x_data")

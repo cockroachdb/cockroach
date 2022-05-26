@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -68,3 +69,5 @@ stringer(
     src = "system_attributes.go",
     typ = "systemAttribute",
 )
+
+get_x_data(name = "get_x_data")

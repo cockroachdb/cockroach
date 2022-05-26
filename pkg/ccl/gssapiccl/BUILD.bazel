@@ -1,10 +1,14 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 # keep
 go_library(
     name = "gssapiccl",
     srcs = select({
-        "@io_bazel_rules_go//go/platform:linux": ["gssapi.go", "get_user.go"],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "gssapi.go",
+            "get_user.go",
+        ],
         "//conditions:default": ["empty.go"],
     }),
     cdeps = select({
@@ -36,3 +40,5 @@ go_library(
         "//conditions:default": [],
     }),
 )
+
+get_x_data(name = "get_x_data")

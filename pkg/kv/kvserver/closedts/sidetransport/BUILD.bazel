@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//build:STRINGER.bzl", "stringer")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -61,3 +62,5 @@ stringer(
     src = "sender.go",
     typ = "CantCloseReason",
 )
+
+get_x_data(name = "get_x_data")

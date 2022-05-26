@@ -6,7 +6,6 @@
 package u1000
 
 import (
-	util "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/staticcheck"
 	"golang.org/x/tools/go/analysis"
 	"honnef.co/go/tools/unused"
 )
@@ -15,5 +14,4 @@ var Analyzer *analysis.Analyzer
 
 func init() {
 	Analyzer = unused.Analyzer.Analyzer
-	util.MungeAnalyzer(Analyzer)
 }

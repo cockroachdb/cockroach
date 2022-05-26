@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/build/bazelutil/staticcheckanalyzers/u1000",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/testutils/lint/passes/staticcheck",
         "@co_honnef_go_tools//unused",
         "@org_golang_x_tools//go/analysis",
     ],
