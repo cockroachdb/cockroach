@@ -47,6 +47,8 @@ import SQLActivityError from "../sqlActivity/errorComponent";
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
 import { Col, Row } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import { Text, Heading } from "@cockroachlabs/ui-components";
 import { formatTwoPlaces } from "../barCharts";
 import { ArrowLeft } from "@cockroachlabs/icons";

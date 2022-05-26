@@ -28,6 +28,8 @@ import SQLActivityError from "../sqlActivity/errorComponent";
 import { TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT } from "src/util/format";
 import { Col, Row } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 
 import TerminateSessionModal, {
   TerminateSessionModalRef,
