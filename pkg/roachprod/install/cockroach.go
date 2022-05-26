@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,25 +70,6 @@ func cockroachNodeBinary(c *SyncedCluster, node Node) string {
 		return c.Binary
 	}
 	return path
-}
-
-func getCockroachVersion(
-	ctx context.Context, c *SyncedCluster, node Node,
-) (*version.Version, error) {
-	sess, err := c.newSession(node)
-	if err != nil {
-		return nil, err
-	}
-	defer sess.Close()
-
-	cmd := cockroachNodeBinary(c, node) + " version"
-	out, err := sess.CombinedOutput(ctx, cmd+" --build-tag")
-	if err != nil {
-		return nil, errors.Wrapf(err, "~ %s --build-tag\n%s", cmd, out)
-	}
-
-	verString := strings.TrimSpace(string(out))
-	return version.Parse(verString)
 }
 
 func argExists(args []string, target string) int {
@@ -166,14 +146,10 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	l.Printf("%s: starting nodes", c.Name)
 	return c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
 		node := nodes[nodeIdx]
-		vers, err := getCockroachVersion(ctx, c, node)
-		if err != nil {
-			return nil, err
-		}
 
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
-		if _, err := c.startNode(ctx, l, node, startOpts, vers); err != nil {
+		if _, err := c.startNode(ctx, l, node, startOpts); err != nil {
 			return nil, err
 		}
 
@@ -360,9 +336,9 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 }
 
 func (c *SyncedCluster) startNode(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts, vers *version.Version,
+	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
 ) (string, error) {
-	startCmd, err := c.generateStartCmd(ctx, l, node, startOpts, vers)
+	startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
 	if err != nil {
 		return "", err
 	}
@@ -408,9 +384,9 @@ func (c *SyncedCluster) startNode(
 }
 
 func (c *SyncedCluster) generateStartCmd(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts, vers *version.Version,
+	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
 ) (string, error) {
-	args, err := c.generateStartArgs(ctx, l, node, startOpts, vers)
+	args, err := c.generateStartArgs(ctx, l, node, startOpts)
 	if err != nil {
 		return "", err
 	}
@@ -462,7 +438,7 @@ func execStartTemplate(data startTemplateData) (string, error) {
 // generateStartArgs generates cockroach binary arguments for starting a node.
 // The first argument is the command (e.g. "start").
 func (c *SyncedCluster) generateStartArgs(
-	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts, vers *version.Version,
+	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
 ) ([]string, error) {
 	var args []string
 
@@ -499,12 +475,8 @@ func (c *SyncedCluster) generateStartArgs(
 
 	// if neither --log nor --log-config-file are present
 	if idx1 == -1 && idx2 == -1 {
-		if vers.AtLeast(version.MustParse("v21.1.0-alpha.0")) {
-			// Specify exit-on-error=false to work around #62763.
-			args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
-		} else {
-			args = append(args, `--log-dir`, logDir)
-		}
+		// Specify exit-on-error=false to work around #62763.
+		args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
 	}
 
 	listenHost := ""
@@ -542,11 +514,11 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	if startOpts.Target == StartDefault {
-		args = append(args, c.generateStartFlagsKV(node, startOpts, vers)...)
+		args = append(args, c.generateStartFlagsKV(node, startOpts)...)
 	}
 
 	if startOpts.Target == StartDefault || startOpts.Target == StartTenantSQL {
-		args = append(args, c.generateStartFlagsSQL(node, startOpts, vers)...)
+		args = append(args, c.generateStartFlagsSQL()...)
 	}
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
@@ -567,9 +539,7 @@ func (c *SyncedCluster) generateStartArgs(
 // generateStartFlagsKV generates `cockroach start` arguments that are relevant
 // for the KV and storage layers (and consequently are never used by
 // `cockroach mt start-sql`).
-func (c *SyncedCluster) generateStartFlagsKV(
-	node Node, startOpts StartOpts, vers *version.Version,
-) []string {
+func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []string {
 	var args []string
 	var storeDirs []string
 	if idx := argExists(startOpts.ExtraArgs, "--store"); idx == -1 {
@@ -612,9 +582,7 @@ func (c *SyncedCluster) generateStartFlagsKV(
 // generateStartFlagsSQL generates `cockroach start` and `cockroach mt
 // start-sql` arguments that are relevant for the SQL layers, used by both KV
 // and storage layers (and in particular, are never used by `
-func (c *SyncedCluster) generateStartFlagsSQL(
-	node Node, startOpts StartOpts, vers *version.Version,
-) []string {
+func (c *SyncedCluster) generateStartFlagsSQL() []string {
 	var args []string
 	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(25)))
 	return args
