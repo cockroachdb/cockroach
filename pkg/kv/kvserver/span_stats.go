@@ -13,23 +13,79 @@ package kvserver
 import (
 	"context"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+
+
+func (s *Store) SetBucketBoundaries() error {
+
+	hist := newSpanStatsHistogram()
+
+	var err error
+	s.VisitReplicas(func(replica *Replica) (wantMore bool) {
+		desc := replica.Desc()
+
+		err = hist.addBucket(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+
+		if err != nil {
+			return false
+		}
+
+		log.Infof(context.Background(), "Add Bucket: %s",  desc.KeySpan().String())
+		return true
+	})
+
+
+	// TODO: acquire lock
+	if err != nil {
+		return err
+	}
+
+	s.spanStatsHistogram = hist
+	return nil
+}
+
+
+// TODO: get rid of dependency on serverpb
+// use go types instead.
 
 func (s *Store) GetSpanStats(
 	ctx context.Context,
 	start hlc.Timestamp,
 	end hlc.Timestamp,
-) error { // XXX: Fill me in, find the right return type
-	tenantID, _ := roachpb.TenantFromContext(ctx) // XXX: unused return
+ ) ([]*serverpb.SpanStatistics, error) {
+
+	// for now, assume that the requested time window
+	// corresponds to the current s.spanStatsHistogram
+
+	tenantID, _ := roachpb.TenantFromContext(ctx) // XXX: unused tenantId
 	_ = tenantID
 
-	copy := s.spanStatsHistogram.tree.Clone()
-	_ = copy
+	sample := make([]*serverpb.SpanStatistics, 0)
+	it := s.spanStatsHistogram.tree.Iterator()
+
+	for {
+		i, next := it.Next()
+
+		if next == false {
+			break
+		}
+
+		bucket := i.(*spanStatsHistogramBucket)
+		sample = append(sample, &serverpb.SpanStatistics{Span: &bucket.sp, Qps: bucket.counter})
+	}
+
+
+	// clone for llrb trees is not implemented.
+	//copy := s.spanStatsHistogram.tree.Clone()
+	//_ = copy
 	// XXX: construct the return type with the copy.
-	return nil
+	return sample, nil
 }
 
 type tenantShardedSpanStats struct {
@@ -42,12 +98,30 @@ type spanStatsHistogram struct {
 	// XXX: span oriented data structure, queryable by a span, values are counters.
 	// Scan[a,d) --> a list of counters of increment
 	// GetAllCountersBetween(a, d) -> inc each one.
-	tree interval.Tree // tree of spans -> counters
+	tree interval.Tree // tree of spans -> counters,
+	lastBucketId uint64
+}
+
+func (s *spanStatsHistogram) addBucket(startKey, endKey roachpb.Key) error {
+	s.lastBucketId++
+
+	bucket := spanStatsHistogramBucket{
+		sp:      roachpb.Span{Key: startKey, EndKey: endKey},
+		id:      uintptr(s.lastBucketId),
+		counter: 0,
+	}
+
+	return s.tree.Insert(&bucket, false)
 }
 
 func newSpanStatsHistogram() *spanStatsHistogram {
+	// install boundaries.
+	// for now, just use ranges
+
+	tree := interval.NewTree(interval.ExclusiveOverlapper)
+
 	return &spanStatsHistogram{
-		tree: interval.NewTree(interval.ExclusiveOverlapper),
+		tree: tree,
 	}
 	// XXX: needs to be initialized with a set of boundaries
 	// XXX: want to be able to reset/reconfigure boundaries
@@ -64,8 +138,7 @@ func (s *spanStatsHistogramBucket) Range() interval.Range {
 }
 
 func (s *spanStatsHistogramBucket) ID() uintptr {
-	//TODO implement me
-	panic("implement me")
+	return s.id
 }
 
 var _ interval.Interface = &spanStatsHistogramBucket{}
