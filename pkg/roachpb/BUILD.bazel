@@ -41,6 +41,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/bitarray",
+        "//pkg/util/bulk",
         "//pkg/util/caller",
         "//pkg/util/duration",
         "//pkg/util/encoding",
@@ -60,6 +61,7 @@ go_library(
         "@com_github_gogo_protobuf//proto",
         "@com_github_golang_mock//gomock",  # keep
         "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@io_opentelemetry_go_otel//attribute",
         "@org_golang_google_grpc//metadata",  # keep
     ],
 )

@@ -808,13 +808,18 @@ func (pb *ProcessorBase) AppendTrailingMeta(meta execinfrapb.ProducerMetadata) {
 
 // ProcessorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
-func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.Span) {
+func ProcessorSpan(
+	ctx context.Context, name string, tracingEventListeners ...tracing.EventListener,
+) (context.Context, *tracing.Span) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(ctx, name,
-		tracing.WithParent(sp), tracing.WithDetachedRecording())
+	spanOpts := []tracing.SpanOption{tracing.WithParent(sp), tracing.WithDetachedRecording()}
+	if tracingEventListeners != nil {
+		spanOpts = append(spanOpts, tracing.WithEventListeners(tracingEventListeners))
+	}
+	return sp.Tracer().StartSpanCtx(ctx, name, spanOpts...)
 }
 
 // StartInternal prepares the ProcessorBase for execution. It returns the
@@ -826,8 +831,10 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 //   < inputs >.Start(ctx) // if there are any inputs-RowSources to pb
 //   < other initialization >
 // so that the caller doesn't mistakenly use old ctx object.
-func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string) context.Context {
-	return pb.startImpl(ctx, true /* createSpan */, name)
+func (pb *ProcessorBaseNoHelper) StartInternal(
+	ctx context.Context, name string, tracingEventListeners ...tracing.EventListener,
+) context.Context {
+	return pb.startImpl(ctx, true /* createSpan */, name, tracingEventListeners...)
 }
 
 // StartInternalNoSpan does the same as StartInternal except that it does not
@@ -840,11 +847,14 @@ func (pb *ProcessorBaseNoHelper) StartInternalNoSpan(ctx context.Context) contex
 }
 
 func (pb *ProcessorBaseNoHelper) startImpl(
-	ctx context.Context, createSpan bool, spanName string,
+	ctx context.Context,
+	createSpan bool,
+	spanName string,
+	tracingEventListeners ...tracing.EventListener,
 ) context.Context {
 	pb.origCtx = ctx
 	if createSpan {
-		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
+		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName, tracingEventListeners...)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -170,8 +171,14 @@ func newBackupDataProcessor(
 
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
+	agg := bulk.MakeAggregator()
 	ctx = logtags.AddTag(ctx, "job", bp.spec.JobID)
-	ctx = bp.StartInternal(ctx, backupProcessorName)
+	ctx = bp.StartInternal(ctx, backupProcessorName, agg)
+
+	// Initialize the aggregator with the tracing span that will live as long as
+	// this processor is running.
+	agg.Init(tracing.SpanFromContext(ctx))
+
 	ctx, cancel := context.WithCancel(ctx)
 	bp.cancelAndWaitForWorker = func() {
 		cancel()
@@ -254,7 +261,6 @@ func runBackupProcessor(
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	memAcc *mon.BoundAccount,
 ) error {
-	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 
 	totalSpans := len(spec.Spans) + len(spec.IntroducedSpans)
@@ -411,37 +417,23 @@ func runBackupProcessor(
 						span.span, span.attempts+1, header.UserPriority.String())
 					var rawResp roachpb.Response
 					var pErr *roachpb.Error
-					var reqSentTime time.Time
-					var respReceivedTime time.Time
 					exportRequestErr := contextutil.RunWithTimeout(ctx,
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
-							reqSentTime = timeutil.Now()
-							backupProcessorSpan.RecordStructured(&BackupExportTraceRequestEvent{
-								Span:        span.span.String(),
-								Attempt:     int32(span.attempts + 1),
-								Priority:    header.UserPriority.String(),
-								ReqSentTime: reqSentTime.String(),
-							})
-
 							rawResp, pErr = kv.SendWrappedWithAdmission(
 								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
-							respReceivedTime = timeutil.Now()
 							if pErr != nil {
 								return pErr.GoError()
 							}
 							return nil
 						})
 					if exportRequestErr != nil {
-						if intentErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+						if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
-							backupProcessorSpan.RecordStructured(&BackupExportTraceResponseEvent{
-								RetryableError: tracing.RedactAndTruncateError(intentErr),
-							})
 							continue
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
@@ -500,20 +492,12 @@ func runBackupProcessor(
 						completedSpans = 1
 					}
 
-					duration := respReceivedTime.Sub(reqSentTime)
-					exportResponseTraceEvent := &BackupExportTraceResponseEvent{
-						Duration:      duration.String(),
-						FileSummaries: make([]roachpb.RowCount, 0),
-					}
-
 					if len(resp.Files) > 1 {
 						log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 					}
 
 					for i, file := range resp.Files {
 						entryCounts := countRows(file.Exported, spec.PKIDs)
-						exportResponseTraceEvent.FileSummaries = append(exportResponseTraceEvent.FileSummaries, entryCounts)
-
 						ret := exportedSpan{
 							// BackupManifest_File just happens to contain the exact fields
 							// to store the metadata we need, but there's no actual File
@@ -541,8 +525,6 @@ func runBackupProcessor(
 							return ctx.Err()
 						}
 					}
-					exportResponseTraceEvent.NumFiles = int32(len(resp.Files))
-					backupProcessorSpan.RecordStructured(exportResponseTraceEvent)
 
 				default:
 					// No work left to do, so we can exit. Note that another worker could

@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 //go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient
@@ -1800,3 +1802,69 @@ const (
 	// with the SpecificTenantOverrides precedence..
 	AllTenantsOverrides
 )
+
+var _ bulk.AggregatorEvent = &ExportStats{}
+
+// Combine implements the AggregatorEvent interface.
+func (e *ExportStats) Combine(other bulk.AggregatorEvent) {
+	if e == nil {
+		e.SentPerNode = make(map[NodeID]int32)
+		e.EvaluatedPerNode = make(map[NodeID]int32)
+	}
+
+	otherExportStats, ok := other.(*ExportStats)
+	if !ok {
+		panic("`other` is not of type ExportStats")
+	}
+	e.NumFiles += otherExportStats.NumFiles
+	e.DataSize += otherExportStats.DataSize
+	for nodeID, count := range otherExportStats.SentPerNode {
+		e.SentPerNode[nodeID] += count
+	}
+	for nodeID, count := range otherExportStats.EvaluatedPerNode {
+		e.EvaluatedPerNode[nodeID] += count
+	}
+}
+
+// Tag implements the AggregatorEvent interface.
+func (e *ExportStats) Tag() string {
+	return "ExportStats"
+}
+
+const (
+	tagNumFiles    = "export_num_files"
+	tagDataSize    = "export_data_size"
+	tagRequestSent = "export_sent_per_node"
+	tagRequestEval = "export_eval_per_node"
+)
+
+// Render implements the AggregatorEvent interface.
+func (e *ExportStats) Render() []attribute.KeyValue {
+	tags := make([]attribute.KeyValue, 0)
+	if e.NumFiles > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagNumFiles,
+			Value: attribute.Int64Value(e.NumFiles),
+		})
+	}
+	if e.DataSize > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagDataSize,
+			Value: attribute.Int64Value(e.DataSize),
+		})
+	}
+	if len(e.SentPerNode) > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagRequestSent,
+			Value: attribute.StringValue(fmt.Sprintf("%v", e.SentPerNode)),
+		})
+	}
+	if len(e.EvaluatedPerNode) > 0 {
+		tags = append(tags, attribute.KeyValue{
+			Key:   tagRequestEval,
+			Value: attribute.StringValue(fmt.Sprintf("%v", e.EvaluatedPerNode)),
+		})
+	}
+
+	return tags
+}

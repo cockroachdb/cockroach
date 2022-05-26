@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "bulk",
+    srcs = ["aggregator.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/bulk",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+    ],
+)
