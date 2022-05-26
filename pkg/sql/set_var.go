@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -25,9 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -484,4 +488,82 @@ func newVarValueError(varName, actualVal string, allowedVals ...string) (err err
 func newCannotChangeParameterError(varName string) error {
 	return pgerror.Newf(pgcode.CantChangeRuntimeParam,
 		"parameter %q cannot be changed", varName)
+}
+
+var internalQoSLevels = settings.RegisterValidatedStringSetting(
+	settings.SystemOnly,
+	"cluster.internal_qos_levels",
+	"internal QoS levels that users defined by may assume",
+	sessiondatapb.InternalNormalName,
+	func(_ *settings.Values, val string) error {
+		for _, val := range parseStringListSetting(val) {
+			if val != sessiondatapb.InternalNormalName {
+				return errors.Newf("invalid value for cluster.internal_qos_levels: %q", val)
+			}
+		}
+		return nil
+	},
+)
+
+// parseStringListSetting parses a string of comma separated values in to a
+// string slice. An empty slice is returned if the passed string is empty.
+func parseStringListSetting(val string) []string {
+	parts := strings.Split(strings.ToLower(val), ",")
+
+	vals := []string{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			vals = append(vals, p)
+		}
+	}
+
+	return vals
+}
+
+// containsSQLUsername returns true if the SQLUsername s is in the list of
+// SQLUsernames slist.
+func containsSQLUsername(s username.SQLUsername, slist []username.SQLUsername) bool {
+	for _, su := range slist {
+		if s == su {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultTransactionQualityOfServiceVarSet sets the default transaction QoS for the session.
+func defaultTransactionQualityOfServiceVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+	qosLevel, ok := sessiondatapb.ParseQoSLevelFromString(s)
+	if !ok {
+		return newVarValueError(`default_transaction_quality_of_service`, s,
+			sessiondatapb.NormalName, sessiondatapb.UserHighName, sessiondatapb.UserLowName)
+	}
+
+	// Only a privileged set of users (defined by a environment variable)
+	// should be allowed to access internal QoS levels.
+	if sessiondatapb.IsInternalQoSLevel(qosLevel) {
+		// TODO(logston): Find best way to validate this env var value during startup.
+		envVarVal := envutil.EnvOrDefaultString("COCKROACH_CLUSTER_ALLOWED_INTERNAL_USERS", "")
+
+		allowedInternalSQLUsernames := []username.SQLUsername{}
+		for _, u := range parseStringListSetting(envVarVal) {
+			s, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
+			if err != nil {
+				return errors.Wrapf(err, "unable to make sql username from %s", s)
+			}
+			allowedInternalSQLUsernames = append(allowedInternalSQLUsernames, s)
+		}
+		su := m.data.SessionUser()
+		if !containsSQLUsername(su, allowedInternalSQLUsernames) {
+			return newVarValueError(`default_transaction_quality_of_service`, s,
+				sessiondatapb.NormalName, sessiondatapb.UserHighName, sessiondatapb.UserLowName)
+		}
+
+		log.Dev.Infof(ctx, "qos set to internal level %s by %s", qosLevel, su.Normalized())
+	}
+
+	m.SetQualityOfService(qosLevel)
+
+	return nil
 }

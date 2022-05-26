@@ -1941,15 +1941,7 @@ var varGen = map[string]sessionVar{
 	},
 	`default_transaction_quality_of_service`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`default_transaction_quality_of_service`),
-		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			qosLevel, ok := sessiondatapb.ParseQoSLevelFromString(s)
-			if !ok {
-				return newVarValueError(`default_transaction_quality_of_service`, s,
-					sessiondatapb.NormalName, sessiondatapb.UserHighName, sessiondatapb.UserLowName)
-			}
-			m.SetQualityOfService(qosLevel)
-			return nil
-		},
+		Set:          defaultTransactionQualityOfServiceVarSet,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return evalCtx.QualityOfService().String(), nil
 		},
