@@ -185,7 +185,7 @@ func TestBoundingBoxFromGeomT(t *testing.T) {
 		t.Run(fmt.Sprintf("%s: %#v", tc.soType, tc.g), func(t *testing.T) {
 			bbox, err := boundingBoxFromGeomT(tc.g, tc.soType)
 			require.NoError(t, err)
-  		// If bbox is within a small epsilon of expected, use the same values.
+			// If bbox is within a small epsilon of expected, use the same values.
 			if bbox != nil && tc.expected != nil {
 				const epsilon = 0.000001
 				if math.Abs(bbox.LoX-tc.expected.LoX) < epsilon {
