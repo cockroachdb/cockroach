@@ -307,7 +307,7 @@ memo (optimized, ~5KB, required=[presentation: i:1,g:2])
  ├── G1: (select G2 G3)
  │    └── [presentation: i:1,g:2]
  │         ├── best: (select G2 G3)
- │         └── cost: 2144.55
+ │         └── cost: 4144.55
  ├── G2: (scan t,cols=(1,2))
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
