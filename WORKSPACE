@@ -28,14 +28,14 @@ http_archive(
 # Like the above, but for nodeJS.
 http_archive(
     name = "rules_nodejs",
-    sha256 = "26766278d815a6e2c43d2f6c9c72fde3fec8729e84138ffa4dabee47edc7702a",
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-core-5.4.2.tar.gz"],
+    sha256 = "4d48998e3fa1e03c684e6bdf7ac98051232c7486bfa412e5b5475bbaec7bb257",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-core-5.5.0.tar.gz"],
 )
 
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "e328cb2c9401be495fa7d79c306f5ee3040e8a03b2ebb79b022e15ca03770096",
-    urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.4.2.tar.gz" ],
+    sha256 = "0fad45a9bda7dc1990c47b002fd64f55041ea751fafc00cd34efb96107675778",
+    urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.5.0.tar.gz" ],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
