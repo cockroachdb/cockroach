@@ -1084,6 +1084,22 @@ func (c *coster) computeInvertedJoinCost(
 	return cost
 }
 
+// computeExprCost calculates per-row cost of the expression.
+// It finds every embedded spatial function and add its cost.
+func (c *coster) computeExprCost(
+	expr opt.Expr,
+) memo.Cost {
+	perRowCost := memo.Cost(0)
+	if expr.Op() == opt.FunctionOp {
+		function := expr.(*memo.FunctionExpr)
+		perRowCost += fnCost[function.Name]
+	}
+	for i := 0; i < expr.ChildCount(); i++ {
+		perRowCost += c.computeExprCost(expr.Child(i))
+	}
+	return perRowCost
+}
+
 // computeFiltersCost returns the setup and per-row cost of executing
 // a filter. Callers of this function should add setupCost and multiply
 // perRowCost by the number of rows expected to be filtered.
@@ -1098,12 +1114,9 @@ func (c *coster) computeFiltersCost(
 		switch f.Condition.Op() {
 		case opt.EqOp:
 			eq := f.Condition.(*memo.EqExpr)
-			leftVar, ok := eq.Left.(*memo.VariableExpr)
-			if !ok {
-				break
-			}
-			rightVar, ok := eq.Right.(*memo.VariableExpr)
-			if !ok {
+			leftVar, lOk := eq.Left.(*memo.VariableExpr)
+			rightVar, rOk := eq.Right.(*memo.VariableExpr)
+			if !lOk || !rOk {
 				break
 			}
 			if val, ok := eqMap.Get(int(leftVar.Col)); ok && val == int(rightVar.Col) {
@@ -1113,11 +1126,14 @@ func (c *coster) computeFiltersCost(
 				continue
 			}
 		case opt.FunctionOp:
-			function := f.Condition.(*memo.FunctionExpr)
 			// We are ok with the zero value here for functions not in the map.
+			function := f.Condition.(*memo.FunctionExpr)
 			perRowCost += fnCost[function.Name]
 		}
-
+		// recurse into the children of the current expression
+		for i := 0; i < f.Condition.ChildCount(); i++ {
+			perRowCost += c.computeExprCost(f.Condition.Child(i))
+		}
 		// Add a constant "setup" cost per ON condition to account for the fact that
 		// the rowsProcessed estimate alone cannot effectively discriminate between
 		// plans when RowCount is too small.
