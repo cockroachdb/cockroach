@@ -10,6 +10,7 @@
 
 import React from "react";
 import { Modal as AntModal } from "antd";
+import "antd/lib/modal/style";
 import { Button, Text, TextTypes } from "src/components";
 import "./modal.styl";
 

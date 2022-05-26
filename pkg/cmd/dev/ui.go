@@ -177,7 +177,7 @@ Replaces 'make ui-watch'.`,
 				"--cwd",
 				dirs.dbConsole,
 				"webpack-dev-server",
-				"--config", "webpack.app.js",
+				"--config", "webpack.config.js",
 				"--mode", "development",
 				// Polyfill WEBPACK_SERVE for webpack v4; it's set in webpack v5 via
 				// `webpack serve`.
