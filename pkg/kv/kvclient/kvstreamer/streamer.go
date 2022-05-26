@@ -541,6 +541,10 @@ func (s *Streamer) Enqueue(
 			// can become head-of-the-line in the future. We probably will need
 			// to introduce a way to "restore" the original order within
 			// singleRangeBatch if it is sorted and issued with headOfLine=true.
+			r.reqsKeys = make([]roachpb.Key, len(r.reqs))
+			for i := range r.reqs {
+				r.reqsKeys[i] = r.reqs[i].GetInner().Header().Key
+			}
 			sort.Sort(&r)
 		}
 
