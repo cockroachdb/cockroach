@@ -81,6 +81,25 @@ var addSSTableCapacityRemainingLimit = settings.RegisterFloatSetting(
 	0.05,
 )
 
+// prefixSeekCollisionCheckRatio specifies the minimum engine:sst byte ratio at
+// which we do prefix seeks in CheckSSTCollisions instead of regular seeks.
+// Prefix seeks make more sense if the inbound SST is wide relative to the engine
+// i.e. the engine:sst byte/key ratio is high and skewed in favour of the engine.
+// In those cases, since we are less likely to skip SST keys with regular seeks
+// on the engine, it is more efficient to utilize bloom filters on the engine's
+// SSTs and do a prefix seek in the engine for every key in the SST being added.
+//
+// A value of 10 was experimentally determined to be sufficient in separating
+// most cases of wide SSTs from other cases where a regular seek would be
+// beneficial (i.e. incoming SSTs that are very narrow in the engine's keyspace).
+// For cases where the ratio is 1 or less (i.e. more SST key bytes than engine
+// key bytes in the span being ingested), regular seeks are always beneficial,
+// while for cases where the ratio is 10 or higher, prefix seeks were always
+// found to be beneficial. This value can likely be set anywhere within the 1-10
+// range, but it was conservatively set to 10 to not induce regressions as the
+// old status quo was regular seeks.
+const prefixSeekCollisionCheckRatio = 10
+
 var forceRewrite = util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
@@ -160,8 +179,26 @@ func EvalAddSSTable(
 		// Additionally, if DisallowShadowing or DisallowShadowingBelow is set, it
 		// will not write above existing/visible values (but will write above
 		// tombstones).
+		//
+		// If the overlap between the ingested SST and the engine is large (i.e.
+		// the SST is wide in keyspace), or if the ingested SST is very small,
+		// use prefix seeks in CheckSSTConflicts. This ends up being more performant
+		// as it avoids expensive seeks with index/data block loading in the common
+		// case of no conflicts.
+		usePrefixSeek := false
+		bytes, err := cArgs.EvalCtx.GetApproximateDiskBytes(start.Key, end.Key)
+		if err == nil {
+			usePrefixSeek = bytes > prefixSeekCollisionCheckRatio*uint64(len(sst))
+		}
+		if args.MVCCStats != nil {
+			// If the incoming SST is small, use a prefix seek. Very little time is
+			// usually spent iterating over keys in these cases anyway, so it makes
+			// sense to use prefix seeks when the max number of seeks we'll do is
+			// bounded with a small number on the SST side.
+			usePrefixSeek = usePrefixSeek || args.MVCCStats.KeyCount < 100
+		}
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end,
-			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents)
+			args.DisallowShadowing, args.DisallowShadowingBelow, maxIntents, usePrefixSeek)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
