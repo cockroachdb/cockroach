@@ -2261,12 +2261,6 @@ func ReplicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool 
 // replica that is not the raft leader), we pessimistically assume that
 // `replicaID` may need a snapshot.
 func replicaMayNeedSnapshot(raftStatus *raft.Status, replica roachpb.ReplicaDescriptor) bool {
-	// When adding replicas, we only move them from LEARNER to VOTER_INCOMING after
-	// they applied the snapshot (see initializeRaftLearners and its use in
-	// changeReplicasImpl).
-	if replica.GetType() == roachpb.VOTER_INCOMING {
-		return false
-	}
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
 		return true
 	}
