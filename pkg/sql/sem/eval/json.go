@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/errors"
 )
 
 // PopulateDatumWithJSON is used for the json to record function family, like
@@ -59,6 +60,9 @@ func PopulateDatumWithJSON(ctx *Context, j json.JSON, desiredType *types.T) (tre
 		t, err := j.AsText()
 		if err != nil {
 			return nil, err
+		}
+		if t == nil {
+			return nil, errors.AssertionFailedf("JSON NULL value was checked above")
 		}
 		s = *t
 	default:
