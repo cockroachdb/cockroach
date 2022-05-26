@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/gogo/protobuf/jsonpb"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
@@ -1078,8 +1079,30 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Register the SpanStats service, to power the key visualizer.
 	spanStatsServer := &spanStatsServer{server: s}
-	serverpb.RegisterSpanStatsServer(s.grpc.Server, spanStatsServer)
+	//serverpb.RegisterSpanStatsServer(s.grpc.Server, spanStatsServer)
+	spanStatsServer.RegisterService(s.grpc.Server)
 	s.spanStatsServer = spanStatsServer // only for testing via TestServer; XXX: unnecessary
+
+	// every 5 minutes call getSpan
+	collectStats := func() {
+		ctx := context.Background()
+		sample, err := s.spanStatsServer.GetSpanStatistics(ctx, &serverpb.GetSpanStatisticsRequest{})
+		if err != nil {
+			log.Error(ctx, err.Error())
+			return
+		}
+		m := jsonpb.Marshaler{}
+		result, _ := m.MarshalToString(sample)
+		log.Infof(ctx, "Span Stat: %s", result)
+	}
+
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			collectStats()
+		}
+	}()
+
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -1131,7 +1154,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer, s.spanStatsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}

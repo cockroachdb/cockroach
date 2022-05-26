@@ -2063,6 +2063,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 
+
+
+
 	return nil
 }
 

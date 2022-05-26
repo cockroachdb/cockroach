@@ -14,17 +14,44 @@ option go_package = "serverpb";
 
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "google/api/annotations.proto";
 
 message GetSpanStatisticsRequest {
   util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end   = 2 [(gogoproto.nullable) = false];
 }
 
-message GetSpanStatisticsResponse {
+message Sample {
+  util.hlc.Timestamp sample_time = 1;
+  repeated SpanStatistics span_stats = 2;
 }
+
+message SpanStatistics {
+  roachpb.Span span = 1;
+  uint64 qps = 2;
+}
+
+message GetSpanStatisticsResponse {
+  repeated Sample samples = 1;
+}
+
+message SetSpanBoundariesRequest{}
+message SetSpanBoundariesResponse{}
 
 service SpanStats {
   // GetSpanStatistics fans out to all stores of interest to retrieve
   // histogram data over the requested period and aggregates the results.
-  rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) { }
+  rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/span_stats"
+    };
+  }
+
+  rpc SetSpanBoundaries(SetSpanBoundariesRequest) returns (SetSpanBoundariesResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/set_span_boundaries"
+      body : "*"
+    };
+  }
 }

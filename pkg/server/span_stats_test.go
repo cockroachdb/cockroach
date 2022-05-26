@@ -29,10 +29,15 @@ func TestXXX(t *testing.T) {
 
 	s := tc.Server(0)
 	spanStatsServer := s.SpanStatsServer().(serverpb.SpanStatsServer)
+
 	//serverpb.NewSpanStatsClient() // XXX: Figure out where to get a grpcconn from in tests.
+
+
 	resp, err := spanStatsServer.GetSpanStatistics(ctx, &serverpb.GetSpanStatisticsRequest{})
+
+	require.Equal(t, len(resp.Samples), 1)
 	require.NoError(t, err)
-	_ = resp
+
 
 	t.Log("sup")
 }
