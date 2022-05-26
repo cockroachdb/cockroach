@@ -475,6 +475,7 @@ func (s *Streamer) Enqueue(
 			s.mu.Unlock()
 		}
 	}()
+	var reqsKeysScratch []roachpb.Key
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Truncate the request span to the current range.
 		singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
@@ -541,7 +542,17 @@ func (s *Streamer) Enqueue(
 			// can become head-of-the-line in the future. We probably will need
 			// to introduce a way to "restore" the original order within
 			// singleRangeBatch if it is sorted and issued with headOfLine=true.
+			if cap(reqsKeysScratch) >= len(r.reqs) {
+				r.reqsKeys = reqsKeysScratch[:len(r.reqs)]
+			} else {
+				r.reqsKeys = make([]roachpb.Key, len(r.reqs))
+			}
+			for i := range r.reqs {
+				r.reqsKeys[i] = r.reqs[i].GetInner().Header().Key
+			}
 			sort.Sort(&r)
+			reqsKeysScratch = r.reqsKeys
+			r.reqsKeys = nil
 		}
 
 		requestsToServe = append(requestsToServe, r)
