@@ -14,6 +14,7 @@
 import React from "react";
 import Helmet from "react-helmet";
 import { Tabs } from "antd";
+import "antd/lib/tabs/style";
 import SessionsPageConnected from "src/views/sessions/sessionsPage";
 import TransactionsPageConnected from "src/views/transactions/transactionsPage";
 import StatementsPageConnected from "src/views/statements/statementsPage";

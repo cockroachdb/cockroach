@@ -12,6 +12,7 @@ import React from "react";
 import classNames from "classnames/bind";
 import spinner from "src/assets/spinner.gif";
 import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
 
 import styles from "./visualizations.module.scss";
 const cx = classNames.bind(styles);

@@ -14,6 +14,7 @@ import cn from "classnames";
 import { OutsideEventHandler } from "../outsideEventHandler";
 import "./dropdown.styl";
 import { Icon } from "antd";
+import "antd/lib/icon/style";
 import { Button } from "src/components/button";
 
 export interface Item {

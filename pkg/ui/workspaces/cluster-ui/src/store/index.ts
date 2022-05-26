@@ -11,5 +11,7 @@
 export { sagas } from "./sagas";
 export { notificationAction } from "./notifications";
 export { actions as analyticsActions } from "./analytics";
-export { actions as uiConfigActions, UIConfigState } from "./uiConfig";
-export { rootReducer, AppState, rootActions } from "./reducers";
+export { actions as uiConfigActions } from "./uiConfig";
+export { rootReducer, rootActions } from "./reducers";
+export type { UIConfigState } from "./uiConfig";
+export type { AppState } from "./reducers";

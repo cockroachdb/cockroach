@@ -13,6 +13,7 @@ import Select from "react-select";
 import { Button } from "../button";
 import { CaretDown } from "@cockroachlabs/icons";
 import { Input } from "antd";
+import "antd/lib/input/style";
 import { History } from "history";
 import { isEqual } from "lodash";
 import {
