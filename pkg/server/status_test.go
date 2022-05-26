@@ -59,13 +59,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -73,7 +71,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
-	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -902,162 +899,6 @@ func TestMetricsMetadata(t *testing.T) {
 			t.Fatalf("%s missing Unit.", v.Name)
 		}
 	}
-}
-
-// TestChartCatalog ensures that the server successfully generates the chart catalog.
-func TestChartCatalogGen(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := startServer(t)
-	defer s.Stopper().Stop(context.Background())
-
-	metricsMetadata := s.recorder.GetMetricsMetadata()
-
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure each of the 8 constant sections of the chart catalog exist.
-	if len(chartCatalog) != 8 {
-		t.Fatal("Chart catalog failed to generate.")
-	}
-
-	for _, section := range chartCatalog {
-		// Ensure that one of the chartSections has defined Subsections.
-		if len(section.Subsections) == 0 {
-			t.Fatalf(`Chart catalog has missing subsections in %v`, section)
-		}
-	}
-}
-
-// walkAllSections invokes the visitor on each of the ChartSections nestled under
-// the input one.
-func walkAllSections(chartCatalog []catalog.ChartSection, visit func(c *catalog.ChartSection)) {
-	for _, c := range chartCatalog {
-		visit(&c)
-		for _, ic := range c.Subsections {
-			visit(ic)
-		}
-	}
-}
-
-// findUndefinedMetrics finds metrics listed in pkg/ts/catalog/chart_catalog.go
-// that are not defined. This is most likely caused by a metric being removed.
-func findUndefinedMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata) []string {
-	var undefinedMetrics []string
-	for _, ic := range c.Charts {
-		for _, metric := range ic.Metrics {
-			_, ok := metadata[metric.Name]
-			if !ok {
-				undefinedMetrics = append(undefinedMetrics, metric.Name)
-			}
-		}
-	}
-
-	for _, x := range c.Subsections {
-		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(x, metadata)...)
-	}
-
-	return undefinedMetrics
-}
-
-// deleteSeenMetrics removes all metrics in a section from the metricMetadata map.
-func deleteSeenMetrics(c *catalog.ChartSection, metadata map[string]metric.Metadata, t *testing.T) {
-	// if c.Title == "SQL" {
-	// 	t.Log(c)
-	// }
-	for _, x := range c.Charts {
-		if x.Title == "Connections" || x.Title == "Byte I/O" {
-			t.Log(x)
-		}
-
-		for _, metric := range x.Metrics {
-			if metric.Name == "sql.new_conns" || metric.Name == "sql.bytesin" {
-				t.Logf("found %v\n", metric.Name)
-			}
-			_, ok := metadata[metric.Name]
-			if ok {
-				delete(metadata, metric.Name)
-			}
-		}
-	}
-
-	for _, x := range c.Subsections {
-		deleteSeenMetrics(x, metadata, t)
-	}
-}
-
-// TestChartCatalogMetric ensures that all metrics are included in at least one
-// chart, and that every metric included in a chart is still part of the metrics
-// registry.
-func TestChartCatalogMetrics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := startServer(t)
-	defer s.Stopper().Stop(context.Background())
-
-	metricsMetadata := s.recorder.GetMetricsMetadata()
-
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Each metric referenced in the chartCatalog must have a definition in metricsMetadata
-	var undefinedMetrics []string
-	for _, cs := range chartCatalog {
-		undefinedMetrics = append(undefinedMetrics, findUndefinedMetrics(&cs, metricsMetadata)...)
-	}
-
-	if len(undefinedMetrics) > 0 {
-		t.Fatalf(`The following metrics need are no longer present and need to be removed
-			from the chart catalog (pkg/ts/catalog/chart_catalog.go):%v`, undefinedMetrics)
-	}
-
-	// Each metric in metricsMetadata should have at least one entry in
-	// chartCatalog, which we track by deleting the metric from metricsMetadata.
-	for _, v := range chartCatalog {
-		deleteSeenMetrics(&v, metricsMetadata, t)
-	}
-
-	if len(metricsMetadata) > 0 {
-		var metricNames []string
-		for metricName := range metricsMetadata {
-			metricNames = append(metricNames, metricName)
-		}
-		sort.Strings(metricNames)
-		t.Errorf(`The following metrics need to be added to the chart catalog
-		    (pkg/ts/catalog/chart_catalog.go): %v`, metricNames)
-	}
-
-	internalTSDBMetricNamesWithoutPrefix := map[string]struct{}{}
-	for _, name := range catalog.AllInternalTimeseriesMetricNames() {
-		name = strings.TrimPrefix(name, "cr.node.")
-		name = strings.TrimPrefix(name, "cr.store.")
-		internalTSDBMetricNamesWithoutPrefix[name] = struct{}{}
-	}
-	walkAllSections(chartCatalog, func(cs *catalog.ChartSection) {
-		for _, chart := range cs.Charts {
-			for _, metric := range chart.Metrics {
-				if *metric.MetricType.Enum() != io_prometheus_client.MetricType_HISTOGRAM {
-					continue
-				}
-				// We have a histogram. Make sure that it is properly represented in
-				// AllInternalTimeseriesMetricNames(). It's not a complete check but good enough in
-				// practice. Ideally we wouldn't require `histogramMetricsNames` and
-				// the associated manual step when adding a histogram. See:
-				// https://github.com/cockroachdb/cockroach/issues/64373
-				_, ok := internalTSDBMetricNamesWithoutPrefix[metric.Name+"-p50"]
-				if !ok {
-					t.Errorf("histogram %s needs to be added to `catalog.histogramMetricsNames` manually",
-						metric.Name)
-				}
-			}
-		}
-	})
 }
 
 func TestHotRangesResponse(t *testing.T) {
