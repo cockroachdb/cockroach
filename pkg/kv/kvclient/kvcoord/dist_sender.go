@@ -1813,7 +1813,7 @@ func maybeSetResumeSpan(
 			// Case 2.
 			return
 		}
-		key := req.Header().Span().Key
+		key := req.Header().Key
 		if isReverse {
 			if !nextKey.Less(roachpb.RKey(key)) {
 				// key <= nextKey, so this request was not completed (case 3).
