@@ -1,3 +1,4 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
@@ -87,3 +88,5 @@ disallowed_imports_test(
         "//pkg/sql/execinfra",
     ],
 )
+
+get_x_data(name = "get_x_data")

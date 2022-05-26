@@ -3,5 +3,8 @@ bin
 build/builder_home
 lib
 pkg/ui/node_modules
+pkg/ui/workspaces/cluster-ui/node_modules
+pkg/ui/workspaces/db-console/node_modules
+pkg/ui/workspaces/eslint-plugin-crdb/node_modules
 tmp
 vendor
