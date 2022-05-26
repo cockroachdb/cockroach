@@ -44,6 +44,7 @@
     "@cockroachlabs/crdb-protobuf-client": "link:../db-console/src/js",
     "@cockroachlabs/design-tokens": "0.4.5",
     "@cockroachlabs/eslint-config": "^0.1.11",
+    "@cockroachlabs/eslint-plugin-crdb": "link:../eslint-plugin-crdb",
     "@cockroachlabs/icons": "0.3.0",
     "@cockroachlabs/ui-components": "0.2.20",
     "@popperjs/core": "^2.4.0",
@@ -93,6 +94,8 @@
     "d3-scale": "^3.2.3",
     "enzyme": "^3.11.0",
     "enzyme-adapter-react-16": "^1.15.2",
+    "esbuild": "0.14.43",
+    "esbuild-loader": "^2.19.0",
     "eslint": "^6.8.0",
     "eslint-config-prettier": "^6.10.0",
     "eslint-plugin-prettier": "^3.1.2",
@@ -161,6 +164,7 @@
     "serialize-javascript": "~3.1.0",
     "yargs-parser": "~13.1.2",
     "protobufjs": "6.8.6",
-    "**/jest-environment-jsdom": "^27.5.1"
+    "**/jest-environment-jsdom": "^27.5.1",
+    "esbuild": "0.14.43"
   }
 }

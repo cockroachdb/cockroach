@@ -87,30 +87,6 @@ You can read all about this division in the [README for the
 package](https://github.com/cockroachdb/ui/blob/master/packages/cluster-ui/README.md)
 which describes a dev workflow that fits well with this package.
 
-### DLLs for speedy builds
-
-To improve Webpack compile times, we split the compile output into three
-bundles, each of which can be compiled independently. The feature that enables
-this is [Webpack's DLLPlugin](https://webpack.js.org/plugins/dll-plugin/), named
-after the Windows term for shared libraries ("**d**ynamic-**l**ink
-**l**ibraries").
-
-Third-party dependencies, which change infrequently, are contained in the
-[vendor DLL]. Generated protobuf definitions, which change more frequently, are
-contained in the [protos DLL]. First-party JavaScript and TypeScript are
-compiled in the [main app bundle], which is then "linked" against the two DLLs.
-This means that updating a dependency or protobuf only requires rebuilding the
-appropriate DLL and the main app bundle, and updating a UI source file doesn't
-require rebuilding the DLLs at all. When DLLs were introduced, the time required
-to start the proxy was reduced from over a minute to under five seconds.
-
-DLLs are not without costs. Notably, the development proxy cannot determine when
-a DLL is out-of-date, so the proxy must be manually restarted when dependencies
-or protobufs change. (The Make build system, however, tracks the DLLs'
-dependencies properly, so a top-level `make build` will rebuild exactly the
-necessary DLLs.) DLLs also make the Webpack configuration rather complicated.
-Still, the tradeoff seems well worth it.
-
 ## CCL Build
 
 In CCL builds, code in `pkg/ui/ccl/src` overrides code in `pkg/ui/src` at build
@@ -300,10 +276,8 @@ contingent upon resolving the above TODO.
 
 [cockroachdb/yarn-vendored]: https://github.com/cockroachdb/yarn-vendored
 [dcodeIO/protobuf.js#716]: https://github.com/dcodeIO/protobuf.js#716
-[main app bundle]: ./webpack.app.js
+[main app bundle]: ./webpack.config.js
 [Git LFS]: https://git-lfs.github.com
 [offline mirror]: https://yarnpkg.com/blog/2016/11/24/offline-mirror/
-[protos DLL]: ./webpack.protos.js
-[vendor DLL]: ./webpack.vendor.js
 [.yarnrc]: ./yarnrc
 [yarn-vendor]: ./yarn-vendor
