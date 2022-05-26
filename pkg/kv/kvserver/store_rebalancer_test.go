@@ -487,7 +487,14 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
 			hottestRanges := rr.topQPS()
-			_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
+			_, target, _ := sr.chooseLeaseToTransfer(
+				ctx,
+				&hottestRanges,
+				&localDesc,
+				storeList,
+				storeMap,
+				nil, /* qpsScorerOptions */
+			)
 			if target.StoreID != tc.expectTarget {
 				t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
 					target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
@@ -1191,7 +1198,14 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		return status
 	}
 
-	_, target, _ := sr.chooseLeaseToTransfer(ctx, &hottestRanges, &localDesc, storeList, storeMap)
+	_, target, _ := sr.chooseLeaseToTransfer(
+		ctx,
+		&hottestRanges,
+		&localDesc,
+		storeList,
+		storeMap,
+		nil, /* qpsScorerOptions */
+	)
 	expectTarget := roachpb.StoreID(4)
 	if target.StoreID != expectTarget {
 		t.Errorf("got target store s%d for range with RaftStatus %v; want s%d",

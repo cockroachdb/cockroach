@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -97,6 +98,12 @@ var qpsRebalanceThreshold = func() *settings.FloatSetting {
 		"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
 		0.25,
 		settings.NonNegativeFloat,
+		func(f float64) error {
+			if f < 0.01 {
+				return errors.Errorf("cannot set kv.allocator.qps_rebalance_threshold to less than 0.01")
+			}
+			return nil
+		},
 	)
 	s.SetVisibility(settings.Public)
 	return s
@@ -307,6 +314,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			localDesc,
 			allStoresList,
 			storeMap,
+			sr.scorerOptions(),
 		)
 		replicasToMaybeRebalance = append(replicasToMaybeRebalance, considerForRebalance...)
 		if replWithStats.repl == nil {
@@ -432,9 +440,28 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
-	storeList StoreList,
+	allStoresList StoreList,
 	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
+	options *qpsScorerOptions,
 ) (replicaWithStats, roachpb.ReplicaDescriptor, []replicaWithStats) {
+	// NB: Don't switch over to the new locality-aware lease transfer scheme until
+	// the cluster version is finalized.
+	if !sr.st.Version.IsActive(ctx, clusterversion.EnableNewStoreRebalancer) {
+		log.Infof(
+			ctx, "cluster version has not been finalized; using pre-22.1 load-based lease transfer scheme",
+		)
+
+		// We manually compute the cluster level under/over-fullness thresholds
+		// since the deprecated rebalance logic doesn't care about equivalence
+		// classes.
+		qpsMinThreshold := underfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+		qpsMaxThreshold := overfullQPSThreshold(options, allStoresList.candidateQueriesPerSecond.mean)
+		return sr.deprecatedChooseLeaseToTransfer(
+			ctx, hottestRanges, localDesc, allStoresList,
+			storeMap, qpsMinThreshold, qpsMaxThreshold,
+		)
+	}
+
 	var considerForRebalance []replicaWithStats
 	now := sr.rq.store.Clock().NowAsClockTimestamp()
 	for {
@@ -503,8 +530,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		filteredStoreList := storeList.excludeInvalid(conf.Constraints)
-		filteredStoreList = storeList.excludeInvalid(conf.VoterConstraints)
+		filteredStoreList := allStoresList.excludeInvalid(conf.Constraints)
+		filteredStoreList = allStoresList.excludeInvalid(conf.VoterConstraints)
 		if sr.rq.allocator.followTheWorkloadPrefersLocal(
 			ctx,
 			filteredStoreList,
@@ -553,6 +580,28 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 	allStoresList StoreList,
 	options *qpsScorerOptions,
 ) (replWithStats replicaWithStats, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
+	// NB: Don't switch over to the locality aware rebalancer until the cluster
+	// version is finalized.
+	if !sr.st.Version.IsActive(ctx, clusterversion.EnableNewStoreRebalancer) {
+		log.Infof(
+			ctx, "cluster version has not been finalized; using pre-22.1 load-based rebalancing scheme",
+		)
+
+		// We manually compute the cluster level under/over-fullness thresholds
+		// since the deprecated rebalance logic doesn't care about equivalence
+		// classes.
+		qpsMinThreshold := underfullQPSThreshold(
+			options, allStoresList.candidateQueriesPerSecond.mean,
+		)
+		qpsMaxThreshold := overfullQPSThreshold(
+			options, allStoresList.candidateQueriesPerSecond.mean,
+		)
+		return sr.deprecatedChooseRangeToRebalance(
+			ctx, hottestRanges, localDesc, allStoresList,
+			storeListToMap(allStoresList), qpsMinThreshold, qpsMaxThreshold,
+		)
+	}
+
 	now := sr.rq.store.Clock().NowAsClockTimestamp()
 	for {
 		if len(*hottestRanges) == 0 {
