@@ -125,6 +125,7 @@ type Config struct {
 	// Metrics.
 	TxnWaitMetrics *txnwait.Metrics
 	SlowLatchGauge *metric.Gauge
+	LatchWaitTime  *metric.Histogram
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -151,6 +152,7 @@ func NewManager(cfg Config) Manager {
 			m: spanlatch.Make(
 				cfg.Stopper,
 				cfg.SlowLatchGauge,
+				cfg.LatchWaitTime,
 			),
 		},
 		lt: lt,

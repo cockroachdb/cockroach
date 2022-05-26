@@ -87,6 +87,7 @@ func newUnloadedReplica(
 			IntentResolver:    store.intentResolver,
 			TxnWaitMetrics:    store.txnWaitMetrics,
 			SlowLatchGauge:    store.metrics.SlowLatchRequests,
+			LatchWaitTime:     store.metrics.LatchWaitTime,
 			DisableTxnPushing: store.TestingKnobs().DontPushOnWriteIntentError,
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
 		}),

@@ -1005,6 +1005,11 @@ var charts = []sectionDescription{
 				Rate:        DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
 				Metrics:     []string{"kv.replica_circuit_breaker.num_tripped_events"},
 			},
+			{
+				Title:     "Latency histogram of time spent waiting for latch acquisitions",
+				Metrics:   []string{"requests.latch.wait_time"},
+				AxisLabel: "Latch Wait Time",
+			},
 		},
 	},
 	{

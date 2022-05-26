@@ -1248,6 +1248,13 @@ A nonzero value indicates range or replica unavailability, and should be investi
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaLatchWaitLatency = metric.Metadata{
+		Name:        "requests.latch.wait_time",
+		Help:        "Latency histogram of time spent waiting for latch acquisitions",
+		Measurement: "Latch wait time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
 	// Backpressure metrics.
 	metaBackpressuredOnSplitRequests = metric.Metadata{
 		Name: "requests.backpressure.split",
@@ -1617,6 +1624,9 @@ type StoreMetrics struct {
 	SlowLatchRequests *metric.Gauge
 	SlowLeaseRequests *metric.Gauge
 	SlowRaftRequests  *metric.Gauge
+
+	// Latch wait time.
+	LatchWaitTime *metric.Histogram
 
 	// Backpressure counts.
 	BackpressuredOnSplitRequests *metric.Gauge
@@ -2089,6 +2099,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SlowLatchRequests: metric.NewGauge(metaLatchRequests),
 		SlowLeaseRequests: metric.NewGauge(metaSlowLeaseRequests),
 		SlowRaftRequests:  metric.NewGauge(metaSlowRaftRequests),
+
+		LatchWaitTime: metric.NewLatency(metaLatchWaitLatency, histogramWindow),
 
 		// Backpressure counters.
 		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),

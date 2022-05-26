@@ -13,6 +13,7 @@ package spanlatch
 import (
 	"context"
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -61,8 +62,9 @@ type Manager struct {
 	idAlloc uint64
 	scopes  [spanset.NumSpanScope]scopedManager
 
-	stopper  *stop.Stopper
-	slowReqs *metric.Gauge
+	stopper       *stop.Stopper
+	slowReqs      *metric.Gauge
+	latchWaitTime *metric.Histogram
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -74,10 +76,11 @@ type scopedManager struct {
 
 // Make returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
-func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
+func Make(stopper *stop.Stopper, slowReqs *metric.Gauge, latchWaitTime *metric.Histogram) Manager {
 	return Manager{
-		stopper:  stopper,
-		slowReqs: slowReqs,
+		stopper:       stopper,
+		slowReqs:      slowReqs,
+		latchWaitTime: latchWaitTime,
 	}
 }
 
@@ -506,6 +509,7 @@ func (m *Manager) iterAndWait(
 	wait *latch,
 	ignore ignoreFn,
 ) error {
+	recordLatchWaitTime := m.latchWaitTime != nil
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
 		if held.done.signaled() {
@@ -514,8 +518,16 @@ func (m *Manager) iterAndWait(
 		if ignore(wait.ts, held.ts) {
 			continue
 		}
+
+		var tBegin time.Time
+		if recordLatchWaitTime {
+			tBegin = timeutil.Now()
+		}
 		if err := m.waitForSignal(ctx, t, pp, waitType, heldType, wait, held); err != nil {
 			return err
+		}
+		if recordLatchWaitTime {
+			m.latchWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds())
 		}
 	}
 	return nil
