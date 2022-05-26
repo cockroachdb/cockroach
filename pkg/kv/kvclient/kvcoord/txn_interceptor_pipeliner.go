@@ -561,7 +561,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 			} else {
 				// Transactional reads and writes needs to chain on to any
 				// overlapping in-flight writes.
-				s := req.Header().Span()
+				s := req.Header()
 				tp.ifWrites.ascendRange(s.Key, s.EndKey, writeIter)
 			}
 		}
