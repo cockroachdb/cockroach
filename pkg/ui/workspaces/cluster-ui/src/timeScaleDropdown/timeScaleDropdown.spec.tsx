@@ -23,11 +23,11 @@ import moment from "moment";
 import { MemoryRouter } from "react-router";
 import TimeFrameControls from "./timeFrameControls";
 import RangeSelect from "./rangeSelect";
-import { timeFormat as customMenuTimeFormat } from "../dateRange";
+import { timeFormat as customMenuTimeFormat } from "../dateRangeMenu";
 import { assert } from "chai";
 import sinon from "sinon";
 import { TimeWindow, ArrowDirection, TimeScale } from "./timeScaleTypes";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -58,7 +58,7 @@ function TimeScaleDropdownWrapper({
 describe("<TimeScaleDropdown> component", function() {
   let clock: sinon.SinonFakeTimers;
 
-  // Returns a new moment every time, so that we don't accidentally mutate it
+  // Returns a new moment every time, so that we don't accidentally mutate it.
   const getNow = () => {
     return moment.utc({
       year: 2020,
@@ -105,12 +105,12 @@ describe("<TimeScaleDropdown> component", function() {
       </MemoryRouter>,
     );
 
-    // Default state
+    // Default state.
     getByText("Past 10 Minutes");
     getByText("10m");
     expect(queryByText("Past 6 Hours")).toBeNull();
 
-    // Select a different preset option
+    // Select a different preset option.
     userEvent.click(getByText("Past 10 Minutes"));
     userEvent.click(getByText("Past 6 Hours"));
 
@@ -133,7 +133,7 @@ describe("<TimeScaleDropdown> component", function() {
     );
     getByText("Past 10 Minutes");
 
-    // Click left, and it shows a custom time
+    // Click left, and it shows a custom time.
     userEvent.click(
       getByRole("button", {
         name: "previous timeframe",
@@ -148,7 +148,7 @@ describe("<TimeScaleDropdown> component", function() {
       getByText(expectedText);
     }
 
-    // Click right, and it reverts to "Past 10 minutes"
+    // Click right, and it reverts to "Past 10 minutes".
     userEvent.click(
       getByRole("button", {
         name: "next timeframe",
@@ -179,7 +179,7 @@ describe("<TimeScaleDropdown> component", function() {
     userEvent.click(getByText("Custom date range"));
     expect(mockSetTimeScale).toHaveBeenCalledTimes(1);
 
-    // Custom menu should be initialized to currently selected time, i.e. now-6h to now
+    // Custom menu should be initialized to currently selected time, i.e. now-6h to now.
     // Start: 3:28 AM (UTC)
     // End: 9:28 AM (UTC)
     const startText = getNow()
@@ -190,7 +190,46 @@ describe("<TimeScaleDropdown> component", function() {
     getByDisplayValue(endMoment.format(customMenuTimeFormat)); // end
 
     // Testing changing and selecting a new custom time is blocked on being able to distinguish the time options in the
-    // start and end dropdowns; for an attempt see: https://github.com/jocrl/cockroach/commit/a15ac08b3ed0515a4c4910396e32dc8712cc86ec#diff-491a1b9fd6a93863973c270c8c05ab0d28e0a41f616ecd2222df9fab327806f2R196
+    // start and end dropdowns; for an attempt see: https://github.com/jocrl/cockroach/commit/a15ac08b3ed0515a4c4910396e32dc8712cc86ec#diff-491a1b9fd6a93863973c270c8c05ab0d28e0a41f616ecd2222df9fab327806f2R196.
+  });
+
+  it("opens directly to the custom menu when a custom time frame is currently selected", () => {
+    const mockSetTimeScale = jest.fn();
+    const { getByText, getByRole } = render(
+      <MemoryRouter>
+        <TimeScaleDropdownWrapper
+          currentScale={new timescale.TimeScaleState().scale}
+          onSetTimeScale={mockSetTimeScale}
+        />
+      </MemoryRouter>,
+    );
+
+    // When a preset option is selected, the dropdown should open to other preset options.
+    userEvent.click(getByText("Past 10 Minutes"));
+    getByText("Past 30 Minutes");
+    getByText("Past 1 Hour");
+
+    // Change to a custom selection
+    userEvent.click(
+      getByRole("button", {
+        name: "previous timeframe",
+      }),
+    );
+
+    // When a custom option is selected, the dropdown should open to the custom selector.
+    const expectedText = getExpectedCustomText(
+      getNow().subtract(moment.duration(10, "m")),
+      getNow().subtract(moment.duration(10 * 2, "m")),
+      "10m",
+    );
+    userEvent.click(getByText(expectedText[0]));
+    getByText("Start (UTC)");
+    getByText("End (UTC)");
+
+    // Clicking "Preset Time Ranges" should bring the dropdown back to the preset options.
+    userEvent.click(getByText("Preset Time Ranges"));
+    getByText("Past 30 Minutes");
+    getByText("Past 1 Hour");
   });
 });
 
