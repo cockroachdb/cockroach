@@ -3,7 +3,10 @@
 workspace(
     name = "com_github_cockroachdb_cockroach",
     managed_directories = {
-        "@npm": ["pkg/ui/node_modules"],
+        "@yarn_vendor": ["pkg/ui/yarn-vendor"],
+        "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
+        "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
+        "@npm_db_console": ["pkg/ui/workspaces/db-console/node_modules"],
     },
 )
 
@@ -24,11 +27,15 @@ http_archive(
 
 # Like the above, but for nodeJS.
 http_archive(
+    name = "rules_nodejs",
+    sha256 = "26766278d815a6e2c43d2f6c9c72fde3fec8729e84138ffa4dabee47edc7702a",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-core-5.4.2.tar.gz"],
+)
+
+http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "cfc289523cf1594598215901154a6c2515e8bf3671fd708264a6f6aefe02bf39",
-    urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-4.4.6.tar.gz",
-    ],
+    sha256 = "e328cb2c9401be495fa7d79c306f5ee3040e8a03b2ebb79b022e15ca03770096",
+    urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.4.2.tar.gz" ],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -195,8 +202,16 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 # begin rules_nodejs dependencies #
 ###################################
 
+# Install rules_nodejs dependencies
+
+# bazel_skylib handled above.
+# rules_nodejs handled above.
+load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
+build_bazel_rules_nodejs_dependencies()
+
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
+load("@rules_nodejs//nodejs:yarn_repositories.bzl", "yarn_repositories")
 
 node_repositories(
     node_repositories = {
@@ -210,8 +225,11 @@ node_repositories(
         "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",
     ],
     node_version = "16.13.0",
-    package_json = ["//pkg/ui:package.json"],
-    yarn_repositories = {
+)
+
+yarn_repositories(
+    name = "yarn",
+    yarn_releases = {
         "1.22.11": ("yarn-v1.22.11.tar.gz", "yarn-v1.22.11", "2c320de14a6014f62d29c34fec78fdbb0bc71c9ccba48ed0668de452c1f5fe6c"),
     },
     yarn_urls = [
@@ -220,21 +238,69 @@ node_repositories(
     yarn_version = "1.22.11",
 )
 
-# install external dependencies for pkg/ui package
+load("//build/bazelutil:seed_yarn_cache.bzl", "seed_yarn_cache")
+seed_yarn_cache(name = "yarn_cache")
+
+# Install external dependencies for NPM packages in pkg/ui/ as separate bazel
+# repositories, to avoid version conflicts between those packages.
+# Unfortunately Bazel's rules_nodejs does not support yarn workspaces, so 
+# packages have isolated dependencies and must be installed as isolated
+# Bazel repositories.
 yarn_install(
-    name = "npm",
+    name = "npm_protos",
     args = [
-        "--ignore-optional",
         "--offline",
+        "--ignore-optional",
     ],
-    package_json = "//pkg/ui:package.json",
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_path = "/",
+    package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui:yarn.lock",
-    links = {
-      "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
-      "@cockroachlabs/crdb-protobuf-client-ccl": "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
-      "@cockroachlabs/cluster-ui": "//pkg/ui/workspaces/cluster-ui:cluster-ui",
-    },
+    yarn_lock = "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
+)
+
+yarn_install(
+    name = "npm_db_console",
+    args = [
+        "--offline",
+        "--ignore-optional",
+    ],
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_json = "//pkg/ui/workspaces/db-console:package.json",
+    yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
+    strict_visibility = False,
+    patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
+    post_install_patches = [
+      "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.db-console.patch",
+    ],
+    symlink_node_modules = True,
+)
+
+yarn_install(
+    name = "npm_cluster_ui",
+    args = [
+        "--verbose",
+        "--offline",
+        "--ignore-optional",
+    ],
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
+    strict_visibility = False,
+    yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
+    patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
+    post_install_patches = [
+      "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.cluster-ui.patch",
+    ],
+    symlink_node_modules = True,
 )
 
 #################################
