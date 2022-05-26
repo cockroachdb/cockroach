@@ -282,6 +282,7 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 					pathsToDelete,
 					filepath.Join(workspace, "pkg", "ui", "node_modules"),
 					filepath.Join(uiDirs.dbConsole, "node_modules"),
+					filepath.Join(uiDirs.dbConsole, "src", "js", "node_modules"),
 					filepath.Join(uiDirs.clusterUI, "node_modules"),
 				)
 			}
@@ -499,6 +500,6 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 //     d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
 func buildBazelYarnArgv(argv ...string) []string {
 	return append([]string{
-		"run", "@nodejs//:yarn", "--",
+		"run", "@yarn//:yarn", "--",
 	}, argv...)
 }

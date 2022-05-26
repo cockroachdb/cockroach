@@ -369,9 +369,9 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	@# Also some linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
-	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
+	@# We remove this broken dependency again in pkg/ui/workspaces/db-console/webpack.config.js.
 	@# See the comment there for details.
-	rm -rf pkg/ui/node_modules/@types/node
+	rm -rf pkg/ui/workspaces/db-console/node_modules/@types/node
 	touch $@
 
 vendor/modules.txt: | bin/.submodules-initialized
@@ -1275,8 +1275,8 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' -print))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-PBJS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbjs
-PBTS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbts
+PBJS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbjs
+PBTS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbts
 
 # Unlike the protobuf compiler for Go and C++, the protobuf compiler for
 # JavaScript only needs the entrypoint protobufs to be listed. It automatically
