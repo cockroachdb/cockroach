@@ -34,8 +34,9 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
 	end := start.Add(25 * time.Second)
 	interval := 10 * time.Second
+	exchange := asim.NewFixedDelayExhange(start, interval, interval)
 	s := asim.LoadConfig(asim.SingleRegionConfig)
-	sim := asim.NewSimulator(start, end, interval, rwg, s)
+	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange)
 	sim.RunSim(ctx)
 }
 
