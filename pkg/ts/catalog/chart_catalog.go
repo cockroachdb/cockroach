@@ -327,7 +327,6 @@ var charts = []sectionDescription{
 					"rpc.method.gc.recv",
 					"rpc.method.get.recv",
 					"rpc.method.heartbeattxn.recv",
-					"rpc.method.import.recv",
 					"rpc.method.increment.recv",
 					"rpc.method.initput.recv",
 					"rpc.method.leaseinfo.recv",
@@ -382,7 +381,6 @@ var charts = []sectionDescription{
 					"distsender.rpc.gc.sent",
 					"distsender.rpc.get.sent",
 					"distsender.rpc.heartbeattxn.sent",
-					"distsender.rpc.import.sent",
 					"distsender.rpc.increment.sent",
 					"distsender.rpc.initput.sent",
 					"distsender.rpc.leaseinfo.sent",
@@ -800,10 +798,6 @@ var charts = []sectionDescription{
 				Title:   "Count",
 				Metrics: []string{"follower_reads.success_count"},
 			},
-			{
-				Title:   "Failed Attempts To Close",
-				Metrics: []string{"kv.closed_timestamp.failures_to_close"},
-			},
 		},
 	},
 	{
@@ -1206,10 +1200,6 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title:   "Failed Commits",
-				Metrics: []string{"txn.commits.failed"},
-			},
-			{
 				Title:   "Durations",
 				Metrics: []string{"txn.durations"},
 			},
@@ -1329,12 +1319,6 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Min High Water",
-				Metrics: []string{
-					"changefeed.min_high_water",
-				},
-			},
-			{
 				Title: "Currently Running",
 				Metrics: []string{
 					"changefeed.running",
@@ -1343,10 +1327,100 @@ var charts = []sectionDescription{
 			{
 				Title: "Total Time Spent",
 				Metrics: []string{
-					"changefeed.emit_nanos",
-					"changefeed.flush_nanos",
-					"changefeed.processing_nanos",
 					"changefeed.table_metadata_nanos",
+				},
+			},
+			{
+				Title: "Event admission latency",
+				Metrics: []string{
+					"changefeed.admit_latency",
+				},
+			},
+			{
+				Title: "Release/Acquire",
+				Metrics: []string{
+					"changefeed.buffer_entries.released",
+					"changefeed.buffer_entries_mem.acquired",
+					"changefeed.buffer_entries_mem.released",
+				},
+			},
+			{
+				Title: "Frontier Updates",
+				Metrics: []string{
+					"changefeed.frontier_updates",
+				},
+			},
+			{
+				Title: "Ingested Events",
+				Metrics: []string{
+					"streaming.events_ingested",
+					"streaming.resolved_events_ingested",
+				},
+			},
+			{
+				Title: "Flushes",
+				Metrics: []string{
+					"streaming.flushes",
+				},
+			},
+			{
+				Title: "Ingested Bytes",
+				Metrics: []string{
+					"streaming.ingested_bytes",
+				},
+			},
+			{
+				Title: "Flushed Bytes",
+				Metrics: []string{
+					"changefeed.flushed_bytes",
+				},
+			},
+			{
+				Title: "Forwarded Resolved Messages",
+				Metrics: []string{
+					"changefeed.forwarded_resolved_messages",
+				},
+			},
+			{
+				Title: "Messages Size",
+				Metrics: []string{
+					"changefeed.message_size_hist",
+				},
+			},
+			{
+				Title: "Commits Latency",
+				Metrics: []string{
+					"changefeed.commit_latency",
+				},
+			},
+			{
+				Title: "Time spent",
+				Metrics: []string{
+					"changefeed.checkpoint_hist_nanos",
+					"changefeed.flush_hist_nanos",
+					"changefeed.sink_batch_hist_nanos",
+				},
+			},
+			{
+				Title: "Backfill",
+				Metrics: []string{
+					"changefeed.backfill_count",
+					"changefeed.backfill_pending_ranges",
+				},
+			},
+			{
+				Title: "Time Spent Waiting",
+				Metrics: []string{
+					"changefeed.buffer_pushback_nanos",
+					"changefeed.queue_time_nanos",
+				},
+			},
+			{
+				Title: "Throttled Time",
+				Metrics: []string{
+					"changefeed.bytes.messages_pushback_nanos",
+					"changefeed.messages.messages_pushback_nanos",
+					"changefeed.flush.messages_pushback_nanos",
 				},
 			},
 		},
@@ -2081,14 +2155,6 @@ var charts = []sectionDescription{
 		Organization: [][]string{{SQLLayer, "Optimizer"}},
 		Charts: []chartDescription{
 			{
-				Title: "Count",
-				Metrics: []string{
-					"sql.optimizer.count",
-					"sql.optimizer.count.internal",
-				},
-				AxisLabel: "SQL Statements",
-			},
-			{
 				Title: "Fallback",
 				Metrics: []string{
 					"sql.optimizer.fallback.count",
@@ -2140,82 +2206,8 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
-		Charts: []chartDescription{
-			{
-				Title:   "All",
-				Metrics: []string{"sql.mem.admin.max"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.admin.current"},
-			},
-			{
-				Title:   "Session All",
-				Metrics: []string{"sql.mem.admin.session.max"},
-			},
-			{
-				Title:   "Session Current",
-				Metrics: []string{"sql.mem.admin.session.current"},
-			},
-			{
-				Title:   "Txn All",
-				Metrics: []string{"sql.mem.admin.txn.max"},
-			},
-			{
-				Title:   "Txn Current",
-				Metrics: []string{"sql.mem.admin.txn.current"},
-			},
-		},
-	},
-	{
-		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
-		Charts: []chartDescription{
-			{
-				Title:   "All",
-				Metrics: []string{"sql.mem.conns.max"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.conns.current"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.conns.current"},
-			},
-			{
-				Title:   "Session All",
-				Metrics: []string{"sql.mem.conns.session.max"},
-			},
-			{
-				Title:   "Session Current",
-				Metrics: []string{"sql.mem.conns.session.current"},
-			},
-			{
-				Title:   "Txn All",
-				Metrics: []string{"sql.mem.conns.txn.max"},
-			},
-			{
-				Title:   "Txn Current",
-				Metrics: []string{"sql.mem.conns.txn.current"},
-			},
-		},
-	},
-	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
 		Charts: []chartDescription{
-			{
-				Title:   "All",
-				Metrics: []string{"sql.mem.internal.max"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.internal.current"},
-			},
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.internal.current"},
-			},
 			{
 				Title:   "Session All",
 				Metrics: []string{"sql.mem.internal.session.max"},
@@ -2270,19 +2262,6 @@ var charts = []sectionDescription{
 			{
 				Title:   "Max",
 				Metrics: []string{"sql.mem.root.max"},
-			},
-		},
-	},
-	{
-		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL"}},
-		Charts: []chartDescription{
-			{
-				Title:   "Current",
-				Metrics: []string{"sql.mem.sql.current"},
-			},
-			{
-				Title:   "Max",
-				Metrics: []string{"sql.mem.sql.max"},
 			},
 		},
 	},
@@ -2455,7 +2434,6 @@ var charts = []sectionDescription{
 					"sql.query.started.count",
 					"sql.select.started.count",
 					"sql.update.started.count",
-					"sql.failure.started.count",
 				},
 			},
 			{
@@ -2481,7 +2459,6 @@ var charts = []sectionDescription{
 					"sql.query.started.count.internal",
 					"sql.select.started.count.internal",
 					"sql.update.started.count.internal",
-					"sql.failure.started.count.internal",
 				},
 			},
 		},
@@ -2898,11 +2875,9 @@ var charts = []sectionDescription{
 			{
 				Title: "Round",
 				Metrics: []string{
-					"schedules.round.schedules-ready-to-run",
 					"schedules.round.reschedule-skip",
 					"schedules.round.reschedule-wait",
 					"schedules.round.jobs-started",
-					"schedules.round.num-jobs-running",
 				},
 				AxisLabel: "Count",
 			},
@@ -2911,9 +2886,6 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"schedules.malformed",
 					"schedules.error",
-					"schedules.total.started",
-					"schedules.total.succeeded",
-					"schedules.total.failed",
 				},
 				AxisLabel: "Count",
 			},
@@ -2928,6 +2900,12 @@ var charts = []sectionDescription{
 					"schedules.BACKUP.started",
 					"schedules.BACKUP.succeeded",
 					"schedules.BACKUP.failed",
+				},
+			},
+			{
+				Title: "Last Completed Backups",
+				Metrics: []string{
+					"schedules.BACKUP.last-completed-time",
 				},
 			},
 		},
@@ -3256,6 +3234,41 @@ var charts = []sectionDescription{
 				Title: "IO Tokens Exhausted Duration Sum",
 				Metrics: []string{
 					"admission.granter.io_tokens_exhausted_duration.kv",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{Tenants, "Consumption"}},
+		Charts: []chartDescription{
+			{
+				Title: "Total number of KV read/write requests",
+				Metrics: []string{
+					"tenant.consumption.write_requests",
+					"tenant.consumption.read_requests",
+				},
+			},
+			{
+				Title: "Total RU consumption",
+				Metrics: []string{
+					"tenant.consumption.request_units",
+					"tenant.consumption.kv_request_units",
+				},
+			},
+			{
+				Title: "Total number of bytes written to KV",
+				Metrics: []string{
+					"tenant.consumption.sql_pods_cpu_seconds",
+				},
+			},
+			{
+				Title: "Total number of bytes",
+				Metrics: []string{
+					"tenant.consumption.write_bytes",
+					"tenant.consumption.pgwire_egress_bytes",
+					"tenant.consumption.read_bytes",
+					"tenant.consumption.external_io_egress_bytes",
+					"tenant.consumption.external_io_ingress_bytes",
 				},
 			},
 		},

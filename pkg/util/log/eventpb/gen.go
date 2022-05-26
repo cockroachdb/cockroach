@@ -387,10 +387,11 @@ func readInput(
 				// redact:"safeif:<regexp>" - safe for reporting if the string matches the regexp.
 				safeReName := ""
 				if re := fieldDefRe.ReplaceAllString(line, "$safeif"); re != "" {
+					var err error
 					// We're reading the regular expression from the .proto source, so we must
 					// take care of string un-escaping ourselves. If this code ever improves
 					// to apply as a protobuf plugin, this step can be removed.
-					re, err := strconv.Unquote(`"` + re + `"`)
+					re, err = strconv.Unquote(`"` + re + `"`)
 					if err != nil {
 						return errors.Wrapf(err, "error while unquoting regexp at %q", line)
 					}
