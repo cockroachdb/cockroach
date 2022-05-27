@@ -270,11 +270,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// will become false and we will recompute the size -- so this cannot cause
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.mu.raftLogSizeTrusted
-	firstIndex, err := r.raftFirstIndexRLocked()
+	firstIndex := r.raftFirstIndexRLocked()
 	r.mu.RUnlock()
-	if err != nil {
-		return truncateDecision{}, errors.Wrapf(err, "error retrieving first index for r%d", rangeID)
-	}
 	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 
 	if raftStatus == nil {
