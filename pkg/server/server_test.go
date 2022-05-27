@@ -626,13 +626,13 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 			a := assert.New(t)
 
 			const maxOffset = 500 * time.Millisecond
-			m := hlc.NewManualClock(test.clockStartTime)
+			m := timeutil.NewManualTime(timeutil.Unix(0, test.clockStartTime))
 			c := hlc.NewClock(m, maxOffset /* maxOffset */)
 
 			sleepUntilFn := func(ctx context.Context, t hlc.Timestamp) error {
-				delta := t.WallTime - c.Now().WallTime
+				delta := t.GoTime().Sub(c.Now().GoTime())
 				if delta > 0 {
-					m.Increment(delta)
+					m.Advance(delta)
 				}
 				return nil
 			}
@@ -702,7 +702,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
-			m := hlc.NewManualClock(int64(1))
+			m := timeutil.NewManualTime(timeutil.Unix(0, 1))
 			c := hlc.NewClock(m, time.Nanosecond /* maxOffset */)
 
 			var persistErr error
@@ -741,7 +741,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 			fatal = false
 			// persist an upper bound
-			m.Increment(100)
+			m.Advance(100)
 			wallTime3 := c.Now().WallTime
 			persistHLCUpperBoundIntervalCh <- test.persistInterval
 			<-tickProcessedCh
@@ -770,7 +770,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 			// Increment clock by 100 and tick the timer.
 			// A persist should have happened
-			m.Increment(100)
+			m.Advance(100)
 			tickerCh <- timeutil.Now()
 			<-tickProcessedCh
 			secondPersist := persistedUpperBound
@@ -800,7 +800,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 
 			persistHLCUpperBoundIntervalCh <- test.persistInterval
 			<-tickProcessedCh
-			m.Increment(100)
+			m.Advance(100)
 			tickerCh <- timeutil.Now()
 			<-tickProcessedCh
 			// If persisting fails, a fatal error is expected
