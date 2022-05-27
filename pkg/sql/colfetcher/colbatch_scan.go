@@ -159,12 +159,12 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(s.Ctx)
+	return execinfra.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetScanStats() execinfra.ScanStats {
-	return execinfra.GetScanStats(s.Ctx)
+	return execinfra.GetScanStats(s.Ctx, nil /* recording */)
 }
 
 var colBatchScanPool = sync.Pool{

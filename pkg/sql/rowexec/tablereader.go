@@ -302,13 +302,13 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	tr.scanStats = execinfra.GetScanStats(tr.Ctx)
+	tr.scanStats = execinfra.GetScanStats(tr.Ctx, tr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
 			KVTime:         is.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx)),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx, tr.ExecStatsTrace)),
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
