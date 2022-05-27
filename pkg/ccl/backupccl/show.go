@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -486,6 +487,8 @@ func checkBackupFiles(
 	storeFactory cloud.ExternalStorageFromURIFactory,
 	user username.SQLUsername,
 ) ([][]int64, error) {
+	const maxMissingFiles = 10
+	missingFiles := make(map[string]struct{}, maxMissingFiles)
 
 	checkLayer := func(layer int) ([]int64, error) {
 		// TODO (msbutler): Right now, checkLayer opens stores for each backup layer. In 22.2,
@@ -546,10 +549,19 @@ func checkBackupFiles(
 			}
 			sz, err := store.Size(ctx, f.Path)
 			if err != nil {
-				return nil, errors.Wrapf(err, "Error checking file %s in %s", f.Path, uri)
+				uriNoLocality := strings.Split(uri, "?")[0]
+				missingFile := path.Join(uriNoLocality, f.Path)
+				if _, ok := missingFiles[missingFile]; !ok {
+					missingFiles[missingFile] = struct{}{}
+					if maxMissingFiles == len(missingFiles) {
+						break
+					}
+				}
+				continue
 			}
 			fileSizes[i] = sz
 		}
+
 		return fileSizes, nil
 	}
 
@@ -559,7 +571,22 @@ func checkBackupFiles(
 		if err != nil {
 			return nil, err
 		}
+		if len(missingFiles) == maxMissingFiles {
+			break
+		}
 		manifestFileSizes[layer] = layerFileSizes
+	}
+	if len(missingFiles) > 0 {
+		filesForMsg := make([]string, 0, len(missingFiles))
+		for file := range missingFiles {
+			filesForMsg = append(filesForMsg, file)
+		}
+		errorMsgPrefix := "The following files are missing from the backup:"
+		if len(missingFiles) == maxMissingFiles {
+			errorMsgPrefix = "Multiple files cannot be read from the backup including:"
+		}
+		sort.Strings(filesForMsg)
+		return nil, errors.Newf("%s\n\t%s", errorMsgPrefix, strings.Join(filesForMsg, "\n\t"))
 	}
 	return manifestFileSizes, nil
 }
@@ -828,11 +855,11 @@ func getLogicalSSTSize(files []backuppb.BackupManifest_File) map[string]int64 {
 	return sstDataSize
 }
 
-// approximateTablePhysicalSize approximates the number bytes written to disk for the table.
-func approximateTablePhysicalSize(
-	logicalTableSize int64, logicalFileSize int64, sstFileSize int64,
+// approximateSpanPhysicalSize approximates the number of bytes written to disk for the span.
+func approximateSpanPhysicalSize(
+	logicalSpanSize int64, logicalSSTSize int64, physicalSSTSize int64,
 ) int64 {
-	return int64(float64(sstFileSize) * (float64(logicalTableSize) / float64(logicalFileSize)))
+	return int64(float64(physicalSSTSize) * (float64(logicalSpanSize) / float64(logicalSSTSize)))
 }
 
 // getTableSizes gathers row and size count for each table in the manifest
@@ -868,7 +895,8 @@ func getTableSizes(
 		s := tableSizes[descpb.ID(tableID)]
 		s.rowCount.Add(file.EntryCounts)
 		if len(fileSizes) > 0 {
-			s.fileSize = approximateTablePhysicalSize(s.rowCount.DataSize, logicalSSTSize[file.Path], fileSizes[i])
+			s.fileSize += approximateSpanPhysicalSize(file.EntryCounts.DataSize, logicalSSTSize[file.Path],
+				fileSizes[i])
 		}
 		tableSizes[descpb.ID(tableID)] = s
 	}
@@ -993,7 +1021,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 					backupType = "incremental"
 				}
 
-				sstDataSize := getLogicalSSTSize(manifest.Files)
+				logicalSSTSize := getLogicalSSTSize(manifest.Files)
 				for j, file := range manifest.Files {
 					filePath := file.Path
 					if inCol != nil {
@@ -1008,7 +1036,8 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 					}
 					sz := int64(-1)
 					if len(info.fileSizes) > 0 {
-						sz = approximateTablePhysicalSize(info.fileSizes[i][j], file.EntryCounts.DataSize, sstDataSize[file.Path])
+						sz = approximateSpanPhysicalSize(file.EntryCounts.DataSize,
+							logicalSSTSize[file.Path], info.fileSizes[i][j])
 					}
 					rows = append(rows, tree.Datums{
 						tree.NewDString(filePath),
