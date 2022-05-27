@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -501,8 +502,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -547,8 +547,7 @@ func TestAnchoringErrorNoTrigger(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -572,8 +571,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "fast-path", func(t *testing.T, fastPath bool) {
 		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
-		mc := hlc.NewManualClock(1)
-		clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -685,8 +683,7 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			mc := hlc.NewManualClock(1)
-			clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 			txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -743,8 +740,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "fast-path", func(t *testing.T, fastPath bool) {
 		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
-		mc := hlc.NewManualClock(1)
-		clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond /* maxOffset */)
 		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
 			_ context.Context, ba roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {

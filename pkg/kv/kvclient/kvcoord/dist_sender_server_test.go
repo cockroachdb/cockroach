@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1111,8 +1112,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), false),
 				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), false),
 			} {
-				manual := hlc.NewManualClock(ts[0].WallTime + 1)
-				clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClock(timeutil.NewManualTime(ts[0].GoTime().Add(1)), time.Nanosecond /* maxOffset */)
 				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 					AmbientCtx:         s.AmbientCtx(),
 					Settings:           cluster.MakeTestingClusterSettings(),
