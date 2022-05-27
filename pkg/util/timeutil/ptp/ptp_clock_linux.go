@@ -11,7 +11,7 @@
 //go:build linux
 // +build linux
 
-package hlc
+package ptp
 
 /*
 #include <time.h>
@@ -28,23 +28,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// PTPClock contains the handle of the clock device as well as the
+// Clock contains the handle of the clock device as well as the
 // clock id.
-// The PTPClock implements the hlc.WallClock interface, so it can be used
+// The Clock implements the hlc.WallClock interface, so it can be used
 // as the time source for an hlc.Clock:
-// hlc.NewClock(MakePTPClock(...), ...).
-type PTPClock struct {
+// hlc.NewClock(MakeClock(...), ...).
+type Clock struct {
 	// clockDevice is not used after the device is open but is here to prevent the GC
 	// from closing the device and invalidating the clockDeviceID.
 	clockDevice   *os.File
 	clockDeviceID uintptr
 }
 
-var _ WallClock = PTPClock{}
-
-// MakePTPClock creates a new PTPClock for the given device path.
-func MakePTPClock(ctx context.Context, clockDevicePath string) (PTPClock, error) {
-	var result PTPClock
+// MakeClock creates a new Clock for the given device path.
+func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
+	var result Clock
 	var err error
 	result.clockDevice, err = os.Open(clockDevicePath)
 	if err != nil {
@@ -74,7 +72,7 @@ func MakePTPClock(ctx context.Context, clockDevicePath string) (PTPClock, error)
 }
 
 // Now implements the hlc.WallClock interface.
-func (p PTPClock) Now() time.Time {
+func (p Clock) Now() time.Time {
 	var ts C.struct_timespec
 	_, err := C.clock_gettime(C.clockid_t(p.clockDeviceID), &ts)
 	if err != nil {

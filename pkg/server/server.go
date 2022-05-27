@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -168,7 +169,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	var clock *hlc.Clock
 	if cfg.ClockDevicePath != "" {
-		ptpClock, err := hlc.MakePTPClock(context.Background(), cfg.ClockDevicePath)
+		ptpClock, err := ptp.MakeClock(context.Background(), cfg.ClockDevicePath)
 		if err != nil {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
