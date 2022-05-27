@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -632,9 +633,11 @@ type Pebble struct {
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
-	writeStallCount int64
-	diskSlowCount   int64
-	diskStallCount  int64
+	writeStallCount      int64
+	writeStallDuration   time.Duration
+	writeStallStartNanos int64
+	diskSlowCount        int64
+	diskStallCount       int64
 
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
@@ -905,6 +908,22 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 	return pebble.EventListener{
 		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
 			atomic.AddInt64(&p.writeStallCount, 1)
+			startNanos := timeutil.Now().UnixNano()
+			atomic.StoreInt64(&p.writeStallStartNanos, startNanos)
+		},
+		WriteStallEnd: func() {
+			startNanos := atomic.SwapInt64(&p.writeStallStartNanos, 0)
+			if startNanos == 0 {
+				// Should not happen since these callbacks are registered when Pebble
+				// is opened, but just in case we miss the WriteStallBegin, lets not
+				// corrupt the metric.
+				return
+			}
+			stallDuration := timeutil.Now().UnixNano() - startNanos
+			if stallDuration < 0 {
+				return
+			}
+			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
 			maxSyncDuration := maxSyncDurationDefault
@@ -1486,11 +1505,17 @@ func (p *Pebble) Flush() error {
 func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
 	return Metrics{
-		Metrics:         m,
-		WriteStallCount: atomic.LoadInt64(&p.writeStallCount),
-		DiskSlowCount:   atomic.LoadInt64(&p.diskSlowCount),
-		DiskStallCount:  atomic.LoadInt64(&p.diskStallCount),
+		Metrics:            m,
+		WriteStallCount:    atomic.LoadInt64(&p.writeStallCount),
+		WriteStallDuration: time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
+		DiskSlowCount:      atomic.LoadInt64(&p.diskSlowCount),
+		DiskStallCount:     atomic.LoadInt64(&p.diskStallCount),
 	}
+}
+
+// GetInternalIntervalMetrics implements the Engine interface.
+func (p *Pebble) GetInternalIntervalMetrics() *pebble.InternalIntervalMetrics {
+	return p.db.InternalIntervalMetrics()
 }
 
 // GetEncryptionRegistries implements the Engine interface.

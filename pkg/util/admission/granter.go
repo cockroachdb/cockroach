@@ -66,6 +66,32 @@ var EnabledSoftSlotGranting = settings.RegisterBoolSetting(
 	true,
 )
 
+// MinFlushUtilizationFraction is a lower-bound on the dynamically adjusted
+// flush utilization target fraction that attempts to reduce write stalls. Set
+// it to a high fraction (>>1, e.g. 10), to effectively disable flush based
+// tokens.
+//
+// The target fraction is used to multiply the (measured) peak flush rate, to
+// compute the flush tokens. For example, if the dynamic target fraction (for
+// which this setting provides a lower bound) is currently 0.75, then
+// 0.75*peak-flush-rate will be used to set the flush tokens. The lower bound
+// of 0.5 should not need to be tuned, and should not be tuned without
+// consultation with a domain expert. If the storage.write-stall-nanos
+// indicates significant write stalls, and the granter logs show that the
+// dynamic target fraction has already reached the lower bound, one can
+// consider lowering it slightly and then observe the effect.
+var MinFlushUtilizationFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"admission.min_flush_util_fraction",
+	"when computing flush tokens, this fraction is a lower bound on the dynamically "+
+		"adjusted flush utilization target fraction that attempts to reduce write stalls. Set "+
+		"it to a high fraction (>>1, e.g. 10), to disable flush based tokens. The dynamic "+
+		"target fraction is used to multiply the (measured) peak flush rate, to compute the flush "+
+		"tokens. If the storage.write-stall-nanos indicates significant write stalls, and the granter "+
+		"logs show that the dynamic target fraction has already reached the lower bound, one can "+
+		"consider lowering it slightly (after consultation with domain experts)", 0.5,
+	settings.PositiveFloat)
+
 // grantChainID is the ID for a grant chain. See continueGrantChain for
 // details.
 type grantChainID uint64
@@ -576,7 +602,11 @@ type kvStoreTokenGranter struct {
 	requester requester
 	// There is no rate limiting in granting these tokens. That is, they are all
 	// burst tokens.
-	availableIOTokens               int64
+	availableIOTokens int64
+	// startingIOTokens is the number of tokens set by
+	// setAvailableIOTokensLocked. It is used to compute the tokens used, by
+	// computing startingIOTokens-availableIOTokens.
+	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
 	exhaustedStart                  time.Time
 }
@@ -643,7 +673,8 @@ func (sg *kvStoreTokenGranter) continueGrantChain(grantChainID grantChainID) {
 	sg.coord.continueGrantChain(KVWork, grantChainID)
 }
 
-func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) {
+func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
+	tokensUsed = sg.startingIOTokens - sg.availableIOTokens
 	// It is possible for availableIOTokens to be negative because of
 	// tookWithoutPermission or because tryGet will satisfy requests until
 	// availableIOTokens become <= 0. We want to remember this previous
@@ -653,6 +684,8 @@ func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) {
 		// Clamp to tokens.
 		sg.availableIOTokens = tokens
 	}
+	sg.startingIOTokens = tokens
+	return tokensUsed
 }
 
 // GrantCoordinator is the top-level object that coordinates grants across
@@ -997,7 +1030,7 @@ func appendMetricStructsForQueues(ms []metric.Struct, coord *GrantCoordinator) [
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
+func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) {
 	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
@@ -1009,10 +1042,8 @@ func (coord *GrantCoordinator) allocateIOTokensTick() {
 	if !coord.grantChainActive {
 		coord.tryGrant()
 	}
-	// Else, let the grant chain finish. We could terminate it, but token
-	// replenishment occurs at 1s granularity which is coarse enough to not
-	// bother. Also, in production we turn off grant chains on the
-	// GrantCoordinators used for IO, so we will always call tryGrant.
+	// Else, let the grant chain finish. NB: we turn off grant chains on the
+	// GrantCoordinators used for IO, so the if-condition is always true.
 }
 
 // testingTryGrant is only for unit tests, since they sometimes cut out
@@ -1378,7 +1409,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		if !loaded {
 			sgc.numStores++
 		}
-		gc.pebbleMetricsTick(startupCtx, m.Metrics)
+		gc.pebbleMetricsTick(startupCtx, m)
 		gc.allocateIOTokensTick()
 	}
 	if sgc.disableTickerForTesting {
@@ -1389,13 +1420,13 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 
 	go func() {
 		var ticks int64
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(ioTokenTickDuration)
 		done := false
 		for !done {
 			select {
 			case <-ticker.C:
 				ticks++
-				if ticks%adjustmentInterval == 0 {
+				if ticks%ticksInAdjustmentInterval == 0 {
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
 						log.Warningf(ctx,
@@ -1404,7 +1435,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					for _, m := range metrics {
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
-							gc.pebbleMetricsTick(ctx, m.Metrics)
+							gc.pebbleMetricsTick(ctx, m)
 							iotc.UpdateIOThreshold(roachpb.StoreID(m.StoreID), gc.ioLoadListener.ioThreshold)
 						} else {
 							log.Warningf(ctx,
@@ -1745,6 +1776,8 @@ type IOThresholdConsumer interface {
 type StoreMetrics struct {
 	StoreID int32
 	*pebble.Metrics
+	WriteStallCount int64
+	*pebble.InternalIntervalMetrics
 }
 
 // granterWithIOTokens is used to abstract kvStoreTokenGranter for testing.
@@ -1754,8 +1787,11 @@ type granterWithIOTokens interface {
 	// tight bound when the callee has negative available tokens, due to the use
 	// of granter.tookWithoutPermission, since in that the case the callee
 	// increments that negative value with the value provided by tokens. This
-	// method needs to be called periodically.
-	setAvailableIOTokensLocked(tokens int64)
+	// method needs to be called periodically. The return value is the number of
+	// used tokens in the interval since the prior call to this method. Note
+	// that tokensUsed can be negative, though that will be rare, since it is
+	// possible for tokens to be returned.
+	setAvailableIOTokensLocked(tokens int64) (tokensUsed int64)
 }
 
 // storeAdmissionStats are stats maintained by a storeRequester. The non-test
@@ -1819,6 +1855,8 @@ type ioLoadListenerState struct {
 	cumL0AddedBytes uint64
 	// Gauge.
 	curL0Bytes int64
+	// Cumulative.
+	cumWriteStallCount int64
 
 	// Exponentially smoothed per interval values.
 
@@ -1829,13 +1867,25 @@ type ioLoadListenerState struct {
 	// is determined when the work is done, as then the L0 fraction is known
 	// precisely.
 	smoothedIntIngestedAccountedL0BytesFraction float64 // '1.0' means: all ingested bytes went to L0
-	smoothedTotalNumByteTokens                  float64 // smoothed history of token bucket sizes
+	// Smoothed history of byte tokens calculated based on compactions out of L0.
+	smoothedCompactionByteTokens float64
+
+	// Smoothed history of flush tokens calculated based on memtable flushes,
+	// before multiplying by target fraction.
+	smoothedNumFlushTokens float64
+	// The target fraction to be used for the effective flush tokens. It is in
+	// the interval
+	// [MinFlushUtilizationFraction,maxFlushUtilTargetFraction].
+	flushUtilTargetFraction float64
 
 	// totalNumByteTokens represents the tokens to give out until the next call to
 	// adjustTokens. They are parceled out in small intervals. tokensAllocated
 	// represents what has been given out.
 	totalNumByteTokens int64
 	tokensAllocated    int64
+	// Used tokens can be negative if some tokens taken in one interval were
+	// returned in another, but that will be extremely rare.
+	tokensUsed int64
 }
 
 // ioLoadListener adjusts tokens in kvStoreTokenGranter for IO, specifically due to
@@ -1863,12 +1913,12 @@ const unlimitedTokens = math.MaxInt64
 
 // Token changes are made at a coarse time granularity of 15s since
 // compactions can take ~10s to complete. The totalNumByteTokens to give out over
-// the 15s interval are given out in a smoothed manner, at 1s intervals.
+// the 15s interval are given out in a smoothed manner, at 250ms intervals.
 // This has similarities with the following kinds of token buckets:
 // - Zero replenishment rate and a burst value that is changed every 15s. We
 //   explicitly don't want a huge burst every 15s.
-// - A replenishment rate equal to totalNumByteTokens/15, with a burst capped at
-//   totalNumByteTokens/15. The only difference with the code here is that if
+// - A replenishment rate equal to totalNumByteTokens/60, with a burst capped at
+//   totalNumByteTokens/60. The only difference with the code here is that if
 //   totalNumByteTokens is small, the integer rounding effects are compensated for.
 //
 // In an experiment with extreme overload using KV0 with block size 64KB,
@@ -1898,18 +1948,35 @@ const unlimitedTokens = math.MaxInt64
 // reasonable to simply use metrics that are updated when compactions
 // complete (as opposed to also tracking progress in bytes of on-going
 // compactions).
+//
+// The 250ms interval to hand out the computed tokens is due to the needs of
+// flush tokens. For compaction tokens, a 1s interval is fine-grained enough.
+//
+// If flushing a memtable take 100ms, then 10 memtables can be sustainably
+// flushed in 1s. If we dole out flush tokens in 1s intervals, then there are
+// enough tokens to create 10 memtables at the very start of a 1s interval,
+// which will cause a write stall. Intuitively, the faster it is to flush a
+// memtable, the smaller the interval for doling out these tokens. We have
+// observed flushes taking ~0.5s, so we picked a 250ms interval for doling out
+// these tokens. We could use a value smaller than 250ms, but we've observed
+// CPU utilization issues at lower intervals (see the discussion in
+// runnable.go).
 const adjustmentInterval = 15
+const ticksInAdjustmentInterval = 60
+const ioTokenTickDuration = 250 * time.Millisecond
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call.
-func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
+func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) {
+	m := metrics.Metrics
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		io.adjustTokensResult = adjustTokensResult{
 			ioLoadListenerState: ioLoadListenerState{
-				cumAdmissionStats: io.kvRequester.getStoreAdmissionStats(),
-				cumL0AddedBytes:   m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
-				curL0Bytes:        m.Levels[0].Size,
+				cumAdmissionStats:  io.kvRequester.getStoreAdmissionStats(),
+				cumL0AddedBytes:    m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
+				curL0Bytes:         m.Levels[0].Size,
+				cumWriteStallCount: metrics.WriteStallCount,
 				// Reasonable starting fraction until we see some ingests.
 				smoothedIntIngestedAccountedL0BytesFraction: 0.5,
 				// No initial limit, i.e, the first interval is unlimited.
@@ -1926,21 +1993,21 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metri
 		}
 		return
 	}
-	io.adjustTokens(ctx, m)
+	io.adjustTokens(ctx, metrics)
 }
 
-// allocateTokensTick gives out 1/adjustmentInterval of the totalNumByteTokens every
-// 1s.
+// allocateTokensTick gives out 1/ticksInAdjustmentInterval of the
+// totalNumByteTokens every 250ms.
 func (io *ioLoadListener) allocateTokensTick() {
 	var toAllocate int64
 	// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
 	// calculation.
-	if io.totalNumByteTokens >= unlimitedTokens-(adjustmentInterval-1) {
-		toAllocate = io.totalNumByteTokens / adjustmentInterval
+	if io.totalNumByteTokens >= unlimitedTokens-(ticksInAdjustmentInterval-1) {
+		toAllocate = io.totalNumByteTokens / ticksInAdjustmentInterval
 	} else {
 		// Round up so that we don't accumulate tokens to give in a burst on the
 		// last tick.
-		toAllocate = (io.totalNumByteTokens + adjustmentInterval - 1) / adjustmentInterval
+		toAllocate = (io.totalNumByteTokens + ticksInAdjustmentInterval - 1) / ticksInAdjustmentInterval
 		if toAllocate < 0 {
 			panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
 		}
@@ -1955,24 +2022,38 @@ func (io *ioLoadListener) allocateTokensTick() {
 	if io.tokensAllocated < 0 {
 		panic(errors.AssertionFailedf("tokens allocated is negative %d", io.tokensAllocated))
 	}
-	io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
+	io.tokensUsed += io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
 }
 
 // adjustTokens computes a new value of totalNumByteTokens (and resets
 // tokensAllocated). The new value, when overloaded, is based on comparing how
 // many bytes are being moved out of L0 via compactions with the average
 // number of bytes being added to L0 per KV work. We want the former to be
-// (significantly) larger so that L0 returns to a healthy state.
-func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
-	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(), m.Levels[0],
-		L0FileCountOverloadThreshold.Get(&io.settings.SV), L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
+// (significantly) larger so that L0 returns to a healthy state. The byte
+// token computation also takes into account the flush throughput, since an
+// inability to flush fast enough can result in write stalls due to high
+// memtable counts, which we want to avoid as it can cause latency hiccups of
+// 100+ms for all write traffic.
+func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
+	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(),
+		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
+		L0FileCountOverloadThreshold.Get(&io.settings.SV),
+		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
+		MinFlushUtilizationFraction.Get(&io.settings.SV),
 	)
 	io.adjustTokensResult = res
 	io.kvRequester.setStoreRequestEstimates(res.requestEstimates)
-	if _, overloaded := res.ioThreshold.Score(); overloaded {
+	if _, overloaded := res.ioThreshold.Score(); overloaded || res.aux.doLogFlush {
 		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
 	}
 }
+
+type tokenKind int8
+
+const (
+	compactionTokenKind tokenKind = iota
+	flushTokenKind
+)
 
 type adjustTokensAuxComputations struct {
 	intL0AddedBytes     int64
@@ -1987,6 +2068,15 @@ type adjustTokensAuxComputations struct {
 
 	intPerWorkUnaccountedL0Bytes float64
 	l0BytesIngestFraction        float64
+
+	intFlushTokens      float64
+	intFlushUtilization float64
+	intWriteStalls      int64
+
+	prevTokensUsed int64
+	tokenKind      tokenKind
+
+	doLogFlush bool
 }
 
 func (*ioLoadListener) adjustTokensInner(
@@ -1994,7 +2084,10 @@ func (*ioLoadListener) adjustTokensInner(
 	prev ioLoadListenerState,
 	cumAdmissionStats storeAdmissionStats,
 	l0Metrics pebble.LevelMetrics,
+	cumWriteStallCount int64,
+	im *pebble.InternalIntervalMetrics,
 	threshNumFiles, threshNumSublevels int64,
+	minFlushUtilTargetFraction float64,
 ) adjustTokensResult {
 	ioThreshold := &admissionpb.IOThreshold{
 		L0NumFiles:              l0Metrics.NumFiles,
@@ -2106,9 +2199,192 @@ func (*ioLoadListener) adjustTokensInner(
 		smoothedIntIngestedAccountedL0BytesFraction = prev.smoothedIntIngestedAccountedL0BytesFraction
 	}
 
-	// We constrain admission if the store is over the threshold.
+	// Flush tokens:
+	//
+	// Write stalls happen when flushing of memtables is a bottleneck.
+	//
+	// Computing Flush Tokens:
+	// Flush can go from not being the bottleneck in one 15s interval
+	// (adjustmentInterval) to being the bottleneck in the next 15s interval
+	// (e.g. when L0 falls below the unhealthy threshold and compaction tokens
+	// become unlimited). So the flush token limit has to react quickly (cannot
+	// afford to wait for multiple 15s intervals). We've observed that if we
+	// normalize the flush rate based on flush loop utilization (the PeakRate
+	// computation below), and use that to compute flush tokens, the token
+	// counts are quite stable. Here are two examples, showing this steady token
+	// count computed using PeakRate of the flush ThroughputMetric, despite
+	// changes in flush loop utilization (the util number below).
+	//
+	// Example 1: Case where IO bandwidth was not a bottleneck
+	// flush: tokens: 2312382401, util: 0.90
+	// flush: tokens: 2345477107, util: 0.31
+	// flush: tokens: 2317829891, util: 0.29
+	// flush: tokens: 2428387843, util: 0.17
+	//
+	// Example 2: Case where IO bandwidth became a bottleneck (and mean fsync
+	// latency was fluctuating between 1ms and 4ms in the low util to high util
+	// cases).
+	//
+	// flush: tokens: 1406132615, util: 1.00
+	// flush: tokens: 1356476227, util: 0.64
+	// flush: tokens: 1374880806, util: 0.24
+	// flush: tokens: 1328578534, util: 0.96
+	//
+	// Hence, using PeakRate as a basis for computing flush tokens seems sound.
+	// The other important question is what fraction of PeakRate avoids write
+	// stalls. It is likely less than 100% since while a flush is ongoing,
+	// memtables can accumulate and cause a stall. For example, we have observed
+	// write stalls at 80% of PeakRate. The fraction depends on configuration
+	// parameters like MemTableStopWritesThreshold (defaults to 4 in
+	// CockroachDB), and environmental and workload factors like how long a
+	// flush takes to flush a single 64MB memtable. Instead of trying to measure
+	// and adjust for these, we use a simple multiplier,
+	// flushUtilTargetFraction. By default, flushUtilTargetFraction ranges
+	// between 0.5 and 1.5. The lower bound is configurable via
+	// admission.min_flush_util_percent and if configured above the upper bound,
+	// the upper bound will be ignored and the target fraction will not be
+	// dynamically adjusted. The dynamic adjustment logic uses an additive step
+	// size of flushUtilTargetFractionIncrement (0.025), with the following
+	// logic:
+	// - Reduce the fraction if there is a write-stall. The reduction may use a
+	//   small multiple of flushUtilTargetFractionIncrement. This is so that
+	//   this probing spends more time below the threshold where write stalls
+	//   occur.
+	// - Increase fraction if no write-stall and flush tokens were almost all
+	//   used.
+	//
+	// This probing unfortunately cannot eliminate write stalls altogether.
+	// Future improvements could use more history to settle on a good
+	// flushUtilTargetFraction for longer, or use some measure of how close we
+	// are to a write-stall to stop the increase.
+	//
+	// Ingestion and flush tokens:
+	//
+	// Ingested sstables do not utilize any flush capacity. Consider 2 cases:
+	// - sstable ingested into L0: there was either data overlap with L0, or
+	//   file boundary overlap with L0-L6. To be conservative, lets assume there
+	//   was data overlap, and that this data overlap extended into the memtable
+	//   at the time of ingestion. Memtable(s) would have been force flushed to
+	//   handle such overlap. The cost of flushing a memtable is based on how
+	//   much of the allocated memtable capacity is used, so an early flush
+	//   seems harmless. However, write stalls are based on allocated memtable
+	//   capacity, so there is a potential negative interaction of these forced
+	//   flushes since they cause additional memtable capacity allocation.
+	// - sstable ingested into L1-L6: there was no data overlap with L0, which
+	//   implies that there was no reason to flush memtables.
+	//
+	// Since there is some interaction noted in bullet 1, and because it
+	// simplifies the admission control token behavior, we use flush tokens in
+	// an identical manner as compaction tokens -- to be consumed by all data
+	// flowing into L0. Some of this conservative choice will be compensated for
+	// by flushUtilTargetFraction (when the mix of ingestion and actual flushes
+	// are stable). Another thing to note is that compactions out of L0 are
+	// typically the more persistent bottleneck than flushes for the following
+	// reason:
+	// There is a dedicated flush thread. With a maximum compaction concurrency
+	// of C, we have up to C threads dedicated to handling the write-amp of W
+	// (caused by rewriting the same data). So C/(W-1) threads on average are
+	// reading the original data (that will be rewritten W-1 times). Since L0
+	// can have multiple overlapping files, and intra-L0 compactions are usually
+	// avoided, we can assume (at best) that the original data (in L0) is being
+	// read only when compacting to levels lower than L0. That is, C/(W-1)
+	// threads are reading from L0 to compact to levels lower than L0. Since W
+	// can be 20+ and C defaults to 3 (we plan to dynamically adjust C but one
+	// can expect C to be <= 10), C/(W-1) < 1. So the main reason we are
+	// considering flush tokens is transient flush bottlenecks, and workloads
+	// where W is small.
+
+	// Compute flush utilization for this interval. A very low flush utilization
+	// will cause flush tokens to be unlimited.
+	intFlushUtilization := float64(0)
+	if im.Flush.WriteThroughput.WorkDuration > 0 {
+		intFlushUtilization = float64(im.Flush.WriteThroughput.WorkDuration) /
+			float64(im.Flush.WriteThroughput.WorkDuration+im.Flush.WriteThroughput.IdleDuration)
+	}
+	// Compute flush tokens for this interval that would cause 100% utilization.
+	intFlushTokens := float64(im.Flush.WriteThroughput.PeakRate()) * adjustmentInterval
+	intWriteStalls := cumWriteStallCount - prev.cumWriteStallCount
+
+	// Ensure flushUtilTargetFraction is in the configured bounds. This also
+	// does lazy initialization.
+	const maxFlushUtilTargetFraction = 1.5
+	flushUtilTargetFraction := prev.flushUtilTargetFraction
+	if flushUtilTargetFraction == 0 {
+		// Initialization: use the maximum configured fraction.
+		flushUtilTargetFraction = minFlushUtilTargetFraction
+		if flushUtilTargetFraction < maxFlushUtilTargetFraction {
+			flushUtilTargetFraction = maxFlushUtilTargetFraction
+		}
+	} else if flushUtilTargetFraction < minFlushUtilTargetFraction {
+		// The min can be changed in a running system, so we bump up to conform to
+		// the min.
+		flushUtilTargetFraction = minFlushUtilTargetFraction
+	}
+	numFlushTokens := int64(unlimitedTokens)
+	// doLogFlush becomes true if something interesting is done here.
+	doLogFlush := false
+	smoothedNumFlushTokens := prev.smoothedNumFlushTokens
+	const flushUtilIgnoreThreshold = 0.05
+	if intFlushUtilization > flushUtilIgnoreThreshold {
+		if smoothedNumFlushTokens == 0 {
+			// Initialization.
+			smoothedNumFlushTokens = intFlushTokens
+		} else {
+			smoothedNumFlushTokens = alpha*intFlushTokens + (1-alpha)*prev.smoothedNumFlushTokens
+		}
+		const flushUtilTargetFractionIncrement = 0.025
+		// Have we used, over the last (15s) cycle, more than 90% of the tokens we
+		// would give out for the next cycle? If yes, highTokenUsage is true.
+		highTokenUsage :=
+			float64(prev.tokensUsed) >= 0.9*smoothedNumFlushTokens*flushUtilTargetFraction
+		if intWriteStalls > 0 {
+			// Try decrease since there were write-stalls.
+			numDecreaseSteps := 1
+			// These constants of 5, 3, 2, 2 were found to work reasonably well,
+			// without causing large decreases. We need better benchmarking to tune
+			// such constants.
+			if intWriteStalls >= 5 {
+				numDecreaseSteps = 3
+			} else if intWriteStalls >= 2 {
+				numDecreaseSteps = 2
+			}
+			for i := 0; i < numDecreaseSteps; i++ {
+				if flushUtilTargetFraction >= minFlushUtilTargetFraction+flushUtilTargetFractionIncrement {
+					flushUtilTargetFraction -= flushUtilTargetFractionIncrement
+					doLogFlush = true
+				} else {
+					break
+				}
+			}
+		} else if flushUtilTargetFraction < maxFlushUtilTargetFraction-flushUtilTargetFractionIncrement &&
+			intWriteStalls == 0 && highTokenUsage {
+			// No write-stalls, and token usage was high, so give out more tokens.
+			flushUtilTargetFraction += flushUtilTargetFractionIncrement
+			doLogFlush = true
+		}
+		if highTokenUsage {
+			doLogFlush = true
+		}
+		flushTokensFloat := flushUtilTargetFraction * smoothedNumFlushTokens
+		if flushTokensFloat < float64(math.MaxInt64) {
+			numFlushTokens = int64(flushTokensFloat)
+		}
+		// Else avoid overflow by using the previously set unlimitedTokens. This
+		// should not really happen.
+	}
+	// Else intFlushUtilization is too low. We don't want to make token
+	// determination based on a very low utilization, so we hand out unlimited
+	// tokens. Note that flush utilization has been observed to fluctuate from
+	// 0.16 to 0.9 in a single interval, when compaction tokens are not limited,
+	// hence we have set flushUtilIgnoreThreshold to a very low value. If we've
+	// erred towards it being too low, we run the risk of computing incorrect
+	// tokens. If we've erred towards being too high, we run the risk of giving
+	// out unlimitedTokens and causing write stalls.
+
+	// We constrain admission based on compactions, if the store is over the L0
+	// threshold.
 	var totalNumByteTokens int64
-	var smoothedTotalNumByteTokens float64
+	var smoothedCompactionByteTokens float64
 
 	_, overloaded := ioThreshold.Score()
 	if overloaded {
@@ -2121,12 +2397,12 @@ func (*ioLoadListener) adjustTokensInner(
 		// Smooth it. This may seem peculiar since we are already using
 		// smoothedIntL0CompactedBytes, but the else clause below uses a different
 		// computation so we also want the history of smoothedTotalNumByteTokens.
-		smoothedTotalNumByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedTotalNumByteTokens
-		if float64(math.MaxInt64) < smoothedTotalNumByteTokens {
+		smoothedCompactionByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedCompactionByteTokens
+		if float64(math.MaxInt64) < smoothedCompactionByteTokens {
 			// Avoid overflow. This should not really happen.
 			totalNumByteTokens = math.MaxInt64
 		} else {
-			totalNumByteTokens = int64(smoothedTotalNumByteTokens)
+			totalNumByteTokens = int64(smoothedCompactionByteTokens)
 		}
 	} else {
 		// Under the threshold. Maintain a smoothedTotalNumByteTokens based on what was
@@ -2135,8 +2411,15 @@ func (*ioLoadListener) adjustTokensInner(
 		// we've seen extreme situations with alternating 15s intervals of above
 		// and below the threshold.
 		numTokens := intL0CompactedBytes
-		smoothedTotalNumByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedTotalNumByteTokens
+		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
 		totalNumByteTokens = unlimitedTokens
+	}
+	// Use the minimum of the token count calculated using compactions and
+	// flushes.
+	tokenKind := compactionTokenKind
+	if totalNumByteTokens > numFlushTokens {
+		totalNumByteTokens = numFlushTokens
+		tokenKind = flushTokenKind
 	}
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
@@ -2144,12 +2427,16 @@ func (*ioLoadListener) adjustTokensInner(
 			cumAdmissionStats:                           cumAdmissionStats,
 			cumL0AddedBytes:                             cumL0AddedBytes,
 			curL0Bytes:                                  curL0Bytes,
+			cumWriteStallCount:                          cumWriteStallCount,
 			smoothedIntL0CompactedBytes:                 smoothedIntL0CompactedBytes,
 			smoothedIntPerWorkUnaccountedL0Bytes:        smoothedIntPerWorkUnaccountedL0Bytes,
 			smoothedIntIngestedAccountedL0BytesFraction: smoothedIntIngestedAccountedL0BytesFraction,
-			smoothedTotalNumByteTokens:                  smoothedTotalNumByteTokens,
+			smoothedCompactionByteTokens:                smoothedCompactionByteTokens,
+			smoothedNumFlushTokens:                      smoothedNumFlushTokens,
+			flushUtilTargetFraction:                     flushUtilTargetFraction,
 			totalNumByteTokens:                          totalNumByteTokens,
 			tokensAllocated:                             0,
+			tokensUsed:                                  0,
 		},
 		requestEstimates: storeRequestEstimates{
 			workByteAddition:       max(1, int64(smoothedIntPerWorkUnaccountedL0Bytes)),
@@ -2166,6 +2453,12 @@ func (*ioLoadListener) adjustTokensInner(
 			intUnaccountedL0Bytes:        intUnaccountedL0Bytes,
 			intPerWorkUnaccountedL0Bytes: intPerWorkUnaccountedL0Bytes,
 			l0BytesIngestFraction:        intIngestedAccountedL0BytesFraction,
+			intFlushTokens:               intFlushTokens,
+			intFlushUtilization:          intFlushUtilization,
+			intWriteStalls:               intWriteStalls,
+			prevTokensUsed:               prev.tokensUsed,
+			tokenKind:                    tokenKind,
+			doLogFlush:                   doLogFlush,
 		},
 		ioThreshold: ioThreshold,
 	}
@@ -2188,7 +2481,7 @@ func max(i, j int64) int64 {
 func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	// NB: "≈" indicates smoothed quantities.
-	p.Printf("score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
+	p.Printf("compaction score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
 	p.Printf("L0 growth %s: ", ib(res.aux.intL0AddedBytes))
 	// Writes to L0 that we expected because requests asked admission control for them.
 	// This is the "happy path".
@@ -2202,14 +2495,19 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("%s unacc [≈%s/req, n=%d], ",
 		ib(res.aux.intUnaccountedL0Bytes), ib(int64(res.smoothedIntPerWorkUnaccountedL0Bytes)), res.aux.intAdmittedCount)
 	// How much got compacted out of L0 recently.
-	p.Printf("compacted %s [≈%s]; ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
-
+	p.Printf("compacted %s [≈%s], ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
+	p.Printf("flushed %s [≈%s]; ", ib(int64(res.aux.intFlushTokens)),
+		ib(int64(res.smoothedNumFlushTokens)))
 	p.Printf("admitting ")
 	if n := res.ioLoadListenerState.totalNumByteTokens; n < unlimitedTokens {
-		p.Printf("%s", ib(n))
-		if n := res.ioLoadListenerState.tokensAllocated; 0 < n && n < unlimitedTokens/adjustmentInterval {
-			p.Printf("(used %s)", ib(n))
+		p.Printf("%s (rate %s/s)", ib(n), ib(n/adjustmentInterval))
+		switch res.aux.tokenKind {
+		case compactionTokenKind:
+			p.Printf(" due to L0 growth")
+		case flushTokenKind:
+			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
+		p.Printf(" (used %s)", ib(res.aux.prevTokensUsed))
 		p.Printf(" with L0 penalty: +%s/req, *%.2f/ingest",
 			ib(res.requestEstimates.workByteAddition), res.requestEstimates.fractionOfIngestIntoL0,
 		)

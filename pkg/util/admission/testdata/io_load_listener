@@ -11,8 +11,8 @@ prep-admission-stats admitted=0
 # Even though above the threshold, the first 15 ticks don't limit the tokens.
 set-state l0-bytes=10000 l0-added=1000 l0-files=21 l0-sublevels=21
 ----
-score 0.000 (21 ssts, 21 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B]; admitting all
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:10000 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 0.000 (21 ssts, 21 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 tick: 0, setAvailableIOTokens: unlimited
 tick: 1, setAvailableIOTokens: unlimited
 tick: 2, setAvailableIOTokens: unlimited
@@ -28,6 +28,51 @@ tick: 11, setAvailableIOTokens: unlimited
 tick: 12, setAvailableIOTokens: unlimited
 tick: 13, setAvailableIOTokens: unlimited
 tick: 14, setAvailableIOTokens: unlimited
+tick: 15, setAvailableIOTokens: unlimited
+tick: 16, setAvailableIOTokens: unlimited
+tick: 17, setAvailableIOTokens: unlimited
+tick: 18, setAvailableIOTokens: unlimited
+tick: 19, setAvailableIOTokens: unlimited
+tick: 20, setAvailableIOTokens: unlimited
+tick: 21, setAvailableIOTokens: unlimited
+tick: 22, setAvailableIOTokens: unlimited
+tick: 23, setAvailableIOTokens: unlimited
+tick: 24, setAvailableIOTokens: unlimited
+tick: 25, setAvailableIOTokens: unlimited
+tick: 26, setAvailableIOTokens: unlimited
+tick: 27, setAvailableIOTokens: unlimited
+tick: 28, setAvailableIOTokens: unlimited
+tick: 29, setAvailableIOTokens: unlimited
+tick: 30, setAvailableIOTokens: unlimited
+tick: 31, setAvailableIOTokens: unlimited
+tick: 32, setAvailableIOTokens: unlimited
+tick: 33, setAvailableIOTokens: unlimited
+tick: 34, setAvailableIOTokens: unlimited
+tick: 35, setAvailableIOTokens: unlimited
+tick: 36, setAvailableIOTokens: unlimited
+tick: 37, setAvailableIOTokens: unlimited
+tick: 38, setAvailableIOTokens: unlimited
+tick: 39, setAvailableIOTokens: unlimited
+tick: 40, setAvailableIOTokens: unlimited
+tick: 41, setAvailableIOTokens: unlimited
+tick: 42, setAvailableIOTokens: unlimited
+tick: 43, setAvailableIOTokens: unlimited
+tick: 44, setAvailableIOTokens: unlimited
+tick: 45, setAvailableIOTokens: unlimited
+tick: 46, setAvailableIOTokens: unlimited
+tick: 47, setAvailableIOTokens: unlimited
+tick: 48, setAvailableIOTokens: unlimited
+tick: 49, setAvailableIOTokens: unlimited
+tick: 50, setAvailableIOTokens: unlimited
+tick: 51, setAvailableIOTokens: unlimited
+tick: 52, setAvailableIOTokens: unlimited
+tick: 53, setAvailableIOTokens: unlimited
+tick: 54, setAvailableIOTokens: unlimited
+tick: 55, setAvailableIOTokens: unlimited
+tick: 56, setAvailableIOTokens: unlimited
+tick: 57, setAvailableIOTokens: unlimited
+tick: 58, setAvailableIOTokens: unlimited
+tick: 59, setAvailableIOTokens: unlimited
 
 prep-admission-stats admitted=10000
 ----
@@ -39,24 +84,69 @@ prep-admission-stats admitted=10000
 # removed), but smoothing it drops the tokens to 12,500.
 set-state l0-bytes=10000 l0-added=101000 l0-files=21 l0-sublevels=21
 ----
-score 1.050[overload] (21 ssts, 21 sub-levels), L0 growth 98 KiB: 0 B acc-write + 0 B acc-ingest + 98 KiB unacc [≈10 B/req, n=10000], compacted 98 KiB [≈49 KiB]; admitting 12 KiB with L0 penalty: +10 B/req, *0.50/ingest
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:10000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:101000 curL0Bytes:10000 smoothedIntL0CompactedBytes:50000 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:12500 totalNumByteTokens:12500 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:100000 intPerWorkUnaccountedL0Bytes:10 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 98 KiB: 0 B acc-write + 0 B acc-ingest + 98 KiB unacc [≈10 B/req, n=10000], compacted 98 KiB [≈49 KiB], flushed 0 B [≈0 B]; admitting 12 KiB (rate 833 B/s) due to L0 growth (used 0 B) with L0 penalty: +10 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:10000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:101000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:50000 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:12500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:12500 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:100000 intPerWorkUnaccountedL0Bytes:10 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 10
-tick: 0, setAvailableIOTokens: 834
-tick: 1, setAvailableIOTokens: 834
-tick: 2, setAvailableIOTokens: 834
-tick: 3, setAvailableIOTokens: 834
-tick: 4, setAvailableIOTokens: 834
-tick: 5, setAvailableIOTokens: 834
-tick: 6, setAvailableIOTokens: 834
-tick: 7, setAvailableIOTokens: 834
-tick: 8, setAvailableIOTokens: 834
-tick: 9, setAvailableIOTokens: 834
-tick: 10, setAvailableIOTokens: 834
-tick: 11, setAvailableIOTokens: 834
-tick: 12, setAvailableIOTokens: 834
-tick: 13, setAvailableIOTokens: 834
-tick: 14, setAvailableIOTokens: 824
+tick: 0, setAvailableIOTokens: 209
+tick: 1, setAvailableIOTokens: 209
+tick: 2, setAvailableIOTokens: 209
+tick: 3, setAvailableIOTokens: 209
+tick: 4, setAvailableIOTokens: 209
+tick: 5, setAvailableIOTokens: 209
+tick: 6, setAvailableIOTokens: 209
+tick: 7, setAvailableIOTokens: 209
+tick: 8, setAvailableIOTokens: 209
+tick: 9, setAvailableIOTokens: 209
+tick: 10, setAvailableIOTokens: 209
+tick: 11, setAvailableIOTokens: 209
+tick: 12, setAvailableIOTokens: 209
+tick: 13, setAvailableIOTokens: 209
+tick: 14, setAvailableIOTokens: 209
+tick: 15, setAvailableIOTokens: 209
+tick: 16, setAvailableIOTokens: 209
+tick: 17, setAvailableIOTokens: 209
+tick: 18, setAvailableIOTokens: 209
+tick: 19, setAvailableIOTokens: 209
+tick: 20, setAvailableIOTokens: 209
+tick: 21, setAvailableIOTokens: 209
+tick: 22, setAvailableIOTokens: 209
+tick: 23, setAvailableIOTokens: 209
+tick: 24, setAvailableIOTokens: 209
+tick: 25, setAvailableIOTokens: 209
+tick: 26, setAvailableIOTokens: 209
+tick: 27, setAvailableIOTokens: 209
+tick: 28, setAvailableIOTokens: 209
+tick: 29, setAvailableIOTokens: 209
+tick: 30, setAvailableIOTokens: 209
+tick: 31, setAvailableIOTokens: 209
+tick: 32, setAvailableIOTokens: 209
+tick: 33, setAvailableIOTokens: 209
+tick: 34, setAvailableIOTokens: 209
+tick: 35, setAvailableIOTokens: 209
+tick: 36, setAvailableIOTokens: 209
+tick: 37, setAvailableIOTokens: 209
+tick: 38, setAvailableIOTokens: 209
+tick: 39, setAvailableIOTokens: 209
+tick: 40, setAvailableIOTokens: 209
+tick: 41, setAvailableIOTokens: 209
+tick: 42, setAvailableIOTokens: 209
+tick: 43, setAvailableIOTokens: 209
+tick: 44, setAvailableIOTokens: 209
+tick: 45, setAvailableIOTokens: 209
+tick: 46, setAvailableIOTokens: 209
+tick: 47, setAvailableIOTokens: 209
+tick: 48, setAvailableIOTokens: 209
+tick: 49, setAvailableIOTokens: 209
+tick: 50, setAvailableIOTokens: 209
+tick: 51, setAvailableIOTokens: 209
+tick: 52, setAvailableIOTokens: 209
+tick: 53, setAvailableIOTokens: 209
+tick: 54, setAvailableIOTokens: 209
+tick: 55, setAvailableIOTokens: 209
+tick: 56, setAvailableIOTokens: 209
+tick: 57, setAvailableIOTokens: 209
+tick: 58, setAvailableIOTokens: 209
+tick: 59, setAvailableIOTokens: 169
 
 prep-admission-stats admitted=20000
 ----
@@ -65,46 +155,77 @@ prep-admission-stats admitted=20000
 # Same delta as previous but smoothing bumps up the tokens to 25,000.
 set-state l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
 ----
-score 1.050[overload] (21 ssts, 21 sub-levels), L0 growth 98 KiB: 0 B acc-write + 0 B acc-ingest + 98 KiB unacc [≈10 B/req, n=10000], compacted 98 KiB [≈73 KiB]; admitting 24 KiB with L0 penalty: +10 B/req, *0.50/ingest
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:201000 curL0Bytes:10000 smoothedIntL0CompactedBytes:75000 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:25000 totalNumByteTokens:25000 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:100000 intPerWorkUnaccountedL0Bytes:10 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 98 KiB: 0 B acc-write + 0 B acc-ingest + 98 KiB unacc [≈10 B/req, n=10000], compacted 98 KiB [≈73 KiB], flushed 0 B [≈0 B]; admitting 24 KiB (rate 1.6 KiB/s) due to L0 growth (used 0 B) with L0 penalty: +10 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:201000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:75000 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:25000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:25000 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{intL0AddedBytes:100000 intL0CompactedBytes:100000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:100000 intPerWorkUnaccountedL0Bytes:10 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 10
-tick: 0, setAvailableIOTokens: 1667
-tick: 1, setAvailableIOTokens: 1667
-tick: 2, setAvailableIOTokens: 1667
-tick: 3, setAvailableIOTokens: 1667
-tick: 4, setAvailableIOTokens: 1667
-tick: 5, setAvailableIOTokens: 1667
-tick: 6, setAvailableIOTokens: 1667
-tick: 7, setAvailableIOTokens: 1667
-tick: 8, setAvailableIOTokens: 1667
-tick: 9, setAvailableIOTokens: 1667
-tick: 10, setAvailableIOTokens: 1667
-tick: 11, setAvailableIOTokens: 1667
-tick: 12, setAvailableIOTokens: 1667
-tick: 13, setAvailableIOTokens: 1667
-tick: 14, setAvailableIOTokens: 1662
+tick: 0, setAvailableIOTokens: 417
+tick: 1, setAvailableIOTokens: 417
+tick: 2, setAvailableIOTokens: 417
+tick: 3, setAvailableIOTokens: 417
+tick: 4, setAvailableIOTokens: 417
+tick: 5, setAvailableIOTokens: 417
+tick: 6, setAvailableIOTokens: 417
+tick: 7, setAvailableIOTokens: 417
+tick: 8, setAvailableIOTokens: 417
+tick: 9, setAvailableIOTokens: 417
+tick: 10, setAvailableIOTokens: 417
+tick: 11, setAvailableIOTokens: 417
+tick: 12, setAvailableIOTokens: 417
+tick: 13, setAvailableIOTokens: 417
+tick: 14, setAvailableIOTokens: 417
+tick: 15, setAvailableIOTokens: 417
+tick: 16, setAvailableIOTokens: 417
+tick: 17, setAvailableIOTokens: 417
+tick: 18, setAvailableIOTokens: 417
+tick: 19, setAvailableIOTokens: 417
+tick: 20, setAvailableIOTokens: 417
+tick: 21, setAvailableIOTokens: 417
+tick: 22, setAvailableIOTokens: 417
+tick: 23, setAvailableIOTokens: 417
+tick: 24, setAvailableIOTokens: 417
+tick: 25, setAvailableIOTokens: 417
+tick: 26, setAvailableIOTokens: 417
+tick: 27, setAvailableIOTokens: 417
+tick: 28, setAvailableIOTokens: 417
+tick: 29, setAvailableIOTokens: 417
+tick: 30, setAvailableIOTokens: 417
+tick: 31, setAvailableIOTokens: 417
+tick: 32, setAvailableIOTokens: 417
+tick: 33, setAvailableIOTokens: 417
+tick: 34, setAvailableIOTokens: 417
+tick: 35, setAvailableIOTokens: 417
+tick: 36, setAvailableIOTokens: 417
+tick: 37, setAvailableIOTokens: 417
+tick: 38, setAvailableIOTokens: 417
+tick: 39, setAvailableIOTokens: 417
+tick: 40, setAvailableIOTokens: 417
+tick: 41, setAvailableIOTokens: 417
+tick: 42, setAvailableIOTokens: 417
+tick: 43, setAvailableIOTokens: 417
+tick: 44, setAvailableIOTokens: 417
+tick: 45, setAvailableIOTokens: 417
+tick: 46, setAvailableIOTokens: 417
+tick: 47, setAvailableIOTokens: 417
+tick: 48, setAvailableIOTokens: 417
+tick: 49, setAvailableIOTokens: 417
+tick: 50, setAvailableIOTokens: 417
+tick: 51, setAvailableIOTokens: 417
+tick: 52, setAvailableIOTokens: 417
+tick: 53, setAvailableIOTokens: 417
+tick: 54, setAvailableIOTokens: 417
+tick: 55, setAvailableIOTokens: 417
+tick: 56, setAvailableIOTokens: 417
+tick: 57, setAvailableIOTokens: 417
+tick: 58, setAvailableIOTokens: 417
+tick: 59, setAvailableIOTokens: 397
 
 # No delta. This used to trigger an overflow bug.
-set-state l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21
+set-state l0-bytes=10000 l0-added=201000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
-score 1.050[overload] (21 ssts, 21 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈10 B/req, n=1], compacted 0 B [≈37 KiB]; admitting 21 KiB with L0 penalty: +10 B/req, *0.50/ingest
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:201000 curL0Bytes:10000 smoothedIntL0CompactedBytes:37500 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:21875 totalNumByteTokens:21875 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈10 B/req, n=1], compacted 0 B [≈37 KiB], flushed 0 B [≈0 B]; admitting 21 KiB (rate 1.4 KiB/s) due to L0 growth (used 0 B) with L0 penalty: +10 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:201000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:37500 smoothedIntPerWorkUnaccountedL0Bytes:10 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:21875 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:21875 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:10} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 10
-tick: 0, setAvailableIOTokens: 1459
-tick: 1, setAvailableIOTokens: 1459
-tick: 2, setAvailableIOTokens: 1459
-tick: 3, setAvailableIOTokens: 1459
-tick: 4, setAvailableIOTokens: 1459
-tick: 5, setAvailableIOTokens: 1459
-tick: 6, setAvailableIOTokens: 1459
-tick: 7, setAvailableIOTokens: 1459
-tick: 8, setAvailableIOTokens: 1459
-tick: 9, setAvailableIOTokens: 1459
-tick: 10, setAvailableIOTokens: 1459
-tick: 11, setAvailableIOTokens: 1459
-tick: 12, setAvailableIOTokens: 1459
-tick: 13, setAvailableIOTokens: 1459
-tick: 14, setAvailableIOTokens: 1449
+tick: 0, setAvailableIOTokens: 365
 
 prep-admission-stats admitted=30000
 ----
@@ -112,26 +233,12 @@ prep-admission-stats admitted=30000
 
 # l0-sublevels drops below threshold. We calculate the smoothed values, but
 # don't limit the tokens.
-set-state l0-bytes=10000 l0-added=501000 l0-files=21 l0-sublevels=20
+set-state l0-bytes=10000 l0-added=501000 l0-files=21 l0-sublevels=20 print-only-first-tick=true
 ----
-score 1.000 (21 ssts, 20 sub-levels), L0 growth 293 KiB: 0 B acc-write + 0 B acc-ingest + 293 KiB unacc [≈20 B/req, n=10000], compacted 293 KiB [≈165 KiB]; admitting all
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:30000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:501000 curL0Bytes:10000 smoothedIntL0CompactedBytes:168750 smoothedIntPerWorkUnaccountedL0Bytes:20 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:160937.5 totalNumByteTokens:9223372036854775807 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:20} aux:{intL0AddedBytes:300000 intL0CompactedBytes:300000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:300000 intPerWorkUnaccountedL0Bytes:30 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 1.000 (21 ssts, 20 sub-levels), L0 growth 293 KiB: 0 B acc-write + 0 B acc-ingest + 293 KiB unacc [≈20 B/req, n=10000], compacted 293 KiB [≈165 KiB], flushed 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:30000 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:501000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:168750 smoothedIntPerWorkUnaccountedL0Bytes:20 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:160937.5 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:20} aux:{intL0AddedBytes:300000 intL0CompactedBytes:300000 intAdmittedCount:10000 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:300000 intPerWorkUnaccountedL0Bytes:30 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 20
 tick: 0, setAvailableIOTokens: unlimited
-tick: 1, setAvailableIOTokens: unlimited
-tick: 2, setAvailableIOTokens: unlimited
-tick: 3, setAvailableIOTokens: unlimited
-tick: 4, setAvailableIOTokens: unlimited
-tick: 5, setAvailableIOTokens: unlimited
-tick: 6, setAvailableIOTokens: unlimited
-tick: 7, setAvailableIOTokens: unlimited
-tick: 8, setAvailableIOTokens: unlimited
-tick: 9, setAvailableIOTokens: unlimited
-tick: 10, setAvailableIOTokens: unlimited
-tick: 11, setAvailableIOTokens: unlimited
-tick: 12, setAvailableIOTokens: unlimited
-tick: 13, setAvailableIOTokens: unlimited
-tick: 14, setAvailableIOTokens: unlimited
 
 # Test cases with more information in storeAdmissionStats.
 init
@@ -141,25 +248,11 @@ prep-admission-stats admitted=0
 ----
 {admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
 
-set-state l0-bytes=1000 l0-added=1000 l0-files=21 l0-sublevels=21
+set-state l0-bytes=1000 l0-added=1000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
-score 0.000 (21 ssts, 21 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B]; admitting all
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:1000 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedTotalNumByteTokens:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 0.000 (21 ssts, 21 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 tick: 0, setAvailableIOTokens: unlimited
-tick: 1, setAvailableIOTokens: unlimited
-tick: 2, setAvailableIOTokens: unlimited
-tick: 3, setAvailableIOTokens: unlimited
-tick: 4, setAvailableIOTokens: unlimited
-tick: 5, setAvailableIOTokens: unlimited
-tick: 6, setAvailableIOTokens: unlimited
-tick: 7, setAvailableIOTokens: unlimited
-tick: 8, setAvailableIOTokens: unlimited
-tick: 9, setAvailableIOTokens: unlimited
-tick: 10, setAvailableIOTokens: unlimited
-tick: 11, setAvailableIOTokens: unlimited
-tick: 12, setAvailableIOTokens: unlimited
-tick: 13, setAvailableIOTokens: unlimited
-tick: 14, setAvailableIOTokens: unlimited
 
 # L0 will see an addition of 200,000 bytes. 180,000 bytes were mentioned by
 # the admitted requests, but 30,000 went into levels below L0. So 150,000 are
@@ -168,52 +261,24 @@ prep-admission-stats admitted=10 admitted-bytes=180000 ingested-bytes=50000 inge
 ----
 {admittedCount:10 admittedWithBytesCount:0 admittedAccountedBytes:180000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000}
 
-set-state l0-bytes=1000 l0-added=201000 l0-files=21 l0-sublevels=21
+set-state l0-bytes=1000 l0-added=201000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
-score 1.050[overload] (21 ssts, 21 sub-levels), L0 growth 195 KiB: 127 KiB acc-write + 20 KiB acc-ingest + 49 KiB unacc [≈4.9 KiB/req, n=10], compacted 195 KiB [≈98 KiB]; admitting 24 KiB with L0 penalty: +4.9 KiB/req, *0.45/ingest
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:10 admittedWithBytesCount:0 admittedAccountedBytes:180000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:201000 curL0Bytes:1000 smoothedIntL0CompactedBytes:100000 smoothedIntPerWorkUnaccountedL0Bytes:5000 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedTotalNumByteTokens:25000 totalNumByteTokens:25000 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:5000} aux:{intL0AddedBytes:200000 intL0CompactedBytes:200000 intAdmittedCount:10 intAdmittedBytes:180000 intIngestedBytes:50000 intIngestedAccountedL0Bytes:20000 intAccountedL0Bytes:150000 intUnaccountedL0Bytes:50000 intPerWorkUnaccountedL0Bytes:5000 l0BytesIngestFraction:0.4} ioThreshold:<nil>}
+compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 195 KiB: 127 KiB acc-write + 20 KiB acc-ingest + 49 KiB unacc [≈4.9 KiB/req, n=10], compacted 195 KiB [≈98 KiB], flushed 0 B [≈0 B]; admitting 24 KiB (rate 1.6 KiB/s) due to L0 growth (used 0 B) with L0 penalty: +4.9 KiB/req, *0.45/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:10 admittedWithBytesCount:0 admittedAccountedBytes:180000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:201000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:100000 smoothedIntPerWorkUnaccountedL0Bytes:5000 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedCompactionByteTokens:25000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:25000 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:5000} aux:{intL0AddedBytes:200000 intL0CompactedBytes:200000 intAdmittedCount:10 intAdmittedBytes:180000 intIngestedBytes:50000 intIngestedAccountedL0Bytes:20000 intAccountedL0Bytes:150000 intUnaccountedL0Bytes:50000 intPerWorkUnaccountedL0Bytes:5000 l0BytesIngestFraction:0.4 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.45, workByteAddition: 5000
-tick: 0, setAvailableIOTokens: 1667
-tick: 1, setAvailableIOTokens: 1667
-tick: 2, setAvailableIOTokens: 1667
-tick: 3, setAvailableIOTokens: 1667
-tick: 4, setAvailableIOTokens: 1667
-tick: 5, setAvailableIOTokens: 1667
-tick: 6, setAvailableIOTokens: 1667
-tick: 7, setAvailableIOTokens: 1667
-tick: 8, setAvailableIOTokens: 1667
-tick: 9, setAvailableIOTokens: 1667
-tick: 10, setAvailableIOTokens: 1667
-tick: 11, setAvailableIOTokens: 1667
-tick: 12, setAvailableIOTokens: 1667
-tick: 13, setAvailableIOTokens: 1667
-tick: 14, setAvailableIOTokens: 1662
+tick: 0, setAvailableIOTokens: 417
 
 # L0 will see an addition of 20,000 bytes, all of which are accounted for.
 prep-admission-stats admitted=20 admitted-bytes=200000 ingested-bytes=50000 ingested-into-l0=20000
 ----
 {admittedCount:20 admittedWithBytesCount:0 admittedAccountedBytes:200000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000}
 
-set-state l0-bytes=1000 l0-added=221000 l0-files=21 l0-sublevels=21
+set-state l0-bytes=1000 l0-added=221000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
-score 1.050[overload] (21 ssts, 21 sub-levels), L0 growth 20 KiB: 20 KiB acc-write + 0 B acc-ingest + 0 B unacc [≈2.4 KiB/req, n=10], compacted 20 KiB [≈59 KiB]; admitting 27 KiB with L0 penalty: +2.4 KiB/req, *0.45/ingest
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20 admittedWithBytesCount:0 admittedAccountedBytes:200000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:221000 curL0Bytes:1000 smoothedIntL0CompactedBytes:60000 smoothedIntPerWorkUnaccountedL0Bytes:2500 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedTotalNumByteTokens:27500 totalNumByteTokens:27500 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:2500} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intAdmittedCount:10 intAdmittedBytes:20000 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:20000 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 20 KiB: 20 KiB acc-write + 0 B acc-ingest + 0 B unacc [≈2.4 KiB/req, n=10], compacted 20 KiB [≈59 KiB], flushed 0 B [≈0 B]; admitting 27 KiB (rate 1.8 KiB/s) due to L0 growth (used 0 B) with L0 penalty: +2.4 KiB/req, *0.45/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:20 admittedWithBytesCount:0 admittedAccountedBytes:200000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:221000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:60000 smoothedIntPerWorkUnaccountedL0Bytes:2500 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedCompactionByteTokens:27500 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:27500 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:2500} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intAdmittedCount:10 intAdmittedBytes:20000 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:20000 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.45, workByteAddition: 2500
-tick: 0, setAvailableIOTokens: 1834
-tick: 1, setAvailableIOTokens: 1834
-tick: 2, setAvailableIOTokens: 1834
-tick: 3, setAvailableIOTokens: 1834
-tick: 4, setAvailableIOTokens: 1834
-tick: 5, setAvailableIOTokens: 1834
-tick: 6, setAvailableIOTokens: 1834
-tick: 7, setAvailableIOTokens: 1834
-tick: 8, setAvailableIOTokens: 1834
-tick: 9, setAvailableIOTokens: 1834
-tick: 10, setAvailableIOTokens: 1834
-tick: 11, setAvailableIOTokens: 1834
-tick: 12, setAvailableIOTokens: 1834
-tick: 13, setAvailableIOTokens: 1834
-tick: 14, setAvailableIOTokens: 1824
+tick: 0, setAvailableIOTokens: 459
 
 # L0 will see an addition of 20,000 bytes, but we think we have added 100,000
 # bytes to L0. We don't let unaccounted bytes become negative.
@@ -221,23 +286,165 @@ prep-admission-stats admitted=30 admitted-bytes=300000 ingested-bytes=50000 inge
 ----
 {admittedCount:30 admittedWithBytesCount:0 admittedAccountedBytes:300000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000}
 
-set-state l0-bytes=1000 l0-added=241000 l0-files=21 l0-sublevels=21
+set-state l0-bytes=1000 l0-added=241000 l0-files=21 l0-sublevels=21 print-only-first-tick=true
 ----
-score 1.050[overload] (21 ssts, 21 sub-levels), L0 growth 20 KiB: 98 KiB acc-write + 0 B acc-ingest + 0 B unacc [≈1.2 KiB/req, n=10], compacted 20 KiB [≈39 KiB]; admitting 23 KiB with L0 penalty: +1.2 KiB/req, *0.45/ingest
-{ioLoadListenerState:{cumAdmissionStats:{admittedCount:30 admittedWithBytesCount:0 admittedAccountedBytes:300000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:241000 curL0Bytes:1000 smoothedIntL0CompactedBytes:40000 smoothedIntPerWorkUnaccountedL0Bytes:1250 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedTotalNumByteTokens:23750 totalNumByteTokens:23750 tokensAllocated:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:1250} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intAdmittedCount:10 intAdmittedBytes:100000 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:100000 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0} ioThreshold:<nil>}
+compaction score 1.050[L0-overload] (21 ssts, 21 sub-levels), L0 growth 20 KiB: 98 KiB acc-write + 0 B acc-ingest + 0 B unacc [≈1.2 KiB/req, n=10], compacted 20 KiB [≈39 KiB], flushed 0 B [≈0 B]; admitting 23 KiB (rate 1.5 KiB/s) due to L0 growth (used 0 B) with L0 penalty: +1.2 KiB/req, *0.45/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:30 admittedWithBytesCount:0 admittedAccountedBytes:300000 ingestedAccountedBytes:50000 ingestedAccountedL0Bytes:20000} cumL0AddedBytes:241000 curL0Bytes:1000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:40000 smoothedIntPerWorkUnaccountedL0Bytes:1250 smoothedIntIngestedAccountedL0BytesFraction:0.45 smoothedCompactionByteTokens:23750 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:23750 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.45 workByteAddition:1250} aux:{intL0AddedBytes:20000 intL0CompactedBytes:20000 intAdmittedCount:10 intAdmittedBytes:100000 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:100000 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
 store-request-estimates: fractionOfIngestIntoL0: 0.45, workByteAddition: 1250
-tick: 0, setAvailableIOTokens: 1584
-tick: 1, setAvailableIOTokens: 1584
-tick: 2, setAvailableIOTokens: 1584
-tick: 3, setAvailableIOTokens: 1584
-tick: 4, setAvailableIOTokens: 1584
-tick: 5, setAvailableIOTokens: 1584
-tick: 6, setAvailableIOTokens: 1584
-tick: 7, setAvailableIOTokens: 1584
-tick: 8, setAvailableIOTokens: 1584
-tick: 9, setAvailableIOTokens: 1584
-tick: 10, setAvailableIOTokens: 1584
-tick: 11, setAvailableIOTokens: 1584
-tick: 12, setAvailableIOTokens: 1584
-tick: 13, setAvailableIOTokens: 1584
-tick: 14, setAvailableIOTokens: 1574
+tick: 0, setAvailableIOTokens: 396
+
+# Test case with flush tokens.
+init
+----
+
+prep-admission-stats admitted=0
+----
+{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0}
+
+set-state l0-bytes=10000 l0-added=1000 l0-files=1 l0-sublevels=1 print-only-first-tick=true
+----
+compaction score 0.000 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=0], compacted 0 B [≈0 B], flushed 0 B [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:1000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:0 smoothedNumFlushTokens:0 flushUtilTargetFraction:0 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0 workByteAddition:0} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:0 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:0 intFlushUtilization:0 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
+tick: 0, setAvailableIOTokens: unlimited
+
+# Flush loop utilization is too low for the interval flush tokens to
+# contribute to the smoothed value, or for tokens to become limited.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=1000 flush-work-sec=2 flush-idle-sec=100 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 9.8 KiB: 0 B acc-write + 0 B acc-ingest + 9.8 KiB unacc [≈0 B/req, n=1], compacted 9.8 KiB [≈4.9 KiB], flushed 7.3 KiB [≈0 B]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:5000 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:5000 smoothedNumFlushTokens:0 flushUtilTargetFraction:1.5 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:10000 intL0CompactedBytes:10000 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:10000 intPerWorkUnaccountedL0Bytes:10000 l0BytesIngestFraction:0 intFlushTokens:7500 intFlushUtilization:0.0196078431372549 intWriteStalls:0 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: unlimited
+
+# Flush loop utilization is high enough, so we compute flush tokens for limiting admission.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=1000 flush-work-sec=2 flush-idle-sec=10 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈2.4 KiB], flushed 7.3 KiB [≈7.3 KiB]; admitting 11 KiB (rate 750 B/s) due to memtable flush (multiplier 1.500) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:0 smoothedIntL0CompactedBytes:2500 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:2500 smoothedNumFlushTokens:7500 flushUtilTargetFraction:1.5 totalNumByteTokens:11250 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:7500 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 188
+
+# Write stalls are happening, so decrease the flush utilization target
+# fraction from 1.5 to 1.475. But the peak flush rate has also increased since
+# now we flushed 10x the bytes, so the overall tokens increase.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=1 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈1.2 KiB], flushed 73 KiB [≈40 KiB]; admitting 59 KiB (rate 4.0 KiB/s) due to memtable flush (multiplier 1.475) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:1 smoothedIntL0CompactedBytes:1250 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:1250 smoothedNumFlushTokens:41250 flushUtilTargetFraction:1.475 totalNumByteTokens:60843 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1015
+
+# Two write stalls happened, so decrease the flush utilization target fraction
+# by a bigger step, from 1.475 to 1.425. Since the smoothed peak flush rate is
+# increasing, the overall flush tokens continue to increase.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=3 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈625 B], flushed 73 KiB [≈57 KiB]; admitting 81 KiB (rate 5.4 KiB/s) due to memtable flush (multiplier 1.425) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:3 smoothedIntL0CompactedBytes:625 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:625 smoothedNumFlushTokens:58125 flushUtilTargetFraction:1.4250000000000003 totalNumByteTokens:82828 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:2 prevTokensUsed:0 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1381
+
+# Five more write stalls, so the the flush utilization target fraction is
+# decreased to 1.35. The smoothed peak flush rate continues to increase.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=8 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈312 B], flushed 73 KiB [≈65 KiB]; admitting 88 KiB (rate 5.8 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:8 smoothedIntL0CompactedBytes:312 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:312.5 smoothedNumFlushTokens:66562.5 flushUtilTargetFraction:1.3500000000000005 totalNumByteTokens:89859 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:5 prevTokensUsed:0 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1498
+
+# Another write stall, and the flush utilization target fraction drops to 1.325.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=9 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈156 B], flushed 73 KiB [≈69 KiB]; admitting 92 KiB (rate 6.1 KiB/s) due to memtable flush (multiplier 1.325) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:9 smoothedIntL0CompactedBytes:156 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:156.25 smoothedNumFlushTokens:70781.25 flushUtilTargetFraction:1.3250000000000006 totalNumByteTokens:93785 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1564
+
+# Set a lower bound of 1.3 on the flush utilization target fraction.
+set-min-flush-util percent=130
+----
+
+# Another write stall causes the flush utilization target fraction to decrease
+# to 1.3, which is also the lower bound.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=10 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈78 B], flushed 73 KiB [≈71 KiB]; admitting 92 KiB (rate 6.2 KiB/s) due to memtable flush (multiplier 1.300) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:10 smoothedIntL0CompactedBytes:78 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:78.125 smoothedNumFlushTokens:72890.625 flushUtilTargetFraction:1.3000000000000007 totalNumByteTokens:94757 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1580
+
+# Despite another write stall, the flush utilization target fraction does not
+# decrease since it is already at the lower bound.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=11 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈39 B], flushed 73 KiB [≈72 KiB]; admitting 94 KiB (rate 6.3 KiB/s) due to memtable flush (multiplier 1.300) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:11 smoothedIntL0CompactedBytes:39 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:39.0625 smoothedNumFlushTokens:73945.3125 flushUtilTargetFraction:1.3000000000000007 totalNumByteTokens:96128 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1603
+
+# Bump up the lower bound to 1.35, which is greater than the current flush
+# utilization target fraction.
+set-min-flush-util percent=135
+----
+
+# Despite another write stall, the flush utilization target fraction
+# increases to the new lower bound.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=12 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈19 B], flushed 73 KiB [≈73 KiB]; admitting 98 KiB (rate 6.5 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:12 smoothedIntL0CompactedBytes:19 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:19.53125 smoothedNumFlushTokens:74472.65625 flushUtilTargetFraction:1.35 totalNumByteTokens:100538 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:0 tokenKind:1 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1676
+
+# The flush utilization is too low, so there is no limit on flush tokens.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=100 write-stall-count=13 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈9 B], flushed 73 KiB [≈73 KiB]; admitting all
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:9 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:9.765625 smoothedNumFlushTokens:74472.65625 flushUtilTargetFraction:1.35 totalNumByteTokens:9223372036854775807 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.0196078431372549 intWriteStalls:1 prevTokensUsed:0 tokenKind:0 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: unlimited
+
+# Flush utilization is high enough, so flush tokens are again limited.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈4 B], flushed 73 KiB [≈73 KiB]; admitting 98 KiB (rate 6.6 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:4 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:4.8828125 smoothedNumFlushTokens:74736.328125 flushUtilTargetFraction:1.35 totalNumByteTokens:100894 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1682
+
+# No write stalls, and token utilization is high, which will have an effect
+# in the next pebbleMetricsTick.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 all-tokens-used=true print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈2 B], flushed 73 KiB [≈73 KiB]; admitting 99 KiB (rate 6.6 KiB/s) due to memtable flush (multiplier 1.350) (used 0 B) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:2 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:2.44140625 smoothedNumFlushTokens:74868.1640625 flushUtilTargetFraction:1.35 totalNumByteTokens:101072 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:0 tokenKind:1 doLogFlush:false} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1685
+
+# No write stalls, and token utilization was high, so flush utilization
+# target fraction is increased to 1.375.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 all-tokens-used=true print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈1 B], flushed 73 KiB [≈73 KiB]; admitting 101 KiB (rate 6.7 KiB/s) due to memtable flush (multiplier 1.375) (used 197 KiB) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:1 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:1.220703125 smoothedNumFlushTokens:74934.08203125 flushUtilTargetFraction:1.375 totalNumByteTokens:103034 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:202144 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1718
+
+# No write stalls, and token utilization was high, so flush utilization
+# target fraction is increased to 1.4.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=13 all-tokens-used=true print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈0 B], flushed 73 KiB [≈73 KiB]; admitting 102 KiB (rate 6.8 KiB/s) due to memtable flush (multiplier 1.400) (used 201 KiB) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:13 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:0.6103515625 smoothedNumFlushTokens:74967.041015625 flushUtilTargetFraction:1.4 totalNumByteTokens:104953 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:0 prevTokensUsed:206068 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1750
+
+# There is a write stall, so even though token utilization is high, we
+# decrease flush utilization target fraction to 1.375.
+set-state l0-bytes=10000 l0-added=11000 l0-files=1 l0-sublevels=1 flush-bytes=10000 flush-work-sec=2 flush-idle-sec=10 write-stall-count=14 all-tokens-used=true print-only-first-tick=true
+----
+compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 0 B: 0 B acc-write + 0 B acc-ingest + 0 B unacc [≈0 B/req, n=1], compacted 0 B [≈0 B], flushed 73 KiB [≈73 KiB]; admitting 101 KiB (rate 6.7 KiB/s) due to memtable flush (multiplier 1.375) (used 205 KiB) with L0 penalty: +1 B/req, *0.50/ingest
+{ioLoadListenerState:{cumAdmissionStats:{admittedCount:0 admittedWithBytesCount:0 admittedAccountedBytes:0 ingestedAccountedBytes:0 ingestedAccountedL0Bytes:0} cumL0AddedBytes:11000 curL0Bytes:10000 cumWriteStallCount:14 smoothedIntL0CompactedBytes:0 smoothedIntPerWorkUnaccountedL0Bytes:0 smoothedIntIngestedAccountedL0BytesFraction:0.5 smoothedCompactionByteTokens:0.30517578125 smoothedNumFlushTokens:74983.5205078125 flushUtilTargetFraction:1.375 totalNumByteTokens:103102 tokensAllocated:0 tokensUsed:0} requestEstimates:{fractionOfIngestIntoL0:0.5 workByteAddition:1} aux:{intL0AddedBytes:0 intL0CompactedBytes:0 intAdmittedCount:1 intAdmittedBytes:0 intIngestedBytes:0 intIngestedAccountedL0Bytes:0 intAccountedL0Bytes:0 intUnaccountedL0Bytes:0 intPerWorkUnaccountedL0Bytes:0 l0BytesIngestFraction:0 intFlushTokens:75000 intFlushUtilization:0.16666666666666666 intWriteStalls:1 prevTokensUsed:209906 tokenKind:1 doLogFlush:true} ioThreshold:<nil>}
+store-request-estimates: fractionOfIngestIntoL0: 0.50, workByteAddition: 1
+tick: 0, setAvailableIOTokens: 1719

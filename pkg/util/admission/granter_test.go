@@ -448,15 +448,20 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 }
 
 type testGranterWithIOTokens struct {
-	buf strings.Builder
+	buf           strings.Builder
+	allTokensUsed bool
 }
 
-func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) {
-	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensFor1sToString(tokens))
+func (g *testGranterWithIOTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
+	fmt.Fprintf(&g.buf, "setAvailableIOTokens: %s", tokensForTokenTickDurationToString(tokens))
+	if g.allTokensUsed {
+		return tokens * 2
+	}
+	return 0
 }
 
-func tokensFor1sToString(tokens int64) string {
-	if tokens >= unlimitedTokens/adjustmentInterval {
+func tokensForTokenTickDurationToString(tokens int64) string {
+	if tokens >= unlimitedTokens/ticksInAdjustmentInterval {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
@@ -467,7 +472,7 @@ type rawTokenResult adjustTokensResult
 // TestIOLoadListener is a datadriven test with the following command that
 // sets the state for token calculation and then ticks adjustmentInterval
 // times to cause tokens to be set in the testGranterWithIOTokens:
-// set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int>
+// set-state admitted=<int> l0-bytes=<int> l0-added=<int> l0-files=<int> l0-sublevels=<int> ...
 func TestIOLoadListener(t *testing.T) {
 	req := &testRequesterForIOLL{}
 	kvGranter := &testGranterWithIOTokens{}
@@ -510,6 +515,12 @@ func TestIOLoadListener(t *testing.T) {
 				}
 				return fmt.Sprintf("%+v", req.stats)
 
+			case "set-min-flush-util":
+				var percent int
+				d.ScanArgs(t, "percent", &percent)
+				MinFlushUtilizationFraction.Override(ctx, &st.SV, float64(percent)/100)
+				return ""
+
 			case "set-state":
 				// Setup state used as input for token adjustment.
 				var metrics pebble.Metrics
@@ -526,8 +537,38 @@ func TestIOLoadListener(t *testing.T) {
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
+				var flushBytes, flushWorkSec, flushIdleSec int
+				if d.HasArg("flush-bytes") {
+					d.ScanArgs(t, "flush-bytes", &flushBytes)
+					d.ScanArgs(t, "flush-work-sec", &flushWorkSec)
+					d.ScanArgs(t, "flush-idle-sec", &flushIdleSec)
+				}
+				flushMetric := pebble.ThroughputMetric{
+					Bytes:        int64(flushBytes),
+					WorkDuration: time.Duration(flushWorkSec) * time.Second,
+					IdleDuration: time.Duration(flushIdleSec) * time.Second,
+				}
+				im := &pebble.InternalIntervalMetrics{}
+				im.Flush.WriteThroughput = flushMetric
+				var writeStallCount int
+				if d.HasArg("write-stall-count") {
+					d.ScanArgs(t, "write-stall-count", &writeStallCount)
+				}
+				var allTokensUsed bool
+				if d.HasArg("all-tokens-used") {
+					d.ScanArgs(t, "all-tokens-used", &allTokensUsed)
+				}
+				kvGranter.allTokensUsed = allTokensUsed
+				var printOnlyFirstTick bool
+				if d.HasArg("print-only-first-tick") {
+					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
+				}
+				ioll.pebbleMetricsTick(ctx, StoreMetrics{
+					Metrics:                 &metrics,
+					WriteStallCount:         int64(writeStallCount),
+					InternalIntervalMetrics: im,
+				})
 				var buf strings.Builder
-				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
 				res := ioll.adjustTokensResult
 				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&res))
@@ -537,9 +578,11 @@ func TestIOLoadListener(t *testing.T) {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()
 				}
-				for i := 0; i < adjustmentInterval; i++ {
+				for i := 0; i < ticksInAdjustmentInterval; i++ {
 					ioll.allocateTokensTick()
-					fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
+					if i == 0 || !printOnlyFirstTick {
+						fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
+					}
 					kvGranter.buf.Reset()
 				}
 				return buf.String()
@@ -566,7 +609,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		// Override the totalNumByteTokens manually to trigger the overflow bug.
 		ioll.totalNumByteTokens = math.MaxInt64 - i
 		ioll.tokensAllocated = 0
-		for j := 0; j < adjustmentInterval; j++ {
+		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()
 		}
 	}
@@ -576,8 +619,10 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		Sublevels: 100,
 		NumFiles:  10000,
 	}
-	ioll.pebbleMetricsTick(ctx, &m)
-	ioll.pebbleMetricsTick(ctx, &m)
+	ioll.pebbleMetricsTick(ctx,
+		StoreMetrics{Metrics: &m, InternalIntervalMetrics: &pebble.InternalIntervalMetrics{}})
+	ioll.pebbleMetricsTick(ctx,
+		StoreMetrics{Metrics: &m, InternalIntervalMetrics: &pebble.InternalIntervalMetrics{}})
 	ioll.allocateTokensTick()
 }
 
@@ -585,8 +630,9 @@ type testGranterNonNegativeTokens struct {
 	t *testing.T
 }
 
-func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) {
+func (g *testGranterNonNegativeTokens) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
 	require.LessOrEqual(g.t, int64(0), tokens)
+	return 0
 }
 
 func TestAdjustTokensInnerAndLogging(t *testing.T) {
@@ -622,7 +668,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 				smoothedIntL0CompactedBytes:                 47 * mb,
 				smoothedIntPerWorkUnaccountedL0Bytes:        2204, // 2kb
 				smoothedIntIngestedAccountedL0BytesFraction: 0.3,
-				smoothedTotalNumByteTokens:                  201 * mb,
+				smoothedCompactionByteTokens:                201 * mb,
 				totalNumByteTokens:                          int64(201 * mb),
 			},
 			admissionStats: admStats,
@@ -640,7 +686,8 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
 		res := (*ioLoadListener)(nil).adjustTokensInner(
-			ctx, tt.prev, tt.admissionStats, tt.l0Metrics, 100, 10)
+			ctx, tt.prev, tt.admissionStats, tt.l0Metrics, 0,
+			&pebble.InternalIntervalMetrics{}, 100, 10, 0.50)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(testutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
@@ -680,13 +727,16 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	ioll.mu.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
 		randomValues()
-		ioll.pebbleMetricsTick(ctx, &m)
-		for j := 0; j < adjustmentInterval; j++ {
+		ioll.pebbleMetricsTick(ctx, StoreMetrics{
+			Metrics:                 &m,
+			InternalIntervalMetrics: &pebble.InternalIntervalMetrics{},
+		})
+		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()
 			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
 			require.LessOrEqual(t, float64(0), ioll.smoothedIntPerWorkUnaccountedL0Bytes)
 			require.LessOrEqual(t, float64(0), ioll.smoothedIntIngestedAccountedL0BytesFraction)
-			require.LessOrEqual(t, float64(0), ioll.smoothedTotalNumByteTokens)
+			require.LessOrEqual(t, float64(0), ioll.smoothedCompactionByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.tokensAllocated)
 		}

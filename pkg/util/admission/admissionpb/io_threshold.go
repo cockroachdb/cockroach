@@ -19,10 +19,18 @@ import (
 )
 
 // Score returns, as the second return value, whether IO admission control is
-// considering the Store overloaded. The first return value is a 1-normalized
-// float (i.e. 1.0 is the threshold at which the second value flips to true).
+// considering the Store overloaded wrt compaction of L0. The first return
+// value is a 1-normalized float (i.e. 1.0 is the threshold at which the
+// second value flips to true).
 //
 // The zero value returns (0, false). Use of the nil pointer is not allowed.
+//
+// TODO(sumeer): consider whether we need to enhance this to incorporate
+// overloading via flush bandwidth. I suspect we can get away without
+// incorporating flush bandwidth since typically chronic overload will be due
+// to compactions falling behind (though that may change if we increase the
+// max number of compactions). And we will need to incorporate overload due to
+// disk bandwidth bottleneck.
 func (iot IOThreshold) Score() (float64, bool) {
 	if iot == (IOThreshold{}) {
 		return 0, false
@@ -42,7 +50,7 @@ func (iot IOThreshold) SafeFormat(s interfaces.SafePrinter, _ rune) {
 	sc, overload := iot.Score()
 	s.Printf("%.3f", redact.SafeFloat(sc))
 	if overload {
-		s.Printf("[overload]")
+		s.Printf("[L0-overload]")
 	}
 }
 
