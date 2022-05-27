@@ -98,6 +98,8 @@ type ProxyOptions struct {
 	// ThrottleBaseDelay is the initial exponential backoff triggered in
 	// response to the first connection failure.
 	ThrottleBaseDelay time.Duration
+	// DisableConnectionRebalancing disables connection rebalancing for tenants.
+	DisableConnectionRebalancing bool
 
 	// testingKnobs are knobs used for testing.
 	testingKnobs struct {
@@ -263,6 +265,9 @@ func newProxyHandler(
 	balancerMetrics := balancer.NewMetrics()
 	registry.AddMetricStruct(balancerMetrics)
 	var balancerOpts []balancer.Option
+	if handler.DisableConnectionRebalancing {
+		balancerOpts = append(balancerOpts, balancer.DisableRebalancing())
+	}
 	if handler.testingKnobs.balancerOpts != nil {
 		balancerOpts = append(balancerOpts, handler.testingKnobs.balancerOpts...)
 	}
