@@ -320,30 +320,36 @@ func term(
 	return ents[0].Term, nil
 }
 
-// LastIndex implements the raft.Storage interface.
-func (r *replicaRaftStorage) LastIndex() (uint64, error) {
-	return r.mu.lastIndex, nil
+// raftLastIndexRLocked requires that r.mu is held for reading.
+func (r *Replica) raftLastIndexRLocked() uint64 {
+	return r.mu.lastIndex
 }
 
-// raftLastIndexRLocked requires that r.mu is held for reading.
-func (r *Replica) raftLastIndexRLocked() (uint64, error) {
-	return (*replicaRaftStorage)(r).LastIndex()
+// LastIndex implements the raft.Storage interface.
+func (r *replicaRaftStorage) LastIndex() (uint64, error) {
+	return (*Replica)(r).raftLastIndexRLocked(), nil
+}
+
+// GetLastIndex returns the index of the last entry in the replica's Raft log.
+func (r *Replica) GetLastIndex() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftLastIndexRLocked()
+}
+
+// raftFirstIndexRLocked requires that r.mu is held for reading.
+func (r *Replica) raftFirstIndexRLocked() uint64 {
+	// TruncatedState is guaranteed to be non-nil.
+	return r.mu.state.TruncatedState.Index + 1
 }
 
 // FirstIndex implements the raft.Storage interface.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
-	// TruncatedState is guaranteed to be non-nil.
-	return r.mu.state.TruncatedState.Index + 1, nil
+	return (*Replica)(r).raftFirstIndexRLocked(), nil
 }
 
-// raftFirstIndexRLocked requires that r.mu is held for reading.
-func (r *Replica) raftFirstIndexRLocked() (uint64, error) {
-	return (*replicaRaftStorage)(r).FirstIndex()
-}
-
-// GetFirstIndex is the same function as raftFirstIndexLocked but it requires
-// that r.mu is not held.
-func (r *Replica) GetFirstIndex() (uint64, error) {
+// GetFirstIndex returns the index of the first entry in the replica's Raft log.
+func (r *Replica) GetFirstIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.raftFirstIndexRLocked()

@@ -603,10 +603,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			oldFirstIndex, err := r.GetFirstIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			oldFirstIndex := r.GetFirstIndex()
 
 			for i := 0; i < c.count; i++ {
 				key := roachpb.Key(fmt.Sprintf("key%02d", i))
@@ -624,10 +621,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 					// Flush the engine to advance durability, which triggers truncation.
 					require.NoError(t, store.engine.Flush())
 				}
-				newFirstIndex, err := r.GetFirstIndex()
-				if err != nil {
-					t.Fatal(err)
-				}
+				newFirstIndex := r.GetFirstIndex()
 				if newFirstIndex <= oldFirstIndex {
 					return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
 						oldFirstIndex, newFirstIndex)
@@ -722,10 +716,7 @@ func TestTruncateLog(t *testing.T) {
 			if _, pErr := tc.SendWrapped(args); pErr != nil {
 				t.Fatal(pErr)
 			}
-			idx, err := tc.repl.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			idx := tc.repl.GetLastIndex()
 			indexes = append(indexes, idx)
 		}
 
@@ -921,8 +912,7 @@ func waitForTruncationForTesting(
 			require.NoError(t, r.Engine().Flush())
 		}
 		// FirstIndex should have changed.
-		firstIndex, err := r.GetFirstIndex()
-		require.NoError(t, err)
+		firstIndex := r.GetFirstIndex()
 		if firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}

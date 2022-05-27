@@ -64,7 +64,7 @@ type EvalContext interface {
 	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
-	GetFirstIndex() (uint64, error)
+	GetFirstIndex() uint64
 	GetTerm(uint64) (uint64, error)
 	GetLeaseAppliedIndex() uint64
 
@@ -228,8 +228,8 @@ func (m *mockEvalCtxImpl) GetRangeID() roachpb.RangeID {
 func (m *mockEvalCtxImpl) IsFirstRange() bool {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetFirstIndex() (uint64, error) {
-	return m.FirstIndex, nil
+func (m *mockEvalCtxImpl) GetFirstIndex() uint64 {
+	return m.FirstIndex
 }
 func (m *mockEvalCtxImpl) GetTerm(uint64) (uint64, error) {
 	return m.Term, nil
