@@ -1,0 +1,30 @@
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+load("@npm_eslint_rules//@bazel/typescript:index.bzl", "ts_project")
+load("@npm_eslint_rules//jest:index.bzl", "jest_test")
+
+ts_project(
+    name = "ts_project",
+    srcs = glob(
+        ["src/**/*.ts"],
+        exclude = ["src/**/*.test.ts"],
+    ),
+    out_dir = "dist",
+    root_dir = "src",
+    tsconfig = "tsconfig.json",
+    validate = False,
+    deps = [
+        "@npm_eslint_rules//@typescript-eslint/utils",
+    ],
+)
+
+js_library(
+    name = "eslint-rules",
+    package_name = "@cockroachlabs/eslint-plugin-crdb",
+    srcs = [
+        "package.json",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ts_project",
+    ],
+)
