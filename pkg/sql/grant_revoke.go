@@ -71,8 +71,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 			granteePrivsAfterGrant := *(privDesc.FindOrCreateUser(grantee))
 			return granteePrivsBeforeGrant != granteePrivsAfterGrant
 		},
-		grantOn:          grantOn,
-		granteesNameList: n.Grantees,
+		grantOn: grantOn,
 	}, nil
 }
 
@@ -117,8 +116,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 			privsChanges := !ok || granteePrivsBeforeGrant != *granteePrivs
 			return privsChanges
 		},
-		grantOn:          grantOn,
-		granteesNameList: n.Grantees,
+		grantOn: grantOn,
 	}, nil
 }
 
@@ -130,11 +128,6 @@ type changePrivilegesNode struct {
 	desiredprivs    privilege.List
 	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool)
 	grantOn         privilege.ObjectType
-
-	// granteesNameList is used for creating an AST node for alter default
-	// privileges inside changePrivilegesNode's startExec.
-	// This is required for getting the pre-normalized name to construct the AST.
-	granteesNameList tree.RoleSpecList
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

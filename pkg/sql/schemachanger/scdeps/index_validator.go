@@ -67,18 +67,13 @@ func (iv indexValidator) ValidateForwardIndexes(
 	indexes []catalog.Index,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	// Set up a new transaction with the current timestamp.
-	txnRunner := func(ctx context.Context, fn sqlutil.InternalExecFn) error {
-		validationTxn := iv.db.NewTxn(ctx, "validation")
-		err := validationTxn.SetFixedTimestamp(ctx, iv.db.Clock().Now())
-		if err != nil {
-			return err
-		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
-	}
+
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
-	return iv.validateForwardIndexes(ctx, tbl, indexes, txnRunner, withFirstMutationPublic, gatherAllInvalid, override)
+	return iv.validateForwardIndexes(
+		ctx, tbl, indexes, iv.makeHistoricalInternalExecTxnRunner(),
+		withFirstMutationPublic, gatherAllInvalid, override,
+	)
 }
 
 // ValidateInvertedIndexes checks that the indexes have entries for all the rows.
@@ -88,18 +83,28 @@ func (iv indexValidator) ValidateInvertedIndexes(
 	indexes []catalog.Index,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	// Set up a new transaction with the current timestamp.
-	txnRunner := func(ctx context.Context, fn sqlutil.InternalExecFn) error {
+
+	const withFirstMutationPublic = true
+	const gatherAllInvalid = false
+	return iv.validateInvertedIndexes(
+		ctx, iv.codec, tbl, indexes, iv.makeHistoricalInternalExecTxnRunner(),
+		withFirstMutationPublic, gatherAllInvalid, override,
+	)
+}
+
+// makeHistoricalInternalExecTxnRunner creates a new transaction runner which
+// always runs at the same time and that time is the current time as of when
+// this constructor was called.
+func (iv indexValidator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
+	now := iv.db.Clock().Now()
+	return func(ctx context.Context, fn sqlutil.InternalExecFn) error {
 		validationTxn := iv.db.NewTxn(ctx, "validation")
-		err := validationTxn.SetFixedTimestamp(ctx, iv.db.Clock().Now())
+		err := validationTxn.SetFixedTimestamp(ctx, now)
 		if err != nil {
 			return err
 		}
 		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
 	}
-	const withFirstMutationPublic = true
-	const gatherAllInvalid = false
-	return iv.validateInvertedIndexes(ctx, iv.codec, tbl, indexes, txnRunner, withFirstMutationPublic, gatherAllInvalid, override)
 }
 
 // NewIndexValidator creates a IndexValidator interface
