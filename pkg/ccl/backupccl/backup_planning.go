@@ -123,12 +123,16 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// getPublicIndexTableSpans returns all the public index spans of the
-// provided table.
-func getPublicIndexTableSpans(
-	table *descpb.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
-) []roachpb.Span {
-	publicIndexSpans := make([]roachpb.Span, 0, len(table.Indexes)+1)
+// forEachPublicIndexTableSpan constructs the span for each public index of the
+// provided table and runs the given function on each of them. The added map is
+// used to track duplicates. Duplicate indexes are not passed to the provided
+// function.
+func forEachPublicIndexTableSpan(
+	table *descpb.TableDescriptor,
+	added map[tableAndIndex]bool,
+	codec keys.SQLCodec,
+	f func(span roachpb.Span),
+) {
 	table.ForEachPublicIndex(func(idx *descpb.IndexDescriptor) {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.ID}
 		if added[key] {
@@ -136,9 +140,8 @@ func getPublicIndexTableSpans(
 		}
 		added[key] = true
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, table.GetID(), idx.ID))
-		publicIndexSpans = append(publicIndexSpans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+		f(roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	})
-	return publicIndexSpans
 }
 
 // spansForAllTableIndexes returns non-overlapping spans for every index and
@@ -160,10 +163,7 @@ func spansForAllTableIndexes(
 	}
 
 	for _, table := range tables {
-		publicIndexSpans := getPublicIndexTableSpans(table.TableDesc(), added, execCfg.Codec)
-		for _, indexSpan := range publicIndexSpans {
-			insertSpan(indexSpan)
-		}
+		forEachPublicIndexTableSpan(table.TableDesc(), added, execCfg.Codec, insertSpan)
 	}
 
 	// If there are desc revisions, ensure that we also add any index spans
@@ -176,10 +176,7 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.Public() {
-			publicIndexSpans := getPublicIndexTableSpans(rawTbl, added, execCfg.Codec)
-			for _, indexSpan := range publicIndexSpans {
-				insertSpan(indexSpan)
-			}
+			forEachPublicIndexTableSpan(rawTbl, added, execCfg.Codec, insertSpan)
 		}
 	}
 

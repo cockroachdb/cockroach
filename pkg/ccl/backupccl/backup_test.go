@@ -6233,7 +6233,7 @@ func getMockTableDesc(
 	return tabledesc.NewBuilder(&mockTableDescriptor).BuildImmutableTable()
 }
 
-// Unit tests for the spansForAllTableIndexes and getPublicIndexTableSpans()
+// Unit tests for the spansForAllTableIndexes and forEachPublicIndexTableSpan()
 // methods.
 func TestPublicIndexTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -6331,8 +6331,11 @@ func TestPublicIndexTableSpans(t *testing.T) {
 	for _, test := range testCases {
 		tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
 			test.indexes, test.addingIndexes, test.droppingIndexes)
-		t.Run(fmt.Sprintf("%s:%s", "getPublicIndexTableSpans", test.name), func(t *testing.T) {
-			spans := getPublicIndexTableSpans(tableDesc.TableDesc(), unusedMap, codec)
+		t.Run(fmt.Sprintf("%s:%s", "forEachPublicIndexTableSpan", test.name), func(t *testing.T) {
+			var spans []roachpb.Span
+			forEachPublicIndexTableSpan(tableDesc.TableDesc(), unusedMap, codec, func(sp roachpb.Span) {
+				spans = append(spans, sp)
+			})
 			var unmergedSpans []string
 			for _, span := range spans {
 				unmergedSpans = append(unmergedSpans, span.String())
