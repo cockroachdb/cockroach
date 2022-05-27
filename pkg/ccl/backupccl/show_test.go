@@ -839,10 +839,13 @@ func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 		"SHOW BACKUP $1", localFoo)
 }
 
-// TestShowBackupCheckFiles verifies the check_files option catches a corrupt backup file
-// in 3 scenarios: 1. SST from a full backup; 2. SST from a default incremental backup; 3.
-// SST from an incremental backup created with the incremental_location parameter.
-// The first two scenarios also get checked with locality aware backups.
+// TestShowBackupCheckFiles verifies the check_files option catches a corrupt
+// backup file in 3 scenarios: 1. SST from a full backup; 2. SST from a default
+// incremental backup; 3. SST from an incremental backup created with the
+// incremental_location parameter. The first two scenarios also get checked with
+// locality aware backups. The test also sanity checks the new file_bytes column
+// in SHOW BACKUP with check_files, which displays the physical size of each
+// table in the backup.
 func TestShowBackupCheckFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -855,8 +858,8 @@ func TestShowBackupCheckFiles(t *testing.T) {
 
 	collectionRoot := "full"
 	incLocRoot := "inc"
-	const c1, c2, c3 = `nodelocal://0/full`, `nodelocal://1/full`, `nodelocal://2/full`
-	const i1, i2, i3 = `nodelocal://0/inc`, `nodelocal://1/inc`, `nodelocal://2/inc`
+	const c1, c2, c3 = `nodelocal://1/full`, `nodelocal://2/full`, `nodelocal://3/full`
+	const i1, i2, i3 = `nodelocal://1/inc`, `nodelocal://2/inc`, `nodelocal://3/inc`
 	localities := []string{"default", "dc=dc1", "dc=dc2"}
 
 	collections := []string{
@@ -879,7 +882,6 @@ func TestShowBackupCheckFiles(t *testing.T) {
 		{dest: collections, inc: incrementals, localities: localities},
 	}
 
-	// create db
 	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
 	sqlDB.Exec(t, `CREATE TABLE fkdb.fk (ind INT)`)
 
@@ -905,11 +907,23 @@ func TestShowBackupCheckFiles(t *testing.T) {
 
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest))
 
+		// breakCheckFiles validates that moving an SST will cause SHOW BACKUP with check_files to
+		// error.
 		breakCheckFiles := func(
+			// rootDir identifies the root of the collection or incremental backup dir
+			// of the target backup file.
 			rootDir string,
+
+			// backupDest contains the collection or incremental URIs.
 			backupDest []string,
+
+			// file contains the path to the target file staring from the rootDir.
 			file string,
+
+			// fileLocality contains the expected locality of the target file.
 			fileLocality string,
+
+			// checkQuery contains the 'SHOW BACKUP with check_files' query.
 			checkQuery string) {
 
 			// Ensure no errors first
@@ -921,65 +935,57 @@ func TestShowBackupCheckFiles(t *testing.T) {
 				require.NoError(t, err, "failed to corrupt SST")
 			}
 
-			// To validate the checkFiles error message, resolve the full path of the missing file.
-			// For locality aware backups, it may not live at the default URI (e.g. backupDest[0]).
-			var fileDest string
+			// If the file is from a locality aware backup, check its locality info. Note
+			// that locality aware URIs have the following structure:
+			// `someURI?COCKROACH_LOCALITY ='locality'`.
 			if fileLocality == "NULL" {
-				fileDest = backupDest[0]
 			} else {
+				var locality string
 				fileLocality = url.QueryEscape(fileLocality)
 				for _, destURI := range backupDest {
-					// Locality aware URIs have the following structure:
-					// `someURI?COCKROACH_LOCALITY='locality'`. Given the fileLocality, we
-					// match for the proper URI.
+					// Using the locality, match for the proper URI.
 					destLocality := strings.Split(destURI, "?")
 					if strings.Contains(destLocality[1], fileLocality) {
-						fileDest = destURI
+						locality = destLocality[1]
 						break
 					}
 				}
+				require.NotEmpty(t, locality, "could not find file locality")
 			}
-			require.NotEmpty(t, fileDest, "could not find file locality")
 
-			// The full error message looks like "Error checking file
-			// data/756930828574818306.sst in nodelocal://0/full/2022/04/27-134916.90".
-			//
-			// Note that the expected error message excludes the path to the data file
-			// to avoid a test flake for locality aware backups where two different
-			// nodelocal URI's read to the same place. In this scenario, the test
-			// expects the backup to be in nodelocal://1/foo and the actual error
-			// message resolves the uri to nodelocal://0/foo. While both are correct,
-			// the test fails.
-
-			// Get Path after /data dir
-			toFile := "data" + strings.Split(file, "/data")[1]
-			errorMsg := fmt.Sprintf("Error checking file %s", toFile)
+			// Note that the expected error message excludes the nodelocal portion of
+			// the file path (nodelocal://1/) to avoid a test flake for locality aware
+			// backups where two different nodelocal URI's read to the same place. In
+			// this scenario, the test expects the backup to be in nodelocal://2/foo
+			// and the actual error message resolves the uri to nodelocal://1/foo.
+			// While both are correct, the test fails.
+			errorMsg := fmt.Sprintf("The following files are missing from the backup:\n\t.*%s",
+				filepath.Join(rootDir, file))
 			sqlDB.ExpectErr(t, errorMsg, checkQuery)
 
 			if err := os.Rename(badPath, fullPath); err != nil {
 				require.NoError(t, err, "failed to de-corrupt SST")
 			}
 		}
-
 		fileInfo := sqlDB.QueryStr(t,
 			fmt.Sprintf(`SELECT path, locality, file_bytes FROM [SHOW BACKUP FILES FROM LATEST IN %s with check_files]`, dest))
 
 		checkQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files`, dest)
 
-		// break on full backup
+		// Break on full backup.
 		breakCheckFiles(collectionRoot, test.dest, fileInfo[0][0], fileInfo[0][1], checkQuery)
 
-		// break on default inc backup
+		// Break on default inc backup.
 		breakCheckFiles(collectionRoot, test.dest, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], checkQuery)
 
-		// check that each file size is positive
+		// Check that each file size is positive.
 		for _, file := range fileInfo {
 			sz, err := strconv.Atoi(file[2])
 			require.NoError(t, err, "could not get file size")
 			require.Greater(t, sz, 0, "file size is not positive")
 		}
 
-		// check that returned file size is consistent across flavors of SHOW BACKUP
+		// Check that the returned file size is consistent across flavors of SHOW BACKUP.
 		fileSum := sqlDB.QueryStr(t,
 			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FILES FROM LATEST IN %s with check_files]`, dest))
 
@@ -988,7 +994,7 @@ func TestShowBackupCheckFiles(t *testing.T) {
 			fileSum)
 
 		if len(test.dest) == 1 {
-			// break on an incremental backup stored at incremental_location
+			// Break on an incremental backup stored at incremental_location.
 			fileInfo := sqlDB.QueryStr(t,
 				fmt.Sprintf(`SELECT path, locality FROM [SHOW BACKUP FILES FROM LATEST IN %s WITH incremental_location = %s]`,
 					dest, inc))
