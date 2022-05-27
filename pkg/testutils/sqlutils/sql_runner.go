@@ -37,6 +37,7 @@ type DBHandle interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (gosql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*gosql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
+	PrepareContext(ctx context.Context, query string) (*gosql.Stmt, error)
 }
 
 var _ DBHandle = &gosql.DB{}
@@ -148,6 +149,16 @@ func (sr *SQLRunner) Query(t testutils.TB, query string, args ...interface{}) *g
 		t.Fatalf("error executing '%s': %s", query, err)
 	}
 	return r
+}
+
+// Prepare is a wrapper around gosql.Prepare that kills the test on error.
+func (sr *SQLRunner) Prepare(t testutils.TB, query string) *gosql.Stmt {
+	t.Helper()
+	s, err := sr.DB.PrepareContext(context.Background(), query)
+	if err != nil {
+		t.Fatalf("error executing '%s': %s", query, err)
+	}
+	return s
 }
 
 // Row is a wrapper around gosql.Row that kills the test on error.
@@ -298,4 +309,11 @@ func (rr *RoundRobinDBHandle) QueryRowContext(
 	ctx context.Context, query string, args ...interface{},
 ) *gosql.Row {
 	return rr.next().QueryRowContext(ctx, query, args...)
+}
+
+// PrepareContext is part of the DBHandle interface.
+func (rr *RoundRobinDBHandle) PrepareContext(
+	ctx context.Context, query string,
+) (*gosql.Stmt, error) {
+	return rr.next().PrepareContext(ctx, query)
 }

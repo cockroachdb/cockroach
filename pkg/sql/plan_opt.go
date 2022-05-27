@@ -454,14 +454,36 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 //
 // The returned memo is only safe to use in one thread, during execution of the
 // current statement.
-func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
+func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo, canHack bool) (*memo.Memo, error) {
+
+	f := opc.optimizer.Factory()
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized if there were no
 		// placeholders or the placeholder fast path succeeded (see
 		// buildReusableMemo).
 		return cachedMemo, nil
+	} else if canHack {
+		from := cachedMemo
+		// Copy the next scalar rank to the target memo so that new scalar
+		// expressions built with the new memo will not share scalar ranks with
+		// existing expressions.
+		f.Memo().CopyNextRankFrom(from)
+
+		// Copy all metadata to the target memo so that referenced tables and
+		// columns can keep the same ids they had in the "from" memo. Scalar
+		// expressions in the metadata cannot have placeholders, so we simply copy
+		// the expressions without replacement.
+		f.Memo().Metadata().CopyFrom(from.Metadata(), f.CopyWithoutAssigningPlaceholders)
+
+		// Perform copy and replacement, and store result as the root of this
+		// factory's memo.
+		f.Memo().SetRoot(from.RootExpr().(memo.RelExpr), from.RootProps())
+		if _, err := opc.optimizer.Optimize(); err != nil {
+			return nil, err
+		}
+		//cachedMemo.SetRoot(cachedMemo.RootExpr().(memo.RelExpr), cachedMemo.RootProps())
+		return cachedMemo, nil
 	}
-	f := opc.optimizer.Factory()
 	// Finish optimization by assigning any remaining placeholders and
 	// applying exploration rules. Reinitialize the optimizer and construct a
 	// new memo that is copied from the prepared memo, but with placeholders
@@ -500,8 +522,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 			}
 		}
 		opc.log(ctx, "reusing cached memo")
-		memo, err := opc.reuseMemo(prepared.Memo)
-		return memo, err
+		return opc.reuseMemo(prepared.Memo, p.EvalContext().SessionData().SkipReoptimize)
 	}
 
 	if opc.useCache {
@@ -525,7 +546,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
 			}
-			memo, err := opc.reuseMemo(cachedData.Memo)
+			memo, err := opc.reuseMemo(cachedData.Memo, false)
 			return memo, err
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
