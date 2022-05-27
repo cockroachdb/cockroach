@@ -13,14 +13,65 @@ package timeutil
 import (
 	"strings"
 	"time"
+	"unsafe"
 )
 
 // LibPQTimePrefix is the prefix lib/pq prints time-type datatypes with.
 const LibPQTimePrefix = "0000-01-01"
 
 // Now returns the current UTC time.
+//
+// We've decided in times immemorial that always returning UTC is a good policy
+// across the cluster so that all the timestamps print uniformly across
+// different nodes, and also because we were afraid that timestamps leak into
+// SQL Datums, and there the timestamp matters. Years later, it's not clear
+// whether this was a good decision since it's forcing the nasty implementation
+// below.
 func Now() time.Time {
+	t := time.Now()
+	// HACK: instead of doing t = t.UTC(), we reach inside the
+	// struct and set the location manually. UTC() strips the monotonic clock reading
+	// from t, for no good reason: https://groups.google.com/g/golang-nuts/c/dyPTdi6oem8
+	// Stripping the monotonic part has bad consequences:
+	// 1. We lose the benefits of the monotonic clock reading.
+	// 2. On OSX, only the monotonic clock seems to have nanosecond resolution. If
+	// we strip it, we only get microsecond resolution. Besides generally sucking,
+	// microsecond resolution is not enough to guarantee that consecutive
+	// timeutil.Now() calls don't return the same instant. This trips up some of
+	// our tests, which assume that they can measure any duration of time.
+	// 3. time.Since(t) does one less system calls when t has a monotonic reading,
+	// making it twice as fast as otherwise:
+	// https://cs.opensource.google/go/go/+/refs/tags/go1.17.2:src/time/time.go;l=878;drc=refs%2Ftags%2Fgo1.17.2
+	x := (*timeLayout)(unsafe.Pointer(&t))
+	x.loc = nil // nil means UTC
+	return t
+}
+
+// NowNoMono is like Now(), but it strips down the monotonic part of the
+// timestamp. This is useful for getting timestamps that rounds-trip through
+// various channels that strip out the monotonic part - for example yaml
+// marshaling.
+func NowNoMono() time.Time {
+	// UTC has the side-effect of stripping the nanos.
 	return time.Now().UTC()
+}
+
+// StripMono returns a copy of t with its monotonic clock reading stripped. This
+// is useful for getting a time.Time that compares == with another one that
+// might not have the mono part. time.Time is meant to be compared with
+// Time.Equal() (which ignores the mono), not with ==, but sometimes we have a
+// time.Time in a bigger struct and we want to use require.Equal() or such.
+func StripMono(t time.Time) time.Time {
+	// UTC() has the side-effect of stripping the mono part.
+	return t.UTC()
+}
+
+// timeLayout mimics time.Time, exposing all the fields. We do an unsafe cast of
+// a time.Time to this in order to set the location.
+type timeLayout struct {
+	wall uint64
+	ext  int64
+	loc  *time.Location
 }
 
 // Since returns the time elapsed since t.

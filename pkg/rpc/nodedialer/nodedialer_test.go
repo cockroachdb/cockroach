@@ -60,7 +60,7 @@ func TestDialNoBreaker(t *testing.T) {
 
 	// Don't use setUpNodedialerTest because we want access to the underlying clock and rpcContext.
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	rpcCtx := newTestContext(clock, stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, _ := newTestServer(t, clock, stopper, true /* useHeartbeat */)
@@ -124,7 +124,7 @@ func TestConnHealth(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	rpcCtx := newTestContext(clock, stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
@@ -176,7 +176,7 @@ func TestConnHealthTryDial(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	rpcCtx := newTestContext(clock, stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
@@ -228,7 +228,7 @@ func TestConnHealthInternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	stopper := stop.NewStopper()
 	localAddr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 26657}
 
@@ -391,7 +391,7 @@ func setUpNodedialerTest(
 	nd *Dialer,
 ) {
 	stopper = stop.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	// Create an rpc Context and then
 	rpcCtx = newTestContext(clock, stopper)
 	rpcCtx.NodeID.Set(context.Background(), nodeID)

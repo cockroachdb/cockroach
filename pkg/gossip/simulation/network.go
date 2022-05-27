@@ -74,7 +74,7 @@ func NewNetwork(
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
 			Config:   &base.Config{Insecure: true},
-			Clock:    hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+			Clock:    hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
 			Stopper:  n.Stopper,
 			Settings: cluster.MakeTestingClusterSettings(),
 		})

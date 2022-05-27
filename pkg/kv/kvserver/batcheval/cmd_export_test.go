@@ -118,7 +118,7 @@ func TestExportCmd(t *testing.T) {
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp,
 		maxResponseSSTBytes int64) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
-		ret.end = hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
+		ret.end = hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
 		ret.mvccLatestFiles, ret.mvccLatestKVs, ret.mvccLatestResponseHeader = exportAndSlurpOne(t,
 			start, roachpb.MVCCFilter_Latest, maxResponseSSTBytes)
 		ret.mvccAllFiles, ret.mvccAllKVs, ret.mvccAllResponseHeader = exportAndSlurpOne(t, start,

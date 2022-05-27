@@ -181,7 +181,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			QueryResolvedTimestampIntentCleanupAge.Override(ctx, &st.SV, cfg.intentCleanupAge)
 
 			manual := hlc.NewManualClock(10)
-			clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 			evalCtx := &MockEvalCtx{
 				ClusterSettings: st,
@@ -232,7 +232,7 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	manual := hlc.NewManualClock(10)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	evalCtx := &MockEvalCtx{
 		ClusterSettings: st,

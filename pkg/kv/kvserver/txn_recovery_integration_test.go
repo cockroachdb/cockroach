@@ -85,7 +85,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			manual := hlc.NewManualClock(123)
-			cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 			// Set the RecoverIndeterminateCommitsOnFailedPushes flag to true so
 			// that a push on a STAGING transaction record immediately launches
 			// the transaction recovery process.
@@ -226,7 +226,7 @@ func TestTxnRecoveryFromStagingWithHighPriority(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		manual := hlc.NewManualClock(123)
-		cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+		cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 		store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
 		// Create a transaction that will get stuck performing a parallel

@@ -271,7 +271,7 @@ func TestProposalBuffer(t *testing.T) {
 	}
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	// Insert propBufArrayMinSize proposals. The buffer should not be flushed.
@@ -340,7 +340,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	}
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	dsErr := errors.New("destroyed")
@@ -408,7 +408,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	p.raftGroup = raft
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	num := propBufArrayMinSize
@@ -555,7 +555,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.ownsValidLease = tc.ownsValidLease
 
 			var b propBuf
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
@@ -584,7 +584,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 
 	const maxOffset = 500 * time.Millisecond
 	mc := hlc.NewManualClock((1613588135 * time.Second).Nanoseconds())
-	clock := hlc.NewClock(mc.UnixNano, maxOffset)
+	clock := hlc.NewClock(mc, maxOffset /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(ctx, &st.SV, time.Second)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 200*time.Millisecond)

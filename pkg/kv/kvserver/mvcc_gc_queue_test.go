@@ -442,9 +442,10 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	{
 		irrelevantTTL := 24 * time.Hour * 365
 		ms, valSize := initialMS(), 1<<10
+		mc := hlc.NewManualClock(ms.LastUpdateNanos)
 		txn := newTransaction(
 			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
-			hlc.NewClock(func() int64 { return ms.LastUpdateNanos }, time.Millisecond))
+			hlc.NewClock(mc, time.Millisecond /* maxOffset */))
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
 		// the average intent age is just the time elapsed from now, and this is roughly
@@ -702,7 +703,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	ctx := context.Background()
 
 	manual := hlc.NewManualClock(123)
-	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
 	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
@@ -847,7 +848,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig).UnixNano, time.Nanosecond)
+		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig), time.Nanosecond /* maxOffset */)
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.LockSpans = testIntents
@@ -1103,7 +1104,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 
 	var gcRequests int32
 	manual := hlc.NewManualClock(123)
-	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {

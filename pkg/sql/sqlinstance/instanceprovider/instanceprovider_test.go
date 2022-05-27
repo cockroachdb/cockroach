@@ -43,9 +43,7 @@ func TestInstanceProvider(t *testing.T) {
 		*stop.Stopper, *slinstance.Instance, *slstorage.FakeStorage, *hlc.Clock,
 	) {
 		timeSource := timeutil.NewTestTimeSource()
-		clock := hlc.NewClock(func() int64 {
-			return timeSource.Now().UnixNano()
-		}, base.DefaultMaxClockOffset)
+		clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.TestingBinaryVersion,
 			clusterversion.TestingBinaryMinSupportedVersion,

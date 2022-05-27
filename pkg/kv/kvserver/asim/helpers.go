@@ -34,7 +34,7 @@ func NewStorePool(
 
 	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond)
 
 	// Never gossip, pass in nil values.
 	g := gossip.NewTest(1, nil, nil, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
