@@ -1604,6 +1604,9 @@ func TestBackupRestoreResume(t *testing.T) {
 				}
 				createAndWaitForJob(
 					t, sqlDB, []descpb.ID{backupTableDesc.GetID()},
+					// We set the URI and HasLockedLocation to prevent the job from
+					// running the logic that resolves the backup destination. Since this
+					// is a "fake" job record, that step is bound to fail.
 					jobspb.BackupDetails{
 						EndTime: tc.Servers[0].Clock().Now(),
 						URI:     "nodelocal://0/backup" + "-" + item.testName,
@@ -3495,10 +3498,10 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 
 	const msg = "can not backup tenants with revision history"
 
-	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO 'nodelocal://0/' WITH revision_history`)
+	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO 'nodelocal://0/foo' WITH revision_history`)
 	require.Contains(t, fmt.Sprint(err), msg)
 
-	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://0/' WITH revision_history`)
+	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://0/bar' WITH revision_history`)
 	require.Contains(t, fmt.Sprint(err), msg)
 }
 
@@ -4034,28 +4037,28 @@ func TestTimestampMismatch(t *testing.T) {
 		sqlDB.ExpectErr(
 			t, "backups listed out of order",
 			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`,
-			localFoo, incrementalT1FromFull,
+			localFoo+"/missing-initial", incrementalT1FromFull,
 		)
 
 		// Missing an intermediate incremental backup.
 		sqlDB.ExpectErr(
 			t, "backups listed out of order",
 			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			localFoo, fullBackup, incrementalT2FromT1,
+			localFoo+"/missing-inc", fullBackup, incrementalT2FromT1,
 		)
 
 		// Backups specified out of order.
 		sqlDB.ExpectErr(
 			t, "out of order",
 			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			localFoo, incrementalT1FromFull, fullBackup,
+			localFoo+"/ooo", incrementalT1FromFull, fullBackup,
 		)
 
 		// Missing data for one table in the most recent backup.
 		sqlDB.ExpectErr(
 			t, "previous backup does not contain table",
 			`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			localFoo, fullBackup, incrementalT3FromT1OneTable,
+			localFoo+"/missing-table-data", fullBackup, incrementalT3FromT1OneTable,
 		)
 	})
 
@@ -5947,7 +5950,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 		// Kickoff an incremental backup, but pause it just after it writes its
 		// protected timestamps.
-		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow'`)
+		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
 
 		var jobID int
 		runner.QueryRow(t,
@@ -6415,7 +6418,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 
 	// Creating the protected timestamp record should fail because there are too
 	// many spans. Ensure that we get the appropriate error.
-	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo'`)
+	_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo/byte-limit'`)
 	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+30 > 1 bytes")
 
 	// TODO(adityamaru): Remove in 22.2 once no records protect spans.
@@ -6434,7 +6437,7 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 
 		// Creating the protected timestamp record should fail because there are too
 		// many spans. Ensure that we get the appropriate error.
-		_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo'`)
+		_, err := db.Exec(`BACKUP TABLE foo, bar TO 'nodelocal://0/foo/spans-limit'`)
 		require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
 	})
 }
@@ -9270,7 +9273,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 		return nil
 	})
 
-	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo)
+	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo+"/fail")
 	testutils.IsError(err, "must be after replica GC threshold")
 
 	_, err = conn.Exec(`ALTER TABLE foo SET (exclude_data_from_backup = true)`)
@@ -9282,7 +9285,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 		return true, nil
 	})
 
-	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo)
+	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo TO $1 AS OF SYSTEM TIME '%s'", tsBefore), localFoo+"/succeed")
 	require.NoError(t, err)
 }
 
@@ -9356,7 +9359,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		return true, nil
 	})
 
-	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow'`)
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
 	if _, err := conn.Exec(`BACKUP DATABASE test INTO $1`, localFoo); !testutils.IsError(err, "pause") {
 		t.Fatal(err)
 	}
@@ -9802,7 +9805,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 	numCheckpoints := 5
 
 	for i := 0; i < numCheckpoints; i++ {
-		checkpoints = append(checkpoints, newTimestampedCheckpointFileName())
+		checkpoints = append(checkpoints, newTimestampedFilename(backupManifestCheckpointName))
 		// Occasionally, we call newTimestampedCheckpointFileName() in succession
 		// too fast and the timestamp is the same. So wait for a moment to
 		// avoid that.
