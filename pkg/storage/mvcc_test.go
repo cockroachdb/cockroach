@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -2448,7 +2449,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			clock := hlc.NewClock(hlc.NewManualClock(123), time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 
 			txn := *txn1
 			txn.Sequence++
