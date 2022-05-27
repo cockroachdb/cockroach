@@ -15,6 +15,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/ccl/backupccl",
+        "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/baseccl",
         "//pkg/ccl/cliccl/cliflagsccl",
         "//pkg/ccl/storageccl",

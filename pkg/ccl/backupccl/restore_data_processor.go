@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -71,7 +72,7 @@ type restoreDataProcessor struct {
 	metaCh chan *execinfrapb.ProducerMetadata
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
-	progCh chan RestoreProgress
+	progCh chan backuppb.RestoreProgress
 }
 
 var (
@@ -147,7 +148,7 @@ func newRestoreDataProcessor(
 		input:      input,
 		spec:       spec,
 		output:     output,
-		progCh:     make(chan RestoreProgress, maxConcurrentRestoreWorkers),
+		progCh:     make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
 	}
@@ -508,7 +509,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 func makeProgressUpdate(
 	summary roachpb.BulkOpSummary, entry execinfrapb.RestoreSpanEntry, pkIDs map[uint64]bool,
-) (progDetails RestoreProgress) {
+) (progDetails backuppb.RestoreProgress) {
 	progDetails.Summary = countRows(summary, pkIDs)
 	progDetails.ProgressIdx = entry.ProgressIdx
 	progDetails.DataSpan = entry.Span

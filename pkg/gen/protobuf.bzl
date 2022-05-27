@@ -4,7 +4,7 @@ PROTOBUF_SRCS = [
   "//pkg/acceptance/cluster:cluster_go_proto",
   "//pkg/blobs/blobspb:blobspb_go_proto",
   "//pkg/build:build_go_proto",
-  "//pkg/ccl/backupccl:backupccl_go_proto",
+  "//pkg/ccl/backupccl/backuppb:backuppb_go_proto",
   "//pkg/ccl/baseccl:baseccl_go_proto",
   "//pkg/ccl/sqlproxyccl/tenant:tenant_go_proto",
   "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
