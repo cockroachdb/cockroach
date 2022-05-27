@@ -11,15 +11,12 @@
 package debug
 
 import (
-	"bytes"
 	"context"
 	"expvar"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/pprof"
-	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -33,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
+	"github.com/cockroachdb/pebble/vfs"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
@@ -149,12 +148,10 @@ func NewServer(
 }
 
 func analyzeLSM(dir string, writer io.Writer) error {
-	manifestName, err := ioutil.ReadFile(path.Join(dir, "CURRENT"))
+	db, err := pebble.Peek(dir, vfs.Default)
 	if err != nil {
 		return err
 	}
-
-	manifestPath := path.Join(dir, string(bytes.TrimSpace(manifestName)))
 
 	t := pebbletool.New(pebbletool.Comparers(storage.EngineComparer))
 
@@ -170,7 +167,7 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	}
 
 	lsm.SetOutput(writer)
-	return lsm.RunE(lsm, []string{manifestPath})
+	return lsm.RunE(lsm, []string{db.ManifestFilename})
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
