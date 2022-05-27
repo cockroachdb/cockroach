@@ -180,7 +180,7 @@ func spansForAllTableIndexes(
 		}
 	}
 
-	var spans []roachpb.Span
+	spans := make([]roachpb.Span, 0, sstIntervalTree.Len())
 	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
 		spans = append(spans, roachpb.Span{
 			Key:    roachpb.Key(r.Range().Start),
