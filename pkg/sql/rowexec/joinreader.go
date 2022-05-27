@@ -128,6 +128,7 @@ type joinReader struct {
 	usesStreamer bool
 	streamerInfo struct {
 		*kvstreamer.Streamer
+		reqsScratch         []roachpb.RequestUnion
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
 		budgetLimit         int64
@@ -920,8 +921,9 @@ func (jr *joinReader) readInput() (
 	// joinReaderStrategy doesn't account for any memory used by the spans.
 	if jr.usesStreamer {
 		var kvBatchFetcher *row.TxnKVStreamer
-		kvBatchFetcher, err = row.NewTxnKVStreamer(
+		kvBatchFetcher, jr.streamerInfo.reqsScratch, err = row.NewTxnKVStreamer(
 			jr.Ctx, jr.streamerInfo.Streamer, spans, spanIDs, jr.keyLocking,
+			jr.streamerInfo.reqsScratch,
 		)
 		if err != nil {
 			jr.MoveToDraining(err)
@@ -1100,6 +1102,7 @@ func (jr *joinReader) close() {
 			if jr.streamerInfo.Streamer != nil {
 				jr.streamerInfo.Streamer.Close(jr.Ctx)
 			}
+			jr.streamerInfo.reqsScratch = nil
 			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
 			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
 			if jr.streamerInfo.diskMonitor != nil {

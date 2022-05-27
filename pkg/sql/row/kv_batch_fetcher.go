@@ -155,6 +155,8 @@ type txnKVFetcher struct {
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
 
+	reqsScratch []roachpb.RequestUnion
+
 	acc *mon.BoundAccount
 	// spansAccountedFor and batchResponseAccountedFor track the number of bytes
 	// that we've already registered with acc in regards to spans and the batch
@@ -382,7 +384,8 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength)
+	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength, f.reqsScratch)
+	f.reqsScratch = ba.Requests
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -609,6 +612,7 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.remainingBatches = nil
 	f.spans = identifiableSpans{}
 	f.scratchSpans = identifiableSpans{}
+	f.reqsScratch = nil
 	// Release only the allocations made by this fetcher.
 	f.acc.Shrink(ctx, f.batchResponseAccountedFor+f.spansAccountedFor)
 }
@@ -618,9 +622,14 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 // otherwise, a Scan (or ReverseScan if reverse is true) request is used with
 // BATCH_RESPONSE format.
 func spansToRequests(
-	spans roachpb.Spans, reverse bool, keyLocking lock.Strength,
+	spans roachpb.Spans, reverse bool, keyLocking lock.Strength, reqsScratch []roachpb.RequestUnion,
 ) []roachpb.RequestUnion {
-	reqs := make([]roachpb.RequestUnion, len(spans))
+	var reqs []roachpb.RequestUnion
+	if cap(reqsScratch) > len(spans) {
+		reqs = reqsScratch[:len(spans)]
+	} else {
+		reqs = make([]roachpb.RequestUnion, len(spans))
+	}
 	// Detect the number of gets vs scans, so we can batch allocate all of the
 	// requests precisely.
 	nGets := 0

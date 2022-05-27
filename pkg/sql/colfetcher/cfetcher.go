@@ -579,14 +579,15 @@ func (cf *cFetcher) StartScanStreaming(
 	streamer *kvstreamer.Streamer,
 	spans roachpb.Spans,
 	limitHint rowinfra.RowLimit,
-) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength)
+	reqsScratch []roachpb.RequestUnion,
+) ([]roachpb.RequestUnion, error) {
+	kvBatchFetcher, reqs, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength, reqsScratch)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f := row.NewKVStreamingFetcher(kvBatchFetcher)
 	cf.setFetcher(f, limitHint)
-	return nil
+	return reqs, nil
 }
 
 // fetcherState is the state enum for NextBatch.

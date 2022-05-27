@@ -65,19 +65,20 @@ func NewTxnKVStreamer(
 	spans roachpb.Spans,
 	spanIDs []int,
 	lockStrength descpb.ScanLockingStrength,
-) (*TxnKVStreamer, error) {
+	reqsScratch []roachpb.RequestUnion,
+) (*TxnKVStreamer, []roachpb.RequestUnion, error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", spans)
 	}
 	keyLocking := getKeyLockingStrength(lockStrength)
-	reqs := spansToRequests(spans, false /* reverse */, keyLocking)
+	reqs := spansToRequests(spans, false /* reverse */, keyLocking, reqsScratch)
 	if err := streamer.Enqueue(ctx, reqs, spanIDs); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return &TxnKVStreamer{
 		streamer: streamer,
 		spans:    spans,
-	}, nil
+	}, reqs, nil
 }
 
 // proceedWithLastResult processes the result which must be already set on the

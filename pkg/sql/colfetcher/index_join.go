@@ -125,6 +125,7 @@ type ColIndexJoin struct {
 	usesStreamer bool
 	streamerInfo struct {
 		*kvstreamer.Streamer
+		reqsScratch []roachpb.RequestUnion
 		budgetAcc   *mon.BoundAccount
 		budgetLimit int64
 		diskBuffer  kvstreamer.ResultDiskBuffer
@@ -243,11 +244,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// memory from its account in GetSpans().
 			var err error
 			if s.usesStreamer {
-				err = s.cf.StartScanStreaming(
+				s.streamerInfo.reqsScratch, err = s.cf.StartScanStreaming(
 					s.Ctx,
 					s.streamerInfo.Streamer,
 					spans,
 					rowinfra.NoRowLimit,
+					s.streamerInfo.reqsScratch,
 				)
 			} else {
 				err = s.cf.StartScan(
@@ -659,6 +661,7 @@ func (s *ColIndexJoin) closeInternal() {
 	}
 	if s.streamerInfo.Streamer != nil {
 		s.streamerInfo.Streamer.Close(ctx)
+		s.streamerInfo.reqsScratch = nil
 	}
 	s.batch = nil
 }
