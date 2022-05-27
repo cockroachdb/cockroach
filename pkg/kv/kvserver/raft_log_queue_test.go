@@ -669,7 +669,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin := func(exp uint64, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
-		if maxIndex := r.getSnapshotLogTruncationConstraintsLocked(anyRecipientStore); maxIndex != exp {
+		if maxIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore); maxIndex != exp {
 			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}
@@ -760,7 +760,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// The term of the last truncated entry is still available.
 		tc.repl.mu.Lock()
-		term, err := tc.repl.raftTermRLocked(indexes[4])
+		term, err := tc.repl.raftTermLocked(indexes[4])
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -771,7 +771,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// The terms of older entries are gone.
 		tc.repl.mu.Lock()
-		_, err = tc.repl.raftTermRLocked(indexes[3])
+		_, err = tc.repl.raftTermLocked(indexes[3])
 		tc.repl.mu.Unlock()
 		if !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
@@ -793,7 +793,7 @@ func TestTruncateLog(t *testing.T) {
 
 		tc.repl.mu.Lock()
 		// The term of the last truncated entry is still available.
-		term, err = tc.repl.raftTermRLocked(indexes[4])
+		term, err = tc.repl.raftTermLocked(indexes[4])
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)

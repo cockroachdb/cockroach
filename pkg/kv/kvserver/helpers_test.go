@@ -249,9 +249,9 @@ func (r *Replica) RaftUnlock() {
 // GetLastIndex is the same function as LastIndex but it does not require
 // that the replica lock is held.
 func (r *Replica) GetLastIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftLastIndexLocked()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftLastIndexRLocked()
 }
 
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.

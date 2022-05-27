@@ -1662,12 +1662,12 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(snapUUID uuid.UUID) {
 func (r *Replica) getSnapshotLogTruncationConstraints(
 	recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.getSnapshotLogTruncationConstraintsLocked(recipientStore)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.getSnapshotLogTruncationConstraintsRLocked(recipientStore)
 }
 
-func (r *Replica) getSnapshotLogTruncationConstraintsLocked(
+func (r *Replica) getSnapshotLogTruncationConstraintsRLocked(
 	recipientStore roachpb.StoreID,
 ) (minSnapIndex uint64) {
 	for _, item := range r.mu.snapshotLogTruncationConstraints {
