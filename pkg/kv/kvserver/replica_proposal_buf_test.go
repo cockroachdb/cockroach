@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
@@ -583,7 +584,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 	ctx := context.Background()
 
 	const maxOffset = 500 * time.Millisecond
-	mc := hlc.NewManualClock((1613588135 * time.Second).Nanoseconds())
+	mc := timeutil.NewManualTime(timeutil.Unix(1613588135, 0))
 	clock := hlc.NewClock(mc, maxOffset /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(ctx, &st.SV, time.Second)
