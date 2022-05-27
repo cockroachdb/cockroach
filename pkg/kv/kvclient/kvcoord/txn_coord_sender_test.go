@@ -2251,7 +2251,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
+	manual := hlc.NewManualClock(1)
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
