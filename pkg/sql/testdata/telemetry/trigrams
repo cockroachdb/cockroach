@@ -3,18 +3,6 @@ unimplemented.*
 ----
 
 feature-usage
-SELECT similarity('asdf', 'adfs')
-----
-error: pq: similarity(): unimplemented: this function is not yet supported
-unimplemented.#41285.similarity
-
-feature-usage
-SELECT show_trgm('asdf')
-----
-error: pq: show_trgm(): unimplemented: this function is not yet supported
-unimplemented.#41285.show_trgm
-
-feature-usage
 SELECT word_similarity('asdf', 'adfs')
 ----
 error: pq: word_similarity(): unimplemented: this function is not yet supported
