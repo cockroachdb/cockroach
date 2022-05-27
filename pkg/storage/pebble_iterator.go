@@ -142,6 +142,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	p.options = pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		UseL6Filters:              opts.useL6Filters,
+		NothingBelowL0:            opts.NothingBelowL0,
 	}
 	p.prefix = opts.Prefix
 

@@ -46,11 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -256,88 +252,19 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if debugCtx.decodeAsTableDesc != "" {
-		bytes, err := base64.StdEncoding.DecodeString(debugCtx.decodeAsTableDesc)
+	iter := db.NewEngineIterator(storage.IterOptions{
+		LowerBound:     roachpb.KeyMin,
+		UpperBound:     roachpb.KeyMax,
+		NothingBelowL0: true,
+	})
+	defer iter.Close()
+	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+	for ; valid && err == nil; valid, err = iter.NextEngineKey() {
+		key, err := iter.EngineKey()
 		if err != nil {
 			return err
 		}
-		var desc descpb.Descriptor
-		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
-			return err
-		}
-		b := descbuilder.NewBuilder(&desc)
-		if b == nil || b.DescriptorType() != catalog.Table {
-			return errors.Newf("expected a table descriptor")
-		}
-		table := b.BuildImmutable().(catalog.TableDescriptor)
-
-		fn := func(kv storage.MVCCKeyValue) (string, error) {
-			var v roachpb.Value
-			v.RawBytes = kv.Value
-			_, names, values, err := row.DecodeRowInfo(context.Background(), table, kv.Key.Key, &v, true)
-			if err != nil {
-				return "", err
-			}
-			pairs := make([]string, len(names))
-			for i := range pairs {
-				pairs[i] = fmt.Sprintf("%s=%s", names[i], values[i])
-			}
-			return strings.Join(pairs, ", "), nil
-		}
-		kvserver.DebugSprintMVCCKeyValueDecoders = append(kvserver.DebugSprintMVCCKeyValueDecoders, fn)
-	}
-	printer := printKey
-	if debugCtx.values {
-		printer = func(kv storage.MVCCKeyValue) (bool, error) {
-			kvserver.PrintMVCCKeyValue(kv)
-			return false, nil
-		}
-	}
-
-	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
-	if debugCtx.startKey.Equal(storage.NilKey) {
-		debugCtx.startKey = keyTypeOptions.minKey
-	}
-	if debugCtx.endKey.Equal(storage.NilKey) {
-		debugCtx.endKey = keyTypeOptions.maxKey
-	}
-
-	results := 0
-	iterFunc := func(kv storage.MVCCKeyValue) error {
-		if !keyTypeOptions.predicate(kv) {
-			return nil
-		}
-		done, err := printer(kv)
-		if err != nil {
-			return err
-		}
-		if done {
-			return iterutil.StopIteration()
-		}
-		results++
-		if results == debugCtx.maxResults {
-			return iterutil.StopIteration()
-		}
-		return nil
-	}
-	endKey := debugCtx.endKey.Key
-	splitScan := false
-	// If the startKey is local and the endKey is global, split into two parts
-	// to do the scan. This is because MVCCKeyAndIntentsIterKind cannot span
-	// across the two key kinds.
-	if (len(debugCtx.startKey.Key) == 0 || keys.IsLocal(debugCtx.startKey.Key)) && !(keys.IsLocal(endKey) || bytes.Equal(endKey, keys.LocalMax)) {
-		splitScan = true
-		endKey = keys.LocalMax
-	}
-	if err := db.MVCCIterate(
-		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
-		return err
-	}
-	if splitScan {
-		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
-			iterFunc); err != nil {
-			return err
-		}
+		fmt.Println(key.Key.String())
 	}
 	return nil
 }
