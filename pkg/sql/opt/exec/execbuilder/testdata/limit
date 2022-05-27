@@ -518,3 +518,50 @@ vectorized: true
 └── • virtual table
       table: pg_type@pg_type_oid_idx
       spans: [/1 - /1000]
+
+
+statement ok
+CREATE TABLE t76741 (x FLOAT NOT NULL, y INT NOT NULL, PRIMARY KEY (x, y),
+                     CONSTRAINT ck CHECK (x IN (1, 3, 5) OR x BETWEEN 7 and 10))
+
+# Regression test for #76741. This test previously caused a panic.
+query T
+EXPLAIN SELECT * FROM t76741 ORDER BY y LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ count: 5
+│
+└── • union all
+    │
+    ├── • union all
+    │   │
+    │   ├── • union all
+    │   │   │
+    │   │   ├── • scan
+    │   │   │     missing stats
+    │   │   │     table: t76741@primary
+    │   │   │     spans: [/1.0 - /1.0]
+    │   │   │     limit: 5
+    │   │   │
+    │   │   └── • scan
+    │   │         missing stats
+    │   │         table: t76741@primary
+    │   │         spans: [/3.0 - /3.0]
+    │   │         limit: 5
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: t76741@primary
+    │         spans: [/5.0 - /5.0]
+    │         limit: 5
+    │
+    └── • sort
+        │ order: +y
+        │
+        └── • scan
+              missing stats
+              table: t76741@primary
+              spans: [/7.0 - /10.0]

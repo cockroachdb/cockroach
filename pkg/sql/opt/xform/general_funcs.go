@@ -627,7 +627,7 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 	// construct an unlimited Scan and add it to the UnionAll tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
-		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
+		Columns: cons.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	})
 	newScan := c.e.f.ConstructScan(newScanPrivate)
