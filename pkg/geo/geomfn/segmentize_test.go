@@ -155,7 +155,7 @@ func TestSegmentize(t *testing.T) {
 			require.NoError(t, err)
 			expectedGeom, err := geo.ParseGeometry(test.expectedWKT)
 			require.NoError(t, err)
-			require.Equal(t, expectedGeom, modifiedGeom)
+			requireGeometryWithinEpsilon(t, expectedGeom, modifiedGeom, 1e-6)
 		})
 	}
 	// Test for segment maximum length as negative.
