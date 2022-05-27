@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -170,13 +171,13 @@ func (h *testHelper) createBackupSchedule(
 }
 
 func getScheduledBackupStatement(t *testing.T, arg *jobspb.ExecutionArguments) string {
-	var backup ScheduledBackupExecutionArgs
+	var backup backuppb.ScheduledBackupExecutionArgs
 	require.NoError(t, pbtypes.UnmarshalAny(arg.Args, &backup))
 	return backup.BackupStatement
 }
 
 func getScheduledBackupChainProtectedTimestamp(t *testing.T, arg *jobspb.ExecutionArguments) bool {
-	var backup ScheduledBackupExecutionArgs
+	var backup backuppb.ScheduledBackupExecutionArgs
 	require.NoError(t, pbtypes.UnmarshalAny(arg.Args, &backup))
 	return backup.ChainProtectedTimestampRecords
 }
@@ -781,7 +782,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 					require.False(t, full.IsPaused())
 
 					// The full should list incremental as a schedule to unpause.
-					args := &ScheduledBackupExecutionArgs{}
+					args := &backuppb.ScheduledBackupExecutionArgs{}
 					require.NoError(t, pbtypes.UnmarshalAny(full.ExecutionArgs().Args, args))
 					require.EqualValues(t, inc.ScheduleID(), args.UnpauseOnSuccess)
 				}
@@ -1118,7 +1119,7 @@ INSERT INTO t values (1), (10), (100);
 }
 
 func extractBackupNode(sj *jobs.ScheduledJob) (*tree.Backup, error) {
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling args")
 	}
@@ -1139,7 +1140,7 @@ func constructExpectedScheduledBackupNode(
 	t *testing.T, sj *jobs.ScheduledJob, fullBackupAlways bool, fullRecurrence, recurrence string,
 ) *tree.ScheduledBackup {
 	t.Helper()
-	args := &ScheduledBackupExecutionArgs{}
+	args := &backuppb.ScheduledBackupExecutionArgs{}
 	err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args)
 	require.NoError(t, err)
 

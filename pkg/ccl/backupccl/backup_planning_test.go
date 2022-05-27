@@ -11,6 +11,7 @@ package backupccl
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -28,13 +29,13 @@ func BenchmarkSpansForAllTableIndexes(b *testing.B) {
 
 	primaryIndex := getMockIndexDesc(descpb.IndexID(1))
 	secondaryIndexes := make([]descpb.IndexDescriptor, descCount)
-	revs := make([]BackupManifest_DescriptorRevision, descCount)
+	revs := make([]backuppb.BackupManifest_DescriptorRevision, descCount)
 	for i := 0; i < descCount; i++ {
 		idxDesc := getMockIndexDesc(descpb.IndexID(i + 1))
 		secondaryIndexes[i] = idxDesc
 
 		tableRev := getMockTableDesc(descpb.ID(42), idxDesc, nil, nil, nil)
-		revs[i] = BackupManifest_DescriptorRevision{
+		revs[i] = backuppb.BackupManifest_DescriptorRevision{
 			Desc: tableRev.DescriptorProto(),
 		}
 	}
