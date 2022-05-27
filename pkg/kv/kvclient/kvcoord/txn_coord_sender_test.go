@@ -216,7 +216,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 						t.Fatal(pErr)
 					}
 					// Advance clock by 1ns.
-					s.Manual.Increment(1)
+					s.Manual.Advance(1)
 					if lastActive := txn.LastActive(); heartbeatTS.Less(lastActive) {
 						heartbeatTS = lastActive
 						return nil
@@ -1299,14 +1299,14 @@ func TestTxnDurations(t *testing.T) {
 	defer cleanupFn()
 	const puts = 10
 
-	const incr int64 = 1000
+	const incr time.Duration = 1000
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
 		if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.Put(ctx, key, []byte("val")); err != nil {
 				return err
 			}
-			manual.Increment(incr)
+			manual.Advance(incr)
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -1325,7 +1325,7 @@ func TestTxnDurations(t *testing.T) {
 	}
 
 	// Metrics lose fidelity, so we can't compare incr directly.
-	if min, thresh := hist.Min(), incr-10; min < thresh {
+	if min, thresh := hist.Min(), (incr - 10).Nanoseconds(); min < thresh {
 		t.Fatalf("min %d < %d", min, thresh)
 	}
 }
@@ -1480,7 +1480,7 @@ func TestTxnCommitWait(t *testing.T) {
 
 			adv := futureOffset / 5
 			expWait -= adv
-			s.Manual.Increment(adv.Nanoseconds())
+			s.Manual.Advance(adv)
 		}
 		require.NoError(t, <-errC)
 		require.Equal(t, expMetric, metrics.CommitWaits.Count())
