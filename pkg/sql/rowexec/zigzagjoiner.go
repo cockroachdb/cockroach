@@ -843,11 +843,11 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	z.scanStats = execstats.GetScanStats(z.Ctx)
+	z.scanStats = execstats.GetScanStats(z.Ctx, z.ExecStatsTrace)
 
 	kvStats := execinfrapb.KVStats{
 		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime: optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx)),
+		ContentionTime: optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx, z.ExecStatsTrace)),
 	}
 	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
