@@ -2463,7 +2463,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 	nl.SetNodeStatus(1, livenesspb.NodeLivenessStatus_LIVE)
 	assertShouldTransferLease(false)
 	// Wait out the suspected store timeout, verify that lease transfers are back.
-	clock.Increment(timeAfterStoreSuspect.Nanoseconds() + time.Millisecond.Nanoseconds())
+	clock.Advance(timeAfterStoreSuspect + time.Millisecond)
 	assertShouldTransferLease(true)
 }
 

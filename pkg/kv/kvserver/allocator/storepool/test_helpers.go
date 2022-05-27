@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // MockNodeLiveness is a testing construct to mock what node liveness status a
@@ -74,9 +75,9 @@ func CreateTestStorePool(
 	deterministic bool,
 	nodeCount NodeCountFunc,
 	defaultNodeStatus livenesspb.NodeLivenessStatus,
-) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool, *MockNodeLiveness) {
+) (*stop.Stopper, *gossip.Gossip, *timeutil.ManualTime, *StorePool, *MockNodeLiveness) {
 	stopper := stop.NewStopper()
-	mc := hlc.NewManualClock(123)
+	mc := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())

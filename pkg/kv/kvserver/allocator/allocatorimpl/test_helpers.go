@@ -18,15 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // CreateTestAllocator creates a stopper, gossip, store pool and allocator for
 // use in tests. Stopper must be stopped by the caller.
 func CreateTestAllocator(
 	ctx context.Context, numNodes int, deterministic bool,
-) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *hlc.ManualClock) {
+) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
 	return CreateTestAllocatorWithKnobs(ctx, numNodes, deterministic, nil /* knobs */)
 }
 
@@ -35,7 +35,7 @@ func CreateTestAllocator(
 // the caller.
 func CreateTestAllocatorWithKnobs(
 	ctx context.Context, numNodes int, deterministic bool, knobs *allocator.TestingKnobs,
-) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *hlc.ManualClock) {
+) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
 	stopper, g, manual, storePool, _ := storepool.CreateTestStorePool(ctx,
 		storepool.TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
