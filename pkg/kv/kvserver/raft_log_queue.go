@@ -238,8 +238,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
-	// NB: we need an exclusive lock due to grabbing the first index.
-	r.mu.Lock()
+	r.mu.RLock()
 	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.mu.raftLogSize)
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
 	// the log) takes place whenever there are more than
@@ -260,7 +259,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	raftStatus := r.raftStatusRLocked()
 
 	const anyRecipientStore roachpb.StoreID = 0
-	pendingSnapshotIndex := r.getSnapshotLogTruncationConstraintsLocked(anyRecipientStore)
+	pendingSnapshotIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore)
 	lastIndex := r.mu.lastIndex
 	// NB: raftLogSize above adjusts for pending truncations that have already
 	// been successfully replicated via raft, but logSizeTrusted does not see if
@@ -271,8 +270,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// will become false and we will recompute the size -- so this cannot cause
 	// an indefinite delay in recomputation.
 	logSizeTrusted := r.mu.raftLogSizeTrusted
-	firstIndex, err := r.raftFirstIndexLocked()
-	r.mu.Unlock()
+	firstIndex, err := r.raftFirstIndexRLocked()
+	r.mu.RUnlock()
 	if err != nil {
 		return truncateDecision{}, errors.Wrapf(err, "error retrieving first index for r%d", rangeID)
 	}
