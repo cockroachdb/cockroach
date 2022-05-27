@@ -892,14 +892,50 @@ func backupPlanHook(
 		}
 
 		// TODO(dt): delete this in 22.2.
-		backupDetails, backupManifest, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(),
-		)
+		backupDest, err := resolveDest(ctx, p.User(), initialDetails.Destination, initialDetails.EndTime,
+			initialDetails.IncrementalFrom, p.ExecCfg())
 		if err != nil {
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.RawKmsUris, backupDetails.Destination.Subdir, initialDetails.Destination.IncrementalStorage)
+		// The backup job needs to lay a claim on the bucket it is writing to, to
+		// prevent concurrent backups from writing to the same location.
+		//
+		// We choose the nodeID planning the backup as the suffix of the lock
+		// file, so that other nodes running 22.1 binaries in this cluster will
+		// not be able to backup to the same location. Ideally, we would have used
+		// `jobID` but this can change across txn restarts, and so we could end up
+		// in a situation where the txn restarts and checkForPreviousBackup
+		// considers the LOCK file we wrote with the "old" jobID (in the previous
+		// txn attempt) as a LOCK file written by another backup. Effectively,
+		// locking ourselves out.
+		//
+		// The nodeID is static across txn restarts.
+		nodeID := jobspb.JobID(p.ExecCfg().NodeID.SQLInstanceID())
+		foundLockFile, err := checkForBackupLockFile(ctx, p.ExecCfg(), backupDest.defaultURI, nodeID, p.User())
+		if err != nil {
+			return err
+		}
+		if !foundLockFile {
+			if err := checkForPreviousBackup(ctx, p.ExecCfg(), backupDest.defaultURI, nodeID,
+				p.User()); err != nil {
+				return err
+			}
+
+			if err := writeLockOnBackupLocation(ctx, p.ExecCfg(), backupDest.defaultURI, nodeID,
+				p.User()); err != nil {
+				return err
+			}
+		}
+
+		backupDetails, backupManifest, err := getBackupDetailAndManifest(
+			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(), backupDest)
+		if err != nil {
+			return err
+		}
+
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom,
+			encryptionParams.RawKmsUris, backupDetails.Destination.Subdir, initialDetails.Destination.IncrementalStorage)
 		if err != nil {
 			return err
 		}
@@ -1193,7 +1229,7 @@ func writeBackupManifestCheckpoint(
 	// the checkpoints and pick the file whose name is lexicographically
 	// sorted to the top. This will be the last checkpoint we write, for
 	// details refer to newTimestampedCheckpointFileName.
-	filename := newTimestampedCheckpointFileName()
+	filename := newTimestampedFilename(backupManifestCheckpointName)
 
 	// HTTP storage does not support listing and so we cannot rely on the
 	// above-mentioned List method to return us the latest checkpoint file.
@@ -1644,12 +1680,19 @@ func checkForNewTables(
 	return nil
 }
 
+// getBackupDetailsAndManifest populates the backup job's `BackupDetails` and
+// `BackupManifest` with relevant metadata.
+//
+// Note, in 22.1 this method is called from either backup planning or backup job
+// execution depending on the cluster version. If it has been called during
+// backup planning, it will not be re-invoked during job execution.
 func getBackupDetailAndManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	initialDetails jobspb.BackupDetails,
 	user security.SQLUsername,
+	backupDestination backupDestination,
 ) (jobspb.BackupDetails, BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
@@ -1678,31 +1721,13 @@ func getBackupDetailAndManifest(
 		}
 	}
 
-	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
-	// backupDestination struct.
-	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-		resolveDest(ctx, user, initialDetails.Destination, endTime, initialDetails.IncrementalFrom, execCfg)
-	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
-	}
-
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
-	if err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
-	}
-	defer defaultStore.Close()
-
-	if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
-		return jobspb.BackupDetails{}, BackupManifest{}, err
-	}
-
 	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
 
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
 	prevBackups, encryptionOptions, memSize, err := fetchPreviousBackups(ctx, &mem, user,
-		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, kmsEnv)
+		makeCloudStorage, backupDestination.prevBackupURIs, *initialDetails.EncryptionOptions, kmsEnv)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}
@@ -1891,14 +1916,14 @@ func getBackupDetailAndManifest(
 	}
 
 	return jobspb.BackupDetails{
-		Destination:       jobspb.BackupDetails_Destination{Subdir: resolvedSubdir},
+		Destination:       jobspb.BackupDetails_Destination{Subdir: backupDestination.chosenSubdir},
 		StartTime:         startTime,
 		EndTime:           endTime,
-		URI:               defaultURI,
-		URIsByLocalityKV:  urisByLocalityKV,
+		URI:               backupDestination.defaultURI,
+		URIsByLocalityKV:  backupDestination.urisByLocalityKV,
 		EncryptionOptions: encryptionOptions,
 		EncryptionInfo:    encryptionInfo,
-		CollectionURI:     collectionURI,
+		CollectionURI:     backupDestination.collectionURI,
 	}, backupManifest, nil
 }
 
