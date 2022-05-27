@@ -355,7 +355,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 	// Delay for longer than the cache window.
-	s.Manual.Increment((tscache.MinRetentionWindow + time.Second).Nanoseconds())
+	s.Manual.Advance(tscache.MinRetentionWindow + time.Second)
 	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		// Attempt to get first keyB.
 		gr1, err := txn.Get(ctx, keyB)
@@ -427,7 +427,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		s.Manual.Increment(time.Second.Nanoseconds())
+		s.Manual.Advance(time.Second)
 		// Split range by keyB.
 		if err := s.DB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
@@ -915,7 +915,7 @@ func TestRetrySerializableBumpsToNow(t *testing.T) {
 	ctx := context.Background()
 
 	bumpClosedTimestamp := func(delay time.Duration) {
-		s.Manual.Increment(delay.Nanoseconds())
+		s.Manual.Advance(delay)
 		// We need to bump closed timestamp for clock increment to have effect
 		// on further kv writes. Putting anything into proposal buffer will
 		// trigger achieve this.
