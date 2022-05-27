@@ -44,6 +44,7 @@ func (n *createExtensionNode) unimplementedExtensionError(issue int) error {
 func (n *createExtensionNode) startExec(params runParams) error {
 	switch n.CreateExtension.Name {
 	case "postgis",
+		"pg_trgm",
 		"uuid-ossp":
 		telemetry.Inc(sqltelemetry.CreateExtensionCounter(n.CreateExtension.Name))
 		return nil
@@ -64,8 +65,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		return n.unimplementedExtensionError(41276)
 	case "postgres_fdw":
 		return n.unimplementedExtensionError(20249)
-	case "pg_trgm":
-		return n.unimplementedExtensionError(51137)
 	case "adminpack",
 		"amcheck",
 		"auth_delay",

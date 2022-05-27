@@ -124,6 +124,7 @@ type BinaryOpEvaluator interface {
 	EvalModFloatOp(*ModFloatOp, Datum, Datum) (Datum, error)
 	EvalModIntDecimalOp(*ModIntDecimalOp, Datum, Datum) (Datum, error)
 	EvalModIntOp(*ModIntOp, Datum, Datum) (Datum, error)
+	EvalModStringOp(*ModStringOp, Datum, Datum) (Datum, error)
 	EvalMultDecimalIntOp(*MultDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalMultDecimalIntervalOp(*MultDecimalIntervalOp, Datum, Datum) (Datum, error)
 	EvalMultDecimalOp(*MultDecimalOp, Datum, Datum) (Datum, error)
@@ -617,6 +618,11 @@ func (op *ModIntDecimalOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 // Eval is part of the BinaryEvalOp interface.
 func (op *ModIntOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalModIntOp(op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *ModStringOp) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalModStringOp(op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

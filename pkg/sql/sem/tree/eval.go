@@ -1098,6 +1098,15 @@ var BinOps = map[treebin.BinaryOperatorSymbol]binOpOverload{
 			EvalOp:     &ModIntDecimalOp{},
 			Volatility: volatility.Immutable,
 		},
+		&BinOp{
+			LeftType:   types.String,
+			RightType:  types.String,
+			ReturnType: types.Bool,
+			EvalOp:     &ModStringOp{},
+			// This operator is only stable because its result depends on the value
+			// of the pg_trgm.similarity_threshold session setting.
+			Volatility: volatility.Stable,
+		},
 	},
 
 	treebin.Concat: {
