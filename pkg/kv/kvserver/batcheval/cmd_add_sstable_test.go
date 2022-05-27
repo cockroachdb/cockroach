@@ -13,7 +13,6 @@ package batcheval_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -42,7 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEvalAddSSTable tests EvalAddSSTable directly, using only an on-disk
+// TestEvalAddSSTable tests EvalAddSSTable directly, using only an in-memory
 // Pebble engine. This allows precise manipulation of timestamps.
 func TestEvalAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -671,9 +670,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
 						batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
-						dir := t.TempDir()
-						engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
-						require.NoError(t, err)
+						engine := storage.NewDefaultInMemForTesting()
 						defer engine.Close()
 
 						// Write initial data.
@@ -758,9 +755,8 @@ func TestEvalAddSSTable(t *testing.T) {
 							require.Nil(t, result.Replicated.AddSSTable)
 						} else {
 							require.NotNil(t, result.Replicated.AddSSTable)
-							sstPath := filepath.Join(dir, "sst")
-							require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
-							require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
+							require.NoError(t, engine.WriteFile("sst", result.Replicated.AddSSTable.Data))
+							require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
 						}
 
 						// Scan resulting data from engine.
@@ -1117,9 +1113,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		Desc:            &roachpb.RangeDescriptor{},
 	}
 
-	dir := t.TempDir()
-	engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
-	require.NoError(t, err)
+	engine := storage.NewDefaultInMemForTesting()
 	defer engine.Close()
 
 	for _, kv := range []sstutil.KV{
@@ -1176,12 +1170,11 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		Stats: &enginepb.MVCCStats{},
 	}
 	var resp roachpb.AddSSTableResponse
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
+	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
 	require.NoError(t, err)
 
-	sstPath := filepath.Join(dir, "sst")
-	require.NoError(t, engine.WriteFile(sstPath, sst))
-	require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
+	require.NoError(t, engine.WriteFile("sst", sst))
+	require.NoError(t, engine.IngestExternalFiles(ctx, []string{"sst"}))
 
 	statsEvaled := statsBefore
 	statsEvaled.Add(*cArgs.Stats)
