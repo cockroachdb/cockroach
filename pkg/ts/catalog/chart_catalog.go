@@ -2757,6 +2757,11 @@ var charts = []sectionDescription{
 				Title:   "Stalls",
 				Metrics: []string{"storage.write-stalls"},
 			},
+			{
+				Title:     "Stall Duration",
+				Metrics:   []string{"storage.write-stall-nanos"},
+				AxisLabel: "Duration (nanos)",
+			},
 		},
 	},
 	{
