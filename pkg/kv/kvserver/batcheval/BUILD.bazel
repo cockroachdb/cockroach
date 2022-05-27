@@ -160,6 +160,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uint128",
         "//pkg/util/uuid",

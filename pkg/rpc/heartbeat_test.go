@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -45,8 +46,7 @@ func TestRemoteOffsetString(t *testing.T) {
 
 func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -110,8 +110,7 @@ func (mhs *ManualHeartbeatService) Ping(
 
 func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
@@ -214,8 +213,7 @@ func TestClusterIDCompare(t *testing.T) {
 		{"cluster ID mismatch", uuid1, uuid2, true},
 	}
 
-	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -258,8 +256,7 @@ func TestNodeIDCompare(t *testing.T) {
 		{"node ID mismatch", 1, 2, true},
 	}
 
-	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -293,8 +290,7 @@ func TestNodeIDCompare(t *testing.T) {
 // active where the system tenant may not.
 func TestTenantVersionCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,

@@ -37,11 +37,11 @@ var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
 }
 
 func forEachCacheImpl(
-	t *testing.T, fn func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock),
+	t *testing.T, fn func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime),
 ) {
 	for _, constr := range cacheImplConstrs {
 		const baseTS = 100
-		manual := hlc.NewManualClock(baseTS)
+		manual := timeutil.NewManualTime(timeutil.Unix(0, baseTS))
 		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 		tc := constr(clock)
@@ -55,25 +55,25 @@ func forEachCacheImpl(
 func TestTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
-		baseTS := manual.UnixNano()
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime) {
+		baseTS := manual.Now()
 
 		// First simulate a read of just "a" at time 50.
 		tc.Add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, noTxnID)
 		// Verify GetMax returns the lowWater mark.
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), nil); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("notincache"), nil); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"notincache\"; txnID=%s", rTxnID)
 		}
 
 		// Advance the clock and verify same low water mark.
-		manual.Increment(100)
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		manual.Advance(100)
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), nil); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("notincache"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("notincache"), nil); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"notincache\"; txnID=%s", rTxnID)
 		}
 
@@ -88,7 +88,7 @@ func TestTimestampCache(t *testing.T) {
 		if rTS, rTxnID := tc.GetMax(roachpb.Key("bb"), nil); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bb\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), nil); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"c\"; txnID=%s", rTxnID)
 		}
 		if rTS, rTxnID := tc.GetMax(roachpb.Key("b"), roachpb.Key("c")); rTS != ts || rTxnID != noTxnID {
@@ -97,7 +97,7 @@ func TestTimestampCache(t *testing.T) {
 		if rTS, rTxnID := tc.GetMax(roachpb.Key("bb"), roachpb.Key("bz")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bb\"-\"bz\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), roachpb.Key("b")); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), roachpb.Key("b")); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"-\"b\"; txnID=%s", rTxnID)
 		}
 		if rTS, rTxnID := tc.GetMax(roachpb.Key("a"), roachpb.Key("bb")); rTS != ts || rTxnID != noTxnID {
@@ -112,7 +112,7 @@ func TestTimestampCache(t *testing.T) {
 		if rTS, rTxnID := tc.GetMax(roachpb.Key("bz"), roachpb.Key("d")); rTS != ts || rTxnID != noTxnID {
 			t.Errorf("expected current time for key \"bz\"-\"d\"; txnID=%s", rTxnID)
 		}
-		if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), roachpb.Key("d")); rTS.WallTime != baseTS || rTxnID != noTxnID {
+		if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), roachpb.Key("d")); !baseTS.Equal(rTS.GoTime()) || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"c\"-\"d\"; txnID=%s", rTxnID)
 		}
 	})
@@ -292,7 +292,7 @@ var layeredIntervalTestCase5 = layeredIntervalTestCase{
 func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime) {
 		// Run each test case in several configurations.
 		for _, testCase := range []layeredIntervalTestCase{
 			layeredIntervalTestCase1,
@@ -338,7 +338,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 									txns[i].ts = now
 								}
 							} else {
-								manual.Increment(1)
+								manual.Advance(1)
 								for i := range txns {
 									txns[i].ts = clock.Now()
 								}
@@ -365,13 +365,13 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 func TestTimestampCacheClear(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime) {
 		key := roachpb.Key("a")
 
 		ts := clock.Now()
 		tc.Add(key, nil, ts, noTxnID)
 
-		manual.Increment(5000000)
+		manual.Advance(5000000)
 
 		expTS := clock.Now()
 		// Clear the cache, which will reset the low water mark to
@@ -393,7 +393,7 @@ func TestTimestampCacheClear(t *testing.T) {
 func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime) {
 		txn1 := uuid.MakeV4()
 		txn2 := uuid.MakeV4()
 
@@ -430,7 +430,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 func TestTimestampCacheLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime) {
 		keyStart := roachpb.Key(make([]byte, 5*maximumSklPageSize))
 		keyEnd := keyStart.Next()
 		ts1 := clock.Now()
@@ -651,8 +651,7 @@ func identicalAndRatcheted(
 }
 
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	tc := New(clock)
 
 	for i := 0; i < b.N; i++ {
