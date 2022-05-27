@@ -170,8 +170,7 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	}
 
 	lsm.SetOutput(writer)
-	lsm.Run(lsm, []string{manifestPath})
-	return nil
+	return lsm.RunE(lsm, []string{manifestPath})
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
