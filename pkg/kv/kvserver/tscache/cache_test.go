@@ -42,7 +42,7 @@ func forEachCacheImpl(
 	for _, constr := range cacheImplConstrs {
 		const baseTS = 100
 		manual := hlc.NewManualClock(baseTS)
-		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 		tc := constr(clock)
 		tcName := reflect.TypeOf(tc).Elem().Name()
@@ -457,7 +457,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 	// simulating real conditions while the latter is good for testing timestamp
 	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
-		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 		caches := make([]Cache, len(cacheImplConstrs))
 		start := clock.Now()
 		for i, constr := range cacheImplConstrs {
@@ -652,7 +652,7 @@ func identicalAndRatcheted(
 
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	tc := New(clock)
 
 	for i := 0; i < b.N; i++ {

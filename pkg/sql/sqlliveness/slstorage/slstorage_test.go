@@ -68,9 +68,7 @@ func TestStorage(t *testing.T) {
 		tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 		timeSource := timeutil.NewManualTime(t0)
-		clock := hlc.NewClock(func() int64 {
-			return timeSource.Now().UnixNano()
-		}, base.DefaultMaxClockOffset)
+		clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 		settings := cluster.MakeTestingClusterSettings()
 		stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 		var ambientCtx log.AmbientContext
@@ -325,9 +323,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(func() int64 {
-		return timeSource.Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
+	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper(stop.WithTracer(s.TracerI().(*tracing.Tracer)))
 	defer stopper.Stop(ctx)
@@ -490,9 +486,7 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	tableID := getTableID(t, tDB, dbName, "sqlliveness")
 
 	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(func() int64 {
-		return timeSource.Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
+	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

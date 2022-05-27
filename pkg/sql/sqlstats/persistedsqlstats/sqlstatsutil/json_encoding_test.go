@@ -142,6 +142,9 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 
 		err = DecodeStmtStatsMetadataJSON(actualMetadataJSON, &actualJSONUnmarshalled)
 		require.NoError(t, err)
+		// Strip the monononic part of timestamps, as it doesn't roundtrip. UTC()
+		// has that stripping side-effect.
+		input.Stats.LastExecTimestamp = input.Stats.LastExecTimestamp.UTC()
 
 		err = DecodeStmtStatsStatisticsJSON(actualStatisticsJSON, &actualJSONUnmarshalled.Stats)
 		require.NoError(t, err)
@@ -259,6 +262,9 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		actualStatisticsJSON, _, _ = actualStatisticsJSON.RemovePath([]string{"statistics", "numRows"})
 		// Initialize the field again to remove the existing value.
 		expectedStatistics.Stats.NumRows = roachpb.NumericStat{}
+		// Strip the monononic part of timestamps, as it doesn't roundtrip. UTC()
+		// has that stripping side-effect.
+		expectedStatistics.Stats.LastExecTimestamp = expectedStatistics.Stats.LastExecTimestamp.UTC()
 
 		err = DecodeStmtStatsStatisticsJSON(actualStatisticsJSON, &actualJSONUnmarshalled.Stats)
 		require.NoError(t, err)

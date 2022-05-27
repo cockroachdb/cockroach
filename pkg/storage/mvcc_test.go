@@ -2448,7 +2448,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(hlc.NewManualClock(123), time.Nanosecond /* maxOffset */)
 
 			txn := *txn1
 			txn.Sequence++
