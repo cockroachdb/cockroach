@@ -7226,10 +7226,7 @@ func TestEntries(t *testing.T) {
 				if _, pErr := tc.SendWrapped(args); pErr != nil {
 					t.Fatal(pErr)
 				}
-				idx, err := repl.GetLastIndex()
-				if err != nil {
-					t.Fatal(err)
-				}
+				idx := repl.GetLastIndex()
 				newIndexes = append(newIndexes, idx)
 			}
 			return newIndexes
@@ -7385,10 +7382,7 @@ func TestTerm(t *testing.T) {
 			if _, pErr := tc.SendWrapped(args); pErr != nil {
 				t.Fatal(pErr)
 			}
-			idx, err := tc.repl.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			idx := tc.repl.GetLastIndex()
 			indexes = append(indexes, idx)
 		}
 
@@ -7402,10 +7396,7 @@ func TestTerm(t *testing.T) {
 		repl.mu.Lock()
 		defer repl.mu.Unlock()
 
-		firstIndex, err := repl.raftFirstIndexRLocked()
-		if err != nil {
-			t.Fatal(err)
-		}
+		firstIndex := repl.raftFirstIndexRLocked()
 		if firstIndex != indexes[5] {
 			t.Fatalf("expected firstIndex %d to be %d", firstIndex, indexes[4])
 		}
@@ -7432,10 +7423,7 @@ func TestTerm(t *testing.T) {
 			t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
 		}
 
-		lastIndex, err := repl.raftLastIndexRLocked()
-		if err != nil {
-			t.Fatal(err)
-		}
+		lastIndex := repl.raftLastIndexRLocked()
 
 		// Last index should return correctly.
 		if _, err := tc.repl.raftTermLocked(lastIndex); err != nil {
@@ -9968,8 +9956,8 @@ func (q *testQuiescer) raftBasicStatusRLocked() raft.BasicStatus {
 	return q.status.BasicStatus
 }
 
-func (q *testQuiescer) raftLastIndexRLocked() (uint64, error) {
-	return q.lastIndex, nil
+func (q *testQuiescer) raftLastIndexRLocked() uint64 {
+	return q.lastIndex
 }
 
 func (q *testQuiescer) hasRaftReadyRLocked() bool {

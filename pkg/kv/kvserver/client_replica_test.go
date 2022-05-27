@@ -2680,10 +2680,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// Truncate the log at index+1 (log entries < N are removed, so this
 		// includes the increment). This necessitates a snapshot when the
 		// partitioned replica rejoins the rest of the range.
-		index, err := repl0.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
+		index := repl0.GetLastIndex()
 		truncArgs := truncateLogArgs(index+1, repl0.GetRangeID())
 		truncArgs.Key = keyA
 		if _, err := kv.SendWrapped(ctx, store0.TestSender(), truncArgs); err != nil {

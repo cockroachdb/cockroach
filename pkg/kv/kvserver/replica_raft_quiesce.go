@@ -193,7 +193,7 @@ type quiescer interface {
 	descRLocked() *roachpb.RangeDescriptor
 	raftStatusRLocked() *raft.Status
 	raftBasicStatusRLocked() raft.BasicStatus
-	raftLastIndexRLocked() (uint64, error)
+	raftLastIndexRLocked() uint64
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
@@ -345,13 +345,7 @@ func shouldReplicaQuiesce(
 		}
 		return nil, nil, false
 	}
-	lastIndex, err := q.raftLastIndexRLocked()
-	if err != nil {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: %v", err)
-		}
-		return nil, nil, false
-	}
+	lastIndex := q.raftLastIndexRLocked()
 	if status.Commit != lastIndex {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",

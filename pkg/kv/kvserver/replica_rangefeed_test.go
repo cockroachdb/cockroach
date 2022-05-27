@@ -846,10 +846,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		index, err := repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
+		index := repl.GetLastIndex()
 
 		// Truncate the log at index+1 (log entries < N are removed, so this
 		// includes the put). This necessitates a snapshot when the partitioned

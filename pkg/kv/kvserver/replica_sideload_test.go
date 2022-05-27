@@ -806,10 +806,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 
 		var indexes []uint64
 		addLastIndex := func() {
-			lastIndex, err := tc.repl.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			lastIndex := tc.repl.GetLastIndex()
 			indexes = append(indexes, lastIndex)
 		}
 		for i := 0; i < count; i++ {
