@@ -158,7 +158,7 @@ func spansForAllTableIndexes(
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	insertSpan := func(indexSpan roachpb.Span) {
-		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), false); err != nil {
+		if err := sstIntervalTree.Insert(intervalSpan(indexSpan), true); err != nil {
 			panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 		}
 	}
@@ -181,6 +181,7 @@ func spansForAllTableIndexes(
 		}
 	}
 
+	sstIntervalTree.AdjustRanges()
 	spans := make([]roachpb.Span, 0, sstIntervalTree.Len())
 	_ = sstIntervalTree.Do(func(r interval.Interface) bool {
 		spans = append(spans, roachpb.Span{
