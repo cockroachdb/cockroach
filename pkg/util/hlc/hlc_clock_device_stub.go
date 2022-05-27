@@ -29,7 +29,7 @@ func (p ClockSource) UnixNano() int64 {
 	panic(errors.New("clock device not supported on this platform"))
 }
 
-// MakeClockSource us not used on platforms other than Linux
+// MakeClockSource is not used on platforms other than Linux
 func MakeClockSource(_ context.Context, _ string) (ClockSource, error) {
 	return ClockSource{}, errors.New("clock device not supported on this platform")
 }
