@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
@@ -5236,7 +5237,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	localityFn := func(nodeID roachpb.NodeID) string {
 		return localities[nodeID]
 	}
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	// Set up four different load distributions. Record a bunch of requests to
@@ -5256,7 +5257,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		imbalanced3.RecordCount(1, 3)
 	}
 
-	manual.Increment(int64(MinLeaseTransferStatsDuration))
+	manual.Advance(MinLeaseTransferStatsDuration)
 
 	noLatency := map[string]time.Duration{}
 	highLatency := map[string]time.Duration{

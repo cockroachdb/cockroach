@@ -35,6 +35,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

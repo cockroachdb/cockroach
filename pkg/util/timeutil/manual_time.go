@@ -13,6 +13,7 @@ package timeutil
 import (
 	"container/heap"
 	"container/list"
+	"fmt"
 	"sort"
 	"time"
 
@@ -89,6 +90,20 @@ func (m *ManualTime) Advance(duration time.Duration) {
 func (m *ManualTime) AdvanceTo(now time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.advanceToLocked(now)
+}
+
+// MustAdvanceTo is like AdvanceTo, except it panics if now is below m's current time.
+func (m *ManualTime) MustAdvanceTo(now time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if now.Before(m.mu.now) {
+		panic(fmt.Sprintf("attempting to move ManualTime backwards from %s to %s", m.mu.now, now))
+	}
+	m.advanceToLocked(now)
+}
+
+func (m *ManualTime) advanceToLocked(now time.Time) {
 	if !now.After(m.mu.now) {
 		return
 	}

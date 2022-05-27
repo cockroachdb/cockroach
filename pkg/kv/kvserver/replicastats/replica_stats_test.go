@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,7 @@ func TestReplicaStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	gceLocalities := map[roachpb.NodeID]string{
@@ -178,7 +179,7 @@ func TestReplicaStats(t *testing.T) {
 		for _, req := range tc.reqs {
 			rs.RecordCount(1, req)
 		}
-		manual.Increment(int64(time.Second))
+		manual.Advance(time.Second)
 		if actual, _ := rs.PerLocalityDecayingRate(); !floatMapsEqual(tc.expected, actual) {
 			t.Errorf("%d: incorrect per-locality QPS averages: %s", i, pretty.Diff(tc.expected, actual))
 		}
@@ -190,7 +191,7 @@ func TestReplicaStats(t *testing.T) {
 			t.Errorf("%d: avgQPS() got %f, want %f", i, actual, expectedAvgQPS)
 		}
 		// Verify that QPS numbers get cut in half after another second.
-		manual.Increment(int64(time.Second))
+		manual.Advance(time.Second)
 		for k, v := range tc.expected {
 			tc.expected[k] = v / 2
 		}
@@ -212,7 +213,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	awsLocalities := map[roachpb.NodeID]string{
@@ -233,7 +234,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 		if dur != 0 {
 			t.Errorf("expected duration = 0, got %v", dur)
 		}
-		manual.Increment(1)
+		manual.Advance(1)
 		if _, dur := rs.PerLocalityDecayingRate(); dur != 1 {
 			t.Errorf("expected duration = 1, got %v", dur)
 		}
@@ -259,7 +260,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 
 		var totalDuration time.Duration
 		for i := 0; i < len(rs.Mu.records)-1; i++ {
-			manual.Increment(int64(replStatsRotateInterval))
+			manual.Advance(replStatsRotateInterval)
 			totalDuration = time.Duration(float64(replStatsRotateInterval+totalDuration) * decayFactor)
 			expected := make(PerLocalityCounts)
 			for k, v := range counts {
@@ -277,7 +278,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 			}
 		}
 
-		manual.Increment(int64(replStatsRotateInterval))
+		manual.Advance(replStatsRotateInterval)
 		expected := make(PerLocalityCounts)
 		if actual, _ := rs.PerLocalityDecayingRate(); !reflect.DeepEqual(expected, actual) {
 			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
@@ -289,7 +290,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 		for _, req := range []roachpb.NodeID{1, 1, 2, 2, 3} {
 			rs.RecordCount(1, req)
 		}
-		manual.Increment(int64(replStatsRotateInterval))
+		manual.Advance(replStatsRotateInterval)
 		for _, req := range []roachpb.NodeID{2, 2, 3, 3, 3} {
 			rs.RecordCount(1, req)
 		}
@@ -314,7 +315,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	awsLocalities := map[roachpb.NodeID]string{
 		1: "region=us-east-1,zone=us-east-1a",
@@ -339,7 +340,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	}
 
 	increment := replStatsRotateInterval / 2
-	manual.Increment(int64(increment))
+	manual.Advance(increment)
 	actual1, dur := rs.PerLocalityDecayingRate()
 	if dur != increment {
 		t.Errorf("expected duration = %v; got %v", increment, dur)
@@ -352,7 +353,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	}
 
 	// Verify that all values decrease as time advances if no requests come in.
-	manual.Increment(1)
+	manual.Advance(1)
 	actual2, _ := rs.PerLocalityDecayingRate()
 	if len(actual1) != len(actual2) {
 		t.Fatalf("unexpected different results sizes (expected %d, got %d)", len(actual1), len(actual2))
@@ -364,7 +365,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	}
 
 	// Ditto for passing a window boundary.
-	manual.Increment(int64(increment))
+	manual.Advance(increment)
 	actual3, _ := rs.PerLocalityDecayingRate()
 	if len(actual2) != len(actual3) {
 		t.Fatalf("unexpected different results sizes (expected %d, got %d)", len(actual2), len(actual3))
@@ -377,7 +378,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 }
 
 func genTestingReplicaStats(windowedMultipliers []int, n, offset int) *ReplicaStats {
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	awsLocalities := map[roachpb.NodeID]string{
 		1: "region=us-east-1,zone=us-east-1a",
@@ -389,7 +390,7 @@ func genTestingReplicaStats(windowedMultipliers []int, n, offset int) *ReplicaSt
 	})
 
 	for i := 0; i < offset; i++ {
-		manual.Increment(int64(replStatsRotateInterval))
+		manual.Advance(replStatsRotateInterval)
 	}
 
 	// Here we generate recorded counts against the three localities. For
@@ -402,7 +403,7 @@ func genTestingReplicaStats(windowedMultipliers []int, n, offset int) *ReplicaSt
 			rs.RecordCount(float64(i*3*multiplier), 3)
 		}
 		// rotate the window
-		manual.Increment(int64(replStatsRotateInterval))
+		manual.Advance(replStatsRotateInterval)
 	}
 	return rs
 }

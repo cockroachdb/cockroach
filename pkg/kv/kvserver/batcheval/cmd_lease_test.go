@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,8 +127,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	}
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
 			StoreID: voterStoreID,
@@ -187,7 +187,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			}
 			desc := roachpb.RangeDescriptor{}
 			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-			manual := hlc.NewManualClock(123)
+			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 			clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 			prevLease := roachpb.Lease{
@@ -229,7 +229,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				},
 			}
 
-			manual.Increment(1000)
+			manual.Advance(1000)
 			beforeEval := clock.NowAsClockTimestamp()
 
 			res, err := TransferLease(ctx, batch, cArgs, nil)
