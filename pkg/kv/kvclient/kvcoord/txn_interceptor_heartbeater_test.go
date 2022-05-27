@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -32,11 +33,10 @@ func makeMockTxnHeartbeater(
 	txn *roachpb.Transaction,
 ) (th txnHeartbeater, mockSender, mockGatekeeper *mockLockedSender) {
 	mockSender, mockGatekeeper = &mockLockedSender{}, &mockLockedSender{}
-	manual := hlc.NewManualClock(123)
 	th.init(
 		log.MakeTestingAmbientCtxWithNewTracer(),
 		stop.NewStopper(),
-		hlc.NewClock(manual, time.Nanosecond),
+		hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond),
 		new(TxnMetrics),
 		1*time.Millisecond,
 		mockGatekeeper,

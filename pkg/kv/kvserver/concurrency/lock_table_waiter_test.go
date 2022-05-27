@@ -104,13 +104,13 @@ func setupLockTableWaiterTest() (
 	*lockTableWaiterImpl,
 	*mockIntentResolver,
 	*mockLockTableGuard,
-	*hlc.ManualClock,
+	*timeutil.ManualTime,
 ) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
 	LockTableLivenessPushDelay.Override(context.Background(), &st.SV, 0)
 	LockTableDeadlockDetectionPushDelay.Override(context.Background(), &st.SV, 0)
-	manual := hlc.NewManualClock(lockTableWaiterTestClock.WallTime)
+	manual := timeutil.NewManualTime(lockTableWaiterTestClock.GoTime())
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),
 	}
@@ -670,7 +670,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				// push is initiated, install a hook to manipulate the clock.
 				if timeoutBeforePush {
 					w.onPushTimer = func() {
-						manual.Increment(req.LockTimeout.Nanoseconds())
+						manual.Advance(req.LockTimeout)
 					}
 				}
 

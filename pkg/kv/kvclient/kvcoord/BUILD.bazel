@@ -187,6 +187,7 @@ go_test(
         "//pkg/util/shuffle",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1133,8 +1134,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				batch := db.NewBatch()
 				defer batch.Close()
 
-				manual := hlc.NewManualClock(123)
-				clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 				desc := roachpb.RangeDescriptor{
 					RangeID:  99,
 					StartKey: roachpb.RKey("a"),

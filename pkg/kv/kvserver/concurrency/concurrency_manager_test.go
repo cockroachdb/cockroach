@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -524,17 +525,16 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var secs int
 				d.ScanArgs(t, "ts", &secs)
 
-				nanos := int64(secs) * time.Second.Nanoseconds()
-				if nanos < c.manual.UnixNano() {
+				if int64(secs) < c.manual.Now().Unix() {
 					d.Fatalf(t, "manual clock must advance")
 				}
-				c.manual.Set(nanos)
+				c.manual.MustAdvanceTo(timeutil.Unix(int64(secs), 0))
 				return ""
 
 			case "debug-advance-clock":
 				var secs int
 				d.ScanArgs(t, "ts", &secs)
-				c.manual.Increment(int64(secs) * time.Second.Nanoseconds())
+				c.manual.Advance(time.Duration(secs) * time.Second)
 				return ""
 
 			case "debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache":
@@ -596,7 +596,7 @@ type cluster struct {
 	nodeDesc  *roachpb.NodeDescriptor
 	rangeDesc *roachpb.RangeDescriptor
 	st        *clustersettings.Settings
-	manual    *hlc.ManualClock
+	manual    *timeutil.ManualTime
 	clock     *hlc.Clock
 	m         concurrency.Manager
 
@@ -627,7 +627,7 @@ type txnPush struct {
 }
 
 func newCluster() *cluster {
-	manual := hlc.NewManualClock(123 * time.Second.Nanoseconds())
+	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},

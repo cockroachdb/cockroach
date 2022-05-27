@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -180,8 +181,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			gc.MaxIntentKeyBytesPerCleanupBatch.Override(ctx, &st.SV, cfg.maxEncounteredIntentKeyBytes)
 			QueryResolvedTimestampIntentCleanupAge.Override(ctx, &st.SV, cfg.intentCleanupAge)
 
-			manual := hlc.NewManualClock(10)
-			clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 10)), time.Nanosecond /* maxOffset */)
 
 			evalCtx := &MockEvalCtx{
 				ClusterSettings: st,
@@ -231,8 +231,7 @@ func TestQueryResolvedTimestampErrors(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 
-	manual := hlc.NewManualClock(10)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 10)), time.Nanosecond /* maxOffset */)
 
 	evalCtx := &MockEvalCtx{
 		ClusterSettings: st,

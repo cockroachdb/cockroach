@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,8 +41,7 @@ func TestAcquireAndRelease(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	lm := leasemanager.New(db, clock, leasemanager.Options{ClientID: clientID1})
 
 	l, err := lm.AcquireLease(ctx, leaseKey)
@@ -71,8 +71,7 @@ func TestReacquireLease(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	lm := leasemanager.New(db, clock, leasemanager.Options{ClientID: clientID1})
 
 	if _, err := lm.AcquireLease(ctx, leaseKey); err != nil {
@@ -98,7 +97,7 @@ func TestExtendLease(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	lm := leasemanager.New(db, clock, leasemanager.Options{ClientID: clientID1})
 
@@ -107,7 +106,7 @@ func TestExtendLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manual.Increment(int64(time.Second))
+	manual.Advance(time.Second)
 	timeRemainingBefore := lm.TimeRemaining(l)
 	if err := lm.ExtendLease(ctx, l); err != nil {
 		t.Fatal(err)
@@ -118,7 +117,7 @@ func TestExtendLease(t *testing.T) {
 			timeRemainingAfter, timeRemainingBefore)
 	}
 
-	manual.Increment(int64(leasemanager.DefaultLeaseDuration) + 1)
+	manual.Advance(leasemanager.DefaultLeaseDuration + 1)
 	if tr := lm.TimeRemaining(l); tr >= 0 {
 		t.Errorf("expected negative time remaining on lease, got %s", tr)
 	}
@@ -138,9 +137,9 @@ func TestLeasesMultipleClients(t *testing.T) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	manual1 := hlc.NewManualClock(123)
+	manual1 := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock1 := hlc.NewClock(manual1, time.Nanosecond /* maxOffset */)
-	manual2 := hlc.NewManualClock(123)
+	manual2 := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock2 := hlc.NewClock(manual2, time.Nanosecond /* maxOffset */)
 	lm1 := leasemanager.New(db, clock1, leasemanager.Options{ClientID: clientID1})
 	lm2 := leasemanager.New(db, clock2, leasemanager.Options{ClientID: clientID2})
@@ -158,7 +157,7 @@ func TestLeasesMultipleClients(t *testing.T) {
 	}
 
 	// Ensure a lease can be "stolen" after it's expired.
-	manual2.Increment(int64(leasemanager.DefaultLeaseDuration) + 1)
+	manual2.Advance(leasemanager.DefaultLeaseDuration + 1)
 	l2, err := lm2.AcquireLease(ctx, leaseKey)
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +165,7 @@ func TestLeasesMultipleClients(t *testing.T) {
 
 	// lm1's clock indicates that its lease should still be valid, but it doesn't
 	// own it anymore.
-	manual1.Increment(int64(leasemanager.DefaultLeaseDuration) / 2)
+	manual1.Advance(leasemanager.DefaultLeaseDuration / 2)
 	if err := lm1.ExtendLease(ctx, l1); !testutils.IsError(err, "out of sync with DB state") {
 		t.Fatalf("didn't get expected error trying to extend expired lease: %v", err)
 	}
