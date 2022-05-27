@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -213,9 +214,9 @@ func TestStoresGetStore(t *testing.T) {
 var storeIDAlloc roachpb.StoreID
 
 // createStores creates a slice of count stores.
-func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
+func createStores(count int) (*timeutil.ManualTime, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	ls := newStores(log.MakeTestingAmbientCtxWithNewTracer(), cfg.Clock)
 
@@ -238,7 +239,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 func TestStoresGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	manual, stores, ls, stopper := createStores(2, t)
+	manual, stores, ls, stopper := createStores(2)
 	defer stopper.Stop(context.Background())
 	ls.AddStore(stores[0])
 
@@ -252,14 +253,14 @@ func TestStoresGossipStorage(t *testing.T) {
 	}
 
 	// Add a fake address and write.
-	manual.Increment(1)
+	manual.Advance(1)
 	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8001"))
 	if err := ls.WriteBootstrapInfo(&bi); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify on read.
-	manual.Increment(1)
+	manual.Advance(1)
 	var newBI gossip.BootstrapInfo
 	if err := ls.ReadBootstrapInfo(&newBI); err != nil {
 		t.Fatal(err)
@@ -288,7 +289,7 @@ func TestStoresGossipStorage(t *testing.T) {
 func TestStoresGossipStorageReadLatest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	manual, stores, ls, stopper := createStores(2, t)
+	manual, stores, ls, stopper := createStores(2)
 	defer stopper.Stop(context.Background())
 	ls.AddStore(stores[0])
 
@@ -304,7 +305,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	ls.AddStore(stores[1])
 
 	// Increment clock, add another address and write.
-	manual.Increment(1)
+	manual.Advance(1)
 	bi.Addresses = append(bi.Addresses, util.MakeUnresolvedAddr("tcp", "127.0.0.1:8002"))
 	if err := ls.WriteBootstrapInfo(&bi); err != nil {
 		t.Fatal(err)
@@ -312,7 +313,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 
 	// Create a new stores object to freshly read. Should get latest
 	// version from store 1.
-	manual.Increment(1)
+	manual.Advance(1)
 	ls2 := newStores(log.MakeTestingAmbientCtxWithNewTracer(), ls.clock)
 	ls2.AddStore(stores[0])
 	ls2.AddStore(stores[1])
@@ -342,7 +343,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 func TestClusterVersionWriteSynthesize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	_, stores, _, stopper := createStores(3, t)
+	_, stores, _, stopper := createStores(3)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
