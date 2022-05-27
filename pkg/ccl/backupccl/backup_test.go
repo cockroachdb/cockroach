@@ -5947,7 +5947,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 		// Kickoff an incremental backup, but pause it just after it writes its
 		// protected timestamps.
-		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow'`)
+		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
 
 		var jobID int
 		runner.QueryRow(t,
@@ -9356,7 +9356,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		return true, nil
 	})
 
-	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before_flow'`)
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
 	if _, err := conn.Exec(`BACKUP DATABASE test INTO $1`, localFoo); !testutils.IsError(err, "pause") {
 		t.Fatal(err)
 	}
@@ -9802,7 +9802,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 	numCheckpoints := 5
 
 	for i := 0; i < numCheckpoints; i++ {
-		checkpoints = append(checkpoints, newTimestampedCheckpointFileName())
+		checkpoints = append(checkpoints, newTimestampedFilename(backupManifestCheckpointName))
 		// Occasionally, we call newTimestampedCheckpointFileName() in succession
 		// too fast and the timestamp is the same. So wait for a moment to
 		// avoid that.

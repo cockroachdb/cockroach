@@ -19,6 +19,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -70,6 +72,9 @@ const (
 	// backupEncryptionInfoFile is the file name used to store the serialized
 	// EncryptionInfo proto while the backup is in progress.
 	backupEncryptionInfoFile = "ENCRYPTION-INFO"
+	// backupLockFile is the prefix of the file name used by the backup job to
+	// lock the bucket from running concurrent backups to the same destination.
+	backupLockFilePrefix = "BACKUP-LOCK-"
 )
 
 const (
@@ -1207,15 +1212,74 @@ func RedactURIForErrorMessage(uri string) string {
 	return redactedURI
 }
 
-// checkForPreviousBackup ensures that the target location does not already
-// contain a BACKUP or checkpoint, locking out accidental concurrent operations
-// on that location. Note that the checkpoint file should be written as soon as
-// the job actually starts.
-func checkForPreviousBackup(
-	ctx context.Context, exportStore cloud.ExternalStorage, defaultURI string,
+// writeLockOnBackupLocation is responsible for writing a versioned
+// `BACKUP-LOCK` file that will prevent concurrent backups from writing to the
+// same location.
+func writeLockOnBackupLocation(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user security.SQLUsername,
 ) error {
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	// The lock file name consists of three parts
+	// `BACKUP-LOCK-<jobID>-<currentTimestamp>`.
+	//
+	// The jobID is used in `checkForPreviousBackups` to ensure that we do not
+	// read our own lock file on job resumption.
+	//
+	// The currentTimestamp is used to version the lock file. Since backup
+	// provides write-once semantics we do not want to overwrite the same file on
+	// job resumption, and so we suffix it with monotonically increasing wall
+	// time.
+	lockFileName := fmt.Sprintf("%s%s", backupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
+	versionedLockFileName := newTimestampedFilename(lockFileName)
+	return cloud.WriteFile(ctx, defaultStore, versionedLockFileName, bytes.NewReader([]byte("lock")))
+}
+
+// checkForPreviousBackup ensures that the target location does not already
+// contain a previous or concurrently running backup. It does this by checking
+// for the existence of one of:
+//
+// 1) BACKUP_MANIFEST: Written on completion of a backup.
+//
+// 2) BACKUP-LOCK: Written by the coordinator node to lay claim on a backup
+// location. This file is suffixed with the ID of the backup job to prevent a
+// node from reading its own lock file on job resumption.
+//
+// 3) BACKUP-CHECKPOINT: Prior to 22.1.1, nodes would use the BACKUP-CHECKPOINT
+// to lay claim on a backup location. To account for a mixed-version cluster
+// where an older coordinator node may be running a concurrent backup to the
+// same location, we must continue to check for a BACKUP-CHECKPOINT file.
+//
+// NB: The node will continue to write a BACKUP-CHECKPOINT file later in its
+// execution, but we do not have to worry about reading our own
+// BACKUP-CHECKPOINT file (and locking ourselves out) since
+// `checkForPreviousBackup` is invoked as the first step on job resumption, and
+// is not called again.
+func checkForPreviousBackup(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	defaultURI string,
+	jobID jobspb.JobID,
+	user security.SQLUsername,
+) error {
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultURI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
 	redactedURI := RedactURIForErrorMessage(defaultURI)
-	r, err := exportStore.ReadFile(ctx, backupManifestName)
+
+	// Check for the presence of a BACKUP_MANIFEST.
+	r, err := defaultStore.ReadFile(ctx, backupManifestName)
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
@@ -1229,7 +1293,31 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	r, err = readLatestCheckpointFile(ctx, exportStore, backupManifestCheckpointName)
+	// Check for the presence of a BACKUP-LOCK file with a job ID different from
+	// that of our job.
+	if err := defaultStore.List(ctx, "", "", func(s string) error {
+		s = strings.TrimPrefix(s, "/")
+		if strings.HasPrefix(s, backupLockFilePrefix) {
+			jobIDPrefix := strings.TrimPrefix(s, backupLockFilePrefix)
+			if !strings.HasPrefix(jobIDPrefix, strconv.FormatInt(int64(jobID), 10)) {
+				// BACKUP-LOCK files have a <version-number> suffix.
+				splitJobID := strings.Split(jobIDPrefix, "-")
+				if len(splitJobID) != 2 {
+					return errors.AssertionFailedf("expected `BACKUP-LOCK-` to be suffixed by <jobID>-<version-num>")
+				}
+				return pgerror.Newf(pgcode.FileAlreadyExists,
+					"%s already contains a `BACKUP-LOCK` file written by job %s",
+					redactedURI, splitJobID[0])
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Check for a BACKUP-CHECKPOINT that might have been written by a node
+	// running a pre-22.1.1 binary.
+	r, err = readLatestCheckpointFile(ctx, defaultStore, backupManifestCheckpointName)
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
@@ -1329,17 +1417,15 @@ func readLatestCheckpointFile(
 		return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)
 	}
 	return r, nil
-
 }
 
-// newTimestampedCheckpointFileName returns a string of a new checkpoint filename
-// with a suffixed version. It returns it in the format of BACKUP-CHECKPOINT-<version>
-// where version is a hex encoded one's complement of the timestamp.
-// This means that as long as the supplied timestamp is correct, the filenames
-// will adhere to a lexicographical/utf-8 ordering such that the most
-// recent file is at the top.
-func newTimestampedCheckpointFileName() string {
+// newTimestampedFilename returns a filename with a suffixed version. This new
+// filename is in the format of filename-<version> where version is a hex
+// encoded one's complement of the timestamp. This means that as long as the
+// supplied timestamp is correct, the filenames will adhere to a
+// lexicographical/utf-8 ordering such that the most recent file is at the top.
+func newTimestampedFilename(filename string) string {
 	var buffer []byte
 	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
-	return fmt.Sprintf("%s-%s", backupManifestCheckpointName, hex.EncodeToString(buffer))
+	return fmt.Sprintf("%s-%s", filename, hex.EncodeToString(buffer))
 }

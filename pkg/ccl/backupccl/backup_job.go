@@ -124,7 +124,6 @@ func backup(
 	execCtx sql.JobExecContext,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
-	db *kv.DB,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*roachpb.ExternalStorage,
@@ -134,9 +133,6 @@ func backup(
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
 ) (roachpb.RowCount, error) {
-	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
-	// for grpc.
-
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
 
@@ -402,14 +398,72 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	var backupManifest *BackupManifest
+	// Resolve the backup destination. We can skip this step if we have already
+	// resolved and persisted the destination either during planning or a previous
+	// resumption of this job.
+	var backupDestination backupDestination
+	if !details.HasLockedLocation || details.URI == "" {
+		var err error
+		backupDestination, err = resolveDest(ctx, p.User(), details.Destination, details.EndTime,
+			details.IncrementalFrom, p.ExecCfg())
+		if err != nil {
+			return err
+		}
+	}
 
-	// If planning didn't resolve the external destination, then we need to now.
+	// The backup job needs to lay claim to the bucket it is writing to, to
+	// prevent concurrent backups from writing to the same location.
+	//
+	// If we have already locked the location, either on a previous resume of the
+	// job or during planning because `clusterversion.BackupResolutionInJob` isn't
+	// active, we do not want to lock it again.
+	if !details.HasLockedLocation {
+		if err := checkForPreviousBackup(ctx, p.ExecCfg(), backupDestination.defaultURI,
+			b.job.ID(), p.User()); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.write_lock"); err != nil {
+			return err
+		}
+
+		if err := writeLockOnBackupLocation(ctx, p.ExecCfg(), backupDestination.defaultURI,
+			b.job.ID(), p.User()); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.details_has_locked"); err != nil {
+			return err
+		}
+
+		// The backup job has locked the location and can skip over this skip the
+		// next time around.
+		details.HasLockedLocation = true
+		if err := b.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Populate the BackupDetails with the resolved backup destination, and
+	// construct the BackupManifest to be written to external storage as a
+	// BACKUP-CHECKPOINT. We can skip this step if one of the following are true:
+	//
+	// 1) The gateway node has already resolved the backup details and manifest
+	// during planning.
+	//
+	// 2) The job has already persisted the resolved details and manifest in a
+	// prior resumption.
+	var backupManifest *BackupManifest
 	if details.URI == "" {
-		initialDetails := details
 		backupDetails, m, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, details, p.User(),
-		)
+			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, details, p.User(), backupDestination)
 		if err != nil {
 			return err
 		}
@@ -452,6 +506,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.after.write_first_checkpoint"); err != nil {
+			return err
+		}
+
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return planSchedulePTSChaining(ctx, p.ExecCfg(), txn, &details, b.job.CreatedBy())
 		}); err != nil {
@@ -467,7 +525,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// we should just leave the description as-is, since it is just for humans).
 		description := b.job.Payload().Description
 		const unresolvedText = "INTO 'LATEST' IN"
-		if initialDetails.Destination.Subdir == "LATEST" && strings.Count(description, unresolvedText) == 1 {
+		if details.Destination.Subdir == "LATEST" && strings.Count(description, unresolvedText) == 1 {
 			description = strings.ReplaceAll(description, unresolvedText, fmt.Sprintf("INTO '%s' IN", details.Destination.Subdir))
 		}
 
@@ -483,6 +541,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			ju.UpdatePayload(md.Payload)
 			return nil
 		}); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.after.details_has_checkpoint"); err != nil {
 			return err
 		}
 
@@ -550,7 +612,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		MaxRetries: 5,
 	}
 
-	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before_flow"); err != nil {
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
 		return err
 	}
 
@@ -570,7 +632,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			p,
 			details.URI,
 			details.URIsByLocalityKV,
-			p.ExecCfg().DB,
 			p.ExecCfg().Settings,
 			defaultStore,
 			storageByLocalityKV,

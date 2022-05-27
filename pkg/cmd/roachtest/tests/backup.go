@@ -207,7 +207,7 @@ func waitForJobToHaveStatus(
 	expectedStatus jobs.Status,
 	nodesWithAdoptionDisabled option.NodeListOption,
 ) {
-	if err := retry.ForDuration(time.Minute*2, func() error {
+	if err := retry.ForDuration(time.Minute*1, func() error {
 		// TODO(adityamaru): This is unfortunate and can be deleted once
 		// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
 		// 21.2 and the mixed version map for roachtests is bumped to the 21.2

@@ -214,7 +214,12 @@ message BackupDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 20;
+  // HasLockedLocation is set to true once the backup job has checked that are no concurrent backups
+  // writing to the same location, and has written a lock file to prevent any other backups from
+  // writing to the location.
+  bool has_locked_location = 20;
+
+  // NEXT ID: 21;
 }
 
 message BackupProgress {
