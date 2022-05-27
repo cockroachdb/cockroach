@@ -489,6 +489,12 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRdbWriteStallNanos = metric.Metadata{
+		Name:        "storage.write-stall-nanos",
+		Help:        "Total write stall duration in nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Disk health metrics.
 	metaDiskSlow = metric.Metadata{
@@ -1554,6 +1560,7 @@ type StoreMetrics struct {
 	RdbL0NumFiles               *metric.Gauge
 	RdbBytesIngested            [7]*metric.Gauge // idx = level
 	RdbWriteStalls              *metric.Gauge
+	RdbWriteStallNanos          *metric.Gauge
 
 	// Disk health metrics.
 	DiskSlow    *metric.Gauge
@@ -2022,6 +2029,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
 		RdbBytesIngested:            rdbBytesIngested,
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
+		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
 
 		// Disk health metrics.
 		DiskSlow:    metric.NewGauge(metaDiskSlow),
@@ -2279,6 +2287,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.RdbWriteStalls.Update(m.WriteStallCount)
+	sm.RdbWriteStallNanos.Update(m.WriteStallDuration.Nanoseconds())
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
 
