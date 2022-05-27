@@ -437,7 +437,7 @@ func (s *ColIndexJoin) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
-	return execstats.GetCumulativeContentionTime(s.Ctx)
+	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
@@ -625,7 +625,7 @@ func adjustMemEstimate(estimate int64) int64 {
 
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
-	return execstats.GetScanStats(s.Ctx)
+	return execstats.GetScanStats(s.Ctx, nil /* recording */)
 }
 
 // Release implements the execinfra.Releasable interface.
