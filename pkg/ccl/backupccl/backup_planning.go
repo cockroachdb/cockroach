@@ -123,7 +123,7 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-// forEachPublicIndexTableSpan constructs the span for each public index of the
+// forEachPublicIndexTableSpan constructs a span for each public index of the
 // provided table and runs the given function on each of them. The added map is
 // used to track duplicates. Duplicate indexes are not passed to the provided
 // function.
