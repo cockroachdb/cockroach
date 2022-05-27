@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -848,7 +849,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig), time.Nanosecond /* maxOffset */)
+		txnClock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, test.orig)), time.Nanosecond /* maxOffset */)
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.LockSpans = testIntents
