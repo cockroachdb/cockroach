@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -104,15 +105,15 @@ func allSpansGuard() *concurrency.Guard {
 	}
 }
 
-// leaseExpiry returns a duration in nanos after which any range lease the
+// leaseExpiry the time after which any range lease the
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
-func leaseExpiry(repl *Replica) int64 {
+func leaseExpiry(repl *Replica) time.Time {
 	l, _ := repl.GetLease()
 	if l.Type() != roachpb.LeaseExpiration {
 		panic("leaseExpiry only valid for expiration-based leases")
 	}
-	return l.Expiration.WallTime + 1
+	return l.Expiration.GoTime().Add(1)
 }
 
 // Create a Raft status that shows everyone fully up to date.
@@ -145,7 +146,7 @@ type testContext struct {
 	rangeID     roachpb.RangeID
 	gossip      *gossip.Gossip
 	engine      storage.Engine
-	manualClock *hlc.ManualClock
+	manualClock *timeutil.ManualTime
 }
 
 func (tc *testContext) Clock() *hlc.Clock {
@@ -155,7 +156,7 @@ func (tc *testContext) Clock() *hlc.Clock {
 // Start initializes the test context with a single range covering the
 // entire keyspace.
 func (tc *testContext) Start(ctx context.Context, t testing.TB, stopper *stop.Stopper) {
-	tc.manualClock = hlc.NewManualClock(123)
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(
 		hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	// testContext tests like to move the manual clock around and assume that they can write at past
@@ -526,7 +527,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -565,7 +566,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 
 	// Lose the lease and verify CONSISTENT reads receive NotLeaseHolderError
 	// and INCONSISTENT reads work as expected.
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      start,
@@ -609,7 +610,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "transferSucceeds", func(t *testing.T, transferSucceeds bool) {
-		manual := hlc.NewManualClock(123)
+		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 		clock := hlc.NewClock(manual, 100*time.Millisecond /* maxOffset */)
 		tc := testContext{manualClock: manual}
 		tsc := TestStoreConfig(clock)
@@ -660,7 +661,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 
 		// Advance the clock so that the transfer we're going to perform sets a higher
 		// minLeaseProposedTS.
-		tc.manualClock.Increment((500 * time.Nanosecond).Nanoseconds())
+		tc.manualClock.Advance(500 * time.Nanosecond)
 
 		// Initiate a transfer (async) and wait for it to be blocked.
 		transferResChan := make(chan error)
@@ -699,7 +700,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		}
 
 		// Set up a hook to detect lease requests, in case this transfer fails.
-		expectedLeaseStartTS := tc.manualClock.UnixNano()
+		expectedLeaseStartTS := tc.manualClock.Now().UnixNano()
 		leaseAcquisitionCh := make(chan error)
 		leaseAcquisitionTrap.Store(func(ts hlc.Timestamp) {
 			if ts.WallTime == expectedLeaseStartTS {
@@ -767,7 +768,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -780,7 +781,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	pArgs := putArgs(roachpb.Key("a"), []byte("asd"))
 
 	// Lose the lease.
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      start,
@@ -902,7 +903,7 @@ func TestReplicaLease(t *testing.T) {
 		return 0, nil
 	}
 
-	tc.manualClock = hlc.NewManualClock(123)
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tsc.TestingKnobs.TestingApplyFilter = applyFilter
@@ -935,7 +936,7 @@ func TestReplicaLease(t *testing.T) {
 	if !tc.repl.OwnsValidLease(ctx, tc.Clock().NowAsClockTimestamp()) {
 		t.Errorf("expected lease on range start")
 	}
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now.ToTimestamp().Add(10, 0).UnsafeToClockTimestamp(),
@@ -956,7 +957,7 @@ func TestReplicaLease(t *testing.T) {
 	}
 	// Advance clock past expiration and verify that another has
 	// range lease will not be true.
-	tc.manualClock.Increment(21) // 21ns have passed
+	tc.manualClock.Advance(21) // 21ns have passed
 	if tc.repl.OwnsValidLease(ctx, tc.Clock().NowAsClockTimestamp()) {
 		t.Errorf("expected another replica to have expired lease")
 	}
@@ -980,7 +981,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -990,7 +991,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now,
@@ -1142,7 +1143,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Use the TestingBinaryMinSupportedVersion for bootstrap because we won't
@@ -1173,7 +1174,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 
 	// Expire our own lease which we automagically acquired due to being
 	// first range and config holder.
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 
 	// Give lease to someone else.
@@ -1186,7 +1187,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}
 
 	// Expire that lease.
-	tc.manualClock.Increment(11 + int64(tc.Clock().MaxOffset())) // advance time
+	tc.manualClock.Advance(11 + tc.Clock().MaxOffset()) // advance time
 	now = tc.Clock().NowAsClockTimestamp()
 
 	// Give lease to this range.
@@ -1218,7 +1219,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	// Disable raft log truncation which confuses this test.
@@ -1230,7 +1231,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().Now()
 
 	testCases := []struct {
@@ -1314,12 +1315,12 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
-	tc.manualClock.Set(leaseExpiry(tc.repl))
+	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
 	lease := &roachpb.Lease{
 		Start:      now,
@@ -2012,7 +2013,7 @@ func TestAcquireLease(t *testing.T) {
 				}
 				tc.repl.mu.Unlock()
 
-				tc.manualClock.Set(leaseExpiry(tc.repl))
+				tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 
 				ts := tc.Clock().Now().Next()
 				if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, test); pErr != nil {
@@ -2034,7 +2035,7 @@ func TestAcquireLease(t *testing.T) {
 				}
 
 				shouldRenewTS := lease.Expiration.Add(-1, 0)
-				tc.manualClock.Set(shouldRenewTS.WallTime + 1)
+				tc.manualClock.MustAdvanceTo(shouldRenewTS.GoTime().Add(1))
 				if _, pErr := tc.SendWrapped(test); pErr != nil {
 					t.Error(pErr)
 				}
@@ -2072,7 +2073,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(num)
 
-		tc := testContext{manualClock: hlc.NewManualClock(123)}
+		tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 		// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
 		// refreshes so that our lease proposal does not risk being rejected
@@ -2100,7 +2101,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 		atomic.StoreInt32(&active, 1)
-		tc.manualClock.Increment(leaseExpiry(tc.repl))
+		tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 		now := tc.Clock().NowAsClockTimestamp()
 		pErrCh := make(chan *roachpb.Error, num)
 		for i := 0; i < num; i++ {
@@ -2162,7 +2163,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 		startNanos := tc.Clock().Now().WallTime
 
 		// Set clock to time 1s and do the read.
-		tc.manualClock.Set(1 * time.Second.Nanoseconds())
+		tc.manualClock.MustAdvanceTo(timeutil.Unix(1, 0))
 		ts1 := tc.Clock().Now().WithSynthetic(synthetic)
 		gArgs := getArgs([]byte("a"))
 
@@ -2170,7 +2171,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 			t.Error(pErr)
 		}
 		// Set clock to time 2s for write.
-		tc.manualClock.Set(2 * time.Second.Nanoseconds())
+		tc.manualClock.MustAdvanceTo(timeutil.Unix(2, 0))
 		ts2 := tc.Clock().Now().WithSynthetic(synthetic)
 		key := roachpb.Key([]byte("b"))
 		drArgs := roachpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
@@ -2831,7 +2832,7 @@ func TestReplicaUseTSCache(t *testing.T) {
 		startTS := tc.Clock().Now()
 
 		// Set clock to time 1s and do the read.
-		tc.manualClock.Increment(1)
+		tc.manualClock.Advance(1)
 		readTS := tc.Clock().Now().WithSynthetic(synthetic)
 		args := getArgs([]byte("a"))
 
@@ -2924,7 +2925,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
@@ -2935,7 +2936,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
 	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
 	t2Next := t2.Next()
-	tc.manualClock.Set(t2.WallTime)
+	tc.manualClock.MustAdvanceTo(t2.GoTime())
 
 	// CPut args which expect value "1" to write "0".
 	key := []byte("a")
@@ -2963,7 +2964,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	// because there's now a transaction intent. This failure will
 	// not update the timestamp cache.
 	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
-	tc.manualClock.Set(t3.WallTime)
+	tc.manualClock.MustAdvanceTo(t3.GoTime())
 	_, pErr = tc.SendWrapped(&cpArgs1)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError; got %v", pErr)
@@ -3008,7 +3009,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
@@ -3028,7 +3029,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
 	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
 	t2Next := t2.Next()
-	tc.manualClock.Set(t2.WallTime)
+	tc.manualClock.MustAdvanceTo(t2.GoTime())
 
 	// InitPut args to write "1" to same key. Should fail.
 	ipArgs2 := iPutArgs(key, []byte("1"))
@@ -3056,7 +3057,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	// because there's now a transaction intent. This failure
 	// will not update the timestamp cache.
 	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
-	tc.manualClock.Set(t3.WallTime)
+	tc.manualClock.MustAdvanceTo(t3.GoTime())
 	_, pErr = tc.SendWrapped(&ipArgs2)
 	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
 		t.Errorf("expected WriteIntentError; got %v", pErr)
@@ -3115,7 +3116,7 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 			tc.Start(ctx, t, stopper)
 			// Set clock to time 1s and do the read.
 			t0 := 1 * time.Second
-			tc.manualClock.Set(t0.Nanoseconds())
+			tc.manualClock.MustAdvanceTo(timeutil.Unix(0, t0.Nanoseconds()))
 			args := getArgs([]byte("a"))
 			ts := tc.Clock().Now()
 
@@ -3863,7 +3864,7 @@ func TestSerializableDeadline(t *testing.T) {
 	key := roachpb.Key("key")
 	txn := newTransaction("test txn", key, roachpb.MinUserPriority, tc.Clock())
 
-	tc.manualClock.Increment(100)
+	tc.manualClock.Advance(100)
 	pusher := newTransaction(
 		"test pusher", key, roachpb.MaxUserPriority, tc.Clock())
 	pushReq := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
@@ -3915,7 +3916,7 @@ func TestCreateTxnRecordAfterPushAndGC(t *testing.T) {
 	desc := tc.repl.Desc()
 	// This test avoids a zero-timestamp regression (see LastActive() below),
 	// so avoid zero timestamps.
-	tc.manualClock.Increment(123)
+	tc.manualClock.Advance(123)
 	pusher := newTransaction("pusher", key, 1, tc.Clock())
 
 	// This pushee should never be allowed to write a txn record because it
@@ -5529,7 +5530,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
@@ -5659,7 +5660,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		// source used to detect transaction expiration. We make sure to set it
 		// above h.Timestamp to avoid it being updated by the request.
 		now := pushee.ReadTimestamp.Add(test.timeOffset, 0)
-		tc.manualClock.Set(now.WallTime)
+		tc.manualClock.MustAdvanceTo(now.GoTime())
 
 		reply, pErr := tc.SendWrappedWith(h, &args)
 		if !testutils.IsPError(pErr, test.expErr) {
@@ -6799,7 +6800,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 		return nil
 	}
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tc := testContext{manualClock: manual}
 	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.TestingProposalFilter = proposeFn
@@ -6808,7 +6809,7 @@ func TestRequestLeaderEncounterGroupDeleteError(t *testing.T) {
 	atomic.StoreInt32(&active, 1)
 	gArgs := getArgs(roachpb.Key("a"))
 	// Force the read command request a new lease.
-	manual.Set(leaseExpiry(tc.repl))
+	manual.MustAdvanceTo(leaseExpiry(tc.repl))
 	_, pErr := kv.SendWrappedWith(ctx, tc.store, roachpb.Header{
 		Timestamp: tc.Clock().Now(),
 		RangeID:   1,
@@ -10388,7 +10389,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	// different physical timestamp than the one used to initialize the replica's
 	// timestamp cache. This allows one of the tests to reset the logical part of
 	// the timestamp it's operating and not run into the timestamp cache.
-	tc.manualClock.Increment(1)
+	tc.manualClock.Advance(1)
 
 	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
 		txn := roachpb.MakeTransaction(
@@ -11012,7 +11013,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, ts1, 0, 0)
 
 	// Write a value outside the transaction.
-	tc.manualClock.Increment(10)
+	tc.manualClock.Advance(10)
 	ts2 := tc.Clock().Now()
 	if err := storage.MVCCPut(ctx, tc.engine, nil, k, ts2, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("one"), nil); err != nil {
 		t.Fatalf("writing interfering value: %+v", err)
@@ -11023,7 +11024,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// timestamp is ReadWithinUncertaintyIntervalError, but
 	// synthesizing one of those in this single-node test harness is
 	// tricky.
-	tc.manualClock.Increment(10)
+	tc.manualClock.Advance(10)
 	ts3 := tc.Clock().Now()
 	txn.WriteTimestamp.Forward(ts3)
 
@@ -11474,7 +11475,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tc := testContext{manualClock: manual}
 	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.DisableGCQueue = true
@@ -12950,7 +12951,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			defer setTxnAutoGC(!c.disableTxnAutoGC)()
 
 			txn := newTransaction(c.name, roachpb.Key(c.name), 1, tc.Clock())
-			manual.Increment(99)
+			manual.Advance(99)
 			runTs := tc.Clock().Now()
 
 			if c.setup != nil {
@@ -13127,7 +13128,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.manualClock = hlc.NewManualClock(123)
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	// Set the RaftMaxCommittedSizePerReady so that only a single raft entry is
 	// applied at a time, which makes it easier to line up the timing of reproposals.
