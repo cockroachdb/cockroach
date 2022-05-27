@@ -7402,7 +7402,7 @@ func TestTerm(t *testing.T) {
 		repl.mu.Lock()
 		defer repl.mu.Unlock()
 
-		firstIndex, err := repl.raftFirstIndexLocked()
+		firstIndex, err := repl.raftFirstIndexRLocked()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -7432,7 +7432,7 @@ func TestTerm(t *testing.T) {
 			t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
 		}
 
-		lastIndex, err := repl.raftLastIndexLocked()
+		lastIndex, err := repl.raftLastIndexRLocked()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -9968,7 +9968,7 @@ func (q *testQuiescer) raftBasicStatusRLocked() raft.BasicStatus {
 	return q.status.BasicStatus
 }
 
-func (q *testQuiescer) raftLastIndexLocked() (uint64, error) {
+func (q *testQuiescer) raftLastIndexRLocked() (uint64, error) {
 	return q.lastIndex, nil
 }
 

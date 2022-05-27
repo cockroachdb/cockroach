@@ -325,8 +325,8 @@ func (r *replicaRaftStorage) LastIndex() (uint64, error) {
 	return r.mu.lastIndex, nil
 }
 
-// raftLastIndexLocked requires that r.mu is held.
-func (r *Replica) raftLastIndexLocked() (uint64, error) {
+// raftLastIndexRLocked requires that r.mu is held for reading.
+func (r *Replica) raftLastIndexRLocked() (uint64, error) {
 	return (*replicaRaftStorage)(r).LastIndex()
 }
 
@@ -336,17 +336,17 @@ func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
 	return r.mu.state.TruncatedState.Index + 1, nil
 }
 
-// raftFirstIndexLocked requires that r.mu is held.
-func (r *Replica) raftFirstIndexLocked() (uint64, error) {
+// raftFirstIndexRLocked requires that r.mu is held for reading.
+func (r *Replica) raftFirstIndexRLocked() (uint64, error) {
 	return (*replicaRaftStorage)(r).FirstIndex()
 }
 
 // GetFirstIndex is the same function as raftFirstIndexLocked but it requires
 // that r.mu is not held.
 func (r *Replica) GetFirstIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftFirstIndexLocked()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftFirstIndexRLocked()
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
