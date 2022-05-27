@@ -11,7 +11,7 @@
 //go:build !linux
 // +build !linux
 
-package hlc
+package ptp
 
 import (
 	"context"
@@ -22,8 +22,6 @@ import (
 
 // PTPClock reads the time from a ptp device. Only implemented on Linux.
 type PTPClock struct{}
-
-var _ WallClock = PTPClock{}
 
 // MakePTPClock us not used on platforms other than Linux
 func MakePTPClock(_ context.Context, _ string) (PTPClock, error) {

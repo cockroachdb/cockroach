@@ -11,7 +11,7 @@
 //go:build linux
 // +build linux
 
-package hlc
+package ptp
 
 /*
 #include <time.h>
@@ -39,8 +39,6 @@ type PTPClock struct {
 	clockDevice   *os.File
 	clockDeviceID uintptr
 }
-
-var _ WallClock = PTPClock{}
 
 // MakePTPClock creates a new PTPClock for the given device path.
 func MakePTPClock(ctx context.Context, clockDevicePath string) (PTPClock, error) {

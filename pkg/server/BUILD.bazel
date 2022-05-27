@@ -238,6 +238,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/timeutil/ptp",
         "//pkg/util/tracing",
         "//pkg/util/tracing/collector",
         "//pkg/util/tracing/service",
