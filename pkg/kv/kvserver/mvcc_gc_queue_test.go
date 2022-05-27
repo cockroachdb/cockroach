@@ -443,7 +443,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	{
 		irrelevantTTL := 24 * time.Hour * 365
 		ms, valSize := initialMS(), 1<<10
-		mc := hlc.NewManualClock(ms.LastUpdateNanos)
+		mc := timeutil.NewManualTime(timeutil.Unix(0, ms.LastUpdateNanos))
 		txn := newTransaction(
 			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
 			hlc.NewClock(mc, time.Millisecond /* maxOffset */))

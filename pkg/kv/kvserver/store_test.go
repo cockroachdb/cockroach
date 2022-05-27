@@ -917,7 +917,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 
 	for _, test := range testCases {
 		func() {
-			manual := hlc.NewManualClock(123)
+			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
@@ -936,7 +936,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			pArgs := putArgs(test.key, []byte("value"))
 			assignSeqNumsForReqs(txn, &pArgs)
 			pReply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &pArgs)
-			test.check(manual.UnixNano(), store.NodeID(), pReply, pErr)
+			test.check(manual.Now().UnixNano(), store.NodeID(), pReply, pErr)
 		}()
 	}
 }
@@ -1276,15 +1276,15 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond) /* maxOffset */)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond /* maxOffset */))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
 				return nil
 			}
-			if exp, act := manual.UnixNano(), pr.PushTo.WallTime; exp > act {
+			if exp, act := manual.Now().UnixNano(), pr.PushTo.WallTime; exp > act {
 				return roachpb.NewError(fmt.Errorf("expected PushTo > WallTime, but got %d < %d:\n%+v", act, exp, pr))
 			}
 			return nil
@@ -1314,7 +1314,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		manual.Increment(100)
+		manual.Advance(100)
 		// Now, try a put using the pusher's txn.
 		h.Txn = pusher
 		resultCh := make(chan *roachpb.Error, 1)
@@ -2236,7 +2236,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var resolveCount int32
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
@@ -2268,7 +2268,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
+	manual.Advance(txnwait.TxnLivenessThreshold + 1)
 
 	// Query the range with a single scan, which should cause all intents
 	// to be resolved.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func TestQueryIntent(t *testing.T) {
 	txB := writeIntent(keyB, 7)
 
 	st := cluster.MakeTestingClusterSettings()
-	clock := hlc.NewClock(hlc.NewManualClock(10), time.Nanosecond)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 10)), time.Nanosecond /* maxOffset */)
 	evalCtx := &MockEvalCtx{ClusterSettings: st, Clock: clock}
 
 	// Since we can't move the intents clock after they are written, created
