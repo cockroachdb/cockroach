@@ -172,8 +172,6 @@ func TestWatchPods(t *testing.T) {
 	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
 	require.NoError(t, err)
 	require.Empty(t, pods)
-	stopper.Stop(ctx)
-	stopper.Stop(ctx)
 }
 
 func TestCancelLookups(t *testing.T) {
