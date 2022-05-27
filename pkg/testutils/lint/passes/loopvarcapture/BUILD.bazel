@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "loopvarcapture",
+    srcs = [
+        "loopvarcapture.go",
+        "loop.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/loopvarcapture",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/testutils/lint/passes/passesutil",
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/inspect",
+        "@org_golang_x_tools//go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "loopvarcapture_test",
+    srcs = ["loopvarcapture_test.go"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
+    deps = [
+        ":loopvarcapture",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)
