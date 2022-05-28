@@ -1615,7 +1615,8 @@ func mvccPutInternal(
 	versionValue := MVCCValue{}
 	versionValue.Value = value
 	versionValue.LocalTimestamp = localTimestamp
-	if !versionValue.LocalTimestampNeeded(versionKey) || !writer.ShouldWriteLocalTimestamps(ctx) {
+	if !versionValue.LocalTimestampNeeded(versionKey.Timestamp) ||
+		!writer.ShouldWriteLocalTimestamps(ctx) {
 		versionValue.LocalTimestamp = hlc.ClockTimestamp{}
 	}
 
@@ -3128,9 +3129,9 @@ func mvccResolveWriteIntent(
 			// while the transaction was still pending, in which case it can be advanced
 			// to the observed timestamp.
 			newValue := oldValue
-			newValue.LocalTimestamp = oldValue.GetLocalTimestamp(oldKey)
+			newValue.LocalTimestamp = oldValue.GetLocalTimestamp(oldKey.Timestamp)
 			newValue.LocalTimestamp.Forward(intent.ClockWhilePending.Timestamp)
-			if !newValue.LocalTimestampNeeded(newKey) || !rw.ShouldWriteLocalTimestamps(ctx) {
+			if !newValue.LocalTimestampNeeded(newKey.Timestamp) || !rw.ShouldWriteLocalTimestamps(ctx) {
 				newValue.LocalTimestamp = hlc.ClockTimestamp{}
 			}
 
