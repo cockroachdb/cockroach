@@ -388,8 +388,9 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DBitArray:
 			s = t.BitArray.String()
 		case *tree.DFloat:
+			floatTyp := t.ResolvedType()
 			s = strconv.FormatFloat(float64(*t), 'g',
-				ctx.SessionData().DataConversionConfig.GetFloatPrec(), 64)
+				ctx.SessionData().DataConversionConfig.GetFloatPrec(floatTyp), int(floatTyp.Width()))
 		case *tree.DInt:
 			if typ.Oid() == oid.T_char {
 				// int to "char" casts just return the correspondong ASCII byte.

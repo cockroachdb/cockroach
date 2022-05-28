@@ -84,7 +84,9 @@ func writeTextInt64(b *writeBuffer, v int64) {
 	b.write(s)
 }
 
-func writeTextFloat64(b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig) {
+func writeTextFloat(
+	b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig, typ *types.T,
+) {
 	var s []byte
 	// PostgreSQL supports 'Inf' as a valid literal for the floating point
 	// special value Infinity, therefore handling the special cases for them.
@@ -95,7 +97,7 @@ func writeTextFloat64(b *writeBuffer, fl float64, conv sessiondatapb.DataConvers
 		s = []byte("-Infinity")
 	} else {
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s = strconv.AppendFloat(b.putbuf[4:4], fl, 'g', conv.GetFloatPrec(), 64)
+		s = strconv.AppendFloat(b.putbuf[4:4], fl, 'g', conv.GetFloatPrec(typ), int(typ.Width()))
 	}
 	b.putInt32(int32(len(s)))
 	b.write(s)
@@ -180,7 +182,7 @@ func writeTextDatumNotNull(
 
 	case *tree.DFloat:
 		fl := float64(*v)
-		writeTextFloat64(b, fl, conv)
+		writeTextFloat(b, fl, conv, t)
 
 	case *tree.DDecimal:
 		b.writeLengthPrefixedDatum(v)
@@ -312,7 +314,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		writeTextInt64(b, getInt64(vecs, vecIdx, rowIdx, typ))
 
 	case types.FloatFamily:
-		writeTextFloat64(b, vecs.Float64Cols[colIdx].Get(rowIdx), conv)
+		writeTextFloat(b, vecs.Float64Cols[colIdx].Get(rowIdx), conv, typ)
 
 	case types.DecimalFamily:
 		d := vecs.DecimalCols[colIdx].Get(rowIdx)
