@@ -66,7 +66,7 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 	// If the node cert already exists, skip all the complexity of setting up
 	// servers, etc.
 	cl := certnames.MakeCertsLocator(baseCfg.SSLCertsDir)
-	if exists, err := cl.HasNodeCert(); err != nil {
+	if exists, err := certnames.FileExists(cl.NodeCertPath()); err != nil {
 		return err
 	} else if exists {
 		return errors.Newf("node certificate already exists in %s", baseCfg.SSLCertsDir)

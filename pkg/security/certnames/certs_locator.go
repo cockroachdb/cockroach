@@ -101,9 +101,11 @@ func (cl CertsLocator) NodeCertPath() string {
 	return filepath.Join(cl.certsDir, NodeCertFilename())
 }
 
-// HasNodeCert returns true iff the node certificate file already exists.
-func (cl CertsLocator) HasNodeCert() (bool, error) {
-	_, err := os.Stat(cl.NodeCertPath())
+// FileExists returns true iff the target file already exists.
+// We define this here and not in 'fileutil' to avoid extraneous
+// package dependencies.
+func FileExists(filename string) (bool, error) {
+	_, err := os.Stat(filename)
 	if err != nil {
 		if oserror.IsNotExist(err) {
 			return false, nil
