@@ -13,13 +13,13 @@ package security
 import (
 	"context"
 	"crypto/x509"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,36 +42,13 @@ func init() {
 var skipPermissionChecks bool
 
 // AssetLoader describes the functions necessary to read certificate and key files.
-type AssetLoader struct {
-	ReadDir  func(dirname string) ([]os.FileInfo, error)
-	ReadFile func(filename string) ([]byte, error)
-	Stat     func(name string) (os.FileInfo, error)
-}
-
-// defaultAssetLoader uses real filesystem calls.
-var defaultAssetLoader = AssetLoader{
-	ReadDir:  ioutil.ReadDir,
-	ReadFile: ioutil.ReadFile,
-	Stat:     os.Stat,
-}
-
-// assetLoaderImpl is used to list/read/stat security assets.
-var assetLoaderImpl = defaultAssetLoader
-
-// GetAssetLoader returns the active asset loader.
-func GetAssetLoader() AssetLoader {
-	return assetLoaderImpl
-}
+type AssetLoader = securityassets.AssetLoader
 
 // SetAssetLoader overrides the asset loader with the passed-in one.
-func SetAssetLoader(al AssetLoader) {
-	assetLoaderImpl = al
-}
+func SetAssetLoader(al AssetLoader) { securityassets.SetAssetLoader(al) }
 
 // ResetAssetLoader restores the asset loader to the default value.
-func ResetAssetLoader() {
-	assetLoaderImpl = defaultAssetLoader
-}
+func ResetAssetLoader() { securityassets.ResetAssetLoader() }
 
 // PemUsage indicates the purpose of a given certificate.
 type PemUsage uint32
@@ -307,7 +284,7 @@ func (cl *CertificateLoader) TestDisablePermissionChecks() {
 // usage, and looks for their keys.
 // It populates the certificates field.
 func (cl *CertificateLoader) Load() error {
-	fileInfos, err := assetLoaderImpl.ReadDir(cl.certsDir)
+	fileInfos, err := securityassets.GetAssetLoader().ReadDir(cl.certsDir)
 	if err != nil {
 		if oserror.IsNotExist(err) {
 			// Directory does not exist.
@@ -352,7 +329,7 @@ func (cl *CertificateLoader) Load() error {
 
 		// Read the cert file contents.
 		fullCertPath := filepath.Join(cl.certsDir, filename)
-		certPEMBlock, err := assetLoaderImpl.ReadFile(fullCertPath)
+		certPEMBlock, err := securityassets.GetAssetLoader().ReadFile(fullCertPath)
 		if err != nil {
 			log.Warningf(context.Background(), "could not read certificate file %s: %v", fullPath, err)
 		}
@@ -388,7 +365,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	fullKeyPath := filepath.Join(cl.certsDir, keyFilename)
 
 	// Stat the file. This follows symlinks.
-	info, err := assetLoaderImpl.Stat(fullKeyPath)
+	info, err := securityassets.GetAssetLoader().Stat(fullKeyPath)
 	if err != nil {
 		return errors.Wrapf(err, "could not stat key file %s", fullKeyPath)
 	}
@@ -407,7 +384,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 	}
 
 	// Read key file.
-	keyPEMBlock, err := assetLoaderImpl.ReadFile(fullKeyPath)
+	keyPEMBlock, err := securityassets.GetAssetLoader().ReadFile(fullKeyPath)
 	if err != nil {
 		return errors.Wrapf(err, "could not read key file %s", fullKeyPath)
 	}
