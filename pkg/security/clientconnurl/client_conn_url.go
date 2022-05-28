@@ -32,9 +32,9 @@ type ClientSecurityOptions struct {
 	CertsDir string
 }
 
-// LoadSecurityOptions extends a url.Values with SSL settings suitable for
+// loadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func LoadSecurityOptions(
+func loadSecurityOptions(
 	opts ClientSecurityOptions, u *pgurl.URL, user username.SQLUsername,
 ) error {
 	u.WithUsername(user.Normalized())
@@ -140,15 +140,14 @@ func PGURL(
 	copts ClientSecurityOptions, sparams ServerParameters, user *url.Userinfo,
 ) (*pgurl.URL, error) {
 	host, port, _ := addr.SplitHostPort(sparams.ServerAddr, sparams.DefaultPort)
-	u := pgurl.New().
-		WithNet(pgurl.NetTCP(host, port)).
-		WithDatabase(sparams.DefaultDatabase)
-
-	username, _ := username.MakeSQLUsernameFromUserInput(user.Username(), username.PurposeValidation)
-	if err := LoadSecurityOptions(copts, u, username); err != nil {
-		return nil, err
+	ccopts := ClientOptions{
+		ClientSecurityOptions: copts,
+		User:                  user.Username(),
+		Database:              sparams.DefaultDatabase,
+		ServerHost:            host,
+		ServerPort:            port,
 	}
-	return u, nil
+	return MakeClientConnURL(ccopts)
 }
 
 // UpdateURL is a helper that processes a connection URL passed on the
@@ -356,4 +355,87 @@ func UpdateURL(
 	// Check that the URL so far is valid.
 	err = parsedURL.Validate()
 	return parsedURL, err
+}
+
+// ClientOptions represents configurable options from the command line.
+type ClientOptions struct {
+	ClientSecurityOptions
+
+	// ExplicitURL is an explicit URL specified on the command line
+	// via --url, and enhanced via clientconnurl.UpdateURL().
+	// This may contain additional parameters (e.g. application_name)
+	// which cannot be specified by discrete flags.
+	ExplicitURL *pgurl.URL
+
+	// User is the requested username, as specified via --user or --url.
+	//
+	// When calling UpdateURL() to generate ExplicitURL from --url, the
+	// function should be passed an update callback that updates this
+	// field if the URL contains a username part.
+	User string
+
+	// Database is the requested database name, as specified
+	// via --database or --url.
+	//
+	// When calling UpdateURL() to generate ExplicitURL from --url, the
+	// function should be passed an update callback that updates this
+	// field if the URL contains a database name.
+	Database string
+
+	// ServerHost is the requested server host name or address, as
+	// specified via --host or --url.
+	//
+	// When calling UpdateURL() to generate ExplicitURL from --url, the
+	// function should be passed an update callback that updates this
+	// field if the URL contains a hostname part.
+	ServerHost string
+
+	// ServerPort is the requested server port name/number, as
+	// specified via --port or --url.
+	//
+	// When calling UpdateURL() to generate ExplicitURL from --url, the
+	// function should be passed an update callback that updates this
+	// field if the URL contains a port number/name.
+	ServerPort string
+}
+
+// MakeClientConnURL constructs a connection URL from the given input options.
+func MakeClientConnURL(copts ClientOptions) (*pgurl.URL, error) {
+	purl := copts.ExplicitURL
+	if purl == nil {
+		// New URL. Start from scratch.
+		purl = pgurl.New() // defaults filled in below.
+	}
+
+	// Fill in any defaults from any command-line arguments if there was
+	// no --url flag, or if they were specified *after* the --url flag.
+	//
+	// Note: the username is filled in by loadSecurityOptions() below.
+	// If there was any password while parsing a --url flag,
+	// it will be pre-populated via cliCtx.sqlConnURL above.
+	purl.WithDatabase(copts.Database)
+	if _, host, port := purl.GetNetworking(); host != copts.ServerHost || port != copts.ServerPort {
+		purl.WithNet(pgurl.NetTCP(copts.ServerHost, copts.ServerPort))
+	}
+
+	// Check the structure of the username.
+	userName, err := username.MakeSQLUsernameFromUserInput(copts.User, username.PurposeValidation)
+	if err != nil {
+		return nil, err
+	}
+	if userName.Undefined() {
+		userName = username.RootUserName()
+	}
+
+	if err := loadSecurityOptions(copts.ClientSecurityOptions, purl, userName); err != nil {
+		return nil, err
+	}
+
+	// The construct above should have produced a valid URL already;
+	// however a post-assertion doesn't hurt.
+	if err := purl.Validate(); err != nil {
+		return nil, err
+	}
+
+	return purl, nil
 }
