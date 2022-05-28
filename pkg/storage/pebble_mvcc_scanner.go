@@ -604,7 +604,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey)
+			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
@@ -1025,7 +1025,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 			// are only uncertain if their timestamps are synthetic. Meanwhile,
 			// any value with a time in the range (ts, uncertainty.LocalLimit]
 			// is uncertain.
-			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey)
+			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 			}
@@ -1053,7 +1053,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 		// Iterate through uncertainty interval. See the comment above about why
 		// a value in this interval is not necessarily cause for an uncertainty
 		// error.
-		localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey)
+		localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 			return p.uncertaintyError(p.curUnsafeKey.Timestamp)
 		}
