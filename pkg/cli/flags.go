@@ -12,6 +12,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"path/filepath"
 	"regexp"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -255,13 +257,7 @@ func (f *keyTypeFilter) Set(v string) error {
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
-// flagSetForCmd is a replacement for cmd.Flag() that properly merges
-// persistent and local flags, until the upstream bug
-// https://github.com/spf13/cobra/issues/961 has been fixed.
-func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
-	_ = cmd.LocalFlags() // force merge persistent+local flags
-	return cmd.Flags()
-}
+func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet { return clienturl.FlagSetForCmd(cmd) }
 
 func init() {
 	initCLIDefaults()
@@ -751,7 +747,7 @@ func init() {
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		// The URL flag.
-		varFlag(f, newURLParser(cmd, &cliCtx.clientOpts, cliCtx.Config, false /* strictTLS */, true /* warn */), cliflags.URL)
+		varFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, false /* strictTLS */, nil /* warnFn */), cliflags.URL)
 
 		// The username flag.
 		stringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
@@ -783,7 +779,9 @@ func init() {
 		}
 
 		f := cmd.PersistentFlags()
-		varFlag(f, newURLParser(cmd, &cliCtx.clientOpts, cliCtx.Config, true /* strictTLS */, true /* warn */), cliflags.URL)
+		varFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, true /* strictTLS */, func(format string, args ...interface{}) {
+			fmt.Fprintf(stderr, format, args...)
+		}), cliflags.URL)
 
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)

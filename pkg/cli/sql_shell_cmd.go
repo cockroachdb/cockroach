@@ -14,9 +14,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
-	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -59,17 +58,6 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	sqlCtx.ShellCtx.ParseURL = makeURLParser(cmd)
+	sqlCtx.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, cliCtx.clientOpts)
 	return sqlCtx.Run(conn)
-}
-
-func makeURLParser(cmd *cobra.Command) clisqlshell.URLParser {
-	return func(url string) (*pgurl.URL, error) {
-		// Parse it as if --url was specified.
-		up := newURLParser(cmd, &cliCtx.clientOpts, cliCtx.Config, false /* strictTLS */, false /* warn */)
-		if err := up.Set(url); err != nil {
-			return nil, err
-		}
-		return cliCtx.clientOpts.ExplicitURL, nil
-	}
 }

@@ -16,6 +16,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
@@ -346,6 +347,6 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	sqlCtx.ShellCtx.ParseURL = makeURLParser(cmd)
+	sqlCtx.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, cliCtx.clientOpts)
 	return sqlCtx.Run(conn)
 }
