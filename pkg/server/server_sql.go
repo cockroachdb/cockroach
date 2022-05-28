@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -675,8 +677,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	nodeInfo := sql.NodeInfo{
-		AdminURL:         cfg.AdminURL,
-		PGURL:            cfg.rpcContext.PGURL,
+		AdminURL: cfg.AdminURL,
+		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
+			return rpc.PGURL(cfg.Config, user)
+		},
 		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
 		NodeID:           cfg.nodeIDContainer,
 	}
