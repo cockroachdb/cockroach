@@ -53,7 +53,7 @@ func TestInitializeFromConfig(t *testing.T) {
 }
 
 func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBundle, error) {
-	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
+	cl := security.MakeLocator(cfg.SSLCertsDir)
 	bundleFromDisk, err := collectLocalCABundle(cfg.SSLCertsDir)
 	if err != nil {
 		return bundleFromDisk, err
@@ -323,7 +323,7 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
 
-	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
+	cl := security.MakeLocator(cfg.SSLCertsDir)
 	if err = os.Remove(cl.ClientCACertPath()); err != nil {
 		t.Fatalf("failed to remove test cert: %q", err)
 	}
@@ -372,7 +372,7 @@ func TestRotationOnBrokenIntializedNode(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
+	cl := security.MakeLocator(cfg.SSLCertsDir)
 	certBundle := CertificateBundle{}
 	err := certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
