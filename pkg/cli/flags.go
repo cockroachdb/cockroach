@@ -177,32 +177,6 @@ func (a aliasStrVar) Set(v string) error {
 // Type implements the pflag.Value interface.
 func (a aliasStrVar) Type() string { return "string" }
 
-// addrSetter wraps a address/port configuration option pair and
-// enables setting them both with a single command-line flag.
-type addrSetter struct {
-	addr *string
-	port *string
-}
-
-// String implements the pflag.Value interface.
-func (a addrSetter) String() string {
-	return net.JoinHostPort(*a.addr, *a.port)
-}
-
-// Type implements the pflag.Value interface.
-func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
-
-// Set implements the pflag.Value interface.
-func (a addrSetter) Set(v string) error {
-	addr, port, err := addr.SplitHostPort(v, *a.port)
-	if err != nil {
-		return err
-	}
-	*a.addr = addr
-	*a.port = port
-	return nil
-}
-
 // clusterNameSetter wraps the cluster name variable
 // and verifies its format during configuration.
 type clusterNameSetter struct {
@@ -412,12 +386,12 @@ func init() {
 	for _, cmd := range append(StartCmds, connectInitCmd, connectJoinCmd) {
 		f := cmd.Flags()
 
-		varFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
-		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
-		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
-		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
-		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
-		varFlag(f, addrSetter{&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort}, cliflags.HTTPAdvertiseAddr)
+		varFlag(f, addr.NewAddrSetter(&startCtx.serverListenAddr, &serverListenPort), cliflags.ListenAddr)
+		varFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
+		varFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
+		varFlag(f, addr.NewAddrSetter(&serverSQLAdvertiseAddr, &serverSQLAdvertisePort), cliflags.SQLAdvertiseAddr)
+		varFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
+		varFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
@@ -634,7 +608,7 @@ func init() {
 	clientCmds = append(clientCmds, debugResetQuorumCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		varFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
+		varFlag(f, addr.NewAddrSetter(&cliCtx.clientConnHost, &cliCtx.clientConnPort), cliflags.ClientHost)
 		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
@@ -771,7 +745,7 @@ func init() {
 		//
 		// TODO(knz): if/when env var option initialization is deferred
 		// to parse time, this can be removed.
-		varFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
+		varFlag(f, addr.NewAddrSetter(&cliCtx.clientConnHost, &cliCtx.clientConnPort), cliflags.ClientHost)
 		_ = f.MarkHidden(cliflags.ClientHost.Name)
 		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
@@ -989,10 +963,10 @@ func init() {
 
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
-		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
-		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
-		varFlag(f, addrSetter{&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort}, cliflags.HTTPAdvertiseAddr)
-		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
+		varFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
+		varFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
+		varFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
+		varFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
 
 		varFlag(f, &serverCfg.Locality, cliflags.Locality)
 		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
