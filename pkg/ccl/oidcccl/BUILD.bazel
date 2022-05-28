@@ -42,7 +42,7 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

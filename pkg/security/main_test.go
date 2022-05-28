@@ -14,7 +14,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -24,7 +24,7 @@ import (
 // ResetTest sets up the test environment. In particular, it embeds the
 // EmbeddedCertsDir folder and makes the tls package load from there.
 func ResetTest() {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetAssetLoader(securitytest.EmbeddedAssets)
 }
 
 func TestMain(m *testing.M) {

@@ -14,13 +14,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestMain(m *testing.M) {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetAssetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	os.Exit(m.Run())
 }

@@ -14,7 +14,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -23,7 +23,7 @@ import (
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetAssetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

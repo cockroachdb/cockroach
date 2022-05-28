@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -49,7 +50,7 @@ func TestRotateCerts(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetAssetLoader()
 	defer ResetTest()
 	certsDir := t.TempDir()
 

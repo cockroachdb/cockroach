@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
@@ -90,7 +91,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 	var tenant uint64
 	if !embedded {
 		// Don't mock assets in this test, we're creating our own one-off certs.
-		security.ResetAssetLoader()
+		securityassets.ResetAssetLoader()
 		defer ResetTest()
 		tenant = uint64(rand.Int63())
 		certsDir = makeTenantCerts(t, tenant)

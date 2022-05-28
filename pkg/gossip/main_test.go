@@ -11,12 +11,12 @@
 package gossip_test
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 )
 
 func init() {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetAssetLoader(securitytest.EmbeddedAssets)
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go

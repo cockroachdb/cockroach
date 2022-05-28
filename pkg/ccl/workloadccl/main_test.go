@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -23,7 +23,7 @@ import (
 
 func TestMain(m *testing.M) {
 	defer utilccl.TestingEnableEnterprise()()
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetAssetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)

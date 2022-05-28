@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -195,7 +196,7 @@ func TestNamingScheme(t *testing.T) {
 	_, notRootCert := makeTestCert(t, "notroot", fullKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 
 	// Do not use embedded certs.
-	security.ResetAssetLoader()
+	securityassets.ResetAssetLoader()
 	defer ResetTest()
 
 	// Some test cases are skipped on windows due to non-UGO permissions.

@@ -13,7 +13,7 @@ go_test(
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/spanconfig",

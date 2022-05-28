@@ -198,7 +198,7 @@ go_test(
     deps = [
         "//pkg/build/bazel",
         "//pkg/internal/rsg",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
         "//pkg/sql/parser",
