@@ -87,18 +87,8 @@ func writeTextInt64(b *writeBuffer, v int64) {
 func writeTextFloat(
 	b *writeBuffer, fl float64, conv sessiondatapb.DataConversionConfig, typ *types.T,
 ) {
-	var s []byte
-	// PostgreSQL supports 'Inf' as a valid literal for the floating point
-	// special value Infinity, therefore handling the special cases for them.
-	// (https://github.com/cockroachdb/cockroach/issues/62601)
-	if math.IsInf(fl, 1) {
-		s = []byte("Infinity")
-	} else if math.IsInf(fl, -1) {
-		s = []byte("-Infinity")
-	} else {
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s = strconv.AppendFloat(b.putbuf[4:4], fl, 'g', conv.GetFloatPrec(typ), int(typ.Width()))
-	}
+	// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+	s := tree.PgwireFormatFloat(b.putbuf[4:4], fl, conv, typ)
 	b.putInt32(int32(len(s)))
 	b.write(s)
 }
