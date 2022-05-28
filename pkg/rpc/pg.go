@@ -65,7 +65,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 				}
 				if ourCACert := cm.CACert(); ourCACert != nil {
 					// The CM has a CA cert. Use that.
-					caCertPath = cm.FullPath(ourCACert)
+					caCertPath = cm.FullPath(ourCACert.Filename)
 				}
 			}
 			// Fallback: if caCertPath was not assigned above, either
