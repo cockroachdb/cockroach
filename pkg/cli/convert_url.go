@@ -52,7 +52,7 @@ func runConvertURL(cmd *cobra.Command, _ []string) error {
 		WithDefaultUsername(username.RootUser).
 		WithDefaultDatabase(catalogkeys.DefaultDatabaseName).
 		WithDefaultHost("localhost").
-		WithDefaultPort(cliCtx.clientConnPort)
+		WithDefaultPort(cliCtx.clientOpts.ServerPort)
 
 	if err := u.Validate(); err != nil {
 		return err
