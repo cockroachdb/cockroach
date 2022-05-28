@@ -66,10 +66,10 @@ func runTerm(cmd *cobra.Command, args []string) (resErr error) {
 func makeURLParser(cmd *cobra.Command) clisqlshell.URLParser {
 	return func(url string) (*pgurl.URL, error) {
 		// Parse it as if --url was specified.
-		up := newURLParser(cmd, &cliCtx, false /* strictTLS */, false /* warn */)
+		up := newURLParser(cmd, &cliCtx.clientOpts, cliCtx.Config, false /* strictTLS */, false /* warn */)
 		if err := up.Set(url); err != nil {
 			return nil, err
 		}
-		return cliCtx.sqlConnURL, nil
+		return cliCtx.clientOpts.ExplicitURL, nil
 	}
 }
