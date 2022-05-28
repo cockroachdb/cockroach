@@ -17,13 +17,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
+	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/security/clientconnurl"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -40,22 +44,64 @@ var cfg = func() *clisqlcfg.Context {
 	return c
 }()
 
+// copts is the set of options that is used to configure the
+// connection URL.
+var copts clientconnurl.ClientOptions
+
 func main() {
+	// URL defaults.
+	copts.ServerHost = "localhost"
+	copts.ServerPort = "26257"
 	// TODO(knz): We should deprecate auto-connecting to 'defaultdb'
 	// and instead do something like psql, i.e. use the current
 	// unix username as default target database.
-	cfg.Database = "defaultdb"
+	copts.Database = "defaultdb"
 	// TODO(knz): We should deprecate auto-connecting as 'root'
 	// and instead do something like psql, i.e. use the current
 	// unix username to log into the database.
-	cfg.User = "root"
+	copts.User = "root"
+
+	// Defaults for the SQL shell.
+	cfg.User = copts.User
+	cfg.Database = copts.Database
 	cfg.ApplicationName = "$ cockroach sql"
+	// TODO(knz): Make the timeout configurable.
 	cfg.ConnectTimeout = 15
 
+	// The connection parameters can be configured either via a URL or
+	// discrete flags.
+
 	f := sqlCmd.PersistentFlags()
-	f.StringVar(&url, cliflags.URL.Name, url, "Connection URL.")
-	f.StringVarP(&cfg.Database, cliflags.Database.Name, cliflags.Database.Shorthand, cfg.Database, cliflags.Database.Description)
-	f.StringVarP(&cfg.User, cliflags.User.Name, cliflags.User.Shorthand, cfg.User, cliflags.User.Description)
+
+	// URL configuration. This is the main recommended connection method
+	// and the only one documented for this command.
+	//
+	// The complexity of urlParser{} exists because --url
+	// can be interleaved with other discrete parameters. The URL
+	// parser needs to integrate values from earlier discrete/URL flags
+	// and extract defaults for subsequent parameters.
+	f.Var(clienturl.NewURLParser(sqlCmd, &copts, false /*sslStrict*/, nil /*warnFn*/),
+		cliflags.URL.Name, cliflags.URL.Description)
+
+	// Discrete flags follow.
+	// We support more flags than are documented, so that the cockroach-sql binary
+	// can be used in place of 'cockroach sql'.
+	//
+	// Remote SQL parameters.
+	f.StringVarP(&copts.Database, cliflags.Database.Name, cliflags.Database.Shorthand, cfg.Database, cliflags.Database.Description)
+	f.StringVarP(&copts.User, cliflags.User.Name, cliflags.User.Shorthand, cfg.User, cliflags.User.Description)
+	// Hidden parameters for compatibility with 'cockroach sql'.
+	f.Var(addr.NewAddrSetter(&copts.ServerHost, &copts.ServerPort), cliflags.ClientHost.Name, cliflags.ClientHost.Description)
+	_ = f.MarkHidden(cliflags.ClientHost.Name)
+	f.StringVar(&copts.ServerPort, cliflags.ClientPort.Name, copts.ServerPort, cliflags.ClientPort.Description)
+	_ = f.MarkHidden(cliflags.ClientPort.Name)
+	f.StringVar(&copts.CertsDir, cliflags.CertsDir.Name, copts.CertsDir, cliflags.CertsDir.Description)
+	_ = f.MarkHidden(cliflags.CertsDir.Name)
+	// NB: Insecure is deprecated. See #53404.
+	f.BoolVar(&copts.Insecure, cliflags.ClientInsecure.Name, copts.Insecure, cliflags.ClientInsecure.Description)
+	_ = f.MarkHidden(cliflags.ClientInsecure.Name)
+
+	// Parameters specific to the SQL shell.
 	f.VarP(&cfg.ShellCtx.ExecStmts, cliflags.Execute.Name, cliflags.Execute.Shorthand, cliflags.Execute.Description)
 	f.StringVarP(&cfg.InputFile, cliflags.File.Name, cliflags.File.Shorthand, cfg.InputFile, cliflags.File.Description)
 	f.DurationVar(&cfg.ShellCtx.RepeatDelay, cliflags.Watch.Name, cfg.ShellCtx.RepeatDelay, cliflags.Watch.Description)
@@ -72,6 +118,7 @@ func main() {
 	subCmd := *sqlCmd
 	sqlCmd.AddCommand(&subCmd)
 
+	// Now is time to run the command.
 	errCode := exit.Success()
 	if err := sqlCmd.Execute(); err != nil {
 		clierror.OutputError(os.Stderr, err, true /*showSeverity*/, false /*verbose*/)
@@ -87,10 +134,13 @@ func main() {
 }
 
 var sqlCmd = &cobra.Command{
-	Use:   "sql [[--url] <url>] [-f <inputfile>] [-e <stmt>]",
+	Use:   "sql [[--url] <url>] [-f <inputfile>] [-e <stmt>] [options]",
 	Short: "start the SQL shell",
 	Args:  cobra.MaximumNArgs(1),
-	RunE:  runSQL,
+	Long: `
+Open a SQL shell running against a CockroachDB database.
+`,
+	RunE: runSQL,
 	// Disable automatic printing of usage information whenever an error
 	// occurs. Many errors are not the result of a bad command invocation,
 	// e.g. attempting to start a node on an in-use port, and printing the
@@ -102,14 +152,45 @@ var sqlCmd = &cobra.Command{
 	// details and hints, which cobra does not do for us. Instead
 	// we do the printing in Main().
 	SilenceErrors: true,
+	// Prevent cobra from auto-generating a completions command,
+	// since we provide our own.
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
+	// Support --version automatically.
+	Version: func() string {
+		info := build.GetInfo()
+		return "details:\n" + info.Long()
+	}(),
 }
 
-func runSQL(_ *cobra.Command, args []string) (resErr error) {
-	if url == "" && len(args) > 0 {
-		url = args[0]
+func runSQL(cmd *cobra.Command, args []string) (resErr error) {
+	fs := clienturl.FlagSetForCmd(cmd)
+	urlFlag := fs.Lookup(cliflags.URL.Name)
+
+	if len(args) > 0 {
+		if urlFlag.Changed {
+			return errors.New("cannot pass both --url and positional URL")
+		}
+		if err := urlFlag.Value.Set(args[0]); err != nil {
+			return err
+		}
+		urlFlag.Changed = true
 	}
-	if url == "" {
-		return errors.New("no connection URL specified")
+
+	// Translate the connection arguments to a connection URL.
+	connURL, err := clientconnurl.MakeClientConnURL(copts)
+	if err != nil {
+		return err
+	}
+
+	// How we're going to authenticate.
+	usePw, _, _ := connURL.GetAuthnPassword()
+	if usePw && copts.Insecure {
+		// There's a password already configured.
+		// In insecure mode, we don't want the user to get the mistaken
+		// idea that a password is worth anything.
+		return errors.New("password authentication not enabled in insecure mode")
 	}
 
 	closeFn, err := cfg.Open(os.Stdin)
@@ -128,11 +209,12 @@ func runSQL(_ *cobra.Command, args []string) (resErr error) {
 		fmt.Print(welcomeMessage)
 	}
 
-	conn, err := cfg.MakeConn(url)
+	conn, err := cfg.MakeConn(connURL.ToPQ().String())
 	if err != nil {
 		return err
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	cfg.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, copts)
 	return cfg.Run(conn)
 }
