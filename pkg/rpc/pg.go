@@ -24,9 +24,9 @@ import (
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLUsername) error {
+func LoadSecurityOptions(cfg *base.Config, u *pgurl.URL, user username.SQLUsername) error {
 	u.WithUsername(user.Normalized())
-	if ctx.config.Insecure {
+	if cfg.Insecure {
 		u.WithInsecure()
 	} else if net, _, _ := u.GetNetworking(); net == pgurl.ProtoTCP {
 		tlsUsed, tlsMode, caCertPath := u.GetTLSOptions()
@@ -40,6 +40,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 		}
 
 		loader := securityassets.GetAssetLoader()
+		cl := certnames.MakeCertsLocator(cfg.SSLCertsDir)
 
 		// Only verify-full and verify-ca should be doing certificate verification.
 		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
@@ -49,7 +50,6 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 				// assume that the Go TLS code will fall back to a OS-level
 				// common trust store.
 
-				cl := certnames.MakeCertsLocator(ctx.config.SSLCertsDir)
 				exists, err := loader.FileExists(cl.CACertPath())
 				if err != nil {
 					return err
@@ -73,8 +73,8 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 
 		// Fetch client certs, but don't fail if they're absent, we may be
 		// using a password.
-		certPath := ctx.ClientCertPath(user)
-		keyPath := ctx.ClientKeyPath(user)
+		certPath := cl.ClientCertPath(user)
+		keyPath := cl.ClientKeyPath(user)
 		_, err1 := loader.Stat(certPath)
 		_, err2 := loader.Stat(keyPath)
 		if err1 != nil || err2 != nil {
@@ -84,8 +84,8 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 		// client.node.crt, try with just node.crt.
 		if missing && user.IsNodeUser() {
 			missing = false
-			certPath = ctx.NodeCertPath()
-			keyPath = ctx.NodeKeyPath()
+			certPath = cl.NodeCertPath()
+			keyPath = cl.NodeKeyPath()
 			_, err1 = loader.Stat(certPath)
 			_, err2 = loader.Stat(keyPath)
 			if err1 != nil || err2 != nil {
@@ -109,14 +109,14 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 
 // PGURL constructs a URL for the postgres endpoint, given a server
 // config. There is no default database set.
-func (ctx *SecurityContext) PGURL(user *url.Userinfo) (*pgurl.URL, error) {
-	host, port, _ := addr.SplitHostPort(ctx.config.SQLAdvertiseAddr, base.DefaultPort)
+func PGURL(cfg *base.Config, user *url.Userinfo) (*pgurl.URL, error) {
+	host, port, _ := addr.SplitHostPort(cfg.SQLAdvertiseAddr, base.DefaultPort)
 	u := pgurl.New().
 		WithNet(pgurl.NetTCP(host, port)).
 		WithDatabase(catalogkeys.DefaultDatabaseName)
 
 	username, _ := username.MakeSQLUsernameFromUserInput(user.Username(), username.PurposeValidation)
-	if err := ctx.LoadSecurityOptions(u, username); err != nil {
+	if err := LoadSecurityOptions(cfg, u, username); err != nil {
 		return nil, err
 	}
 	return u, nil
