@@ -208,6 +208,7 @@ func constrainSpansByExpression(
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	return execCtx.ConstrainPrimaryIndexSpanByExpr(
-		ctx, descr, &execCtx.ExtendedEvalContext().Context, &semaCtx, filterExpr)
+	spans, _, err := execCtx.ConstrainPrimaryIndexSpanByExpr(
+		ctx, sql.MustFullyConstrain, descr, &execCtx.ExtendedEvalContext().Context, &semaCtx, filterExpr)
+	return spans, err
 }

@@ -45,7 +45,7 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
