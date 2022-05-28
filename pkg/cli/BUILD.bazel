@@ -133,6 +133,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/certnames",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

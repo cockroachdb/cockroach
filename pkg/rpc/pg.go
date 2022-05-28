@@ -39,6 +39,8 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 			tlsMode = pgurl.TLSVerifyFull
 		}
 
+		loader := securityassets.GetLoader()
+
 		// Only verify-full and verify-ca should be doing certificate verification.
 		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
 			if caCertPath == "" {
@@ -48,7 +50,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 				// common trust store.
 
 				cl := certnames.MakeLocator(ctx.config.SSLCertsDir)
-				exists, err := certnames.FileExists(cl.CACertPath())
+				exists, err := loader.FileExists(cl.CACertPath())
 				if err != nil {
 					return err
 				}
@@ -68,7 +70,6 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 		u.WithTransport(pgurl.TransportTLS(tlsMode, caCertPath))
 
 		var missing bool // certs found on file system?
-		loader := securityassets.GetLoader()
 
 		// Fetch client certs, but don't fail if they're absent, we may be
 		// using a password.
