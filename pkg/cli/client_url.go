@@ -124,6 +124,24 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		fl.Lookup(cliflags.ClientPort.Name).Changed = true
 	}
 
+	foundDatabase := func(db string) {
+		if f := fl.Lookup(cliflags.Database.Name); f == nil {
+			// A client which does not support --database does not need this
+			// bit of information, so we can ignore/forget about it. We do
+			// not produce an error however, so that a user can readily
+			// copy-paste an URL they picked up from another tool (a GUI
+			// tool for example).
+			if warn {
+				fmt.Fprintf(stderr,
+					"warning: --url specifies database %q, but command %q does not accept a database name - database name ignored\n",
+					db, u.cmd.Name())
+			}
+		} else {
+			cliCtx.sqlConnDBName = db
+			f.Changed = true
+		}
+	}
+
 	if user := parsedURL.GetUsername(); user != "" {
 		foundUsername(user)
 	}
@@ -141,21 +159,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	// If a database is specified, and the command supports databases,
 	// forward it to --database.
 	if db := parsedURL.GetDatabase(); db != "" {
-		if f := fl.Lookup(cliflags.Database.Name); f == nil {
-			// A client which does not support --database does not need this
-			// bit of information, so we can ignore/forget about it. We do
-			// not produce an error however, so that a user can readily
-			// copy-paste an URL they picked up from another tool (a GUI
-			// tool for example).
-			if warn {
-				fmt.Fprintf(stderr,
-					"warning: --url specifies database %q, but command %q does not accept a database name - database name ignored\n",
-					db, u.cmd.Name())
-			}
-		} else {
-			cliCtx.sqlConnDBName = db
-			f.Changed = true
-		}
+		foundDatabase(db)
 	}
 
 	flInsecure := fl.Lookup(cliflags.ClientInsecure.Name)
