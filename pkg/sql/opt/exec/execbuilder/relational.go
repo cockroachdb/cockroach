@@ -2456,7 +2456,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		}
 
 		exprs[i] = tree.NewTypedFuncExpr(
-			tree.WrapFunction(name),
+			b.wrapFunction(name),
 			0,
 			args,
 			builtFilter,
