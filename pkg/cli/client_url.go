@@ -152,6 +152,14 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		flCertsDir.Changed = true
 	}
 
+	flInsecure := fl.Lookup(cliflags.ClientInsecure.Name)
+	insecureFlag := func() (flagSpecified bool, isInsecure bool) {
+		return flInsecure.Changed, cliCtx.Insecure
+	}
+	insecureOverride := func(insecure bool) {
+		cliCtx.Insecure = insecure
+	}
+
 	if user := parsedURL.GetUsername(); user != "" {
 		foundUsername(user)
 	}
@@ -172,7 +180,6 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		foundDatabase(db)
 	}
 
-	flInsecure := fl.Lookup(cliflags.ClientInsecure.Name)
 	tlsUsed, tlsMode, caCertPath := parsedURL.GetTLSOptions()
 
 	if tlsUsed && tlsMode == pgurl.TLSUnspecified && net == pgurl.ProtoTCP {
@@ -182,9 +189,9 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		//
 		// Is there a value to go by from a previous --insecure flag? If
 		// so, use that.
-		if flInsecure.Changed {
+		if insecureSpecified, insecureValue := insecureFlag(); insecureSpecified {
 			var tp pgurl.TransportOption
-			if cliCtx.Insecure {
+			if insecureValue {
 				tp = pgurl.TransportNone()
 				tlsUsed = false
 			} else {
@@ -204,9 +211,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			// For "strict" mode (RPC client commands) we don't support non-TLS
 			// yet. See https://github.com/cockroachdb/cockroach/issues/54007
 			// Instead, we see a request for no TLS to imply insecure mode.
-			if err := flInsecure.Value.Set("true"); err != nil {
-				return errors.Wrapf(err, "setting secure connection based on --url")
-			}
+			insecureOverride(true)
 		}
 	} else {
 		if u.sslStrict {
@@ -217,9 +222,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				return fmt.Errorf("command %q only supports sslmode=disable or sslmode=verify-full", u.cmd.Name())
 			}
 		}
-		if err := flInsecure.Value.Set("false"); err != nil {
-			return errors.Wrapf(err, "setting secure connection based on --url")
-		}
+		insecureOverride(false)
 
 		if u.sslStrict {
 			// The "sslStrict" flag means the client command is using our
