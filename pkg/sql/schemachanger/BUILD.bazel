@@ -23,7 +23,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",

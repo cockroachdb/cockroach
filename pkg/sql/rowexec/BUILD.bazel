@@ -152,7 +152,7 @@ go_test(
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

@@ -142,7 +142,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",

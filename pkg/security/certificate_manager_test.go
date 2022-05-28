@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -75,7 +76,7 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
 	defer func() { _ = security.SetCertPrincipalMap(nil) }()

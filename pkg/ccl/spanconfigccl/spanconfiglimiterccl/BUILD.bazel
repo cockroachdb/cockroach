@@ -16,7 +16,7 @@ go_test(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
