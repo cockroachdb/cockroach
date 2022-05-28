@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
@@ -283,14 +284,14 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			if cliCtx.sqlConnUser != "" {
 				userName, _ = username.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, username.PurposeValidation)
 			}
-			if err := tryCertsDir("sslrootcert", caCertPath, security.CACertFilename()); err != nil {
+			if err := tryCertsDir("sslrootcert", caCertPath, certnames.CACertFilename()); err != nil {
 				return err
 			}
 			if clientCertEnabled, clientCertPath, clientKeyPath := parsedURL.GetAuthnCert(); clientCertEnabled {
-				if err := tryCertsDir("sslcert", clientCertPath, security.ClientCertFilename(userName)); err != nil {
+				if err := tryCertsDir("sslcert", clientCertPath, certnames.ClientCertFilename(userName)); err != nil {
 					return err
 				}
-				if err := tryCertsDir("sslkey", clientKeyPath, security.ClientKeyFilename(userName)); err != nil {
+				if err := tryCertsDir("sslkey", clientKeyPath, certnames.ClientKeyFilename(userName)); err != nil {
 					return err
 				}
 			}
