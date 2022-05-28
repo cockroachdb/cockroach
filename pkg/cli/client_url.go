@@ -80,11 +80,6 @@ func (u urlParser) Set(v string) error {
 }
 
 func (u urlParser) setInternal(v string, warn bool) error {
-	parsedURL, err := pgurl.Parse(v)
-	if err != nil {
-		return err
-	}
-
 	fl := flagSetForCmd(u.cmd)
 	cliCtx := u.cliCtx
 
@@ -160,6 +155,74 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		cliCtx.Insecure = insecure
 	}
 
+	makeStrictErr := func() error {
+		return fmt.Errorf("command %q only supports sslmode=disable or sslmode=verify-full", u.cmd.Name())
+	}
+
+	purl, err := updateURL(v,
+		u.sslStrict,
+		makeStrictErr,
+		usernameFlag,
+		foundUsername,
+		foundHostname,
+		foundPort,
+		foundDatabase,
+		insecureFlag,
+		insecureOverride,
+		certsDirFlag,
+		foundCertsDir,
+	)
+
+	if err != nil {
+		// This function is called by pflag.(*FlagSet).Set() and that code
+		// does not know how to use errors.Wrap properly. Instead, it
+		// reformats the error as a string, which loses any validation
+		// details.
+		// We make-do here by injecting the details as part of
+		// the error message.
+		// TODO(knz): Fix the upstream pflag and get rid of this
+		// horrendous logic.
+		msg := err.Error()
+		if details := errors.FlattenDetails(err); details != "" {
+			msg += "\n" + details
+		}
+		return fmt.Errorf("%s", msg)
+	}
+
+	// Store the parsed URL for later.
+	cliCtx.sqlConnURL = purl
+	return err
+}
+
+// updateURL is a helper that processes a connection URL passed on the
+// command line, integrates any defaults set by earlier command-line arguments,
+// then calls callbacks depending on which details were found in the new URL.
+//
+// sslStrict, when set to true, requires that the SSL file paths in
+// a URL clearly map to a single certificate directory and restricts
+// the set of supported SSL modes to just "disable" and "require".
+//
+// This is set for all non-SQL client commands, which only support
+// the insecure boolean and certs-dir with maximum SSL validation.
+func updateURL(
+	newURL string,
+	sslStrict bool,
+	makeStrictErr func() error,
+	usernameFlag func() (bool, string),
+	foundUsername func(string),
+	foundHostname func(string),
+	foundPort func(string),
+	foundDatabase func(string),
+	insecureFlag func() (bool, bool),
+	insecureOverride func(bool),
+	certsDirFlag func() (bool, string),
+	foundCertsDir func(string),
+) (*pgurl.URL, error) {
+	parsedURL, err := pgurl.Parse(newURL)
+	if err != nil {
+		return nil, err
+	}
+
 	if user := parsedURL.GetUsername(); user != "" {
 		foundUsername(user)
 	}
@@ -207,24 +270,24 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	}
 
 	if !tlsUsed {
-		if u.sslStrict {
+		if sslStrict {
 			// For "strict" mode (RPC client commands) we don't support non-TLS
 			// yet. See https://github.com/cockroachdb/cockroach/issues/54007
 			// Instead, we see a request for no TLS to imply insecure mode.
 			insecureOverride(true)
 		}
 	} else {
-		if u.sslStrict {
+		if sslStrict {
 			switch tlsMode {
 			case pgurl.TLSVerifyFull:
 				// This is valid.
 			default:
-				return fmt.Errorf("command %q only supports sslmode=disable or sslmode=verify-full", u.cmd.Name())
+				return nil, makeStrictErr()
 			}
 		}
 		insecureOverride(false)
 
-		if u.sslStrict {
+		if sslStrict {
 			// The "sslStrict" flag means the client command is using our
 			// certificate manager instead of the certificate handler in
 			// lib/pq.
@@ -271,7 +334,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				candidateCertsDir = certsDir
 				candidateCertsDir, err = filepath.Abs(candidateCertsDir)
 				if err != nil {
-					return err
+					return nil, err
 				}
 			}
 
@@ -316,14 +379,14 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				userName, _ = username.MakeSQLUsernameFromUserInput(connUser, username.PurposeValidation)
 			}
 			if err := tryCertsDir("sslrootcert", caCertPath, certnames.CACertFilename()); err != nil {
-				return err
+				return nil, err
 			}
 			if clientCertEnabled, clientCertPath, clientKeyPath := parsedURL.GetAuthnCert(); clientCertEnabled {
 				if err := tryCertsDir("sslcert", clientCertPath, certnames.ClientCertFilename(userName)); err != nil {
-					return err
+					return nil, err
 				}
 				if err := tryCertsDir("sslkey", clientKeyPath, certnames.ClientKeyFilename(userName)); err != nil {
-					return err
+					return nil, err
 				}
 			}
 
@@ -334,26 +397,8 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	}
 
 	// Check that the URL so far is valid.
-	if err := parsedURL.Validate(); err != nil {
-		// This function is called by pflag.(*FlagSet).Set() and that code
-		// does not know how to use errors.Wrap properly. Instead, it
-		// reformats the error as a string, which loses any validation
-		// details.
-		// We make-do here by injecting the details as part of
-		// the error message.
-		// TODO(knz): Fix the upstream pflag and get rid of this
-		// horrendous logic.
-		msg := err.Error()
-		if details := errors.FlattenDetails(err); details != "" {
-			msg += "\n" + details
-		}
-		return fmt.Errorf("%s", msg)
-	}
-
-	// Store the parsed URL for later.
-	cliCtx.sqlConnURL = parsedURL
-
-	return nil
+	err = parsedURL.Validate()
+	return parsedURL, err
 }
 
 // makeClientConnURL constructs a connection URL from the parsed options.
