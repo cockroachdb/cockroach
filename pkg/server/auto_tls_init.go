@@ -293,7 +293,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if exists, err := cl.HasNodeCert(); err != nil {
+	if exists, err := certnames.FileExists(cl.NodeCertPath()); err != nil {
 		return err
 	} else if exists {
 		return errors.New("inter-node certificate already present")
@@ -438,7 +438,7 @@ func (b *CertificateBundle) InitializeNodeFromBundle(ctx context.Context, c base
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if exists, err := cl.HasNodeCert(); err != nil {
+	if exists, err := certnames.FileExists(cl.NodeCertPath()); err != nil {
 		return err
 	} else if exists {
 		return errors.New("inter-node certificate already present")

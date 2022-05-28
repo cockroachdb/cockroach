@@ -14,12 +14,12 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	"github.com/cockroachdb/errors"
 )
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
@@ -43,29 +43,18 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
 			if caCertPath == "" {
 				// We need a CA certificate.
-				// Try to use the cert manager to find one, and if that fails,
+				// Try to use the cert locator to find one, and if that fails,
 				// assume that the Go TLS code will fall back to a OS-level
 				// common trust store.
 
-				// First, initialize the cert manager.
-				cm, err := ctx.GetCertificateManager()
+				cl := certnames.MakeLocator(ctx.config.SSLCertsDir)
+				exists, err := certnames.FileExists(cl.CACertPath())
 				if err != nil {
-					// The SecurityContext was unable to get a cert manager. We
-					// can further distinguish between:
-					// - cert manager initialized OK, but contains no certs.
-					// - cert manager did not initialize (bad certs dir, file access error etc).
-					// The former case is legitimate and we will fall back below.
-					// The latter case is a real problem and needs to pop up to the user.
-					if !errors.Is(err, errNoCertificatesFound) {
-						// The certificate manager could not load properly. Let
-						// the user know.
-						return err
-					}
-					// Fall back: cert manager initialized OK, but no certs found.
+					return err
 				}
-				if ourCACert := cm.CACert(); ourCACert != nil {
-					// The CM has a CA cert. Use that.
-					caCertPath = cm.FullPath(ourCACert.Filename)
+				if exists {
+					// The CL has found a CA cert. Use that.
+					caCertPath = cl.CACertPath()
 				}
 			}
 			// Fallback: if caCertPath was not assigned above, either
