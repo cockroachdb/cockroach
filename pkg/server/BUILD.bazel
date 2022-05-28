@@ -117,6 +117,7 @@ go_library(
         "//pkg/rpc/nodedialer",
         "//pkg/scheduledjobs",
         "//pkg/security",
+        "//pkg/security/certnames",
         "//pkg/security/password",
         "//pkg/security/username",
         "//pkg/server/debug",

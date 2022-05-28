@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -65,7 +65,7 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 
 	// If the node cert already exists, skip all the complexity of setting up
 	// servers, etc.
-	cl := security.MakeCertsLocator(baseCfg.SSLCertsDir)
+	cl := certnames.MakeCertsLocator(baseCfg.SSLCertsDir)
 	if exists, err := cl.HasNodeCert(); err != nil {
 		return err
 	} else if exists {

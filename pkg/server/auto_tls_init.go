@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -288,7 +289,7 @@ func writeKeyFile(keyFilePath string, keyPEM *pem.Block, overwrite bool) error {
 // N.B.: This function fast fails if an inter-node cert/key pair are present
 // as this should _never_ happen.
 func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Config) error {
-	cl := security.MakeCertsLocator(c.SSLCertsDir)
+	cl := certnames.MakeCertsLocator(c.SSLCertsDir)
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
@@ -433,7 +434,7 @@ func extractHosts(addrs ...string) []string {
 // It is assumed that a node receiving this has not has TLS initialized. If
 // an inter-node certificate is found, this function will error.
 func (b *CertificateBundle) InitializeNodeFromBundle(ctx context.Context, c base.Config) error {
-	cl := security.MakeCertsLocator(c.SSLCertsDir)
+	cl := certnames.MakeCertsLocator(c.SSLCertsDir)
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
@@ -525,7 +526,7 @@ func (sb *ServiceCertificateBundle) loadCACertAndKeyIfExists(
 // will skip any CA's where the certificate is not found. Any other read errors
 // including permissions result in an error.
 func collectLocalCABundle(SSLCertsDir string) (CertificateBundle, error) {
-	cl := security.MakeCertsLocator(SSLCertsDir)
+	cl := certnames.MakeCertsLocator(SSLCertsDir)
 	var b CertificateBundle
 	var err error
 
@@ -575,7 +576,7 @@ func collectLocalCABundle(SSLCertsDir string) (CertificateBundle, error) {
 // any interface. All existing interfaces will again receive a new
 // certificate/key pair.
 func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
-	cl := security.MakeCertsLocator(c.SSLCertsDir)
+	cl := certnames.MakeCertsLocator(c.SSLCertsDir)
 
 	// Fail fast if we can't load the CAs.
 	b, err := collectLocalCABundle(c.SSLCertsDir)

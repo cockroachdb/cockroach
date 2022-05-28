@@ -2,8 +2,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "certnames",
-    srcs = ["certnames.go"],
+    srcs = [
+        "certnames.go",
+        "certs_locator.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/certnames",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/security/username"],
+    deps = [
+        "//pkg/security/username",
+        "@com_github_cockroachdb_errors//oserror",
+    ],
 )
