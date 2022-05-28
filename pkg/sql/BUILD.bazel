@@ -626,6 +626,7 @@ go_test(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

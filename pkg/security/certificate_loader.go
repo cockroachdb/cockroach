@@ -41,15 +41,6 @@ func init() {
 
 var skipPermissionChecks bool
 
-// AssetLoader describes the functions necessary to read certificate and key files.
-type AssetLoader = securityassets.Loader
-
-// SetAssetLoader overrides the asset loader with the passed-in one.
-func SetAssetLoader(al AssetLoader) { securityassets.SetLoader(al) }
-
-// ResetAssetLoader restores the asset loader to the default value.
-func ResetAssetLoader() { securityassets.ResetLoader() }
-
 // PemUsage indicates the purpose of a given certificate.
 type PemUsage uint32
 

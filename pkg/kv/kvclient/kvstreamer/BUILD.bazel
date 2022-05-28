@@ -49,7 +49,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",

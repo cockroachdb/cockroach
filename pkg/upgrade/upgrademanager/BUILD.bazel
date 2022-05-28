@@ -44,7 +44,7 @@ go_test(
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",

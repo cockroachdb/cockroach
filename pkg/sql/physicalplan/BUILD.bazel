@@ -55,7 +55,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog",

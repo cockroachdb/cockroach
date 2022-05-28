@@ -48,7 +48,7 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/col/coldata",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/types",

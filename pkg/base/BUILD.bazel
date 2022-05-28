@@ -57,7 +57,7 @@ go_test(
     deps = [
         ":base",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/testutils",
         "//pkg/util/leaktest",

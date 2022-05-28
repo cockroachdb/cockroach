@@ -67,7 +67,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/storage",

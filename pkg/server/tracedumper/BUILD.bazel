@@ -28,7 +28,7 @@ go_test(
     ],
     embed = [":tracedumper"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/dumpstore",

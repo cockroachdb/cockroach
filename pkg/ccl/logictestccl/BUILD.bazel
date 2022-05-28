@@ -24,7 +24,7 @@ go_test(
         "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/utilccl",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/logictest",

@@ -16,7 +16,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/spanconfig",

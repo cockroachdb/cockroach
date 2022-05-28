@@ -65,7 +65,7 @@ go_test(
     embed = [":execbuilder"],
     shard_count = 16,
     deps = [
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",

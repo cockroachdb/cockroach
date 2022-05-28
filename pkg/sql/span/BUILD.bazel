@@ -35,7 +35,7 @@ go_test(
     deps = [
         ":span",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog/desctestutils",

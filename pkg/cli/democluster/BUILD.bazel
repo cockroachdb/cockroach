@@ -62,7 +62,7 @@ go_test(
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
