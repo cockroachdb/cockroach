@@ -41,11 +41,10 @@ func TestMVCCValueLocalTimestampNeeded(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			mvccKey := MVCCKey{Timestamp: tc.versionTs}
 			mvccVal := MVCCValue{}
 			mvccVal.LocalTimestamp = hlc.ClockTimestamp(tc.localTs)
 
-			require.Equal(t, tc.expect, mvccVal.LocalTimestampNeeded(mvccKey))
+			require.Equal(t, tc.expect, mvccVal.LocalTimestampNeeded(tc.versionTs))
 		})
 	}
 }
@@ -71,11 +70,10 @@ func TestMVCCValueGetLocalTimestamp(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			mvccKey := MVCCKey{Timestamp: tc.versionTs}
 			mvccVal := MVCCValue{}
 			mvccVal.LocalTimestamp = hlc.ClockTimestamp(tc.localTs)
 
-			require.Equal(t, hlc.ClockTimestamp(tc.expect), mvccVal.GetLocalTimestamp(mvccKey))
+			require.Equal(t, hlc.ClockTimestamp(tc.expect), mvccVal.GetLocalTimestamp(tc.versionTs))
 		})
 	}
 }
