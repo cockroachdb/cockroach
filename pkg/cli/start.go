@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/clientconnurl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -518,7 +519,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := rpc.PGURL(newClientConnOptionsForServer(), url.User(username.RootUser))
+			pgURL, err := clientconnurl.PGURL(newClientConnOptionsForServer(), url.User(username.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return
@@ -912,8 +913,8 @@ func waitForShutdown(
 
 // newClientConnOptionsForServer returns a ClientConnectOptions struct
 // derived from a server configuration.
-func newClientConnOptionsForServer() *rpc.ClientConnectOptions {
-	return &rpc.ClientConnectOptions{
+func newClientConnOptionsForServer() *clientconnurl.Options {
+	return &clientconnurl.Options{
 		Insecure:        serverCfg.Config.Insecure,
 		CertsDir:        serverCfg.Config.SSLCertsDir,
 		ServerAddr:      serverCfg.Config.SQLAdvertiseAddr,
@@ -947,7 +948,7 @@ func reportServerInfo(
 	// (Re-)compute the client connection URL. We cannot do this
 	// earlier (e.g. above, in the runStart function) because
 	// at this time the address and port have not been resolved yet.
-	pgURL, err := rpc.PGURL(newClientConnOptionsForServer(), url.User(username.RootUser))
+	pgURL, err := clientconnurl.PGURL(newClientConnOptionsForServer(), url.User(username.RootUser))
 	if err != nil {
 		log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 		return err

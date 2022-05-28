@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security/clientconnurl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
@@ -676,7 +677,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
-	ccopts := &rpc.ClientConnectOptions{
+	ccopts := &clientconnurl.Options{
 		Insecure:        cfg.Config.Insecure,
 		CertsDir:        cfg.Config.SSLCertsDir,
 		ServerAddr:      cfg.Config.SQLAdvertiseAddr,
@@ -687,7 +688,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	nodeInfo := sql.NodeInfo{
 		AdminURL: cfg.AdminURL,
 		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
-			return rpc.PGURL(ccopts, user)
+			return clientconnurl.PGURL(ccopts, user)
 		},
 		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
 		NodeID:           cfg.nodeIDContainer,
