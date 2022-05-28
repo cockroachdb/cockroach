@@ -1615,7 +1615,7 @@ query FFFFF
 SELECT covar_samp(y, x), covar_samp(int_y, int_x), covar_samp(y, int_x), covar_samp(int_y, x), round(covar_samp(dy, dx), 6)
 FROM statistics_agg_test
 ----
--166.333708 36.6666666666667 1222.66666666667 -28.1514688888889 -166.333708
+-166.333708  36.666666666666664  1222.6666666666667  -28.15146888888889  -166.333708
 
 query FFFF
 SELECT covar_samp(y, dx), covar_samp(int_y, dx), covar_samp(dy, int_x), covar_samp(dy, x)
@@ -1768,7 +1768,7 @@ query RRR
 SELECT regr_intercept(y, x), regr_intercept(int_y, int_x), regr_intercept(dy, dx)
 FROM statistics_agg_test
 ----
-1.33333333333333 1.33333333333333 1.33333333333333
+1.3333333333333333  1.3333333333333333  1.3333333333333333
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -1807,13 +1807,13 @@ query FFFFF
 SELECT regr_r2(y, x), regr_r2(int_y, int_x), regr_r2(y, int_x), round(regr_r2(int_y, x), 15), regr_r2(dy, dx)
 FROM statistics_agg_test
 ----
-0.00157988373240915 0.870503597122302 0.928416382915767 0.047181068076447 0.00157988373240915
+0.001579883732409151  0.8705035971223022  0.9284163829157668  0.047181068076447  0.001579883732409151
 
 query FFFF
 SELECT regr_r2(y, dx), round(regr_r2(int_y, x), 15), regr_r2(dy, int_x), regr_r2(dy, x)
 FROM statistics_agg_test
 ----
-0.00157988373240915 0.047181068076447 0.928416382915767 0.00157988373240915
+0.001579883732409151  0.047181068076447  0.9284163829157668  0.001579883732409151
 
 query F
 SELECT regr_r2(DISTINCT y, x)
@@ -1962,7 +1962,7 @@ query RRR
 SELECT regr_slope(y, x), regr_slope(int_y, int_x), regr_slope(dy, dx)
 FROM statistics_agg_test
 ----
--0.0333333333333333  -0.0333333333333333  -0.0333333333333333
+-0.03333333333333333  -0.03333333333333333  -0.03333333333333333
 
 statement OK
 TRUNCATE statistics_agg_test
@@ -3399,7 +3399,7 @@ SELECT
   percentile_cont(0.95) WITHIN GROUP (ORDER BY i)
 FROM osagg
 ----
-5.65  0.0175  1 year 5 mons 24 days 18:00:00
+5.6499999999999995  0.017500000000000026  1 year 5 mons 24 days 18:00:00
 
 # Test with null values.
 query TRR
@@ -3419,7 +3419,7 @@ SELECT
   percentile_cont(0.05) WITHIN GROUP (ORDER BY i DESC)
 FROM osagg
 ----
-0.0175  5.65  1 mon  1 year 5 mons 24 days 18:00:00
+0.017500000000000005  5.65  1 mon  1 year 5 mons 24 days 18:00:00
 
 # Test with different percent values.
 query RRR
@@ -3453,7 +3453,7 @@ SELECT
   percentile_disc(ARRAY[0.25, 0.5, 0.75]::float[]) WITHIN GROUP (ORDER BY f)
 FROM osagg
 ----
-{0.05,2.0,4.0}
+{0.05,2,4}
 
 query T
 SELECT

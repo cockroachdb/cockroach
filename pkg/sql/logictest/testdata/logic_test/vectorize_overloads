@@ -123,8 +123,8 @@ query R rowsort
 SELECT _float^_float FROM many_types
 ----
 NULL
-1.28998092100128
-1011.29924392386
+1.289980921001281
+1011.299243923862
 NULL
 
 query R rowsort

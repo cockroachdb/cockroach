@@ -1,0 +1,56 @@
+send
+Query {"String": "SELECT (1/3.0)::float4, (1/3.0)::float8"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"float4","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":700,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"float8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"0.33333334"},{"text":"0.3333333333333333"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "SET extra_float_digits = -1"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT (1/3.0)::float4, (1/3.0)::float8"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"float4","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":700,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"float8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"0.33333"},{"text":"0.33333333333333"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET extra_float_digits = -15"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT (1/3.0)::float4, (1/3.0)::float8"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"float4","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":700,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"float8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"0.3"},{"text":"0.3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
