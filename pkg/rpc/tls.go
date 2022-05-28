@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
@@ -55,7 +56,7 @@ func wrapError(err error) error {
 // SecurityContext is a wrapper providing transport security helpers such as
 // the certificate manager.
 type SecurityContext struct {
-	security.CertsLocator
+	certnames.Locator
 	security.TLSSettings
 	config *base.Config
 	tenID  roachpb.TenantID
@@ -77,10 +78,10 @@ func MakeSecurityContext(
 		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
 	}
 	return SecurityContext{
-		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
-		TLSSettings:  tlsSettings,
-		config:       cfg,
-		tenID:        tenID,
+		Locator:     certnames.MakeLocator(cfg.SSLCertsDir),
+		TLSSettings: tlsSettings,
+		config:      cfg,
+		tenID:       tenID,
 	}
 }
 
