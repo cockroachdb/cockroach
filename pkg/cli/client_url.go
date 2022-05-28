@@ -12,7 +12,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -238,7 +237,6 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				// If --certs-dir was not specified, we'll pick up
 				// the first directory encountered below.
 				candidateCertsDir = cliCtx.SSLCertsDir
-				candidateCertsDir = os.ExpandEnv(candidateCertsDir)
 				candidateCertsDir, err = filepath.Abs(candidateCertsDir)
 				if err != nil {
 					return err
