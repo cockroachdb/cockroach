@@ -676,10 +676,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
+	ccopts := &rpc.ClientConnectOptions{
+		Insecure:        cfg.Config.Insecure,
+		CertsDir:        cfg.Config.SSLCertsDir,
+		ServerAddr:      cfg.Config.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+
 	nodeInfo := sql.NodeInfo{
 		AdminURL: cfg.AdminURL,
 		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
-			return rpc.PGURL(cfg.Config, user)
+			return rpc.PGURL(ccopts, user)
 		},
 		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
 		NodeID:           cfg.nodeIDContainer,

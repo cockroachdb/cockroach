@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -517,7 +518,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := rpc.PGURL(serverCfg.Config, url.User(username.RootUser))
+			pgURL, err := rpc.PGURL(newClientConnOptionsForServer(), url.User(username.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return
@@ -909,6 +910,18 @@ func waitForShutdown(
 	return returnErr
 }
 
+// newClientConnOptionsForServer returns a ClientConnectOptions struct
+// derived from a server configuration.
+func newClientConnOptionsForServer() *rpc.ClientConnectOptions {
+	return &rpc.ClientConnectOptions{
+		Insecure:        serverCfg.Config.Insecure,
+		CertsDir:        serverCfg.Config.SSLCertsDir,
+		ServerAddr:      serverCfg.Config.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+}
+
 // reportServerInfo prints out the server version and network details
 // in a standardized format.
 func reportServerInfo(
@@ -934,7 +947,7 @@ func reportServerInfo(
 	// (Re-)compute the client connection URL. We cannot do this
 	// earlier (e.g. above, in the runStart function) because
 	// at this time the address and port have not been resolved yet.
-	pgURL, err := rpc.PGURL(serverCfg.Config, url.User(username.RootUser))
+	pgURL, err := rpc.PGURL(newClientConnOptionsForServer(), url.User(username.RootUser))
 	if err != nil {
 		log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 		return err

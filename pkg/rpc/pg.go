@@ -13,20 +13,40 @@ package rpc
 import (
 	"net/url"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 )
 
+// ClientConnectOptions defines the configurable connection parameters
+// used as input to compute connection URLs.
+type ClientConnectOptions struct {
+	// Insecure corresponds to the --insecure flag.
+	Insecure bool
+
+	// CertsDir corresponds to the --certs-dir flag.
+	CertsDir string
+
+	// ServerAddr is the configured server address to use if the URL does not contain one.
+	ServerAddr string
+
+	// DefaultPort is the port number to use if ServerAddr does not contain one.
+	DefaultPort string
+
+	// DefaultDatabase is the default database name to use if the connection URL
+	// does not contain one.
+	DefaultDatabase string
+}
+
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func LoadSecurityOptions(cfg *base.Config, u *pgurl.URL, user username.SQLUsername) error {
+func LoadSecurityOptions(
+	opts *ClientConnectOptions, u *pgurl.URL, user username.SQLUsername,
+) error {
 	u.WithUsername(user.Normalized())
-	if cfg.Insecure {
+	if opts.Insecure {
 		u.WithInsecure()
 	} else if net, _, _ := u.GetNetworking(); net == pgurl.ProtoTCP {
 		tlsUsed, tlsMode, caCertPath := u.GetTLSOptions()
@@ -40,7 +60,7 @@ func LoadSecurityOptions(cfg *base.Config, u *pgurl.URL, user username.SQLUserna
 		}
 
 		loader := securityassets.GetAssetLoader()
-		cl := certnames.MakeCertsLocator(cfg.SSLCertsDir)
+		cl := certnames.MakeCertsLocator(opts.CertsDir)
 
 		// Only verify-full and verify-ca should be doing certificate verification.
 		if tlsMode == pgurl.TLSVerifyFull || tlsMode == pgurl.TLSVerifyCA {
@@ -109,14 +129,14 @@ func LoadSecurityOptions(cfg *base.Config, u *pgurl.URL, user username.SQLUserna
 
 // PGURL constructs a URL for the postgres endpoint, given a server
 // config. There is no default database set.
-func PGURL(cfg *base.Config, user *url.Userinfo) (*pgurl.URL, error) {
-	host, port, _ := addr.SplitHostPort(cfg.SQLAdvertiseAddr, base.DefaultPort)
+func PGURL(opts *ClientConnectOptions, user *url.Userinfo) (*pgurl.URL, error) {
+	host, port, _ := addr.SplitHostPort(opts.ServerAddr, opts.DefaultPort)
 	u := pgurl.New().
 		WithNet(pgurl.NetTCP(host, port)).
-		WithDatabase(catalogkeys.DefaultDatabaseName)
+		WithDatabase(opts.DefaultDatabase)
 
 	username, _ := username.MakeSQLUsernameFromUserInput(user.Username(), username.PurposeValidation)
-	if err := LoadSecurityOptions(cfg, u, username); err != nil {
+	if err := LoadSecurityOptions(opts, u, username); err != nil {
 		return nil, err
 	}
 	return u, nil

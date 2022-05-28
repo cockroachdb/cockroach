@@ -14,11 +14,13 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -358,7 +360,14 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 		userName = username.RootUserName()
 	}
 
-	if err := rpc.LoadSecurityOptions(cliCtx.Config, purl, userName); err != nil {
+	ccopts := rpc.ClientConnectOptions{
+		Insecure:        cliCtx.Config.Insecure,
+		CertsDir:        cliCtx.Config.SSLCertsDir,
+		ServerAddr:      cliCtx.Config.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+	if err := rpc.LoadSecurityOptions(&ccopts, purl, userName); err != nil {
 		return nil, err
 	}
 
