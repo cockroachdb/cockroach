@@ -144,6 +144,16 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		}
 	}
 
+	flCertsDir := fl.Lookup(cliflags.CertsDir.Name)
+	certsDirFlag := func() (certsDirSpecified bool, certsDir string) {
+		return flCertsDir.Changed, baseCfg.SSLCertsDir
+	}
+
+	foundCertsDir := func(certsDir string) {
+		baseCfg.SSLCertsDir = certsDir
+		flCertsDir.Changed = true
+	}
+
 	if user := parsedURL.GetUsername(); user != "" {
 		foundUsername(user)
 	}
@@ -249,15 +259,15 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			//
 
 			candidateCertsDir := ""
-			foundCertsDir := false
-			if fl.Lookup(cliflags.CertsDir.Name).Changed {
+			hasCertsDir := false
+			if certsDirSpecified, certsDir := certsDirFlag(); certsDirSpecified {
 				// If a --certs-dir flag was preceding --url, we want to
 				// check that the paths inside the URL match the value of
 				// that explicit --certs-dir.
 				//
 				// If --certs-dir was not specified, we'll pick up
 				// the first directory encountered below.
-				candidateCertsDir = cliCtx.SSLCertsDir
+				candidateCertsDir = certsDir
 				candidateCertsDir, err = filepath.Abs(candidateCertsDir)
 				if err != nil {
 					return err
@@ -294,7 +304,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				} else {
 					// First time seeing a directory, remember it.
 					candidateCertsDir = dir
-					foundCertsDir = true
+					hasCertsDir = true
 				}
 
 				return nil
@@ -316,10 +326,8 @@ func (u urlParser) setInternal(v string, warn bool) error {
 				}
 			}
 
-			if foundCertsDir {
-				if err := fl.Set(cliflags.CertsDir.Name, candidateCertsDir); err != nil {
-					return errors.Wrapf(err, "extracting certificate directory")
-				}
+			if hasCertsDir {
+				foundCertsDir(candidateCertsDir)
 			}
 		}
 	}
