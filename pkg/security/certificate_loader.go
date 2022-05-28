@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -82,9 +83,6 @@ const (
 	// Maximum allowable permissions if file is owned by root.
 	maxGroupKeyPermissions os.FileMode = 0740
 
-	// Filename extensions.
-	certExtension = `.crt`
-	keyExtension  = `.key`
 	// Certificate directory permissions.
 	defaultCertsDirPerm = 0700
 )
@@ -152,10 +150,6 @@ type CertInfo struct {
 	Error error
 }
 
-func isCertificateFile(filename string) bool {
-	return strings.HasSuffix(filename, certExtension)
-}
-
 // CertInfoFromFilename takes a filename and attempts to determine the
 // certificate usage (ca, node, etc..).
 func CertInfoFromFilename(filename string) (*CertInfo, error) {
@@ -173,53 +167,56 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 	case `ca`:
 		fileUsage = CAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("CA certificate filename should match ca%s", certExtension)
+			return nil, errors.Errorf("CA certificate filename should match %s", certnames.CACertFilename())
 		}
 	case `ca-client`:
 		fileUsage = ClientCAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("client CA certificate filename should match ca-client%s", certExtension)
+			return nil, errors.Errorf("client CA certificate filename should match %s", certnames.ClientCACertFilename())
 		}
 	case `ca-client-tenant`:
 		fileUsage = TenantCAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("tenant CA certificate filename should match ca%s", certExtension)
+			return nil, errors.Errorf("tenant CA certificate filename should match %s", certnames.TenantClientCACertFilename())
 		}
 	case `ca-ui`:
 		fileUsage = UICAPem
 		if numParts != 2 {
-			return nil, errors.Errorf("UI CA certificate filename should match ca-ui%s", certExtension)
+			return nil, errors.Errorf("UI CA certificate filename should match %s", certnames.UICACertFilename())
 		}
 	case `node`:
 		fileUsage = NodePem
 		if numParts != 2 {
-			return nil, errors.Errorf("node certificate filename should match node%s", certExtension)
+			return nil, errors.Errorf("node certificate filename should match %s", certnames.NodeCertFilename())
 		}
 	case `ui`:
 		fileUsage = UIPem
 		if numParts != 2 {
-			return nil, errors.Errorf("UI certificate filename should match ui%s", certExtension)
+			return nil, errors.Errorf("UI certificate filename should match %s", certnames.UIServerCertFilename())
 		}
 	case `client`:
 		fileUsage = ClientPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("client certificate filename should match client.<user>%s", certExtension)
+			return nil, errors.Errorf("client certificate filename should match %s",
+				certnames.ClientCertFilename(username.MakeSQLUsernameFromPreNormalizedString("<user>")))
 		}
 	case `client-tenant`:
 		fileUsage = TenantPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("tenant certificate filename should match client-tenant.<tenantid>%s", certExtension)
+			return nil, errors.Errorf("tenant certificate filename should match %s",
+				certnames.TenantCertFilename("<tenantid>"))
 		}
 	case `tenant-signing`:
 		fileUsage = TenantSigningPem
 		// Strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
-			return nil, errors.Errorf("tenant signing certificate filename should match tenant-signing.<tenantid>%s", certExtension)
+			return nil, errors.Errorf("tenant signing certificate filename should match %s",
+				certnames.TenantSigningCertFilename("<tenantid>"))
 		}
 	default:
 		return nil, errors.Errorf("unknown prefix %q", prefix)
@@ -313,7 +310,7 @@ func (cl *CertificateLoader) Load() error {
 			continue
 		}
 
-		if !isCertificateFile(filename) {
+		if !certnames.IsCertificateFile(filename) {
 			if log.V(3) {
 				log.Infof(context.Background(), "skipping non-certificate file %s", filename)
 			}
@@ -361,7 +358,7 @@ func (cl *CertificateLoader) findKey(ci *CertInfo) error {
 		return nil
 	}
 
-	keyFilename := strings.TrimSuffix(ci.Filename, certExtension) + keyExtension
+	keyFilename := certnames.KeyForCert(ci.Filename)
 	fullKeyPath := filepath.Join(cl.certsDir, keyFilename)
 
 	// Stat the file. This follows symlinks.
