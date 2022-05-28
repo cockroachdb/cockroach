@@ -85,10 +85,14 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		return err
 	}
 
+	fl := flagSetForCmd(u.cmd)
 	cliCtx := u.cliCtx
 
-	fl := flagSetForCmd(u.cmd)
-	if user := parsedURL.GetUsername(); user != "" {
+	usernameFlag := func() (hasConnUser bool, connUser string) {
+		return cliCtx.sqlConnUser != "", cliCtx.sqlConnUser
+	}
+
+	foundUsername := func(user string) {
 		// If the URL specifies a username, check whether a username was expected.
 		if f := fl.Lookup(cliflags.User.Name); f == nil {
 			// A client which does not support --user will also not use
@@ -108,6 +112,10 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			// the .Changed field.
 			f.Changed = true
 		}
+	}
+
+	if user := parsedURL.GetUsername(); user != "" {
+		foundUsername(user)
 	}
 
 	// If some host/port information is available, forward it to
@@ -279,8 +287,8 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			}
 
 			userName := username.RootUserName()
-			if cliCtx.sqlConnUser != "" {
-				userName, _ = username.MakeSQLUsernameFromUserInput(cliCtx.sqlConnUser, username.PurposeValidation)
+			if hasConnUser, connUser := usernameFlag(); hasConnUser {
+				userName, _ = username.MakeSQLUsernameFromUserInput(connUser, username.PurposeValidation)
 			}
 			if err := tryCertsDir("sslrootcert", caCertPath, certnames.CACertFilename()); err != nil {
 				return err
