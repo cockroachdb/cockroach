@@ -13,6 +13,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
@@ -55,12 +56,14 @@ import (
 //
 
 type urlParser struct {
-	cmd    *cobra.Command
-	cliCtx *cliContext
+	cmd *cobra.Command
 
 	// if is the flag set for cmd. This is initialized late in Set()
 	// since some flags are only defined after the URL flag.
 	fl *pflag.FlagSet
+
+	clientOpts *clientsecopts.ClientOptions
+	baseCfg    *base.Config
 
 	// warn determines whether a warning is printed if an URL contains
 	// user/database details and the command does not support that.
@@ -75,12 +78,19 @@ type urlParser struct {
 	strictTLS bool
 }
 
-func newURLParser(cmd *cobra.Command, cliCtx *cliContext, strictTLS bool, warn bool) pflag.Value {
+func newURLParser(
+	cmd *cobra.Command,
+	clientOpts *clientsecopts.ClientOptions,
+	baseCfg *base.Config,
+	strictTLS bool,
+	warn bool,
+) pflag.Value {
 	return &urlParser{
-		cmd:       cmd,
-		cliCtx:    cliCtx,
-		warn:      warn,
-		strictTLS: strictTLS,
+		cmd:        cmd,
+		clientOpts: clientOpts,
+		baseCfg:    baseCfg,
+		warn:       warn,
+		strictTLS:  strictTLS,
 	}
 }
 
@@ -117,7 +127,7 @@ func (u *urlParser) Set(v string) error {
 	}
 
 	// Store the parsed URL for later.
-	u.cliCtx.sqlConnURL = purl
+	u.clientOpts.ExplicitURL = purl
 	return err
 }
 
@@ -128,7 +138,7 @@ func (u *urlParser) StrictTLS() bool { return u.strictTLS }
 
 // UserFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) UserFlag() (hasConnUser bool, connUser string) {
-	return u.cliCtx.sqlConnUser != "", u.cliCtx.sqlConnUser
+	return u.clientOpts.User != "", u.clientOpts.User
 }
 
 // SetUser implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
@@ -147,7 +157,7 @@ func (u *urlParser) SetUser(user string) {
 		}
 	} else {
 		// If username information is available, forward it to --user.
-		u.cliCtx.sqlConnUser = user
+		u.clientOpts.User = user
 		// Remember the --user flag was changed in case later code checks
 		// the .Changed field.
 		f.Changed = true
@@ -156,13 +166,13 @@ func (u *urlParser) SetUser(user string) {
 
 // SetHost implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetHost(host string) {
-	u.cliCtx.clientConnHost = host
+	u.clientOpts.ServerHost = host
 	u.fl.Lookup(cliflags.ClientHost.Name).Changed = true
 }
 
 // SetPort implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetPort(port string) {
-	u.cliCtx.clientConnPort = port
+	u.clientOpts.ServerPort = port
 	u.fl.Lookup(cliflags.ClientPort.Name).Changed = true
 }
 
@@ -180,7 +190,7 @@ func (u *urlParser) SetDatabase(db string) {
 				db, u.cmd.Name())
 		}
 	} else {
-		u.cliCtx.sqlConnDBName = db
+		u.clientOpts.Database = db
 		f.Changed = true
 	}
 }
@@ -188,26 +198,26 @@ func (u *urlParser) SetDatabase(db string) {
 // CertsDirFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) CertsDirFlag() (bool, string) {
 	flCertsDir := u.fl.Lookup(cliflags.CertsDir.Name)
-	return flCertsDir.Changed, u.cliCtx.Config.SSLCertsDir
+	return flCertsDir.Changed, u.baseCfg.SSLCertsDir
 }
 
 // SetCertsDir implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetCertsDir(certsDir string) {
-	u.cliCtx.Config.SSLCertsDir = certsDir
+	u.baseCfg.SSLCertsDir = certsDir
 	u.fl.Lookup(cliflags.CertsDir.Name).Changed = true
 }
 
 // InsecureFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) InsecureFlag() (bool, bool) {
 	flInsecure := u.fl.Lookup(cliflags.ClientInsecure.Name)
-	return flInsecure.Changed, u.cliCtx.Insecure
+	return flInsecure.Changed, u.baseCfg.Insecure
 }
 
 // SetInsecure implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetInsecure(insecure bool) {
 	// Note: we purposefully do not update the .Changed field of the
 	// --insecure flag.
-	u.cliCtx.Config.Insecure = insecure
+	u.baseCfg.Insecure = insecure
 }
 
 // NewStrictTLSConfigurationError implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
@@ -217,17 +227,10 @@ func (u *urlParser) NewStrictTLSConfigurationError() error {
 
 // makeClientConnURL constructs a connection URL from the parsed options.
 func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
-	copts := clientsecopts.ClientOptions{
-		ClientSecurityOptions: clientsecopts.ClientSecurityOptions{
-			Insecure: cliCtx.Config.Insecure,
-			CertsDir: cliCtx.Config.SSLCertsDir,
-		},
-		ExplicitURL: cliCtx.sqlConnURL,
-		User:        cliCtx.sqlConnUser,
-		Database:    cliCtx.sqlConnDBName,
-		ServerHost:  cliCtx.clientConnHost,
-		ServerPort:  cliCtx.clientConnPort,
+	copts := cliCtx.clientOpts
+	copts.ClientSecurityOptions = clientsecopts.ClientSecurityOptions{
+		Insecure: cliCtx.Config.Insecure,
+		CertsDir: cliCtx.Config.SSLCertsDir,
 	}
-
 	return clientsecopts.MakeClientConnURL(copts)
 }
