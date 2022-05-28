@@ -201,6 +201,13 @@ func (c *Context) Run(conn clisqlclient.Conn) error {
 		return err
 	}
 
+	if c.ConnCtx.DebugMode {
+		fmt.Fprintln(c.CmdOut,
+			"#\n# NOTE: if you intend to troubleshoot CockroachDB, you might want to set the current database\n"+
+				"# to the empty string (SET database = \"\"), for otherwise simple queries against crdb_internal\n"+
+				"# and other vtables will attempt to take a database lease and incur write traffic.\n#")
+	}
+
 	shell := clisqlshell.NewShell(c.CliCtx, c.ConnCtx, c.ExecCtx, &c.ShellCtx, conn)
 	return shell.RunInteractive(c.cmdIn, c.CmdOut, c.CmdErr)
 }
