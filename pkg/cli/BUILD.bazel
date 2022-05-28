@@ -132,6 +132,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
+        "//pkg/security/certnames",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -267,7 +268,7 @@ func MakeCertsLocator(certsDir string) CertsLocator {
 
 // CACertPath returns the expected file path for the CA certificate.
 func (cl CertsLocator) CACertPath() string {
-	return filepath.Join(cl.certsDir, CACertFilename())
+	return filepath.Join(cl.certsDir, certnames.CACertFilename())
 }
 
 // FullPath takes a CertInfo and returns the full path for it.
@@ -281,68 +282,56 @@ func (cl CertsLocator) EnsureCertsDirectory() error {
 	return os.MkdirAll(cl.certsDir, 0700)
 }
 
-// CACertFilename returns the expected file name for the CA certificate.
-func CACertFilename() string { return "ca" + certExtension }
-
 // CAKeyPath returns the expected file path for the CA certificate.
 func (cl CertsLocator) CAKeyPath() string {
-	return filepath.Join(cl.certsDir, CAKeyFilename())
+	return filepath.Join(cl.certsDir, certnames.CAKeyFilename())
 }
-
-// CAKeyFilename returns the expected file name for the CA certificate.
-func CAKeyFilename() string { return "ca" + keyExtension }
 
 // TenantCACertPath returns the expected file path for the Tenant client CA
 // certificate.
 func (cl CertsLocator) TenantCACertPath() string {
-	return filepath.Join(cl.certsDir, TenantCACertFilename())
-}
-
-// TenantCACertFilename returns the expected file name for the Tenant CA
-// certificate.
-func TenantCACertFilename() string {
-	return "ca-client-tenant" + certExtension
+	return filepath.Join(cl.certsDir, certnames.TenantClientCACertFilename())
 }
 
 // ClientCACertPath returns the expected file path for the CA certificate
 // used to verify client certificates.
 func (cl CertsLocator) ClientCACertPath() string {
-	return filepath.Join(cl.certsDir, "ca-client"+certExtension)
+	return filepath.Join(cl.certsDir, certnames.ClientCACertFilename())
 }
 
 // ClientCAKeyPath returns the expected file path for the CA key
 // used to sign client certificates.
 func (cl CertsLocator) ClientCAKeyPath() string {
-	return filepath.Join(cl.certsDir, "ca-client"+keyExtension)
+	return filepath.Join(cl.certsDir, certnames.ClientCAKeyFilename())
 }
 
 // ClientNodeCertPath returns the expected file path for the certificate used
 // by other nodes to verify outgoing RPCs from this node.
 func (cl CertsLocator) ClientNodeCertPath() string {
-	return filepath.Join(cl.certsDir, "client.node"+certExtension)
+	return filepath.Join(cl.certsDir, certnames.ClientCertFilename(username.NodeUserName()))
 }
 
 // ClientNodeKeyPath returns the expected file path for the key used
 // to sign outgoing RPCs.
 func (cl CertsLocator) ClientNodeKeyPath() string {
-	return filepath.Join(cl.certsDir, "client.node"+keyExtension)
+	return filepath.Join(cl.certsDir, certnames.ClientKeyFilename(username.NodeUserName()))
 }
 
 // UICACertPath returns the expected file path for the CA certificate
 // used to verify Admin UI certificates.
 func (cl CertsLocator) UICACertPath() string {
-	return filepath.Join(cl.certsDir, "ca-ui"+certExtension)
+	return filepath.Join(cl.certsDir, certnames.UICACertFilename())
 }
 
 // UICAKeyPath returns the expected file path for the CA certificate
 // used to verify Admin UI certificates.
 func (cl CertsLocator) UICAKeyPath() string {
-	return filepath.Join(cl.certsDir, "ca-ui"+keyExtension)
+	return filepath.Join(cl.certsDir, certnames.UICAKeyFilename())
 }
 
 // NodeCertPath returns the expected file path for the node certificate.
 func (cl CertsLocator) NodeCertPath() string {
-	return filepath.Join(cl.certsDir, NodeCertFilename())
+	return filepath.Join(cl.certsDir, certnames.NodeCertFilename())
 }
 
 // HasNodeCert returns true iff the node certificate file already exists.
@@ -357,181 +346,93 @@ func (cl CertsLocator) HasNodeCert() (bool, error) {
 	return true, nil
 }
 
-// NodeCertFilename returns the expected file name for the node certificate.
-func NodeCertFilename() string {
-	return "node" + certExtension
-}
-
 // NodeKeyPath returns the expected file path for the node key.
 func (cl CertsLocator) NodeKeyPath() string {
-	return filepath.Join(cl.certsDir, NodeKeyFilename())
-}
-
-// NodeKeyFilename returns the expected file name for the node key.
-func NodeKeyFilename() string {
-	return "node" + keyExtension
+	return filepath.Join(cl.certsDir, certnames.NodeKeyFilename())
 }
 
 // UICertPath returns the expected file path for the UI certificate.
 func (cl CertsLocator) UICertPath() string {
-	return filepath.Join(cl.certsDir, "ui"+certExtension)
+	return filepath.Join(cl.certsDir, certnames.UIServerCertFilename())
 }
 
 // UIKeyPath returns the expected file path for the UI key.
 func (cl CertsLocator) UIKeyPath() string {
-	return filepath.Join(cl.certsDir, "ui"+keyExtension)
+	return filepath.Join(cl.certsDir, certnames.UIServerKeyFilename())
 }
 
 // TenantCertPath returns the expected file path for the user's certificate.
 func (cl CertsLocator) TenantCertPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantCertFilename(tenantIdentifier))
-}
-
-// TenantCertFilename returns the expected file name for the user's certificate.
-func TenantCertFilename(tenantIdentifier string) string {
-	return "client-tenant." + tenantIdentifier + certExtension
+	return filepath.Join(cl.certsDir, certnames.TenantCertFilename(tenantIdentifier))
 }
 
 // TenantKeyPath returns the expected file path for the tenant's key.
 func (cl CertsLocator) TenantKeyPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantKeyFilename(tenantIdentifier))
-}
-
-// TenantKeyFilename returns the expected file name for the user's key.
-func TenantKeyFilename(tenantIdentifier string) string {
-	return "client-tenant." + tenantIdentifier + keyExtension
+	return filepath.Join(cl.certsDir, certnames.TenantKeyFilename(tenantIdentifier))
 }
 
 // TenantSigningCertPath returns the expected file path for the node certificate.
 func (cl CertsLocator) TenantSigningCertPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantSigningCertFilename(tenantIdentifier))
-}
-
-// TenantSigningCertFilename returns the expected file name for the node certificate.
-func TenantSigningCertFilename(tenantIdentifier string) string {
-	return "tenant-signing." + tenantIdentifier + certExtension
+	return filepath.Join(cl.certsDir, certnames.TenantSigningCertFilename(tenantIdentifier))
 }
 
 // TenantSigningKeyPath returns the expected file path for the node key.
 func (cl CertsLocator) TenantSigningKeyPath(tenantIdentifier string) string {
-	return filepath.Join(cl.certsDir, TenantSigningKeyFilename(tenantIdentifier))
-}
-
-// TenantSigningKeyFilename returns the expected file name for the node key.
-func TenantSigningKeyFilename(tenantIdentifier string) string {
-	return "tenant-signing." + tenantIdentifier + keyExtension
+	return filepath.Join(cl.certsDir, certnames.TenantSigningKeyFilename(tenantIdentifier))
 }
 
 // ClientCertPath returns the expected file path for the user's certificate.
 func (cl CertsLocator) ClientCertPath(user username.SQLUsername) string {
-	return filepath.Join(cl.certsDir, ClientCertFilename(user))
-}
-
-// ClientCertFilename returns the expected file name for the user's certificate.
-func ClientCertFilename(user username.SQLUsername) string {
-	return "client." + user.Normalized() + certExtension
+	return filepath.Join(cl.certsDir, certnames.ClientCertFilename(user))
 }
 
 // ClientKeyPath returns the expected file path for the user's key.
 func (cl CertsLocator) ClientKeyPath(user username.SQLUsername) string {
-	return filepath.Join(cl.certsDir, ClientKeyFilename(user))
-}
-
-// ClientKeyFilename returns the expected file name for the user's key.
-func ClientKeyFilename(user username.SQLUsername) string {
-	return "client." + user.Normalized() + keyExtension
+	return filepath.Join(cl.certsDir, certnames.ClientKeyFilename(user))
 }
 
 // SQLServiceCertPath returns the expected file path for the
 // SQL service certificate
 func (cl CertsLocator) SQLServiceCertPath() string {
-	return filepath.Join(cl.certsDir, SQLServiceCertFilename())
-}
-
-// SQLServiceCertFilename returns the expected file name for the SQL service
-// certificate
-func SQLServiceCertFilename() string {
-	return "service.sql" + certExtension
+	return filepath.Join(cl.certsDir, certnames.SQLServiceCertFilename())
 }
 
 // SQLServiceKeyPath returns the expected file path for the SQL service key
 func (cl CertsLocator) SQLServiceKeyPath() string {
-	return filepath.Join(cl.certsDir, SQLServiceKeyFilename())
-}
-
-// SQLServiceKeyFilename returns the expected file name for the SQL service
-// certificate
-func SQLServiceKeyFilename() string {
-	return "service.sql" + keyExtension
+	return filepath.Join(cl.certsDir, certnames.SQLServiceKeyFilename())
 }
 
 // SQLServiceCACertPath returns the expected file path for the
 // SQL CA certificate
 func (cl CertsLocator) SQLServiceCACertPath() string {
-	return filepath.Join(cl.certsDir, SQLServiceCACertFilename())
-}
-
-// SQLServiceCACertFilename returns the expected file name for the SQL CA
-// certificate
-func SQLServiceCACertFilename() string {
-	return "service.ca.sql" + certExtension
+	return filepath.Join(cl.certsDir, certnames.SQLServiceCACertFilename())
 }
 
 // SQLServiceCAKeyPath returns the expected file path for the SQL CA key
 func (cl CertsLocator) SQLServiceCAKeyPath() string {
-	return filepath.Join(cl.certsDir, SQLServiceCAKeyFilename())
-}
-
-// SQLServiceCAKeyFilename returns the expected file name for the SQL CA
-// certificate
-func SQLServiceCAKeyFilename() string {
-	return "service.ca.sql" + keyExtension
+	return filepath.Join(cl.certsDir, certnames.SQLServiceCAKeyFilename())
 }
 
 // RPCServiceCertPath returns the expected file path for the
 // RPC service certificate
 func (cl CertsLocator) RPCServiceCertPath() string {
-	return filepath.Join(cl.certsDir, RPCServiceCertFilename())
-}
-
-// RPCServiceCertFilename returns the expected file name for the RPC service
-// certificate
-func RPCServiceCertFilename() string {
-	return "service.rpc" + certExtension
+	return filepath.Join(cl.certsDir, certnames.RPCServiceCertFilename())
 }
 
 // RPCServiceKeyPath returns the expected file path for the RPC service key
 func (cl CertsLocator) RPCServiceKeyPath() string {
-	return filepath.Join(cl.certsDir, RPCServiceKeyFilename())
-}
-
-// RPCServiceKeyFilename returns the expected file name for the RPC service
-// certificate
-func RPCServiceKeyFilename() string {
-	return "service.rpc" + keyExtension
+	return filepath.Join(cl.certsDir, certnames.RPCServiceKeyFilename())
 }
 
 // RPCServiceCACertPath returns the expected file path for the
 // RPC service certificate
 func (cl CertsLocator) RPCServiceCACertPath() string {
-	return filepath.Join(cl.certsDir, RPCServiceCACertFilename())
-}
-
-// RPCServiceCACertFilename returns the expected file name for the RPC service
-// certificate
-func RPCServiceCACertFilename() string {
-	return "service.ca.rpc" + certExtension
+	return filepath.Join(cl.certsDir, certnames.RPCServiceCACertFilename())
 }
 
 // RPCServiceCAKeyPath returns the expected file path for the RPC service key
 func (cl CertsLocator) RPCServiceCAKeyPath() string {
-	return filepath.Join(cl.certsDir, RPCServiceCAKeyFilename())
-}
-
-// RPCServiceCAKeyFilename returns the expected file name for the RPC service
-// certificate
-func RPCServiceCAKeyFilename() string {
-	return "service.ca.rpc" + keyExtension
+	return filepath.Join(cl.certsDir, certnames.RPCServiceCAKeyFilename())
 }
 
 // CACert returns the CA cert. May be nil.
