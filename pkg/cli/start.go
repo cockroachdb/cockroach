@@ -917,8 +917,8 @@ func waitForShutdown(
 // is finalized late in the network initialization sequence.
 func makeServerOptionsForURL(
 	serverCfg *server.Config,
-) (clientconnurl.ClientOptions, clientconnurl.ServerParameters) {
-	clientConnOptions := clientconnurl.ClientOptions{
+) (clientconnurl.ClientSecurityOptions, clientconnurl.ServerParameters) {
+	clientConnOptions := clientconnurl.ClientSecurityOptions{
 		Insecure: serverCfg.Config.Insecure,
 		CertsDir: serverCfg.Config.SSLCertsDir,
 	}

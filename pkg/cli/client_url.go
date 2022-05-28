@@ -225,7 +225,7 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 		userName = username.RootUserName()
 	}
 
-	ccopts := clientconnurl.ClientOptions{
+	ccopts := clientconnurl.ClientSecurityOptions{
 		Insecure: cliCtx.Config.Insecure,
 		CertsDir: cliCtx.Config.SSLCertsDir,
 	}
