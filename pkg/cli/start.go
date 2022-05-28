@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -517,7 +518,8 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := rpc.PGURL(serverCfg.Config, url.User(username.RootUser))
+			clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
+			pgURL, err := rpc.PGURL(clientConnOptions, serverParams, url.User(username.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return
@@ -909,6 +911,24 @@ func waitForShutdown(
 	return returnErr
 }
 
+// makeServerOptionsForURL creates the input for PGURL().
+// Beware of not calling this too early; the server address
+// is finalized late in the network initialization sequence.
+func makeServerOptionsForURL(
+	serverCfg *server.Config,
+) (rpc.ClientConnectOptions, rpc.ServerParameters) {
+	clientConnOptions := rpc.ClientConnectOptions{
+		Insecure: serverCfg.Config.Insecure,
+		CertsDir: serverCfg.Config.SSLCertsDir,
+	}
+	serverParams := rpc.ServerParameters{
+		ServerAddr:      serverCfg.Config.SQLAdvertiseAddr,
+		DefaultPort:     base.DefaultPort,
+		DefaultDatabase: catalogkeys.DefaultDatabaseName,
+	}
+	return clientConnOptions, serverParams
+}
+
 // reportServerInfo prints out the server version and network details
 // in a standardized format.
 func reportServerInfo(
@@ -934,7 +954,8 @@ func reportServerInfo(
 	// (Re-)compute the client connection URL. We cannot do this
 	// earlier (e.g. above, in the runStart function) because
 	// at this time the address and port have not been resolved yet.
-	pgURL, err := rpc.PGURL(serverCfg.Config, url.User(username.RootUser))
+	clientConnOptions, serverParams := makeServerOptionsForURL(serverCfg)
+	pgURL, err := rpc.PGURL(clientConnOptions, serverParams, url.User(username.RootUser))
 	if err != nil {
 		log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 		return err

@@ -35,7 +35,6 @@ go_library(
         "//pkg/security/username",
         "//pkg/server/pgurl",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/catalogkeys",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/growstack",
