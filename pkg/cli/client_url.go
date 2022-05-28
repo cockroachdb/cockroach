@@ -116,6 +116,16 @@ func (u urlParser) setInternal(v string, warn bool) error {
 		}
 	}
 
+	foundHostname := func(host string) {
+		cliCtx.clientConnHost = host
+		fl.Lookup(cliflags.ClientHost.Name).Changed = true
+	}
+
+	foundPort := func(port string) {
+		cliCtx.clientConnPort = port
+		fl.Lookup(cliflags.ClientPort.Name).Changed = true
+	}
+
 	if user := parsedURL.GetUsername(); user != "" {
 		foundUsername(user)
 	}
@@ -124,12 +134,10 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	// --host / --port.
 	net, host, port := parsedURL.GetNetworking()
 	if host != "" {
-		cliCtx.clientConnHost = host
-		fl.Lookup(cliflags.ClientHost.Name).Changed = true
+		foundHostname(host)
 	}
 	if port != "" {
-		cliCtx.clientConnPort = port
-		fl.Lookup(cliflags.ClientPort.Name).Changed = true
+		foundPort(port)
 	}
 
 	// If a database is specified, and the command supports databases,
