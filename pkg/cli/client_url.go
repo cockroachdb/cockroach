@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/clientconnurl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
@@ -358,11 +358,11 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 		userName = username.RootUserName()
 	}
 
-	ccopts := rpc.ClientConnectOptions{
+	ccopts := clientconnurl.ClientOptions{
 		Insecure: cliCtx.Config.Insecure,
 		CertsDir: cliCtx.Config.SSLCertsDir,
 	}
-	if err := rpc.LoadSecurityOptions(ccopts, purl, userName); err != nil {
+	if err := clientconnurl.LoadSecurityOptions(ccopts, purl, userName); err != nil {
 		return nil, err
 	}
 

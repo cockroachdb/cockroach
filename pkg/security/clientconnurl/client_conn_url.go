@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rpc
+package clientconnurl
 
 import (
 	"net/url"
@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 )
 
-// ClientConnectOptions defines the configurable connection parameters
+// ClientOptions defines the configurable connection parameters
 // used as input to compute connection URLs.
-type ClientConnectOptions struct {
+type ClientOptions struct {
 	// Insecure corresponds to the --insecure flag.
 	Insecure bool
 
@@ -32,7 +32,7 @@ type ClientConnectOptions struct {
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func LoadSecurityOptions(opts ClientConnectOptions, u *pgurl.URL, user username.SQLUsername) error {
+func LoadSecurityOptions(opts ClientOptions, u *pgurl.URL, user username.SQLUsername) error {
 	u.WithUsername(user.Normalized())
 	if opts.Insecure {
 		u.WithInsecure()
@@ -131,10 +131,8 @@ type ServerParameters struct {
 }
 
 // PGURL constructs a URL for the postgres endpoint, given a server
-// config. There is no default database set.
-func PGURL(
-	copts ClientConnectOptions, sparams ServerParameters, user *url.Userinfo,
-) (*pgurl.URL, error) {
+// config.
+func PGURL(copts ClientOptions, sparams ServerParameters, user *url.Userinfo) (*pgurl.URL, error) {
 	host, port, _ := addr.SplitHostPort(sparams.ServerAddr, sparams.DefaultPort)
 	u := pgurl.New().
 		WithNet(pgurl.NetTCP(host, port)).

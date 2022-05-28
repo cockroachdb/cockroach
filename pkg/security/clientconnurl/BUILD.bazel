@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clientconnurl",
+    srcs = ["client_conn_url.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/clientconnurl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/certnames",
+        "//pkg/security/securityassets",
+        "//pkg/security/username",
+        "//pkg/server/pgurl",
+        "//pkg/util/netutil/addr",
+    ],
+)
