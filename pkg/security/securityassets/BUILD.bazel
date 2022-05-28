@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "securityassets",
+    srcs = ["security_assets.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/securityassets",
+    visibility = ["//visibility:public"],
+)
