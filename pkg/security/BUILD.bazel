@@ -23,6 +23,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/security/password",
+        "//pkg/security/securityassets",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",

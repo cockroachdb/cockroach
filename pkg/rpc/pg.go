@@ -14,7 +14,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -79,7 +79,7 @@ func (ctx *SecurityContext) LoadSecurityOptions(u *pgurl.URL, user username.SQLU
 		u.WithTransport(pgurl.TransportTLS(tlsMode, caCertPath))
 
 		var missing bool // certs found on file system?
-		loader := security.GetAssetLoader()
+		loader := securityassets.GetLoader()
 
 		// Fetch client certs, but don't fail if they're absent, we may be
 		// using a password.
