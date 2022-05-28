@@ -13,7 +13,6 @@ package eval
 import (
 	"context"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -388,9 +387,12 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DBitArray:
 			s = t.BitArray.String()
 		case *tree.DFloat:
+			// At the time of this writing, the FLOAT4 -> TEXT cast is flawed, since
+			// the resolved type for a DFloat is always FLOAT8, meaning
+			// floatTyp.Width() will always return 64.
 			floatTyp := t.ResolvedType()
-			s = strconv.FormatFloat(float64(*t), 'g',
-				ctx.SessionData().DataConversionConfig.GetFloatPrec(floatTyp), int(floatTyp.Width()))
+			b := tree.PgwireFormatFloat(nil /* buf */, float64(*t), ctx.SessionData().DataConversionConfig, floatTyp)
+			s = string(b)
 		case *tree.DInt:
 			if typ.Oid() == oid.T_char {
 				// int to "char" casts just return the correspondong ASCII byte.
