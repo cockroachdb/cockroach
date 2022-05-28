@@ -131,7 +131,7 @@ go_test(
         "//pkg/base",
         "//pkg/build",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/status/statuspb",

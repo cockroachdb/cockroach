@@ -27,7 +27,7 @@ go_test(
     embed = [":schemachange"],
     deps = [
         "//pkg/base",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/parser",

@@ -48,7 +48,7 @@ go_test(
     embed = [":workload"],
     deps = [
         "//pkg/col/coldata",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/types",

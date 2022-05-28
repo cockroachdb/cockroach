@@ -46,7 +46,7 @@ go_test(
         ":typedesc",
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

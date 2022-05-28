@@ -349,7 +349,7 @@ go_test(
         "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
