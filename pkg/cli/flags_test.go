@@ -357,10 +357,10 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		}
 		return capturedFlags{
 			insecure:     baseCfg.Insecure,
-			connUser:     cliCtx.sqlConnUser,
-			connDatabase: cliCtx.sqlConnDBName,
-			connHost:     cliCtx.clientConnHost,
-			connPort:     cliCtx.clientConnPort,
+			connUser:     cliCtx.clientOpts.User,
+			connDatabase: cliCtx.clientOpts.Database,
+			connHost:     cliCtx.clientOpts.ServerHost,
+			connPort:     cliCtx.clientOpts.ServerPort,
 			certsDir:     certsDir,
 		}
 	}
