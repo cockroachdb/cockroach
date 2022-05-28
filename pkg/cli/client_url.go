@@ -358,7 +358,11 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 		userName = username.RootUserName()
 	}
 
-	if err := rpc.LoadSecurityOptions(cliCtx.Config, purl, userName); err != nil {
+	ccopts := rpc.ClientConnectOptions{
+		Insecure: cliCtx.Config.Insecure,
+		CertsDir: cliCtx.Config.SSLCertsDir,
+	}
+	if err := rpc.LoadSecurityOptions(ccopts, purl, userName); err != nil {
 		return nil, err
 	}
 
