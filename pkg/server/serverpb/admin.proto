@@ -24,7 +24,6 @@ import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
-import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 // ZoneConfigurationLevel indicates, for objects with a Zone Configuration,
