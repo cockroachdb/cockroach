@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "clientsecopts",
     srcs = [
+        "analyze_url_flag.go",
         "client_opts.go",
         "doc.go",
     ],
