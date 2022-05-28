@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -293,7 +294,8 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if exists, err := certnames.FileExists(cl.NodeCertPath()); err != nil {
+	loader := securityassets.GetLoader()
+	if exists, err := loader.FileExists(cl.NodeCertPath()); err != nil {
 		return err
 	} else if exists {
 		return errors.New("inter-node certificate already present")
@@ -438,7 +440,8 @@ func (b *CertificateBundle) InitializeNodeFromBundle(ctx context.Context, c base
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if exists, err := certnames.FileExists(cl.NodeCertPath()); err != nil {
+	loader := securityassets.GetLoader()
+	if exists, err := loader.FileExists(cl.NodeCertPath()); err != nil {
 		return err
 	} else if exists {
 		return errors.New("inter-node certificate already present")

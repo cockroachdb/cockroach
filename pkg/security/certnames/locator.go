@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/errors/oserror"
 )
 
 // A Locator provides locations to certificates.
@@ -99,20 +98,6 @@ func (cl Locator) UICAKeyPath() string {
 // NodeCertPath returns the expected file path for the node certificate.
 func (cl Locator) NodeCertPath() string {
 	return filepath.Join(cl.certsDir, NodeCertFilename())
-}
-
-// FileExists returns true iff the target file already exists.
-// We define this here and not in 'fileutil' to avoid extraneous
-// package dependencies.
-func FileExists(filename string) (bool, error) {
-	_, err := os.Stat(filename)
-	if err != nil {
-		if oserror.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 // NodeKeyPath returns the expected file path for the node key.

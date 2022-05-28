@@ -9,8 +9,5 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/certnames",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/security/username",
-        "@com_github_cockroachdb_errors//oserror",
-    ],
+    deps = ["//pkg/security/username"],
 )

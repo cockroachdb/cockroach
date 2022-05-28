@@ -5,4 +5,5 @@ go_library(
     srcs = ["security_assets.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/securityassets",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//oserror"],
 )

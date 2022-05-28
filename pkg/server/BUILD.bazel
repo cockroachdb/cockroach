@@ -119,6 +119,7 @@ go_library(
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/password",
+        "//pkg/security/securityassets",
         "//pkg/security/username",
         "//pkg/server/debug",
         "//pkg/server/diagnostics",
