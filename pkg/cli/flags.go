@@ -12,6 +12,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"path/filepath"
 	"regexp"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -255,13 +257,7 @@ func (f *keyTypeFilter) Set(v string) error {
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
-// flagSetForCmd is a replacement for cmd.Flag() that properly merges
-// persistent and local flags, until the upstream bug
-// https://github.com/spf13/cobra/issues/961 has been fixed.
-func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
-	_ = cmd.LocalFlags() // force merge persistent+local flags
-	return cmd.Flags()
-}
+func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet { return clienturl.FlagSetForCmd(cmd) }
 
 func init() {
 	initCLIDefaults()
@@ -737,7 +733,7 @@ func init() {
 		// commands, ensure the isSQLCommand() predicate is updated accordingly.
 		boolFlag(f, &sqlConnCtx.Echo, cliflags.EchoSQL)
 
-		varFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
+		varFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, false /* strictSSL */, nil /* warnFn */), cliflags.URL)
 		stringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
 		if cmd == demoCmd {
 			// The 'demo' command does not really support --url or --user.
@@ -748,7 +744,7 @@ func init() {
 		}
 
 		// Even though SQL commands take their connection parameters via
-		// --url / --user (see above), the urlParser{} struct internally
+		// --url / --user (see above), the urlParser struct internally
 		// needs the ClientHost and ClientPort flags to be defined -
 		// even if they are invisible - due to the way initialization from
 		// env vars is implemented.
@@ -781,7 +777,9 @@ func init() {
 		}
 
 		f := cmd.PersistentFlags()
-		varFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
+		varFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, true /* strictSSL */, func(format string, args ...interface{}) {
+			fmt.Fprintf(stderr, format, args...)
+		}), cliflags.URL)
 
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
