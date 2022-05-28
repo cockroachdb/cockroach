@@ -10,6 +10,29 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send
+Query {"String": "SELECT ARRAY[(1/3.0)::float4, 'inf'::float4]"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"array","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1021,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{0.33333334,Infinity}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT ARRAY[(1/3.0)::float8, '-inf'::float8]"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"array","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1022,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{0.3333333333333333,-Infinity}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
 Query {"String": "SET extra_float_digits = -1"}
@@ -52,5 +75,29 @@ ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"float4","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":700,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"float8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":701,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"0.3"},{"text":"0.3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT ARRAY[(1/3.0)::float4, 'inf'::float4]"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"array","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1021,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{0.3,Infinity}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT ARRAY[(1/3.0)::float8, '-inf'::float8]"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"array","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1022,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{0.3,-Infinity}"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

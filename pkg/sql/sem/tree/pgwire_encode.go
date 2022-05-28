@@ -13,8 +13,11 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"strconv"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -136,6 +139,11 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 			// double escaped.
 		case *DBytes:
 			ctx.FormatNode(dv)
+		case *DFloat:
+			fl := float64(*dv)
+			floatTyp := d.ResolvedType().ArrayContents()
+			b := PgwireFormatFloat(nil /*buf*/, fl, ctx.dataConversionConfig, floatTyp)
+			ctx.WriteString(string(b))
 		default:
 			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInArray(ctx, s)
@@ -159,6 +167,27 @@ func init() {
 	arrayQuoteSet, ok = makeASCIISet(" \t\v\f\r\n{},\"\\")
 	if !ok {
 		panic("array asciiset")
+	}
+}
+
+// PgwireFormatFloat returns a []byte representing a float according to
+// pgwire encoding. The result is appended to the given buffer.
+func PgwireFormatFloat(
+	buf []byte, fl float64, conv sessiondatapb.DataConversionConfig, floatTyp *types.T,
+) []byte {
+	// PostgreSQL supports 'Inf' as a valid literal for the floating point
+	// special value Infinity, therefore handling the special cases for them.
+	// (https://github.com/cockroachdb/cockroach/issues/62601)
+	if math.IsInf(fl, 1) {
+		return append(buf, []byte("Infinity")...)
+	} else if math.IsInf(fl, -1) {
+		return append(buf, []byte("-Infinity")...)
+	} else {
+		return strconv.AppendFloat(
+			buf, fl, 'g',
+			conv.GetFloatPrec(floatTyp),
+			int(floatTyp.Width()),
+		)
 	}
 }
 
