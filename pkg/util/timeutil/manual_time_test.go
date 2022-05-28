@@ -35,6 +35,13 @@ func TestManualTime(t *testing.T) {
 		require.Equal(t, t1, mt.Now())
 	})
 
+	t.Run("Backwards", func(t *testing.T) {
+		mt := timeutil.NewManualTime(t1)
+		require.Equal(t, t1, mt.Now())
+		mt.Backwards(time.Second)
+		require.Equal(t, t0, mt.Now())
+	})
+
 	t.Run("AdvanceTo", func(t *testing.T) {
 		mt := timeutil.NewManualTime(t0)
 		mt.AdvanceTo(t2)
