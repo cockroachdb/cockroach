@@ -81,7 +81,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	cliCtx := u.cliCtx
 
 	usernameFlag := func() (hasConnUser bool, connUser string) {
-		return cliCtx.sqlConnUser != "", cliCtx.sqlConnUser
+		return cliCtx.clientOpts.User != "", cliCtx.clientOpts.User
 	}
 
 	foundUsername := func(user string) {
@@ -99,7 +99,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 			}
 		} else {
 			// If username information is available, forward it to --user.
-			cliCtx.sqlConnUser = user
+			cliCtx.clientOpts.User = user
 			// Remember the --user flag was changed in case later code checks
 			// the .Changed field.
 			f.Changed = true
@@ -107,12 +107,12 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	}
 
 	foundHostname := func(host string) {
-		cliCtx.clientConnHost = host
+		cliCtx.clientOpts.ServerHost = host
 		fl.Lookup(cliflags.ClientHost.Name).Changed = true
 	}
 
 	foundPort := func(port string) {
-		cliCtx.clientConnPort = port
+		cliCtx.clientOpts.ServerPort = port
 		fl.Lookup(cliflags.ClientPort.Name).Changed = true
 	}
 
@@ -129,7 +129,7 @@ func (u urlParser) setInternal(v string, warn bool) error {
 					db, u.cmd.Name())
 			}
 		} else {
-			cliCtx.sqlConnDBName = db
+			cliCtx.clientOpts.Database = db
 			f.Changed = true
 		}
 	}
@@ -187,23 +187,16 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	}
 
 	// Store the parsed URL for later.
-	cliCtx.sqlConnURL = purl
+	cliCtx.clientOpts.ExplicitURL = purl
 	return err
 }
 
 // makeClientConnURL constructs a connection URL from the parsed options.
 func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
-	copts := clientconnurl.ClientOptions{
-		ClientSecurityOptions: clientconnurl.ClientSecurityOptions{
-			Insecure: cliCtx.Config.Insecure,
-			CertsDir: cliCtx.Config.SSLCertsDir,
-		},
-		ExplicitURL: cliCtx.sqlConnURL,
-		User:        cliCtx.sqlConnUser,
-		Database:    cliCtx.sqlConnDBName,
-		ServerHost:  cliCtx.clientConnHost,
-		ServerPort:  cliCtx.clientConnPort,
+	copts := cliCtx.clientOpts
+	copts.ClientSecurityOptions = clientconnurl.ClientSecurityOptions{
+		Insecure: cliCtx.Config.Insecure,
+		CertsDir: cliCtx.Config.SSLCertsDir,
 	}
-
 	return clientconnurl.MakeClientConnURL(copts)
 }

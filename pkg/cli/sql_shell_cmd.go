@@ -70,6 +70,6 @@ func makeURLParser(cmd *cobra.Command) clisqlshell.URLParser {
 		if err := up.setInternal(url, false /* warn */); err != nil {
 			return nil, err
 		}
-		return cliCtx.sqlConnURL, nil
+		return cliCtx.clientOpts.ExplicitURL, nil
 	}
 }

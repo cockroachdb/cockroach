@@ -608,8 +608,8 @@ func init() {
 	clientCmds = append(clientCmds, debugResetQuorumCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		varFlag(f, addr.NewAddrSetter(&cliCtx.clientConnHost, &cliCtx.clientConnPort), cliflags.ClientHost)
-		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
+		varFlag(f, addr.NewAddrSetter(&cliCtx.clientOpts.ServerHost, &cliCtx.clientOpts.ServerPort), cliflags.ClientHost)
+		stringFlag(f, &cliCtx.clientOpts.ServerPort, cliflags.ClientPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		// NB: Insecure is deprecated. See #53404.
@@ -738,7 +738,7 @@ func init() {
 		boolFlag(f, &sqlConnCtx.Echo, cliflags.EchoSQL)
 
 		varFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
-		stringFlag(f, &cliCtx.sqlConnUser, cliflags.User)
+		stringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
 		if cmd == demoCmd {
 			// The 'demo' command does not really support --url or --user.
 			// However, we create the pflag instance so that the user
@@ -755,13 +755,13 @@ func init() {
 		//
 		// TODO(knz): if/when env var option initialization is deferred
 		// to parse time, this can be removed.
-		varFlag(f, addr.NewAddrSetter(&cliCtx.clientConnHost, &cliCtx.clientConnPort), cliflags.ClientHost)
+		varFlag(f, addr.NewAddrSetter(&cliCtx.clientOpts.ServerHost, &cliCtx.clientOpts.ServerPort), cliflags.ClientHost)
 		_ = f.MarkHidden(cliflags.ClientHost.Name)
-		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
+		stringFlag(f, &cliCtx.clientOpts.ServerPort, cliflags.ClientPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		if cmd == sqlShellCmd || cmd == demoCmd {
-			stringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database)
+			stringFlag(f, &cliCtx.clientOpts.Database, cliflags.Database)
 			if cmd == demoCmd {
 				// As above, 'demo' does not really support --database.
 				// However, we create the pflag instance so that
@@ -869,7 +869,7 @@ func init() {
 		intFlag(d, &importCtx.rowLimit, cliflags.ImportRowLimit)
 		boolFlag(d, &importCtx.ignoreUnsupported, cliflags.ImportIgnoreUnsupportedStatements)
 		stringFlag(d, &importCtx.ignoreUnsupportedLog, cliflags.ImportLogIgnoredStatements)
-		stringFlag(d, &cliCtx.sqlConnDBName, cliflags.Database)
+		stringFlag(d, &cliCtx.clientOpts.Database, cliflags.Database)
 
 		t := importDumpTableCmd.Flags()
 		boolFlag(t, &importCtx.skipForeignKeys, cliflags.ImportSkipForeignKeys)
@@ -877,7 +877,7 @@ func init() {
 		intFlag(t, &importCtx.rowLimit, cliflags.ImportRowLimit)
 		boolFlag(t, &importCtx.ignoreUnsupported, cliflags.ImportIgnoreUnsupportedStatements)
 		stringFlag(t, &importCtx.ignoreUnsupportedLog, cliflags.ImportLogIgnoredStatements)
-		stringFlag(t, &cliCtx.sqlConnDBName, cliflags.Database)
+		stringFlag(t, &cliCtx.clientOpts.Database, cliflags.Database)
 	}
 
 	// sqlfmt command.
@@ -1260,9 +1260,9 @@ func extraClientFlagInit() error {
 	if err := security.SetCertPrincipalMap(principalMap); err != nil {
 		return err
 	}
-	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
+	serverCfg.Addr = net.JoinHostPort(cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
-	serverCfg.SQLAddr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
+	serverCfg.SQLAddr = net.JoinHostPort(cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort)
 	serverCfg.SQLAdvertiseAddr = serverCfg.SQLAddr
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr
