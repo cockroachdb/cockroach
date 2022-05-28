@@ -245,7 +245,9 @@ func (c *sqlConn) GetServerMetadata(
 	ctx context.Context,
 ) (nodeID int32, version, clusterID string, err error) {
 	// Retrieve the node ID and server build info.
-	rows, err := c.Query(ctx, "SELECT * FROM crdb_internal.node_build_info")
+	// Be careful to query against the empty database string, which avoids taking
+	// a lease against the current database (in case it's currently unavailable).
+	rows, err := c.Query(ctx, `SELECT * FROM "".crdb_internal.node_build_info`)
 	if errors.Is(err, driver.ErrBadConn) {
 		return 0, "", "", err
 	}
