@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 )
 
-// ClientOptions defines the configurable connection parameters
-// used as input to compute connection URLs.
-type ClientOptions struct {
+// ClientSecurityOptions defines the configurable connection parameters
+// used as input to compute the security parameters of connection URLs.
+type ClientSecurityOptions struct {
 	// Insecure corresponds to the --insecure flag.
 	Insecure bool
 
@@ -32,7 +32,9 @@ type ClientOptions struct {
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
 // the given server config.
-func LoadSecurityOptions(opts ClientOptions, u *pgurl.URL, user username.SQLUsername) error {
+func LoadSecurityOptions(
+	opts ClientSecurityOptions, u *pgurl.URL, user username.SQLUsername,
+) error {
 	u.WithUsername(user.Normalized())
 	if opts.Insecure {
 		u.WithInsecure()
@@ -133,7 +135,7 @@ type ServerParameters struct {
 // MakeURLForServer constructs a URL for the postgres endpoint, given a server
 // config.
 func MakeURLForServer(
-	copts ClientOptions, sparams ServerParameters, user *url.Userinfo,
+	copts ClientSecurityOptions, sparams ServerParameters, user *url.Userinfo,
 ) (*pgurl.URL, error) {
 	host, port, _ := addr.SplitHostPort(sparams.ServerAddr, sparams.DefaultPort)
 	u := pgurl.New().

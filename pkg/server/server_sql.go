@@ -677,7 +677,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
-	ccopts := clientsecopts.ClientOptions{
+	ccopts := clientsecopts.ClientSecurityOptions{
 		Insecure: cfg.Config.Insecure,
 		CertsDir: cfg.Config.SSLCertsDir,
 	}
