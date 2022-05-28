@@ -13,6 +13,8 @@ package securityassets
 import (
 	"io/ioutil"
 	"os"
+
+	"github.com/cockroachdb/errors/oserror"
 )
 
 // AssetLoader describes the functions necessary to read certificate and key files.
@@ -45,4 +47,16 @@ func SetAssetLoader(al AssetLoader) {
 // ResetAssetLoader restores the asset loader to the default value.
 func ResetAssetLoader() {
 	assetLoaderImpl = defaultAssetLoader
+}
+
+// FileExists returns true iff the target file already exists.
+func (al AssetLoader) FileExists(filename string) (bool, error) {
+	_, err := al.Stat(filename)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
