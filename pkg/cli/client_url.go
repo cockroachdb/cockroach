@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -122,49 +121,6 @@ func (u *urlParser) Set(v string) error {
 	return err
 }
 
-// clientOptions represents configurable options from the command line.
-// TODO(knz): Move this to package clientsecopts.
-type clientOptions struct {
-	clientsecopts.ClientSecurityOptions
-
-	// ExplicitURL is an explicit URL specified on the command line
-	// via --url, and enhanced via clientconnurl.UpdateURL().
-	// This may contain additional parameters (e.g. application_name)
-	// which cannot be specified by discrete flags.
-	ExplicitURL *pgurl.URL
-
-	// User is the requested username, as specified via --user or --url.
-	//
-	// When calling UpdateURL() to generate ExplicitURL from --url, the
-	// function should be passed an update callback that updates this
-	// field if the URL contains a username part.
-	User string
-
-	// Database is the requested database name, as specified
-	// via --database or --url.
-	//
-	// When calling UpdateURL() to generate ExplicitURL from --url, the
-	// function should be passed an update callback that updates this
-	// field if the URL contains a database name.
-	Database string
-
-	// ServerHost is the requested server host name or address, as
-	// specified via --host or --url.
-	//
-	// When calling UpdateURL() to generate ExplicitURL from --url, the
-	// function should be passed an update callback that updates this
-	// field if the URL contains a hostname part.
-	ServerHost string
-
-	// ServerPort is the requested server port name/number, as
-	// specified via --port or --url.
-	//
-	// When calling UpdateURL() to generate ExplicitURL from --url, the
-	// function should be passed an update callback that updates this
-	// field if the URL contains a port number/name.
-	ServerPort string
-}
-
 var _ clientsecopts.CLIFlagInterfaceForClientURL = (*urlParser)(nil)
 
 // StrictTLS implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
@@ -260,10 +216,8 @@ func (u *urlParser) NewStrictTLSConfigurationError() error {
 }
 
 // makeClientConnURL constructs a connection URL from the parsed options.
-// Do not call this function before command-line argument parsing has completed:
-// this initializes the certificate manager with the configured --certs-dir.
 func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
-	copts := clientOptions{
+	copts := clientsecopts.ClientOptions{
 		ClientSecurityOptions: clientsecopts.ClientSecurityOptions{
 			Insecure: cliCtx.Config.Insecure,
 			CertsDir: cliCtx.Config.SSLCertsDir,
@@ -275,45 +229,5 @@ func (cliCtx *cliContext) makeClientConnURL() (*pgurl.URL, error) {
 		ServerPort:  cliCtx.clientConnPort,
 	}
 
-	return makeClientConnURL(copts)
-}
-
-func makeClientConnURL(copts clientOptions) (*pgurl.URL, error) {
-	purl := copts.ExplicitURL
-	if purl == nil {
-		// New URL. Start from scratch.
-		purl = pgurl.New() // defaults filled in below.
-	}
-
-	// Fill in any defaults from any command-line arguments if there was
-	// no --url flag, or if they were specified *after* the --url flag.
-	//
-	// Note: the username is filled in by LoadSecurityOptions() below.
-	// If there was any password while parsing a --url flag,
-	// it will be pre-populated via cliCtx.sqlConnURL above.
-	purl.WithDatabase(copts.Database)
-	if _, host, port := purl.GetNetworking(); host != copts.ServerHost || port != copts.ServerPort {
-		purl.WithNet(pgurl.NetTCP(copts.ServerHost, copts.ServerPort))
-	}
-
-	// Check the structure of the username.
-	userName, err := username.MakeSQLUsernameFromUserInput(copts.User, username.PurposeValidation)
-	if err != nil {
-		return nil, err
-	}
-	if userName.Undefined() {
-		userName = username.RootUserName()
-	}
-
-	if err := clientsecopts.LoadSecurityOptions(copts.ClientSecurityOptions, purl, userName); err != nil {
-		return nil, err
-	}
-
-	// The construct above should have produced a valid URL already;
-	// however a post-assertion doesn't hurt.
-	if err := purl.Validate(); err != nil {
-		return nil, err
-	}
-
-	return purl, nil
+	return clientsecopts.MakeClientConnURL(copts)
 }
