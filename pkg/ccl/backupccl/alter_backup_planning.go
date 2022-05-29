@@ -14,6 +14,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -141,7 +142,7 @@ func doAlterBackupPlan(
 	}
 	defer baseStore.Close()
 
-	opts, err := readEncryptionOptions(ctx, baseStore)
+	opts, err := backupencryption.ReadEncryptionOptions(ctx, baseStore)
 	if err != nil {
 		return err
 	}
@@ -154,10 +155,11 @@ func doAlterBackupPlan(
 	oldKMSFound := false
 	for _, old := range oldKms {
 		for _, encFile := range opts {
-			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, []string{old},
-				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
-					baseStore.Settings(),
-					&ioConf,
+			defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, []string{old},
+				backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
+				&backupencryption.BackupKMSEnv{
+					Settings: baseStore.Settings(),
+					Conf:     &ioConf,
 				})
 
 			if err == nil {
@@ -179,38 +181,38 @@ func doAlterBackupPlan(
 
 	// Recover the encryption key using the old key, so we can encrypt it again with the new keys.
 	var plaintextDataKey []byte
-	plaintextDataKey, err = getEncryptionKey(ctx, encryption, baseStore.Settings(),
+	plaintextDataKey, err = backupencryption.GetEncryptionKey(ctx, encryption, baseStore.Settings(),
 		baseStore.ExternalIOConf())
 	if err != nil {
 		return err
 	}
 
-	kmsEnv := &backupKMSEnv{settings: p.ExecCfg().Settings, conf: &p.ExecCfg().ExternalIODirConfig}
+	kmsEnv := &backupencryption.BackupKMSEnv{Settings: p.ExecCfg().Settings, Conf: &p.ExecCfg().ExternalIODirConfig}
 
-	encryptedDataKeyByKMSMasterKeyID := newEncryptedDataKeyMap()
+	encryptedDataKeyByKMSMasterKeyID := backupencryption.NewEncryptedDataKeyMap()
 
 	// Add each new key user wants to add to a new data key map.
 	for _, kmsURI := range newKms {
-		masterKeyID, encryptedDataKey, err := getEncryptedDataKeyFromURI(ctx,
+		masterKeyID, encryptedDataKey, err := backupencryption.GetEncryptedDataKeyFromURI(ctx,
 			plaintextDataKey, kmsURI, kmsEnv)
 		if err != nil {
 			return errors.Wrap(err, "failed to encrypt data key when adding new KMS")
 		}
 
-		encryptedDataKeyByKMSMasterKeyID.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID),
+		encryptedDataKeyByKMSMasterKeyID.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(masterKeyID),
 			encryptedDataKey)
 	}
 
 	encryptedDataKeyMapForProto := make(map[string][]byte)
-	encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
-		func(masterKeyID hashedMasterKeyID, dataKey []byte) {
+	encryptedDataKeyByKMSMasterKeyID.RangeOverMap(
+		func(masterKeyID backupencryption.HashedMasterKeyID, dataKey []byte) {
 			encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
 		})
 
 	encryptionInfo := &jobspb.EncryptionInfo{EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto}
 
 	// Write the new ENCRYPTION-INFO file.
-	return writeNewEncryptionInfoToBackup(ctx, encryptionInfo, baseStore, len(opts))
+	return backupencryption.WriteNewEncryptionInfoToBackup(ctx, encryptionInfo, baseStore, len(opts))
 }
 
 func init() {

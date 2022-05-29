@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -82,13 +81,6 @@ type tableAndIndex struct {
 	indexID descpb.IndexID
 }
 
-type backupKMSEnv struct {
-	settings *cluster.Settings
-	conf     *base.ExternalIODirConfig
-}
-
-var _ cloud.KMSEnv = &backupKMSEnv{}
-
 // featureBackupEnabled is used to enable and disable the BACKUP feature.
 var featureBackupEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
@@ -96,22 +88,6 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
 ).WithPublic()
-
-func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
-	return p.settings
-}
-
-func (p *backupKMSEnv) KMSConfig() *base.ExternalIODirConfig {
-	return p.conf
-}
-
-type (
-	plaintextMasterKeyID string
-	hashedMasterKeyID    string
-	encryptedDataKeyMap  struct {
-		m map[hashedMasterKeyID][]byte
-	}
-)
 
 // featureFullBackupUserSubdir, when true, will create a full backup at a user
 // specified subdirectory if no backup already exists at that subdirectory. As
@@ -1055,7 +1031,7 @@ func writeBackupManifestCheckpoint(
 	}
 
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -1447,7 +1423,7 @@ func getBackupDetailAndManifest(
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
-	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
+	kmsEnv := &backupencryption.BackupKMSEnv{Settings: execCfg.Settings, Conf: &execCfg.ExternalIODirConfig}
 
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
@@ -1744,7 +1720,7 @@ func updateBackupDetails(
 	urisByLocalityKV map[string]string,
 	prevBackups []backuppb.BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
-	kmsEnv *backupKMSEnv,
+	kmsEnv *backupencryption.BackupKMSEnv,
 ) (jobspb.BackupDetails, error) {
 	var err error
 	var startTime hlc.Timestamp
@@ -1756,7 +1732,7 @@ func updateBackupDetails(
 	// need to generate encryption specific data.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
-		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
+		encryptionOptions, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
 		if err != nil {
 			return jobspb.BackupDetails{}, err
 		}
