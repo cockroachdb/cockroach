@@ -571,6 +571,7 @@ func getSessionArgs(ln net.Listener, trustRemoteAddr bool) (net.Conn, sql.Sessio
 func makeTestingConvCfg() (sessiondatapb.DataConversionConfig, *time.Location) {
 	return sessiondatapb.DataConversionConfig{
 		BytesEncodeFormat: lex.BytesEncodeHex,
+		ExtraFloatDigits:  1,
 	}, time.UTC
 }
 
