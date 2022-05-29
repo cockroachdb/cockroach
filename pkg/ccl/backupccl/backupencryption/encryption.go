@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupencryption
 
 import (
 	"bytes"
@@ -28,31 +28,78 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func newEncryptedDataKeyMap() *encryptedDataKeyMap {
-	return &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
+const (
+	// backupEncryptionInfoFile is the file name used to store the serialized
+	// EncryptionInfo proto while the backup is in progress.
+	backupEncryptionInfoFile = "ENCRYPTION-INFO"
+)
+
+// ErrEncryptionInfoRead is a special error returned when the ENCRYPTION-INFO
+// file is not found.
+var ErrEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
+
+// BackupKMSEnv is the environment in which a backup with KMS is configured and
+// used.
+type BackupKMSEnv struct {
+	// Settings refers to the cluster settings that apply to the BackupKMSEnv.
+	Settings *cluster.Settings
+	// Conf represents the ExternalIODirConfig that applies to the BackupKMSEnv.
+	Conf *base.ExternalIODirConfig
 }
 
-func newEncryptedDataKeyMapFromProtoMap(protoDataKeyMap map[string][]byte) *encryptedDataKeyMap {
-	encMap := &encryptedDataKeyMap{make(map[hashedMasterKeyID][]byte)}
+var _ cloud.KMSEnv = &BackupKMSEnv{}
+
+// ClusterSettings implements the cloud.KMSEnv interface.
+func (p *BackupKMSEnv) ClusterSettings() *cluster.Settings {
+	return p.Settings
+}
+
+// KMSConfig implements the cloud.KMSEnv interface.
+func (p *BackupKMSEnv) KMSConfig() *base.ExternalIODirConfig {
+	return p.Conf
+}
+
+type (
+	// PlaintextMasterKeyID is the plain text version of the master key ID.
+	PlaintextMasterKeyID string
+	// HashedMasterKeyID is the hashed version of the master key ID.
+	HashedMasterKeyID string
+	// EncryptedDataKeyMap is a mapping from the hashed version of the master key
+	// ID to the encrypted data key.
+	EncryptedDataKeyMap struct {
+		m map[HashedMasterKeyID][]byte
+	}
+)
+
+// NewEncryptedDataKeyMap returns a new EncryptedDataKeyMap.
+func NewEncryptedDataKeyMap() *EncryptedDataKeyMap {
+	return &EncryptedDataKeyMap{make(map[HashedMasterKeyID][]byte)}
+}
+
+// NewEncryptedDataKeyMapFromProtoMap constructs an EncryptedDataKeyMap from the
+// passed in protoDataKeyMap.
+func NewEncryptedDataKeyMapFromProtoMap(protoDataKeyMap map[string][]byte) *EncryptedDataKeyMap {
+	encMap := &EncryptedDataKeyMap{make(map[HashedMasterKeyID][]byte)}
 	for k, v := range protoDataKeyMap {
-		encMap.m[hashedMasterKeyID(k)] = v
+		encMap.m[HashedMasterKeyID(k)] = v
 	}
 
 	return encMap
 }
 
-func (e *encryptedDataKeyMap) addEncryptedDataKey(
-	masterKeyID plaintextMasterKeyID, encryptedDataKey []byte,
+// AddEncryptedDataKey adds an entry to the EncryptedDataKeyMap.
+func (e *EncryptedDataKeyMap) AddEncryptedDataKey(
+	masterKeyID PlaintextMasterKeyID, encryptedDataKey []byte,
 ) {
 	// Hash the master key ID before writing to the map.
 	hasher := crypto.SHA256.New()
 	hasher.Write([]byte(masterKeyID))
 	hash := hasher.Sum(nil)
-	e.m[hashedMasterKeyID(hash)] = encryptedDataKey
+	e.m[HashedMasterKeyID(hash)] = encryptedDataKey
 }
 
-func (e *encryptedDataKeyMap) getEncryptedDataKey(
-	masterKeyID plaintextMasterKeyID,
+func (e *EncryptedDataKeyMap) getEncryptedDataKey(
+	masterKeyID PlaintextMasterKeyID,
 ) ([]byte, error) {
 	// Hash the master key ID before reading from the map.
 	hasher := crypto.SHA256.New()
@@ -60,20 +107,21 @@ func (e *encryptedDataKeyMap) getEncryptedDataKey(
 	hash := hasher.Sum(nil)
 	var encDataKey []byte
 	var ok bool
-	if encDataKey, ok = e.m[hashedMasterKeyID(hash)]; !ok {
+	if encDataKey, ok = e.m[HashedMasterKeyID(hash)]; !ok {
 		return nil, errors.New("could not find an entry in the encryptedDataKeyMap")
 	}
 
 	return encDataKey, nil
 }
 
-func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID, dataKey []byte)) {
+// RangeOverMap iterates over the map and executes fn on every key-value pair.
+func (e *EncryptedDataKeyMap) RangeOverMap(fn func(masterKeyID HashedMasterKeyID, dataKey []byte)) {
 	for k, v := range e.m {
 		fn(k, v)
 	}
 }
 
-// validateKMSURIsAgainstFullBackup ensures that the KMS URIs provided to an
+// ValidateKMSURIsAgainstFullBackup ensures that the KMS URIs provided to an
 // incremental BACKUP are a subset of those used during the full BACKUP. It does
 // this by ensuring that the KMS master key ID of each KMS URI specified during
 // the incremental BACKUP can be found in the map written to `encryption-info`
@@ -82,10 +130,10 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 // The method also returns the KMSInfo to be used for all subsequent
 // encryption/decryption operations during this BACKUP. By default it is the
 // first KMS URI passed during the incremental BACKUP.
-func validateKMSURIsAgainstFullBackup(
+func ValidateKMSURIsAgainstFullBackup(
 	ctx context.Context,
 	kmsURIs []string,
-	kmsMasterKeyIDToDataKey *encryptedDataKeyMap,
+	kmsMasterKeyIDToDataKey *EncryptedDataKeyMap,
 	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions_KMSInfo, error) {
 	var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
@@ -106,7 +154,7 @@ func validateKMSURIsAgainstFullBackup(
 			return nil, err
 		}
 
-		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(plaintextMasterKeyID(id))
+		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(PlaintextMasterKeyID(id))
 		if err != nil {
 			return nil,
 				errors.Wrap(err,
@@ -124,7 +172,9 @@ func validateKMSURIsAgainstFullBackup(
 	return defaultKMSInfo, nil
 }
 
-func makeNewEncryptionOptions(
+// MakeNewEncryptionOptions returns a new jobspb.BackupEncryptionOptions based
+// on the passed in encryption parameters.
+func MakeNewEncryptionOptions(
 	ctx context.Context, encryptionParams jobspb.BackupEncryptionOptions, kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
 	var encryptionOptions *jobspb.BackupEncryptionOptions
@@ -151,14 +201,14 @@ func makeNewEncryptionOptions(
 		}
 
 		encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
-			getEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.RawKmsUris, plaintextDataKey, kmsEnv)
+			GetEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.RawKmsUris, plaintextDataKey, kmsEnv)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		encryptedDataKeyMapForProto := make(map[string][]byte)
-		encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
-			func(masterKeyID hashedMasterKeyID, dataKey []byte) {
+		encryptedDataKeyByKMSMasterKeyID.RangeOverMap(
+			func(masterKeyID HashedMasterKeyID, dataKey []byte) {
 				encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
 			})
 
@@ -171,7 +221,9 @@ func makeNewEncryptionOptions(
 	return encryptionOptions, encryptionInfo, nil
 }
 
-func getEncryptedDataKeyFromURI(
+// GetEncryptedDataKeyFromURI returns the encrypted data key from the KMS
+// specified by kmsURI.
+func GetEncryptedDataKeyFromURI(
 	ctx context.Context, plaintextDataKey []byte, kmsURI string, kmsEnv cloud.KMSEnv,
 ) (string, []byte, error) {
 	kms, err := cloud.KMSFromURI(ctx, kmsURI, kmsEnv)
@@ -202,22 +254,22 @@ func getEncryptedDataKeyFromURI(
 	return masterKeyID, encryptedDataKey, nil
 }
 
-// getEncryptedDataKeyByKMSMasterKeyID constructs a mapping {MasterKeyID :
+// GetEncryptedDataKeyByKMSMasterKeyID constructs a mapping {MasterKeyID :
 // EncryptedDataKey} for each KMS URI provided during a full BACKUP. The
 // MasterKeyID is hashed before writing it to the map.
 //
 // The method also returns the KMSInfo to be used for all subsequent
 // encryption/decryption operations during this BACKUP. By default it is the
 // first KMS URI.
-func getEncryptedDataKeyByKMSMasterKeyID(
+func GetEncryptedDataKeyByKMSMasterKeyID(
 	ctx context.Context, kmsURIs []string, plaintextDataKey []byte, kmsEnv cloud.KMSEnv,
-) (*encryptedDataKeyMap, *jobspb.BackupEncryptionOptions_KMSInfo, error) {
-	encryptedDataKeyByKMSMasterKeyID := newEncryptedDataKeyMap()
+) (*EncryptedDataKeyMap, *jobspb.BackupEncryptionOptions_KMSInfo, error) {
+	encryptedDataKeyByKMSMasterKeyID := NewEncryptedDataKeyMap()
 	// The coordinator node contacts every KMS and records the encrypted data
 	// key for each one.
 	var kmsInfo *jobspb.BackupEncryptionOptions_KMSInfo
 	for _, kmsURI := range kmsURIs {
-		masterKeyID, encryptedDataKey, err := getEncryptedDataKeyFromURI(ctx,
+		masterKeyID, encryptedDataKey, err := GetEncryptedDataKeyFromURI(ctx,
 			plaintextDataKey, kmsURI, kmsEnv)
 		if err != nil {
 			return nil, nil, err
@@ -232,14 +284,16 @@ func getEncryptedDataKeyByKMSMasterKeyID(
 			}
 		}
 
-		encryptedDataKeyByKMSMasterKeyID.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID),
+		encryptedDataKeyByKMSMasterKeyID.AddEncryptedDataKey(PlaintextMasterKeyID(masterKeyID),
 			encryptedDataKey)
 	}
 
 	return encryptedDataKeyByKMSMasterKeyID, kmsInfo, nil
 }
 
-func writeNewEncryptionInfoToBackup(
+// WriteNewEncryptionInfoToBackup writes a versioned ENCRYPTION-INFO file to
+// external storage.
+func WriteNewEncryptionInfoToBackup(
 	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage, numFiles int,
 ) error {
 	// New encryption-info file name is in the format "ENCRYPTION-INFO-<version number>"
@@ -252,10 +306,10 @@ func writeNewEncryptionInfoToBackup(
 	return cloud.WriteFile(ctx, dest, newEncryptionInfoFile, bytes.NewReader(buf))
 }
 
-// getEncryptionFromBase retrieves the encryption options of a base backup. It
+// GetEncryptionFromBase retrieves the encryption options of a base backup. It
 // is expected that incremental backups use the same encryption options as the
 // base backups.
-func getEncryptionFromBase(
+func GetEncryptionFromBase(
 	ctx context.Context,
 	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
@@ -270,7 +324,7 @@ func getEncryptionFromBase(
 			return nil, err
 		}
 		defer exportStore.Close()
-		opts, err := readEncryptionOptions(ctx, exportStore)
+		opts, err := ReadEncryptionOptions(ctx, exportStore)
 		if err != nil {
 			return nil, err
 		}
@@ -284,8 +338,8 @@ func getEncryptionFromBase(
 		case jobspb.EncryptionMode_KMS:
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, encryptionParams.RawKmsUris,
-					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
+				defaultKMSInfo, err = ValidateKMSURIsAgainstFullBackup(ctx, encryptionParams.RawKmsUris,
+					NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
 				if err == nil {
 					break
 				}
@@ -301,7 +355,9 @@ func getEncryptionFromBase(
 	return encryptionOptions, nil
 }
 
-func getEncryptionKey(
+// GetEncryptionKey returns the decrypted plaintext data key to be used for
+// encryption.
+func GetEncryptionKey(
 	ctx context.Context,
 	encryption *jobspb.BackupEncryptionOptions,
 	settings *cluster.Settings,
@@ -317,9 +373,9 @@ func getEncryptionKey(
 		// Contact the selected KMS to derive the decrypted data key.
 		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
 		// here to avoid a panic, and return an error instead.
-		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: settings,
-			conf:     &ioConf,
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &BackupKMSEnv{
+			Settings: settings,
+			Conf:     &ioConf,
 		})
 		if err != nil {
 			return nil, err
@@ -340,21 +396,21 @@ func getEncryptionKey(
 	return nil, errors.New("invalid encryption mode")
 }
 
-// readEncryptionOptions takes in a backup location and tries to find
+// ReadEncryptionOptions takes in a backup location and tries to find
 // and return all encryption option files in the backup. A backup
 // normally only creates one encryption option file, but if the user
 // uses ALTER BACKUP to add new keys, a new encryption option file
 // will be placed side by side with the old one. Since the old file
 // is still valid, as we never want to modify or delete an existing
 // backup, we return both new and old files.
-func readEncryptionOptions(
+func ReadEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
 ) ([]jobspb.EncryptionInfo, error) {
 	const encryptionReadErrorMsg = `could not find or read encryption information`
 
-	files, err := getEncryptionInfoFiles(ctx, src)
+	files, err := GetEncryptionInfoFiles(ctx, src)
 	if err != nil {
-		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), errEncryptionInfoRead)
+		return nil, errors.Mark(errors.Wrap(err, encryptionReadErrorMsg), ErrEncryptionInfoRead)
 	}
 	var encInfo []jobspb.EncryptionInfo
 	// The user is more likely to pass in a KMS URI that was used to
@@ -380,7 +436,8 @@ func readEncryptionOptions(
 	return encInfo, nil
 }
 
-func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
+// GetEncryptionInfoFiles reads the ENCRYPTION-INFO files from external storage.
+func GetEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
 	var files []string
 	// Look for all files in dest that start with "/ENCRYPTION-INFO"
 	// and return them.
@@ -400,7 +457,8 @@ func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]
 	return files, err
 }
 
-func writeEncryptionInfoIfNotExists(
+// WriteEncryptionInfoIfNotExists writes EncryptionInfo to external storage.
+func WriteEncryptionInfoIfNotExists(
 	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage,
 ) error {
 	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
