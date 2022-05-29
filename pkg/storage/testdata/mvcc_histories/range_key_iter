@@ -14,23 +14,23 @@
 #
 run ok
 put_rangekey k=a end=k ts=1
-put_rangekey k=m end=n ts=3 localTs=2
-put_rangekey k=b end=d ts=3
-put_rangekey k=f end=h ts=3
-put_rangekey k=c end=g ts=5
 put k=a ts=2 v=a2
 del k=a ts=4
+put_rangekey k=b end=d ts=3
 del k=b ts=4
 put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
-put k=f ts=4 v=f4
-put k=f ts=6 v=f6
 put k=g ts=2 v=g2
+put_rangekey k=f end=h ts=3
+put k=f ts=4 v=f4
 put k=g ts=4 v=g4
+put_rangekey k=c end=g ts=5
+put k=f ts=6 v=f6
 put k=h ts=3 v=h3
 del k=h ts=4
 put k=k ts=5 v=k5
+put_rangekey k=m end=n ts=3 localTs=2
 with t=A
   txn_begin ts=7
   put k=a v=a7
