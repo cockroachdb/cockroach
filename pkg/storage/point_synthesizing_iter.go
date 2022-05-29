@@ -12,7 +12,6 @@ package storage
 
 import (
 	"sort"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -22,13 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
-
-// pointSynthesizingIterPool reuses pointSynthesizingIters to avoid allocations.
-var pointSynthesizingIterPool = sync.Pool{
-	New: func() interface{} {
-		return &pointSynthesizingIter{}
-	},
-}
 
 // pointSynthesizingIter wraps an MVCCIterator, and synthesizes MVCC point keys
 // for MVCC range keys above/below existing point keys, and at the start of
@@ -109,34 +101,15 @@ var _ MVCCIterator = new(pointSynthesizingIter)
 // newPointSynthesizingIter creates a new pointSynthesizingIter, or gets one
 // from the pool.
 func newPointSynthesizingIter(parent MVCCIterator, emitOnSeekGE bool) *pointSynthesizingIter {
-	iter := pointSynthesizingIterPool.Get().(*pointSynthesizingIter)
-	*iter = pointSynthesizingIter{
+	return &pointSynthesizingIter{
 		iter:         parent,
 		emitOnSeekGE: emitOnSeekGE,
-		// Reuse pooled byte slices.
-		rangeKeysPos:   iter.rangeKeysPos,
-		rangeKeysStart: iter.rangeKeysStart,
 	}
-	return iter
 }
 
 // Close implements MVCCIterator.
-//
-// Close will also close the underlying iterator. Use release() to release it
-// back to the pool without closing the parent iterator.
 func (i *pointSynthesizingIter) Close() {
 	i.iter.Close()
-	i.release()
-}
-
-// release releases the iterator back into the pool.
-func (i *pointSynthesizingIter) release() {
-	*i = pointSynthesizingIter{
-		// Reuse byte slices.
-		rangeKeysPos:   i.rangeKeysPos[:0],
-		rangeKeysStart: i.rangeKeysStart[:0],
-	}
-	pointSynthesizingIterPool.Put(i)
 }
 
 // updateRangeKeys updates i.rangeKeys and related fields with range keys from

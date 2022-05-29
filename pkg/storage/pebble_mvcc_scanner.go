@@ -281,10 +281,10 @@ func extractResultKey(repr []byte) roachpb.Key {
 	return key.Key
 }
 
-// Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
-// one MVCCGet / MVCCScan call.
+// pebbleMVCCScanner performs an MVCCGet / MVCCScan, using a point synthesizing
+// iterator for MVCC range tombstone handling.
 type pebbleMVCCScanner struct {
-	parent MVCCIterator
+	parent *pointSynthesizingIter
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
 	reverse    bool
@@ -368,13 +368,20 @@ type pebbleMVCCScanner struct {
 // Pool for allocating pebble MVCC Scanners.
 var pebbleMVCCScannerPool = sync.Pool{
 	New: func() interface{} {
-		return &pebbleMVCCScanner{}
+		return &pebbleMVCCScanner{
+			parent: &pointSynthesizingIter{},
+		}
 	},
 }
 
 func (p *pebbleMVCCScanner) release() {
 	// Discard most memory references before placing in pool.
+	*p.parent = pointSynthesizingIter{
+		rangeKeysPos:   p.parent.rangeKeysPos[:0],
+		rangeKeysStart: p.parent.rangeKeysStart[:0],
+	}
 	*p = pebbleMVCCScanner{
+		parent: p.parent,
 		keyBuf: p.keyBuf,
 	}
 	pebbleMVCCScannerPool.Put(p)

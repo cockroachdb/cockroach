@@ -84,7 +84,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	// scanner to skip keys that it desired to see.
 	ts := hlc.Timestamp{WallTime: 2}
 	mvccScanner := pebbleMVCCScanner{
-		parent:           iter,
+		parent:           newPointSynthesizingIter(iter, false /* emitOnSeekGE */),
 		reverse:          false,
 		start:            keys[0],
 		end:              roachpb.Key("d"),
@@ -146,7 +146,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 
 	ts := hlc.Timestamp{WallTime: 2}
 	mvccScanner := pebbleMVCCScanner{
-		parent:  iter,
+		parent:  newPointSynthesizingIter(iter, false /* emitOnSeekGE */),
 		reverse: false,
 		start:   keys[0],
 		end:     roachpb.Key("e"),
@@ -224,7 +224,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 
 	// Narrow scan succeeds with a budget of 6000.
 	scanner := &pebbleMVCCScanner{
-		parent: iter,
+		parent: newPointSynthesizingIter(iter, false /* emitOnSeekGE */),
 		start:  makeKey(nil, 9),
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
@@ -240,7 +240,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 
 	// Wider scan fails with a budget of 6000.
 	scanner = &pebbleMVCCScanner{
-		parent: iter,
+		parent: newPointSynthesizingIter(iter, false /* emitOnSeekGE */),
 		start:  makeKey(nil, 0),
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
@@ -259,7 +259,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	// intent causes 57 bytes to be reserved).
 	for _, inconsistent := range []bool{false, true} {
 		scanner = &pebbleMVCCScanner{
-			parent:       iter,
+			parent:       newPointSynthesizingIter(iter, false /* emitOnSeekGE */),
 			start:        makeKey(nil, 0),
 			end:          makeKey(nil, 11),
 			ts:           hlc.Timestamp{WallTime: 50},
