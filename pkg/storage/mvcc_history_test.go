@@ -56,6 +56,7 @@ import (
 // txn_step       t=<name> [n=<int>]
 // txn_advance    t=<name> ts=<int>[,<int>]
 // txn_status     t=<name> status=<txnstatus>
+// txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
 // resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
 // check_intent   k=<key> [none]
@@ -65,6 +66,8 @@ import (
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> end=<key>
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
+// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [failOnTombstones]
+// merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
@@ -488,6 +491,7 @@ var commands = map[string]cmd{
 	"del_range_ts":   {typDataUpdate, cmdDeleteRangeTombstone},
 	"get":            {typReadOnly, cmdGet},
 	"increment":      {typDataUpdate, cmdIncrement},
+	"initput":        {typDataUpdate, cmdInitPut},
 	"merge":          {typDataUpdate, cmdMerge},
 	"put":            {typDataUpdate, cmdPut},
 	"put_rangekey":   {typDataUpdate, cmdPutRangeKey},
@@ -725,6 +729,27 @@ func cmdCPut(e *evalCtx) error {
 
 	return e.withWriter("cput", func(rw ReadWriter) error {
 		if err := MVCCConditionalPut(e.ctx, rw, e.ms, key, ts, localTs, val, expVal, behavior, txn); err != nil {
+			return err
+		}
+		if resolve {
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+		}
+		return nil
+	})
+}
+
+func cmdInitPut(e *evalCtx) error {
+	txn := e.getTxn(optional)
+	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	key := e.getKey()
+	val := e.getVal()
+	failOnTombstones := e.hasArg("failOnTombstones")
+	resolve, resolveStatus := e.getResolve()
+
+	return e.withWriter("initput", func(rw ReadWriter) error {
+		if err := MVCCInitPut(e.ctx, rw, e.ms, key, ts, localTs, val, failOnTombstones, txn); err != nil {
 			return err
 		}
 		if resolve {
