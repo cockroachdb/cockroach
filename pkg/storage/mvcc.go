@@ -858,7 +858,8 @@ func MVCCGetAsTxn(
 //    that is the usual contribution of the meta key). The value size returned
 //    will be zero, as there is no stored MVCCMetadata.
 //    ok is set to true.
-// The passed in MVCCMetadata must not be nil.
+// The passed in MVCCMetadata must not be nil. Any MVCC range tombstones will
+// cause an error, the caller is expected to use a pointSynthesizingIter.
 //
 // If the supplied iterator is nil, no seek operation is performed. This is
 // used by the Blind{Put,ConditionalPut} operations to avoid seeking when the
@@ -866,16 +867,17 @@ func MVCCGetAsTxn(
 // iterator has already been seeked to metaKey, so a wasteful seek can be
 // avoided.
 func mvccGetMetadata(
-	iter MVCCIterator, metaKey MVCCKey, iterAlreadyPositioned bool, meta *enginepb.MVCCMetadata,
+	iter MVCCIterator, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if iter == nil {
 		return false, 0, 0, nil
 	}
-	if !iterAlreadyPositioned {
-		iter.SeekGE(metaKey)
-	}
+	iter.SeekGE(metaKey)
 	if ok, err = iter.Valid(); !ok {
 		return false, 0, 0, err
+	}
+	if _, hasRange := iter.HasPointAndRange(); hasRange {
+		return false, 0, 0, errors.AssertionFailedf("unexpected MVCC range key at %s", iter.UnsafeKey())
 	}
 
 	unsafeKey := iter.UnsafeKey()
@@ -1024,7 +1026,10 @@ func MVCCPut(
 	var iter MVCCIterator
 	blind := ms == nil && timestamp.IsEmpty()
 	if !blind {
-		iter = rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+		iter = newPointSynthesizingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes: IterKeyTypePointsAndRanges,
+			Prefix:   true,
+		}), true /* emitOnSeekGE */)
 		defer iter.Close()
 	}
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, txn, nil)
@@ -1068,7 +1073,10 @@ func MVCCDelete(
 	localTimestamp hlc.ClockTimestamp,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newPointSynthesizingIter(newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	}), true /* emitOnSeekGE */)
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, nil)
@@ -1080,6 +1088,13 @@ var noValue = roachpb.Value{}
 // MVCCIterator. The function takes a value and a valueFn, only one of which
 // should be provided. If the valueFn is nil, value's raw bytes will be set
 // for the key, else the bytes provided by the valueFn will be used.
+//
+// The caller is expected to use a pointSynthesizingIter -- any MVCC range
+// tombstones encountered will trigger an error.
+//
+// TODO(erikgrinaker): newMVCCIterator should construct an appropriate
+// MVCCIterator, including point synthesis where needed, once all callers are
+// ready to use them.
 func mvccPutUsingIter(
 	ctx context.Context,
 	writer Writer,
@@ -1323,8 +1338,7 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, origMetaKeySize, origMetaValSize, err :=
-		mvccGetMetadata(iter, metaKey, false /* iterAlreadyPositioned */, &buf.meta)
+	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
 	if err != nil {
 		return err
 	}
@@ -1453,6 +1467,8 @@ func mvccPutInternal(
 					iter.SeekGE(oldVersionKey)
 					if valid, err := iter.Valid(); err != nil {
 						return err
+					} else if _, hasRange := iter.HasPointAndRange(); hasRange {
+						return errors.AssertionFailedf("unexpected MVCC range tombstone at %s", iter.Key())
 					} else if !valid && !iter.UnsafeKey().Equal(oldVersionKey) {
 						return errors.Errorf("existing intent value missing: %s", oldVersionKey)
 					}
@@ -1516,6 +1532,8 @@ func mvccPutInternal(
 					iter.SeekGE(prevKey)
 					if valid, err := iter.Valid(); err != nil {
 						return err
+					} else if _, hasRange := iter.HasPointAndRange(); hasRange {
+						return errors.AssertionFailedf("unexpected MVCC range tombstone at %s", iter.Key())
 					} else if valid && iter.UnsafeKey().Key.Equal(prevKey.Key) {
 						prevUnsafeKey := iter.UnsafeKey()
 						if !prevUnsafeKey.IsValue() {
@@ -1732,7 +1750,10 @@ func MVCCIncrement(
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newPointSynthesizingIter(newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	}), true /* emitOnSeekGE */)
 	defer iter.Close()
 
 	var int64Val int64
@@ -1806,7 +1827,10 @@ func MVCCConditionalPut(
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newPointSynthesizingIter(newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	}), true /* emitOnSeekGE */)
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(
@@ -1888,7 +1912,10 @@ func MVCCInitPut(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newPointSynthesizingIter(newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	}), true /* emitOnSeekGE */)
 	defer iter.Close()
 	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
 }
@@ -1967,6 +1994,9 @@ func (m mvccKeyFormatter) Format(f fmt.State, c rune) {
 // concatenates undifferentiated byte slice values, and efficiently
 // combines time series observations if the roachpb.Value tag value
 // indicates the value byte slice is of type TIMESERIES.
+//
+// Merges are not really MVCC operations: they operate on inline values with no
+// version, and do not check for conflicts with other MVCC versions.
 func MVCCMerge(
 	_ context.Context,
 	rw ReadWriter,
@@ -2269,7 +2299,10 @@ func MVCCDeleteRange(
 
 	buf := newPutBuffer()
 	defer buf.release()
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newPointSynthesizingIter(newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	}), true /* emitOnSeekGE */)
 	defer iter.Close()
 
 	var keys []roachpb.Key
@@ -3623,8 +3656,7 @@ func MVCCGarbageCollect(
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, metaKeySize, metaValSize, err :=
-			mvccGetMetadata(iter, encKey, false /* iterAlreadyPositioned */, meta)
+		ok, metaKeySize, metaValSize, err := mvccGetMetadata(iter, encKey, meta)
 		if err != nil {
 			return err
 		}
