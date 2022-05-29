@@ -11279,7 +11279,6 @@ simple_typename:
     $$.val = $1.typeReference()
   }
 | const_typename
-| bit_with_length
 | character_with_length
 | interval_type
 | POINT error { return unimplementedWithIssueDetail(sqllex, 21286, "point") } // needed or else it generates a syntax error.
@@ -11360,6 +11359,7 @@ const_geo:
 const_typename:
   numeric
 | bit_without_length
+| bit_with_length
 | character_without_length
 | const_datetime
 | const_geo
