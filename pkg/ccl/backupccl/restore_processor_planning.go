@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -71,9 +72,9 @@ func distRestore(
 	var noTxn *kv.Txn
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupKMSEnv{
-			settings: execCtx.ExecCfg().Settings,
-			conf:     &execCtx.ExecCfg().ExternalIODirConfig,
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupencryption.BackupKMSEnv{
+			Settings: execCtx.ExecCfg().Settings,
+			Conf:     &execCtx.ExecCfg().ExternalIODirConfig,
 		})
 		if err != nil {
 			return err

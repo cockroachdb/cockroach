@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -329,8 +330,8 @@ func showBackupPlanHook(
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			opts, err := readEncryptionOptions(ctx, encStore)
-			if errors.Is(err, errEncryptionInfoRead) {
+			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
+			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
 			}
 			if err != nil {
@@ -342,19 +343,22 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				Key:  encryptionKey,
 			}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
-			opts, err := readEncryptionOptions(ctx, encStore)
-			if errors.Is(err, errEncryptionInfoRead) {
+			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
+			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
 			}
 			if err != nil {
 				return err
 			}
 
-			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
+			env := &backupencryption.BackupKMSEnv{
+				Settings: p.ExecCfg().Settings,
+				Conf:     &p.ExecCfg().ExternalIODirConfig,
+			}
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, []string{kms},
-					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
+				defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, []string{kms},
+					backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
 				if err == nil {
 					break
 				}

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,7 +55,7 @@ func TestAlterBackupStatement(t *testing.T) {
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
 
-	files, err := getEncryptionInfoFiles(ctx, store)
+	files, err := backupencryption.GetEncryptionInfoFiles(ctx, store)
 	require.NoError(t, err)
 	require.True(t, len(files) == 2)
 	// Userfiles are sorted lexicographically, so the newest version is
@@ -63,7 +64,7 @@ func TestAlterBackupStatement(t *testing.T) {
 
 	query = fmt.Sprintf("ALTER BACKUP LATEST in %s ADD NEW_KMS=%s WITH OLD_KMS=%s", userfile, key1, key2)
 	sqlDB.Exec(t, query)
-	files, err = getEncryptionInfoFiles(ctx, store)
+	files, err = backupencryption.GetEncryptionInfoFiles(ctx, store)
 	require.NoError(t, err)
 	require.True(t, len(files) == 3)
 	require.True(t, files[2] == "ENCRYPTION-INFO-3")

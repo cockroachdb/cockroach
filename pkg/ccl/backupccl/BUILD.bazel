@@ -13,7 +13,6 @@ go_library(
         "backup_processor_planning.go",
         "backup_span_coverage.go",
         "create_scheduled_backup.go",
-        "encryption.go",
         "file_sst_sink.go",
         "incrementals.go",
         "key_rewriter.go",
@@ -37,6 +36,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/backupccl/backupencryption",
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backupresolver",
         "//pkg/ccl/multiregionccl",
@@ -176,6 +176,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl/backupccl/backupencryption",
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",

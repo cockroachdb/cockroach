@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -67,9 +68,6 @@ const (
 	// backupStatisticsFileName is the file name used to store the serialized
 	// table statistics for the tables being backed up.
 	backupStatisticsFileName = "BACKUP-STATISTICS"
-	// backupEncryptionInfoFile is the file name used to store the serialized
-	// EncryptionInfo proto while the backup is in progress.
-	backupEncryptionInfoFile = "ENCRYPTION-INFO"
 )
 
 const (
@@ -115,7 +113,6 @@ var writeMetadataSST = settings.RegisterBoolSetting(
 	"write experimental new format BACKUP metadata file",
 	true,
 )
-var errEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
 // is used rather than a standard implementation such as http.DetectContentType
@@ -322,7 +319,7 @@ func readManifest(
 
 	var encryptionKey []byte
 	if encryption != nil {
-		encryptionKey, err = getEncryptionKey(ctx, encryption, exportStore.Settings(),
+		encryptionKey, err = backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
 			return backuppb.BackupManifest{}, 0, err
@@ -406,7 +403,7 @@ func readBackupPartitionDescriptor(
 	}()
 
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, 0, err
@@ -462,7 +459,7 @@ func readTableStatistics(
 		return nil, err
 	}
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
 			return nil, err
@@ -500,7 +497,7 @@ func writeBackupManifest(
 	}
 
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -557,7 +554,7 @@ func writeBackupPartitionDescriptor(
 		return errors.Wrap(err, "compressing backup partition descriptor")
 	}
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
 			return err
@@ -586,7 +583,7 @@ func writeTableStatistics(
 		return err
 	}
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
 			return err
