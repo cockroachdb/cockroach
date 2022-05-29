@@ -1,0 +1,318 @@
+# Tests MVCC scans across range tombstones.
+#
+# Sets up the following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
+#
+#  T
+#  6                 [e6]
+#  5                      f5
+#  4          o-----------------------o   o-------o  [j-l)@4 has localTs=3
+#  3  x          d3       f3
+#  2  o---------------o           h2
+#  1  a1  x   c1          f1
+#     a   b   c   d   e   f   g   h   i   j   k   l
+#
+run ok
+put k=a ts=1 v=a1
+del k=b ts=1
+put k=c ts=1 v=c1
+put k=f ts=1 v=f1
+del_range_ts k=a end=e ts=2
+del k=a ts=3
+put k=d ts=3 v=d3
+put k=f ts=3 v=f3
+put k=h ts=2 v=h2
+del_range_ts k=c end=i ts=4
+put k=f ts=5 v=f5
+del_range_ts k=j end=l ts=4 localTs=3
+with t=A
+  txn_begin ts=6
+  put k=e v=e6
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
+rangekey: {a-c}/[2.000000000,0=/<empty>]
+rangekey: {c-e}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+rangekey: {e-i}/[4.000000000,0=/<empty>]
+rangekey: {j-l}/[4.000000000,0=vheader{ localTs=3.000000000,0 } /<empty>]
+data: "a"/3.000000000,0 -> /<empty>
+data: "a"/1.000000000,0 -> /BYTES/a1
+data: "b"/1.000000000,0 -> /<empty>
+data: "c"/1.000000000,0 -> /BYTES/c1
+data: "d"/3.000000000,0 -> /BYTES/d3
+meta: "e"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "e"/6.000000000,0 -> /BYTES/e6
+data: "f"/5.000000000,0 -> /BYTES/f5
+data: "f"/3.000000000,0 -> /BYTES/f3
+data: "f"/1.000000000,0 -> /BYTES/f1
+data: "h"/2.000000000,0 -> /BYTES/h2
+
+# Run non-tombstone scans at all timestamps.
+run ok
+scan k=a end=z ts=1
+----
+scan: "a" -> /BYTES/a1 @1.000000000,0
+scan: "c" -> /BYTES/c1 @1.000000000,0
+scan: "f" -> /BYTES/f1 @1.000000000,0
+
+run ok
+scan k=a end=z ts=2
+----
+scan: "f" -> /BYTES/f1 @1.000000000,0
+scan: "h" -> /BYTES/h2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=3
+----
+scan: "d" -> /BYTES/d3 @3.000000000,0
+scan: "f" -> /BYTES/f3 @3.000000000,0
+scan: "h" -> /BYTES/h2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=4
+----
+scan: "a"-"z" -> <no data>
+
+run ok
+scan k=a end=z ts=5
+----
+scan: "f" -> /BYTES/f5 @5.000000000,0
+
+run ok
+scan k=a end=z ts=6 inconsistent
+----
+scan: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: "f" -> /BYTES/f5 @5.000000000,0
+
+# Run tombstone scans at all timestamps.
+run ok
+scan k=a end=z ts=1 tombstones
+----
+scan: "a" -> /BYTES/a1 @1.000000000,0
+scan: "b" -> /<empty> @1.000000000,0
+scan: "c" -> /BYTES/c1 @1.000000000,0
+scan: "f" -> /BYTES/f1 @1.000000000,0
+
+run ok
+scan k=a end=z ts=2 tombstones
+----
+scan: "a" -> /<empty> @2.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @2.000000000,0
+scan: "d" -> /<empty> @2.000000000,0
+scan: "f" -> /BYTES/f1 @1.000000000,0
+scan: "h" -> /BYTES/h2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=3 tombstones
+----
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @2.000000000,0
+scan: "d" -> /BYTES/d3 @3.000000000,0
+scan: "f" -> /BYTES/f3 @3.000000000,0
+scan: "h" -> /BYTES/h2 @2.000000000,0
+
+run ok
+scan k=a end=z ts=4 tombstones
+----
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "f" -> /<empty> @4.000000000,0
+scan: "h" -> /<empty> @4.000000000,0
+scan: "j" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=z ts=5 tombstones
+----
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "f" -> /BYTES/f5 @5.000000000,0
+scan: "h" -> /<empty> @4.000000000,0
+scan: "j" -> /<empty> @4.000000000,0
+
+run ok
+scan k=a end=z ts=6 tombstones inconsistent
+----
+scan: "a" -> intent {id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
+scan: "a" -> /<empty> @3.000000000,0
+scan: "b" -> /<empty> @2.000000000,0
+scan: "c" -> /<empty> @4.000000000,0
+scan: "d" -> /<empty> @4.000000000,0
+scan: "e" -> /<empty> @4.000000000,0
+scan: "f" -> /BYTES/f5 @5.000000000,0
+scan: "h" -> /<empty> @4.000000000,0
+scan: "j" -> /<empty> @4.000000000,0
+
+# failOnMoreRecent: a-d
+run error
+scan k=a end=d ts=3 failOnMoreRecent
+----
+scan: "a"-"d" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+scan k=a end=d ts=4 failOnMoreRecent
+----
+scan: "a"-"d" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+run ok
+scan k=a end=d ts=5 failOnMoreRecent
+----
+scan: "a"-"d" -> <no data>
+
+# failOnMoreRecent: c-d
+run error
+scan k=c end=d ts=1 failOnMoreRecent
+----
+scan: "c"-"d" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 1.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+scan k=c end=d ts=2 failOnMoreRecent
+----
+scan: "c"-"d" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 2.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+scan k=c end=d ts=3 failOnMoreRecent
+----
+scan: "c"-"d" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+scan k=c end=d ts=4 failOnMoreRecent
+----
+scan: "c"-"d" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+run ok
+scan k=c end=d ts=5 failOnMoreRecent
+----
+scan: "c"-"d" -> <no data>
+
+# failOnMoreRecent: e-f
+run error
+scan k=e end=f ts=3 failOnMoreRecent
+----
+scan: "e"-"f" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "e"
+
+run error
+scan k=e end=f ts=4 failOnMoreRecent
+----
+scan: "e"-"f" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "e"
+
+run error
+scan k=e end=f ts=5 failOnMoreRecent
+----
+scan: "e"-"f" -> <no data>
+error: (*roachpb.WriteIntentError:) conflicting intents on "e"
+
+# failOnMoreRecent: g-h
+run error
+scan k=g end=h ts=3 failOnMoreRecent
+----
+scan: "g"-"h" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "g" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+scan k=g end=h ts=4 failOnMoreRecent
+----
+scan: "g"-"h" -> <no data>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "g" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+run ok
+scan k=g end=h ts=5 failOnMoreRecent
+----
+scan: "g"-"h" -> <no data>
+
+
+# globalUncertaintyLimit: b-d
+run ok
+scan k=b end=d ts=3 globalUncertaintyLimit=3
+----
+scan: "b"-"d" -> <no data>
+
+run error
+scan k=b end=d ts=3 globalUncertaintyLimit=4
+----
+scan: "b"-"d" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 3.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+
+run ok
+scan k=b end=d ts=4 globalUncertaintyLimit=5
+----
+scan: "b"-"d" -> <no data>
+
+# globalUncertaintyLimit: g-h
+run ok
+scan k=g end=h ts=1 globalUncertaintyLimit=1
+----
+scan: "g"-"h" -> <no data>
+
+run ok
+scan k=g end=h ts=1 globalUncertaintyLimit=3
+----
+scan: "g"-"h" -> <no data>
+
+run error
+scan k=g end=h ts=1 globalUncertaintyLimit=4
+----
+scan: "g"-"h" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+
+run ok
+scan k=g end=h ts=4 globalUncertaintyLimit=5
+----
+scan: "g"-"h" -> <no data>
+
+# globalUncertaintyLimit: h-i
+run ok
+scan k=h end=i ts=2 globalUncertaintyLimit=2
+----
+scan: "h" -> /BYTES/h2 @2.000000000,0
+
+run ok
+scan k=h end=i ts=2 globalUncertaintyLimit=3
+----
+scan: "h" -> /BYTES/h2 @2.000000000,0
+
+run error
+scan k=h end=i ts=2 globalUncertaintyLimit=4
+----
+scan: "h"-"i" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 2.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+
+# Test local timestamp uncertainty for [j-l)@4 with localTs=3. Normally,
+# globalUncertaintyLimit=4 would error. However, localUncertaintyLimit<4
+# disables this via observed timestamps, but not if
+# localTs<=localUncertaintyLimit.
+run error
+scan k=j end=l ts=1 globalUncertaintyLimit=4
+----
+scan: "j"-"l" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+
+run ok
+scan k=j end=l ts=1 globalUncertaintyLimit=4 localUncertaintyLimit=1
+----
+scan: "j"-"l" -> <no data>
+
+run ok
+scan k=j end=l ts=1 globalUncertaintyLimit=4 localUncertaintyLimit=2
+----
+scan: "j"-"l" -> <no data>
+
+run error
+scan k=j end=l ts=1 globalUncertaintyLimit=4 localUncertaintyLimit=3
+----
+scan: "j"-"l" -> <no data>
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 1.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=3.000000000,0, global=0,0)`; observed timestamps: []
