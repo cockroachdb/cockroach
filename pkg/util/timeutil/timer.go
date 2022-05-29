@@ -79,8 +79,14 @@ func (t *Timer) Reset(d time.Duration) {
 		t.C = t.timer.C
 		return
 	}
-	if !t.timer.Stop() && !t.Read {
-		<-t.C
+	// Stop the timer and, if the timer had fired already, attempt to drain its
+	// channel in case the user had not already received from the channel before
+	// calling Reset().
+	if !t.timer.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
 	}
 	t.timer.Reset(d)
 	t.Read = false
