@@ -12380,8 +12380,6 @@ simple_typename:
     $$.val = $1.typeReference()
   }
 | const_typename
-| bit_with_length
-| character_with_length
 | interval_type
 | POINT error { return unimplementedWithIssueDetail(sqllex, 21286, "point") } // needed or else it generates a syntax error.
 | POLYGON error { return unimplementedWithIssueDetail(sqllex, 21286, "polygon") } // needed or else it generates a syntax error.
@@ -12449,19 +12447,21 @@ const_geo:
     $$.val = types.MakeGeography($3.geoShapeType(), geopb.SRID(val))
   }
 
-// We have a separate const_typename to allow defaulting fixed-length types
-// such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
+// We have a separate const_typename to allow defaulting fixed-length types such
+// as CHAR() and BIT() to an unspecified length. SQL9x requires that these
 // default to a length of one, but this makes no sense for constructs like CHAR
-// 'hi' and BIT '0101', where there is an obvious better choice to make. Note
-// that interval_type is not included here since it must be pushed up higher
-// in the rules to accommodate the postfix options (e.g. INTERVAL '1'
-// YEAR). Likewise, we have to handle the generic-type-name case in
-// a_expr_const to avoid premature reduce/reduce conflicts against function
-// names.
+// 'hi' and BIT '0101', where there is an obvious better choice to make. This
+// rule *also* supports length-specified types like BIT(1), CHAR(3), etc. Note
+// that interval_type is not included here since it must be pushed up higher in
+// the rules to accommodate the postfix options (e.g. INTERVAL '1' YEAR).
+// Likewise, we have to handle the generic-type-name case in a_expr_const to
+// avoid premature reduce/reduce conflicts against function names.
 const_typename:
   numeric
 | bit_without_length
+| bit_with_length
 | character_without_length
+| character_with_length
 | const_datetime
 | const_geo
 

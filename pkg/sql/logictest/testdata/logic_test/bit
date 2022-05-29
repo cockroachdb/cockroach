@@ -316,3 +316,13 @@ query TT
 SELECT 'xAb'::STRING::BIT(8), 'XaB'::STRING::BIT(8)
 ----
 10101011 10101011
+
+query TT
+SELECT BIT(4) '1101', BIT(1) '1010'
+----
+1101  1
+
+query TT
+SELECT VARBIT(4) '1101', VARBIT(2) '1001'
+----
+1101  10
