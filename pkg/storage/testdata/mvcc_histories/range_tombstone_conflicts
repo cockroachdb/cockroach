@@ -75,17 +75,12 @@ data: "j"/1.000000000,0 -> /INT/1
 error: (*withstack.withStack:) "b"/0,0: put is inline=true, but existing value is inline=false
 
 # DeleteRange at ts=5 should error with WriteTooOldError.
-#
-# TODO(erikgrinaker): This should error on c rather than d, but won't do so
-# until MVCCScan respects MVCC range tombstones. Until it does, the
-# put will actually do a write at the new timestamp.
 run error
 del_range k=a end=f ts=5
 ----
 >> at end:
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-data: "d"/5.000000000,1 -> /<empty>
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
@@ -95,7 +90,7 @@ data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 5.000000000,0 too old; wrote at 5.000000000,1
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 5.000000000,0 too old; wrote at 5.000000000,1
 
 # Point key below range tombstones should error, but is written anyway at a
 # higher timestamp.
@@ -110,7 +105,6 @@ put k=c ts=3 v=c3
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,1 -> /<empty>
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
@@ -129,8 +123,7 @@ put k=d ts=3 v=d3
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
@@ -140,7 +133,7 @@ data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 3.000000000,0 too old; wrote at 5.000000000,2
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 3.000000000,0 too old; wrote at 5.000000000,1
 
 run error
 put k=e ts=3 v=e3
@@ -149,8 +142,7 @@ put k=e ts=3 v=e3
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -171,8 +163,7 @@ cput k=f ts=7 v=f7 cond=f1
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -195,8 +186,7 @@ with t=A ts=7
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -222,8 +212,7 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -244,8 +233,7 @@ initput k=f ts=7 v=f7 failOnTombstones
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -269,8 +257,7 @@ initput k=f ts=7 v=f7
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -292,8 +279,7 @@ increment k=i ts=2
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
@@ -317,8 +303,7 @@ inc: current value = 1
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "c"/5.000000000,1 -> /BYTES/c3
-data: "d"/5.000000000,2 -> /BYTES/d3
-data: "d"/5.000000000,1 -> /<empty>
+data: "d"/5.000000000,1 -> /BYTES/d3
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/5.000000000,1 -> /BYTES/e3
 data: "e"/2.000000000,0 -> /<empty>
