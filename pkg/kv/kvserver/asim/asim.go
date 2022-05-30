@@ -29,9 +29,11 @@ type Simulator struct {
 	// The simulator can run multiple workload Generators in parallel.
 	generators []workload.Generator
 
+	pacers map[state.StoreID]ReplicaPacer
+	rqs    map[state.StoreID]ReplicateQueue
+
 	state    state.State
 	changer  state.Changer
-	pacers   map[state.StoreID]ReplicaPacer
 	exchange state.Exchange
 }
 
@@ -43,9 +45,17 @@ func NewSimulator(
 	initialState state.State,
 	exchange state.Exchange,
 	changer state.Changer,
+	changeDelay time.Duration,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
+	rqs := make(map[state.StoreID]ReplicateQueue)
 	for storeID := range initialState.Stores() {
+		rqs[storeID] = NewReplicateQueue(
+			storeID,
+			changer,
+			changeDelay,
+			initialState.MakeAllocator(storeID),
+		)
 		pacers[storeID] = NewScannerReplicaPacer(
 			initialState.NextReplicasFn(storeID),
 			defaultLoopInterval,
@@ -61,6 +71,7 @@ func NewSimulator(
 		generators: wgs,
 		state:      initialState,
 		changer:    changer,
+		rqs:        rqs,
 		pacers:     pacers,
 		exchange:   exchange,
 	}
@@ -108,11 +119,15 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		s.tickStoreClocks(tick)
 
 		// Done with config and load updates, the state is ready for the
-		// allocators. There no allocators at the moment, so instead just loop
-		// back.
+		// allocators.
+		stateForAlloc := s.state
+
+		// Simulate the replicate queue logic.
+		s.tickReplicateQueue(ctx, tick, stateForAlloc)
 	}
 }
 
+// tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 	for _, generator := range s.generators {
 		for {
@@ -120,6 +135,10 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 			if done {
 				break
 			}
+			// TODO(kvoli): When profiling, we see that the majority of time is
+			// spent iterating to find a range to apply load to for a load
+			// event. We should batch load for keys or find other ways to
+			// reduce time spent here.
 			s.state.ApplyLoad(event)
 		}
 	}
@@ -138,4 +157,31 @@ func (s *Simulator) tickStateExchange(tick time.Time) {
 
 func (s *Simulator) tickStoreClocks(tick time.Time) {
 	s.state.TickClock(tick)
+}
+
+// tickReplicateQueue iterates over the next replicas for each store to
+// consider. It then enqueues each of these and ticks the replicate queue for
+// processing.
+func (s *Simulator) tickReplicateQueue(ctx context.Context, tick time.Time, state state.State) {
+	for storeID := range state.Stores() {
+		for {
+			r := s.pacers[storeID].Next(tick)
+			if r == nil {
+				// No replicas to consider at this tick.
+				break
+			}
+
+			// NB: Only the leaseholder replica for the range is
+			// considered in the allocator.
+			if !r.HoldsLease() {
+				continue
+			}
+
+			// Try adding the replica to the replicate queue.
+			s.rqs[storeID].MaybeAdd(ctx, r, state)
+
+			// Tick the replicate queue.
+			s.rqs[storeID].Tick(ctx, tick, state)
+		}
+	}
 }
