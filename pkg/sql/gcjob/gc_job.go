@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -44,8 +45,15 @@ func SetSmallMaxGCIntervalForTest() func() {
 	}
 }
 
+var idleWaitDuration = settings.RegisterDurationSetting(
+	settings.TenantReadOnly,
+	"sql.gc_job.idle_wait_duration",
+	"after this duration of waiting for an update, the gc job will mark itself idle",
+	time.Second,
+)
+
 type schemaChangeGCResumer struct {
-	jobID jobspb.JobID
+	job *jobs.Job
 }
 
 // performGC GCs any schema elements that are in the DELETING state and returns
@@ -179,39 +187,32 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	}
 
 	if fn := execCfg.GCJobTestingKnobs.RunBeforeResume; fn != nil {
-		if err := fn(r.jobID); err != nil {
+		if err := fn(r.job.ID()); err != nil {
 			return err
 		}
 	}
-	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.jobID)
+	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.job.ID())
 	if err != nil {
 		return err
 	}
 
-	if err := maybeUnsplitRanges(ctx, execCfg, r.jobID, details, progress); err != nil {
+	if err := maybeUnsplitRanges(ctx, execCfg, r.job.ID(), details, progress); err != nil {
 		return err
 	}
 
 	tableDropTimes, indexDropTimes := getDropTimes(details)
 
-	timer := timeutil.NewTimer()
-	defer timer.Stop()
-	timer.Reset(0)
 	gossipUpdateC, cleanup := execCfg.GCJobNotifier.AddNotifyee(ctx)
 	defer cleanup()
+	var timerDuration time.Duration
+	ts := timeutil.DefaultTimeSource{}
+
 	for {
-		select {
-		case <-gossipUpdateC:
-			if log.V(2) {
-				log.Info(ctx, "received a new system config")
-			}
-		case <-timer.C:
-			timer.Read = true
-			if log.V(2) {
-				log.Info(ctx, "SchemaChangeGC timer triggered")
-			}
-		case <-ctx.Done():
-			return ctx.Err()
+		idleWait := idleWaitDuration.Get(execCfg.SV())
+		if err := waitForWork(
+			ctx, r.job.MarkIdle, ts, timerDuration, idleWait, gossipUpdateC,
+		); err != nil {
+			return err
 		}
 
 		// Refresh the status of all elements in case any GC TTLs have changed.
@@ -220,7 +221,7 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		if details.Tenant == nil {
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			expired, earliestDeadline = refreshTables(
-				ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress,
+				ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job.ID(), progress,
 			)
 		} else {
 			expired, earliestDeadline, err = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
@@ -228,20 +229,20 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 				return err
 			}
 		}
-		timerDuration := time.Until(earliestDeadline)
+		timerDuration = time.Until(earliestDeadline)
 
 		if expired {
 			// Some elements have been marked as DELETING so save the progress.
-			persistProgress(ctx, execCfg, r.jobID, progress, runningStatusGC(progress))
+			persistProgress(ctx, execCfg, r.job.ID(), progress, runningStatusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
-				if err := fn(r.jobID); err != nil {
+				if err := fn(r.job.ID()); err != nil {
 					return err
 				}
 			}
 			if err := performGC(ctx, execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, execCfg, r.jobID, progress, sql.RunningStatusWaitingGC)
+			persistProgress(ctx, execCfg, r.job.ID(), progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0
@@ -255,8 +256,61 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		if timerDuration > MaxSQLGCInterval {
 			timerDuration = MaxSQLGCInterval
 		}
-		timer.Reset(timerDuration)
 	}
+}
+
+// waitForWork waits until there is work to do given the gossipUpDateC, the
+// timer, or the context. It calls markIdle with true after waiting
+// idleWaitDuration. It calls markIdle with false before returning.
+func waitForWork(
+	ctx context.Context,
+	markIdle func(isIdle bool),
+	source timeutil.TimeSource,
+	workTimerDuration, idleWaitDuration time.Duration,
+	gossipUpdateC <-chan struct{},
+) error {
+	var markedIdle bool
+	defer func() {
+		if markedIdle {
+			markIdle(false)
+		}
+	}()
+
+	markIdleTimer := source.NewTimer()
+	markIdleTimer.Reset(idleWaitDuration)
+	defer markIdleTimer.Stop()
+
+	workTimer := source.NewTimer()
+	workTimer.Reset(workTimerDuration)
+	defer workTimer.Stop()
+
+	wait := func() (done bool) {
+		select {
+		case <-markIdleTimer.Ch():
+			markIdleTimer.MarkRead()
+			markIdle(true)
+			markedIdle = true
+			return false
+
+		case <-gossipUpdateC:
+			if log.V(2) {
+				log.Info(ctx, "received a new system config")
+			}
+
+		case <-workTimer.Ch():
+			workTimer.MarkRead()
+			if log.V(2) {
+				log.Info(ctx, "SchemaChangeGC workTimer triggered")
+			}
+
+		case <-ctx.Done():
+		}
+		return true
+	}
+	if done := wait(); !done {
+		wait()
+	}
+	return ctx.Err()
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
@@ -276,7 +330,7 @@ func (r *schemaChangeGCResumer) isPermanentGCError(err error) bool {
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &schemaChangeGCResumer{
-			jobID: job.ID(),
+			job: job,
 		}
 	}
 	jobs.RegisterConstructor(jobspb.TypeSchemaChangeGC, createResumerFn)
