@@ -83,6 +83,7 @@ DEPENDENCIES = [
     "@npm_cluster_ui//highlight.js",
     "@npm_cluster_ui//http-proxy-middleware",
     "@npm_cluster_ui//identity-obj-proxy",
+    "@npm_cluster_ui//jest-canvas-mock",
     "@npm_cluster_ui//jest-environment-enzyme",
     "@npm_cluster_ui//jest-enzyme",
     "@npm_cluster_ui//jest-fetch-mock",
