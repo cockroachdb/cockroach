@@ -1245,3 +1245,18 @@ SELECT "reportingID",
  LIMIT 1;
 ----
 1  {"CascadeDroppedViews": ["db2.public.v1nest", "db2.public.v2nest", "db2.public.v3nest"], "EventType": "drop_table", "Statement": "DROP TABLE db2.public.t1nest CASCADE", "TableName": "db2.public.t1nest", "Tag": "DROP TABLE", "User": "root"}
+
+
+statement ok
+CREATE TABLE test_t1(a int);
+
+statement ok
+CREATE MATERIALIZED VIEW li AS (SELECT 1 AS test_t1);
+
+query TT
+SHOW CREATE VIEW li
+----
+li                          CREATE MATERIALIZED VIEW public.li (
+                                                    test_t1,
+                                                    rowid
+                        ) AS (SELECT 1 AS test_t1)

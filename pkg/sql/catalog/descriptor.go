@@ -297,8 +297,7 @@ type TableDescriptor interface {
 	// Sequences count as physical tables because their values are stored in
 	// the KV layer.
 	IsPhysicalTable() bool
-	// MaterializedView returns whether or not this TableDescriptor is a
-	// MaterializedView.
+	// MaterializedView returns whether this TableDescriptor is a MaterializedView.
 	MaterializedView() bool
 	// IsAs returns true if the TableDescriptor describes a Table that was created
 	// with a CREATE TABLE AS command.
