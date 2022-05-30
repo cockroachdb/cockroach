@@ -128,6 +128,7 @@ go_library(
         "versionupgrade.go",
         "ycsb.go",
     ],
+    embedsrcs = ["predecessor_version.json"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests",
     visibility = ["//visibility:public"],
     deps = [
