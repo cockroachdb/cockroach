@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1762,22 +1763,24 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 	}
 }
 
-func humanizePointCount(n uint64) redact.SafeString {
-	return redact.SafeString(humanize.SI(float64(n), ""))
+func humanizeCount(n uint64) redact.SafeString {
+	return redact.SafeString(strings.TrimSpace(humanize.SI(float64(n), "")))
 }
 
 // SafeFormat implements redact.SafeFormatter.
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
-		"block-bytes: (total %s, cached %s); "+
+		"blocks: (count %s, cached-count %s, bytes %s, cached-bytes %s); "+
 		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s)",
 		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
+		humanizeCount(s.Blocks),
+		humanizeCount(s.BlocksInCache),
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
-		humanizePointCount(s.PointCount),
+		humanizeCount(s.PointCount),
 		humanizeutil.IBytes(int64(s.KeyBytes)),
 		humanizeutil.IBytes(int64(s.ValueBytes)),
-		humanizePointCount(s.PointsCoveredByRangeTombstones))
+		humanizeCount(s.PointsCoveredByRangeTombstones))
 }
 
 // String implements fmt.Stringer.
