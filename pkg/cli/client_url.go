@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // This file implements the parsing of the client --url flag.
@@ -58,118 +59,47 @@ type urlParser struct {
 	cmd    *cobra.Command
 	cliCtx *cliContext
 
-	// sslStrict, when set to true, requires that the SSL file paths in
+	// if is the flag set for cmd. This is initialized late in Set()
+	// since some flags are only defined after the URL flag.
+	fl *pflag.FlagSet
+
+	// warn determines whether a warning is printed if an URL contains
+	// user/database details and the command does not support that.
+	warn bool
+
+	// strictTLS, when set to true, requires that the SSL file paths in
 	// a URL clearly map to a certificate directory and restricts the
 	// set of supported SSL modes to just "disable" and "require".
 	//
 	// This is set for all non-SQL client commands, which only support
 	// the insecure boolean and certs-dir with maximum SSL validation.
-	sslStrict bool
+	strictTLS bool
 }
 
-func (u urlParser) String() string { return "" }
+func newURLParser(cmd *cobra.Command, cliCtx *cliContext, strictTLS bool, warn bool) pflag.Value {
+	return &urlParser{
+		cmd:       cmd,
+		cliCtx:    cliCtx,
+		warn:      warn,
+		strictTLS: strictTLS,
+	}
+}
 
-func (u urlParser) Type() string {
+func (u *urlParser) String() string { return "" }
+
+func (u *urlParser) Type() string {
 	return "<postgres://...>"
 }
 
-func (u urlParser) Set(v string) error {
-	return u.setInternal(v, true /* warn */)
-}
-
-func (u urlParser) setInternal(v string, warn bool) error {
-	fl := flagSetForCmd(u.cmd)
-	cliCtx := u.cliCtx
-
-	usernameFlag := func() (hasConnUser bool, connUser string) {
-		return cliCtx.sqlConnUser != "", cliCtx.sqlConnUser
+func (u *urlParser) Set(v string) error {
+	if u.fl == nil {
+		// Late initialization of the flagset. We can't call this early as
+		// we need all flags to be defined already, and some flags
+		// are only defined (in cli/flags.go) after the URL flag has been defined.
+		u.fl = flagSetForCmd(u.cmd)
 	}
 
-	foundUsername := func(user string) {
-		// If the URL specifies a username, check whether a username was expected.
-		if f := fl.Lookup(cliflags.User.Name); f == nil {
-			// A client which does not support --user will also not use
-			// makeClientConnURL(), so we can ignore/forget about the
-			// information. We do not produce an error however, so that a
-			// user can readily copy-paste the URL produced by `cockroach
-			// start` even if the client command does not accept a username.
-			if warn {
-				fmt.Fprintf(stderr,
-					"warning: --url specifies user/password, but command %q does not accept user/password details - details ignored\n",
-					u.cmd.Name())
-			}
-		} else {
-			// If username information is available, forward it to --user.
-			cliCtx.sqlConnUser = user
-			// Remember the --user flag was changed in case later code checks
-			// the .Changed field.
-			f.Changed = true
-		}
-	}
-
-	foundHostname := func(host string) {
-		cliCtx.clientConnHost = host
-		fl.Lookup(cliflags.ClientHost.Name).Changed = true
-	}
-
-	foundPort := func(port string) {
-		cliCtx.clientConnPort = port
-		fl.Lookup(cliflags.ClientPort.Name).Changed = true
-	}
-
-	foundDatabase := func(db string) {
-		if f := fl.Lookup(cliflags.Database.Name); f == nil {
-			// A client which does not support --database does not need this
-			// bit of information, so we can ignore/forget about it. We do
-			// not produce an error however, so that a user can readily
-			// copy-paste an URL they picked up from another tool (a GUI
-			// tool for example).
-			if warn {
-				fmt.Fprintf(stderr,
-					"warning: --url specifies database %q, but command %q does not accept a database name - database name ignored\n",
-					db, u.cmd.Name())
-			}
-		} else {
-			cliCtx.sqlConnDBName = db
-			f.Changed = true
-		}
-	}
-
-	flCertsDir := fl.Lookup(cliflags.CertsDir.Name)
-	certsDirFlag := func() (certsDirSpecified bool, certsDir string) {
-		return flCertsDir.Changed, baseCfg.SSLCertsDir
-	}
-
-	foundCertsDir := func(certsDir string) {
-		baseCfg.SSLCertsDir = certsDir
-		flCertsDir.Changed = true
-	}
-
-	flInsecure := fl.Lookup(cliflags.ClientInsecure.Name)
-	insecureFlag := func() (flagSpecified bool, isInsecure bool) {
-		return flInsecure.Changed, cliCtx.Insecure
-	}
-	insecureOverride := func(insecure bool) {
-		cliCtx.Insecure = insecure
-	}
-
-	makeStrictErr := func() error {
-		return fmt.Errorf("command %q only supports sslmode=disable or sslmode=verify-full", u.cmd.Name())
-	}
-
-	purl, err := clientsecopts.AnalyzeClientURL(v,
-		u.sslStrict,
-		makeStrictErr,
-		usernameFlag,
-		foundUsername,
-		foundHostname,
-		foundPort,
-		foundDatabase,
-		insecureFlag,
-		insecureOverride,
-		certsDirFlag,
-		foundCertsDir,
-	)
+	purl, err := clientsecopts.AnalyzeClientURL(v, u)
 
 	if err != nil {
 		// This function is called by pflag.(*FlagSet).Set() and that code
@@ -188,8 +118,102 @@ func (u urlParser) setInternal(v string, warn bool) error {
 	}
 
 	// Store the parsed URL for later.
-	cliCtx.sqlConnURL = purl
+	u.cliCtx.sqlConnURL = purl
 	return err
+}
+
+var _ clientsecopts.CLIFlagInterfaceForClientURL = (*urlParser)(nil)
+
+// StrictTLS implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) StrictTLS() bool { return u.strictTLS }
+
+// UserFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) UserFlag() (hasConnUser bool, connUser string) {
+	return u.cliCtx.sqlConnUser != "", u.cliCtx.sqlConnUser
+}
+
+// SetUser implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) SetUser(user string) {
+	// If the URL specifies a username, check whether a username was expected.
+	if f := u.fl.Lookup(cliflags.User.Name); f == nil {
+		// A client which does not support --user will also not use
+		// makeClientConnURL(), so we can ignore/forget about the
+		// information. We do not produce an error however, so that a
+		// user can readily copy-paste the URL produced by `cockroach
+		// start` even if the client command does not accept a username.
+		if u.warn {
+			fmt.Fprintf(stderr,
+				"warning: --url specifies user/password, but command %q does not accept user/password details - details ignored\n",
+				u.cmd.Name())
+		}
+	} else {
+		// If username information is available, forward it to --user.
+		u.cliCtx.sqlConnUser = user
+		// Remember the --user flag was changed in case later code checks
+		// the .Changed field.
+		f.Changed = true
+	}
+}
+
+// SetHost implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) SetHost(host string) {
+	u.cliCtx.clientConnHost = host
+	u.fl.Lookup(cliflags.ClientHost.Name).Changed = true
+}
+
+// SetPort implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) SetPort(port string) {
+	u.cliCtx.clientConnPort = port
+	u.fl.Lookup(cliflags.ClientPort.Name).Changed = true
+}
+
+// SetDatabase implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) SetDatabase(db string) {
+	if f := u.fl.Lookup(cliflags.Database.Name); f == nil {
+		// A client which does not support --database does not need this
+		// bit of information, so we can ignore/forget about it. We do
+		// not produce an error however, so that a user can readily
+		// copy-paste an URL they picked up from another tool (a GUI
+		// tool for example).
+		if u.warn {
+			fmt.Fprintf(stderr,
+				"warning: --url specifies database %q, but command %q does not accept a database name - database name ignored\n",
+				db, u.cmd.Name())
+		}
+	} else {
+		u.cliCtx.sqlConnDBName = db
+		f.Changed = true
+	}
+}
+
+// CertsDirFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) CertsDirFlag() (bool, string) {
+	flCertsDir := u.fl.Lookup(cliflags.CertsDir.Name)
+	return flCertsDir.Changed, u.cliCtx.Config.SSLCertsDir
+}
+
+// SetCertsDir implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) SetCertsDir(certsDir string) {
+	u.cliCtx.Config.SSLCertsDir = certsDir
+	u.fl.Lookup(cliflags.CertsDir.Name).Changed = true
+}
+
+// InsecureFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) InsecureFlag() (bool, bool) {
+	flInsecure := u.fl.Lookup(cliflags.ClientInsecure.Name)
+	return flInsecure.Changed, u.cliCtx.Insecure
+}
+
+// SetInsecure implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) SetInsecure(insecure bool) {
+	// Note: we purposefully do not update the .Changed field of the
+	// --insecure flag.
+	u.cliCtx.Config.Insecure = insecure
+}
+
+// NewStrictTLSConfigurationError implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
+func (u *urlParser) NewStrictTLSConfigurationError() error {
+	return fmt.Errorf("command %q only supports sslmode=disable or sslmode=verify-full", u.cmd.Name())
 }
 
 // makeClientConnURL constructs a connection URL from the parsed options.

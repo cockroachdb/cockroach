@@ -763,18 +763,8 @@ func init() {
 		// commands, ensure the isSQLCommand() predicate is updated accordingly.
 		boolFlag(f, &sqlConnCtx.Echo, cliflags.EchoSQL)
 
-		varFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
-		stringFlag(f, &cliCtx.sqlConnUser, cliflags.User)
-		if cmd == demoCmd {
-			// The 'demo' command does not really support --url or --user.
-			// However, we create the pflag instance so that the user
-			// can use \connect inside the shell session.
-			_ = f.MarkHidden(cliflags.URL.Name)
-			_ = f.MarkHidden(cliflags.User.Name)
-		}
-
 		// Even though SQL commands take their connection parameters via
-		// --url / --user (see above), the urlParser{} struct internally
+		// --url / --user (see below), the urlParser{} struct internally
 		// needs the ClientHost and ClientPort flags to be defined -
 		// even if they are invisible - due to the way initialization from
 		// env vars is implemented.
@@ -786,9 +776,22 @@ func init() {
 		stringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
+		// The URL flag.
+		varFlag(f, newURLParser(cmd, &cliCtx, false /* strictTLS */, true /* warn */), cliflags.URL)
+
+		// The username flag.
+		stringFlag(f, &cliCtx.sqlConnUser, cliflags.User)
+
 		if cmd == sqlShellCmd || cmd == demoCmd {
+			// The target database name.
 			stringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database)
+
 			if cmd == demoCmd {
+				// The 'demo' command does not really support --url or --user.
+				// However, we create the pflag instance so that the user
+				// can use \connect inside the shell session.
+				_ = f.MarkHidden(cliflags.URL.Name)
+				_ = f.MarkHidden(cliflags.User.Name)
 				// As above, 'demo' does not really support --database.
 				// However, we create the pflag instance so that
 				// the user can use \connect inside the shell.
@@ -807,7 +810,7 @@ func init() {
 		}
 
 		f := cmd.PersistentFlags()
-		varFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
+		varFlag(f, newURLParser(cmd, &cliCtx, true /* strictTLS */, true /* warn */), cliflags.URL)
 
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
