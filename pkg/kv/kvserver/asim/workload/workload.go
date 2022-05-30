@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package workload
 
 import (
 	"container/list"
@@ -20,20 +20,20 @@ import (
 
 // LoadEvent represent a key access that generates load against the database.
 type LoadEvent struct {
-	isWrite bool
-	size    int64
+	IsWrite bool
+	Size    int64
 	Key     int64
 }
 
-// WorkloadGenerator generates workload where each op contains: key,
+// Generator generates a workload where each op contains: key,
 // op type (e.g., read/write), size.
-type WorkloadGenerator interface {
+type Generator interface {
 	// GetNext returns a LoadEvent which happens before or at maxTime, if exists.
 	GetNext(maxTime time.Time) (done bool, event LoadEvent)
 }
 
-// RandomWorkloadGenerator generates random operations within some limits.
-type RandomWorkloadGenerator struct {
+// RandomGenerator generates random operations within some limits.
+type RandomGenerator struct {
 	seed           int64
 	keyGenerator   keyGenerator
 	rand           *rand.Rand
@@ -45,10 +45,20 @@ type RandomWorkloadGenerator struct {
 	opBuffer       list.List
 }
 
-func newRandomWorkloadGenerator(
+// NewRandomGenerator returns a generator that generates random operations
+// within some limits.
+func NewRandomGenerator(
 	seed int64, keyGenerator keyGenerator, rate float64, readRatio float64, maxSize int, minSize int,
-) *RandomWorkloadGenerator {
-	return &RandomWorkloadGenerator{
+) Generator {
+	return newRandomGenerator(seed, keyGenerator, rate, readRatio, maxSize, minSize)
+}
+
+// newRandomGenerator returns a generator that generates random operations
+// within some limits.
+func newRandomGenerator(
+	seed int64, keyGenerator keyGenerator, rate float64, readRatio float64, maxSize int, minSize int,
+) *RandomGenerator {
+	return &RandomGenerator{
 		seed:           seed,
 		keyGenerator:   keyGenerator,
 		rand:           keyGenerator.rand(),
@@ -61,7 +71,7 @@ func newRandomWorkloadGenerator(
 }
 
 // GetNext is part of the WorkloadGenerator interface.
-func (rwg *RandomWorkloadGenerator) GetNext(maxTime time.Time) (done bool, event LoadEvent) {
+func (rwg *RandomGenerator) GetNext(maxTime time.Time) (done bool, event LoadEvent) {
 	rwg.maybeUpdateBuffer(maxTime)
 	if next := rwg.opBuffer.Front(); next != nil {
 		rwg.opBuffer.Remove(next)
@@ -74,7 +84,7 @@ func (rwg *RandomWorkloadGenerator) GetNext(maxTime time.Time) (done bool, event
 // operations and the maxTime passed in. If the duration multiplied by the rate
 // of operations per second is greater than or equal to 1, the operation buffer
 // is updated with new generated operations.
-func (rwg *RandomWorkloadGenerator) maybeUpdateBuffer(maxTime time.Time) {
+func (rwg *RandomGenerator) maybeUpdateBuffer(maxTime time.Time) {
 	elapsed := maxTime.Sub(rwg.lastRun).Seconds()
 	count := int(elapsed * rwg.rollsPerSecond)
 	// Do not attempt to generate additional load events if the elapsed
@@ -92,16 +102,16 @@ func (rwg *RandomWorkloadGenerator) maybeUpdateBuffer(maxTime time.Time) {
 	for read := 0; read < reads; read++ {
 		rwg.opBuffer.PushBack(
 			LoadEvent{
-				size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
-				isWrite: false,
+				Size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
+				IsWrite: false,
 				Key:     rwg.keyGenerator.readKey(),
 			})
 	}
 	for write := 0; write < writes; write++ {
 		rwg.opBuffer.PushBack(
 			LoadEvent{
-				size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
-				isWrite: true,
+				Size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
+				IsWrite: true,
 				Key:     rwg.keyGenerator.writeKey(),
 			})
 	}

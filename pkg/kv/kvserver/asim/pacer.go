@@ -13,6 +13,7 @@ package asim
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 )
 
@@ -24,19 +25,16 @@ const (
 
 // ReplicaPacer controls the speed of considering a replica.
 type ReplicaPacer interface {
-
 	// Next returns the next replica for the current tick, if exists.
-	Next(tick time.Time) *Replica
+	Next(tick time.Time) state.Replica
 }
 
 // ReplicaScanner simulates store scanner replica pacing, iterating over
 // replicas at a rate sufficient to complete iteration in the specified scan
 // loop interval.
 type ReplicaScanner struct {
-	// TOOD(kvoli): make this a function which returns the store's current
-	// replicas.
-	nextReplsFn        func() []*Replica
-	repls              []*Replica
+	nextReplsFn        func() []state.Replica
+	repls              []state.Replica
 	start              time.Time
 	lastLoop           time.Time
 	targetLoopInterval time.Duration
@@ -48,11 +46,12 @@ type ReplicaScanner struct {
 
 // NewScannerReplicaPacer returns a scanner replica pacer.
 func NewScannerReplicaPacer(
-	nextReplsFn func() []*Replica, targetLoopInterval, minIterInterval, maxIterInterval time.Duration,
+	nextReplsFn func() []state.Replica,
+	targetLoopInterval, minIterInterval, maxIterInterval time.Duration,
 ) *ReplicaScanner {
 	return &ReplicaScanner{
 		nextReplsFn:        nextReplsFn,
-		repls:              make([]*Replica, 0, 1),
+		repls:              make([]state.Replica, 0, 1),
 		targetLoopInterval: targetLoopInterval,
 		minIterInvterval:   minIterInterval,
 		maxIterInvterval:   maxIterInterval,
@@ -64,7 +63,7 @@ func (rp ReplicaScanner) Len() int { return len(rp.repls) }
 
 // Less implements sort.Interface.
 func (rp ReplicaScanner) Less(i, j int) bool {
-	return rp.repls[i].rangeDesc.RangeID < rp.repls[j].rangeDesc.RangeID
+	return rp.repls[i].Range() < rp.repls[j].Range()
 }
 
 // Swap implements sort.Interface.
@@ -85,9 +84,9 @@ func (rp *ReplicaScanner) resetPacerLoop(tick time.Time) {
 	// Reset the counter and tracker vars.
 	rp.visited = 0
 
-	// If there are no replicas, we cannot determine the correct iter interval,
-	// instead of waitng for the loop interval return early and try again on next
-	// check.
+	// If there are no replicas, we cannot determine the correct iteration
+	// interval, instead of waiting for the loop interval return early and try
+	// again on next check.
 	if len(rp.repls) == 0 {
 		return
 	}
@@ -122,7 +121,7 @@ func (rp *ReplicaScanner) maybeResetPacerLoop(tick time.Time) {
 }
 
 // Next returns the next replica for the current tick, if exists.
-func (rp *ReplicaScanner) Next(tick time.Time) *Replica {
+func (rp *ReplicaScanner) Next(tick time.Time) state.Replica {
 	rp.maybeResetPacerLoop(tick)
 
 	elapsed := tick.Sub(rp.start)
