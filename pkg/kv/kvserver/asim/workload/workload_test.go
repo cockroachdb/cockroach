@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package workload
 
 import (
 	"math"
@@ -40,9 +40,9 @@ func summary(ops []LoadEvent, cycleLength int) summaryStats {
 	sizeSum := 0
 	distribution := make([]int, len(ops))
 	for i, op := range ops {
-		sizeSum += int(op.size)
+		sizeSum += int(op.Size)
 		distribution[i] = int(op.Key)
-		if op.isWrite {
+		if op.IsWrite {
 			writes++
 		} else {
 			reads++
@@ -112,7 +112,7 @@ func TestRandWorkloadGenerator(t *testing.T) {
 
 	for _, tc := range testCases {
 		start := timeutil.Now().UTC()
-		workLoadGenerator := newRandomWorkloadGenerator(testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize)
+		workLoadGenerator := newRandomGenerator(testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize)
 		workLoadGenerator.lastRun = start
 		end := start.Add(tc.duration)
 
