@@ -74,7 +74,7 @@ go_test(
         "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

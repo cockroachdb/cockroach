@@ -33,7 +33,7 @@ go_test(
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",

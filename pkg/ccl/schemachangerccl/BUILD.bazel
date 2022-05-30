@@ -19,7 +19,7 @@ go_test(
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/schemachanger/scexec",

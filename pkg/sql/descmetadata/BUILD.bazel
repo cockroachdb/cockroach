@@ -37,7 +37,7 @@ go_test(
     embed = [":descmetadata"],
     deps = [
         "//pkg/kv",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog/descpb",

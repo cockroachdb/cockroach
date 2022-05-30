@@ -87,7 +87,7 @@ go_test(
     embed = [":execinfra"],
     tags = ["no-remote"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/execinfrapb",

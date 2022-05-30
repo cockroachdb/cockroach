@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -270,7 +270,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		{Tiers: []roachpb.Tier{{Key: "prize-winner", Value: "otan"}}},
 	}
 
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	certsDir := t.TempDir()
 
 	require.NoError(t, demoCtx.generateCerts(certsDir))

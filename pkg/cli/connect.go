@@ -124,7 +124,7 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 	defer func() {
 		if retErr == nil {
 			fmt.Println("server certificate generation complete.\n\n" +
-				"cert files generated in: " + os.ExpandEnv(baseCfg.SSLCertsDir) + "\n\n" +
+				"cert files generated in: " + baseCfg.SSLCertsDir + "\n\n" +
 				"Do not forget to generate a client certificate for the 'root' user!\n" +
 				"This must be done manually, preferably from a different unix user account\n" +
 				"than the one running the server. Example command:\n\n" +

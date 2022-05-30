@@ -33,7 +33,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/systemconfigwatcher/systemconfigwatchertest",

@@ -28,7 +28,7 @@ go_test(
         ":leasemanager",
         "//pkg/base",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",

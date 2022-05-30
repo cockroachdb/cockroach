@@ -31,7 +31,7 @@ go_test(
     embed = [":scheduledlogging"],
     deps = [
         "//pkg/base",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",

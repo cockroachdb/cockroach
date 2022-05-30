@@ -55,7 +55,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",

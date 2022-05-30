@@ -20,7 +20,7 @@ go_test(
     embed = [":sampledataccl"],
     deps = [
         "//pkg/ccl/utilccl",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",

@@ -20,7 +20,7 @@ go_test(
     embed = [":tpcc"],
     deps = [
         "//pkg/base",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",

@@ -12,7 +12,7 @@ go_test(
         "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/col/coldata",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",

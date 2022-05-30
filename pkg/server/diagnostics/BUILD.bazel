@@ -60,7 +60,7 @@ go_test(
         ":diagnostics",
         "//pkg/base",
         "//pkg/build",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/diagutils",

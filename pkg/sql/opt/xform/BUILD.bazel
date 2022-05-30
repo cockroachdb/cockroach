@@ -78,7 +78,7 @@ go_test(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",

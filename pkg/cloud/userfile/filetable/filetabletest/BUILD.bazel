@@ -10,7 +10,7 @@ go_test(
     deps = [
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -23,7 +23,7 @@ import (
 )
 
 func init() {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
 }
 
 func TestMain(m *testing.M) {
