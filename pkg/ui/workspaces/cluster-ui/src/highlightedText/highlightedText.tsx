@@ -79,19 +79,14 @@ export function getHighlightedText(
   if (!highlight || highlight.length === 0) {
     return text;
   }
+
   highlight = highlight.replace(
-    /[°§%()\[\]{}\\?´`'#|;:+-]+/g,
+    /[°§%()\[\]{}\\?´`'#|;:+^*-]+/g,
     "highlightNotDefined",
   );
   const search = highlight
     .split(" ")
     .map(val => {
-      // When it's only a character we want to make sure to use the literal value (by adding []),
-      // this is added to handle cases where the highlighted term is a character used normally
-      // in regex, such as '*', '+', '?'
-      if (val.length == 1) {
-        return `[${val.toLowerCase()}]`;
-      }
       if (val.length > 0) {
         return val.toLowerCase();
       }
