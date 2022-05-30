@@ -2421,14 +2421,14 @@ SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n
 ----
 left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
- ├── key columns: [9] = [9]
+ ├── key columns: [15] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:12
- │    ├── key columns: [1] = [6]
- │    ├── first join in paired joiner; continuation column: continuation:12
- │    ├── fd: (9)-->(6,7,12)
+ │    ├── columns: m:1 n:2 a:12 b:13 abcd.rowid:15 continuation:18
+ │    ├── key columns: [1] = [12]
+ │    ├── first join in paired joiner; continuation column: continuation:18
+ │    ├── fd: (15)-->(12,13,18)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -2686,14 +2686,14 @@ SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
 ----
 semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [9] = [9]
+ ├── key columns: [16] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── inner-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1!null n:2 a:6!null abcd.rowid:9!null continuation:13
- │    ├── key columns: [1] = [6]
- │    ├── first join in paired joiner; continuation column: continuation:13
- │    ├── fd: (9)-->(6,13), (1)==(6), (6)==(1)
+ │    ├── columns: m:1!null n:2 a:13!null b:14 abcd.rowid:16!null continuation:19
+ │    ├── key columns: [1] = [13]
+ │    ├── first join in paired joiner; continuation column: continuation:19
+ │    ├── fd: (16)-->(13,14,19), (1)==(13), (13)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -2718,14 +2718,14 @@ SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c
 ----
 anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [9] = [9]
+ ├── key columns: [16] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:6 abcd.rowid:9 continuation:13
- │    ├── key columns: [1] = [6]
- │    ├── first join in paired joiner; continuation column: continuation:13
- │    ├── fd: (9)-->(6,13)
+ │    ├── columns: m:1 n:2 a:13 b:14 abcd.rowid:16 continuation:19
+ │    ├── key columns: [1] = [13]
+ │    ├── first join in paired joiner; continuation column: continuation:19
+ │    ├── fd: (16)-->(13,14,19)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -3201,6 +3201,71 @@ left-join (lookup t59738_ab)
  │         └── d:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
  └── filters (true)
 
+# Regression test for #81968. The index used for the first join in a paired left
+# join should have different column IDs than the index used for the second join.
+exec-ddl
+CREATE TABLE items (
+    id        INT NOT NULL PRIMARY KEY,
+    chat_id   INT NOT NULL,
+    author_id INT NOT NULL,
+    INDEX chat_id_idx (chat_id)
+)
+----
+
+exec-ddl
+CREATE TABLE views (
+    chat_id INT NOT NULL,
+    user_id INT NOT NULL,
+    PRIMARY KEY (chat_id, user_id)
+)
+----
+
+opt
+SELECT (SELECT COUNT(items.id)
+        FROM items
+        WHERE items.chat_id = views.chat_id
+          AND items.author_id != views.user_id)
+FROM views
+WHERE chat_id = 1
+  AND user_id = 1;
+----
+project
+ ├── columns: count:11!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(11)
+ ├── group-by (streaming)
+ │    ├── columns: count:10!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(10)
+ │    ├── left-join (lookup items)
+ │    │    ├── columns: views.chat_id:1!null user_id:2!null items.chat_id:6 author_id:7
+ │    │    ├── key columns: [12] = [5]
+ │    │    ├── lookup columns are key
+ │    │    ├── second join in paired joiner
+ │    │    ├── fd: ()-->(1,2,6)
+ │    │    ├── left-join (lookup items@chat_id_idx)
+ │    │    │    ├── columns: views.chat_id:1!null user_id:2!null id:12 items.chat_id:13 continuation:17
+ │    │    │    ├── key columns: [1] = [13]
+ │    │    │    ├── first join in paired joiner; continuation column: continuation:17
+ │    │    │    ├── key: (12)
+ │    │    │    ├── fd: ()-->(1,2,13), (12)-->(17)
+ │    │    │    ├── scan views
+ │    │    │    │    ├── columns: views.chat_id:1!null user_id:2!null
+ │    │    │    │    ├── constraint: /1/2: [/1/1 - /1/1]
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(1,2)
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── author_id:7 != user_id:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    └── aggregations
+ │         └── count [as=count:10, outer=(6)]
+ │              └── items.chat_id:6
+ └── projections
+      └── count:10 [as=count:11, outer=(10)]
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter
 # --------------------------------------------------
@@ -3351,17 +3416,17 @@ SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n AND b>1
 ----
 left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
- ├── key columns: [9] = [9]
+ ├── key columns: [15] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:12
+ │    ├── columns: m:1 n:2 a:12 b:13 abcd.rowid:15 continuation:18
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
- │    ├── first join in paired joiner; continuation column: continuation:12
- │    ├── fd: (9)-->(6,7,12)
+ │    │         ├── a:12 = m:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+ │    │         └── b:13 > 1 [outer=(13), constraints=(/13: [/2 - ]; tight)]
+ │    ├── first join in paired joiner; continuation column: continuation:18
+ │    ├── fd: (15)-->(12,13,18)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters (true)
@@ -3850,18 +3915,18 @@ SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c AND
 ----
 semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [9] = [9]
+ ├── key columns: [16] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── inner-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null continuation:13
- │    ├── key columns: [1] = [6]
- │    ├── first join in paired joiner; continuation column: continuation:13
- │    ├── fd: (9)-->(6,7,13), (1)==(6), (6)==(1)
+ │    ├── columns: m:1!null n:2 a:13!null b:14!null abcd.rowid:16!null continuation:19
+ │    ├── key columns: [1] = [13]
+ │    ├── first join in paired joiner; continuation column: continuation:19
+ │    ├── fd: (16)-->(13,14,19), (1)==(13), (13)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+ │         └── a:13 > b:14 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
  └── filters
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
@@ -3884,18 +3949,18 @@ SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c
 ----
 anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── key columns: [9] = [9]
+ ├── key columns: [16] = [9]
  ├── lookup columns are key
  ├── second join in paired joiner
  ├── left-join (lookup abcd@abcd_a_b_idx)
- │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:13
- │    ├── key columns: [1] = [6]
- │    ├── first join in paired joiner; continuation column: continuation:13
- │    ├── fd: (9)-->(6,7,13)
+ │    ├── columns: m:1 n:2 a:13 b:14 abcd.rowid:16 continuation:19
+ │    ├── key columns: [1] = [13]
+ │    ├── first join in paired joiner; continuation column: continuation:19
+ │    ├── fd: (16)-->(13,14,19)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
  │    └── filters
- │         └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+ │         └── a:13 > b:14 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
  └── filters
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
@@ -4149,14 +4214,14 @@ project
  ├── columns: m:1
  └── semi-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── key columns: [6] = [6]
+      ├── key columns: [12] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── inner-join (lookup partial_tab@partial_idx,partial)
-      │    ├── columns: m:1 n:2!null k:6!null i:7!null continuation:12
-      │    ├── key columns: [2] = [7]
-      │    ├── first join in paired joiner; continuation column: continuation:12
-      │    ├── fd: (6)-->(7,12), (2)==(7), (7)==(2)
+      │    ├── columns: m:1 n:2!null k:12!null i:13!null continuation:17
+      │    ├── key columns: [2] = [13]
+      │    ├── first join in paired joiner; continuation column: continuation:17
+      │    ├── fd: (12)-->(13,17), (2)==(13), (13)==(2)
       │    ├── scan small
       │    │    └── columns: m:1 n:2
       │    └── filters (true)
@@ -4186,14 +4251,14 @@ project
  ├── columns: m:1
  └── anti-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── key columns: [6] = [6]
+      ├── key columns: [12] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── left-join (lookup partial_tab@partial_idx,partial)
-      │    ├── columns: m:1 n:2 k:6 i:7 continuation:12
-      │    ├── key columns: [2] = [7]
-      │    ├── first join in paired joiner; continuation column: continuation:12
-      │    ├── fd: (6)-->(7,12)
+      │    ├── columns: m:1 n:2 k:12 i:13 continuation:17
+      │    ├── key columns: [2] = [13]
+      │    ├── first join in paired joiner; continuation column: continuation:17
+      │    ├── fd: (12)-->(13,17)
       │    ├── scan small
       │    │    └── columns: m:1 n:2
       │    └── filters (true)
@@ -5433,16 +5498,16 @@ project
  ├── immutable
  └── left-join (lookup virt)
       ├── columns: m:1 j:8 v1:9
-      ├── key columns: [6] = [6]
+      ├── key columns: [16] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── immutable
       ├── left-join (lookup virt@v1_storing_i)
-      │    ├── columns: m:1 k:6 v1:9 continuation:16
+      │    ├── columns: m:1 k:16 i:17 v1:19 continuation:26
       │    ├── flags: force lookup join (into right side)
-      │    ├── key columns: [1] = [9]
-      │    ├── first join in paired joiner; continuation column: continuation:16
-      │    ├── fd: (6)-->(9,16)
+      │    ├── key columns: [1] = [19]
+      │    ├── first join in paired joiner; continuation column: continuation:26
+      │    ├── fd: (16)-->(17,19,26), (17)~~>(19)
       │    ├── scan small
       │    │    └── columns: m:1
       │    └── filters (true)
@@ -6413,17 +6478,17 @@ project
  ├── fd: (6)-->(8)
  └── left-join (lookup virt)
       ├── columns: m:1 k:6 j:8 v3:11
-      ├── key columns: [6] = [6]
+      ├── key columns: [16] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── immutable
       ├── fd: (6)-->(8,11)
       ├── left-join (lookup virt@v3_partial,partial)
-      │    ├── columns: m:1 k:6 v3:11 continuation:16
+      │    ├── columns: m:1 k:16 i:17 v3:21 continuation:26
       │    ├── flags: force lookup join (into right side)
-      │    ├── key columns: [1] = [11]
-      │    ├── first join in paired joiner; continuation column: continuation:16
-      │    ├── fd: (6)-->(11,16)
+      │    ├── key columns: [1] = [21]
+      │    ├── first join in paired joiner; continuation column: continuation:26
+      │    ├── fd: (16)-->(17,21,26)
       │    ├── scan small
       │    │    └── columns: m:1
       │    └── filters (true)
@@ -6549,17 +6614,17 @@ project
  ├── fd: (6)-->(7,8)
  └── left-join (lookup virt)
       ├── columns: m:1 k:6 i:7 j:8 v3:11
-      ├── key columns: [6] = [6]
+      ├── key columns: [16] = [6]
       ├── lookup columns are key
       ├── second join in paired joiner
       ├── immutable
       ├── fd: (6)-->(7,8), (7,8)-->(11)
       ├── left-join (lookup virt@v3_partial,partial)
-      │    ├── columns: m:1 k:6 i:7 v3:11 continuation:16
+      │    ├── columns: m:1 k:16 i:17 v3:21 continuation:26
       │    ├── flags: force lookup join (into right side)
-      │    ├── key columns: [1] = [11]
-      │    ├── first join in paired joiner; continuation column: continuation:16
-      │    ├── fd: (6)-->(7,11,16)
+      │    ├── key columns: [1] = [21]
+      │    ├── first join in paired joiner; continuation column: continuation:26
+      │    ├── fd: (16)-->(17,21,26)
       │    ├── scan small
       │    │    └── columns: m:1
       │    └── filters (true)
@@ -9506,16 +9571,16 @@ project
       │    │                   └── q:19 = b:14 [outer=(14,19), constraints=(/14: (/NULL - ]; /19: (/NULL - ]), fd=(14)==(19), (19)==(14)]
       │    └── semi-join (lookup pqr@q)
       │         ├── columns: a:25!null b:26 c:27!null
-      │         ├── key columns: [26 107] = [31 30]
+      │         ├── key columns: [26 121] = [31 30]
       │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(25-27)
       │         ├── project
-      │         │    ├── columns: "lookup_join_const_col_@30":107!null a:25!null b:26 c:27!null
+      │         │    ├── columns: "lookup_join_const_col_@30":121!null a:25!null b:26 c:27!null
       │         │    ├── cardinality: [0 - 1]
       │         │    ├── key: ()
-      │         │    ├── fd: ()-->(25-27,107)
+      │         │    ├── fd: ()-->(25-27,121)
       │         │    ├── index-join zz
       │         │    │    ├── columns: a:25!null b:26 c:27!null
       │         │    │    ├── cardinality: [0 - 1]
@@ -9528,7 +9593,7 @@ project
       │         │    │         ├── key: ()
       │         │    │         └── fd: ()-->(25,27)
       │         │    └── projections
-      │         │         └── 0 [as="lookup_join_const_col_@30":107]
+      │         │         └── 0 [as="lookup_join_const_col_@30":121]
       │         └── filters (true)
       └── aggregations
            ├── const-agg [as=b:2, outer=(2)]
