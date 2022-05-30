@@ -86,34 +86,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	// Set the bool within to true to create a new fixture for this test. This
-	// is necessary after every release. For example, the day `master` becomes
-	// the 20.2 release, this test will fail because it is missing a fixture for
-	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
-	// Check it in (instructions will be logged below) and off we go.
-	if false {
-		// The version to create/update the fixture for. Must be released (i.e.
-		// can download it from the homepage); if that is not the case use the
-		// empty string which uses the local cockroach binary. Make sure that
-		// this binary then has the correct version. For example, to make a
-		// "v20.2" fixture, you will need a binary that has "v20.2" in the
-		// output of `./cockroach version`, and this process will end up
-		// creating fixtures that have "v20.2" in them. This would be part
-		// of tagging the master branch as v21.1 in the process of going
-		// through the major release for v20.2.
-		//
-		// In the common case, one should populate this with the version (instead of
-		// using the empty string) as this is the most straightforward and least
-		// error-prone way to generate the fixtures.
-		//
-		// Please note that you do *NOT* need to update the fixtures in a patch
-		// release. This only happens as part of preparing the master branch for the
-		// next release. The release team runbooks, at time of writing, reflect
-		// this.
-		makeFixtureVersion := "22.1.0-beta.3" // for 21.2 release in late 2021
-		makeVersionFixtureAndFatal(ctx, t, c, makeFixtureVersion)
-	}
-
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], 10 /* maxOps */, 2 /* concurrency */)
 	// TODO(irfansharif): All schema change instances were commented out while

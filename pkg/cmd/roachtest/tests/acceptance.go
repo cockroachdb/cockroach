@@ -64,6 +64,45 @@ func registerAcceptance(r registry.Registry) {
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
 			},
+			{
+				name: "generate-fixtures",
+				skip: "This test is skipped in CI and can be run manually",
+				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					// Run this test to create a new fixture for the version upgrade test. This
+					// is necessary after every release. For example, the day `master` becomes
+					// the 20.2 release, this test will fail because it is missing a fixture for
+					// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
+					// Check it in (instructions will be logged below) and off we go.
+
+					// The version to create/update the fixture for. Must be released (i.e.
+					// can download it from the homepage); if that is not the case use the
+					// empty string which uses the local cockroach binary. Make sure that
+					// this binary then has the correct version. For example, to make a
+					// "v20.2" fixture, you will need a binary that has "v20.2" in the
+					// output of `./cockroach version`, and this process will end up
+					// creating fixtures that have "v20.2" in them. This would be part
+					// of tagging the master branch as v21.1 in the process of going
+					// through the major release for v20.2.
+					//
+					// In the common case, one should populate this with the version (instead of
+					// using the empty string) as this is the most straightforward and least
+					// error-prone way to generate the fixtures.
+					//
+					// Please note that you do *NOT* need to update the fixtures in a patch
+					// release. This only happens as part of preparing the master branch for the
+					// next release. The release team runbooks, at time of writing, reflect
+					// this.
+					makeFixtureVersion := "22.1.0-beta.3" // for 22.1 release
+					makeVersionFixtureAndFatal(ctx, t, c, makeFixtureVersion)
+				},
+				// This test doesn't like running on old versions because it upgrades to
+				// the latest released version and then it tries to "head", where head is
+				// the cockroach binary built from the branch on which the test is
+				// running. If that branch corresponds to an older release, then upgrading
+				// to head after 19.2 fails.
+				minVersion: "v19.2.0",
+				timeout:    30 * time.Minute,
+			},
 		},
 		registry.OwnerServer: {
 			{name: "build-info", fn: RunBuildInfo},
