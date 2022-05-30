@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "sqlccl_test",
     srcs = [
+        "gc_job_test.go",
         "main_test.go",
         "run_control_test.go",
         "session_revival_test.go",
