@@ -78,6 +78,12 @@ var (
 		"target size for individual data files produced during BACKUP",
 		128<<20,
 	).WithPublic()
+	traceBackups = settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"bulkio.backup.trace_enabled",
+		"enables tracing for backup",
+		false,
+	)
 
 	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
 		"backup-merge-file-buffer-size",
@@ -254,7 +260,7 @@ func runBackupProcessor(
 	spec *execinfrapb.BackupDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	memAcc *mon.BoundAccount,
-) error {
+) (retErr error) {
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 
@@ -312,6 +318,23 @@ func runBackupProcessor(
 	}
 
 	returnedSpansChan := make(chan exportedSpan, 1)
+
+	var backupTracingSpan *tracing.Span
+	if traceBackups.Get(&clusterSettings.SV) {
+		ctx, backupTracingSpan = tracing.EnsureChildSpan(
+			ctx, flowCtx.Cfg.Tracer, "backup-trace",
+			tracing.WithRecording(tracing.RecordingVerbose),
+		)
+		defer func() {
+			if retErr != nil {
+				backupTracingSpan.Finish()
+				return
+			}
+
+			rec := backupTracingSpan.FinishAndGetRecording(tracing.RecordingVerbose)
+			log.Infof(ctx, "Backup trace:\n%s", rec.String())
+		}()
+	}
 
 	grp := ctxgroup.WithContext(ctx)
 	// Start a goroutine that will then start a group of goroutines which each
