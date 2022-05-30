@@ -1727,7 +1727,7 @@ func createAndWaitForJob(
 		t, `INSERT INTO system.jobs (created, status, payload, progress) VALUES ($1, $2, $3, $4) RETURNING id`,
 		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload, progressBytes,
 	).Scan(&jobID)
-	jobutils.WaitForJob(t, db, jobID)
+	jobutils.WaitForJobToSucceed(t, db, jobID)
 }
 
 // TestBackupRestoreResume tests whether backup and restore jobs are properly
@@ -1946,7 +1946,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-			jobutils.WaitForJob(t, sqlDB, jobID)
+			jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 		}
 
 		sqlDB.CheckQueryResults(t,
@@ -1982,7 +1982,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 				sqlDB.CheckQueryResults(t, fmt.Sprintf("SHOW BACKUP '%s'", noOfflineDir), [][]string{})
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-			jobutils.WaitForJob(t, sqlDB, jobID)
+			jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 		}
 		sqlDB.CheckQueryResults(t,
 			`SELECT count(*) FROM pause.bank`,
@@ -2002,7 +2002,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error while running backup %+v", err)
 		}
-		jobutils.WaitForJob(t, sqlDB, backupJobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, backupJobID)
 
 		sqlDB.Exec(t, `DROP DATABASE data`)
 
@@ -8572,7 +8572,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 	}
 
 	// But the job should be restarted and succeed eventually.
-	jobutils.WaitForJob(t, sqlDB, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 
 	// Drop database and restore to ensure that the backup was successful.
 	sqlDB.Exec(t, `DROP DATABASE data`)
@@ -8865,7 +8865,7 @@ DROP INDEX foo@bar;
 	close(allowGC)
 
 	// Wait for the GC to complete.
-	jobutils.WaitForJob(t, sqlRunner, gcJobID)
+	jobutils.WaitForJobToSucceed(t, sqlRunner, gcJobID)
 
 	sqlRunner.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://0/foo' WITH revision_history`)
 }
@@ -9098,4 +9098,56 @@ func TestRestoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(t *testing.T) {
 	// We should have no non-system database with a public schema name space
 	// entry with id 29.
 	sqlDB.CheckQueryResults(t, `SELECT id FROM system.namespace WHERE name = 'public' AND id=29 AND "parentID"!=1`, [][]string{})
+}
+
+// TestRestoreOnFailOrCancelAfterPause is a regression test that ensures that we
+// can cancel a paused restore job. Previously, this test would result in a nil
+// pointer exception when accessing the `r.execCfg` since the resumer was not
+// correctly initialized.
+func TestRestoreOnFailOrCancelAfterPause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/foo'`)
+
+	_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dataDir,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+			},
+		})
+	defer cleanupEmptyCluster()
+
+	restoreHasStarted := make(chan struct{})
+	defer close(restoreHasStarted)
+	for _, server := range tcRestore.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.afterOfflineTableCreation = func() error {
+					<-restoreHasStarted
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	// Start a restore and let it block.
+	var id jobspb.JobID
+	sqlDBRestore.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/foo' WITH detached`).Scan(&id)
+
+	// Wait until the restore has started
+	restoreHasStarted <- struct{}{}
+
+	sqlDBRestore.Exec(t, `PAUSE JOB $1`, id)
+	jobutils.WaitForJobToPause(t, sqlDBRestore, id)
+
+	sqlDBRestore.Exec(t, `CANCEL JOB $1`, id)
+	jobutils.WaitForJobToCancel(t, sqlDBRestore, id)
 }

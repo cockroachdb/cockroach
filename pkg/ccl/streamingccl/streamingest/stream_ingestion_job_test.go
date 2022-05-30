@@ -125,7 +125,7 @@ INSERT INTO d.t2 VALUES (2);
 		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
 		ingestionJobID, cutoverTime)
 
-	jobutils.WaitForJob(t, destSQL, jobspb.JobID(ingestionJobID))
+	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 
 	query := "SELECT * FROM d.t1"
 	sourceData := sourceSQL.QueryStr(t, query)
