@@ -1603,10 +1603,10 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	db := t.openDB(pgURL)
 
 	// The default value for extra_float_digits assumed by tests is
-	// 0. However, lib/pq by default configures this to 2 during
-	// connection initialization, so we need to set it back to 0 before
+	// 1. However, lib/pq by default configures this to 2 during
+	// connection initialization, so we need to set it back to 1 before
 	// we run anything.
-	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
+	if _, err := db.Exec("SET extra_float_digits = 1"); err != nil {
 		t.Fatal(err)
 	}
 	// The default setting for index_recommendations_enabled is true. We do not
