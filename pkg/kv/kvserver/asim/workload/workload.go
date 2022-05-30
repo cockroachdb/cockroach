@@ -14,8 +14,6 @@ import (
 	"container/list"
 	"math/rand"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // LoadEvent represent a key access that generates load against the database.
@@ -35,7 +33,7 @@ type Generator interface {
 // RandomGenerator generates random operations within some limits.
 type RandomGenerator struct {
 	seed           int64
-	keyGenerator   keyGenerator
+	keyGenerator   KeyGenerator
 	rand           *rand.Rand
 	lastRun        time.Time
 	rollsPerSecond float64
@@ -48,21 +46,33 @@ type RandomGenerator struct {
 // NewRandomGenerator returns a generator that generates random operations
 // within some limits.
 func NewRandomGenerator(
-	seed int64, keyGenerator keyGenerator, rate float64, readRatio float64, maxSize int, minSize int,
+	start time.Time,
+	seed int64,
+	keyGenerator KeyGenerator,
+	rate float64,
+	readRatio float64,
+	maxSize int,
+	minSize int,
 ) Generator {
-	return newRandomGenerator(seed, keyGenerator, rate, readRatio, maxSize, minSize)
+	return newRandomGenerator(start, seed, keyGenerator, rate, readRatio, maxSize, minSize)
 }
 
 // newRandomGenerator returns a generator that generates random operations
 // within some limits.
 func newRandomGenerator(
-	seed int64, keyGenerator keyGenerator, rate float64, readRatio float64, maxSize int, minSize int,
+	start time.Time,
+	seed int64,
+	keyGenerator KeyGenerator,
+	rate float64,
+	readRatio float64,
+	maxSize int,
+	minSize int,
 ) *RandomGenerator {
 	return &RandomGenerator{
 		seed:           seed,
 		keyGenerator:   keyGenerator,
 		rand:           keyGenerator.rand(),
-		lastRun:        timeutil.Now().UTC(),
+		lastRun:        start,
 		rollsPerSecond: rate,
 		readRatio:      readRatio,
 		maxSize:        maxSize,
@@ -118,8 +128,8 @@ func (rwg *RandomGenerator) maybeUpdateBuffer(maxTime time.Time) {
 	rwg.lastRun = maxTime
 }
 
-// keyGenerator generates read and write keys.
-type keyGenerator interface {
+// KeyGenerator generates read and write keys.
+type KeyGenerator interface {
 	writeKey() int64
 	readKey() int64
 	rand() *rand.Rand
@@ -133,7 +143,9 @@ type uniformGenerator struct {
 	random *rand.Rand
 }
 
-func newUniformGenerator(cycle int64, rand *rand.Rand) *uniformGenerator {
+// NewUniformKeyGen returns a key generator that generates keys with a
+// uniform distribution.
+func NewUniformKeyGen(cycle int64, rand *rand.Rand) KeyGenerator {
 	return &uniformGenerator{
 		cycle:  cycle,
 		random: rand,
@@ -161,12 +173,12 @@ type zipfianGenerator struct {
 	zipf   *rand.Zipf
 }
 
-// newZipfianGenerator returns a key generator that generates reads and writes
+// NewZipfianKeyGen returns a key generator that generates reads and writes
 // following a Zipfian distribution. Where few keys are relatively frequent,
 // whilst the others are infrequently accessed. The generator generates values
 // k ∈ [0, cycle] such that P(k) is proportional to (v + k) ** (-s).
 // Requirements: cycle > 0, s > 1, and v >= 1
-func newZipfianGenerator(cycle int64, s float64, v float64, random *rand.Rand) *zipfianGenerator {
+func NewZipfianKeyGen(cycle int64, s float64, v float64, random *rand.Rand) KeyGenerator {
 	return &zipfianGenerator{
 		cycle:  cycle,
 		random: random,
