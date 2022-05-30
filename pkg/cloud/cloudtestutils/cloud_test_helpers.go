@@ -547,3 +547,36 @@ func CheckAntagonisticRead(
 	require.NoError(t, err)
 	require.Equal(t, data, read)
 }
+
+// CheckNoPermission checks that we do not have permission to list the external
+// storage at storeURI.
+func CheckNoPermission(
+	t *testing.T,
+	storeURI string,
+	user username.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	kvDB *kv.DB,
+	testSettings *cluster.Settings,
+) {
+	ioConf := base.ExternalIODirConfig{}
+	ctx := context.Background()
+
+	conf, err := cloud.ExternalStorageConfFromURI(storeURI, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	err = s.List(ctx, "", "", nil)
+	if err == nil {
+		t.Fatalf("expected error when listing %s with no permissions", storeURI)
+	}
+
+	require.Regexp(t, "Error 403", err)
+}
