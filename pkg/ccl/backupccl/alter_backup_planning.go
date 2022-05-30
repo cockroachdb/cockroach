@@ -154,7 +154,7 @@ func doAlterBackupPlan(
 	oldKMSFound := false
 	for _, old := range oldKms {
 		for _, encFile := range opts {
-			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup([]string{old},
+			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, []string{old},
 				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
 					baseStore.Settings(),
 					&ioConf,

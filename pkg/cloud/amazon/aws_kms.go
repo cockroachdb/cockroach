@@ -71,7 +71,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 
 // MakeAWSKMS is the factory method which returns a configured, ready-to-use
 // AWS KMS object.
-func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use AWS KMS")
 	}

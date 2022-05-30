@@ -25,7 +25,10 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_env=GOOGLE_CREDENTIALS_JSON="$GOOGLE_EPHEMERAL_CREDENTIALS" \
     --test_env=GOOGLE_APPLICATION_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
     --test_env=GOOGLE_BUCKET="nightly-cloud-unit-tests" \
+    --test_env=GOOGLE_LIMITED_BUCKET="$GOOGLE_LIMITED_BUCKET" \
     --test_env=GOOGLE_KMS_KEY_NAME="$GOOGLE_KMS_KEY_NAME" \
+    --test_env=GOOGLE_LIMITED_KEY_ID="$GOOGLE_LIMITED_KEY_ID" \
+    --test_env=ASSUME_SERVICE_ACCOUNT="$ASSUME_SERVICE_ACCOUNT" \
     --test_timeout=60 \
     || exit_status=$?
 

@@ -41,12 +41,14 @@ func init() {
 type kmsURIParams struct {
 	credentials string
 	auth        string
+	assumeRole  string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	params := kmsURIParams{
 		credentials: kmsURI.Query().Get(CredentialsParam),
 		auth:        kmsURI.Query().Get(cloud.AuthParam),
+		assumeRole:  kmsURI.Query().Get(AssumeRoleParam),
 	}
 
 	return params
@@ -54,7 +56,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 
 // MakeGCSKMS is the factory method which returns a configured, ready-to-use
 // GCS KMS object.
-func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use GCS KMS")
 	}
@@ -98,9 +100,18 @@ func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
-	ctx := context.Background()
+	opts := []option.ClientOption{option.WithScopes(kms.DefaultAuthScopes()...)}
+	if kmsURIParams.assumeRole == "" {
+		opts = append(opts, credentialsOpt...)
+	} else {
+		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.assumeRole, kms.DefaultAuthScopes(), credentialsOpt...)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to assume role")
+		}
+		opts = append(opts, assumeOpt)
+	}
 
-	kmc, err := kms.NewKeyManagementClient(ctx, credentialsOpt...)
+	kmc, err := kms.NewKeyManagementClient(ctx, opts...)
 
 	if err != nil {
 		return nil, err

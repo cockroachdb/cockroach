@@ -1424,6 +1424,10 @@ message ExternalStorage {
     string billing_project = 4;
 
     string credentials = 5;
+
+    // AssumeRole if non-empty, is the email of the service account that should
+    // be assumed in order to access this storage.
+    string assume_role = 6;
   }
   message Azure {
     string container = 1;
