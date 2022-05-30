@@ -310,7 +310,7 @@ func (cl *CertificateLoader) Load() error {
 			continue
 		}
 
-		if !certnames.IsCertificateFile(filename) {
+		if !certnames.IsCertificateFilename(filename) {
 			if log.V(3) {
 				log.Infof(context.Background(), "skipping non-certificate file %s", filename)
 			}
