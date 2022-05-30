@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "state",
     srcs = [
+        "change.go",
         "config_loader.go",
         "exchange.go",
         "helpers.go",
@@ -34,6 +35,7 @@ go_library(
 go_test(
     name = "state_test",
     srcs = [
+        "change_test.go",
         "config_loader_test.go",
         "exchange_test.go",
         "state_test.go",

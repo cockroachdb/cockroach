@@ -30,6 +30,7 @@ type Simulator struct {
 	generators []workload.Generator
 
 	state    state.State
+	changer  state.Changer
 	pacers   map[state.StoreID]ReplicaPacer
 	exchange state.Exchange
 }
@@ -41,6 +42,7 @@ func NewSimulator(
 	wgs []workload.Generator,
 	initialState state.State,
 	exchange state.Exchange,
+	changer state.Changer,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
 	for storeID := range initialState.Stores() {
@@ -58,6 +60,7 @@ func NewSimulator(
 		interval:   interval,
 		generators: wgs,
 		state:      initialState,
+		changer:    changer,
 		pacers:     pacers,
 		exchange:   exchange,
 	}
@@ -94,6 +97,9 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		}
 		// Update the state with generated load.
 		s.tickWorkload(ctx, tick)
+
+		// Update pending state changes.
+		s.changer.Tick(tick, s.state)
 
 		// Update each allocators view of the stores in the cluster.
 		s.tickStateExchange(tick)
