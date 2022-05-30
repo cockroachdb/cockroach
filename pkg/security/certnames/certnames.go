@@ -21,8 +21,8 @@ const (
 	keyExtension  = `.key`
 )
 
-// IsCertificateFile returns true if the file name looks like a certificate file.
-func IsCertificateFile(filename string) bool {
+// IsCertificateFilename returns true if the file name looks like a certificate file.
+func IsCertificateFilename(filename string) bool {
 	return strings.HasSuffix(filename, certExtension)
 }
 
