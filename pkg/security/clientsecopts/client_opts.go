@@ -130,9 +130,11 @@ type ServerParameters struct {
 	DefaultDatabase string
 }
 
-// PGURL constructs a URL for the postgres endpoint, given a server
+// MakeURLForServer constructs a URL for the postgres endpoint, given a server
 // config.
-func PGURL(copts ClientOptions, sparams ServerParameters, user *url.Userinfo) (*pgurl.URL, error) {
+func MakeURLForServer(
+	copts ClientOptions, sparams ServerParameters, user *url.Userinfo,
+) (*pgurl.URL, error) {
 	host, port, _ := addr.SplitHostPort(sparams.ServerAddr, sparams.DefaultPort)
 	u := pgurl.New().
 		WithNet(pgurl.NetTCP(host, port)).
