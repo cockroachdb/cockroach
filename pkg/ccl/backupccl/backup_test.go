@@ -6026,6 +6026,93 @@ func TestBackupHandlesDroppedTypeStatsCollection(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP foo TO $1`, dest)
 }
 
+// TestBatchedInsertStats is a test for the `insertStats` method used in a
+// cluster restore to restore backed up statistics.
+func TestBatchedInsertStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts,
+		InitManualReplication)
+	defer cleanupFn()
+	ctx := context.Background()
+	s := tc.Server(0)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	registry := s.JobRegistry().(*jobs.Registry)
+	mkJob := func(t *testing.T) *jobs.Job {
+		id := registry.MakeJobID()
+		job, err := registry.CreateJobWithTxn(ctx, jobs.Record{
+			// Job does not accept an empty Details field, so arbitrarily provide
+			// RestoreDetails.
+			Details:  jobspb.RestoreDetails{},
+			Progress: jobspb.RestoreProgress{},
+		}, id, nil /* txn */)
+		require.NoError(t, err)
+		return job
+	}
+
+	generateTableStatistics := func(numStats int) []*stats.TableStatisticProto {
+		tableStats := make([]*stats.TableStatisticProto, 0, numStats)
+		for i := 0; i < numStats; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE foo%d (id INT)`, i))
+			var tableID descpb.ID
+			sqlDB.QueryRow(t, fmt.Sprintf(
+				`SELECT id FROM system.namespace WHERE name = 'foo%d'`, i)).Scan(&tableID)
+			tableStats = append(tableStats, &stats.TableStatisticProto{
+				TableID:       tableID,
+				ColumnIDs:     []descpb.ColumnID{1},
+				RowCount:      10,
+				DistinctCount: 0,
+				NullCount:     0,
+			})
+		}
+		return tableStats
+	}
+
+	for i, test := range []struct {
+		name          string
+		numTableStats int
+	}{
+		{
+			name:          "empty-stats",
+			numTableStats: 0,
+		},
+		{
+			name:          "less-than-batch-size",
+			numTableStats: 5,
+		},
+		{
+			name:          "equal-to-batch-size",
+			numTableStats: 10,
+		},
+		{
+			name:          "greater-than-batch-size",
+			numTableStats: 15,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dbName := fmt.Sprintf("foo%d", i)
+			defer sqlDB.Exec(t, fmt.Sprintf(`DROP DATABASE %s`, dbName))
+			sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+			sqlDB.Exec(t, fmt.Sprintf("USE %s", dbName))
+			stats := generateTableStatistics(test.numTableStats)
+
+			// Clear the stats.
+			sqlDB.Exec(t, `DELETE FROM system.table_statistics WHERE true`)
+			job := mkJob(t)
+			require.NoError(t, insertStats(ctx, job, &execCfg, stats))
+			// If there are no stats to insert, we exit early without updating the
+			// job.
+			if test.numTableStats != 0 {
+				require.True(t, job.Details().(jobspb.RestoreDetails).StatsInserted)
+			}
+			res := sqlDB.QueryStr(t, `SELECT * FROM system.table_statistics`)
+			require.Len(t, res, test.numTableStats)
+		})
+	}
+}
+
 func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
