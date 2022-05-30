@@ -188,9 +188,9 @@ type StoreDetail struct {
 	// throttledBecause is set to the most recent reason for which a store was
 	// marked as throttled.
 	throttledBecause string
-	// lastUpdatedTime is set when a store is first consulted and every time
+	// LastUpdatedTime is set when a store is first consulted and every time
 	// gossip arrives for a store.
-	lastUpdatedTime time.Time
+	LastUpdatedTime time.Time
 	// LastUnavailable is set when it's detected that a store was unavailable,
 	// i.e. failed liveness.
 	LastUnavailable time.Time
@@ -265,10 +265,10 @@ func (sd *StoreDetail) status(
 	//                                                heartbeat
 	//
 	// The store is considered dead if it hasn't been updated via gossip
-	// within the liveness threshold. Note that lastUpdatedTime is set
+	// within the liveness threshold. Note that LastUpdatedTime is set
 	// when the store detail is created and will have a non-zero value
 	// even before the first gossip arrives for a store.
-	deadAsOf := sd.lastUpdatedTime.Add(threshold)
+	deadAsOf := sd.LastUpdatedTime.Add(threshold)
 	if now.After(deadAsOf) {
 		// Wipe out the lastAvailable timestamp, so that once a node comes back
 		// from the dead we dont consider it suspect.
@@ -454,7 +454,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(storeDesc.StoreID)
 	detail.Desc = &storeDesc
-	detail.lastUpdatedTime = sp.Clock.PhysicalTime()
+	detail.LastUpdatedTime = sp.Clock.PhysicalTime()
 	sp.DetailsMu.Unlock()
 
 	sp.localitiesMu.Lock()
@@ -562,7 +562,7 @@ func (sp *StorePool) GetStoreDetailLocked(storeID roachpb.StoreID) *StoreDetail 
 		// alive, but start the clock so it will become dead if enough
 		// time passes without updates from gossip.
 		detail = newStoreDetail()
-		detail.lastUpdatedTime = sp.startTime
+		detail.LastUpdatedTime = sp.startTime
 		sp.DetailsMu.StoreDetails[storeID] = detail
 	}
 	return detail
@@ -627,7 +627,7 @@ func (sp *StorePool) IsDead(storeID roachpb.StoreID) (bool, time.Duration, error
 	now := sp.Clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
 
-	deadAsOf := sd.lastUpdatedTime.Add(timeUntilStoreDead)
+	deadAsOf := sd.LastUpdatedTime.Add(timeUntilStoreDead)
 	if now.After(deadAsOf) {
 		return true, 0, nil
 	}
