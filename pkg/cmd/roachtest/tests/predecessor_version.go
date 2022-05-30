@@ -11,11 +11,35 @@
 package tests
 
 import (
+	// Import embed for the version map
+	_ "embed"
+	"encoding/json"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 )
+
+// You can update the values in predecessor_version.json to point at newer patch releases.
+//
+// NB: If a new key was added (e.g. if you're releasing a new major
+// release), you'll also need to regenerate fixtures. To regenerate
+// fixtures, you will need to run acceptance/version-upgrade with the
+// checkpoint option enabled to create the missing store directory
+// fixture (see runVersionUpgrade).
+//go:embed predecessor_version.json
+var verMapJSON []byte
+
+type versionMap map[string]string
+
+func unmarshalVersionMap() (versionMap, error) {
+	var res versionMap
+	err := json.Unmarshal(verMapJSON, &res)
+	if err != nil {
+		return versionMap{}, err
+	}
+	return res, nil
+}
 
 // PredecessorVersion returns a recent predecessor of the build version (i.e.
 // the build tag of the main binary). For example, if the running binary is from
@@ -26,27 +50,11 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 		return "", errors.Errorf("buildVersion not set")
 	}
 
-	buildVersionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
-
-	// You can update the values in verMap to point at newer patch releases.
-	//
-	// NB: If a new key was added (e.g. if you're releasing a new major
-	// release), you'll also need to regenerate fixtures. To regenerate
-	// fixtures, you will need to run acceptance/version-upgrade with the
-	// checkpoint option enabled to create the missing store directory
-	// fixture (see runVersionUpgrade).
-	verMap := map[string]string{
-		"22.2": "22.1.0",
-		"22.1": "21.2.7",
-		"21.2": "21.1.12",
-		"21.1": "20.2.12",
-		"20.2": "20.1.16",
-		"20.1": "19.2.11",
-		"19.2": "19.1.11",
-		"19.1": "2.1.9",
-		"2.2":  "2.1.9",
-		"2.1":  "2.0.7",
+	verMap, err := unmarshalVersionMap()
+	if err != nil {
+		return "", errors.Wrap(err, "cannot load version map")
 	}
+	buildVersionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
 	v, ok := verMap[buildVersionMajorMinor]
 	if !ok {
 		return "", errors.Errorf("prev version not set for version: %s", buildVersionMajorMinor)
