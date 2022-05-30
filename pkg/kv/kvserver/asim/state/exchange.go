@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package state
 
 import (
 	"fmt"
@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// StateExchange controls the dissemination of a store's state, to every other
+// Exchange controls the dissemination of a store's state, to every other
 // store in a simulation. The contract requires that:
 // (1) Single value per tick: Multiple puts at tick t, with desc d should
 // 	   provide an identical d to all other puts for d.
 // (2) Calls to Put are monotonic w.r.t tick value passed in.
-type StateExchange interface {
+type Exchange interface {
 	// Put inserts store state(s) at tick t. This state will be visible to
 	// other stores at potentially different times t' >= t.
 	Put(tick time.Time, descs ...roachpb.StoreDescriptor)
@@ -74,20 +74,22 @@ func (u *FixedDelayExchange) Put(tick time.Time, descs ...roachpb.StoreDescripto
 		// linked list or btree if copy performance affects runtime
 		// significantly.
 		prevIntervalCopy := make(map[roachpb.StoreID]*storepool.StoreDetail)
-		for storeID, storeDetail := range *prevInterval {
+		for _, storeDetail := range *prevInterval {
 			storeDescCopy := *storeDetail.Desc
 			storeDetailCopy := *storeDetail
 			storeDetailCopy.Desc = &storeDescCopy
-			prevIntervalCopy[storeID] = &storeDetailCopy
+			prevIntervalCopy[storeDetail.Desc.StoreID] = &storeDetailCopy
 		}
 		u.intervalMap[u.end.Unix()] = &prevIntervalCopy
 		curInterval = u.intervalMap[u.end.Unix()]
 	}
 
-	for _, desc := range descs {
+	for _, d := range descs {
+		desc := d
 		nextStoreDetail := storepool.StoreDetail{}
 		nextStoreDetail.Desc = &desc
 		nextStoreDetail.LastAvailable = tick
+		nextStoreDetail.LastUpdatedTime = tick
 		nextStoreDetail.Desc.Node = desc.Node
 
 		(*curInterval)[desc.StoreID] = &nextStoreDetail
@@ -135,5 +137,4 @@ func tickUpperBound(tick, end time.Time, interval time.Duration) time.Time {
 		intervalDelta++
 	}
 	return end.Add(intervalDelta * interval)
-
 }
