@@ -210,17 +210,17 @@ sort
       │    │    │         │    │    ├── fd: ()-->(3,30,31), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,134-136,139,140), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (134)-->(135,136,139,140), (139)~~>(140), (140)~~>(139), (84)-->(85), (1,84)-->(36,37,91,105,106), (105)-->(106), (36)-->(37), (37)-->(36), (3)==(30), (30)==(3)
       │    │    │         │    │    ├── left-join (lookup pg_index [as=ind])
       │    │    │         │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:30!null n.nspname:31!null t.oid:36 spcname:37 indexrelid:84 indrelid:85 indisclustered:91 ftrelid:134 ftserver:135 ftoptions:136 fs.oid:139 srvname:140
-      │    │    │         │    │    │    ├── key columns: [84] = [84]
+      │    │    │         │    │    │    ├── key columns: [932] = [84]
       │    │    │         │    │    │    ├── lookup columns are key
       │    │    │         │    │    │    ├── second join in paired joiner
       │    │    │         │    │    │    ├── key: (1,84)
       │    │    │         │    │    │    ├── fd: ()-->(3,30,31), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,134-136,139,140), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (134)-->(135,136,139,140), (139)~~>(140), (140)~~>(139), (84)-->(85), (1,84)-->(36,37,91), (36)-->(37), (37)-->(36), (3)==(30), (30)==(3)
       │    │    │         │    │    │    ├── left-join (lookup pg_index@pg_index_indrelid_index [as=ind])
-      │    │    │         │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:30!null n.nspname:31!null t.oid:36 spcname:37 indexrelid:84 indrelid:85 ftrelid:134 ftserver:135 ftoptions:136 fs.oid:139 srvname:140 continuation:239
-      │    │    │         │    │    │    │    ├── key columns: [1] = [85]
-      │    │    │         │    │    │    │    ├── first join in paired joiner; continuation column: continuation:239
-      │    │    │         │    │    │    │    ├── key: (1,84)
-      │    │    │         │    │    │    │    ├── fd: ()-->(3,30,31), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,36,37,134-136,139,140), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (134)-->(135,136,139,140), (139)~~>(140), (140)~~>(139), (36)-->(37), (37)-->(36), (3)==(30), (30)==(3), (84)-->(85,239)
+      │    │    │         │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:30!null n.nspname:31!null t.oid:36 spcname:37 ftrelid:134 ftserver:135 ftoptions:136 fs.oid:139 srvname:140 indexrelid:932 indrelid:933 continuation:953
+      │    │    │         │    │    │    │    ├── key columns: [1] = [933]
+      │    │    │         │    │    │    │    ├── first join in paired joiner; continuation column: continuation:953
+      │    │    │         │    │    │    │    ├── key: (1,932)
+      │    │    │         │    │    │    │    ├── fd: ()-->(3,30,31), (1)-->(2,5,8,10,13,15,17,20,22,23,26,27,36,37,134-136,139,140), (2)-->(1,5,8,10,13,15,17,20,22,23,26,27), (134)-->(135,136,139,140), (139)~~>(140), (140)~~>(139), (36)-->(37), (37)-->(36), (3)==(30), (30)==(3), (932)-->(933,953)
       │    │    │         │    │    │    │    ├── left-join (lookup pg_tablespace [as=t])
       │    │    │         │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relnamespace:3!null c.relowner:5!null c.reltablespace:8!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.oid:30!null n.nspname:31!null t.oid:36 spcname:37 ftrelid:134 ftserver:135 ftoptions:136 fs.oid:139 srvname:140
       │    │    │         │    │    │    │    │    ├── key columns: [8] = [36]
