@@ -29,8 +29,9 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	interval := 10 * time.Second
 
 	exchange := state.NewFixedDelayExhange(start, interval, interval)
+	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange)
+	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer)
 	sim.RunSim(ctx)
 }
