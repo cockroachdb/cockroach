@@ -67,7 +67,7 @@ go_test(
         ":scbuild",
         "//pkg/base",
         "//pkg/ccl/utilccl",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog/descpb",

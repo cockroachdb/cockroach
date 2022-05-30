@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -41,7 +42,7 @@ const testKeySize = 1024
 func TestGenerateCACert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
 	certsDir := t.TempDir()
@@ -110,7 +111,7 @@ func TestGenerateCACert(t *testing.T) {
 func TestGenerateTenantCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
 	certsDir := t.TempDir()
@@ -174,7 +175,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 func TestGenerateNodeCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 
 	certsDir := t.TempDir()
@@ -316,7 +317,7 @@ func generateSplitCACerts(certsDir string) error {
 func TestUseCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 	certsDir := t.TempDir()
 
@@ -398,7 +399,7 @@ func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) str
 func TestUseSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 	certsDir := t.TempDir()
 
@@ -507,7 +508,7 @@ func TestUseSplitCACerts(t *testing.T) {
 func TestUseWrongSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 	defer ResetTest()
 	certsDir := t.TempDir()
 

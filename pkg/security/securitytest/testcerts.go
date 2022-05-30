@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 )
 
 // CreateTestCerts populates the test certificates in the given directory.
@@ -23,7 +24,7 @@ func CreateTestCerts(certsDir string) (cleanup func() error) {
 	// run from a standalone binary.
 	// Disable embedded certs, or the security library will try to load
 	// our real files as embedded assets.
-	security.ResetAssetLoader()
+	securityassets.ResetLoader()
 
 	assets := []string{
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
@@ -43,7 +44,7 @@ func CreateTestCerts(certsDir string) (cleanup func() error) {
 	}
 
 	return func() error {
-		security.SetAssetLoader(EmbeddedAssets)
+		securityassets.SetLoader(EmbeddedAssets)
 		return os.RemoveAll(certsDir)
 	}
 }
