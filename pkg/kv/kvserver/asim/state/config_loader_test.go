@@ -8,36 +8,35 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim_test
+package state
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLoadConfig(t *testing.T) {
 	testCases := []struct {
-		clusterInfo       asim.ClusterInfo
+		clusterInfo       ClusterInfo
 		expectedNodeCount int
 	}{
 		{
-			clusterInfo:       asim.SingleRegionConfig,
+			clusterInfo:       SingleRegionConfig,
 			expectedNodeCount: 15,
 		},
 		{
-			clusterInfo:       asim.MultiRegionConfig,
+			clusterInfo:       MultiRegionConfig,
 			expectedNodeCount: 36,
 		},
 		{
-			clusterInfo:       asim.ComplexConfig,
+			clusterInfo:       ComplexConfig,
 			expectedNodeCount: 28,
 		},
 	}
 
 	for _, tc := range testCases {
-		state := asim.LoadConfig(tc.clusterInfo)
-		require.Equal(t, tc.expectedNodeCount, len(state.Nodes))
+		state := LoadConfig(tc.clusterInfo)
+		require.Equal(t, tc.expectedNodeCount, len(state.Nodes()))
 	}
 }

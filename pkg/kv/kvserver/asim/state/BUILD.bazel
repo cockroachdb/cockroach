@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "state",
+    srcs = [
+        "config_loader.go",
+        "exchange.go",
+        "helpers.go",
+        "impl.go",
+        "load.go",
+        "state.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/asim/workload",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_google_btree//:btree",
+    ],
+)
+
+go_test(
+    name = "state_test",
+    srcs = [
+        "config_loader_test.go",
+        "exchange_test.go",
+        "state_test.go",
+    ],
+    embed = [":state"],
+    deps = [
+        "//pkg/kv/kvserver/asim/workload",
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)

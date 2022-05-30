@@ -148,6 +148,8 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/allocator/allocatorimpl:allocatorimpl_test",
     "//pkg/kv/kvserver/allocator/storepool:storepool_test",
     "//pkg/kv/kvserver/apply:apply_test",
+    "//pkg/kv/kvserver/asim/state:state_test",
+    "//pkg/kv/kvserver/asim/workload:workload_test",
     "//pkg/kv/kvserver/asim:asim_test",
     "//pkg/kv/kvserver/batcheval/result:result_test",
     "//pkg/kv/kvserver/batcheval:batcheval_test",
