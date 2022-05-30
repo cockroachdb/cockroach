@@ -19,6 +19,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 )
 
+// CLIFlagInterfaceForClientURL is an interface to the state of the
+// variables attached to discrete flags (e.g. --host, --insecure)
+// that can be passed before or after --url.
+//
+// It is used by AnalyzeClientURL below to peek into the state
+// of flags set before --url and prepare state for subsequent
+// flags passed after --url.
+//
+// NB: We use an interface here instead of directly depending on
+// packages pflag and cliflags, so as to simplify the build
+// dependencies and increase readability.
+type CLIFlagInterfaceForClientURL interface {
+	// StrictTLS returns true when the URL should enforce that TLS
+	// client certs and CA cert should be placed into a single common
+	// directory, and the server identity be fully verified.
+	//
+	// This is set for all non-SQL client commands, which only support
+	// the insecure boolean and certs-dir with maximum TLS validation.
+	StrictTLS() bool
+
+	// NewStrictTLSConfigurationError will be called when a URL contains
+	// parameters that conflict with the requirements of StrictTLS().
+	NewStrictTLSConfigurationError() error
+
+	// UserFlag should return whether the --user flag was specified, and its value.
+	// Note that the value returned by UserFlag() should also reflect any prior
+	// calls to SetUser().
+	UserFlag() (bool, string)
+
+	// SetUser is called when the URL contains a username.
+	SetUser(string)
+
+	// SetHost is called when the URL contains a server name / address.
+	SetHost(string)
+
+	// SetPort is called when the URL contains a server port name / number.
+	SetPort(string)
+
+	// SetDatabase is called when the URL contains a database name.
+	SetDatabase(string)
+
+	// InsecureFlag should return whether --insecure was specified and
+	// its value.
+	InsecureFlag() (bool, bool)
+
+	// SetInsecure is called when the URL is found to imply --insecure.
+	// TODO(knz): This behavior should be removed.
+	// See https://github.com/cockroachdb/cockroach/issues/54007.
+	SetInsecure(bool)
+
+	// CertsDirFlag should return whether --certs-dir was specified and
+	// its value.
+	CertsDirFlag() (bool, string)
+
+	// SetCertsDir is called when the URL is found to imply a
+	// certificate directory location.
+	SetCertsDir(string)
+}
+
 // AnalyzeClientURL is a helper that processes a connection URL passed on the
 // command line, integrates any defaults set by earlier command-line arguments,
 // then calls callbacks depending on which details were found in the new URL.
@@ -30,43 +89,30 @@ import (
 //
 // This is set for all non-SQL client commands, which only support
 // the insecure boolean and certs-dir with maximum SSL validation.
-func AnalyzeClientURL(
-	newURL string,
-	sslStrict bool,
-	makeStrictErr func() error,
-	usernameFlag func() (bool, string),
-	foundUsername func(string),
-	foundHostname func(string),
-	foundPort func(string),
-	foundDatabase func(string),
-	insecureFlag func() (bool, bool),
-	insecureOverride func(bool),
-	certsDirFlag func() (bool, string),
-	foundCertsDir func(string),
-) (*pgurl.URL, error) {
+func AnalyzeClientURL(newURL string, flags CLIFlagInterfaceForClientURL) (*pgurl.URL, error) {
 	parsedURL, err := pgurl.Parse(newURL)
 	if err != nil {
 		return nil, err
 	}
 
 	if user := parsedURL.GetUsername(); user != "" {
-		foundUsername(user)
+		flags.SetUser(user)
 	}
 
 	// If some host/port information is available, forward it to
 	// --host / --port.
 	net, host, port := parsedURL.GetNetworking()
 	if host != "" {
-		foundHostname(host)
+		flags.SetHost(host)
 	}
 	if port != "" {
-		foundPort(port)
+		flags.SetPort(port)
 	}
 
 	// If a database is specified, and the command supports databases,
 	// forward it to --database.
 	if db := parsedURL.GetDatabase(); db != "" {
-		foundDatabase(db)
+		flags.SetDatabase(db)
 	}
 
 	tlsUsed, tlsMode, caCertPath := parsedURL.GetTLSOptions()
@@ -78,7 +124,7 @@ func AnalyzeClientURL(
 		//
 		// Is there a value to go by from a previous --insecure flag? If
 		// so, use that.
-		if insecureSpecified, insecureValue := insecureFlag(); insecureSpecified {
+		if insecureSpecified, insecureValue := flags.InsecureFlag(); insecureSpecified {
 			var tp pgurl.TransportOption
 			if insecureValue {
 				tp = pgurl.TransportNone()
@@ -96,25 +142,25 @@ func AnalyzeClientURL(
 	}
 
 	if !tlsUsed {
-		if sslStrict {
+		if flags.StrictTLS() {
 			// For "strict" mode (RPC client commands) we don't support non-TLS
 			// yet. See https://github.com/cockroachdb/cockroach/issues/54007
 			// Instead, we see a request for no TLS to imply insecure mode.
-			insecureOverride(true)
+			flags.SetInsecure(true)
 		}
 	} else {
-		if sslStrict {
+		if flags.StrictTLS() {
 			switch tlsMode {
 			case pgurl.TLSVerifyFull:
 				// This is valid.
 			default:
-				return nil, makeStrictErr()
+				return nil, flags.NewStrictTLSConfigurationError()
 			}
 		}
-		insecureOverride(false)
+		flags.SetInsecure(false)
 
-		if sslStrict {
-			// The "sslStrict" flag means the client command is using our
+		if flags.StrictTLS() {
+			// The "flags.StrictTLS()" flag means the client command is using our
 			// certificate manager instead of the certificate handler in
 			// lib/pq.
 			//
@@ -152,7 +198,7 @@ func AnalyzeClientURL(
 
 			candidateCertsDir := ""
 			hasCertsDir := false
-			if certsDirSpecified, certsDir := certsDirFlag(); certsDirSpecified {
+			if certsDirSpecified, certsDir := flags.CertsDirFlag(); certsDirSpecified {
 				// If a --certs-dir flag was preceding --url, we want to
 				// check that the paths inside the URL match the value of
 				// that explicit --certs-dir.
@@ -203,7 +249,7 @@ func AnalyzeClientURL(
 			}
 
 			userName := username.RootUserName()
-			if hasConnUser, connUser := usernameFlag(); hasConnUser {
+			if hasConnUser, connUser := flags.UserFlag(); hasConnUser {
 				userName, _ = username.MakeSQLUsernameFromUserInput(connUser, username.PurposeValidation)
 			}
 			if err := tryCertsDir("sslrootcert", caCertPath, certnames.CACertFilename()); err != nil {
@@ -219,7 +265,7 @@ func AnalyzeClientURL(
 			}
 
 			if hasCertsDir {
-				foundCertsDir(candidateCertsDir)
+				flags.SetCertsDir(candidateCertsDir)
 			}
 		}
 	}
