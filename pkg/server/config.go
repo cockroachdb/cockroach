@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"net"
 	"runtime"
 	"strconv"
@@ -263,6 +264,10 @@ type KVConfig struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
+	// SoftSlotGranter can be optionally passed into a store to allow the store
+	// to perform additional CPU bound work.
+	SoftSlotGranter *admission.SoftSlotGranter
+
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
@@ -508,6 +513,19 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
+// CPUWorkPermissionGranter implements the pebble.CPUWorkPermissionGranter
+// interface.
+type CPUWorkPermissionGranter struct {
+	*admission.SoftSlotGranter
+}
+
+func (c *CPUWorkPermissionGranter) TryGetProcs(count int) int {
+	return c.TryGetSlots(count)
+}
+func (c *CPUWorkPermissionGranter) ReturnProcs(count int) {
+	c.ReturnSlots(count)
+}
+
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
@@ -627,6 +645,10 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.Cache = pebbleCache
 			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
+			pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &CPUWorkPermissionGranter{
+				cfg.SoftSlotGranter,
+			}
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
 				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{
