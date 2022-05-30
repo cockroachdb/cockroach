@@ -690,7 +690,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	nodeInfo := sql.NodeInfo{
 		AdminURL: cfg.AdminURL,
 		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
-			return clientsecopts.PGURL(ccopts, sparams, user)
+			return clientsecopts.MakeURLForServer(ccopts, sparams, user)
 		},
 		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
 		NodeID:           cfg.nodeIDContainer,
