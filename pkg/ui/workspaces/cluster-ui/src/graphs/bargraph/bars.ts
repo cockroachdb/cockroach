@@ -14,8 +14,8 @@ import { AxisUnits, AxisDomain } from "../utils/domain";
 import { barTooltipPlugin } from "./plugins";
 
 const seriesPalette = [
-  "#475872",
-  "#FFCD02",
+  "#003EBD",
+  "#2AAF44",
   "#F16969",
   "#4E9FD1",
   "#49D990",
@@ -24,7 +24,7 @@ const seriesPalette = [
   "#A3415B",
   "#B59153",
   "#C9DB6D",
-  "#203D9B",
+  "#475872",
   "#748BF2",
   "#91C8F2",
   "#FF9696",
@@ -157,6 +157,9 @@ export const getBarChartOpts = (
     scales: {
       x: {
         range: () => [xAxisDomain.extent[0], xAxisDomain.extent[1]],
+      },
+      yAxis: {
+        range: () => [yAxisDomain.extent[0], yAxisDomain.extent[1]],
       },
     },
     axes: [

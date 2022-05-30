@@ -8,19 +8,22 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Col, Row, Tabs } from "antd";
-import { Text, Heading, InlineAlert } from "@cockroachlabs/ui-components";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
-import _ from "lodash";
 import React, { ReactNode } from "react";
+import { Col, Row, Tabs } from "antd";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { Text, InlineAlert } from "@cockroachlabs/ui-components";
+import { ArrowLeft } from "@cockroachlabs/icons";
+import { Location } from "history";
+import _ from "lodash";
+import Long from "long";
+import { format as d3Format } from "d3-format";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import { format as d3Format } from "d3-format";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
-import Long from "long";
-import { Location } from "history";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { BarGraphTimeSeries } from "../graphs/bargraph";
+import { AxisUnits } from "../graphs";
+import { AlignedData, Options } from "uplot";
 
 import {
   NumericStat,
@@ -28,9 +31,7 @@ import {
   Bytes,
   Duration,
   FixLong,
-  longToInt,
   stdDev,
-  formatNumberForDisplay,
   unique,
   queryByName,
   appAttr,
@@ -44,11 +45,7 @@ import { SortSetting } from "src/sortedtable";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { PlanDetails } from "./planDetails";
 import { SummaryCard } from "src/summaryCard";
-import {
-  latencyBreakdown,
-  genericBarChart,
-  formatTwoPlaces,
-} from "src/barCharts";
+import { latencyBreakdown, genericBarChart } from "src/barCharts";
 import { DiagnosticsView } from "./diagnostics/diagnosticsView";
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
@@ -68,6 +65,13 @@ import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
+import {
+  generateExecCountTimeseries,
+  generateExecRetriesTimeseries,
+  generateExecuteAndPlanningTimeseries,
+  generateRowsProcessedTimeseries,
+  generateContentionTimeseries,
+} from "./timeseriesUtils";
 type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -332,15 +336,6 @@ export class StatementDetails extends React.Component<
   hasDiagnosticReports = (): boolean =>
     this.props.diagnosticsReports.length > 0;
 
-  changeSortSetting = (ss: SortSetting): void => {
-    this.setState({
-      sortSetting: ss,
-    });
-    if (this.props.onSortingChange) {
-      this.props.onSortingChange("Stats By Node", ss.columnTitle, ss.ascending);
-    }
-  };
-
   refreshStatementDetails = (
     timeScale: TimeScale,
     statementFingerprintID: string,
@@ -470,13 +465,13 @@ export class StatementDetails extends React.Component<
             Statements
           </Button>
           <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
-            Statement Details
+            Statement Fingerprint
           </h3>
         </div>
         <section className={cx("section", "section--container")}>
           <Loading
             loading={this.props.isLoading}
-            page={"statement details"}
+            page={"statement fingerprint"}
             error={this.props.statementsError}
             render={this.renderTabs}
             renderError={() =>
@@ -589,15 +584,9 @@ export class StatementDetails extends React.Component<
       total_count,
       implicit_txn,
     } = this.props.statementDetails.statement.metadata;
-
-    const { statement } = this.props.statementDetails;
-
-    const totalCountBarChart = longToInt(statement.stats.count);
-    const firstAttemptsBarChart = longToInt(
-      statement.stats.first_attempt_count,
-    );
-    const retriesBarChart = totalCountBarChart - firstAttemptsBarChart;
-    const maxRetriesBarChart = longToInt(statement.stats.max_retries);
+    const {
+      statement_statistics_per_aggregated_ts,
+    } = this.props.statementDetails;
 
     const nodes: string[] = unique(
       (stats.nodes || []).map(node => node.toString()),
@@ -606,7 +595,6 @@ export class StatementDetails extends React.Component<
       (stats.nodes || []).map(node => nodeRegions[node.toString()]),
     ).sort();
 
-    const duration = (v: number) => Duration(v * 1e9);
     const lastExec =
       stats.last_exec_timestamp &&
       moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
@@ -614,18 +602,10 @@ export class StatementDetails extends React.Component<
       );
     const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
     const unavailableTooltip = !statementSampled && (
-      <Tooltip
-        placement="bottom"
-        style="default"
-        content={
-          <p>
-            This metric is part of the statement execution and therefore will
-            not be available until the statement is sampled via tracing.
-          </p>
-        }
-      >
-        <span className={cx("tooltip-info")}>unavailable</span>
-      </Tooltip>
+      <div>
+        This metric is part of the statement execution and therefore will not be
+        available until the statement is sampled.
+      </div>
     );
 
     const db = databases ? (
@@ -633,6 +613,64 @@ export class StatementDetails extends React.Component<
     ) : (
       <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
     );
+
+    const statsPerAggregatedTs = statement_statistics_per_aggregated_ts.sort(
+      (a, b) =>
+        a.aggregated_ts.seconds < b.aggregated_ts.seconds
+          ? -1
+          : a.aggregated_ts.seconds > b.aggregated_ts.seconds
+          ? 1
+          : 0,
+    );
+
+    const executionAndPlanningTimeseries: AlignedData = generateExecuteAndPlanningTimeseries(
+      statsPerAggregatedTs,
+    );
+    const executionAndPlanningOps: Partial<Options> = {
+      axes: [{}, { label: "Time Spent" }],
+      series: [{}, { label: "Execution" }, { label: "Planning" }],
+      width: 735,
+    };
+
+    const rowsProcessedTimeseries: AlignedData = generateRowsProcessedTimeseries(
+      statsPerAggregatedTs,
+    );
+    const rowsProcessedOps: Partial<Options> = {
+      axes: [{}, { label: "Rows" }],
+      series: [{}, { label: "Rows Read" }, { label: "Rows Written" }],
+      width: 735,
+    };
+
+    const execRetriesTimeseries: AlignedData = generateExecRetriesTimeseries(
+      statsPerAggregatedTs,
+    );
+    const execRetriesOps: Partial<Options> = {
+      axes: [{}, { label: "Retries" }],
+      series: [{}, { label: "Retries" }],
+      legend: { show: false },
+      width: 735,
+    };
+
+    const execCountTimeseries: AlignedData = generateExecCountTimeseries(
+      statsPerAggregatedTs,
+    );
+    const execCountOps: Partial<Options> = {
+      axes: [{}, { label: "Execution Counts" }],
+      series: [{}, { label: "Execution Counts" }],
+      legend: { show: false },
+      width: 735,
+    };
+
+    const contentionTimeseries: AlignedData = generateContentionTimeseries(
+      statsPerAggregatedTs,
+    );
+    const contentionOps: Partial<Options> = {
+      axes: [{}, { label: "Contention" }],
+      series: [{}, { label: "Contention" }],
+      legend: { show: false },
+      width: 735,
+    };
+
     return (
       <>
         <PageConfig>
@@ -655,110 +693,6 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
-                <Row>
-                  <Col>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Heading type="h5">Mean statement time</Heading>
-                      <Text type="body-strong">
-                        {formatNumberForDisplay(
-                          stats.service_lat.mean,
-                          duration,
-                        )}
-                      </Text>
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Planning time</Text>
-                      <Text>
-                        {formatNumberForDisplay(stats.plan_lat.mean, duration)}
-                      </Text>
-                    </div>
-                    <p
-                      className={summaryCardStylesCx("summary--card__divider")}
-                    />
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Execution time</Text>
-                      <Text>
-                        {formatNumberForDisplay(stats.run_lat.mean, duration)}
-                      </Text>
-                    </div>
-                    <p
-                      className={summaryCardStylesCx("summary--card__divider")}
-                    />
-                  </Col>
-                </Row>
-              </SummaryCard>
-              <SummaryCard className={cx("summary-card")}>
-                <Row>
-                  <Col>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Heading type="h5">Resource usage</Heading>
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Mean rows/bytes read</Text>
-                      {statementSampled && (
-                        <Text>
-                          {formatNumberForDisplay(
-                            stats.rows_read.mean,
-                            formatTwoPlaces,
-                          )}
-                          {" / "}
-                          {formatNumberForDisplay(stats.bytes_read.mean, Bytes)}
-                        </Text>
-                      )}
-                      {unavailableTooltip}
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Mean rows written</Text>
-                      <Text>
-                        {formatNumberForDisplay(
-                          stats.rows_written?.mean,
-                          formatTwoPlaces,
-                        )}
-                      </Text>
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Max memory usage</Text>
-                      {statementSampled && (
-                        <Text>
-                          {formatNumberForDisplay(
-                            stats.exec_stats.max_mem_usage.mean,
-                            Bytes,
-                          )}
-                        </Text>
-                      )}
-                      {unavailableTooltip}
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Network usage</Text>
-                      {statementSampled && (
-                        <Text>
-                          {formatNumberForDisplay(
-                            stats.exec_stats.network_bytes.mean,
-                            Bytes,
-                          )}
-                        </Text>
-                      )}
-                      {unavailableTooltip}
-                    </div>
-                    <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text>Max scratch disk usage</Text>
-                      {statementSampled && (
-                        <Text>
-                          {formatNumberForDisplay(
-                            stats.exec_stats.max_disk_usage.mean,
-                            Bytes,
-                          )}
-                        </Text>
-                      )}
-                      {unavailableTooltip}
-                    </div>
-                  </Col>
-                </Row>
-              </SummaryCard>
-            </Col>
-            <Col className="gutter-row" span={12}>
-              <SummaryCard className={cx("summary-card")}>
-                <Heading type="h5">Statement details</Heading>
                 {!isTenant && (
                   <div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
@@ -776,16 +710,10 @@ export class StatementDetails extends React.Component<
                     </div>
                   </div>
                 )}
-
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Database</Text>
                   {db}
                 </div>
-                <p
-                  className={summaryCardStylesCx(
-                    "summary--card__divider--large",
-                  )}
-                />
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>App</Text>
                   <Text>
@@ -795,16 +723,16 @@ export class StatementDetails extends React.Component<
                     )}
                   </Text>
                 </div>
+              </SummaryCard>
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Failed?</Text>
                   <Text>{RenderCount(failed_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Distributed execution?</Text>
-                  <Text>{RenderCount(dist_sql_count, total_count)}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Full Scan?</Text>
+                  <Text>Full scan?</Text>
                   <Text>{RenderCount(full_scan_count, total_count)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
@@ -819,48 +747,55 @@ export class StatementDetails extends React.Component<
                   <Text>Last execution time</Text>
                   <Text>{lastExec}</Text>
                 </div>
-                <p
-                  className={summaryCardStylesCx(
-                    "summary--card__divider--large",
-                  )}
-                />
-                <Heading type="h5">Execution counts</Heading>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>First attempts</Text>
-                  <Text>{firstAttemptsBarChart}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Total executions</Text>
-                  <Text>{totalCountBarChart}</Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Retries</Text>
-                  <Text
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                      {
-                        "summary--card__item--value-red": retriesBarChart > 0,
-                      },
-                    )}
-                  >
-                    {retriesBarChart}
-                  </Text>
-                </div>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Max retries</Text>
-                  <Text
-                    className={summaryCardStylesCx(
-                      "summary--card__item--value",
-                      {
-                        "summary--card__item--value-red":
-                          maxRetriesBarChart > 0,
-                      },
-                    )}
-                  >
-                    {maxRetriesBarChart}
-                  </Text>
-                </div>
               </SummaryCard>
+            </Col>
+          </Row>
+          <p className={summaryCardStylesCx("summary--card__divider--large")} />
+          <Row gutter={24}>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title="Statement Execution and Planning Time"
+                alignedData={executionAndPlanningTimeseries}
+                uPlotOptions={executionAndPlanningOps}
+                yAxisUnits={AxisUnits.Duration}
+              />
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title="Rows Processed"
+                alignedData={rowsProcessedTimeseries}
+                uPlotOptions={rowsProcessedOps}
+                yAxisUnits={AxisUnits.Count}
+              />
+            </Col>
+          </Row>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title="Execution Retries"
+                alignedData={execRetriesTimeseries}
+                uPlotOptions={execRetriesOps}
+                yAxisUnits={AxisUnits.Count}
+              />
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title="Execution Count"
+                alignedData={execCountTimeseries}
+                uPlotOptions={execCountOps}
+                yAxisUnits={AxisUnits.Count}
+              />
+            </Col>
+          </Row>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title="Contention"
+                alignedData={contentionTimeseries}
+                uPlotOptions={contentionOps}
+                tooltip={unavailableTooltip}
+                yAxisUnits={AxisUnits.Duration}
+              />
             </Col>
           </Row>
         </section>

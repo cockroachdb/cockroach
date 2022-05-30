@@ -563,6 +563,7 @@ func getStatementDetailsPerAggregatedTs(
 		GROUP BY
 				aggregated_ts,
 				aggregation_interval
+		ORDER BY aggregated_ts ASC
 		LIMIT $%d`, whereClause, len(args)+1)
 
 	args = append(args, limit)

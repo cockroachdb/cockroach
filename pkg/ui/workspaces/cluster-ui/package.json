@@ -104,6 +104,7 @@
     "http-proxy-middleware": "^1.0.5",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^27.5.1",
+    "jest-canvas-mock": "^2.4.0",
     "jest-cli": "^27.5.1",
     "jest-environment-enzyme": "^7.1.2",
     "jest-enzyme": "^7.1.2",
