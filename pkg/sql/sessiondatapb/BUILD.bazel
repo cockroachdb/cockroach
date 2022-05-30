@@ -14,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/security/username",
+        "//pkg/sql/types",
         "//pkg/util/admission/admissionpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",  # keep

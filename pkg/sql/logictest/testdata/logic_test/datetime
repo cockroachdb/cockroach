@@ -553,7 +553,7 @@ SELECT k, extract(element, input::timestamp) = extract_result, date_part(element
 49  true  true  3
 50  true  true  -2
 51  true  true  0
-52  true  true  2.4574298239966e+06
+52  true  true  2.457429823996599e+06
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
@@ -618,7 +618,7 @@ SELECT k, extract(element, input::timestamptz) = extract_result, extract(element
 49  true  3
 50  true  -2
 51  true  0
-52  true  2.4574298239966e+06
+52  true  2.457429823996599e+06
 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)

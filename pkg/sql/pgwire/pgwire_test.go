@@ -789,7 +789,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SELECT $1:::FLOAT[]", []preparedQueryTest{
 			baseTest.SetArgs("{}").Results("{}"),
-			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),
+			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1,2,3}"),
 		}},
 		{"SELECT $1:::DECIMAL[]", []preparedQueryTest{
 			baseTest.SetArgs("{1.000}").Results("{1.000}"),

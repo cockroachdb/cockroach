@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -272,7 +273,10 @@ func TestParseTupleRandomDatums(t *testing.T) {
 		if tup == tree.DNull {
 			continue
 		}
-		tupString := tree.AsStringWithFlags(tup, tree.FmtPgwireText)
+		conv := sessiondatapb.DataConversionConfig{
+			ExtraFloatDigits: 1,
+		}
+		tupString := tree.AsStringWithFlags(tup, tree.FmtPgwireText, tree.FmtDataConversionConfig(conv))
 
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		parsed, _, err := tree.ParseDTupleFromString(

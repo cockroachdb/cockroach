@@ -162,7 +162,7 @@ func TestFloatConversion(t *testing.T) {
 		expected         string
 	}{
 		{123.4567890123456789, 0, "123.456789012346"},
-		{123.4567890123456789, 1, "123.4567890123457"},
+		{123.4567890123456789, 1, "123.45678901234568"},
 		{123.4567890123456789, 2, "123.45678901234568"},
 		{123.4567890123456789, 3, "123.45678901234568"},
 		{123.4567890123456789, 100, "123.45678901234568"}, // values above 3 clamp to work like 3
@@ -181,7 +181,7 @@ func TestFloatConversion(t *testing.T) {
 			defaultConv.ExtraFloatDigits = int32(test.extraFloatDigits)
 
 			d := tree.NewDFloat(tree.DFloat(test.val))
-			buf.writeTextDatum(context.Background(), d, defaultConv, defaultLoc, nil /* t */)
+			buf.writeTextDatum(context.Background(), d, defaultConv, defaultLoc, types.Float)
 			b := buf.wrapped.Bytes()
 
 			got := string(b[4:])
