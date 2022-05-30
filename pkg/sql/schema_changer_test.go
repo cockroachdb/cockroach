@@ -445,9 +445,35 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	_, err := sqlDB.Exec(`CREATE DATABASE d`)
 	require.NoError(t, err)
 
+	// Create a table that the view depends on.
+	_, err = sqlDB.Exec(`
+CREATE TYPE d.animals as ENUM('cat');
+CREATE SEQUENCE d.sq1;
+CREATE TABLE d.t1 (val INT DEFAULT nextval('d.sq1'), animal d.animals);
+`)
+	require.NoError(t, err)
+
 	// This view creation will fail and eventually rollback.
-	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
-	require.EqualError(t, err, "pq: boom")
+	_, err = sqlDB.Exec(
+		`BEGIN;
+CREATE MATERIALIZED VIEW d.v AS SELECT val FROM d.t1;
+CREATE VIEW d.v1 AS SELECT A.val AS  val2, B.val AS val1, 'cat':::d.animals AS ANIMAL, c.last_value FROM d.v AS A, d.t1 AS B, d.sq1 as C;
+COMMIT;`)
+	require.EqualError(t, err, "pq: transaction committed but schema change aborted with error: (XXUUU): boom")
+
+	// Validate existing back references are intact.
+	_, err = sqlDB.Exec("DROP TYPE d.animals;")
+	require.Error(t, err, "pq: cannot drop type \"animals\" because other objects ([d.public.t1]) still depend on it")
+	_, err = sqlDB.Exec("DROP SEQUENCE d.sq1;")
+	require.Error(t, err, "pq: cannot drop type \"animals\" because other objects ([d.public.t1]) still depend on it")
+
+	// Ensure that the dependent objects can still be dropped.
+	_, err = sqlDB.Exec(`
+DROP TABLE d.t1;
+DROP TYPE d.animals;
+DROP SEQUENCE d.sq1;
+`)
+	require.NoError(t, err)
 
 	// Get the view descriptor we just created and verify that it's in the
 	// dropping state. We're unable to access the descriptor via the usual means
@@ -455,8 +481,11 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	// and once we move the table to the DROP state we also remove the namespace
 	// entry. So we just get the most recent descriptor.
 	var descBytes []byte
-	row := sqlDB.QueryRow(`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
-	require.NoError(t, row.Scan(&descBytes))
+	rows, err := sqlDB.Query(`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 2`)
+	require.NoError(t, err)
+	require.Equal(t, rows.Next(), true)
+	require.Equal(t, rows.Next(), true)
+	require.NoError(t, rows.Scan(&descBytes))
 	var desc descpb.Descriptor
 	require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
 	//nolint:descriptormarshal
