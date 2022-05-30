@@ -693,3 +693,42 @@ query I
 SELECT k FROM t79384a INNER LOOKUP JOIN t79384b ON k = a AND b IN (1, 2, 3) AND c > 0
 ----
 1
+
+# Regression test for #81968. Paired left joins should set all right columns
+# for unmatched rows to NULL.
+statement ok
+CREATE TABLE items (
+    id        INT NOT NULL PRIMARY KEY,
+    chat_id   INT NOT NULL,
+    author_id INT NOT NULL,
+    INDEX chat_id_idx (chat_id)
+);
+CREATE TABLE views (
+    chat_id INT NOT NULL,
+    user_id INT NOT NULL,
+    PRIMARY KEY (chat_id, user_id)
+);
+INSERT INTO views(chat_id, user_id) VALUES (1, 1);
+INSERT INTO items(id, chat_id, author_id) VALUES
+(1, 1, 1),
+(2, 1, 1),
+(3, 1, 1);
+
+query I
+SELECT (SELECT count(items.id)
+        FROM items
+        WHERE items.chat_id = views.chat_id
+          AND items.author_id != views.user_id)
+FROM views
+WHERE chat_id = 1
+  AND user_id = 1;
+----
+0
+
+query IIIII
+SELECT * FROM views LEFT LOOKUP JOIN items
+ON items.chat_id = views.chat_id
+AND items.author_id != views.user_id
+WHERE views.chat_id = 1 and views.user_id = 1;
+----
+1  1  NULL  NULL  NULL
