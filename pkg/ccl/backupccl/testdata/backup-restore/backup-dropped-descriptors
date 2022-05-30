@@ -1,4 +1,4 @@
-# backup-dropped-desctiprors tests backup and restore interaction with database, schema
+# backup-dropped-descriptors tests backup and restore interaction with database, schema
 # and type descriptors in the DROP state.
 subtest dropped-database-descriptors
 
@@ -10,9 +10,12 @@ SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
+----
+
+schema-change expect-pausepoint
 DROP DATABASE d CASCADE;
 ----
-paused before it completed with reason: pause point "schemachanger.before.exec" hit
+job paused at pausepoint
 
 # At this point, we have a descriptor entry for `d` in a DROP state.
 query-sql
@@ -118,16 +121,19 @@ SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 ----
 
-exec-sql
+schema-change expect-pausepoint
 DROP SCHEMA d2.s CASCADE;
 ----
-paused before it completed with reason: pause point "schemachanger.before.exec" hit
+job paused at pausepoint
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'typeschemachanger.before.exec';
+----
+
+schema-change expect-pausepoint
 DROP TYPE d2.typ;
 ----
-paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
+job paused at pausepoint
 
 query-sql
 WITH tbls AS (
