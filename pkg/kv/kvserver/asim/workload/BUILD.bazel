@@ -5,15 +5,11 @@ go_library(
     srcs = ["workload.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/timeutil"],
 )
 
 go_test(
     name = "workload_test",
     srcs = ["workload_test.go"],
     embed = [":workload"],
-    deps = [
-        "//pkg/util/timeutil",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = ["@com_github_stretchr_testify//require"],
 )
