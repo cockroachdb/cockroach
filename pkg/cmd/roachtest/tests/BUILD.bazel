@@ -35,6 +35,7 @@ go_library(
         "encryption.go",
         "engine_switch.go",
         "event_log.go",
+        "fixtures.go",
         "flowable.go",
         "follower_reads.go",
         "go_helpers.go",
@@ -128,6 +129,7 @@ go_library(
         "versionupgrade.go",
         "ycsb.go",
     ],
+    embedsrcs = ["predecessor_version.json"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests",
     visibility = ["//visibility:public"],
     deps = [
