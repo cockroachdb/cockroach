@@ -354,6 +354,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 	var pkCols opt.ColList
 	var eqColMap opt.ColMap
+	var newScanPrivate *memo.ScanPrivate
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
@@ -730,11 +731,38 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			indexJoin.On = c.ExtractUnboundConditions(conditions, onCols)
 		}
 		if pairedJoins {
+			// Create a new ScanPrivate, which will be used below for the first lookup
+			// join in the pair. Note: this must happen before the continuation column
+			// is created to ensure that the continuation column will have the highest
+			// column ID.
+			//
+			// See the comment where this newScanPrivate is used below in mapLookupJoin
+			// for details about why it's needed.
+			if newScanPrivate == nil {
+				newScanPrivate = c.DuplicateScanPrivate(scanPrivate)
+			}
+
 			lookupJoin.JoinType = lowerJoinType
 			continuationCol = c.constructContinuationColumnForPairedJoin()
 			lookupJoin.IsFirstJoinInPairedJoiner = true
 			lookupJoin.ContinuationCol = continuationCol
 			lookupJoin.Cols.Add(continuationCol)
+
+			// Map the lookup join to use the new table and column IDs from the
+			// newScanPrivate created above. We want to make sure that the column IDs
+			// returned by the lookup join are different from the IDs that will be
+			// returned by the top level index join.
+			//
+			// In addition to avoiding subtle bugs in the optimizer when the same
+			// column ID is reused, this mapping is also essential for correct behavior
+			// at execution time in the case of a left paired join. This is because a
+			// row that matches in the first left join (the lookup join) might be a
+			// false positive and fail to match in the second left join (the index
+			// join). If an original left row has no matches after the second left join,
+			// it must appear as a null-extended row with all right-hand columns null.
+			// If one of the right-hand columns comes from the lookup join, however,
+			// it might incorrectly show up as non-null (see #58892 and #81968).
+			c.mapLookupJoin(&lookupJoin, indexCols, newScanPrivate)
 		}
 
 		indexJoin.Input = c.e.f.ConstructLookupJoin(
@@ -745,7 +773,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		indexJoin.JoinType = joinType
 		indexJoin.Table = scanPrivate.Table
 		indexJoin.Index = cat.PrimaryIndex
-		indexJoin.KeyCols = pkCols
+		indexJoin.KeyCols = c.getPkCols(lookupJoin.Table)
 		indexJoin.Cols = rightCols.Union(inputProps.OutputCols)
 		indexJoin.LookupColsAreTableKey = true
 		if pairedJoins {
@@ -949,6 +977,41 @@ func (c *CustomFuncs) makeRangeFilterFromSpan(
 // an inner join.
 func (c *CustomFuncs) constructContinuationColumnForPairedJoin() opt.ColumnID {
 	return c.e.f.Metadata().AddColumn("continuation", c.BoolType())
+}
+
+// mapLookupJoin maps the given lookup join to use the table and columns
+// provided in newScanPrivate. The lookup join is modified in place. indexCols
+// contains the pre-calculated index columns used by the given lookupJoin.
+//
+// Note that columns from the input are not mapped. For example, KeyCols
+// does not need to be mapped below since it only contains input columns.
+func (c *CustomFuncs) mapLookupJoin(
+	lookupJoin *memo.LookupJoinExpr, indexCols opt.ColSet, newScanPrivate *memo.ScanPrivate,
+) {
+	tabID := lookupJoin.Table
+	newTabID := newScanPrivate.Table
+
+	// Get the new index columns.
+	newIndexCols := c.e.mem.Metadata().TableMeta(newTabID).IndexColumns(lookupJoin.Index)
+
+	// Create a map from the source columns to the destination columns.
+	var srcColsToDstCols opt.ColMap
+	for srcCol, ok := indexCols.Next(0); ok; srcCol, ok = indexCols.Next(srcCol + 1) {
+		ord := tabID.ColumnOrdinal(srcCol)
+		dstCol := newTabID.ColumnID(ord)
+		srcColsToDstCols.Set(int(srcCol), int(dstCol))
+	}
+
+	lookupJoin.Table = newTabID
+	lookupExpr := c.RemapCols(&lookupJoin.LookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
+	lookupJoin.LookupExpr = *lookupExpr
+	remoteLookupExpr := c.RemapCols(&lookupJoin.RemoteLookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
+	lookupJoin.RemoteLookupExpr = *remoteLookupExpr
+	lookupJoin.Cols = lookupJoin.Cols.Difference(indexCols).Union(newIndexCols)
+	constFilters := c.RemapCols(&lookupJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
+	lookupJoin.ConstFilters = *constFilters
+	on := c.RemapCols(&lookupJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
+	lookupJoin.On = *on
 }
 
 // GenerateInvertedJoins is similar to GenerateLookupJoins, but instead
