@@ -5,13 +5,17 @@ go_library(
     srcs = [
         "asim.go",
         "pacer.go",
+        "replicate_queue.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
+        "//pkg/util/log",
         "//pkg/util/shuffle",
     ],
 )
@@ -21,11 +25,14 @@ go_test(
     srcs = [
         "asim_test.go",
         "pacer_test.go",
+        "replicate_queue_test.go",
     ],
     embed = [":asim"],
     deps = [
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
+        "//pkg/roachpb",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
