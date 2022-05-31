@@ -72,7 +72,10 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 	j.registerClusterSettingHook()
 
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-scheduled-compaction-job-monitor", func(ctx context.Context) {
-		for timer := timeutil.NewTimer(); ; timer.Reset(j.jitterFn(j.scanInterval)) {
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		for {
+			timer.Reset(j.jitterFn(j.scanInterval))
 			select {
 			case <-timer.C:
 				timer.Read = true
