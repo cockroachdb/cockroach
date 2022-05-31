@@ -165,6 +165,9 @@ func TestFixture(t *testing.T) {
 
 func TestImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 81082, "flaky")
+
 	ctx := context.Background()
 
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {

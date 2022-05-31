@@ -16,8 +16,10 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -65,8 +67,9 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 
 	// If the node cert already exists, skip all the complexity of setting up
 	// servers, etc.
-	cl := security.MakeCertsLocator(baseCfg.SSLCertsDir)
-	if exists, err := cl.HasNodeCert(); err != nil {
+	cl := certnames.MakeLocator(baseCfg.SSLCertsDir)
+	loader := securityassets.GetLoader()
+	if exists, err := loader.FileExists(cl.NodeCertPath()); err != nil {
 		return err
 	} else if exists {
 		return errors.Newf("node certificate already exists in %s", baseCfg.SSLCertsDir)
@@ -141,7 +144,7 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 
 func validateConnectInitFlags(cmd *cobra.Command, requireExplicitFlags bool) error {
 	if requireExplicitFlags {
-		f := flagSetForCmd(cmd)
+		f := cliflagcfg.FlagSetForCmd(cmd)
 		if !(f.Lookup(cliflags.SingleNode.Name).Changed ||
 			(f.Lookup(cliflags.NumExpectedInitialNodes.Name).Changed && f.Lookup(cliflags.InitToken.Name).Changed)) {
 			return errors.Newf("either --%s must be passed, or both --%s and --%s",

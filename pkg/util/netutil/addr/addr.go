@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/pflag"
 )
 
 // SplitHostPort is like net.SplitHostPort however it supports
@@ -48,4 +49,35 @@ func SplitHostPort(v string, defaultPort string) (addr string, port string, err 
 		port = defaultPort
 	}
 	return addr, port, err
+}
+
+type addrSetter struct {
+	addr *string
+	port *string
+}
+
+// NewAddrSetter creates a new pflag.Value raps a address/port
+// configuration option pair and enables setting them both with a
+// single command-line flag.
+func NewAddrSetter(hostOption, portOption *string) pflag.Value {
+	return &addrSetter{addr: hostOption, port: portOption}
+}
+
+// String implements the pflag.Value interface.
+func (a addrSetter) String() string {
+	return net.JoinHostPort(*a.addr, *a.port)
+}
+
+// Type implements the pflag.Value interface.
+func (a addrSetter) Type() string { return "<addr/host>[:<port>]" }
+
+// Set implements the pflag.Value interface.
+func (a addrSetter) Set(v string) error {
+	addr, port, err := SplitHostPort(v, *a.port)
+	if err != nil {
+		return err
+	}
+	*a.addr = addr
+	*a.port = port
+	return nil
 }

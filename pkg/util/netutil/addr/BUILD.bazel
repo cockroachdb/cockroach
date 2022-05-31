@@ -5,7 +5,10 @@ go_library(
     srcs = ["addr.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/netutil/addr",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
 )
 
 go_test(
