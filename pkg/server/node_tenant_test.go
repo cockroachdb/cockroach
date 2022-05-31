@@ -99,6 +99,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			ParentSpanID      tracingpb.SpanID
 			Operation         string
 			Tags              map[string]string
+			TagGroups         []*tracingpb.TagGroup
 			StartTime         time.Time
 			Duration          time.Duration
 			RedactableLogs    bool

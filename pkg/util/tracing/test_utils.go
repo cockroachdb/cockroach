@@ -127,7 +127,16 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 	for _, rs := range rec {
 		d := depth(rs.SpanID)
 		row(d, "span: %s", rs.Operation)
-		if len(rs.Tags) > 0 {
+		if len(rs.TagGroups) > 0 {
+			var tags []string
+			for _, tagGroup := range rs.TagGroups {
+				for _, tag := range tagGroup.Tags {
+					tags = append(tags, fmt.Sprintf("%s=%v", tag.Key, tag.Value))
+				}
+			}
+			sort.Strings(tags)
+			row(d, "    tags: %s", strings.Join(tags, " "))
+		} else if len(rs.Tags) > 0 {
 			var tags []string
 			for k, v := range rs.Tags {
 				tags = append(tags, fmt.Sprintf("%s=%v", k, v))

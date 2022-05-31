@@ -58,8 +58,13 @@ message RecordedSpan {
   uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
   // Operation name.
   string operation = 4;
+
   // Tags associated with the span.
-  map<string, string> tags = 6;
+  map<string, string> tags = 6;  // Deprecated. Avoid new uses. Prefer tag_groups.
+  // tag_groups contains all the information in the v1 tags field, and will replace it.
+  // TODO(benbardin): Remove the tags field for 23.1.
+  repeated TagGroup tag_groups = 18 [(gogoproto.customname) = "TagGroups"];
+
   // Time when the span was started.
   google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
                                             (gogoproto.stdtime) = true];
@@ -103,7 +108,19 @@ message RecordedSpan {
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
+  // Next ID: 19
+
   reserved 5,10,11;
+}
+
+message TagGroup {
+  string name = 1;  // May be empty
+  repeated TagKV tags = 2;
+}
+
+message TagKV {
+  string key = 1;
+  string value = 2;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
@@ -113,7 +130,10 @@ message RecordedSpan {
 // See RecordedSpan for the description of the fields.
 message NormalizedSpan {
   string operation = 1;
-  map<string, string> tags = 2;
+  map<string, string> tags = 2;// Deprecated. Avoid new uses. Prefer tag_groups.
+  // tag_groups contains all the information in the v1 tags field, and will replace it.
+  // TODO(benbardin): Deprecate the tags field for 23.1.
+  repeated TagGroup tag_groups = 8 [(gogoproto.customname) = "TagGroups"];
   google.protobuf.Timestamp start_time = 3 [(gogoproto.nullable) = false,
                                            (gogoproto.stdtime) = true];
   google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,
@@ -121,4 +141,6 @@ message NormalizedSpan {
   repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
   repeated StructuredRecord structured_records = 7 [(gogoproto.nullable) = false];
   repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
+
+  // Next ID: 9
 }

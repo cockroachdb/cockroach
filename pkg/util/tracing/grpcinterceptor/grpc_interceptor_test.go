@@ -256,7 +256,8 @@ func TestGRPCInterceptors(t *testing.T) {
 			sp.ImportRemoteRecording([]tracingpb.RecordedSpan{rec})
 			var n int
 			finalRecs := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
-			for _, rec := range finalRecs {
+			for i := range finalRecs {
+				rec := &finalRecs[i]
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
 				// in this test we are pulling the recorder in the handler impl,
@@ -267,6 +268,19 @@ func TestGRPCInterceptors(t *testing.T) {
 				// the test.
 				delete(rec.Tags, "_unfinished")
 				delete(rec.Tags, "_verbose")
+				filteredTagGroups := make([]*tracingpb.TagGroup, 0)
+				for _, tagGroup := range rec.TagGroups {
+					name := tagGroup.GetName()
+					if name == "_unfinished" {
+						continue
+					}
+					if name == "_verbose" {
+						continue
+					}
+					filteredTagGroups = append(filteredTagGroups, tagGroup)
+				}
+
+				rec.TagGroups = filteredTagGroups
 			}
 			require.Equal(t, 1, n)
 
