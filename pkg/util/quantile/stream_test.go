@@ -229,3 +229,27 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("want 0, got %f", g)
 	}
 }
+
+func TestByteSize(t *testing.T) {
+	// Empty size is nonzero.
+	q := NewTargeted(Targets)
+	s0 := q.ByteSize()
+	if s0 <= 0 {
+		t.Errorf("want > 0, got %d", s0)
+	}
+
+	// Uncompressed size is greater than empty size.
+	for i := cap(q.b); i > 1; i-- {
+		q.Insert(float64(i))
+	}
+	s1 := q.ByteSize()
+	if s1 <= s0 {
+		t.Errorf("want > %d, got %d", s0, s1)
+	}
+
+	// Compressed size is less than uncompressed size.
+	q.Insert(float64(42))
+	if s := q.ByteSize(); s <= s0 || s1 <= s {
+		t.Errorf("want between (%d, %d), got %d", s0, s1, s)
+	}
+}
