@@ -94,10 +94,16 @@ func newDataDistribution(
 	// or the intent age. Such a knob would likely require decoupling intents from
 	// other keys.
 	var (
-		remaining  = totalKeys
-		key        roachpb.Key
-		seen       = map[string]struct{}{}
+		// Remaining values (all versions of all keys together with intents).
+		remaining = totalKeys
+		// Key for the objects currently emitted (if versions are not empty).
+		key roachpb.Key
+		// Set of key.String() to avoid generating data for the same key multiple
+		// times.
+		seen = map[string]struct{}{}
+		// Pending timestamps for current key sorted in ascending order.
 		timestamps []hlc.Timestamp
+		// If we should have an intent at the start of history.
 		haveIntent bool
 	)
 	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
@@ -105,6 +111,8 @@ func newDataDistribution(
 			return storage.MVCCKeyValue{}, nil, false
 		}
 		defer func() { remaining-- }()
+		// Loop because we can have duplicate keys or unacceptable values, in that
+		// case we retry key from scratch.
 		for len(timestamps) == 0 {
 			versions := versionsPerKey()
 			if versions == 0 {
@@ -115,6 +123,7 @@ func newDataDistribution(
 			}
 			timestamps = make([]hlc.Timestamp, 0, versions)
 			for i := 0; i < versions; i++ {
+				// Looks like we could have duplicate timestamps here.
 				timestamps = append(timestamps, tsDist())
 			}
 			sort.Slice(timestamps, func(i, j int) bool {
@@ -134,6 +143,7 @@ func newDataDistribution(
 		ts := timestamps[0]
 		timestamps = timestamps[1:]
 		var txn *roachpb.Transaction
+		// On the last version, we generate a transaction as needed.
 		if len(timestamps) == 0 && haveIntent {
 			txn = &roachpb.Transaction{
 				Status:                 roachpb.PENDING,
@@ -161,7 +171,7 @@ type distSpec interface {
 // uniformDistSpec is a distSpec which represents uniform distributions over its
 // various dimensions.
 type uniformDistSpec struct {
-	tsFrom, tsTo                     int64 // seconds
+	tsSecFrom, tsSecTo               int64 // seconds
 	keySuffixMin, keySuffixMax       int
 	valueLenMin, valueLenMax         int
 	deleteFrac                       float64
@@ -173,9 +183,9 @@ var _ distSpec = uniformDistSpec{}
 
 func (ds uniformDistSpec) dist(maxRows int, rng *rand.Rand) dataDistribution {
 	return newDataDistribution(
-		uniformTimestampDistribution(ds.tsFrom*time.Second.Nanoseconds(), ds.tsTo*time.Second.Nanoseconds(), rng),
-		uniformTableKeyDistribution(ds.desc().StartKey.AsRawKey(), ds.keySuffixMin, ds.keySuffixMax, rng),
-		uniformValueDistribution(ds.valueLenMin, ds.valueLenMax, ds.deleteFrac, rng),
+		uniformTimestampDistribution(ds.tsSecFrom*time.Second.Nanoseconds(), ds.tsSecTo*time.Second.Nanoseconds(), rng),
+		uniformTableStringKeyDistribution(ds.desc().StartKey.AsRawKey(), ds.keySuffixMin, ds.keySuffixMax, rng),
+		uniformValueStringDistribution(ds.valueLenMin, ds.valueLenMax, ds.deleteFrac, rng),
 		uniformValuesPerKey(ds.keysPerValueMin, ds.keysPerValueMax, rng),
 		ds.intentFrac,
 		maxRows,
@@ -198,7 +208,7 @@ func (ds uniformDistSpec) String() string {
 			"valueLen=[%d,%d],"+
 			"keysPerValue=[%d,%d],"+
 			"deleteFrac=%f,intentFrac=%f",
-		ds.tsFrom, ds.tsTo,
+		ds.tsSecFrom, ds.tsSecTo,
 		ds.keySuffixMin, ds.keySuffixMax,
 		ds.valueLenMin, ds.valueLenMax,
 		ds.keysPerValueMin, ds.keysPerValueMax,
@@ -239,6 +249,26 @@ func uniformValueDistribution(
 	}
 }
 
+const allowedPrintableAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// returns a uniform length random value distribution.
+func uniformValueStringDistribution(
+	min, max int, deleteFrac float64, rng *rand.Rand,
+) func() roachpb.Value {
+	if min > max {
+		panic(fmt.Errorf("min (%d) > max (%d)", min, max))
+	}
+	n := (max - min) + 1
+	return func() roachpb.Value {
+		if rng.Float64() < deleteFrac {
+			return roachpb.Value{}
+		}
+		var v roachpb.Value
+		v.SetString(randString(rng, min+rng.Intn(n), allowedPrintableAlphabet))
+		return v
+	}
+}
+
 func uniformValuesPerKey(valuesPerKeyMin, valuesPerKeyMax int, rng *rand.Rand) func() int {
 	if valuesPerKeyMin > valuesPerKeyMax {
 		panic(fmt.Errorf("min (%d) > max (%d)", valuesPerKeyMin, valuesPerKeyMax))
@@ -259,4 +289,28 @@ func uniformTableKeyDistribution(
 		_, _ = rng.Read(randData)
 		return encoding.EncodeBytesAscending(prefix[0:len(prefix):len(prefix)], randData)
 	}
+}
+
+func uniformTableStringKeyDistribution(
+	prefix roachpb.Key, suffixMin, suffixMax int, rng *rand.Rand,
+) func() roachpb.Key {
+	if suffixMin > suffixMax {
+		panic(fmt.Errorf("suffixMin (%d) > suffixMax (%d)", suffixMin, suffixMax))
+	}
+	n := (suffixMax - suffixMin) + 1
+	return func() roachpb.Key {
+		lenSuffix := suffixMin + rng.Intn(n)
+		key := randString(rng, lenSuffix, allowedPrintableAlphabet)
+		return encoding.EncodeBytesAscending(prefix[0:len(prefix):len(prefix)], []byte(key))
+	}
+}
+
+// RandString generates a random string of the desired length from the
+// input alphabet.
+func randString(rng *rand.Rand, length int, alphabet string) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	}
+	return string(buf)
 }
