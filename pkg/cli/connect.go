@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -143,7 +144,7 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 
 func validateConnectInitFlags(cmd *cobra.Command, requireExplicitFlags bool) error {
 	if requireExplicitFlags {
-		f := flagSetForCmd(cmd)
+		f := cliflagcfg.FlagSetForCmd(cmd)
 		if !(f.Lookup(cliflags.SingleNode.Name).Changed ||
 			(f.Lookup(cliflags.NumExpectedInitialNodes.Name).Changed && f.Lookup(cliflags.InitToken.Name).Changed)) {
 			return errors.Newf("either --%s must be passed, or both --%s and --%s",

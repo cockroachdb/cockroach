@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -323,7 +324,7 @@ func isSQLCommand(args []string) (bool, error) {
 		return false, err
 	}
 	// We use --echo-sql as a marker of SQL-only commands.
-	if f := flagSetForCmd(cmd).Lookup(cliflags.EchoSQL.Name); f != nil {
+	if f := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.EchoSQL.Name); f != nil {
 		return true, nil
 	}
 	return false, nil

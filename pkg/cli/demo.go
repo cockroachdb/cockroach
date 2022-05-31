@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -104,7 +105,7 @@ func init() {
 
 func incrementTelemetryCounters(cmd *cobra.Command) {
 	incrementDemoCounter(demo)
-	if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
+	if cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
 		incrementDemoCounter(nodes)
 	}
 	if demoCtx.Localities != nil {
@@ -121,7 +122,7 @@ func incrementTelemetryCounters(cmd *cobra.Command) {
 func checkDemoConfiguration(
 	cmd *cobra.Command, gen workload.Generator,
 ) (workload.Generator, error) {
-	f := flagSetForCmd(cmd)
+	f := cliflagcfg.FlagSetForCmd(cmd)
 	if gen == nil && !demoCtx.NoExampleDatabase {
 		// Use a default dataset unless prevented by --no-example-database.
 		gen = defaultGenerator

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -318,7 +319,7 @@ func initTempStorageConfig(
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
-	joinFlag := flagSetForCmd(cmd).Lookup(cliflags.Join.Name)
+	joinFlag := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name)
 	if joinFlag.Changed {
 		return errCannotUseJoin
 	}
@@ -449,7 +450,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	cgroups.AdjustMaxProcs(ctx)
 
 	// Check the --join flag.
-	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
+	if !cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
 		err := errors.WithHint(
 			errors.New("no --join flags provided to 'cockroach start'"),
 			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
@@ -1070,7 +1071,7 @@ func expandTabsInRedactableBytes(s redact.RedactableBytes) (redact.RedactableByt
 }
 
 func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
-	pf := flagSetForCmd(cmd)
+	pf := cliflagcfg.FlagSetForCmd(cmd)
 
 	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
 	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed
