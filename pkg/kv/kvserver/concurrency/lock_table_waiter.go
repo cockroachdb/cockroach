@@ -947,30 +947,30 @@ func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
 
 // tagContentionTracer is the tracing span tag that the *contentionEventTracer
 // lives under.
-const tagContentionTracer = "contention_tracer"
+const tagContentionTracer = "locks"
 
 // tagWaitKey is the tracing span tag indicating the key of the lock the request
 // is currently waiting on.
-const tagWaitKey = "lock_wait_key"
+const tagWaitKey = "wait_key"
 
 // tagWaitStart is the tracing span tag indicating when the request started
 // waiting on the lock it's currently waiting on.
-const tagWaitStart = "lock_wait_start"
+const tagWaitStart = "wait_start"
 
 // tagLockHolderTxn is the tracing span tag indicating the ID of the txn holding
 // the lock (or a reservation on the lock) that the request is currently waiting
 // on.
-const tagLockHolderTxn = "lock_holder_txn"
+const tagLockHolderTxn = "holder_txn"
 
 // tagNumLocks is the tracing span tag indicating the number of locks that the
 // request has previously waited on. If the request is currently waiting on
 // a lock, that lock is included.
-const tagNumLocks = "lock_num"
+const tagNumLocks = "num"
 
 // tagWaited is the tracing span tag indicating the total time that the span has
 // waited on locks. If the span is currently waiting on a lock, the time it has
 // already waited on that lock is included.
-const tagWaited = "lock_wait"
+const tagWaited = "wait"
 
 // contentionEventTracer adds lock contention information to the trace, in the
 // form of events and tags. The contentionEventTracer is associated with a

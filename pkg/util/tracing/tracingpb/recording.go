@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -253,18 +252,19 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	sb.SafeString("=== operation:")
 	sb.SafeString(redact.SafeString(sp.Operation))
 
-	tags := make([]string, 0, len(sp.Tags))
-	for k := range sp.Tags {
-		tags = append(tags, k)
+	for _, tg := range sp.TagGroups {
+		var prefix string
+		if tg.Name != "" {
+			prefix = fmt.Sprintf("%s-", tg.Name)
+		}
+		for _, tag := range tg.Tags {
+			sb.SafeRune(' ')
+			sb.SafeString(redact.SafeString(fmt.Sprintf("%s%s", prefix, tag.Key)))
+			sb.SafeRune(':')
+			_, _ = sb.WriteString(tag.Value)
+		}
 	}
-	sort.Strings(tags)
 
-	for _, k := range tags {
-		sb.SafeRune(' ')
-		sb.SafeString(redact.SafeString(k))
-		sb.SafeRune(':')
-		_, _ = sb.WriteString(sp.Tags[k])
-	}
 	ownLogs = append(ownLogs, conv(
 		sb.RedactableString(),
 		sp.StartTime,
@@ -350,12 +350,24 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	cpy := make(Recording, len(r))
 	copy(cpy, r)
 	r = cpy
-	tagsCopy := make(map[string]string)
-	for k, v := range r[0].Tags {
-		tagsCopy[k] = v
+
+	tagGroupsCopy := make([]TagGroup, len(r[0].TagGroups))
+	var anonymousTagGroup *TagGroup
+	for i, tg := range r[0].TagGroups {
+		tagGroupsCopy[i] = tg
+		if tagGroupsCopy[i].Name == "" {
+			anonymousTagGroup = &tagGroupsCopy[i]
+		}
 	}
-	tagsCopy["statement"] = stmt
-	r[0].Tags = tagsCopy
+	if anonymousTagGroup == nil {
+		tagGroupsCopy = append(tagGroupsCopy, TagGroup{})
+		anonymousTagGroup = &tagGroupsCopy[len(tagGroupsCopy)-1]
+	}
+	anonymousTagGroup.Tags = append(anonymousTagGroup.Tags, Tag{
+		Key:   "statement",
+		Value: stmt,
+	})
+	r[0].TagGroups = tagGroupsCopy
 
 	toJaegerSpanID := func(spanID SpanID) jaegerjson.SpanID {
 		return jaegerjson.SpanID(strconv.FormatUint(uint64(spanID), 10))
@@ -370,10 +382,17 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	// node present in the trace.
 	getProcessID := func(sp RecordedSpan) jaegerjson.ProcessID {
 		node := "unknown node"
-		for k, v := range sp.Tags {
-			if k == "node" {
-				node = fmt.Sprintf("node %s", v)
-				break
+		for _, tagGroup := range sp.TagGroups {
+			if tagGroup.Name != "" {
+				// We know this particular tag is in the anonymous tag group, so only
+				// search for that one.
+				continue
+			}
+			for _, tag := range tagGroup.Tags {
+				if tag.Key == "node" {
+					node = fmt.Sprintf("node %s", tag.Value)
+					break
+				}
 			}
 		}
 		// If we have passed in an explicit nodeStr then use that as a processID.
@@ -412,12 +431,18 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			}}
 		}
 
-		for k, v := range sp.Tags {
-			s.Tags = append(s.Tags, jaegerjson.KeyValue{
-				Key:   k,
-				Value: v,
-				Type:  "STRING",
-			})
+		for _, tagGroup := range sp.TagGroups {
+			for _, tag := range tagGroup.Tags {
+				var prefix string
+				if tagGroup.Name != "" {
+					prefix = fmt.Sprintf("%s-", tagGroup.Name)
+				}
+				s.Tags = append(s.Tags, jaegerjson.KeyValue{
+					Key:   fmt.Sprintf("%s%s", prefix, tag.Key),
+					Value: tag.Value,
+					Type:  "STRING",
+				})
+			}
 		}
 		for _, l := range sp.Logs {
 			jl := jaegerjson.Log{

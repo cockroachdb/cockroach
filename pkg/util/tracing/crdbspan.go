@@ -766,11 +766,35 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		rs.Finished = true
 	}
 
+	addTagGroup := func(name string) *tracingpb.TagGroup {
+		rs.TagGroups = append(rs.TagGroups,
+			tracingpb.TagGroup{
+				Name: name,
+			})
+		return &rs.TagGroups[len(rs.TagGroups)-1]
+	}
+
 	addTag := func(k, v string) {
 		if rs.Tags == nil {
 			rs.Tags = make(map[string]string)
 		}
 		rs.Tags[k] = v
+
+		var tagGroup *tracingpb.TagGroup
+		for i, tg := range rs.TagGroups {
+			if tg.Name == "" {
+				tagGroup = &rs.TagGroups[i]
+				break
+			}
+		}
+
+		if tagGroup == nil {
+			tagGroup = addTagGroup("")
+		}
+		tagGroup.Tags = append(tagGroup.Tags, tracingpb.Tag{
+			Key:   k,
+			Value: v,
+		})
 	}
 
 	// If the span is not verbose, optimize by avoiding the tags.
@@ -814,8 +838,19 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.lazyTags {
 			switch v := kv.Value.(type) {
 			case LazyTag:
+				tagGroup := addTagGroup(kv.Key)
 				for _, tag := range v.Render() {
-					addTag(string(tag.Key), tag.Value.Emit())
+					childKey := string(tag.Key)
+					childValue := tag.Value.Emit()
+
+					rs.Tags[childKey] = childValue
+
+					tagGroup.Tags = append(tagGroup.Tags,
+						tracingpb.Tag{
+							Key:   childKey,
+							Value: childValue,
+						},
+					)
 				}
 			case fmt.Stringer:
 				addTag(kv.Key, v.String())

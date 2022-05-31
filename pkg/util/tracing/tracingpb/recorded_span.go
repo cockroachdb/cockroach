@@ -64,6 +64,18 @@ func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
 	}
 }
 
+// FindTagGroup returns the tag group matching the supplied name, or nil if
+// the name is not found.
+func (s *RecordedSpan) FindTagGroup(name string) *TagGroup {
+	for i := range s.TagGroups {
+		tagGroup := &s.TagGroups[i]
+		if tagGroup.Name == name {
+			return tagGroup
+		}
+	}
+	return nil
+}
+
 // Msg extracts the message of the LogRecord, which is either in an "event" or
 // "error" field.
 func (l LogRecord) Msg() redact.RedactableString {
@@ -96,4 +108,15 @@ func (r *StructuredRecord) MemorySize() int {
 	return 3*8 + // 3 words for time.Time
 		1*8 + // 1 words for *Any
 		r.Payload.Size() // TODO(andrei): this is the encoded size, not the mem size
+}
+
+// FindTag returns the value matching the supplied key, or nil if the key is
+// not found.
+func (tg *TagGroup) FindTag(key string) (string, bool) {
+	for _, tag := range tg.Tags {
+		if tag.Key == key {
+			return tag.Value, true
+		}
+	}
+	return "", false
 }

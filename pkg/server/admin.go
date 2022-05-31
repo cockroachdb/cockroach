@@ -3570,6 +3570,29 @@ func (s *adminServer) TakeTracingSnapshot(
 	return resp, nil
 }
 
+func getSpanTag(t tracingui.ProcessedTag) *serverpb.SpanTag {
+	processedChildren := make([]*serverpb.ChildSpanTag, len(t.Children))
+	for i, child := range t.Children {
+		processedChildren[i] = &serverpb.ChildSpanTag{
+			Key: child.Key,
+			Val: child.Val,
+		}
+	}
+	return &serverpb.SpanTag{
+		Key:             t.Key,
+		Val:             t.Val,
+		Caption:         t.Caption,
+		Link:            t.Link,
+		Hidden:          t.Hidden,
+		Highlight:       t.Highlight,
+		Inherit:         t.Inherit,
+		Inherited:       t.Inherited,
+		PropagateUp:     t.PropagateUp,
+		CopiedFromChild: t.CopiedFromChild,
+		Children:        processedChildren,
+	}
+}
+
 // GetTracingSnapshot returns a snapshot of the tracing spans in the active
 // spans registry previously generated through TakeTracingSnapshots.
 func (s *adminServer) GetTracingSnapshot(
@@ -3596,18 +3619,7 @@ func (s *adminServer) GetTracingSnapshot(
 	for i, s := range spansList.Spans {
 		tags := make([]*serverpb.SpanTag, len(s.Tags))
 		for j, t := range s.Tags {
-			tags[j] = &serverpb.SpanTag{
-				Key:             t.Key,
-				Val:             t.Val,
-				Caption:         t.Caption,
-				Link:            t.Link,
-				Hidden:          t.Hidden,
-				Highlight:       t.Highlight,
-				Inherit:         t.Inherit,
-				Inherited:       t.Inherited,
-				PropagateUp:     t.PropagateUp,
-				CopiedFromChild: t.CopiedFromChild,
-			}
+			tags[j] = getSpanTag(t)
 		}
 
 		spans[i] = &serverpb.TracingSpan{
