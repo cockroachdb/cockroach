@@ -12,6 +12,8 @@ package concurrency
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // MaxLockWaitQueueLength sets the maximum length of a lock wait-queue that a
@@ -182,33 +185,46 @@ func (m *managerImpl) SequenceReq(
 	ctx context.Context, prev *Guard, req Request, evalKind RequestEvalKind,
 ) (*Guard, Response, *Error) {
 	var g *Guard
+	var branch int
 	if prev == nil {
 		switch evalKind {
 		case PessimisticEval:
+			branch = 1
 			log.Event(ctx, "sequencing request")
 		case OptimisticEval:
+			branch = 2
 			log.Event(ctx, "optimistically sequencing request")
 		case PessimisticAfterFailedOptimisticEval:
+			branch = 3
 			panic("retry should have non-nil guard")
+		default:
+			branch = 4
+			panic("unexpected evalKind")
 		}
 		g = newGuard(req)
 	} else {
 		g = prev
 		switch evalKind {
 		case PessimisticEval:
+			branch = 5
 			g.AssertNoLatches()
 			log.Event(ctx, "re-sequencing request")
 		case OptimisticEval:
+			branch = 6
 			panic("optimistic eval cannot happen when re-sequencing")
 		case PessimisticAfterFailedOptimisticEval:
+			branch = 7
 			if !shouldIgnoreLatches(g.Req) {
 				g.AssertLatches()
 			}
 			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
+		default:
+			branch = 8
+			panic("unexpected evalKind")
 		}
 	}
 	g.EvalKind = evalKind
-	resp, err := m.sequenceReqWithGuard(ctx, g)
+	resp, err := m.sequenceReqWithGuard(ctx, g, branch)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
 		m.FinishReq(g)
@@ -217,7 +233,9 @@ func (m *managerImpl) SequenceReq(
 	return g, nil, nil
 }
 
-func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Response, *Error) {
+func (m *managerImpl) sequenceReqWithGuard(
+	ctx context.Context, g *Guard, branch int,
+) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
 	if shouldIgnoreLatches(g.Req) {
 		log.Event(ctx, "not acquiring latches")
@@ -269,7 +287,10 @@ func (m *managerImpl) sequenceReqWithGuard(ctx context.Context, g *Guard) (Respo
 				panic(errors.AssertionFailedf("second or later iteration cannot be holding latches"))
 			}
 			if g.EvalKind != PessimisticAfterFailedOptimisticEval {
-				panic("must not be holding latches")
+				panic(redact.Safe(fmt.Sprintf("must not be holding latches\n"+
+					"this is tracked in github.com/cockroachdb/cockroach/issues/77663; please comment if seen\n"+
+					"eval_kind=%d, holding_latches=%t, branch=%d, first_iteration=%t, stack=\n%s",
+					g.EvalKind, g.HoldingLatches(), branch, firstIteration, string(debug.Stack()))))
 			}
 			log.Event(ctx, "optimistic failed, so waiting for latches")
 			g.lg, err = m.lm.WaitUntilAcquired(ctx, g.lg)
