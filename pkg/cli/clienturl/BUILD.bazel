@@ -5,11 +5,11 @@ go_library(
     srcs = [
         "client_url.go",
         "doc.go",
-        "flags.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/clienturl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cli/cliflagcfg",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlshell",
         "//pkg/security/clientsecopts",

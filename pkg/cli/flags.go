@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -116,7 +117,7 @@ func AddPersistentPreRunE(cmd *cobra.Command, fn func(*cobra.Command, []string) 
 // See context.go to initialize defaults.
 func stringFlag(f *pflag.FlagSet, valPtr *string, flagInfo cliflags.FlagInfo) {
 	f.StringVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, *valPtr, flagInfo.Usage())
-	registerEnvVarDefault(f, flagInfo)
+	cliflagcfg.RegisterEnvVarDefault(f, flagInfo)
 }
 
 // intFlag creates an int flag and registers it with the FlagSet.
@@ -124,7 +125,7 @@ func stringFlag(f *pflag.FlagSet, valPtr *string, flagInfo cliflags.FlagInfo) {
 // See context.go to initialize defaults.
 func intFlag(f *pflag.FlagSet, valPtr *int, flagInfo cliflags.FlagInfo) {
 	f.IntVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, *valPtr, flagInfo.Usage())
-	registerEnvVarDefault(f, flagInfo)
+	cliflagcfg.RegisterEnvVarDefault(f, flagInfo)
 }
 
 // boolFlag creates a bool flag and registers it with the FlagSet.
@@ -132,7 +133,7 @@ func intFlag(f *pflag.FlagSet, valPtr *int, flagInfo cliflags.FlagInfo) {
 // See context.go to initialize defaults.
 func boolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo) {
 	f.BoolVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, *valPtr, flagInfo.Usage())
-	registerEnvVarDefault(f, flagInfo)
+	cliflagcfg.RegisterEnvVarDefault(f, flagInfo)
 }
 
 // durationFlag creates a duration flag and registers it with the FlagSet.
@@ -140,7 +141,7 @@ func boolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo) {
 // See context.go to initialize defaults.
 func durationFlag(f *pflag.FlagSet, valPtr *time.Duration, flagInfo cliflags.FlagInfo) {
 	f.DurationVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, *valPtr, flagInfo.Usage())
-	registerEnvVarDefault(f, flagInfo)
+	cliflagcfg.RegisterEnvVarDefault(f, flagInfo)
 }
 
 // varFlag creates a custom-variable flag and registers it with the FlagSet.
@@ -148,7 +149,7 @@ func durationFlag(f *pflag.FlagSet, valPtr *time.Duration, flagInfo cliflags.Fla
 // See context.go to initialize defaults.
 func varFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 	f.VarP(value, flagInfo.Name, flagInfo.Shorthand, flagInfo.Usage())
-	registerEnvVarDefault(f, flagInfo)
+	cliflagcfg.RegisterEnvVarDefault(f, flagInfo)
 }
 
 // stringSliceFlag creates a string slice flag and registers it with the FlagSet.
@@ -156,7 +157,7 @@ func varFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 // See context.go to initialize defaults.
 func stringSliceFlag(f *pflag.FlagSet, valPtr *[]string, flagInfo cliflags.FlagInfo) {
 	f.StringSliceVar(valPtr, flagInfo.Name, *valPtr, flagInfo.Usage())
-	registerEnvVarDefault(f, flagInfo)
+	cliflagcfg.RegisterEnvVarDefault(f, flagInfo)
 }
 
 // aliasStrVar wraps a string configuration option and is meant
@@ -257,7 +258,7 @@ func (f *keyTypeFilter) Set(v string) error {
 
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
-func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet { return clienturl.FlagSetForCmd(cmd) }
+func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet { return cliflagcfg.FlagSetForCmd(cmd) }
 
 func init() {
 	initCLIDefaults()
@@ -1046,59 +1047,6 @@ func (w *tenantIDWrapper) Set(s string) error {
 
 func (w *tenantIDWrapper) Type() string {
 	return "number"
-}
-
-// processEnvVarDefaults injects the current value of flag-related
-// environment variables into the initial value of the settings linked
-// to the flags, during initialization and before the command line is
-// actually parsed. For example, it will inject the value of
-// $COCKROACH_URL into the urlParser object linked to the --url flag.
-func processEnvVarDefaults(cmd *cobra.Command) error {
-	fl := flagSetForCmd(cmd)
-
-	var retErr error
-	fl.VisitAll(func(f *pflag.Flag) {
-		envv, ok := f.Annotations[envValueAnnotationKey]
-		if !ok || len(envv) < 2 {
-			// No env var associated. Nothing to do.
-			return
-		}
-		varName, value := envv[0], envv[1]
-		if err := fl.Set(f.Name, value); err != nil {
-			retErr = errors.CombineErrors(retErr,
-				errors.Wrapf(err, "setting --%s from %s", f.Name, varName))
-		}
-	})
-	return retErr
-}
-
-const (
-	// envValueAnnotationKey is the map key used in pflag.Flag instances
-	// to associate flags with a possible default value set by an
-	// env var.
-	envValueAnnotationKey = "envvalue"
-)
-
-// registerEnvVarDefault registers a deferred initialization of a flag
-// from an environment variable.
-// The caller is responsible for ensuring that the flagInfo has been
-// defined in the FlagSet already.
-func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
-	if flagInfo.EnvVar == "" {
-		return
-	}
-
-	value, set := envutil.EnvString(flagInfo.EnvVar, 2)
-	if !set {
-		// Env var is not set. Nothing to do.
-		return
-	}
-
-	if err := f.SetAnnotation(flagInfo.Name, envValueAnnotationKey, []string{flagInfo.EnvVar, value}); err != nil {
-		// This should never happen: an error is only returned if the flag
-		// name was not defined yet.
-		panic(err)
-	}
 }
 
 // extraServerFlagInit configures the server.Config based on the command-line flags.

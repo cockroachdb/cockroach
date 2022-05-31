@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -96,7 +97,7 @@ func doMain(cmd *cobra.Command, cmdName string) error {
 		// This must occur before the parameters are parsed by cobra, so
 		// that the command-line flags can override the defaults in
 		// environment variables.
-		if err := processEnvVarDefaults(cmd); err != nil {
+		if err := cliflagcfg.ProcessEnvVarDefaults(cmd); err != nil {
 			return err
 		}
 

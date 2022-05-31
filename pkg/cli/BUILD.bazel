@@ -103,6 +103,7 @@ go_library(
         "//pkg/cli/clienturl",
         "//pkg/cli/clierror",
         "//pkg/cli/clierrorplus",
+        "//pkg/cli/cliflagcfg",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlcfg",
         "//pkg/cli/clisqlclient",
