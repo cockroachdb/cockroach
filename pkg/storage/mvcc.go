@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -83,6 +84,26 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		}
 		return max
 	}())
+
+// TODO(irfansharif): Export byte equivalents for these?
+
+// ExportBlockCacheHits captures the number of block cache hits observed while
+// exporting to SSTs.
+var ExportBlockCacheHits = metric.NewCounter(metric.Metadata{
+	Name:        "export.block.cache.hits",
+	Help:        "Count of block cache hits for export requests",
+	Measurement: "Cache Ops",
+	Unit:        metric.Unit_COUNT,
+})
+
+// ExportBlockCacheMisses captures the number of block cache misses observed
+// while exporting to SSTs.
+var ExportBlockCacheMisses = metric.NewCounter(metric.Metadata{
+	Name:        "export.block.cache.misses",
+	Help:        "Count of block cache misses for export requests",
+	Measurement: "Cache Ops",
+	Unit:        metric.Unit_COUNT,
+})
 
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {

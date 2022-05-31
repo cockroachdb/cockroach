@@ -2321,6 +2321,29 @@ func pebbleExportToSst(
 			IntentPolicy:                        MVCCIncrementalIterIntentPolicyAggregate,
 		})
 	defer iter.Close()
+	defer func() {
+		iterStats := iter.iter.Stats()
+		if options.UseTBI { // TODO(irfansharif): Define this as a .Merge() on pebble.IteratorStats.
+			timeBoundIterStats := iter.timeBoundIter.Stats()
+
+			for _, statsKind := range []pebble.IteratorStatsKind{
+				pebble.InterfaceCall,
+				pebble.InternalIterCall,
+			} {
+				iterStats.Stats.ForwardSeekCount[statsKind] += timeBoundIterStats.Stats.ForwardSeekCount[statsKind]
+				iterStats.Stats.ReverseSeekCount[statsKind] += timeBoundIterStats.Stats.ReverseSeekCount[statsKind]
+				iterStats.Stats.ForwardStepCount[statsKind] += timeBoundIterStats.Stats.ForwardStepCount[statsKind]
+				iterStats.Stats.ReverseStepCount[statsKind] += timeBoundIterStats.Stats.ReverseStepCount[statsKind]
+			}
+			iterStats.Stats.InternalStats.Merge(timeBoundIterStats.Stats.InternalStats)
+			iterStats.TimeBoundNumSSTs += timeBoundIterStats.TimeBoundNumSSTs
+		}
+		// TODO(irfansharif): These are badly type-cast.
+		ExportBlockCacheHits.Inc(int64(iterStats.Stats.InternalStats.BlocksInCache))
+		ExportBlockCacheMisses.Inc(int64(iterStats.Stats.InternalStats.Blocks - iterStats.Stats.InternalStats.BlocksInCache))
+		recordIteratorStats(span, iterStats)
+	}()
+
 	var curKey roachpb.Key // only used if exportAllRevisions
 	var resumeKey roachpb.Key
 	var resumeTS hlc.Timestamp
