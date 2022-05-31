@@ -191,7 +191,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	}
 	s = zr.start("using SQL address: %s", sqlAddr.AddressField)
 
-	cliCtx.clientConnHost, cliCtx.clientConnPort, err = net.SplitHostPort(sqlAddr.AddressField)
+	cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr.AddressField)
 	if err != nil {
 		return s.fail(err)
 	}

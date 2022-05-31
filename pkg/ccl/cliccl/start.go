@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,7 @@ var storeEncryptionSpecs baseccl.StoreEncryptionSpecList
 
 func init() {
 	for _, cmd := range cli.StartCmds {
-		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+		cliflagcfg.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 		// Add a new pre-run command to match encryption specs to store specs.
 		cli.AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
