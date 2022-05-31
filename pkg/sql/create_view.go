@@ -439,13 +439,13 @@ func replaceSeqNamesWithIDs(
 		if err != nil {
 			return false, expr, err
 		}
-		seqNameToID := make(map[string]int64)
+		seqNameToID := make(map[string]descpb.ID)
 		for _, seqIdentifier := range seqIdentifiers {
 			seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
 			if err != nil {
 				return false, expr, err
 			}
-			seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+			seqNameToID[seqIdentifier.SeqName] = seqDesc.ID
 		}
 		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtinsregistry.GetBuiltinProperties)
 		if err != nil {

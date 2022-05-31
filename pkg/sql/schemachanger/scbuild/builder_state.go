@@ -415,7 +415,7 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 		if err != nil {
 			panic(err)
 		}
-		seqNameToID := make(map[string]int64)
+		seqNameToID := make(map[string]descpb.ID)
 		for _, seqIdentifier := range seqIdentifiers {
 			if seqIdentifier.IsByID() {
 				seqIDs.Add(catid.DescID(seqIdentifier.SeqID))
@@ -430,7 +430,7 @@ func (b *builderState) WrapExpression(parentID catid.DescID, expr tree.Expr) *sc
 				RequiredPrivilege:   privilege.SELECT,
 			})
 			_, _, seq := scpb.FindSequence(elts)
-			seqNameToID[seqIdentifier.SeqName] = int64(seq.SequenceID)
+			seqNameToID[seqIdentifier.SeqName] = seq.SequenceID
 			seqIDs.Add(seq.SequenceID)
 		}
 		if len(seqNameToID) > 0 {

@@ -86,4 +86,8 @@ const (
 	// dropping a schema, we'd mark the database itself as though it was the
 	// schema which was dropped.
 	RemovedSelfEntryInSchemas
+
+	// UpgradedSequenceReference indicates that the table/view had upgraded
+	// their sequence references, if any, from by-name to by-ID, if not already.
+	UpgradedSequenceReference
 )
