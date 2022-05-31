@@ -81,6 +81,7 @@ go_library(
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/rewrite",
         "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",

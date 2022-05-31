@@ -38,8 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -863,6 +865,10 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 	for j, desc := range descs {
 		var b catalog.DescriptorBuilder
 		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
+			// Attempt to upgrade sequence references to by-ID. It's possible that this process might error out
+			// (e.g. referenced sequence cannot be found in `descs` because we only restore a table while this
+			// table references a sequence) but we should continue, so we ignore the error here.
+			_ = maybeUpgradeSequenceReferenceInRelation(descs, tableDesc)
 			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
 		} else {
 			b = desc.NewBuilder()
@@ -883,6 +889,41 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 		}
 		descs[j] = b.BuildExistingMutable()
 	}
+	return nil
+}
+
+// maybeUpgradeSequenceReferenceInRelation attempts to update by-name sequence references in
+// `rel` to by-ID references, if any.
+// `descs` are all descriptors present when the backup is taken. We will use it to help with
+// sequence name resolution (i.e. the question of what is the sequence ID given the sequence's
+// name).
+func maybeUpgradeSequenceReferenceInRelation(
+	descs []catalog.Descriptor, rel catalog.TableDescriptor,
+) error {
+	// A look-up structure of all descriptors, so we can look up a descriptor either by name or by ID.
+	descLookup := &nstree.Map{}
+	for _, d := range descs {
+		descLookup.Upsert(d)
+	}
+
+	// Upgrade by-name sequence references in this table descriptor, if any.
+	upgradedSeqIDs, err := seqexpr.MaybeUpgradeSequenceReferenceToByID(descLookup, rel.TableDesc())
+	if err != nil {
+		return err
+	}
+
+	// Don't forget to modify those upgraded sequence descriptors as well to indicate that they
+	// are now referenced by ID!
+	for _, seqID := range upgradedSeqIDs {
+		if seqDesc, isTable := descLookup.GetByID(seqID).(catalog.TableDescriptor); isTable && seqDesc.IsSequence() {
+			for i, ref := range seqDesc.TableDesc().DependedOnBy {
+				if ref.ID == rel.GetID() {
+					seqDesc.TableDesc().DependedOnBy[i].ByID = true
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
