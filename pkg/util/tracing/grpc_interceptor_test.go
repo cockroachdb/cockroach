@@ -266,6 +266,8 @@ func TestGRPCInterceptors(t *testing.T) {
 				// the test.
 				delete(rec.Tags, "_unfinished")
 				delete(rec.Tags, "_verbose")
+				delete(rec.TagsV2, "_unfinished")
+				delete(rec.TagsV2, "_verbose")
 			}
 			require.Equal(t, 1, n)
 

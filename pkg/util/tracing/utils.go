@@ -41,6 +41,7 @@ func normalizeSpan(s tracingpb.RecordedSpan, trace Recording) tracingpb.Normaliz
 	n.StartTime = s.StartTime
 	n.Duration = s.Duration
 	n.Tags = s.Tags
+	n.TagsV2 = s.TagsV2
 	n.Logs = s.Logs
 	n.StructuredRecords = s.StructuredRecords
 
