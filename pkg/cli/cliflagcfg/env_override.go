@@ -25,16 +25,16 @@ const (
 	envValueAnnotationKey = "envvalue"
 )
 
-// RegisterEnvVarDefault registers a deferred initialization of a flag
+// registerEnvVarDefault registers a deferred initialization of a flag
 // from an environment variable.
 // The caller is responsible for ensuring that the flagInfo has been
 // defined in the FlagSet already.
-func RegisterEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
+func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo, depth int) {
 	if flagInfo.EnvVar == "" {
 		return
 	}
 
-	value, set := envutil.EnvString(flagInfo.EnvVar, 2)
+	value, set := envutil.EnvString(flagInfo.EnvVar, depth+1)
 	if !set {
 		// Env var is not set. Nothing to do.
 		return
