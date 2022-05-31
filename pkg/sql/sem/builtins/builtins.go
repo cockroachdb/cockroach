@@ -5668,6 +5668,9 @@ value if you rely on the HLC for accuracy.`,
 				// TODO(jordan): need to re-evaluate when we support more than just
 				// trigram inverted indexes.
 				// The version argument is currently ignored for string inverted indexes.
+				if args[0] == tree.DNull {
+					return tree.DZero, nil
+				}
 				s := string(tree.MustBeDString(args[0]))
 				return tree.NewDInt(tree.DInt(len(trigram.MakeTrigrams(s, true /* pad */)))), nil
 			},
