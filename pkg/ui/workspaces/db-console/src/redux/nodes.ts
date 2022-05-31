@@ -506,8 +506,15 @@ export const numNodesByVersionsSelector = createSelector(
 export const singleVersionSelector = createSelector(
   versionsSelector,
   builds => {
-    if (!builds || builds.length !== 1) {
+    if (!builds) {
       return undefined;
+    }
+    if (builds.length > 1) {
+      const lowestVersion = _.chain(builds)
+        .sortBy(b => b)
+        .first()
+        .value();
+      return `${lowestVersion} - Mixed Versions`;
     }
     return builds[0];
   },
