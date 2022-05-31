@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -123,7 +124,31 @@ type SSTBatcher struct {
 func MakeSSTBatcher(
 	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	b := &SSTBatcher{
+		db:       db,
+		settings: settings,
+		maxSize:  flushBytes,
+		// disallowShadowing is set to `false` in release builds because RESTORE,
+		// who is the sole user of the returned SSTBatcher, is expected to ingest
+		// into an empty keyspace. If a restore job is resumed, the un-checkpointed
+		// spans that are re-ingested will perfectly shadow (equal key, value and
+		// ts) the already ingested keys.
+		//
+		// NB: disallowShadowing used to be set to `true` because it was believed
+		// that the even across resumptions of a restore job,
+		// `checkForKeyCollisions` would be inexpensive because of our frequent job
+		// checkpointing. Further investigation in
+		// https://github.com/cockroachdb/cockroach/issues/81116 revealed that our
+		// progress checkpointing could significantly lag behind the spans we have
+		// ingested, making a resumed restore spend a lot of time in
+		// `checkForKeyCollisions` leading to severely degraded performance. We have
+		// *never* seen a restore fail because of the invariant enforced when
+		// `disallowShadowing` is set to true, and so we feel comfortable flipping
+		// this check to false. A future version will work on fixing our progress
+		// checkpointing so that we do not have a buildup of un-checkpointed work,
+		// at which point we can reassess flipping `disallowShadowing` to true.
+		disallowShadowing: !build.IsRelease(),
+	}
 	err := b.Reset(ctx)
 	return b, err
 }
