@@ -173,8 +173,8 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	}
 }
 
-// addGeoSpatialIndexes is used to add index candidates on the columns of spatial functions if the expr
-// argument can be cast to a *memo.FunctionExpr
+// addGeoSpatialIndexes is used to add single-column indexes to inverted candidates for queries which use spatial
+// functions that can be index-accelerated.
 func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
 	switch expr := expr.(type) {
 	case *memo.FunctionExpr:
@@ -397,18 +397,8 @@ func addIndexToCandidates(
 		return
 	}
 
-	// Now we are adding indexes for geospatial indexes: removed the short circuit
-	//// Do not add indexes on spatial columns.
-	//// TODO(rytaft): Support spatial predicates like st_contains() etc.
-	//for _, indexCol := range newIndex {
-	//	colFamily := indexCol.Column.DatumType().Family()
-	//	if colFamily == types.GeometryFamily || colFamily == types.GeographyFamily {
-	//		return
-	//	}
-	//}
-
+	// Note: Spatial indexes columns are now added for index recommendation.
 	// Do not add duplicate indexes.
-	// Note: spatial indexes are added and supported in index recommendation
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {
 			continue
