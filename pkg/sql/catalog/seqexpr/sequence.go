@@ -18,11 +18,14 @@ package seqexpr
 import (
 	"go/constant"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // SeqIdentifier wraps together different ways of identifying a sequence.
@@ -186,4 +189,143 @@ func ReplaceSequenceNamesWithIDs(
 
 	newExpr, err := tree.SimpleVisit(defaultExpr, replaceFn)
 	return newExpr, err
+}
+
+// UpgradeSequenceReferenceInExpr upgrades all by-name reference in `expr` to by-ID.
+// The name to ID resolution logic is aided by injecting a set of sequence names
+// (`allUsedSeqNames`). This set is expected to contain names of all sequences used
+// in `expr`, so all we need to do is to match each by-name seq reference in `expr`
+// to one entry in `allUsedSeqNames`.
+func UpgradeSequenceReferenceInExpr(
+	expr *string, allUsedSeqNames map[descpb.ID]*tree.TableName,
+) (hasUpgraded bool, err error) {
+	// Find all sequence references in `expr`.
+	parsedExpr, err := parser.ParseExpr(*expr)
+	if err != nil {
+		return hasUpgraded, err
+	}
+	seqRefs, err := GetUsedSequences(parsedExpr)
+	if err != nil {
+		return hasUpgraded, err
+	}
+
+	// Construct the key mapping from seq-by-name-reference to their IDs.
+	seqByNameRefToID := make(map[string]int64)
+	for _, seqIdentifier := range seqRefs {
+		if seqIdentifier.IsByID() {
+			continue
+		}
+
+		parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
+		if err != nil {
+			return hasUpgraded, err
+		}
+		seqByNameRefInTableName := parsedSeqName.ToTableName()
+
+		// Pairing: find out which sequence name in `allUsedSeqNames` matches
+		// `seqByNameRefInTableName` so we know the ID of this seq identifier.
+		idOfSeqIdentifier, err := findUniqueBestMatchingForTableName(allUsedSeqNames, seqByNameRefInTableName)
+		if err != nil {
+			return hasUpgraded, err
+		}
+
+		seqByNameRefToID[seqIdentifier.SeqName] = int64(idOfSeqIdentifier)
+	}
+
+	// With this name-to-ID mapping, we can upgrade `expr`.
+	newExpr, err := ReplaceSequenceNamesWithIDs(parsedExpr, seqByNameRefToID)
+	if err != nil {
+		return hasUpgraded, err
+	}
+
+	// Modify `expr` in place, if any upgrade.
+	if *expr != tree.Serialize(newExpr) {
+		hasUpgraded = true
+		*expr = tree.Serialize(newExpr)
+	}
+
+	return hasUpgraded, nil
+}
+
+// findUniqueBestMatchingForTableName picks the "best-matching" name from `allTableNamesByID` for `tableName`.
+// The best-matching name is the one that matches all parts of `tableName`.
+//
+// Example 1:
+// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'db.sc2.t'}
+//		tableName = 'sc2.t'
+//		return = 25 (because `db.sc2.t` best-matches `sc2.t`)
+// Example 2:
+// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
+//		tableName = 'sc2.t'
+//		return = 25 (because `sc2.t` best-matches `sc2.t`)
+//
+// It returns a non-nill error if `tableName` does not uniquely match a name in `allTableNamesByID`.
+//
+// Example 3:
+// 		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
+//		tableName = 't'
+//		return = non-nil error (because both 'sc1.t' and 'sc2.t' are equally good matches
+//	 			for 't' and we cannot decide,	i.e., >1 valid candidates left.)
+// Example 4:
+// 		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
+//		tableName = 't2'
+//		return = non-nil error (because neither 'sc1.t' nor 'sc2.t' matches 't2', that is, 0 valid candidate left)
+func findUniqueBestMatchingForTableName(
+	allTableNamesByID map[descpb.ID]*tree.TableName, targetTableName tree.TableName,
+) (descpb.ID, error) {
+	candidates := make(map[descpb.ID]*tree.TableName)
+
+	// Get all candidates whose table name is equal to `t`.
+	t := targetTableName.Table()
+	if t == "" {
+		return descpb.InvalidID, errors.AssertionFailedf("input tableName does not have a Table field.")
+	}
+	for id, tableName := range allTableNamesByID {
+		if tableName.Table() == t {
+			candidates[id] = tableName
+		}
+	}
+	if len(candidates) == 0 {
+		return descpb.InvalidID, errors.AssertionFailedf("no table name found to match input %v", t)
+	}
+
+	// Eliminate candidates whose schema is not equal to `sc`.
+	sc := targetTableName.Schema()
+	if sc != "" {
+		for id, candidateTableName := range candidates {
+			if candidateTableName.Schema() != sc {
+				delete(candidates, id)
+			}
+		}
+	}
+	// Eliminate candidates whose catalog is not equal to `db`.
+	db := targetTableName.Catalog()
+	if db != "" {
+		for id, candidateTableName := range candidates {
+			if candidateTableName.Catalog() != db {
+				delete(candidates, id)
+			}
+		}
+	}
+
+	// There should be only one candidate left; Return errors accordingly if not.
+	if len(candidates) == 0 {
+		return descpb.InvalidID, errors.AssertionFailedf("no table name found to match input %v", t)
+	}
+
+	if len(candidates) > 1 {
+		candidateTableNames := make([]string, 0)
+		for _, candidateTableName := range candidates {
+			candidateTableNames = append(candidateTableNames, candidateTableName.String())
+		}
+		return descpb.InvalidID, errors.AssertionFailedf("more than 1 matches found for %v: %v",
+			targetTableName.String(), candidateTableNames)
+	}
+
+	// Get that only one candidate and return.
+	var result descpb.ID
+	for id := range candidates {
+		result = id
+	}
+	return result, nil
 }

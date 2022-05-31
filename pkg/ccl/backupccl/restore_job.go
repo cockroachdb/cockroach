@@ -426,7 +426,6 @@ func loadBackupSQLDescs(
 		}
 	}
 
-	var sqlDescs []catalog.Descriptor
 	for _, desc := range allDescs {
 		id := desc.GetID()
 		switch desc := desc.(type) {
@@ -435,14 +434,18 @@ func loadBackupSQLDescs(
 				desc.SetRegionConfig(m.RegionConfig)
 			}
 		}
-		if _, ok := details.DescriptorRewrites[id]; ok {
-			sqlDescs = append(sqlDescs, desc)
-		}
 	}
 
-	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
+	if err := maybeUpgradeDescriptors(allDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
 		mem.Shrink(ctx, sz)
 		return nil, backuppb.BackupManifest{}, nil, 0, err
+	}
+
+	var sqlDescs []catalog.Descriptor
+	for _, desc := range allDescs {
+		if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
+			sqlDescs = append(sqlDescs, desc)
+		}
 	}
 
 	return backupManifests, latestBackupManifest, sqlDescs, sz, nil

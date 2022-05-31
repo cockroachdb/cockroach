@@ -92,4 +92,8 @@ const (
 	// The stable cast was rewritten so that it would no longer cause
 	// inconsistencies when DateStyle/IntervalStyle is enabled.
 	FixedDateStyleIntervalStyleCast
+
+	// UpgradedSequenceReference indicates that the table/view had upgraded
+	// their sequence references, if any, from by-name to by-ID, if not already.
+	UpgradedSequenceReference
 )
