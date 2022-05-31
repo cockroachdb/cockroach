@@ -12,9 +12,11 @@ package outliers
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/stretchr/testify/require"
 )
@@ -61,6 +63,138 @@ func TestAnyDetector(t *testing.T) {
 		require.True(t, d1.isOutlierCalled, "the first detector should be consulted")
 		require.True(t, d2.isOutlierCalled, "the second detector should be consulted")
 	})
+}
+
+type IsOutlierTestCase struct {
+	name             string
+	seedLatency      time.Duration
+	candidateLatency time.Duration
+	isOutlier        bool
+}
+
+type MetricsTestCase struct {
+	name         string
+	fingerprints int
+	assertion    func(*testing.T, Metrics)
+}
+
+func TestLatencyQuantileDetector(t *testing.T) {
+	t.Run("enabled false by default", func(t *testing.T) {
+		d := newLatencyQuantileDetector(cluster.MakeTestingClusterSettings(), NewMetrics())
+		require.False(t, d.enabled())
+	})
+
+	t.Run("enabled true by cluster setting", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		d := newLatencyQuantileDetector(st, NewMetrics())
+		LatencyQuantileDetectorEnabled.Override(context.Background(), &st.SV, true)
+		require.True(t, d.enabled())
+	})
+
+	t.Run("isOutlier", func(t *testing.T) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		LatencyQuantileDetectorEnabled.Override(ctx, &st.SV, true)
+		LatencyQuantileDetectorInterestingThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
+
+		tests := []IsOutlierTestCase{{
+			name:             "false with normal latency",
+			seedLatency:      100 * time.Millisecond,
+			candidateLatency: 100 * time.Millisecond,
+			isOutlier:        false,
+		}, {
+			name:             "true with higher latency",
+			seedLatency:      100 * time.Millisecond,
+			candidateLatency: 200 * time.Millisecond,
+			isOutlier:        true,
+		}, {
+			name:             "false with higher latency under interesting threshold",
+			seedLatency:      10 * time.Millisecond,
+			candidateLatency: 20 * time.Millisecond,
+			isOutlier:        false,
+		}}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				d := newLatencyQuantileDetector(st, NewMetrics())
+				for i := 0; i < 1000; i++ {
+					d.isOutlier(&Outlier_Statement{LatencyInSeconds: test.seedLatency.Seconds()})
+				}
+				require.Equal(t, test.isOutlier, d.isOutlier(&Outlier_Statement{LatencyInSeconds: test.candidateLatency.Seconds()}))
+			})
+		}
+	})
+
+	t.Run("metrics", func(t *testing.T) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		LatencyQuantileDetectorEnabled.Override(ctx, &st.SV, true)
+		LatencyQuantileDetectorMemoryCap.Override(ctx, &st.SV, 1024)
+
+		tests := []MetricsTestCase{{
+			name:         "reports distinct fingerprints",
+			fingerprints: 1,
+			assertion: func(t *testing.T, metrics Metrics) {
+				require.Equal(t, int64(1), metrics.Fingerprints.Value())
+			},
+		}, {
+			// Each Stream with one observation requires ~104 bytes,
+			// so the 20 Streams here will consume ~2 kilobytes of memory,
+			// surpassing the above 1 kilobyte cap and triggering some evictions.
+			// We don't assume a precise number of evictions because platform
+			// differences may lead to different memory usage calculations.
+			name:         "reports distinct fingerprints, taking eviction into account",
+			fingerprints: 20,
+			assertion: func(t *testing.T, metrics Metrics) {
+				require.Less(t, metrics.Fingerprints.Value(), int64(20))
+			},
+		}, {
+			name:         "reports memory usage",
+			fingerprints: 1,
+			assertion: func(t *testing.T, metrics Metrics) {
+				require.Greater(t, metrics.Memory.Value(), int64(0))
+			},
+		}, {
+			name:         "reports memory usage, taking eviction into account",
+			fingerprints: 20,
+			assertion: func(t *testing.T, metrics Metrics) {
+				require.LessOrEqual(t, metrics.Memory.Value(), int64(1024))
+			},
+		}, {
+			name:         "reports evictions",
+			fingerprints: 20,
+			assertion: func(t *testing.T, metrics Metrics) {
+				require.Greater(t, metrics.Evictions.Count(), int64(0))
+			},
+		}}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				metrics := NewMetrics()
+				d := newLatencyQuantileDetector(st, metrics)
+				// Show the detector `test.fingerprints` distinct fingerprints.
+				for i := 0; i < test.fingerprints; i++ {
+					d.isOutlier(&Outlier_Statement{
+						LatencyInSeconds: LatencyQuantileDetectorInterestingThreshold.Get(&st.SV).Seconds(),
+						FingerprintID:    roachpb.StmtFingerprintID(i),
+					})
+				}
+				test.assertion(t, metrics)
+			})
+		}
+	})
+}
+
+// dev bench pkg/sql/sqlstats/outliers  --bench-mem --verbose
+// BenchmarkLatencyQuantileDetector-16    	 1589583	       701.1 ns/op	      24 B/op	       1 allocs/op
+func BenchmarkLatencyQuantileDetector(b *testing.B) {
+	random := rand.New(rand.NewSource(42))
+	settings := cluster.MakeTestingClusterSettings()
+	LatencyQuantileDetectorEnabled.Override(context.Background(), &settings.SV, true)
+	d := newLatencyQuantileDetector(settings, NewMetrics())
+	for i := 0; i < b.N; i++ {
+		d.isOutlier(&Outlier_Statement{
+			LatencyInSeconds: random.Float64(),
+		})
+	}
 }
 
 func TestLatencyThresholdDetector(t *testing.T) {

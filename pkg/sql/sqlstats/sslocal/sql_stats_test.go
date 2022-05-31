@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -440,6 +441,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		nil, /* curMemoryBytesCount */
 		nil, /* maxMemoryBytesHist */
+		outliers.NewMetrics(),
 		monitor,
 		nil, /* reportingSink */
 		nil, /* knobs */
@@ -553,6 +555,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			sqlstats.MaxMemSQLStatsTxnFingerprints,
 			nil,
 			nil,
+			outliers.NewMetrics(),
 			monitor,
 			nil,
 			nil,
