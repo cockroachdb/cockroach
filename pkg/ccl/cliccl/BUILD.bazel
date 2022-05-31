@@ -24,6 +24,7 @@ go_library(
         "//pkg/ccl/workloadccl/cliccl",
         "//pkg/cli",
         "//pkg/cli/clierrorplus",
+        "//pkg/cli/cliflagcfg",
         "//pkg/cli/cliflags",
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster",
