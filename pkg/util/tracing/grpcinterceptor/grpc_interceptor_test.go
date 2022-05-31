@@ -256,7 +256,8 @@ func TestGRPCInterceptors(t *testing.T) {
 			sp.ImportRemoteRecording([]tracingpb.RecordedSpan{rec})
 			var n int
 			finalRecs := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
-			for _, rec := range finalRecs {
+			for i := range finalRecs {
+				rec := &finalRecs[i]
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
 				// in this test we are pulling the recorder in the handler impl,
@@ -265,8 +266,22 @@ func TestGRPCInterceptors(t *testing.T) {
 				// it's not worth having to have a separate expectation for each.
 				// Note that we check that we're not leaking spans at the end of
 				// the test.
-				delete(rec.Tags, "_unfinished")
-				delete(rec.Tags, "_verbose")
+				anonymousTagGroup := rec.FindTagGroup("")
+				if anonymousTagGroup == nil {
+					continue
+				}
+
+				filteredAnonymousTags := make([]tracingpb.Tag, 0)
+				for _, tag := range anonymousTagGroup.Tags {
+					if tag.Key == "_unfinished" {
+						continue
+					}
+					if tag.Key == "_verbose" {
+						continue
+					}
+					filteredAnonymousTags = append(filteredAnonymousTags, tag)
+				}
+				anonymousTagGroup.Tags = filteredAnonymousTags
 			}
 			require.Equal(t, 1, n)
 
@@ -288,7 +303,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
 					rec := sp.GetFullRecording(tracingpb.RecordingVerbose)[0]
-					return errors.Newf("leaked span: %s %s", rec.Operation, rec.Tags)
+					return errors.Newf("leaked span: %s %s", rec.Operation, rec.TagGroups)
 				})
 			})
 		})

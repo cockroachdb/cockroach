@@ -60,6 +60,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		rec := mkRec()
 		require.NoError(t, redactRecordingForTenant(roachpb.MakeTenantID(100), rec))
 		require.Zero(t, rec[0].Tags)
+		require.Zero(t, rec[0].TagGroups)
 		require.Len(t, rec[0].Logs, 1)
 		msg := rec[0].Logs[0].Msg().StripMarkers()
 		t.Log(msg)
@@ -78,6 +79,24 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			"tag_not_sensitive":          tagNotSensitive,
 			"tag_sensitive":              tagSensitive,
 		}, rec[0].Tags)
+		require.Equal(t, []tracingpb.Tag{
+			{
+				Key:   "_verbose",
+				Value: "1",
+			},
+			{
+				Key:   "tag_sensitive",
+				Value: tagSensitive,
+			},
+			{
+				Key:   "tag_not_sensitive",
+				Value: tagNotSensitive,
+			},
+			{
+				Key:   "all_span_tags_are_stripped",
+				Value: "because_no_redactability",
+			},
+		}, rec[0].TagGroups[0].Tags)
 		require.Len(t, rec[0].Logs, 1)
 		msg := rec[0].Logs[0].Msg().StripMarkers()
 		t.Log(msg)
@@ -99,6 +118,7 @@ func TestRedactRecordingForTenant(t *testing.T) {
 			ParentSpanID      tracingpb.SpanID
 			Operation         string
 			Tags              map[string]string
+			TagGroups         []tracingpb.TagGroup
 			StartTime         time.Time
 			Duration          time.Duration
 			RedactableLogs    bool
