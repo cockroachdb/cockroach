@@ -17,9 +17,12 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
         "//pkg/util/cache",
+        "//pkg/util/metric",
+        "//pkg/util/quantile",
         "//pkg/util/syncutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
