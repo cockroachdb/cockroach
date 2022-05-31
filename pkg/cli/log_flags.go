@@ -13,10 +13,12 @@ package cli
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -43,6 +45,10 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	if cliCtx.deprecatedLogOverrides.anySet() &&
 		cliCtx.logConfigInput.isSet {
 		return errors.Newf("--%s is incompatible with legacy discrete logging flags", cliflags.Log.Name)
+	}
+
+	if err := validateLogConfigVars(cmd); err != nil {
+		return errors.Wrap(err, "invalid logging configuration")
 	}
 
 	// Sanity check to prevent misuse of API.
@@ -118,7 +124,12 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	// If a configuration was specified via --log, load it.
 	if cliCtx.logConfigInput.isSet {
-		if err := h.Set(cliCtx.logConfigInput.s); err != nil {
+		s := cliCtx.logConfigInput.s
+		if cliCtx.logConfigVars.isSet {
+			s = expandEnvironmentVariables(s, cliCtx.logConfigVars.val)
+		}
+
+		if err := h.Set(s); err != nil {
 			return err
 		}
 		if h.Config.FileDefaults.Dir != nil {
@@ -398,6 +409,33 @@ func (l fileContentsValue) Type() string { return "<file>" }
 // String implements the pflag.Value interface.
 func (l fileContentsValue) String() string { return l.fileName }
 
+// settableSlice represents a slice that can be set from the command line.
+type settableSlice struct {
+	val   []string
+	isSet bool
+}
+
+type sliceValue struct {
+	*settableSlice
+}
+
+// String implements the pflag.Value interface.
+func (s sliceValue) String() string {
+	return strings.Join(s.val, ",")
+}
+
+// Type implements the pflag.Value interface.
+func (s sliceValue) Type() string { return "slice" }
+
+// Set implements the pflag.Value interface.
+func (s *sliceValue) Set(v string) error {
+	s.val = splitCommaSeparatedValues(v)
+	s.isSet = true
+	return nil
+}
+
+var _ flag.Value = (*sliceValue)(nil)
+
 // settableBool represents a boolean that can be set from the command line.
 type settableBool struct {
 	val   bool
@@ -456,3 +494,39 @@ sinks:
     max-file-size: 102400
     max-group-size: 1048576
 `
+
+func splitCommaSeparatedValues(v string) []string {
+	parts := strings.Split(strings.TrimSpace(v), ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+// validateLogConfigVars return an error if any of the passed logging
+// configuration variables are are not permissible. For security, variables
+// that start with COCKROACH_ are explicitly disallowed. See #81146 for more.
+func validateLogConfigVars(cmd *cobra.Command) error {
+	f := flagSetForCmd(cmd)
+	val := f.Lookup(cliflags.LogConfigVars.Name).Value.String()
+	vars := splitCommaSeparatedValues(val)
+	for _, v := range vars {
+		if strings.HasPrefix(strings.ToUpper(v), "COCKROACH_") {
+			return errors.Newf("use of %s is not allowed as a logging configuration variables", v)
+		}
+	}
+	return nil
+}
+
+// expandEnvironmentVariables replaces variables used in s with their values
+// pulled from the environment.
+func expandEnvironmentVariables(s string, vars []string) string {
+	for _, k := range vars {
+		val := os.Getenv(k)
+		// Replace $ENV_VAR and ${ENV_VAR} syntaxes.
+		s = strings.ReplaceAll(s, fmt.Sprintf("$%s", k), val)
+		s = strings.ReplaceAll(s, fmt.Sprintf("${%s}", k), val)
+	}
+
+	return s
+}
