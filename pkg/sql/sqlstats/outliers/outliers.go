@@ -12,15 +12,18 @@ package outliers
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	prometheus "github.com/prometheus/client_model/go"
 )
 
 // LatencyThreshold configures the execution time beyond which a statement is
@@ -34,6 +37,89 @@ var LatencyThreshold = settings.RegisterDurationSetting(
 	"amount of time after which an executing statement is considered an outlier. Use 0 to disable.",
 	0,
 )
+
+// LatencyQuantileDetectionEnabled turns on a per-fingerprint heuristic-based
+// algorithm for marking statements as outliers, attempting to capture elevated
+// p99 latency while generally excluding uninteresting executions less than
+// 100ms.
+var LatencyQuantileDetectionEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.outliers.experimental.latency_quantile_detection.enabled",
+	"enable per-fingerprint latency recording and outlier detection",
+	false,
+)
+
+// LatencyQuantileDetectorInterestingThreshold sets the bar above which
+// statements are considered "interesting" from an outliers perspective. A
+// statement's latency must first cross this threshold before we begin tracking
+// further execution latencies for its fingerprint (this is a memory
+// optimization), and any potential outlier execution must also cross this
+// threshold to be reported (this is a UX optimization, removing noise).
+var LatencyQuantileDetectorInterestingThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stats.outliers.experimental.latency_quantile_detection.interesting_threshold",
+	"statements must surpass this threshold to trigger outlier detection and identification",
+	100*time.Millisecond,
+	settings.NonNegativeDuration,
+)
+
+// LatencyQuantileDetectorMemoryCap restricts the overall memory available for
+// tracking per-statement execution latencies. When changing this setting, keep
+// an eye on the metrics for memory usage and evictions to avoid introducing
+// churn.
+var LatencyQuantileDetectorMemoryCap = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"sql.stats.outliers.experimental.latency_quantile_detection.memory_limit",
+	"the maximum amount of memory allowed for tracking statement latencies",
+	1024*1024,
+	settings.NonNegativeInt,
+)
+
+// Metrics holds running measurements of various outliers-related runtime stats.
+type Metrics struct {
+	// Fingerprints measures the number of statement fingerprints being monitored for
+	// outlier detection.
+	Fingerprints *metric.Gauge
+
+	// Memory measures the memory used in support of outlier detection.
+	Memory *metric.Gauge
+
+	// Evictions counts fingerprint latency summaries discarded due to memory
+	// pressure.
+	Evictions *metric.Counter
+}
+
+// MetricStruct marks Metrics for automatic member metric registration.
+func (Metrics) MetricStruct() {}
+
+var _ metric.Struct = Metrics{}
+
+// NewMetrics builds a new instance of our Metrics struct.
+func NewMetrics() *Metrics {
+	return &Metrics{
+		Fingerprints: metric.NewGauge(metric.Metadata{
+			Name:        "sql.stats.outliers.latency_quantile_detector.fingerprints",
+			Help:        "Current number of statement fingerprints being monitored for outlier detection",
+			Measurement: "Fingerprints",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  prometheus.MetricType_GAUGE,
+		}),
+		Memory: metric.NewGauge(metric.Metadata{
+			Name:        "sql.stats.outliers.latency_quantile_detector.memory",
+			Help:        "Current memory used to support outlier detection",
+			Measurement: "Memory",
+			Unit:        metric.Unit_BYTES,
+			MetricType:  prometheus.MetricType_GAUGE,
+		}),
+		Evictions: metric.NewCounter(metric.Metadata{
+			Name:        "sql.stats.outliers.latency_quantile_detector.evictions",
+			Help:        "Evictions of fingerprint latency summaries due to memory pressure",
+			Measurement: "Evictions",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  prometheus.MetricType_COUNTER,
+		}),
+	}
+}
 
 // maxCacheSize is the number of detected outliers we will retain in memory.
 // We choose a small value for the time being to allow us to iterate without
@@ -59,14 +145,18 @@ type Registry struct {
 }
 
 // New builds a new Registry.
-func New(st *cluster.Settings) *Registry {
+func New(st *cluster.Settings, metrics *Metrics) *Registry {
 	config := cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, key, value interface{}) bool {
 			return size > maxCacheSize
 		},
 	}
-	r := &Registry{detector: anyDetector{detectors: []detector{latencyThresholdDetector{st: st}}}}
+	r := &Registry{
+		detector: anyDetector{detectors: []detector{
+			latencyThresholdDetector{st: st},
+			newLatencyQuantileDetector(st, metrics),
+		}}}
 	r.mu.statements = make(map[clusterunique.ID][]*Outlier_Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
@@ -119,6 +209,11 @@ func (r *Registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUI
 	}
 }
 
+// TODO(todd):
+//   Once we can handle sufficient throughput to live on the hot
+//   execution path in #81021, we can probably get rid of this external
+//   concept of "enabled" and let the detectors just decide for themselves
+//   internally.
 func (r *Registry) enabled() bool {
 	return r.detector.enabled()
 }

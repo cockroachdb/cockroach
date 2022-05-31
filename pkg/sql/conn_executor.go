@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -338,6 +339,9 @@ type ServerMetrics struct {
 	// ContentionSubsystemMetrics contains metrics related to contention
 	// subsystem.
 	ContentionSubsystemMetrics txnidcache.Metrics
+
+	// OutliersMetrics contains metrics related to outlier detection.
+	OutliersMetrics outliers.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -351,6 +355,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
+		&serverMetrics.OutliersMetrics,
 		pool,
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
@@ -363,6 +368,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
 		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
+		&serverMetrics.OutliersMetrics,
 		pool,
 		reportedSQLStats,
 		cfg.SQLStatsTestingKnobs,
@@ -476,6 +482,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			),
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
+		OutliersMetrics:            *outliers.NewMetrics(),
 	}
 }
 

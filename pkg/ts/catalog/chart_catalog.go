@@ -2105,6 +2105,22 @@ var charts = []sectionDescription{
 				Metrics: []string{"sql.stats.txn_stats_collection.duration"},
 			},
 		},
+	}, {
+		Organization: [][]string{{SQLLayer, "SQL Stats", "Outliers"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Number of statement fingerprints being monitored for outlier detection",
+				Metrics: []string{"sql.stats.outliers.latency_quantile_detector.fingerprints"},
+			},
+			{
+				Title:   "Current memory used to support outlier detection",
+				Metrics: []string{"sql.stats.outliers.latency_quantile_detector.memory"},
+			},
+			{
+				Title:   "Evictions of fingerprint latency summaries due to memory pressure",
+				Metrics: []string{"sql.stats.outliers.latency_quantile_detector.evictions"},
+			},
+		},
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Contention"}},
