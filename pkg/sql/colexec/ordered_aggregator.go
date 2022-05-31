@@ -134,6 +134,7 @@ type orderedAggregator struct {
 	seenNonEmptyBatch bool
 	datumAlloc        tree.DatumAlloc
 	toClose           colexecop.Closers
+	cancelChecker     colexecutils.CancelChecker
 }
 
 var _ colexecop.ResettableOperator = &orderedAggregator{}
@@ -179,11 +180,13 @@ func (a *orderedAggregator) Init(ctx context.Context) {
 	}
 	a.Input.Init(a.Ctx)
 	a.bucket.init(a.bucket.fns, a.aggHelper.makeSeenMaps(), a.groupCol)
+	a.cancelChecker.Init(ctx)
 }
 
 func (a *orderedAggregator) Next() coldata.Batch {
 	stateAfterOutputting := orderedAggregatorUnknown
 	for {
+		a.cancelChecker.CheckEveryCall()
 		switch a.state {
 		case orderedAggregatorAggregating:
 			if a.scratch.shouldResetInternalBatch {
