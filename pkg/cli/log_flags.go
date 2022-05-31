@@ -17,9 +17,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -43,6 +45,10 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	if cliCtx.deprecatedLogOverrides.anySet() &&
 		cliCtx.logConfigInput.isSet {
 		return errors.Newf("--%s is incompatible with legacy discrete logging flags", cliflags.Log.Name)
+	}
+
+	if err := validateLogConfigVars(cliCtx.logConfigVars); err != nil {
+		return errors.Wrap(err, "invalid logging configuration")
 	}
 
 	// Sanity check to prevent misuse of API.
@@ -118,7 +124,17 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	// If a configuration was specified via --log, load it.
 	if cliCtx.logConfigInput.isSet {
-		if err := h.Set(cliCtx.logConfigInput.s); err != nil {
+		s := cliCtx.logConfigInput.s
+
+		if len(cliCtx.logConfigVars) > 0 {
+			var err error
+			s, err = expandEnvironmentVariables(s, cliCtx.logConfigVars)
+			if err != nil {
+				return errors.Wrap(err, "unable to expand environment variables")
+			}
+		}
+
+		if err := h.Set(s); err != nil {
 			return err
 		}
 		if h.Config.FileDefaults.Dir != nil {
@@ -456,3 +472,45 @@ sinks:
     max-file-size: 102400
     max-group-size: 1048576
 `
+
+// validateLogConfigVars return an error if any of the passed logging
+// configuration variables are are not permissible. For security, variables
+// that start with COCKROACH_ are explicitly disallowed. See #81146 for more.
+func validateLogConfigVars(vars []string) error {
+	for _, v := range vars {
+		if strings.HasPrefix(strings.ToUpper(v), "COCKROACH_") {
+			return errors.Newf("use of %s is not allowed as a logging configuration variable", v)
+		}
+	}
+	return nil
+}
+
+// expandEnvironmentVariables replaces variables used in string with their
+// values pulled from the environment. If there are variables in the string
+// that are not contained in vars, they will be replaced with the empty string.
+func expandEnvironmentVariables(s string, vars []string) (string, error) {
+	var err error
+
+	m := map[string]string{}
+	// Only pull variable values from the environment if their key is present
+	// in vars to create an allow list.
+	for _, k := range vars {
+		v, ok := envutil.ExternalEnvString(k, 1)
+		if !ok {
+			err = errors.CombineErrors(err, errors.Newf("variable %q is not defined in environment", k))
+			continue
+		}
+		m[k] = v
+	}
+
+	s = os.Expand(s, func(k string) string {
+		v, ok := m[k]
+		if !ok {
+			err = errors.CombineErrors(err, errors.Newf("unknown variable %q used in configuration", k))
+			return ""
+		}
+		return v
+	})
+
+	return s, err
+}
