@@ -13,6 +13,8 @@ package upgrades_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -99,31 +101,90 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		{"100", "0", "true"},
 	})
 
-	for i := 0; i < numUsers; i++ {
-		tdb.Exec(t, fmt.Sprintf(`CREATE USER testuser%d`, i))
+	if numUsers > 100 {
+		// Always create first user as testuser0.
+		tdb.Exec(t, `INSERT INTO system.users VALUES ('testuser0', NULL, false)`)
+		numUsers += 1
+		var wg sync.WaitGroup
+		wg.Add(100)
+		// Make creating users faster.
+		for i := 0; i < 100; i++ {
+			// Each goroutine creates 100 users.
+			capI := i
+			go func() {
+				defer wg.Done()
+				// This is hacky but INSERT into is faster
+				// than CREATE USER due to not having schema
+				// changes. This really affect our migration
+				// so let's insert to go faster.
+				for j := 0; j < numUsers/100; j++ {
+					tdb.Exec(t, fmt.Sprintf(`INSERT INTO system.users VALUES ('testuser%dx%d', '', false)`, capI, j))
+				}
+			}()
+		}
+		wg.Wait()
+	} else {
+		for i := 0; i < numUsers; i++ {
+			tdb.Exec(t, fmt.Sprintf(`CREATE USER testuser%d`, i))
+		}
 	}
 
+	if numUsers > 100 {
+		// Create other users in parallel while the migration is happening.
+		go func() {
+			for i := 0; i < 1000; i++ {
+				tdb.Exec(t, fmt.Sprintf(`CREATE USER parallel_user_creation_%d`, i))
+			}
+		}()
+	}
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.SystemUsersUserIDMigration).String())
+		clusterversion.ByKey(clusterversion.AddSystemUserIDColumn).String())
+	require.NoError(t, err)
+
+	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+		clusterversion.ByKey(clusterversion.UsersHaveIDs).String())
 	require.NoError(t, err)
 
 	tdb.CheckQueryResults(t, `SELECT * FROM system.users WHERE user_id IS NULL`, [][]string{})
 	tdb.Exec(t, `CREATE USER testuser_last`)
-	tdb.CheckQueryResults(t, `SELECT * FROM system.users WHERE username IN ('admin', 'root', 'testuser0', 'testuser_last')`, [][]string{
-		{"admin", "", "true", "2"},
-		{"root", "", "false", "1"},
-		{"testuser0", "NULL", "false", "101"},
-		{"testuser_last", "NULL", "false", fmt.Sprint(101 + numUsers)},
-	})
+
+	if numUsers <= 100 {
+		tdb.CheckQueryResults(t, `SELECT * FROM system.users WHERE username IN ('admin', 'root', 'testuser0', 'testuser_last')`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+			{"testuser0", "NULL", "false", "100"},
+			{"testuser_last", "NULL", "false", fmt.Sprint(100 + numUsers)},
+		})
+	} else {
+		// When we create more than 100 users, we also concurrency
+		// create some users which makes the id of testuser_last
+		// non-deterministic.
+		tdb.CheckQueryResults(t, `SELECT * FROM system.users WHERE username IN ('admin', 'root')`, [][]string{
+			{"admin", "", "true", "2"},
+			{"root", "", "false", "1"},
+		})
+		tdb.CheckQueryResults(t, `SELECT user_id > 100000 FROM system.users WHERE username = 'testuser_last'`, [][]string{
+			{"true"},
+		})
+	}
+
+	modifiedSystemUsersSchema := strings.Replace(strings.TrimPrefix(strings.Replace(systemschema.UsersTableSchema, "\n  ", "\n	", -1), "\n"), "system.users", "public.users", -1)
+	tdb.CheckQueryResults(t, `SELECT CONCAT(create_statement, ';') FROM system.crdb_internal.create_statements WHERE descriptor_id = 4`,
+		[][]string{{modifiedSystemUsersSchema}})
+
 }
 
 func TestRoleIDMigration1User(t *testing.T) {
 	runTestRoleIDMigration(t, 1)
 }
 
-func TestRoleIDMigration10000Users(t *testing.T) {
+func TestRoleIDMigration100User(t *testing.T) {
+	runTestRoleIDMigration(t, 100)
+}
+
+func TestRoleIDMigration100000Users(t *testing.T) {
 	skip.UnderStress(t)
-	runTestRoleIDMigration(t, 10000)
+	runTestRoleIDMigration(t, 100000)
 }
 
 func getDeprecatedSystemUsersTable() *descpb.TableDescriptor {
@@ -152,7 +213,7 @@ func getDeprecatedSystemUsersTable() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"username"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		NextIndexID:      2,

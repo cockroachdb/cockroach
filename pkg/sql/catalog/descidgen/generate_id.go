@@ -44,3 +44,17 @@ func PeekNextUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 	}
 	return descpb.ID(v.ValueInt()), nil
 }
+
+func GenerateUniqueRoleID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (int64, error) {
+	return IncrementUniqueRoleID(ctx, db, codec, 1)
+}
+
+func IncrementUniqueRoleID(
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, inc int64,
+) (int64, error) {
+	newVal, err := kv.IncrementValRetryable(ctx, db, codec.SequenceKey(keys.RoleIDSequenceID), inc)
+	if err != nil {
+		return 0, err
+	}
+	return newVal - inc, nil
+}

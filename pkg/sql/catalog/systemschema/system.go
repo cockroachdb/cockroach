@@ -55,16 +55,20 @@ CREATE TABLE system.descriptor (
   CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
+	// UsersTableSchema represents the system.users table.
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username         STRING,
-  "hashedPassword" BYTES,
-  "isRole"         BOOL NOT NULL DEFAULT false,
-	user_id          OID NOT NULL DEFAULT oid(nextval(48:::OID)),
-  CONSTRAINT "primary" PRIMARY KEY (username),
-	INDEX (user_id)
+  username STRING NOT NULL,
+  "hashedPassword" BYTES NULL,
+  "isRole" BOOL NOT NULL DEFAULT false,
+  user_id OID NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (username ASC),
+  UNIQUE INDEX users_user_id_idx (user_id ASC),
+  FAMILY "primary" (username),
+  FAMILY "fam_2_hashedPassword" ("hashedPassword"),
+  FAMILY "fam_3_isRole" ("isRole"),
+  FAMILY fam_4_user_id (user_id)
 );`
-
 	RoleOptionsTableSchema = `
 CREATE TABLE system.role_options (
 	username STRING NOT NULL,
@@ -104,6 +108,8 @@ CREATE TABLE system.tenants (
 	FAMILY "primary" (id, active, info)
 );`
 
+	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
+	// roles such as root and admin.
 	RoleIDSequenceSchema = `
 CREATE SEQUENCE system.role_id_seq START 100;`
 )
@@ -877,10 +883,9 @@ var (
 			pk("id"),
 		))
 
-	falseBoolString  = "false"
-	trueBoolString   = "true"
-	zeroIntString    = "0:::INT8"
-	genNextOIDString = "oid(nextval(48:::OID))"
+	falseBoolString = "false"
+	trueBoolString  = "true"
+	zeroIntString   = "0:::INT8"
 
 	// UsersTable is the descriptor for the users table.
 	UsersTable = registerSystemTable(
@@ -892,7 +897,7 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
-				{Name: "user_id", ID: 4, Type: types.Oid, DefaultExpr: &genNextOIDString, UsesSequenceIds: []descpb.ID{keys.RoleIDSequenceID}},
+				{Name: "user_id", ID: 4, Type: types.Oid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
@@ -909,6 +914,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             3,
+				Unique:              true,
 			},
 		))
 
@@ -1032,8 +1038,8 @@ var (
 		func(tbl *descpb.TableDescriptor) {
 			opts := &descpb.TableDescriptor_SequenceOpts{
 				Increment: 1,
-				MinValue:  1,
-				MaxValue:  math.MaxInt64,
+				MinValue:  100,
+				MaxValue:  math.MaxInt32,
 				Start:     100,
 				CacheSize: 1,
 			}
