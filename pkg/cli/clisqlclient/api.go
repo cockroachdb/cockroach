@@ -14,7 +14,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
-	"reflect"
 	"time"
 )
 
@@ -108,10 +107,6 @@ type Rows interface {
 	// The implementation of this method should cache the result so that the
 	// result does not need to be constructed on each invocation.
 	Columns() []string
-
-	// ColumnTypeScanType returns the natural Go type of values at the
-	// given column index.
-	ColumnTypeScanType(index int) reflect.Type
 
 	// ColumnTypeDatabaseTypeName returns the database type name
 	// of the column at the given column index.
