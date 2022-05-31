@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cliflagcfg",
+    srcs = [
+        "doc.go",
+        "env_override.go",
+        "flags.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/cliflags",
+        "//pkg/util/envutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
