@@ -486,6 +486,27 @@ func setupDMSEndpointsAndTask(
 			return err
 		}
 		*ep.arn = *epOut.Endpoint.EndpointArn
+
+		t.L().Printf("testing replication endpoint %s", *ep.in.EndpointIdentifier)
+		r := retry.StartWithCtx(ctx, retry.Options{
+			InitialBackoff: 30 * time.Second,
+			MaxBackoff:     time.Minute,
+			MaxRetries:     10,
+		})
+		var lastErr error
+		for r.Next() {
+			_, lastErr = dmsCli.TestConnection(ctx, &dms.TestConnectionInput{
+				EndpointArn:            epOut.Endpoint.EndpointArn,
+				ReplicationInstanceArn: proto.String(replicationARN),
+			})
+			if lastErr == nil {
+				break
+			}
+			t.L().Printf("replication endpoint test failed, retrying: %s", lastErr)
+		}
+		if lastErr != nil {
+			return lastErr
+		}
 	}
 
 	t.L().Printf("creating replication task")
