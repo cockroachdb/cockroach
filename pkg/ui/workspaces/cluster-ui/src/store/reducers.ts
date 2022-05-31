@@ -29,6 +29,10 @@ import {
   SQLDetailsStatsReducerState,
   reducer as sqlDetailsStats,
 } from "./statementDetails";
+import {
+  IndexStatsReducerState,
+  reducer as indexStats,
+} from "./indexStats/indexStats.reducer";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -40,6 +44,7 @@ export type AdminUiState = {
   uiConfig: UIConfigState;
   sqlStats: SQLStatsState;
   sqlDetailsStats: SQLDetailsStatsReducerState;
+  indexStats: IndexStatsReducerState;
 };
 
 export type AppState = {
@@ -56,6 +61,7 @@ export const reducers = combineReducers<AdminUiState>({
   uiConfig,
   sqlStats,
   sqlDetailsStats,
+  indexStats,
 });
 
 export const rootActions = {
