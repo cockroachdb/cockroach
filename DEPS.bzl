@@ -1347,10 +1347,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "d9f3208c0bb38558acffd03addd6a057891665dc58c47c07ef0a4c8c6bfbb130",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220523221036-bb2c1501ac23",
+        sha256 = "29fe49c8883700c53b98b5ae85c35bb1a711166033ba068b82ab79b2c1679407",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220527231317-d5bc42c2884b",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220523221036-bb2c1501ac23.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220527231317-d5bc42c2884b.zip",
         ],
     )
     go_repository(
@@ -4001,10 +4001,10 @@ def go_deps():
         name = "com_github_hdrhistogram_hdrhistogram_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/HdrHistogram/hdrhistogram-go",
-        sha256 = "12281e93a8cf983caec3286e00eadb1475bddad684226015ab96979012f55ac9",
-        strip_prefix = "github.com/HdrHistogram/hdrhistogram-go@v1.1.0",
+        sha256 = "bbc1d64d3179248c78ffa3729ad2ab696ed1ff14874f37d8d4fc4a5a235fa77f",
+        strip_prefix = "github.com/HdrHistogram/hdrhistogram-go@v1.1.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/HdrHistogram/hdrhistogram-go/com_github_hdrhistogram_hdrhistogram_go-v1.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/HdrHistogram/hdrhistogram-go/com_github_hdrhistogram_hdrhistogram_go-v1.1.2.zip",
         ],
     )
     go_repository(
