@@ -10,7 +10,7 @@ go_library(
         "descriptor_id_set.go",
         "errors.go",
         "global_privilege.go",
-        "post_derserialization_changes.go",
+        "post_deserialization_changes.go",
         "privilege_object.go",
         "schema.go",
         "system_table.go",
