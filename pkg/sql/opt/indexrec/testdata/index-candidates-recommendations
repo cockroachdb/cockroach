@@ -1780,6 +1780,8 @@ exec-ddl
 DROP INDEX t1@expr
 ----
 
+# Test spatial index recommendations
+# Ensure that geospatial indexes are added as candidates
 index-candidates
 SELECT * FROM t5 WHERE geom1 IS NULL
 ----
@@ -1792,6 +1794,7 @@ SELECT * FROM t5 WHERE geog1 IS NULL
 t5:
  (geog1)
 
+# For queries that use index accelerated geospatial functions, recommend geospatial index
 index-candidates
 SELECT * FROM t5 WHERE st_covers(geom1, 'POINT(0 0 0 0)')
 ----
@@ -1929,6 +1932,7 @@ t5:
  (geom1)
  (geom11)
 
+# For other functions or other spatial functions that do not use index accelerated geospatial functions, do not recommend geospatial index
 index-candidates
 SELECT * FROM t5 WHERE st_hasarc(geom1)
 ----
