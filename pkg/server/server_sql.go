@@ -312,7 +312,9 @@ func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	// this monitor will be setting their own noteworthy limits.
 	rootSQLMemoryMonitor := mon.NewMonitor(
 		"root",
-		mon.MemoryResource,
+		mon.NewMemoryResourceWithErrorHint(
+			"Consider increasing --max-sql-memory startup parameter.", /* hint */
+		),
 		rootSQLMetrics.CurBytesCount,
 		rootSQLMetrics.MaxBytesHist,
 		-1,            /* increment: use default increment */
