@@ -61,10 +61,6 @@ func (c copyFromRows) ColumnTypeDatabaseTypeName(index int) string {
 	return ""
 }
 
-func (c copyFromRows) ColumnTypeNames() []string {
-	return nil
-}
-
 func (c copyFromRows) Tag() (CommandTag, error) {
 	return c.t, nil
 }

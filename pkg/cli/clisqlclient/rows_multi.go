@@ -147,11 +147,3 @@ func (r *sqlRowsMultiResultSet) ColumnTypeDatabaseTypeName(index int) string {
 	fieldOID := rd.FieldDescriptions()[index].DataTypeOID
 	return databaseTypeName(r.connInfo, fieldOID)
 }
-
-func (r *sqlRowsMultiResultSet) ColumnTypeNames() []string {
-	colTypes := make([]string, len(r.Columns()))
-	for i := range colTypes {
-		colTypes[i] = r.ColumnTypeDatabaseTypeName(i)
-	}
-	return colTypes
-}

@@ -120,10 +120,6 @@ type Rows interface {
 	// of the column at the given column index.
 	ColumnTypeDatabaseTypeName(index int) string
 
-	// ColumnTypeNames returns the database type names for all
-	// columns.
-	ColumnTypeNames() []string
-
 	// Tag retrieves the statement tag for the current result set.
 	Tag() (CommandTag, error)
 

@@ -79,7 +79,10 @@ SET
 	// Use system database for sample query/output as they are fairly fixed.
 	cols, rows, err := testExecCtx.RunQuery(
 		context.Background(),
-		conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+		conn,
+		clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`),
+		false, /* showMoreChars */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
