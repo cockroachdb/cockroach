@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
@@ -115,7 +116,7 @@ func (u *urlParser) Set(v string) error {
 		// Late initialization of the flagset. We can't call this early as
 		// we need all flags to be defined already, and some flags
 		// are only defined (in cli/flags.go) after the URL flag has been defined.
-		u.fl = FlagSetForCmd(u.cmd)
+		u.fl = cliflagcfg.FlagSetForCmd(u.cmd)
 	}
 
 	purl, err := clientsecopts.AnalyzeClientURL(v, u)
