@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -978,6 +979,102 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	})
 }
 
+// dropViewDeps cleans up any dependencies that are related to a given view,
+// including anything that exists because of forward or back references.
+func (sc *SchemaChanger) dropViewDeps(
+	ctx context.Context,
+	descsCol *descs.Collection,
+	txn *kv.Txn,
+	b *kv.Batch,
+	viewDesc *tabledesc.Mutable,
+) error {
+	// Remove back-references from the tables/views this view depends on.
+	dependedOn := append([]descpb.ID(nil), viewDesc.DependsOn...)
+	for _, depID := range dependedOn {
+		dependencyDesc, err := descsCol.GetMutableTableVersionByID(ctx, depID, txn)
+		if err != nil {
+			log.Warningf(ctx, "error resolving dependency relation ID %d", depID)
+			continue
+		}
+		// The dependency is also being deleted, so we don't have to remove the
+		// references.
+		if dependencyDesc.Dropped() {
+			continue
+		}
+		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
+		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, dependencyDesc, b); err != nil {
+			log.Warningf(ctx, "error removing dependency from releation ID %d", depID)
+			return err
+		}
+	}
+	viewDesc.DependsOn = nil
+	// If anything depends on this table clean up references from that object as well.
+	DependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
+	for _, depRef := range DependedOnBy {
+		dependencyDesc, err := descsCol.GetMutableTableVersionByID(ctx, depRef.ID, txn)
+		if err != nil {
+			log.Warningf(ctx, "error resolving dependency relation ID %d", depRef.ID)
+			continue
+		}
+		if dependencyDesc.Dropped() {
+			continue
+		}
+		// Entire dependent view needs to be cleaned up.
+		if err := sc.dropViewDeps(ctx, descsCol, txn, b, dependencyDesc); err != nil {
+			return err
+		}
+	}
+	// Clean up sequence and type references from the view.
+	for _, col := range viewDesc.DeletableColumns() {
+		typeClosure, err := typedesc.GetTypeDescriptorClosure(col.GetType())
+		if err != nil {
+			return err
+		}
+		for id := range typeClosure {
+			typeDesc, err := descsCol.GetMutableTypeByID(ctx,
+				txn,
+				id,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						AvoidLeased: true,
+					},
+				})
+			if err != nil {
+				log.Warningf(ctx, "error resolving type dependency %d", id)
+				continue
+			}
+			typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID())
+			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
+				log.Warningf(ctx, "error removing dependency from type ID %d", id)
+				return err
+			}
+		}
+		for i := 0; i < col.NumUsesSequences(); i++ {
+			id := col.GetUsesSequenceID(i)
+			seqDesc, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+			if err != nil {
+				log.Warningf(ctx, "error resolving sequence dependency %d", id)
+				continue
+			}
+			if seqDesc.Dropped() {
+				continue
+			}
+			DependedOnBy := seqDesc.DependedOnBy
+			seqDesc.DependedOnBy = seqDesc.DependedOnBy[:0]
+			for _, dep := range DependedOnBy {
+				if dep.ID != viewDesc.ID {
+					seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, dep)
+				}
+			}
+			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, seqDesc, b); err != nil {
+				log.Warningf(ctx, "error removing dependency from sequence ID %d", id)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
@@ -1010,6 +1107,12 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		}
 
 		b := txn.NewBatch()
+		// For views, we need to clean up and references that exist to tables.
+		if scTable.IsView() {
+			if err := sc.dropViewDeps(ctx, descsCol, txn, b, scTable); err != nil {
+				return err
+			}
+		}
 		scTable.SetDropped()
 		scTable.DropTime = timeutil.Now().UnixNano()
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
