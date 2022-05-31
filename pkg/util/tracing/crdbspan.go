@@ -766,11 +766,41 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		rs.Finished = true
 	}
 
+	findAnonymousTagGroup := func() *tracingpb.TagGroup {
+		for i := range rs.TagGroups {
+			tg := &rs.TagGroups[i]
+			if tg.Name == "" {
+				return tg
+			}
+		}
+		return nil
+	}
+
+	addTagGroup := func(name string) *tracingpb.TagGroup {
+		if rs.TagGroups == nil {
+			rs.TagGroups = make([]tracingpb.TagGroup, 0)
+		}
+		rs.TagGroups = append(rs.TagGroups,
+			tracingpb.TagGroup{
+				Name: name,
+			})
+		return &rs.TagGroups[len(rs.TagGroups)-1]
+	}
+
 	addTag := func(k, v string) {
 		if rs.Tags == nil {
 			rs.Tags = make(map[string]string)
 		}
 		rs.Tags[k] = v
+
+		tg := findAnonymousTagGroup()
+		if tg == nil {
+			tg = addTagGroup("")
+		}
+		tg.Tags = append(tg.Tags, tracingpb.Tag{
+			Key:   k,
+			Value: v,
+		})
 	}
 
 	// If the span is not verbose, optimize by avoiding the tags.
@@ -814,8 +844,28 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.lazyTags {
 			switch v := kv.Value.(type) {
 			case LazyTag:
+				var tagGroup *tracingpb.TagGroup
+				if kv.Key == "" {
+					// If this is the anonymous tag group, try to find an existing one.
+					tagGroup = findAnonymousTagGroup()
+				}
+				// If this is not the anonymous tag group, OR we could not find an
+				// existing anonymous tag group, create a new tag group.
+				if tagGroup == nil {
+					tagGroup = addTagGroup(kv.Key)
+				}
 				for _, tag := range v.Render() {
-					addTag(string(tag.Key), tag.Value.Emit())
+					childKey := string(tag.Key)
+					childValue := tag.Value.Emit()
+
+					rs.Tags[childKey] = childValue
+
+					tagGroup.Tags = append(tagGroup.Tags,
+						tracingpb.Tag{
+							Key:   childKey,
+							Value: childValue,
+						},
+					)
 				}
 			case fmt.Stringer:
 				addTag(kv.Key, v.String())

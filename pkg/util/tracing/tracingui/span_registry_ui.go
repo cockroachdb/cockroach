@@ -141,6 +141,12 @@ type ProcessedTag struct {
 	// copiedFromChild is set if this tag did not originate on the owner span, but
 	// instead was propagated upwards from a child span.
 	CopiedFromChild bool
+	Children        []ProcessedChildTag
+}
+
+// ProcessedChildTag is a span tag that is embedded as a lazy tag in a parent tag.
+type ProcessedChildTag struct {
+	Key, Val string
 }
 
 // propagateTagUpwards copies tag from sp to all of sp's ancestors.
@@ -182,17 +188,40 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 		GoroutineID:  s.GoroutineID,
 	}
 
-	// Sort the tags.
-	tagKeys := make([]string, 0, len(s.Tags))
-	for k := range s.Tags {
-		tagKeys = append(tagKeys, k)
-	}
-	sort.Strings(tagKeys)
+	p.Tags = make([]ProcessedTag, 0)
+	for _, tagGroup := range s.TagGroups {
+		key := tagGroup.Name
 
-	p.Tags = make([]ProcessedTag, len(s.Tags))
-	for i, k := range tagKeys {
-		p.Tags[i] = processTag(k, s.Tags[k], snap)
+		if key == "" {
+			// The anonymous tag group. Each tag should be treated as top-level.
+			for _, tagKV := range tagGroup.Tags {
+				p.Tags = append(p.Tags, processTag(tagKV.Key, tagKV.Value, snap))
+			}
+		} else {
+			// A named tag group. Each tag should be treated as a child of this parent.
+			processedParentTag := ProcessedTag{
+				// Don't actually need to call processTag() here, none of the checks
+				// will apply to a tag group.
+				Key: key,
+				Val: "",
+			}
+			processedParentTag.Children = make([]ProcessedChildTag, len(tagGroup.Tags))
+			for i, tag := range tagGroup.Tags {
+				processedParentTag.Children[i] = ProcessedChildTag{
+					Key: tag.Key,
+					Val: tag.Value,
+				}
+			}
+			p.Tags = append(p.Tags, processedParentTag)
+		}
+
 	}
+	sort.Slice(p.Tags, func(i, j int) bool {
+		a := p.Tags[i]
+		b := p.Tags[j]
+		return a.Key < b.Key
+	})
+
 	return p
 }
 
@@ -248,15 +277,30 @@ func findTxnState(txnID string, snap tracing.SpansSnapshot) txnState {
 	// respective transaction.
 	for _, t := range snap.Traces {
 		for _, s := range t {
-			if s.Operation != "sql txn" || s.Tags["txn"] != txnID {
+			if s.Operation != "sql txn" {
+				continue
+			}
+			txnTagGroup := s.FindTagGroup("txn")
+			if s.Tags["txn"] != txnID && (txnTagGroup == nil || *txnTagGroup.FindTag("txn") != txnID) {
 				continue
 			}
 			// I've found the transaction. Look through its children and find a SQL query.
 			for _, s2 := range t {
 				if s2.Operation == "sql query" {
+					if len(s2.TagGroups) == 0 {
+						return txnState{
+							found:    true,
+							curQuery: s2.Tags["statement"],
+						}
+					}
+					stmt := ""
+					stmtTag := s2.FindTagGroup("statement")
+					if stmtTag != nil {
+						stmt = *stmtTag.FindTag("statement")
+					}
 					return txnState{
 						found:    true,
-						curQuery: s2.Tags["statement"],
+						curQuery: stmt,
 					}
 				}
 			}

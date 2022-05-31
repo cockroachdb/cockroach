@@ -297,6 +297,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
 	require.Equal(t, "1", rec[0].Tags["_dropped"])
+	require.Equal(t, "1", *rec[0].FindTagGroup("").FindTag("_dropped"))
 
 	first := rec[0].StructuredRecords[0]
 	last := rec[0].StructuredRecords[len(rec[0].StructuredRecords)-1]
@@ -346,6 +347,7 @@ func TestSpanRecordLimit(t *testing.T) {
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Logs, numLogs)
 	require.Equal(t, rec[0].Tags["_dropped"], "1")
+	require.Equal(t, *rec[0].FindTagGroup("").FindTag("_dropped"), "1")
 
 	first := rec[0].Logs[0]
 	last := rec[0].Logs[len(rec[0].Logs)-1]
@@ -553,6 +555,16 @@ func TestSpanTags(t *testing.T) {
 	require.Equal(t, tags["exp1"], "1")
 	require.Equal(t, tags["exp2"], "2")
 	require.Equal(t, tags["lazy tag"], "lazy stringer")
+
+	require.NotNil(t, rec[0].FindTagGroup("").FindTag("tag"))
+	require.NotNil(t, rec[0].FindTagGroup("").FindTag("lazy tag"))
+	lazyExpandingTagGroup := rec[0].FindTagGroup("lazy expanding tag")
+	require.NotNil(t, lazyExpandingTagGroup)
+
+	require.Equal(t, "1", *lazyExpandingTagGroup.FindTag("exp1"))
+	require.Equal(t, "2", *lazyExpandingTagGroup.FindTag("exp2"))
+
+	require.Equal(t, "lazy stringer", *rec[0].FindTagGroup("").FindTag("lazy tag"))
 }
 
 // TestSpanTagsInRecordings verifies that tags added before a recording started
@@ -583,6 +595,12 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	require.True(t, ok)
 	_, ok = rec[0].Tags["foo2"]
 	require.True(t, ok)
+
+	require.Len(t, rec[0].TagGroups, 1)
+	require.Len(t, rec[0].FindTagGroup("").Tags, 5) // _unfinished:1 _verbose:1 foo:tagbar foo1:1 foor2:bar2
+	require.NotNil(t, rec[0].FindTagGroup("").FindTag("foo"))
+	require.NotNil(t, rec[0].FindTagGroup("").FindTag("foo2"))
+
 	require.Equal(t, 1, int(counter))
 
 	// Verify that subsequent tags are also captured.
@@ -592,6 +610,11 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	require.Len(t, rec[0].Tags, 6)
 	_, ok = rec[0].Tags["foo3"]
 	require.True(t, ok)
+
+	require.Len(t, rec[0].TagGroups, 1)
+	require.Len(t, rec[0].FindTagGroup("").Tags, 6)
+	require.NotNil(t, rec[0].FindTagGroup("").FindTag("foo3"))
+
 	require.Equal(t, 2, int(counter))
 }
 
@@ -606,18 +629,23 @@ func TestVerboseTag(t *testing.T) {
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 	_, ok := rec[0].Tags["_verbose"]
 	require.False(t, ok)
+	anonymousTagGroup := rec[0].FindTagGroup("")
+	require.True(t, anonymousTagGroup == nil || anonymousTagGroup.FindTag("_verbose") == nil)
 
 	// The tag is present while the span is recording verbosely.
 	sp.SetRecordingType(tracingpb.RecordingVerbose)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	_, ok = rec[0].Tags["_verbose"]
 	require.True(t, ok)
+	require.NotNil(t, rec[0].FindTagGroup("").FindTag("_verbose"))
 
 	// After we stop recording, the tag goes away.
 	sp.SetRecordingType(tracingpb.RecordingStructured)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	_, ok = rec[0].Tags["_verbose"]
 	require.False(t, ok)
+	anonymousTagGroup = rec[0].FindTagGroup("")
+	require.True(t, anonymousTagGroup == nil || anonymousTagGroup.FindTag("_verbose") == nil)
 }
 
 func TestStructureRecording(t *testing.T) {
