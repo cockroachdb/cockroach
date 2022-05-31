@@ -55,7 +55,7 @@ function TimeScaleDropdownWrapper({
   );
 }
 
-describe("<TimeScaleDropdown> component", function() {
+describe("<TimeScaleDropdown> component", function () {
   let clock: sinon.SinonFakeTimers;
 
   // Returns a new moment every time, so that we don't accidentally mutate it.
@@ -182,9 +182,7 @@ describe("<TimeScaleDropdown> component", function() {
     // Custom menu should be initialized to currently selected time, i.e. now-6h to now.
     // Start: 3:28 AM (UTC)
     // End: 9:28 AM (UTC)
-    const startText = getNow()
-      .subtract(6, "h")
-      .format(customMenuTimeFormat);
+    const startText = getNow().subtract(6, "h").format(customMenuTimeFormat);
     const endMoment = getNow();
     getByDisplayValue(startText); // start
     getByDisplayValue(endMoment.format(customMenuTimeFormat)); // end
@@ -250,7 +248,7 @@ const initialEntries = [
   "#/metrics/overview/node/3?start=1584528726&end=1584529326", // Node 3 - 10 minutes
 ];
 
-describe("TimeScaleDropdown functions", function() {
+describe("TimeScaleDropdown functions", function () {
   let state: Omit<TimeScaleDropdownProps, "setTimeScale">;
   let clock: sinon.SinonFakeTimers;
   let currentWindow: TimeWindow;
@@ -318,10 +316,7 @@ describe("TimeScaleDropdown functions", function() {
       const timeEnd = moment.utc(currentWindow.end).format(dropdownTimeFormat);
       const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
       assert.equal(
-        wrapper
-          .find(".trigger .Select-value-label")
-          .first()
-          .text(),
+        wrapper.find(".trigger .Select-value-label").first().text(),
         ` ${timeStart} -  ${timeEnd} (UTC)`,
       );
       assert.deepEqual(title, {
@@ -359,10 +354,7 @@ describe("TimeScaleDropdown functions", function() {
         currentScale,
       });
       assert.equal(
-        wrapper
-          .find(".trigger .Select-value-label")
-          .first()
-          .text(),
+        wrapper.find(".trigger .Select-value-label").first().text(),
         `${dateStart} ${timeStart} - ${dateEnd} ${timeEnd} (UTC)`,
       );
       assert.deepEqual(title, {

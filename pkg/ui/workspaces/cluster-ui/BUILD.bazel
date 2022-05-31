@@ -212,6 +212,8 @@ eslint_test(
     data = [
         ".eslintignore",
         ".eslintrc.json",
+        ".prettierignore",
+        "prettier.config.js",
         "src",
         "@npm_cluster_ui//@cockroachlabs/eslint-config",
         "@npm_cluster_ui//@testing-library/react",

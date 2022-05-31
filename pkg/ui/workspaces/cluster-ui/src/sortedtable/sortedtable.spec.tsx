@@ -85,8 +85,8 @@ function rowsOf(wrapper: ReactWrapper): Array<Array<string>> {
   return wrapper.find("tr").map(tr => tr.find("td").map(td => td.text()));
 }
 
-describe("<SortedTable>", function() {
-  it("renders the expected table structure.", function() {
+describe("<SortedTable>", function () {
+  it("renders the expected table structure.", function () {
     const wrapper = makeTable([new TestRow("test", 1)]);
     assert.lengthOf(wrapper.find("table"), 1, "one table");
     assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
@@ -98,7 +98,7 @@ describe("<SortedTable>", function() {
     assert.lengthOf(wrapper.find("tbody"), 1, "tbody element");
   });
 
-  it("correctly uses onChangeSortSetting", function() {
+  it("correctly uses onChangeSortSetting", function () {
     const spy = sinon.spy();
     const wrapper = makeTable([new TestRow("test", 1)], undefined, spy);
     wrapper
@@ -112,7 +112,7 @@ describe("<SortedTable>", function() {
     } as SortSetting);
   });
 
-  it("correctly sorts data based on sortSetting", function() {
+  it("correctly sorts data based on sortSetting", function () {
     const data = [
       new TestRow("c", 3),
       new TestRow("d", 4),
@@ -125,18 +125,12 @@ describe("<SortedTable>", function() {
       _.each(expected, (rowData, dataIndex) => {
         const row = rows.childAt(dataIndex);
         assert.equal(
-          row
-            .childAt(0)
-            .childAt(0)
-            .text(),
+          row.childAt(0).childAt(0).text(),
           rowData.name,
           "first columns match",
         );
         assert.equal(
-          row
-            .childAt(0)
-            .childAt(1)
-            .text(),
+          row.childAt(0).childAt(1).text(),
           rowData.value.toString(),
           "second columns match",
         );
@@ -157,8 +151,8 @@ describe("<SortedTable>", function() {
     assertMatches(_.sortBy(data, r => r.value));
   });
 
-  describe("with expandableConfig", function() {
-    it("renders the expected table structure", function() {
+  describe("with expandableConfig", function () {
+    it("renders the expected table structure", function () {
       const wrapper = makeExpandableTable([new TestRow("test", 1)], undefined);
       assert.lengthOf(wrapper.find("table"), 1, "one table");
       assert.lengthOf(wrapper.find("thead").find("tr"), 1, "one header row");
@@ -181,7 +175,7 @@ describe("<SortedTable>", function() {
       );
     });
 
-    it("expands and collapses the clicked row", function() {
+    it("expands and collapses the clicked row", function () {
       const wrapper = makeExpandableTable([new TestRow("test", 1)], undefined);
       assert.lengthOf(
         wrapper.find(`.${cx("row-wrapper__row--expanded-area")}`),
@@ -217,7 +211,7 @@ describe("<SortedTable>", function() {
     });
   });
 
-  it("should correctly render rows with pagination and sort settings", function() {
+  it("should correctly render rows with pagination and sort settings", function () {
     const data = [
       new TestRow("c", 3),
       new TestRow("d", 4),
@@ -231,11 +225,7 @@ describe("<SortedTable>", function() {
     let rows = wrapper.find("tbody");
     assert.lengthOf(wrapper.find("tbody tr"), 2, "two body rows");
     assert.equal(
-      rows
-        .childAt(1)
-        .childAt(0)
-        .childAt(0)
-        .text(),
+      rows.childAt(1).childAt(0).childAt(0).text(),
       "d",
       "second row column at first page match",
     );
@@ -247,11 +237,7 @@ describe("<SortedTable>", function() {
     rows = wrapper.find("tbody");
     assert.lengthOf(wrapper.find("tbody tr"), 2, "two body rows");
     assert.equal(
-      rows
-        .childAt(0)
-        .childAt(0)
-        .childAt(0)
-        .text(),
+      rows.childAt(0).childAt(0).childAt(0).text(),
       "a",
       "first row column at seconds page match",
     );
@@ -267,11 +253,7 @@ describe("<SortedTable>", function() {
     );
     rows = wrapper.find("tbody");
     assert.equal(
-      rows
-        .childAt(1)
-        .childAt(0)
-        .childAt(0)
-        .text(),
+      rows.childAt(1).childAt(0).childAt(0).text(),
       "b",
       "second row column at first page match",
     );
@@ -287,17 +269,13 @@ describe("<SortedTable>", function() {
     );
     rows = wrapper.find("tbody");
     assert.equal(
-      rows
-        .childAt(0)
-        .childAt(0)
-        .childAt(0)
-        .text(),
+      rows.childAt(0).childAt(0).childAt(0).text(),
       "c",
       "first row column at seconds page match",
     );
   });
 
-  it("should update when pagination changes", function() {
+  it("should update when pagination changes", function () {
     const table = makeTable(
       [
         new TestRow("c", 3),

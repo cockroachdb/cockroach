@@ -66,7 +66,8 @@ import {
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 
-type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type Statement =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
@@ -212,12 +213,8 @@ export class TransactionDetails extends React.Component<
   };
 
   render(): React.ReactElement {
-    const {
-      error,
-      nodeRegions,
-      transaction,
-      transactionFingerprintId,
-    } = this.props;
+    const { error, nodeRegions, transaction, transactionFingerprintId } =
+      this.props;
     const { latestTransactionText } = this.state;
     const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;

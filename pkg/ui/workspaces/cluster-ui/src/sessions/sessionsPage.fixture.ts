@@ -25,7 +25,7 @@ const Status = cockroach.server.serverpb.Session.Status;
 
 const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
-const toUuid = function(s: string): Uint8Array {
+const toUuid = function (s: string): Uint8Array {
   const buf = util.newBuffer(util.base64.length(s));
   util.base64.decode(s, buf, 0);
   return buf;
