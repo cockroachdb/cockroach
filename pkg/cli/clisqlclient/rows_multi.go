@@ -13,7 +13,6 @@ package clisqlclient
 import (
 	"database/sql/driver"
 	"io"
-	"reflect"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -133,13 +132,6 @@ func (r *sqlRowsMultiResultSet) NextResultSet() (bool, error) {
 		return false, ErrConnectionClosed
 	}
 	return next, nil
-}
-
-func (r *sqlRowsMultiResultSet) ColumnTypeScanType(index int) reflect.Type {
-	rd := r.rows.ResultReader()
-	o := rd.FieldDescriptions()[index].DataTypeOID
-	n := r.ColumnTypeDatabaseTypeName(index)
-	return scanType(o, n)
 }
 
 func (r *sqlRowsMultiResultSet) ColumnTypeDatabaseTypeName(index int) string {
