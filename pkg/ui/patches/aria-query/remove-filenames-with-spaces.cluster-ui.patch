@@ -1,6 +1,6 @@
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/commandRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -31,9 +31,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/a
 -var _default = commandRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/abstract/compositeRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,26 +0,0 @@
 -"use strict";
 -
@@ -62,9 +62,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/a
 -var _default = compositeRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/dpub/docAbstractRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,34 +0,0 @@
 -"use strict";
 -
@@ -101,9 +101,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/d
 -var _default = docAbstractRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,31 +0,0 @@
 -"use strict";
 -
@@ -137,9 +137,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = alertRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/alertdialogRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -170,9 +170,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = alertdialogRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/applicationRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,34 +0,0 @@
 -"use strict";
 -
@@ -209,9 +209,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = applicationRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/articleRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,31 +0,0 @@
 -"use strict";
 -
@@ -245,9 +245,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = articleRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/bannerRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,29 +0,0 @@
 -"use strict";
 -
@@ -279,9 +279,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = bannerRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/blockquoteRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -307,9 +307,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = blockquoteRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/buttonRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,105 +0,0 @@
 -"use strict";
 -
@@ -417,9 +417,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = buttonRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/captionRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -445,9 +445,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = captionRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/cellRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,34 +0,0 @@
 -"use strict";
 -
@@ -484,9 +484,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = cellRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/checkboxRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,46 +0,0 @@
 -"use strict";
 -
@@ -535,9 +535,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = checkboxRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/codeRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -563,9 +563,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = codeRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/columnheaderRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,34 +0,0 @@
 -"use strict";
 -
@@ -602,9 +602,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = columnheaderRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/comboboxRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,136 +0,0 @@
 -"use strict";
 -
@@ -743,9 +743,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = comboboxRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/complementaryRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -776,9 +776,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = complementaryRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/contentinfoRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,29 +0,0 @@
 -"use strict";
 -
@@ -810,9 +810,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = contentinfoRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/definitionRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -843,9 +843,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = definitionRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/deletionRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -871,9 +871,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = deletionRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/dialogRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -904,9 +904,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = dialogRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/directoryRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,25 +0,0 @@
 -"use strict";
 -
@@ -934,9 +934,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = directoryRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/documentRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,32 +0,0 @@
 -"use strict";
 -
@@ -971,9 +971,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = documentRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/emphasisRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -999,9 +999,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = emphasisRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/feedRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -1027,9 +1027,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = feedRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/figureRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -1060,9 +1060,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = figureRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/formRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,50 +0,0 @@
 -"use strict";
 -
@@ -1115,9 +1115,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = formRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/genericRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,33 +0,0 @@
 -"use strict";
 -
@@ -1153,9 +1153,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = genericRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,35 +0,0 @@
 -"use strict";
 -
@@ -1193,9 +1193,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = gridRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/gridcellRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,41 +0,0 @@
 -"use strict";
 -
@@ -1239,9 +1239,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = gridcellRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/groupRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,41 +0,0 @@
 -"use strict";
 -
@@ -1285,9 +1285,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = groupRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/headingRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,57 +0,0 @@
 -"use strict";
 -
@@ -1347,9 +1347,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = headingRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/imgRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,46 +0,0 @@
 -"use strict";
 -
@@ -1398,9 +1398,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = imgRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/insertionRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -1426,9 +1426,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = insertionRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/linkRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,51 +0,0 @@
 -"use strict";
 -
@@ -1482,9 +1482,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = linkRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,38 +0,0 @@
 -"use strict";
 -
@@ -1525,9 +1525,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = listRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listboxRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,74 +0,0 @@
 -"use strict";
 -
@@ -1604,9 +1604,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = listboxRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/listitemRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,38 +0,0 @@
 -"use strict";
 -
@@ -1647,9 +1647,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = listitemRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/logRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,25 +0,0 @@
 -"use strict";
 -
@@ -1677,9 +1677,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = logRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mainRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -1710,9 +1710,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = mainRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/marqueeRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -1738,9 +1738,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = marqueeRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/mathRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -1771,9 +1771,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = mathRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,45 +0,0 @@
 -"use strict";
 -
@@ -1821,9 +1821,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = menuRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menubarRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,30 +0,0 @@
 -"use strict";
 -
@@ -1856,9 +1856,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = menubarRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,49 +0,0 @@
 -"use strict";
 -
@@ -1910,9 +1910,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = menuitemRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemcheckboxRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,30 +0,0 @@
 -"use strict";
 -
@@ -1945,9 +1945,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = menuitemcheckboxRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/menuitemradioRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,30 +0,0 @@
 -"use strict";
 -
@@ -1980,9 +1980,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = menuitemradioRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/meterRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,29 +0,0 @@
 -"use strict";
 -
@@ -2014,9 +2014,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = meterRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/navigationRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -2047,9 +2047,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = navigationRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noneRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2075,9 +2075,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = noneRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/noteRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2103,9 +2103,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = noteRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/optionRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,45 +0,0 @@
 -"use strict";
 -
@@ -2153,9 +2153,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = optionRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/paragraphRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2181,9 +2181,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = paragraphRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/presentationRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2209,9 +2209,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = presentationRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/progressbarRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,35 +0,0 @@
 -"use strict";
 -
@@ -2249,9 +2249,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = progressbarRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radioRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,38 +0,0 @@
 -"use strict";
 -
@@ -2292,9 +2292,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = radioRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/radiogroupRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,33 +0,0 @@
 -"use strict";
 -
@@ -2330,9 +2330,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = radiogroupRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/regionRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,50 +0,0 @@
 -"use strict";
 -
@@ -2385,9 +2385,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = regionRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,36 +0,0 @@
 -"use strict";
 -
@@ -2426,9 +2426,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = rowRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowgroupRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,38 +0,0 @@
 -"use strict";
 -
@@ -2469,9 +2469,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = rowgroupRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/rowheaderRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,34 +0,0 @@
 -"use strict";
 -
@@ -2508,9 +2508,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = rowheaderRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/scrollbarRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,32 +0,0 @@
 -"use strict";
 -
@@ -2545,9 +2545,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = scrollbarRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2573,9 +2573,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = searchRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/searchboxRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,35 +0,0 @@
 -"use strict";
 -
@@ -2613,9 +2613,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = searchboxRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/separatorRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,35 +0,0 @@
 -"use strict";
 -
@@ -2653,9 +2653,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = separatorRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/sliderRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,43 +0,0 @@
 -"use strict";
 -
@@ -2701,9 +2701,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = sliderRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/spinbuttonRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,39 +0,0 @@
 -"use strict";
 -
@@ -2745,9 +2745,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = spinbuttonRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/statusRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,31 +0,0 @@
 -"use strict";
 -
@@ -2781,9 +2781,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = statusRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/strongRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2809,9 +2809,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = strongRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/subscriptRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2837,9 +2837,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = subscriptRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/superscriptRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -2865,9 +2865,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = superscriptRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js"	2022-05-12 17:27:29.421057273 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/switchRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,30 +0,0 @@
 -"use strict";
 -
@@ -2900,9 +2900,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = switchRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,30 +0,0 @@
 -"use strict";
 -
@@ -2935,9 +2935,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = tabRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tableRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,31 +0,0 @@
 -"use strict";
 -
@@ -2971,9 +2971,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = tableRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tablistRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,32 +0,0 @@
 -"use strict";
 -
@@ -3008,9 +3008,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = tablistRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tabpanelRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -3036,9 +3036,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = tabpanelRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/termRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,33 +0,0 @@
 -"use strict";
 -
@@ -3074,9 +3074,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = termRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/textboxRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,103 +0,0 @@
 -"use strict";
 -
@@ -3182,9 +3182,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = textboxRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timeRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -3210,9 +3210,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = timeRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/timerRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -3238,9 +3238,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = timerRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/toolbarRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,30 +0,0 @@
 -"use strict";
 -
@@ -3273,9 +3273,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = toolbarRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/tooltipRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -3301,9 +3301,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = tooltipRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,29 +0,0 @@
 -"use strict";
 -
@@ -3335,9 +3335,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = treeRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treegridRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,23 +0,0 @@
 -"use strict";
 -
@@ -3363,9 +3363,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = treegridRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js"	2022-05-12 17:27:29.425057562 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/literal/treeitemRole 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,28 +0,0 @@
 -"use strict";
 -
@@ -3396,9 +3396,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/etc/roles/l
 -var _default = treeitemRole;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js"	2022-05-12 17:27:29.417056985 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,29 +0,0 @@
 -"use strict";
 -
@@ -3430,9 +3430,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/index 2.js"
 -var roleElements = _roleElementMap.default;
 -exports.roleElements = roleElements;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js"	2022-05-12 17:27:29.417056985 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElementMap 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,97 +0,0 @@
 -"use strict";
 -
@@ -3532,9 +3532,9 @@ diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/roleElement
 -var _default = roleElementMap;
 -exports.default = _default;
 \ No newline at end of file
-diff -Naur "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js" "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js"
---- "pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js"	2022-05-12 17:27:29.417056985 +0000
-+++ "pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js"	1970-01-01 00:00:00.000000000 +0000
+diff -Naur pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js
+--- pkg/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js	2022-05-12 10:27:29.000000000 -0700
++++ pkg-no-spaces/ui/workspaces/cluster-ui/node_modules/aria-query/lib/rolesMap 2.js	1969-12-31 16:00:00.000000000 -0800
 @@ -1,118 +0,0 @@
 -"use strict";
 -
