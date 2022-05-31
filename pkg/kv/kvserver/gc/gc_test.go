@@ -14,10 +14,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -136,13 +142,15 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	fakeGCer := makeFakeGCer()
 
 	// Test GC desired behavior.
-	info, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
+		RunOptions{IntentAgeThreshold: intentLongThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Zero(t, info.IntentsConsidered,
 		"Expected no intents considered by GC with default threshold")
 
-	info, err = Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs,
+		RunOptions{IntentAgeThreshold: intentShortThreshold}, gcTTL, &fakeGCer, fakeGCer.resolveIntents,
 		fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	assert.Equal(t, 1, info.IntentsConsidered,
@@ -189,7 +197,8 @@ func TestIntentCleanupBatching(t *testing.T) {
 	// Base GCer will cleanup all intents in one go and its result is used as a baseline
 	// to compare batched runs for checking completeness.
 	baseGCer := makeFakeGCer()
-	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold}, gcTTL, &baseGCer, baseGCer.resolveIntents,
+	_, err := Run(ctx, &desc, snap, nowTs, nowTs, RunOptions{IntentAgeThreshold: intentAgeThreshold},
+		gcTTL, &baseGCer, baseGCer.resolveIntents,
 		baseGCer.resolveIntentsAsync)
 	if err != nil {
 		t.Fatal("Can't prepare test fixture. Non batched GC run fails.")
@@ -199,7 +208,8 @@ func TestIntentCleanupBatching(t *testing.T) {
 	var batchSize int64 = 7
 	fakeGCer := makeFakeGCer()
 	info, err := Run(ctx, &desc, snap, nowTs, nowTs,
-		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize}, gcTTL,
+		RunOptions{IntentAgeThreshold: intentAgeThreshold, MaxIntentsPerIntentCleanupBatch: batchSize},
+		gcTTL,
 		&fakeGCer, fakeGCer.resolveIntents, fakeGCer.resolveIntentsAsync)
 	require.NoError(t, err, "GC Run shouldn't fail")
 	maxIntents := 0
@@ -244,8 +254,10 @@ func (r *testResolver) assertInvariants(t *testing.T, opts intentBatcherOptions)
 		}
 		// Last key could overspill over limit, but that's ok.
 		if opts.maxIntentKeyBytesPerIntentCleanupBatch > 0 {
-			require.Less(t, int64(totalKeyBytes-len(batch[len(batch)-1].Key)), opts.maxIntentKeyBytesPerIntentCleanupBatch,
-				fmt.Sprintf("Byte limit was exceeded for more than the last key in batch %d/%d", i+1, len(*r)))
+			require.Less(t, int64(totalKeyBytes-len(batch[len(batch)-1].Key)),
+				opts.maxIntentKeyBytesPerIntentCleanupBatch,
+				fmt.Sprintf("Byte limit was exceeded for more than the last key in batch %d/%d", i+1,
+					len(*r)))
 		}
 		if opts.maxTxnsPerIntentCleanupBatch > 0 {
 			require.LessOrEqual(t, int64(len(txnMap)), opts.maxTxnsPerIntentCleanupBatch,
@@ -273,8 +285,10 @@ func generateScattered(total int, txns int, maxKeySize int, random *rand.Rand) [
 	var intents []testIntent
 	for len(intents) < total {
 		intents = append(intents,
-			testIntent{randomLengthKey(random, maxKeySize),
-				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnIds[random.Intn(len(txnIds))]}}})
+			testIntent{
+				randomLengthKey(random, maxKeySize),
+				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnIds[random.Intn(len(txnIds))]}},
+			})
 	}
 	return intents
 }
@@ -298,8 +312,10 @@ func generateSequential(total int, maxTxnSize int, maxKeySize int, random *rand.
 			txnUUID = uuid.FastMakeV4()
 		}
 		intents = append(intents,
-			testIntent{randomLengthKey(random, maxKeySize),
-				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnUUID}}})
+			testIntent{
+				randomLengthKey(random, maxKeySize),
+				&enginepb.MVCCMetadata{Txn: &enginepb.TxnMeta{ID: txnUUID}},
+			})
 	}
 	return intents
 }
@@ -320,7 +336,8 @@ func TestGCIntentBatcher(t *testing.T) {
 		for _, batchSize := range []int64{0, 1, 10, 100, 1000} {
 			for _, byteCount := range []int64{0, 1, 10, 100, 1000} {
 				for _, txnCount := range []int64{0, 1, 10, 100, 1000} {
-					t.Run(fmt.Sprintf("batch=%d,bytes=%d,txns=%d,txn_intents=%s", batchSize, byteCount, txnCount, s.name), func(t *testing.T) {
+					t.Run(fmt.Sprintf("batch=%d,bytes=%d,txns=%d,txn_intents=%s", batchSize, byteCount,
+						txnCount, s.name), func(t *testing.T) {
 						info := Info{}
 						opts := intentBatcherOptions{
 							maxIntentsPerIntentCleanupBatch:        batchSize,
@@ -378,4 +395,551 @@ func TestGCIntentBatcherErrorHandling(t *testing.T) {
 	}, opts, &info)
 	cancel()
 	require.Error(t, batcher.maybeFlushPendingIntents(ctx))
+}
+
+/*
+Table data format:
+(see data below for examples referenced in brackets after each explanation)
+
+Top row contains keys separated by one or more spaces [a to j].
+
+Data rows start with timestamp followed by values aligned with the first
+character of a key in top row.
+
+Timestamp could be prefixed with '>' to set GC timestamp [gc threshold is 5].
+Intersection of key and timestamp defines value for the key [a@9 == 'A',
+a@2 == 'c'].
+If value contains any upper case characters it is expected that its key should
+not be garbage collected [A, B, D, E].
+
+Special value of . means a tombstone that should be collected [a@4 should be
+garbage collected].
+Special value of * means a tombstone that should not be collected [tombstone c@8
+should not be garbage collected].
+
+Values prefixed with ! are intents and follow the same expectation rules as
+other values.
+
+Empty lines and horizontal and vertical axis separators are ignored.
+
+var data = `
+   | a b c  d e f g h i j
+---+----------------------
+ 9 | A   !E
+ 8 |     *
+ 7 |
+ 6 | B D
+>5 |
+ 4 | .   F
+ 3 |
+ 2 | c
+ 1 |
+`
+*/
+
+var singleValueData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |     C
+>5 |   B
+ 4 | A
+ 3 |
+ 2 |
+ 1 |
+`
+
+var multipleValuesNewerData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 | A C E
+ 7 |
+ 6 |     F
+>5 |   D
+ 4 | B
+ 3 |
+ 2 |
+ 1 |
+`
+
+var multipleValuesOlderData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |     E
+>5 |   C
+ 4 | A
+ 3 |
+ 2 | b d F
+ 1 |
+`
+
+var deleteData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |     *
+>5 |   .
+ 4 | .
+ 3 |
+ 2 | a b C
+ 1 |
+`
+
+var deleteWithNewerData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 | 
+ 8 | A C E
+ 7 |
+ 6 |     *
+>5 |   .
+ 4 | .
+ 3 |
+ 2 | b d F
+ 1 |
+`
+
+var multipleValuesData = `
+   | a b c d e f g h i j
+---+----------------------
+ 9 |
+ 8 | A F *
+ 7 |
+ 6 | B * J
+>5 |
+ 4 | C G K
+ 3 | d h .
+ 2 | e i m
+ 1 |
+`
+
+var intents = `
+   | a  b  c  d e f g h i j
+---+----------------------
+ 9 | 
+ 8 |
+ 7 |
+ 6 |       !C
+>5 |    !B
+ 4 | !A
+ 3 |
+ 2 |
+ 1 |
+`
+
+var intentsAfterData = `
+   | a  b  c  d e f g h i j
+---+----------------------
+ 9 | 
+ 8 | !A !C !E
+ 7 |
+ 6 |       F
+>5 |    D
+ 4 | B
+ 3 |
+ 2 |
+ 1 |
+`
+
+var intentsAfterDelete = `
+   | a  b  c  d e f g h i j
+---+----------------------
+ 9 | 
+ 8 | !A !C !E
+ 7 |
+ 6 |       *
+>5 |    .
+ 4 | .
+ 3 |
+ 2 | b  d  F
+ 1 |
+`
+
+func TestGC(t *testing.T) {
+	for _, d := range []struct {
+		name string
+		data string
+	}{
+		{"single", singleValueData},
+		{"multiple_newer", multipleValuesNewerData},
+		{"multiple_older", multipleValuesOlderData},
+		{"delete", deleteData},
+		{"delete_with_newer", deleteWithNewerData},
+		{"multiple_values", multipleValuesData},
+		{"intents", intents},
+		{"intents_after_data", intentsAfterData},
+		{"intents_after_delete", intentsAfterDelete},
+	} {
+		t.Run(d.name, func(t *testing.T) {
+			runTest(t, d.data)
+		})
+	}
+}
+
+func runTest(t *testing.T, data string) {
+	ctx := context.Background()
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey(tablePrefix),
+		EndKey:   roachpb.RKey(tablePrefix.PrefixEnd()),
+	}
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	dataItems, gcTS, now := readTableData(t, desc.StartKey.AsRawKey(), data)
+	ds := dataItems.fullDistribution()
+	stats := ds.setupTest(t, eng, desc)
+	snap := eng.NewSnapshot()
+	defer snap.Close()
+
+	gcer := makeFakeGCer()
+	_, err := Run(ctx, &desc, snap, now, gcTS,
+		RunOptions{IntentAgeThreshold: time.Nanosecond * time.Duration(now.WallTime)}, time.Second,
+		&gcer,
+		gcer.resolveIntents, gcer.resolveIntentsAsync)
+	require.NoError(t, err)
+	require.Empty(t, gcer.intents, "expecting no intents")
+	require.NoError(t, storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.requests(), gcTS))
+
+	ctrlEng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+	expectedStats := dataItems.liveDistribution().setupTest(t, ctrlEng, desc)
+
+	//fmt.Println("Dump of expected:")
+	//for _, l := range formatTable(engineData(t, ctrlEng, desc), tablePrefix) {
+	//	fmt.Println(l)
+	//}
+	//
+	//fmt.Println("Dump of result:")
+	//for _, l := range formatTable(engineData(t, eng, desc), tablePrefix) {
+	//	fmt.Println(l)
+	//}
+
+	requireEqualReaders(t, ctrlEng, eng, desc)
+	require.Equal(t, expectedStats, stats, "mvcc stats don't match the data")
+}
+
+// requireEqualReaders compares data in two readers
+func requireEqualReaders(
+	t *testing.T, exected storage.Reader, actual storage.Reader, desc roachpb.RangeDescriptor,
+) {
+	itExp := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypePointsOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer itExp.Close()
+
+	itActual := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypePointsOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer itActual.Close()
+	itExp.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+	itActual.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+	for {
+		okExp, err := itExp.Valid()
+		require.NoError(t, err, "failed to iterate values")
+		okAct, err := itActual.Valid()
+		require.NoError(t, err, "failed to iterate values")
+		if !okExp && !okAct {
+			break
+		}
+
+		require.Equal(t, okExp, okAct, "iterators have different number of elements")
+		require.True(t, itExp.UnsafeKey().Equal(itActual.UnsafeKey()),
+			"expected key not equal to actual (expected %s, found %s)", itExp.UnsafeKey(),
+			itActual.UnsafeKey())
+		require.True(t, bytes.Compare(itExp.UnsafeValue(), itActual.UnsafeValue()) == 0,
+			"expected value not equal to actual for key %s", itExp.UnsafeKey())
+
+		itExp.Next()
+		itActual.Next()
+	}
+}
+
+// dataItem is element read from test table containing mvcc key value along with
+// metadata needed for filtering.
+type dataItem struct {
+	value storage.MVCCKeyValue
+	txn   *roachpb.Transaction
+	live  bool
+}
+
+type tableData []dataItem
+
+// readTableData reads all table data and returns data slice of items to
+// initialize engine, gc timestamp, and now timestamp which is above any
+// timestamp in items. items are sorted in ascending order.
+func readTableData(
+	t *testing.T, prefix roachpb.Key, data string,
+) (tableData, hlc.Timestamp, hlc.Timestamp) {
+	lines := strings.Split(data, "\n")
+	var items []dataItem
+
+	var columnPositions []int
+	var columnKeys []roachpb.Key
+	var minLen int
+
+	parseHeader := func(l string) {
+		// Find keys and their positions from the first line.
+		fs := strings.Fields(l)
+		lastPos := 0
+		for _, key := range fs {
+			pos := lastPos + strings.Index(l[lastPos:], key)
+			lastPos = pos + len(key)
+			if key == "|" && len(columnKeys) == 0 {
+				continue
+			}
+			columnPositions = append(columnPositions, pos)
+			var mvccKey roachpb.Key
+			mvccKey = append(mvccKey, prefix...)
+			mvccKey = append(mvccKey, key...)
+			columnKeys = append(columnKeys, mvccKey)
+		}
+		minLen = columnPositions[len(columnPositions)-1] + 1
+		columnPositions = append(columnPositions, 0)
+	}
+
+	parsePoint := func(val string, i int, ts hlc.Timestamp) int {
+		val = strings.TrimSpace(val)
+		if len(val) > 0 {
+			value := []byte(val)
+			// Special meaning for deletions.
+			if val == "*" || val == "." {
+				value = nil
+			}
+			var txn *roachpb.Transaction
+			if val[0] == '!' {
+				value = value[1:]
+				txn = &roachpb.Transaction{
+					Status:                 roachpb.PENDING,
+					ReadTimestamp:          ts,
+					GlobalUncertaintyLimit: ts.Next().Next(),
+				}
+				txn.ID = uuid.MakeV4()
+				txn.WriteTimestamp = ts
+				txn.Key = txn.ID.GetBytes()
+			}
+			live := strings.ToLower(val) != val || val == "*"
+			kv := storage.MVCCKeyValue{
+				Key: storage.MVCCKey{
+					Key:       columnKeys[i],
+					Timestamp: ts,
+				},
+				Value: value,
+			}
+			items = append(items, dataItem{value: kv, txn: txn, live: live})
+		}
+		return i + 1
+	}
+
+	var gcTS hlc.Timestamp
+	var lastTs int64 = math.MaxInt64
+	parseTS := func(l string) (ts hlc.Timestamp) {
+		fs := strings.Fields(l)
+		tss := fs[0]
+		// Timestamp starting with '>' is a gc marker.
+		if tss[0] == '>' {
+			tss = tss[1:]
+			defer func() {
+				gcTS = ts
+			}()
+		}
+		tsInt, err := strconv.ParseInt(tss, 10, 64)
+		require.NoError(t, err, "Failed to parse timestamp from %s", l)
+		require.Less(t, tsInt, lastTs, "Timestamps should be decreasing")
+		lastTs = tsInt
+		return hlc.Timestamp{WallTime: tsInt}
+	}
+
+	for _, l := range lines {
+		if len(l) == 0 || l[0] == '-' {
+			// Ignore empty lines and table separators.
+			continue
+		}
+		if len(columnPositions) == 0 {
+			parseHeader(l)
+			continue
+		}
+
+		// We extend a line to always have at least characters to read values by
+		// index without caring to get beyond slice.
+		if shortBy := minLen - len(l); shortBy > 0 {
+			l = l + strings.Repeat(" ", shortBy)
+		}
+		// Add length to the end of keys to eliminate extra boundary checks.
+		columnPositions[len(columnPositions)-1] = len(l)
+
+		ts := parseTS(l)
+		for i := 0; i < len(columnKeys); {
+			val := l[columnPositions[i]:columnPositions[i+1]]
+			i = parsePoint(val, i, ts)
+		}
+	}
+
+	// Reverse from oldest to newest.
+	for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+		items[i], items[j] = items[j], items[i]
+	}
+
+	return items, gcTS, items[len(items)-1].value.Key.Timestamp.Add(1, 0)
+}
+
+// fullDistribution creates a data distribution that contains all data read from
+// table.
+func (d tableData) fullDistribution() dataDistribution {
+	items := d
+	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
+		if len(items) == 0 {
+			return storage.MVCCKeyValue{}, nil, false
+		}
+		defer func() { items = items[1:] }()
+		return items[0].value, items[0].txn, true
+	}
+}
+
+// liveDistribution creates a data distribution from the table data is was only
+// marked as live (see table data format above).
+func (d tableData) liveDistribution() dataDistribution {
+	items := d
+	return func() (storage.MVCCKeyValue, *roachpb.Transaction, bool) {
+		for {
+			if len(items) == 0 {
+				return storage.MVCCKeyValue{}, nil, false
+			}
+			if items[0].live {
+				break
+			}
+			items = items[1:]
+		}
+		defer func() { items = items[1:] }()
+		return items[0].value, items[0].txn, true
+	}
+}
+
+func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []tableCell {
+	var result []tableCell
+	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypePointsOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer it.Close()
+	it.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+	prefix := ""
+	for {
+		okAct, err := it.Valid()
+		require.NoError(t, err, "failed to iterate values")
+		if !okAct {
+			break
+		}
+		if !it.UnsafeKey().IsValue() {
+			prefix = "!"
+		} else {
+			v := "."
+			if len(it.UnsafeValue()) > 0 {
+				v = prefix + string(it.UnsafeValue())
+			}
+			result = append(result, tableCell{
+				key:   it.Key(),
+				value: v,
+			})
+			prefix = ""
+		}
+		it.Next()
+	}
+	return result
+}
+
+type tableCell struct {
+	key   storage.MVCCKey
+	value string
+}
+
+type columnInfo struct {
+	key            string
+	maxValueLength int
+}
+
+// formatTable renders table with data. expecting data to be sorted naturally:
+// keys ascending, timestamps descending.
+// prefix if provided defines start of the key, that would be stripped from the
+// keys to avoid clutter.
+func formatTable(data []tableCell, prefix roachpb.Key) []string {
+	prefixStr := ""
+	if prefix != nil {
+		prefixStr = prefix.String()
+	}
+	keyRe := regexp.MustCompile(`^/"(.*)"$`)
+	var foundKeys []columnInfo
+	var lastKey roachpb.Key
+	rowData := make(map[int64][]string)
+	for _, c := range data {
+		ts := c.key.Timestamp.WallTime
+		key := c.key.Key.String()
+		if strings.Index(key, prefixStr) == 0 {
+			key = key[len(prefixStr):]
+			if keyRe.FindSubmatch([]byte(key)) != nil {
+				key = key[2 : len(key)-1]
+			}
+		}
+		if !c.key.Key.Equal(lastKey) {
+			foundKeys = append(foundKeys, columnInfo{
+				key:            key,
+				maxValueLength: len(key),
+			})
+			lastKey = c.key.Key
+		}
+		row, _ := rowData[ts]
+		for len(row) < len(foundKeys)-1 {
+			row = append(row, "")
+		}
+		rowData[ts] = append(row, c.value)
+		valueLen := len(c.value)
+		if i := len(foundKeys) - 1; valueLen > foundKeys[i].maxValueLength {
+			foundKeys[i].maxValueLength = valueLen
+		}
+	}
+	var tss []int64
+	for ts := range rowData {
+		tss = append(tss, ts)
+	}
+	sort.Slice(tss, func(i, j int) bool {
+		return tss[i] > tss[j]
+	})
+
+	lsLen := len(fmt.Sprintf("%d", tss[0]))
+	rowPrefixFmt := fmt.Sprintf(" %%%dd | ", lsLen)
+
+	var result []string
+
+	firstRow := fmt.Sprintf(" %s | ", strings.Repeat(" ", lsLen))
+	for _, colInfo := range foundKeys {
+		firstRow += fmt.Sprintf(fmt.Sprintf("%%%ds ", colInfo.maxValueLength), colInfo.key)
+	}
+	result = append(result, firstRow)
+	result = append(result, strings.Repeat("-", len(firstRow)))
+	for _, ts := range tss {
+		row := rowData[ts]
+		rowStr := fmt.Sprintf(rowPrefixFmt, ts)
+		for i, v := range row {
+			rowStr += fmt.Sprintf(fmt.Sprintf("%%%ds ", foundKeys[i].maxValueLength), v)
+		}
+		result = append(result, rowStr)
+	}
+	return result
 }

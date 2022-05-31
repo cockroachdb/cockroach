@@ -58,7 +58,7 @@ func runGCOld(
 	intentExp := now.Add(-options.IntentAgeThreshold.Nanoseconds(), 0)
 	txnExp := now.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
 
-	gc := MakeGarbageCollector(now, gcTTL)
+	gc := makeGarbageCollector(now, gcTTL)
 
 	if err := gcer.SetGCThreshold(ctx, Threshold{
 		Key: gc.Threshold,
@@ -248,9 +248,9 @@ type GarbageCollector struct {
 	ttl       time.Duration
 }
 
-// MakeGarbageCollector allocates and returns a new GC, with expiration
+// makeGarbageCollector allocates and returns a new GC, with expiration
 // computed based on current time and the gc TTL.
-func MakeGarbageCollector(now hlc.Timestamp, gcTTL time.Duration) GarbageCollector {
+func makeGarbageCollector(now hlc.Timestamp, gcTTL time.Duration) GarbageCollector {
 	return GarbageCollector{
 		Threshold: CalculateThreshold(now, gcTTL),
 		ttl:       gcTTL,
@@ -326,10 +326,11 @@ var (
 
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
+// TODO(oleg): Remove once we don't need old GC.
 func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	gcA := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, time.Second)
-	gcB := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, 2*time.Second)
+	gcA := makeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, time.Second)
+	gcB := makeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, 2*time.Second)
 	n := []byte("data")
 	d := []byte(nil)
 	testData := []struct {
