@@ -11,44 +11,10 @@
 package clisqlclient
 
 import (
-	"reflect"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgtype"
 )
-
-// scanType returns the Go type used for the given column type.
-func scanType(typeOID uint32, typeName string) reflect.Type {
-	if typeName == "" || strings.HasPrefix(typeName, "_") {
-		// User-defined types and array types are scanned into []byte.
-		// These are handled separately since we can't easily include all the OIDs
-		// for user-defined types and arrays in the switch statement.
-		return reflect.TypeOf([]byte(nil))
-	}
-	// This switch is copied from lib/pq, and modified with a few additional cases.
-	// https://github.com/lib/pq/blob/b2901c7946b69f1e7226214f9760e31620499595/rows.go#L24
-	switch typeOID {
-	case pgtype.Int8OID:
-		return reflect.TypeOf(int64(0))
-	case pgtype.Int4OID:
-		return reflect.TypeOf(int32(0))
-	case pgtype.Int2OID:
-		return reflect.TypeOf(int16(0))
-	case pgtype.VarcharOID, pgtype.TextOID, pgtype.NameOID,
-		pgtype.ByteaOID, pgtype.NumericOID, pgtype.RecordOID,
-		pgtype.QCharOID, pgtype.BPCharOID:
-		return reflect.TypeOf("")
-	case pgtype.BoolOID:
-		return reflect.TypeOf(false)
-	case pgtype.DateOID, pgtype.TimeOID, 1266, pgtype.TimestampOID, pgtype.TimestamptzOID:
-		// 1266 is the OID for TimeTZ.
-		// TODO(rafi): Add TimetzOID to pgtype.
-		return reflect.TypeOf(time.Time{})
-	default:
-		return reflect.TypeOf(new(interface{})).Elem()
-	}
-}
 
 // databaseTypeName returns the database type name for the given type OID.
 func databaseTypeName(ci *pgtype.ConnInfo, typeOID uint32) string {
