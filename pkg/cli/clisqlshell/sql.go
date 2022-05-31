@@ -927,8 +927,7 @@ func (c *cliState) GetCompletions(s string) []string {
 		var rows [][]string
 		var err error
 		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
-			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
-				clisqlclient.MakeQuery(query), true)
+			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query))
 			return err
 		})
 
@@ -2129,11 +2128,7 @@ func (c *cliState) runStatements(stmts []string) error {
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
 func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
-	cols, rows, err := c.sqlExecCtx.RunQuery(
-		context.Background(),
-		c.conn,
-		clisqlclient.MakeQuery("SHOW SYNTAX "+lexbase.EscapeSQLString(sql)),
-		true)
+	cols, rows, err := c.sqlExecCtx.RunQuery(context.Background(), c.conn, clisqlclient.MakeQuery("SHOW SYNTAX "+lexbase.EscapeSQLString(sql)))
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
 		// detected by SHOW SYNTAX (those show up as valid rows) but
@@ -2292,8 +2287,7 @@ func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
 	var rows [][]string
 	var err error
 	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
-		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
-			clisqlclient.MakeQuery(query), true)
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query))
 		return err
 	})
 

@@ -101,9 +101,7 @@ func createAuthSessionToken(
 	ctx := context.Background()
 
 	// First things first. Does the user exist?
-	_, rows, err := sqlExecCtx.RunQuery(ctx,
-		sqlConn,
-		clisqlclient.MakeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND NOT "isRole"`, username), false)
+	_, rows, err := sqlExecCtx.RunQuery(ctx, sqlConn, clisqlclient.MakeQuery(`SELECT count(username) FROM system.users WHERE username = $1 AND NOT "isRole"`, username))
 	if err != nil {
 		return -1, nil, err
 	}

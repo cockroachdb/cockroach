@@ -26,7 +26,7 @@ import (
 // RunQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
 func (sqlExecCtx *Context) RunQuery(
-	ctx context.Context, conn clisqlclient.Conn, fn clisqlclient.QueryFn, showMoreChars bool,
+	ctx context.Context, conn clisqlclient.Conn, fn clisqlclient.QueryFn,
 ) (retCols []string, retRows [][]string, retErr error) {
 	rows, _, err := fn(ctx, conn)
 	if err != nil {
@@ -34,7 +34,7 @@ func (sqlExecCtx *Context) RunQuery(
 	}
 
 	defer func() { retErr = errors.CombineErrors(retErr, rows.Close()) }()
-	return sqlRowsToStrings(rows, showMoreChars)
+	return sqlRowsToStrings(rows)
 }
 
 // RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
@@ -90,7 +90,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			return true, nil
 		}
 
-		cols := getColumnStrings(rows, true)
+		cols := getColumnStrings(rows)
 		reporter, cleanup, err := sqlExecCtx.makeReporter(w)
 		if err != nil {
 			return err
@@ -103,7 +103,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			if cleanup != nil {
 				defer cleanup()
 			}
-			return render(reporter, w, ew, cols, newRowIter(rows, true), completedHook, noRowsHook)
+			return render(reporter, w, ew, cols, newRowIter(rows), completedHook, noRowsHook)
 		}(); err != nil {
 			return err
 		}
@@ -253,17 +253,16 @@ func (sqlExecCtx *Context) maybeShowTimes(
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
-// If showMoreChars is true, then more characters are not escaped.
-func sqlRowsToStrings(rows clisqlclient.Rows, showMoreChars bool) ([]string, [][]string, error) {
-	cols := getColumnStrings(rows, showMoreChars)
-	allRows, err := getAllRowStrings(rows, rows.ColumnTypeNames(), showMoreChars)
+func sqlRowsToStrings(rows clisqlclient.Rows) ([]string, [][]string, error) {
+	cols := getColumnStrings(rows)
+	allRows, err := getAllRowStrings(rows)
 	if err != nil {
 		return nil, nil, err
 	}
 	return cols, allRows, nil
 }
 
-func getColumnStrings(rows clisqlclient.Rows, showMoreChars bool) []string {
+func getColumnStrings(rows clisqlclient.Rows) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {

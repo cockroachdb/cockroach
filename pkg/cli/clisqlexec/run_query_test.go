@@ -77,9 +77,7 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := testExecCtx.RunQuery(
-		context.Background(),
-		conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+	cols, rows, err := testExecCtx.RunQuery(context.Background(), conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`))
 	if err != nil {
 		t.Fatal(err)
 	}

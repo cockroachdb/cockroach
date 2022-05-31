@@ -234,12 +234,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			// This should take at least maxLatency.
 			startTime := timeutil.Now()
 			sqlExecCtx := clisqlexec.Context{}
-			_, _, err = sqlExecCtx.RunQuery(
-				context.Background(),
-				conn,
-				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
-				false,
-			)
+			_, _, err = sqlExecCtx.RunQuery(context.Background(), conn, clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`))
 			totalDuration := timeutil.Since(startTime)
 			require.NoError(t, err)
 			require.Truef(

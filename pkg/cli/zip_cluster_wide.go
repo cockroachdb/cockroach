@@ -268,9 +268,7 @@ FROM system.namespace WHERE "parentID" IN (TABLE sysid) AND "parentSchemaID" IN 
 ORDER BY name
 `
 	s := zc.clusterPrinter.start("retrieving list of system tables")
-	_, rows, requestErr := sqlExecCtx.RunQuery(ctx,
-		zc.firstNodeSQLConn,
-		clisqlclient.MakeQuery(getSysTablesQuery), true /* showMoreChars */)
+	_, rows, requestErr := sqlExecCtx.RunQuery(ctx, zc.firstNodeSQLConn, clisqlclient.MakeQuery(getSysTablesQuery))
 	if requestErr != nil {
 		if err := zc.z.createError(s, "system", requestErr); err != nil {
 			return nil, errors.Wrap(err, "fetching list of system tables")
