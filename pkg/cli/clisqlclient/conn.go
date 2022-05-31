@@ -446,31 +446,28 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 // GetServerValue retrieves the first driverValue returned by the
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.
-func (c *sqlConn) GetServerValue(
-	ctx context.Context, what, sql string,
-) (driver.Value, string, bool) {
+func (c *sqlConn) GetServerValue(ctx context.Context, what, sql string) (driver.Value, bool) {
 	rows, err := c.Query(ctx, sql)
 	if err != nil {
 		fmt.Fprintf(c.errw, "warning: error retrieving the %s: %v\n", what, err)
-		return nil, "", false
+		return nil, false
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(c.errw, "warning: cannot get the %s\n", what)
-		return nil, "", false
+		return nil, false
 	}
 
-	dbColType := rows.ColumnTypeDatabaseTypeName(0)
 	dbVals := make([]driver.Value, len(rows.Columns()))
 
-	err = rows.Next(dbVals[:])
+	err = rows.Next(dbVals)
 	if err != nil {
 		fmt.Fprintf(c.errw, "warning: invalid %s: %v\n", what, err)
-		return nil, "", false
+		return nil, false
 	}
 
-	return dbVals[0], dbColType, true
+	return dbVals[0], true
 }
 
 func (c *sqlConn) GetLastQueryStatistics(ctx context.Context) (results QueryStats, resErr error) {
