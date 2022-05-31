@@ -15,7 +15,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
-	"reflect"
 
 	"github.com/jackc/pgconn"
 )
@@ -50,10 +49,6 @@ func (c copyFromRows) Close() error {
 }
 
 func (c copyFromRows) Columns() []string {
-	return nil
-}
-
-func (c copyFromRows) ColumnTypeScanType(index int) reflect.Type {
 	return nil
 }
 

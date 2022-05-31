@@ -13,7 +13,6 @@ package clisqlclient
 import (
 	"database/sql/driver"
 	"io"
-	"reflect"
 
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
@@ -85,13 +84,6 @@ func (r *sqlRows) Next(values []driver.Value) error {
 // NextResultSet prepares the next result set for reading.
 func (r *sqlRows) NextResultSet() (bool, error) {
 	return false, nil
-}
-
-func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
-	// todo: remove this?
-	o := r.rows.FieldDescriptions()[index].DataTypeOID
-	n := r.ColumnTypeDatabaseTypeName(index)
-	return scanType(o, n)
 }
 
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
