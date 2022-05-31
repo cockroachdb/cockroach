@@ -317,3 +317,7 @@ export const generateStmtDetailsToID = (
   }
   return generatedID;
 };
+
+export const generateTableID = (db: string, table: string): string => {
+  return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
+};

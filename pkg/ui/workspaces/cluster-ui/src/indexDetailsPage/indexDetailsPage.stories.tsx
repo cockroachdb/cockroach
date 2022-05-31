@@ -30,6 +30,21 @@ const withData: IndexDetailsPageProps = {
     lastRead: moment("2021-10-21T22:00:00Z"),
     lastReset: moment("2021-12-02T07:12:00Z"),
   },
+  breadcrumbItems: [
+    { link: "/databases", name: "Databases" },
+    {
+      link: `/databases/story_db`,
+      name: "Tables",
+    },
+    {
+      link: `/database/story_db/$public/story_table`,
+      name: `Table: story_table`,
+    },
+    {
+      link: `/database/story_db/public/story_table/story_index`,
+      name: `Index: story_index`,
+    },
+  ],
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
   refreshNodes: () => {},

@@ -143,6 +143,7 @@ describe("Index Details Page", function() {
           lastRead: moment(),
           lastReset: moment(),
         },
+        breadcrumbItems: null,
       },
       false,
     );
@@ -194,6 +195,7 @@ describe("Index Details Page", function() {
           makeTimestamp("2021-11-12T20:18:22.167627Z"),
         ),
       },
+      breadcrumbItems: null,
     });
   });
 });

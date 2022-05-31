@@ -93,3 +93,32 @@
     margin-bottom: 0;
   }
 }
+
+.index-recommendations {
+  &-rows {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 16px;
+
+    &__header {
+      font-family: $font-family--semi-bold;
+      flex-basis: 20%;
+      flex-shrink: 0;
+    }
+
+    &__content {
+      font-family: $font-family--base;
+      width: 65%;
+      flex-grow: 0;
+    }
+  }
+  &__tooltip-anchor {
+    a {
+      &:hover {
+        opacity: 0.8;
+        text-decoration: underline;
+      }
+    }
+  }
+}
