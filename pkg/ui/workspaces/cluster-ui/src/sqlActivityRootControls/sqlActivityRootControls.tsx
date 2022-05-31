@@ -44,8 +44,9 @@ export const SQLActivityRootControls = ({
     });
   };
 
-  const content = options.find((option: Option) => option.value === viewValue)
-    .component;
+  const content = options.find(
+    (option: Option) => option.value === viewValue,
+  ).component;
 
   return (
     <div>

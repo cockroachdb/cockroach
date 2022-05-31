@@ -51,18 +51,18 @@
 }
 
 .header-container {
-   align-items: baseline;
-   display: flex;
-   flex-direction: row;
-   justify-content: space-between;
-   width: 75%;
-   padding: 0 9px 12px;
- }
+  align-items: baseline;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  width: 75%;
+  padding: 0 9px 12px;
+}
 
 .reset-info {
-   display: flex;
-   flex-direction: row;
- }
+  display: flex;
+  flex-direction: row;
+}
 
 .last-reset {
   color: $colors--neutral-6;

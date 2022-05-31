@@ -10,4 +10,7 @@
 
 module.exports = {
   trailingComma: "all",
+  // use default options from 1.19: https://prettier.io/blog/2020/03/21/2.0.0.html#breaking-changes
+  arrowParens: "avoid",
+  endOfLine: "auto",
 };

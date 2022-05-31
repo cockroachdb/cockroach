@@ -258,9 +258,7 @@ export class DatabaseDetailsPage extends React.Component<
     }
   }
 
-  private columnsForTablesViewMode(): ColumnDescriptor<
-    DatabaseDetailsPageDataTable
-  >[] {
+  private columnsForTablesViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
     return [
       {
         title: (
@@ -388,9 +386,7 @@ export class DatabaseDetailsPage extends React.Component<
     ];
   }
 
-  private columnsForGrantsViewMode(): ColumnDescriptor<
-    DatabaseDetailsPageDataTable
-  >[] {
+  private columnsForGrantsViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
     return [
       {
         title: (

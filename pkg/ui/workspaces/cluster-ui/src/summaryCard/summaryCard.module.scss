@@ -69,7 +69,8 @@
       &-red {
         color: $alert-color;
       }
-      a, span {
+      a,
+      span {
         font-family: $font-family--base;
         font-size: 14px;
         font-weight: 600;

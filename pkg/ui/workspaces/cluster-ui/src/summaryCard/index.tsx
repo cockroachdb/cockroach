@@ -50,12 +50,9 @@ export const SummaryCardItem: React.FC<ISummaryCardItemProps> = ({
   </div>
 );
 
-export const SummaryCardItemBoolSetting: React.FC<ISummaryCardItemBoolSettingProps> = ({
-  label,
-  value,
-  toolTipText,
-  className,
-}) => {
+export const SummaryCardItemBoolSetting: React.FC<
+  ISummaryCardItemBoolSettingProps
+> = ({ label, value, toolTipText, className }) => {
   const boolValue = value ? "Enabled" : "Disabled";
   const boolClass = value
     ? "bool-setting-icon__enabled"

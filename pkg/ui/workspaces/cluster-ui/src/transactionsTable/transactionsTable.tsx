@@ -41,8 +41,10 @@ import {
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
 
-export type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export type Transaction =
+  protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
+type Statement =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 interface TransactionsTable {
   transactions: TransactionInfo[];
@@ -140,7 +142,8 @@ export function makeTransactionsColumns(
             statements,
           ),
           aggregatedTs: TimestampToString(item.stats_data.aggregated_ts),
-          transactionFingerprintId: item.stats_data.transaction_fingerprint_id.toString(),
+          transactionFingerprintId:
+            item.stats_data.transaction_fingerprint_id.toString(),
           search,
         }),
       sort: (item: TransactionInfo) =>

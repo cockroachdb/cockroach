@@ -360,17 +360,15 @@ export class TransactionsPage extends React.Component<
     //
     // TODO(davidh): Once the redux layer for TransactionsPage is added to this repo,
     // extract this work into the selector
-    const {
-      transactions: filteredTransactions,
-      activeFilters,
-    } = filterTransactions(
-      searchTransactionsData(search, data?.transactions || [], statements),
-      filters,
-      internal_app_name_prefix,
-      statements,
-      nodeRegions,
-      isTenant,
-    );
+    const { transactions: filteredTransactions, activeFilters } =
+      filterTransactions(
+        searchTransactionsData(search, data?.transactions || [], statements),
+        filters,
+        internal_app_name_prefix,
+        statements,
+        nodeRegions,
+        isTenant,
+      );
 
     const appNames = getTrxAppFilterOptions(
       data?.transactions || [],
@@ -428,16 +426,16 @@ export class TransactionsPage extends React.Component<
             error={this.props?.error}
             render={() => {
               const { pagination } = this.state;
-              const transactionsToDisplay: TransactionInfo[] = aggregateAcrossNodeIDs(
-                filteredTransactions,
-                statements,
-              ).map(t => ({
-                stats_data: t.stats_data,
-                node_id: t.node_id,
-                regionNodes: isTenant
-                  ? []
-                  : generateRegionNode(t, statements, nodeRegions),
-              }));
+              const transactionsToDisplay: TransactionInfo[] =
+                aggregateAcrossNodeIDs(filteredTransactions, statements).map(
+                  t => ({
+                    stats_data: t.stats_data,
+                    node_id: t.node_id,
+                    regionNodes: isTenant
+                      ? []
+                      : generateRegionNode(t, statements, nodeRegions),
+                  }),
+                );
               const { current, pageSize } = pagination;
               const hasData = data.transactions?.length > 0;
               const isUsedFilter = search?.length > 0;

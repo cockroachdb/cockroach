@@ -1,5 +1,5 @@
-@import '../../core/index.module.scss';
-@import '../table.module.scss';
+@import "../../core/index.module.scss";
+@import "../table.module.scss";
 
 @mixin table-header-text {
   @include text--body-strong;
@@ -35,7 +35,8 @@
         .sortable__actions {
           position: relative;
           margin: 0 14px 0 30px;
-          &:after, &:before {
+          &:after,
+          &:before {
             content: "";
             position: absolute;
             border-style: solid;
@@ -57,7 +58,8 @@
         color: $colors--neutral-6;
         .inner-content-wrapper {
           .sortable__actions:before {
-          border-color: $colors--primary-blue-3 transparent transparent transparent;
+            border-color: $colors--primary-blue-3 transparent transparent
+              transparent;
           }
         }
       }
@@ -66,7 +68,8 @@
         color: $colors--neutral-6;
         .inner-content-wrapper {
           .sortable__actions:after {
-          border-color: transparent transparent $colors--primary-blue-3 transparent;
+            border-color: transparent transparent $colors--primary-blue-3
+              transparent;
           }
         }
       }

@@ -37,7 +37,8 @@ $stats-table-tr--bg: $colors--neutral-0;
       color: $colors--neutral-7;
       background-color: $colors--neutral-0;
 
-      tr, th {
+      tr,
+      th {
         padding: $spacing-base $spacing-base $spacing-base $spacing-small;
         height: $line-height--large;
         background-color: $colors--neutral-0;

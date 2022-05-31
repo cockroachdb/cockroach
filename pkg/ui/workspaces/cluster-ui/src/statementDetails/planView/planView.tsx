@@ -158,12 +158,7 @@ export function standardizeKey(str: string): string {
     .split(/[ -]+/)
     .filter(str => str !== "(anti)")
     .map((str, i) =>
-      i === 0
-        ? str
-        : str
-            .charAt(0)
-            .toUpperCase()
-            .concat(str.substring(1)),
+      i === 0 ? str : str.charAt(0).toUpperCase().concat(str.substring(1)),
     )
     .join("");
 }

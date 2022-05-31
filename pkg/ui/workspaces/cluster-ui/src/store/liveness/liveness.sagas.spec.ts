@@ -25,9 +25,7 @@ describe("Liveness sagas", () => {
 
   describe("refreshLivenessSaga", () => {
     it("dispatches request for node liveness statuses", () => {
-      expectSaga(refreshLivenessSaga)
-        .put(actions.request())
-        .run();
+      expectSaga(refreshLivenessSaga).put(actions.request()).run();
     });
   });
 

@@ -114,11 +114,8 @@ export class Dropdown<T = string> extends React.Component<
   };
 
   renderDropdownToggleButton = (): React.ReactChild => {
-    const {
-      children,
-      customToggleButton,
-      customToggleButtonOptions,
-    } = this.props;
+    const { children, customToggleButton, customToggleButtonOptions } =
+      this.props;
     const { isOpen } = this.state;
 
     if (customToggleButton) {

@@ -20,7 +20,8 @@ import {
   RenderCount,
 } from "../../util";
 
-export type PlanHashStats = cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
+export type PlanHashStats =
+  cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
 export class PlansSortedTable extends SortedTable<PlanHashStats> {}
 
 const planDetailsColumnLabels = {

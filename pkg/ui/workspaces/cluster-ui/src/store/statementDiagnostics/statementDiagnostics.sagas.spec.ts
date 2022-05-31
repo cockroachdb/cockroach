@@ -60,9 +60,10 @@ describe("statementsDiagnostics sagas", () => {
       },
     });
 
-    const reportsResponse = new cockroach.server.serverpb.StatementDiagnosticsReportsResponse(
-      { reports: [] },
-    );
+    const reportsResponse =
+      new cockroach.server.serverpb.StatementDiagnosticsReportsResponse({
+        reports: [],
+      });
 
     it("successful request", () => {
       expectSaga(createDiagnosticsReportSaga, actions.createReport(request))
@@ -95,9 +96,10 @@ describe("statementsDiagnostics sagas", () => {
 
   describe("requestStatementsDiagnosticsSaga", () => {
     const statementFingerprint = "SELECT * FROM table";
-    const reportsResponse = new cockroach.server.serverpb.StatementDiagnosticsReportsResponse(
-      { reports: [{ statement_fingerprint: statementFingerprint }] },
-    );
+    const reportsResponse =
+      new cockroach.server.serverpb.StatementDiagnosticsReportsResponse({
+        reports: [{ statement_fingerprint: statementFingerprint }],
+      });
 
     it("successfully requests diagnostics reports", () => {
       expectSaga(requestStatementsDiagnosticsSaga)
@@ -138,9 +140,10 @@ describe("statementsDiagnostics sagas", () => {
       error: "",
     });
 
-    const reportsResponse = new cockroach.server.serverpb.StatementDiagnosticsReportsResponse(
-      { reports: [] },
-    );
+    const reportsResponse =
+      new cockroach.server.serverpb.StatementDiagnosticsReportsResponse({
+        reports: [],
+      });
 
     it("successful request", () => {
       return expectSaga(

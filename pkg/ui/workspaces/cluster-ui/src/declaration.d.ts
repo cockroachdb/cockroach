@@ -19,9 +19,8 @@ declare module "*.svg";
 
 type ConstructorType = new (...args: any) => any;
 
-type FirstConstructorParameter<
-  P extends ConstructorType
-> = ConstructorParameters<P>[0];
+type FirstConstructorParameter<P extends ConstructorType> =
+  ConstructorParameters<P>[0];
 
 type Tuple<T> = [T, T];
 

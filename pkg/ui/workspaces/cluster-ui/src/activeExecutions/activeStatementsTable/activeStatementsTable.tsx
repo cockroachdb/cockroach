@@ -35,9 +35,7 @@ interface ActiveStatementsTable {
   selectedColumns: string[];
 }
 
-export function makeActiveStatementsColumns(): ColumnDescriptor<
-  ActiveStatement
->[] {
+export function makeActiveStatementsColumns(): ColumnDescriptor<ActiveStatement>[] {
   const execType: ExecutionType = "statement";
   const columns: ColumnDescriptor<ActiveStatement>[] = [
     {

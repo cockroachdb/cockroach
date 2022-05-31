@@ -98,9 +98,7 @@ describe("timescale utils", (): void => {
         findClosestTimeScale(
           defaultTimeScaleOptions,
           defaultTimeScaleOptions["Past 10 Minutes"].windowSize.asSeconds(),
-          moment()
-            .subtract(1, "day")
-            .unix(),
+          moment().subtract(1, "day").unix(),
         ),
         { ...defaultTimeScaleOptions["Past 10 Minutes"], key: "Custom" },
       );
