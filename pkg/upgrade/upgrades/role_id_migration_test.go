@@ -115,6 +115,8 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		{"testuser0", "NULL", "false", "101"},
 		{"testuser_last", "NULL", "false", fmt.Sprint(101 + numUsers)},
 	})
+
+	tdb.CheckQueryResults(t, `SHOW CREATE TABLE system.users`, [][]string{{systemschema.UsersTableSchema}})
 }
 
 func TestRoleIDMigration1User(t *testing.T) {

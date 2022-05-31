@@ -74,6 +74,9 @@ func (s SQLUsername) IsNodeUser() bool { return s.u == NodeUser }
 // RootUser is the default cluster administrator.
 const RootUser = "root"
 
+// RootUserID is the ID for RootUser.
+const RootUserID = 1
+
 // RootUserName is the SQLUsername for RootUser.
 func RootUserName() SQLUsername { return SQLUsername{RootUser} }
 
@@ -82,6 +85,9 @@ func (s SQLUsername) IsRootUser() bool { return s.u == RootUser }
 
 // AdminRole is the default (and non-droppable) role with superuser privileges.
 const AdminRole = "admin"
+
+// AdminRoleID is the ID for admin.
+const AdminRoleID = 2
 
 // AdminRoleName is the SQLUsername for AdminRole.
 func AdminRoleName() SQLUsername { return SQLUsername{AdminRole} }
