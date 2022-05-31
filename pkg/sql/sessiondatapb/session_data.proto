@@ -89,6 +89,10 @@ message SessionData {
   // increase the speed of lookup joins when each input row might get multiple
   // looked up rows at the cost of increased memory usage.
   bool parallelize_multi_key_lookup_joins_enabled = 19;
+
+  // TrigramSimilarityThreshold configures the value that's used to compare
+  // trigram similarities to in order to evaluate the string % string overload.
+  double trigram_similarity_threshold = 20;
 }
 
 // DataConversionConfig contains the parameters that influence the output

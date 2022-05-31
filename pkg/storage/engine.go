@@ -278,6 +278,14 @@ type IterOptions struct {
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	// useL6Filters allows the caller to opt into reading filter blocks for
+	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
+	// Seeks are expected in quick succession, that are also likely to not
+	// yield a single key. Filter blocks in L6 can be relatively large, often
+	// larger than data blocks, so the benefit of loading them in the cache
+	// is minimized if the probability of the key existing is not low or if
+	// this is a one-time Seek (where loading the data block directly is better).
+	useL6Filters bool
 }
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
@@ -426,9 +434,25 @@ type Reader interface {
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
 	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error) error
-	// NewMVCCIterator returns a new instance of an MVCCIterator over this
-	// engine. The caller must invoke MVCCIterator.Close() when finished
-	// with the iterator to free resources.
+	// NewMVCCIterator returns a new instance of an MVCCIterator over this engine.
+	// The caller must invoke Close() on it when done to free resources.
+	//
+	// Write visibility semantics:
+	//
+	// 1. An iterator has a consistent view of the reader as of the time of its
+	//    creation. Subsequent writes are never visible to it.
+	//
+	// 2. All iterators on readers with ConsistentIterators=true have a consistent
+	//    view of the _engine_ (not reader) as of the time of the first iterator
+	//    creation or PinEngineStateForIterators call: newer engine writes are
+	//    never visible. The opposite holds for ConsistentIterators=false: new
+	//    iterators see the most recent engine state at the time of their creation.
+	//
+	// 3. Iterators on unindexed batches never see batch writes, but satisfy
+	//    ConsistentIterators for engine write visibility.
+	//
+	// 4. Iterators on indexed batches see all batch writes as of their creation
+	//    time, but they satisfy ConsistentIterators for engine writes.
 	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished

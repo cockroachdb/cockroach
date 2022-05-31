@@ -22,11 +22,11 @@ go_library(
         "@com_github_gogo_protobuf//types",
         "@com_google_cloud_go_kms//apiv1",
         "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//impersonate",
         "@org_golang_google_api//iterator",
         "@org_golang_google_api//option",
         "@org_golang_google_genproto//googleapis/cloud/kms/v1:kms",
         "@org_golang_google_protobuf//types/known/wrapperspb",
-        "@org_golang_x_oauth2//google",
     ],
 )
 
@@ -49,5 +49,7 @@ go_test(
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_api//impersonate",
+        "@org_golang_x_oauth2//google",
     ],
 )

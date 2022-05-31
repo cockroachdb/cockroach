@@ -101,7 +101,9 @@ var _ tableWriter = &optTableUpserter{}
 func (tu *optTableUpserter) init(
 	ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, sv *settings.Values,
 ) error {
-	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv)
+	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, sv); err != nil {
+		return err
+	}
 
 	// rowsNeeded, set upon initialization, indicates pkg/sql/backfill.gowhether or not we want
 	// rows returned from the operation.

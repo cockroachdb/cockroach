@@ -50,7 +50,7 @@ type Process struct {
 // is a possibility that between the two calls, the parent stopper completes a
 // stop and then the leak detection may find a leaked stopper.
 func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
-	mu := &syncutil.Mutex{}
+	var mu syncutil.Mutex
 	var subStopper *stop.Stopper
 	parentStopper.AddCloser(stop.CloserFn(func() {
 		mu.Lock()
@@ -161,32 +161,6 @@ func (s *TestDirectoryServer) StartTenant(ctx context.Context, id roachpb.Tenant
 	}))
 
 	return nil
-}
-
-// SetFakeLoad artificially sets the load reported by a specific tenant pod. If
-// the id or addr is not found, a load update event is still generated.
-func (s *TestDirectoryServer) SetFakeLoad(id roachpb.TenantID, addr net.Addr, fakeLoad float32) {
-	s.proc.RLock()
-	defer s.proc.RUnlock()
-
-	// Only set FakeLoad if an entry exists.
-	if processes, ok := s.proc.processByAddrByTenantID[id.ToUint64()]; ok {
-		if process, ok := processes[addr]; ok {
-			process.FakeLoad = fakeLoad
-		}
-	}
-
-	s.listen.RLock()
-	defer s.listen.RUnlock()
-	s.notifyEventListenersLocked(&tenant.WatchPodsResponse{
-		Pod: &tenant.Pod{
-			Addr:           addr.String(),
-			TenantID:       id.ToUint64(),
-			Load:           fakeLoad,
-			State:          tenant.UNKNOWN,
-			StateTimestamp: timeutil.Now(),
-		},
-	})
 }
 
 // GetTenant returns tenant metadata for a given ID. Hard coded to return every

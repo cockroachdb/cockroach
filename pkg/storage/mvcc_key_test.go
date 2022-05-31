@@ -381,3 +381,14 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 	}
 	benchmarkDecodeMVCCKeyResult = mvccKey // avoid compiler optimizing away function call
 }
+
+func pointKey(key string, ts int) MVCCKey {
+	return MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{WallTime: int64(ts)}}
+}
+
+func pointKV(key string, ts int, value string) MVCCKeyValue {
+	return MVCCKeyValue{
+		Key:   pointKey(key, ts),
+		Value: stringValueRaw(value),
+	}
+}

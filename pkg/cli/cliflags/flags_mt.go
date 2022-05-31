@@ -76,6 +76,11 @@ var (
 		Description: "If true, use insecure connection to the backend.",
 	}
 
+	DisableConnectionRebalancing = FlagInfo{
+		Name:        "disable-connection-rebalancing",
+		Description: "If true, proxy will not attempt to rebalance connections.",
+	}
+
 	RatelimitBaseDelay = FlagInfo{
 		Name:        "ratelimit-base-delay",
 		Description: "Initial backoff after a failed login attempt. Set to 0 to disable rate limiting.",

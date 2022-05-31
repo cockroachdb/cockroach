@@ -476,7 +476,7 @@ CREATE MATERIALIZED VIEW v5 AS SELECT currval('view_seq'), i FROM t3
 query TT
 SHOW CREATE VIEW v5
 ----
-v5  CREATE VIEW public.v5 (
+v5  CREATE MATERIALIZED VIEW public.v5 (
     currval,
     i,
     rowid

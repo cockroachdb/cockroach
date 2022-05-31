@@ -578,8 +578,13 @@ func setConvContextDefaults() {
 
 // demoCtx captures the command-line parameters of the `demo` command.
 // See below for defaults.
-var demoCtx = democluster.Context{
-	CliCtx: &cliCtx.Context,
+var demoCtx = struct {
+	democluster.Context
+	disableEnterpriseFeatures bool
+}{
+	Context: democluster.Context{
+		CliCtx: &cliCtx.Context,
+	},
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
@@ -595,7 +600,6 @@ func setDemoContextDefaults() {
 	demoCtx.Localities = nil
 	demoCtx.GeoPartitionedReplicas = false
 	demoCtx.DisableTelemetry = false
-	demoCtx.DisableLicenseAcquisition = false
 	demoCtx.DefaultKeySize = defaultKeySize
 	demoCtx.DefaultCALifetime = defaultCALifetime
 	demoCtx.DefaultCertLifetime = defaultCertLifetime
@@ -604,6 +608,8 @@ func setDemoContextDefaults() {
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
 	demoCtx.Multitenant = true
+
+	demoCtx.disableEnterpriseFeatures = false
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
@@ -650,6 +656,7 @@ func setProxyContextDefaults() {
 	proxyContext.ValidateAccessInterval = 30 * time.Second
 	proxyContext.PollConfigInterval = 30 * time.Second
 	proxyContext.ThrottleBaseDelay = time.Second
+	proxyContext.DisableConnectionRebalancing = false
 }
 
 var testDirectorySvrContext struct {

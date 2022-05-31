@@ -1,15 +1,22 @@
 @import "../core/index.module";
 
-.popup-container {
-  width: 506px;
-  height: 240px;
-
-  :global(.ant-popover-arrow) {
-    display: none;
-  }
-}
-
 .popup-content {
+  .icon {
+    font-size: 13px;
+    margin-right: 3px;
+  }
+
+  .return-to-preset-options-wrapper {
+    padding-top: 10px;
+    padding-bottom: 10px;
+
+    a {
+      // Matches the color of .ant-dropdown, needed to override default anchor color. A cleaner way would be to install
+      // and set up antd-scss-theme-plugin, and use the antd text-color variable.
+      color: rgba(0, 0, 0, 0.65);
+    }
+  }
+
   .label {
     display: block;
   }
@@ -41,20 +48,5 @@
   text-align: right;
   button {
     margin-left: 8px;
-  }
-}
-
-.date-range-form {
-  width: 300px;
-  height: 40px;
-
-  :global(.ant-input-affix-wrapper) {
-    height: 40px;
-    &:hover {
-      :global(.ant-input:not(.ant-input-disabled)) {
-        border-color: $colors--primary-blue-3;
-        border-right-width: 2px !important;
-      }
-    }
   }
 }

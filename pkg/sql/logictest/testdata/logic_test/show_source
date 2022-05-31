@@ -68,7 +68,7 @@ experimental_enable_auto_rehoming                     off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_temp_tables                       off
 experimental_enable_unique_without_index_constraints  off
-extra_float_digits                                    0
+extra_float_digits                                    1
 force_savepoint_restart                               off
 foreign_key_cascades_limit                            10000
 idle_in_session_timeout                               0
@@ -102,6 +102,7 @@ optimizer_use_multicol_stats                          on
 override_multi_region_zone_config                     off
 parallelize_multi_key_lookup_joins_enabled            off
 password_encryption                                   scram-sha-256
+pg_trgm.similarity_threshold                          0.3
 prefer_lookup_joins_for_fks                           off
 propagate_input_ordering                              off
 reorder_joins_limit                                   8

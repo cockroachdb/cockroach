@@ -109,7 +109,8 @@ var (
 		settings.PositiveDuration,
 	)
 
-	retentionTimeSetting = settings.RegisterDurationSetting(
+	// RetentionTimeSetting wraps "jobs.retention_timehelpers_test.go".
+	RetentionTimeSetting = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		retentionTimeSettingKey,
 		"the amount of time to retain records for completed jobs before",

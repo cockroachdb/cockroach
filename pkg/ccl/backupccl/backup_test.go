@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
@@ -661,7 +662,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		"BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
-	sqlDB.ExpectErr(t, "The full backup cannot get written to '/subdir', a user defined subdirectory. To take a full backup, remove the subdirectory from the backup command",
+	sqlDB.ExpectErr(t, "A full backup cannot be written to \"/subdir\", a user defined subdirectory. To take a full backup, remove the subdirectory from the backup command",
 		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
 	time.Sleep(time.Second + 2)
@@ -901,7 +902,7 @@ func backupAndRestore(
 				t.Fatal("cannot unmarshal job payload from system.jobs")
 			}
 
-			backupManifest := &BackupManifest{}
+			backupManifest := &backuppb.BackupManifest{}
 			backupPayload, ok := payload.Details.(*jobspb.Payload_Backup)
 			if !ok {
 				t.Logf("job %T is not a backup: %v", payload.Details, payload.Details)
@@ -1482,7 +1483,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		if err != nil {
 			return errors.Wrap(err, "error while reading checkpoint")
 		}
-		var checkpointDesc BackupManifest
+		var checkpointDesc backuppb.BackupManifest
 		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Wrap(err, "error while unmarshalling checkpoint")
 		}
@@ -1594,9 +1595,9 @@ func TestBackupRestoreResume(t *testing.T) {
 					t.Fatal(err)
 				}
 				backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
-				mockManifest, err := protoutil.Marshal(&BackupManifest{
+				mockManifest, err := protoutil.Marshal(&backuppb.BackupManifest{
 					ClusterID: tc.Servers[0].RPCContext().LogicalClusterID.Get(),
-					Files: []BackupManifest_File{
+					Files: []backuppb.BackupManifest_File{
 						{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 					},
 				})
@@ -1632,7 +1633,7 @@ func TestBackupRestoreResume(t *testing.T) {
 					backupManifestBytes, err = decompressData(ctx, nil, backupManifestBytes)
 					require.NoError(t, err)
 				}
-				var backupManifest BackupManifest
+				var backupManifest backuppb.BackupManifest
 				if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
 					t.Fatal(err)
 				}
@@ -3978,7 +3979,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
 
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	{
 		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupManifestName))
 		if err != nil {
@@ -4434,7 +4435,7 @@ func (k *testKMS) Close() error {
 	return nil
 }
 
-func MakeTestKMS(uri string, _ cloud.KMSEnv) (cloud.KMS, error) {
+func MakeTestKMS(_ context.Context, uri string, _ cloud.KMSEnv) (cloud.KMS, error) {
 	return &testKMS{uri}, nil
 }
 
@@ -4490,6 +4491,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 		},
 	} {
 		masterKeyIDToDataKey := newEncryptedDataKeyMap()
+		ctx := context.Background()
 
 		var defaultEncryptedDataKey []byte
 		for _, uri := range tc.fullBackupURIs {
@@ -4506,7 +4508,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 		}
 
 		kmsInfo, err := validateKMSURIsAgainstFullBackup(
-			tc.incrementalBackupURIs, masterKeyIDToDataKey,
+			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey,
 			&testKMSEnv{cluster.NoSettings, &base.ExternalIODirConfig{}})
 		if tc.expectError {
 			require.Error(t, err)
@@ -4545,7 +4547,7 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 		expectedMap := newEncryptedDataKeyMap()
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, uri := range tc.fullBackupURIs {
-			testKMS, err := MakeTestKMS(uri, nil)
+			testKMS, err := MakeTestKMS(ctx, uri, nil)
 			require.NoError(t, err)
 
 			masterKeyID, err := testKMS.MasterKeyID()
@@ -5834,7 +5836,7 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest,
 		username.RootUserName())
 	require.NoError(t, err)
-	statsTable := StatsTable{
+	statsTable := backuppb.StatsTable{
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
 	}
 	require.NoError(t, writeTableStatistics(ctx, store, backupStatisticsFileName,
@@ -6233,7 +6235,7 @@ func getMockTableDesc(
 	return tabledesc.NewBuilder(&mockTableDescriptor).BuildImmutableTable()
 }
 
-// Unit tests for the spansForAllTableIndexes and getPublicIndexTableSpans()
+// Unit tests for the spansForAllTableIndexes and forEachPublicIndexTableSpan()
 // methods.
 func TestPublicIndexTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -6331,9 +6333,11 @@ func TestPublicIndexTableSpans(t *testing.T) {
 	for _, test := range testCases {
 		tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
 			test.indexes, test.addingIndexes, test.droppingIndexes)
-		t.Run(fmt.Sprintf("%s:%s", "getPublicIndexTableSpans", test.name), func(t *testing.T) {
-			spans, err := getPublicIndexTableSpans(tableDesc, unusedMap, codec)
-			require.NoError(t, err)
+		t.Run(fmt.Sprintf("%s:%s", "forEachPublicIndexTableSpan", test.name), func(t *testing.T) {
+			var spans []roachpb.Span
+			forEachPublicIndexTableSpan(tableDesc.TableDesc(), unusedMap, codec, func(sp roachpb.Span) {
+				spans = append(spans, sp)
+			})
 			var unmergedSpans []string
 			for _, span := range spans {
 				unmergedSpans = append(unmergedSpans, span.String())
@@ -8040,10 +8044,10 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		Mode: jobspb.EncryptionMode_Passphrase,
 		Key:  storageccl.GenerateKey([]byte("passphrase"), []byte("sodium")),
 	}
-	desc := &BackupManifest{}
+	desc := &backuppb.BackupManifest{}
 	magic := 5500
 	for i := 0; i < magic; i++ {
-		desc.Files = append(desc.Files, BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
+		desc.Files = append(desc.Files, backuppb.BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
 	}
 	require.NoError(t, writeBackupManifest(ctx, st, storage, "testmanifest", encOpts, desc))
 	_, sz, err := readBackupManifest(ctx, &mem, storage, "testmanifest", encOpts)
@@ -8070,7 +8074,7 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, err)
 	manifestData, err = decompressData(context.Background(), nil, manifestData)
 	require.NoError(t, err)
-	var backupManifest BackupManifest
+	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
 
 	// Bump the version and write it back out to make it look newer.

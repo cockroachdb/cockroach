@@ -36,7 +36,7 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	// checkpoint option enabled to create the missing store directory
 	// fixture (see runVersionUpgrade).
 	verMap := map[string]string{
-		"22.2": "22.1.0-beta.3",
+		"22.2": "22.1.0",
 		"22.1": "21.2.7",
 		"21.2": "21.1.12",
 		"21.1": "20.2.12",

@@ -1653,6 +1653,11 @@
             "cockroach/pkg/.*$": "first-party code"
         }
     },
+    "shadow": {
+        "only_files": {
+            "cockroach/pkg/.*$": "first-party code"
+        }
+    },
     "stdmethods": {
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"

@@ -489,7 +489,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	var queryTxnCount int32
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	// Move the clock forward so that when the PushTxn is sent, the txn appears
 	// expired.

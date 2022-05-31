@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -894,7 +895,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeDescriptorsInBackupManifests(
-	backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
+	backupManifests []backuppb.BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
 	if len(backupManifests) == 0 {
 		return nil
@@ -1444,7 +1445,7 @@ func doRestorePlan(
 		// restore has been used to encrypt the backup at least once.
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, encFile := range opts {
-			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(kms,
+			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, kms,
 				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
 					baseStores[0].Settings(),
 					&ioConf,
@@ -1469,7 +1470,7 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities.
 	var defaultURIs []string
-	var mainBackupManifests []BackupManifest
+	var mainBackupManifests []backuppb.BackupManifest
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI

@@ -1,0 +1,76 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package builtins
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
+)
+
+func initTrigramBuiltins() {
+	for k, v := range trigramBuiltins {
+		if _, exists := builtins[k]; exists {
+			panic("duplicate builtin: " + k)
+		}
+		v.props.Category = categoryTrigram
+		v.props.AvailableOnPublicSchema = true
+		builtins[k] = v
+	}
+}
+
+var trigramBuiltins = map[string]builtinDefinition{
+	// Trigram functions.
+	"similarity": makeBuiltin(
+		tree.FunctionProperties{Category: categoryTrigram},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"left", types.String}, {"right", types.String}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				l, r := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				f := trigram.Similarity(l, r)
+				return tree.NewDFloat(tree.DFloat(f)), nil
+			},
+			Info: "Returns a number that indicates how similar the two arguments" +
+				" are. The range of the result is zero (indicating that the two strings are" +
+				" completely dissimilar) to one (indicating that the two strings are" +
+				" identical).",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"show_trgm": makeBuiltin(
+		tree.FunctionProperties{Category: categoryTrigram},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"input", types.String}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				arr := trigram.MakeTrigrams(s, true /* pad */)
+				ret := tree.NewDArray(types.String)
+				ret.Array = make(tree.Datums, 0, len(arr))
+				for i := range arr {
+					if err := ret.Append(tree.NewDString(arr[i])); err != nil {
+						return nil, err
+					}
+				}
+				return ret, nil
+			},
+			Info:       "Returns an array of all the trigrams in the given string.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"word_similarity":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"strict_word_similarity": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"show_limit":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+	"set_limit":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 41285, Category: categoryTrigram}),
+}

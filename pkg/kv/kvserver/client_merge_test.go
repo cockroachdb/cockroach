@@ -294,7 +294,7 @@ func mergeWithData(t *testing.T, retries int64) {
 				TestingRequestFilter: testingRequestFilter,
 			},
 			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
+				WallClock: manualClock,
 			},
 		},
 	})
@@ -489,7 +489,7 @@ func mergeCheckingTimestampCaches(
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter:       testingRequestFilter,
@@ -1827,7 +1827,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						TestingRequestFilter:                    testingRequestFilter,
@@ -2312,7 +2312,7 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 				TestingResponseFilter: testingResponseFilter,
 			},
 			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
+				WallClock: manualClock,
 			},
 		},
 	})
@@ -4099,7 +4099,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 				TestingPostApplyFilter: testingPostApplyFilter,
 			},
 			Server: &server.TestingKnobs{
-				ClockSource: manualClock.UnixNano,
+				WallClock: manualClock,
 			},
 		},
 	})
@@ -4183,7 +4183,7 @@ func TestMergeQueue(t *testing.T) {
 				Settings: settings,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource:               manualClock.UnixNano,
+						WallClock:                 manualClock,
 						DefaultZoneConfigOverride: &zoneConfig,
 					},
 					Store: &kvserver.StoreTestingKnobs{

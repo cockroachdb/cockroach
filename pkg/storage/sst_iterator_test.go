@@ -83,7 +83,8 @@ func TestSSTIterator(t *testing.T) {
 	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
-	for i := 0; i < 10; i++ {
+	maxWallTime := 10
+	for i := 0; i < maxWallTime; i++ {
 		kv := MVCCKeyValue{
 			Key: MVCCKey{
 				Key:       []byte{'A' + byte(i)},
@@ -128,5 +129,27 @@ func TestSSTIterator(t *testing.T) {
 		}
 		defer iter.Close()
 		runTestSSTIterator(t, iter, allKVs)
+	})
+	t.Run("AsOf", func(t *testing.T) {
+		iter, err := NewMemSSTIterator(sstFile.Data(), false)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer iter.Close()
+		asOfTimes := []hlc.Timestamp{
+			{WallTime: int64(maxWallTime / 2)},
+			{WallTime: int64(maxWallTime)},
+			{}}
+		for _, asOf := range asOfTimes {
+			var asOfKVs []MVCCKeyValue
+			for _, kv := range allKVs {
+				if !asOf.IsEmpty() && asOf.Less(kv.Key.Timestamp) {
+					continue
+				}
+				asOfKVs = append(asOfKVs, kv)
+			}
+			asOfIter := NewReadAsOfIterator(iter, asOf)
+			runTestSSTIterator(t, asOfIter, asOfKVs)
+		}
 	})
 }

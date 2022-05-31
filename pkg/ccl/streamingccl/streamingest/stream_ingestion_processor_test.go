@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"sync"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -552,10 +554,11 @@ func getStreamIngestionProcessor(
 
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:     st,
-			DB:           kvDB,
-			JobRegistry:  registry,
-			TestingKnobs: execinfra.TestingKnobs{StreamingTestingKnobs: streamingTestingKnobs},
+			Settings:          st,
+			DB:                kvDB,
+			JobRegistry:       registry,
+			TestingKnobs:      execinfra.TestingKnobs{StreamingTestingKnobs: streamingTestingKnobs},
+			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,

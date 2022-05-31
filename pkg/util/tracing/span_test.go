@@ -703,10 +703,14 @@ func TestWithRemoteParentFromTraceInfo(t *testing.T) {
 
 type mockEventListener struct {
 	eventsSeen int
+	notifyImpl func()
 }
 
 func (f *mockEventListener) Notify(_ Structured) {
 	f.eventsSeen++
+	if f.notifyImpl != nil {
+		f.notifyImpl()
+	}
 }
 
 var _ EventListener = &mockEventListener{}
@@ -765,4 +769,23 @@ func TestEventListener(t *testing.T) {
 	childSp2.RecordStructured(&types.Int32Value{Value: 11})
 	require.Equal(t, 7, rootEventListener.eventsSeen)
 	childSp2.Finish()
+}
+
+func TestEventListenerNotifiedWithoutHoldingSpanMutex(t *testing.T) {
+	tr := NewTracer()
+	rootEventListener := &mockEventListener{}
+	sp := tr.StartSpan("root", WithRecording(RecordingStructured),
+		WithEventListeners([]EventListener{rootEventListener}))
+	defer sp.Finish()
+
+	// Set the EventListeners Notify() method to acquire the span's mutex.
+	rootEventListener.notifyImpl = func() {
+		sp.i.crdb.mu.Lock()
+		defer sp.i.crdb.mu.Unlock()
+	}
+
+	// Record a StructuredEvent, if Notify() were called holding the span's mutex
+	// this would deadlock.
+	sp.RecordStructured(&types.Int32Value{Value: 5})
+	require.Equal(t, 1, rootEventListener.eventsSeen)
 }

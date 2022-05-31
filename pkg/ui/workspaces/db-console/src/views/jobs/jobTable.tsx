@@ -10,6 +10,7 @@
 
 import React, { MouseEvent } from "react";
 import { cockroach } from "src/js/protos";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { JobStatusCell } from "src/views/jobs/jobStatusCell";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
@@ -19,9 +20,11 @@ import Job = cockroach.server.serverpb.IJobResponse;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import {
   ColumnDescriptor,
+  EmptyTable,
   Pagination,
   ResultsPerPageLabel,
   SortSetting,
+  SortedTable,
   util,
 } from "@cockroachlabs/cluster-ui";
 import {
@@ -32,11 +35,11 @@ import {
   jobTable,
 } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
-import { EmptyTable, SortedTable } from "@cockroachlabs/cluster-ui";
 import { Anchor } from "src/components";
 import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
 import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -175,6 +178,26 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     sort: job => util.TimestampToMoment(job?.last_run).valueOf(),
   },
   {
+    name: "High-water Timestamp",
+    title: (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={<p>Date and time the job was last executed.</p>}
+      >
+        {"High-water Timestamp"}
+      </Tooltip>
+    ),
+    cell: job =>
+      job.highwater_timestamp ? (
+        <HighwaterTimestamp
+          timestamp={job.highwater_timestamp}
+          decimalString={job.highwater_decimal}
+        />
+      ) : null,
+    sort: job => util.TimestampToMoment(job?.highwater_timestamp).valueOf(),
+  },
+  {
     name: "executionCount",
     title: (
       <Tooltip
@@ -246,16 +269,6 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     this.setState({ pagination: { ...pagination, current } });
   };
 
-  renderCounts = () => {
-    const {
-      pagination: { current, pageSize },
-    } = this.state;
-    const total = this.props.jobs.data.jobs.length;
-    const pageCount = current * pageSize > total ? total : current * pageSize;
-    const count = total > 10 ? pageCount : current * total;
-    return `${count} of ${total} jobs`;
-  };
-
   renderEmptyState = () => {
     const { isUsedFilter, jobs } = this.props;
     const hasData = jobs?.data?.jobs?.length > 0;
@@ -304,18 +317,34 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     trackDocsLink(e.currentTarget.text);
   };
 
+  formatJobsRetentionMessage = (
+    earliestRetainedTime: protos.google.protobuf.ITimestamp,
+  ): string => {
+    return `Since ${util
+      .TimestampToMoment(earliestRetainedTime)
+      .format(DATE_FORMAT_24_UTC)}`;
+  };
+
   render() {
     const jobs = this.props.jobs.data.jobs;
     const { pagination } = this.state;
 
     return (
       <React.Fragment>
-        <div className="cl-table-statistic">
+        <div className="cl-table-statistic jobs-table-summary">
           <h4 className="cl-count-title">
             <ResultsPerPageLabel
               pagination={{ ...pagination, total: jobs.length }}
               pageName="jobs"
             />
+            {this.props.jobs.data.earliest_retained_time && (
+              <>
+                <span className="jobs-table-summary__retention-divider">|</span>
+                {this.formatJobsRetentionMessage(
+                  this.props.jobs.data.earliest_retained_time,
+                )}
+              </>
+            )}
           </h4>
         </div>
         <JobsSortedTable

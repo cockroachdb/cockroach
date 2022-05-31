@@ -1716,22 +1716,22 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 
 	// TODO(peter): Add test cases for non-empty constraints.
 	testCases := []struct {
-		existing       []roachpb.ReplicaDescriptor
-		leaseholder    roachpb.StoreID
-		allowLeaseRepl bool
-		expected       roachpb.StoreID
+		existing         []roachpb.ReplicaDescriptor
+		leaseholder      roachpb.StoreID
+		excludeLeaseRepl bool
+		expected         roachpb.StoreID
 	}{
 		// No existing lease holder, nothing to do.
-		{existing: existing, leaseholder: 0, allowLeaseRepl: true, expected: 0},
+		{existing: existing, leaseholder: 0, excludeLeaseRepl: false, expected: 0},
 		// Store 1 is not a lease transfer source.
-		{existing: existing, leaseholder: 1, allowLeaseRepl: true, expected: 0},
-		{existing: existing, leaseholder: 1, allowLeaseRepl: false, expected: 2},
+		{existing: existing, leaseholder: 1, excludeLeaseRepl: false, expected: 0},
+		{existing: existing, leaseholder: 1, excludeLeaseRepl: true, expected: 2},
 		// Store 2 is not a lease transfer source.
-		{existing: existing, leaseholder: 2, allowLeaseRepl: true, expected: 0},
-		{existing: existing, leaseholder: 2, allowLeaseRepl: false, expected: 1},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 0},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 1},
 		// Store 3 is a lease transfer source.
-		{existing: existing, leaseholder: 3, allowLeaseRepl: true, expected: 1},
-		{existing: existing, leaseholder: 3, allowLeaseRepl: false, expected: 1},
+		{existing: existing, leaseholder: 3, excludeLeaseRepl: false, expected: 1},
+		{existing: existing, leaseholder: 3, excludeLeaseRepl: true, expected: 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -1746,7 +1746,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
-					ExcludeLeaseRepl:       !c.allowLeaseRepl,
+					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
 				},
 			)
@@ -1788,56 +1788,56 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 		existing          []roachpb.ReplicaDescriptor
 		replsNeedingSnaps []roachpb.ReplicaID
 		leaseholder       roachpb.StoreID
-		allowLeaseRepl    bool
+		excludeLeaseRepl  bool
 		transferTarget    roachpb.StoreID
 	}{
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1},
 			leaseholder:       3,
-			allowLeaseRepl:    true,
+			excludeLeaseRepl:  false,
 			transferTarget:    0,
 		},
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1},
 			leaseholder:       3,
-			allowLeaseRepl:    false,
+			excludeLeaseRepl:  true,
 			transferTarget:    2,
 		},
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1},
 			leaseholder:       4,
-			allowLeaseRepl:    true,
+			excludeLeaseRepl:  false,
 			transferTarget:    2,
 		},
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1},
 			leaseholder:       4,
-			allowLeaseRepl:    false,
+			excludeLeaseRepl:  true,
 			transferTarget:    2,
 		},
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1, 2},
 			leaseholder:       4,
-			allowLeaseRepl:    false,
+			excludeLeaseRepl:  true,
 			transferTarget:    3,
 		},
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1, 2},
 			leaseholder:       4,
-			allowLeaseRepl:    true,
+			excludeLeaseRepl:  false,
 			transferTarget:    0,
 		},
 		{
 			existing:          existing,
 			replsNeedingSnaps: []roachpb.ReplicaID{1, 2, 3},
 			leaseholder:       4,
-			allowLeaseRepl:    true,
+			excludeLeaseRepl:  false,
 			transferTarget:    0,
 		},
 	}
@@ -1859,7 +1859,7 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 				nil,
 				false, /* alwaysAllowDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
-					ExcludeLeaseRepl:       !c.allowLeaseRepl,
+					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
 				},
 			)
@@ -2019,36 +2019,36 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	}
 
 	testCases := []struct {
-		existing       []roachpb.ReplicaDescriptor
-		leaseholder    roachpb.StoreID
-		allowLeaseRepl bool
-		expected       roachpb.StoreID
-		conf           roachpb.SpanConfig
+		existing         []roachpb.ReplicaDescriptor
+		leaseholder      roachpb.StoreID
+		excludeLeaseRepl bool
+		expected         roachpb.StoreID
+		conf             roachpb.SpanConfig
 	}{
 		// No existing lease holder, nothing to do.
-		{existing: existing, leaseholder: 0, allowLeaseRepl: true, expected: 0, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 0, excludeLeaseRepl: false, expected: 0, conf: emptySpanConfig()},
 		// Store 1 is draining, so it will try to transfer its lease if
 		// excludeLeaseRepl is false. This behavior isn't relied upon,
 		// though; leases are manually transferred when draining.
-		{existing: existing, leaseholder: 1, allowLeaseRepl: true, expected: 0, conf: emptySpanConfig()},
-		{existing: existing, leaseholder: 1, allowLeaseRepl: false, expected: 2, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 1, excludeLeaseRepl: false, expected: 0, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 1, excludeLeaseRepl: true, expected: 2, conf: emptySpanConfig()},
 		// Store 2 is not a lease transfer source.
-		{existing: existing, leaseholder: 2, allowLeaseRepl: true, expected: 0, conf: emptySpanConfig()},
-		{existing: existing, leaseholder: 2, allowLeaseRepl: false, expected: 3, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 0, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: emptySpanConfig()},
 		// Store 3 is a lease transfer source, but won't transfer to
 		// node 1 because it's draining.
-		{existing: existing, leaseholder: 3, allowLeaseRepl: true, expected: 2, conf: emptySpanConfig()},
-		{existing: existing, leaseholder: 3, allowLeaseRepl: false, expected: 2, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 3, excludeLeaseRepl: false, expected: 2, conf: emptySpanConfig()},
+		{existing: existing, leaseholder: 3, excludeLeaseRepl: true, expected: 2, conf: emptySpanConfig()},
 		// Verify that lease preferences dont impact draining.
 		// If the store that is within the lease preferences (store 1) is draining,
 		// we'd like the lease to stay on the next best store (which is store 2).
-		{existing: existing, leaseholder: 2, allowLeaseRepl: true, expected: 0, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 0, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
 		// If the current lease on store 2 needs to be shed (indicated by
 		// excludeLeaseRepl = false), and store 1 is draining, then store 3
 		// is the only reasonable lease transfer target.
-		{existing: existing, leaseholder: 2, allowLeaseRepl: false, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
-		{existing: existing, leaseholder: 2, allowLeaseRepl: true, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
-		{existing: existing, leaseholder: 2, allowLeaseRepl: false, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -2063,7 +2063,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 				nil,   /* stats */
 				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
-					ExcludeLeaseRepl:       !c.allowLeaseRepl,
+					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
 				},
 			)
@@ -5237,7 +5237,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		return localities[nodeID]
 	}
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	// Set up four different load distributions. Record a bunch of requests to
 	// the unknown node 99 in evenlyBalanced to verify that requests from
@@ -5272,69 +5272,69 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	}
 
 	testCases := []struct {
-		leaseholder    roachpb.StoreID
-		latency        map[string]time.Duration
-		stats          *replicastats.ReplicaStats
-		allowLeaseRepl bool
-		expected       roachpb.StoreID
+		leaseholder      roachpb.StoreID
+		latency          map[string]time.Duration
+		stats            *replicastats.ReplicaStats
+		excludeLeaseRepl bool
+		expected         roachpb.StoreID
 	}{
 		// No existing lease holder, nothing to do.
-		{leaseholder: 0, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 2, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: evenlyBalanced, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 0, latency: noLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: imbalanced1, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: noLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 2, latency: noLatency, stats: imbalanced1, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: imbalanced1, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 0, latency: noLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: imbalanced2, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: noLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 2, latency: noLatency, stats: imbalanced2, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: imbalanced2, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 0, latency: noLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: noLatency, stats: imbalanced3, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: noLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 2, latency: noLatency, stats: imbalanced3, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 3, latency: noLatency, stats: imbalanced3, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 0, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 2, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 3, latency: highLatency, stats: evenlyBalanced, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 0, latency: highLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: highLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: highLatency, stats: imbalanced1, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: highLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 2, latency: highLatency, stats: imbalanced1, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: highLatency, stats: imbalanced1, allowLeaseRepl: true, expected: 1},
-		{leaseholder: 3, latency: highLatency, stats: imbalanced1, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 0, latency: highLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: highLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 2},
-		{leaseholder: 1, latency: highLatency, stats: imbalanced2, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 2, latency: highLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 2, latency: highLatency, stats: imbalanced2, allowLeaseRepl: false, expected: 1},
-		{leaseholder: 3, latency: highLatency, stats: imbalanced2, allowLeaseRepl: true, expected: 2},
-		{leaseholder: 3, latency: highLatency, stats: imbalanced2, allowLeaseRepl: false, expected: 2},
-		{leaseholder: 0, latency: highLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 1, latency: highLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 3},
-		{leaseholder: 1, latency: highLatency, stats: imbalanced3, allowLeaseRepl: false, expected: 3},
-		{leaseholder: 2, latency: highLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 3},
-		{leaseholder: 2, latency: highLatency, stats: imbalanced3, allowLeaseRepl: false, expected: 3},
-		{leaseholder: 3, latency: highLatency, stats: imbalanced3, allowLeaseRepl: true, expected: 0},
-		{leaseholder: 3, latency: highLatency, stats: imbalanced3, allowLeaseRepl: false, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: evenlyBalanced, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced1, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced2, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 0, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 2, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 3, latency: noLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 0, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 2, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: evenlyBalanced, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 0, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: false, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced1, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 0, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 2},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: true, expected: 1},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: false, expected: 2},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced2, excludeLeaseRepl: true, expected: 2},
+		{leaseholder: 0, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 3},
+		{leaseholder: 1, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 3},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 3},
+		{leaseholder: 2, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 3},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: false, expected: 0},
+		{leaseholder: 3, latency: highLatency, stats: imbalanced3, excludeLeaseRepl: true, expected: 1},
 	}
 
 	for _, c := range testCases {
@@ -5353,7 +5353,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				c.stats,
 				false,
 				allocator.TransferLeaseOptions{
-					ExcludeLeaseRepl:       !c.allowLeaseRepl,
+					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
 					DryRun:                 false,
 				},
@@ -7549,7 +7549,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	tr := tracing.NewTracer()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
 	// randomly added occasionally.
@@ -7996,7 +7996,7 @@ func exampleRebalancing(
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.

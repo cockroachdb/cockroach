@@ -470,6 +470,8 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 // The boolean returned is true if this call was actually responsible for the
 // lease acquisition.
 func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, error) {
+	start := timeutil.Now()
+	log.VEventf(ctx, 2, "acquiring lease for descriptor %d", id)
 	var toRelease *storedLease
 	resultChan, didAcquire := m.storage.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
 		// Note that we use a new `context` here to avoid a situation where a cancellation
@@ -516,6 +518,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			return false, result.Err
 		}
 	}
+	log.VEventf(ctx, 2, "acquired lease for descriptor %d, took %v", id, timeutil.Since(start))
 	return didAcquire, nil
 }
 

@@ -951,73 +951,6 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 	}
 }
 
-func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
-
-			value := MVCCValue{Value: roachpb.MakeValueFromString("foobar")}
-			err := engine.PutMVCC(MVCCKey{Key: testKey1, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = engine.PutMVCC(MVCCKey{Key: testKey2, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = engine.PutMVCC(MVCCKey{Key: testKey2, Timestamp: hlc.Timestamp{WallTime: 3}}, value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = engine.PutMVCC(MVCCKey{Key: testKey3, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = engine.PutMVCC(MVCCKey{Key: testKey4, Timestamp: hlc.Timestamp{WallTime: 5}}, value)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			batch := engine.NewBatch()
-			defer batch.Close()
-			txn := &roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{
-					WriteTimestamp: hlc.Timestamp{WallTime: 10},
-				},
-				Name:                   "test",
-				Status:                 roachpb.PENDING,
-				ReadTimestamp:          hlc.Timestamp{WallTime: 10},
-				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 10},
-			}
-			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-				LowerBound: testKey1,
-				UpperBound: testKey5,
-			})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: testKey1, Timestamp: hlc.Timestamp{WallTime: 5}})
-			iter.Next() // key2/5
-
-			// Lay down an intent on key3, which will go at key3/0 and sort before key3/5.
-			err = MVCCDelete(context.Background(), batch, nil, testKey3, txn.WriteTimestamp, hlc.ClockTimestamp{}, txn)
-			if err != nil {
-				t.Fatal(err)
-			}
-			iter.SeekGE(MVCCKey{Key: testKey3})
-			if ok, err := iter.Valid(); !ok || err != nil {
-				t.Fatalf("expected valid iter: ok %t, err %s", ok, err.Error())
-			}
-			// Should see the intent.
-			if iter.UnsafeKey().IsValue() {
-				t.Fatalf("expected iterator to land on an intent, got a value: %v", iter.UnsafeKey())
-			}
-		})
-	}
-}
-
 func mvccScanTest(ctx context.Context, t *testing.T, engine Engine) {
 	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil); err != nil {
 		t.Fatal(err)
@@ -2515,7 +2448,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(hlc.NewManualClock(123), time.Nanosecond /* maxOffset */)
 
 			txn := *txn1
 			txn.Sequence++

@@ -186,8 +186,8 @@ func (p *planner) incrementSequenceUsingCache(
 		// This sequence has exceeded its bounds after performing this increment.
 		if endValue > seqOpts.MaxValue || endValue < seqOpts.MinValue {
 			// If the sequence exceeded its bounds prior to the increment, then return an error.
-			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*cacheSize >= seqOpts.MaxValue) ||
-				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*cacheSize <= seqOpts.MinValue) {
+			if (seqOpts.Increment > 0 && endValue-seqOpts.Increment*(cacheSize-1) > seqOpts.MaxValue) ||
+				(seqOpts.Increment < 0 && endValue-seqOpts.Increment*(cacheSize-1) < seqOpts.MinValue) {
 				return 0, 0, 0, boundsExceededError(descriptor)
 			}
 			// Otherwise, values between the limit and the value prior to incrementing can be cached.
@@ -814,6 +814,8 @@ func addSequenceOwner(
 // if the column has a DEFAULT expression that uses one or more sequences. (Usually just one,
 // e.g. `DEFAULT nextval('my_sequence')`.
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
+// `colExprKind`, either 'DEFAULT' or "ON UPDATE", tells which expression `expr` is, so we can
+// correctly modify `col` (see issue #81333).
 func maybeAddSequenceDependencies(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -822,6 +824,7 @@ func maybeAddSequenceDependencies(
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
+	colExprKind tabledesc.ColExprKind,
 ) ([]*tabledesc.Mutable, error) {
 	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 	if err != nil {
@@ -903,7 +906,14 @@ func maybeAddSequenceDependencies(
 			return nil, err
 		}
 		s := tree.Serialize(newExpr)
-		col.DefaultExpr = &s
+		switch colExprKind {
+		case tabledesc.DefaultExpr:
+			col.DefaultExpr = &s
+		case tabledesc.OnUpdateExpr:
+			col.OnUpdateExpr = &s
+		default:
+			return nil, errors.AssertionFailedf("colExprKind must be either 'DEFAULT' or 'ON UPDATE'; got %v", colExprKind)
+		}
 	}
 
 	return seqDescs, nil

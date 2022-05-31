@@ -58,6 +58,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/buildutil",
+        "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
@@ -86,7 +87,7 @@ go_test(
     embed = [":execinfra"],
     tags = ["no-remote"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/execinfrapb",

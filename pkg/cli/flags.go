@@ -857,7 +857,7 @@ func init() {
 			"to start a test server without any security, run start-single-node --insecure\n"+
 				"For details, see: "+build.MakeIssueURL(53404))
 
-		boolFlag(f, &demoCtx.DisableLicenseAcquisition, cliflags.DemoNoLicense)
+		boolFlag(f, &demoCtx.disableEnterpriseFeatures, cliflags.DemoNoLicense)
 
 		boolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
 		// TODO(knz): Currently the multitenant UX for 'demo' is not
@@ -1033,7 +1033,9 @@ func init() {
 		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
 		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
 		durationFlag(f, &proxyContext.ThrottleBaseDelay, cliflags.ThrottleBaseDelay)
+		boolFlag(f, &proxyContext.DisableConnectionRebalancing, cliflags.DisableConnectionRebalancing)
 	}
+
 	// Multi-tenancy test directory command flags.
 	{
 		f := mtTestDirectorySvr.Flags()

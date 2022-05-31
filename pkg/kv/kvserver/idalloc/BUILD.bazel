@@ -29,7 +29,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/sql",
         "//pkg/testutils",

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -46,7 +47,7 @@ func registerRebalanceLoad(r registry.Registry) {
 	//
 	// In other words, this test should always pass with
 	// kv.allocator.stat_based_rebalancing.enabled set to true, while it should
-	// usually (but not always fail) with it set to false.
+	// usually (but not always) fail with it set to false.
 	rebalanceLoadRun := func(
 		ctx context.Context,
 		t test.Test,
@@ -58,10 +59,16 @@ func registerRebalanceLoad(r registry.Registry) {
 	) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
-		splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
+		numStores := len(roachNodes)
+		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
+			numStores *= c.Spec().SSDs
+		}
+		splits := numStores - 1 // n-1 splits => n ranges => 1 lease per store
 
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
+		startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
+		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
 		if mixedVersion {
 			predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
@@ -128,7 +135,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			}
 
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
-				if done, err := isLoadEvenlyDistributed(t.L(), db, len(roachNodes)); err != nil {
+				if done, err := isLoadEvenlyDistributed(t.L(), db, numStores); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")
@@ -212,9 +219,24 @@ func registerRebalanceLoad(r registry.Registry) {
 			},
 		},
 	)
+	r.Add(
+		registry.TestSpec{
+			Name:    `rebalance/by-load/replicas/ssds=2`,
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(7, spec.SSD(2)), // the last node is just used to generate load
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					t.Fatal("cannot run multi-store in local mode")
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, false, /* mixedVersion */
+				)
+			},
+		},
+	)
 }
 
-func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool, error) {
+func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numStores int) (bool, error) {
 	rows, err := db.Query(
 		`select lease_holder, count(*) ` +
 			`from [show ranges from table kv.kv] ` +
@@ -244,14 +266,14 @@ func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool
 		rangeCount += leaseCount
 	}
 
-	if len(leaseCounts) < numNodes {
-		l.Printf("not all nodes have a lease yet: %v\n", formatLeaseCounts(leaseCounts))
+	if len(leaseCounts) < numStores {
+		l.Printf("not all stores have a lease yet: %v\n", formatLeaseCounts(leaseCounts))
 		return false, nil
 	}
 
 	// The simple case is when ranges haven't split. We can require that every
 	// store has one lease.
-	if rangeCount == numNodes {
+	if rangeCount == numStores {
 		for _, leaseCount := range leaseCounts {
 			if leaseCount != 1 {
 				l.Printf("uneven lease distribution: %s\n", formatLeaseCounts(leaseCounts))
@@ -264,7 +286,7 @@ func isLoadEvenlyDistributed(l *logger.Logger, db *gosql.DB, numNodes int) (bool
 
 	// For completeness, if leases have split, verify the leases per store don't
 	// differ by any more than 1.
-	leases := make([]int, 0, numNodes)
+	leases := make([]int, 0, numStores)
 	for _, leaseCount := range leaseCounts {
 		leases = append(leases, leaseCount)
 	}

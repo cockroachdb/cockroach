@@ -33,7 +33,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/keys",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

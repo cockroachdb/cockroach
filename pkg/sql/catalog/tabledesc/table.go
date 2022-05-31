@@ -57,15 +57,28 @@ type ColumnDefDescs struct {
 // hash-sharded index or primary key.
 const MaxBucketAllowed = 2048
 
+// ColExprKind is an enum type of possible expressions on a column
+// (e.g. 'DEFAULT' expression or 'ON UPDATE' expression).
+type ColExprKind string
+
+const (
+	// DefaultExpr means the expression is a DEFAULT expression.
+	DefaultExpr ColExprKind = "DEFAULT"
+	// OnUpdateExpr means the expression is a ON UPDATE expression.
+	OnUpdateExpr ColExprKind = "ON UPDATE"
+)
+
 // ForEachTypedExpr iterates over each typed expression in this struct.
-func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error {
+func (cdd *ColumnDefDescs) ForEachTypedExpr(
+	fn func(expr tree.TypedExpr, colExprKind ColExprKind) error,
+) error {
 	if cdd.ColumnTableDef.HasDefaultExpr() {
-		if err := fn(cdd.DefaultExpr); err != nil {
+		if err := fn(cdd.DefaultExpr, DefaultExpr); err != nil {
 			return err
 		}
 	}
 	if cdd.ColumnTableDef.HasOnUpdateExpr() {
-		if err := fn(cdd.OnUpdateExpr); err != nil {
+		if err := fn(cdd.OnUpdateExpr, OnUpdateExpr); err != nil {
 			return err
 		}
 	}

@@ -167,17 +167,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	var clock *hlc.Clock
 	if cfg.ClockDevicePath != "" {
-		clockSrc, err := hlc.MakeClockSource(context.Background(), cfg.ClockDevicePath)
+		ptpClock, err := hlc.MakePTPClock(context.Background(), cfg.ClockDevicePath)
 		if err != nil {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
-		clock = hlc.NewClock(clockSrc.UnixNano, time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClock(ptpClock, time.Duration(cfg.MaxOffset))
 	} else if cfg.TestingKnobs.Server != nil &&
-		cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource != nil {
-		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource,
+		cfg.TestingKnobs.Server.(*TestingKnobs).WallClock != nil {
+		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).WallClock,
 			time.Duration(cfg.MaxOffset))
 	} else {
-		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
+		clock = hlc.NewClockWithSystemTimeSource(time.Duration(cfg.MaxOffset))
 	}
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
@@ -400,6 +400,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
+		Stopper:                 stopper,
 		Clock:                   clock,
 		DB:                      db,
 		Gossip:                  g,
@@ -1440,7 +1441,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
 	s.nodeLiveness.Start(ctx, liveness.NodeLivenessStartOptions{
-		Stopper: s.stopper,
 		Engines: s.engines,
 		OnSelfLive: func(ctx context.Context) {
 			now := s.clock.Now()

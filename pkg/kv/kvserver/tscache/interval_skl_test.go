@@ -860,7 +860,7 @@ func TestIntervalSklFill2(t *testing.T) {
 // by the floor timestamp.
 func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, makeSklMetrics())
@@ -914,7 +914,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 // to carry the synthtic flag, if necessary.
 func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, makeSklMetrics())
@@ -974,7 +974,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			// good for simulating real conditions while the latter is good for
 			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
-				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+				clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 				s := newIntervalSkl(clock, 0 /* minRet */, makeSklMetrics())
 				s.setFixedPageSize(tc.pageSize)
 				if tc.minPages != 0 {
@@ -1075,7 +1075,7 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 
 		const smallPageSize = 32 * 1024 // 32 KB
 		const retainForever = math.MaxInt64
@@ -1213,7 +1213,7 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 // we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	ts := clock.Now()
 	val := makeVal(ts, "1")
@@ -1328,7 +1328,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const max = 500000000 // max size of range
 	const txnID = "123"
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond /* maxOffset */)
 	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -1364,7 +1364,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const data = 500000    // number of ranges
 	const txnID = "123"
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
+	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond /* maxOffset */)
 	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 

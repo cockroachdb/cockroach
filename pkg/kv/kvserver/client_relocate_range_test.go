@@ -539,7 +539,7 @@ func setupReplicaRemovalTest(
 					AllowLeaseRequestProposalsWhenNotLeader: true,
 				},
 				Server: &server.TestingKnobs{
-					ClockSource: manual.UnixNano,
+					WallClock: manual,
 				},
 			},
 		},

@@ -60,9 +60,7 @@ func TestStorage(t *testing.T) {
 			`CREATE TABLE "`+dbName+`".sql_instances`, 1)
 		tDB.Exec(t, schema)
 		tableID := getTableID(t, tDB, dbName, "sql_instances")
-		clock := hlc.NewClock(func() int64 {
-			return timeutil.NewTestTimeSource().Now().UnixNano()
-		}, base.DefaultMaxClockOffset)
+		clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
 		stopper := stop.NewStopper()
 		slStorage := slstorage.NewFakeStorage()
 		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
@@ -196,9 +194,7 @@ func TestSQLAccess(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	clock := hlc.NewClock(func() int64 {
-		return timeutil.NewTestTimeSource().Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
+	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
 	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
@@ -250,9 +246,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	clock := hlc.NewClock(func() int64 {
-		return timeutil.NewTestTimeSource().Now().UnixNano()
-	}, base.DefaultMaxClockOffset)
+	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
 	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)

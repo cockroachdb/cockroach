@@ -13,6 +13,7 @@ package bulk
 import (
 	"bytes"
 	"context"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -55,7 +57,34 @@ var (
 		0,
 		settings.NonNegativeDuration,
 	)
+
+	senderConcurrency = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"bulkio.ingest.sender_concurrency_limit",
+		"maximum number of concurrent bulk ingest requests sent by any one sender, such as a processor in an IMPORT, index creation or RESTORE, etc (0 = no limit)",
+		0,
+		settings.NonNegativeInt,
+	)
 )
+
+// MakeAndRegisterConcurrencyLimiter makes a concurrency limiter and registers it
+// with the setting on-change hook; it should be called only once during server
+// setup due to the side-effects of the on-change registration.
+func MakeAndRegisterConcurrencyLimiter(sv *settings.Values) limit.ConcurrentRequestLimiter {
+	newLimit := int(senderConcurrency.Get(sv))
+	if newLimit == 0 {
+		newLimit = math.MaxInt
+	}
+	l := limit.MakeConcurrentRequestLimiter("bulk-send-limit", newLimit)
+	senderConcurrency.SetOnChange(sv, func(ctx context.Context) {
+		newLimit := int(senderConcurrency.Get(sv))
+		if newLimit == 0 {
+			newLimit = math.MaxInt
+		}
+		l.SetLimit(newLimit)
+	})
+	return l
+}
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
 // SSTBatcher can be handed KVs repeatedly and will make them into SSTs that are
@@ -69,6 +98,7 @@ type SSTBatcher struct {
 	rc       *rangecache.RangeCache
 	settings *cluster.Settings
 	mem      mon.BoundAccount
+	limiter  limit.ConcurrentRequestLimiter
 
 	// disallowShadowingBelow is described on roachpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
@@ -147,6 +177,7 @@ func MakeSSTBatcher(
 	writeAtBatchTs bool,
 	splitFilledRanges bool,
 	mem mon.BoundAccount,
+	sendLimiter limit.ConcurrentRequestLimiter,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		name:                   name,
@@ -156,6 +187,7 @@ func MakeSSTBatcher(
 		writeAtBatchTS:         writeAtBatchTs,
 		disableSplits:          !splitFilledRanges,
 		mem:                    mem,
+		limiter:                sendLimiter,
 	}
 	err := b.Reset(ctx)
 	return b, err
@@ -164,9 +196,13 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db *kv.DB, settings *cluster.Settings, mem mon.BoundAccount,
+	ctx context.Context,
+	db *kv.DB,
+	settings *cluster.Settings,
+	mem mon.BoundAccount,
+	sendLimiter limit.ConcurrentRequestLimiter,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, mem: mem}
+	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, mem: mem, limiter: sendLimiter}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -471,12 +507,42 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	summary := b.rowCounter.BulkOpSummary
 	data := b.sstFile.Data()
 	batchTS := b.batchTS
-	var reserved int64
 
-	updatesLastRange := reason != rangeFlush
+	res, err := b.limiter.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	// If we're flushing due to a range boundary, we we might be flushing this
+	// one buffer into many different ranges, and doing so one-by-one, waiting
+	// for each round-trip serially, could really add up; a buffer of random
+	// data that covers all of a 2000 range table would be flushing 2000 SSTs,
+	// each of which might be quite small, like 256kib, but still see, say, 50ms
+	// or more round-trip time. Doing those serially would then take minutes. If
+	// we can, instead send this SST and move on to the next while it is sent,
+	// we could reduce that considerably. One concern with doing so however is
+	// that you could potentially end up with an entire buffer's worth of SSTs
+	// all inflight at once, effectively doubling the memory footprint, so we
+	// need to reserve memory from a monitor for the sst before we move on to
+	// the next one; if memory is not available we'll just block on the send
+	// and then move on to the next send after this SST is no longer being held
+	// in memory.
+	flushAsync := reason == rangeFlush
+
+	var reserved int64
+	if flushAsync {
+		if err := b.mem.Grow(ctx, int64(cap(data))); err != nil {
+			log.VEventf(ctx, 3, "%s unable to reserve enough memory to flush async: %v", b.name, err)
+			flushAsync = false
+		} else {
+			reserved = int64(cap(data))
+		}
+	}
+
 	fn := func(ctx context.Context) error {
-		if err := b.addSSTable(ctx, batchTS, start, end, data, stats, updatesLastRange); err != nil {
-			b.mem.Shrink(ctx, reserved)
+		defer res.Release()
+		defer b.mem.Shrink(ctx, reserved)
+		if err := b.addSSTable(ctx, batchTS, start, end, data, stats, !flushAsync); err != nil {
 			return err
 		}
 		b.mu.Lock()
@@ -485,37 +551,15 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		atomic.AddInt64(&b.stats.batchWaitAtomic, int64(timeutil.Since(beforeFlush)))
 		atomic.AddInt64(&b.stats.dataSizeAtomic, int64(size))
 		b.mu.Unlock()
-		if reserved != 0 {
-			b.mem.Shrink(ctx, reserved)
-		}
 		return nil
 	}
 
-	if reason == rangeFlush {
-		// If we're flushing due to a range boundary, we we might be flushing this
-		// one buffer into many different ranges, and doing so one-by-one, waiting
-		// for each round-trip serially, could really add up; a buffer of random
-		// data that covers all of a 2000 range table would be flushing 2000 SSTs,
-		// each of which might be quite small, like 256kib, but still see, say, 50ms
-		// or more round-trip time. Doing those serially would then take minutes. If
-		// we can, instead send this SST and move on to the next while it is sent,
-		// we could reduce that considerably. One concern with doing so however is
-		// that you could potentially end up with an entire buffer's worth of SSTs
-		// all inflight at once, effectively doubling the memory footprint, so we
-		// need to reserve memory from a monitor for the sst before we move on to
-		// the next one; if memory is not available we'll just block on the send
-		// and then move on to the next send after this SST is no longer being held
-		// in memory.
+	if flushAsync {
 		if b.asyncAddSSTs == (ctxgroup.Group{}) {
 			b.asyncAddSSTs = ctxgroup.WithContext(ctx)
 		}
-		if err := b.mem.Grow(ctx, int64(cap(data))); err != nil {
-			log.VEventf(ctx, 3, "%s unable to reserve enough memory to flush async: %v", b.name, err)
-		} else {
-			reserved = int64(cap(data))
-			b.asyncAddSSTs.GoCtx(fn)
-			return nil
-		}
+		b.asyncAddSSTs.GoCtx(fn)
+		return nil
 	}
 
 	return fn(ctx)
