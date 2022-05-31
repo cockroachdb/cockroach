@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "tabledesc",
@@ -33,6 +34,7 @@ go_library(
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
@@ -41,6 +43,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
@@ -112,6 +115,13 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_google_protobuf//proto",
+    ],
+)
+
+disallowed_imports_test(
+    "tabledesc",
+    disallowed_list = [
+        "//pkg/sql/sem/builtins",
     ],
 )
 
