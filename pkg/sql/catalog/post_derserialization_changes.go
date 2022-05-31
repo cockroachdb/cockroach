@@ -86,4 +86,14 @@ const (
 	// dropping a schema, we'd mark the database itself as though it was the
 	// schema which was dropped.
 	RemovedSelfEntryInSchemas
+
+	// FixedDateStyleIntervalStyleCast indicates that the table had at least
+	// one computed column or partial indexes that had a stable cast within it.
+	// The stable cast was rewritten so that it would no longer cause
+	// inconsistencies when DateStyle/IntervalStyle is enabled.
+	FixedDateStyleIntervalStyleCast
+
+	// UpgradedSequenceReference indicates that the table/view had upgraded
+	// their sequence references, if any, from by-name to by-ID, if not already.
+	UpgradedSequenceReference
 )

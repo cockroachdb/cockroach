@@ -15,9 +15,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetSequenceFromFunc(t *testing.T) {
@@ -154,4 +156,18 @@ func TestReplaceSequenceNamesWithIDs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMaybeUpgradeSequenceReference(t *testing.T) {
+	allUsedSeqNames := make(map[descpb.ID]*tree.TableName)
+	allUsedSeqNames[1] = tree.NewTableNameWithSchema("testdb", "public", "s1")
+	allUsedSeqNames[2] = tree.NewTableNameWithSchema("testdb", "public", "s2")
+	allUsedSeqNames[3] = tree.NewTableNameWithSchema("testdb", "sc1", "s3")
+	expr := "nextval('public.s1') + nextval('testdb.public.s2') + currval('sc1.s3') + nextval('s3')"
+	hasUpgraded, err := UpgradeSequenceReferenceInExpr(&expr, allUsedSeqNames)
+	require.NoError(t, err)
+	require.True(t, hasUpgraded)
+	require.Equal(t,
+		"((nextval(1:::REGCLASS) + nextval(2:::REGCLASS)) + currval(3:::REGCLASS)) + nextval(3:::REGCLASS)",
+		expr)
 }

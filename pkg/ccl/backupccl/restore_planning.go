@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -864,6 +865,12 @@ func resolveTargetDB(
 // the set provided are omitted during the upgrade, instead of causing an error
 // to be returned.
 func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool) error {
+	// A data structure for efficient descriptor lookup by ID or by name.
+	descLookup := &nstree.Map{}
+	for _, d := range descs {
+		descLookup.Upsert(d)
+	}
+
 	for j, desc := range descs {
 		var b catalog.DescriptorBuilder
 		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
@@ -875,12 +882,11 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 			return errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
 		}
 		err := b.RunRestoreChanges(func(id descpb.ID) catalog.Descriptor {
-			for _, d := range descs {
-				if d.GetID() == id {
-					return d
-				}
+			d := descLookup.GetByID(id)
+			if d == nil {
+				return nil
 			}
-			return nil
+			return d.(catalog.Descriptor)
 		})
 		if err != nil {
 			return err
