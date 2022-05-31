@@ -161,9 +161,6 @@ func (s dbSplitAndScatterer) scatter(
 // findDestination returns the node ID of the node of the destination of the
 // AdminScatter request. If the destination cannot be found, 0 is returned.
 func (s dbSplitAndScatterer) findDestination(res *roachpb.AdminScatterResponse) roachpb.NodeID {
-	// A request from a 20.1 node will not have a RangeInfos with a lease.
-	// For this mixed-version state, we'll report the destination as node 0
-	// and suffer a bit of inefficiency.
 	if len(res.RangeInfos) > 0 {
 		// If the lease is not populated, we return the 0 value anyway. We receive 1
 		// RangeInfo per range that was scattered. Since we send a scatter request
@@ -374,6 +371,18 @@ func runSplitAndScatter(
 			chunkDestination, err := scatterer.scatter(ctx, flowCtx.Codec(), scatterKey)
 			if err != nil {
 				return err
+			}
+			if chunkDestination == 0 {
+				// If scatter failed to find a node for range ingestion, route the range
+				// to the node currently running the split and scatter processor.
+				if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok {
+					chunkDestination = nodeID
+					log.Warningf(ctx, "Scatter returned node 0. "+
+						"Route span starting at %s to current node %v", scatterKey, nodeID)
+				} else {
+					log.Warningf(ctx, "Scatter returned node 0. "+
+						"Route span starting at %s default stream", scatterKey)
+				}
 			}
 
 			sc := scatteredChunk{
