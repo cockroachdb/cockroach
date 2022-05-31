@@ -267,7 +267,7 @@ func getColumnStrings(rows clisqlclient.Rows, showMoreChars bool) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = FormatVal(c, "NAME", showMoreChars, showMoreChars)
+		cols[i] = FormatVal(c, showMoreChars, showMoreChars)
 	}
 	return cols
 }

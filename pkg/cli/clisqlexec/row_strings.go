@@ -53,9 +53,11 @@ func getNextRowStrings(
 		return nil, err
 	}
 
+	// These are expected to already be formatted strings, but if not, try to
+	// print them anyway.
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
-		rowStrings[i] = FormatVal(v, colTypes[i], showMoreChars, showMoreChars)
+		rowStrings[i] = FormatVal(v, showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil
 }
