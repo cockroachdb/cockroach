@@ -1480,6 +1480,12 @@ This has the same effect as passing the content of the file via
 the --log flag.`,
 	}
 
+	LogConfigVars = FlagInfo{
+		Name: "log-config-vars",
+		Description: `Environment variables that will be expanded if
+present in the body of the logging configuration.`,
+	}
+
 	DeprecatedStderrThreshold = FlagInfo{
 		Name:        "logtostderr",
 		Description: `Write log messages beyond the specified severity to stderr.`,
