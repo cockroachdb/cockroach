@@ -33,6 +33,7 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) e
 	for i := range rec {
 		sp := &rec[i]
 		sp.Tags = nil
+		sp.TagGroups = nil
 		for j := range sp.Logs {
 			record := &sp.Logs[j]
 			if record.Message != "" && !sp.RedactableLogs {

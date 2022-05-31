@@ -21,7 +21,6 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -2625,19 +2624,23 @@ func getMessagesForSubtrace(
 
 	// spanStartMsgs are metadata about the span, e.g. the operation name and tags
 	// contained in the span. They are added as one log message.
-	spanStartMsgs := make([]string, 0, len(span.Tags)+1)
+	spanStartMsgs := make([]string, 0)
 
 	spanStartMsgs = append(spanStartMsgs, fmt.Sprintf(spanStartMsgTemplate, span.Operation))
 
-	// Add recognized tags to the output.
-	for name, value := range span.Tags {
-		if !strings.HasPrefix(name, tracing.TagPrefix) {
-			// Not a tag to be output.
-			continue
+	for _, tg := range span.TagGroups {
+		var prefix string
+		if tg.Name != "" {
+			prefix = fmt.Sprintf("%s-", tg.Name)
 		}
-		spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s: %s", name, value))
+		for _, tag := range tg.Tags {
+			if !strings.HasPrefix(tag.Key, tracing.TagPrefix) {
+				// Not a tag to be output.
+				continue
+			}
+			spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s%s: %s", prefix, tag.Key, tag.Value))
+		}
 	}
-	sort.Strings(spanStartMsgs[1:])
 
 	// This message holds all the spanStartMsgs and marks the beginning of the
 	// span, to indicate the start time and duration of the span.
