@@ -89,7 +89,7 @@ type Conn interface {
 	// The what argument is a descriptive label for the value being
 	// retrieved, for inclusion inside warning or error message.
 	// The sql argument is the SQL query to use to retrieve the value.
-	GetServerValue(ctx context.Context, what, sql string) (driver.Value, string, bool)
+	GetServerValue(ctx context.Context, what, sql string) (driver.Value, bool)
 
 	// GetDriverConn exposes the underlying driver connection object
 	// for use by the cli package.
