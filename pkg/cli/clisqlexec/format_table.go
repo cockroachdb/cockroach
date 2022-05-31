@@ -99,12 +99,11 @@ func NewRowSliceIter(allRows [][]string, align string) RowStrIter {
 
 type rowIter struct {
 	rows          clisqlclient.Rows
-	colTypes      []string
 	showMoreChars bool
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
-	nextRowString, err := getNextRowStrings(iter.rows, iter.colTypes, iter.showMoreChars)
+	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +114,7 @@ func (iter *rowIter) Next() (row []string, err error) {
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
-	return getAllRowStrings(iter.rows, iter.colTypes, iter.showMoreChars)
+	return getAllRowStrings(iter.rows, iter.showMoreChars)
 }
 
 func (iter *rowIter) Align() []int {
@@ -143,7 +142,6 @@ func (iter *rowIter) Align() []int {
 func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
-		colTypes:      rows.ColumnTypeNames(),
 		showMoreChars: showMoreChars,
 	}
 }

@@ -90,7 +90,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			return true, nil
 		}
 
-		cols := getColumnStrings(rows, true)
+		cols := getColumnStrings(rows, true /* showMoreChars */)
 		reporter, cleanup, err := sqlExecCtx.makeReporter(w)
 		if err != nil {
 			return err
@@ -103,7 +103,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			if cleanup != nil {
 				defer cleanup()
 			}
-			return render(reporter, w, ew, cols, newRowIter(rows, true), completedHook, noRowsHook)
+			return render(reporter, w, ew, cols, newRowIter(rows, true /* showMoreChars */), completedHook, noRowsHook)
 		}(); err != nil {
 			return err
 		}
@@ -253,10 +253,9 @@ func (sqlExecCtx *Context) maybeShowTimes(
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
-// If showMoreChars is true, then more characters are not escaped.
 func sqlRowsToStrings(rows clisqlclient.Rows, showMoreChars bool) ([]string, [][]string, error) {
 	cols := getColumnStrings(rows, showMoreChars)
-	allRows, err := getAllRowStrings(rows, rows.ColumnTypeNames(), showMoreChars)
+	allRows, err := getAllRowStrings(rows, showMoreChars)
 	if err != nil {
 		return nil, nil, err
 	}
