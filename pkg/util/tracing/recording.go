@@ -367,10 +367,19 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	// node present in the trace.
 	getProcessID := func(sp tracingpb.RecordedSpan) jaegerjson.ProcessID {
 		node := "unknown node"
-		for k, v := range sp.Tags {
-			if k == "node" {
-				node = fmt.Sprintf("node %s", v)
-				break
+		if len(sp.TagsV2) == 0 {
+			for k, v := range sp.Tags {
+				if k == "node" {
+					node = fmt.Sprintf("node %s", v)
+					break
+				}
+			}
+		} else {
+			for k, v := range sp.TagsV2 {
+				if k == "node" {
+					node = fmt.Sprintf("node %s", v.Value)
+					break
+				}
 			}
 		}
 		// If we have passed in an explicit nodeStr then use that as a processID.
@@ -409,12 +418,29 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			}}
 		}
 
-		for k, v := range sp.Tags {
-			s.Tags = append(s.Tags, jaegerjson.KeyValue{
-				Key:   k,
-				Value: v,
-				Type:  "STRING",
-			})
+		if len(sp.TagsV2) == 0 {
+			for k, v := range sp.Tags {
+				s.Tags = append(s.Tags, jaegerjson.KeyValue{
+					Key:   k,
+					Value: v,
+					Type:  "STRING",
+				})
+			}
+		} else {
+			for k, v := range sp.TagsV2 {
+				s.Tags = append(s.Tags, jaegerjson.KeyValue{
+					Key:   k,
+					Value: v.Value,
+					Type:  "STRING",
+				})
+				for childK, childV := range v.Tags {
+					s.Tags = append(s.Tags, jaegerjson.KeyValue{
+						Key:   childK,
+						Value: childV,
+						Type:  "STRING",
+					})
+				}
+			}
 		}
 		for _, l := range sp.Logs {
 			jl := jaegerjson.Log{
