@@ -173,22 +173,6 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	}
 }
 
-// addGeoSpatialIndexes is used to add single-column indexes to inverted candidates for queries which use spatial
-// functions that can be index-accelerated.
-func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
-	switch expr := expr.(type) {
-	case *memo.FunctionExpr:
-		// check if the function is one of the geo relationship
-		_, ok := geoindex.RelationshipMap[expr.Name]
-		if ok {
-			for i := range expr.Args {
-				var child = expr.Args.Child(i)
-				ics.addVariableExprIndex(child, indexCandidates)
-			}
-		}
-	}
-}
-
 // addSetOperationIndexes is used to add index candidates on the output columns
 // of set operations (UNION, INTERSECT, INTERSECT ALL, EXCEPT, EXCEPT ALL).
 func (ics *indexCandidateSet) addSetOperationIndexes(leftCols, rightCols opt.ColList) {
@@ -417,4 +401,20 @@ func addIndexToCandidates(
 	}
 	// Index does not exist already, so add it.
 	indexCandidates[currTable] = append(indexCandidates[currTable], newIndex)
+}
+
+// addGeoSpatialIndexes is used to add single-column indexes to inverted candidates for queries which use spatial
+// functions that can be index-accelerated.
+func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
+	switch expr := expr.(type) {
+	case *memo.FunctionExpr:
+		// check if the function is one of the geo relationship
+		_, ok := geoindex.RelationshipMap[expr.Name]
+		if ok {
+			for i := range expr.Args {
+				var child = expr.Args.Child(i)
+				ics.addVariableExprIndex(child, indexCandidates)
+			}
+		}
+	}
 }
