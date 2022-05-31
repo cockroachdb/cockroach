@@ -34,24 +34,7 @@ module.exports = (env, argv) => {
     },
 
     resolve: {
-      modules: [
-        path.resolve("../../node_modules"),
-        path.resolve(__dirname, "node_modules"),
-      ],
-    },
-
-    module: {
-      rules: [
-        {
-          test: /\.js$/,
-          // analytics-node is an es6 module and we must run it through babel. As
-          // of 8/25/2017 there appears to be no better way to run babel only on
-          // the specific packages in node_modules that actually use ES6.
-          // https://github.com/babel/babel-loader/issues/171
-          exclude: /node_modules\/(?!analytics-node)/,
-          use: ["cache-loader", "thread-loader", "babel-loader"],
-        },
-      ],
+      modules: [ "node_modules" ],
     },
 
     plugins: [

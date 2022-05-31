@@ -77,7 +77,7 @@ func CreateTestStorePool(
 ) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool, *MockNodeLiveness) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	rpcContext := rpc.NewContext(ctx,

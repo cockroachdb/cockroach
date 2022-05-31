@@ -11,13 +11,13 @@
 package base_test
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func init() {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
 }
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -127,9 +126,8 @@ func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 	seed := evalCtx.SessionData().TestingOptimizerRandomCostSeed
-	o.rng, _ = randutil.NewPseudoRand()
 	if seed != 0 {
-		o.rng.Seed(seed)
+		o.rng = rand.New(rand.NewSource(seed))
 		// If we've been initialized with a random seed but not an explicit
 		// perturbation value, use the max perturbation. This is used for tests
 		// that set the seed with testing_optimizer_random_cost_seed, and will allow
@@ -470,7 +468,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 		// times, there is likely a cycle in the memo. To avoid a stack
 		// overflow, throw an internal error. The formatted memo is included as
 		// an error detail to aid in debugging the cycle.
-		mf := makeMemoFormatter(o, FmtPretty)
+		mf := makeMemoFormatter(o, FmtCycle)
 		panic(errors.WithDetail(
 			errors.AssertionFailedf(
 				"memo group optimization passes surpassed limit of %v; "+

@@ -542,7 +542,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource: manual.UnixNano,
+					WallClock: manual,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableConsistencyQueue: true,
@@ -700,7 +700,7 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				ClockSource: manual.UnixNano,
+				WallClock: manual,
 			},
 		},
 	})

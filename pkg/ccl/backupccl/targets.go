@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -53,7 +54,7 @@ func getRelevantDescChanges(
 	expanded []descpb.ID,
 	priorIDs map[descpb.ID]descpb.ID,
 	fullCluster bool,
-) ([]BackupManifest_DescriptorRevision, error) {
+) ([]backuppb.BackupManifest_DescriptorRevision, error) {
 
 	allChanges, err := getAllDescChanges(ctx, execCfg.Codec, execCfg.DB, startTime, endTime, priorIDs)
 	if err != nil {
@@ -67,7 +68,7 @@ func getRelevantDescChanges(
 	}
 
 	// interestingChanges will be every descriptor change relevant to the backup.
-	var interestingChanges []BackupManifest_DescriptorRevision
+	var interestingChanges []backuppb.BackupManifest_DescriptorRevision
 
 	// interestingIDs are the descriptor for which we're interested in capturing
 	// changes. This is initially the descriptors matched (as of endTime) by our
@@ -144,7 +145,7 @@ func getRelevantDescChanges(
 				// version in the previous BACKUP descriptor, but avoids adding more
 				// complicated special-cases in RESTORE, so it only needs to look in a
 				// single BACKUP to restore to a particular time.
-				initial := BackupManifest_DescriptorRevision{Time: startTime, ID: i.GetID(), Desc: desc.DescriptorProto()}
+				initial := backuppb.BackupManifest_DescriptorRevision{Time: startTime, ID: i.GetID(), Desc: desc.DescriptorProto()}
 				interestingChanges = append(interestingChanges, initial)
 			}
 		}
@@ -186,7 +187,7 @@ func getAllDescChanges(
 	db *kv.DB,
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[descpb.ID]descpb.ID,
-) ([]BackupManifest_DescriptorRevision, error) {
+) ([]backuppb.BackupManifest_DescriptorRevision, error) {
 	startKey := codec.TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
 
@@ -195,7 +196,7 @@ func getAllDescChanges(
 		return nil, err
 	}
 
-	var res []BackupManifest_DescriptorRevision
+	var res []backuppb.BackupManifest_DescriptorRevision
 
 	for _, revs := range allRevs {
 		id, err := codec.DecodeDescMetadataID(revs.Key)
@@ -203,7 +204,7 @@ func getAllDescChanges(
 			return nil, err
 		}
 		for _, rev := range revs.Values {
-			r := BackupManifest_DescriptorRevision{ID: descpb.ID(id), Time: rev.Timestamp}
+			r := backuppb.BackupManifest_DescriptorRevision{ID: descpb.ID(id), Time: rev.Timestamp}
 			if len(rev.RawBytes) != 0 {
 				var desc descpb.Descriptor
 				if err := rev.GetProto(&desc); err != nil {
@@ -274,7 +275,7 @@ func fullClusterTargets(
 }
 
 func fullClusterTargetsRestore(
-	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
+	allDescs []catalog.Descriptor, lastBackupManifest backuppb.BackupManifest,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	var filteredDescs []catalog.Descriptor
@@ -333,7 +334,7 @@ func fullClusterTargetsBackup(
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
-	backupManifests []BackupManifest,
+	backupManifests []backuppb.BackupManifest,
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
@@ -415,7 +416,7 @@ type BackupTableEntry struct {
 func MakeBackupTableEntry(
 	ctx context.Context,
 	fullyQualifiedTableName string,
-	backupManifests []BackupManifest,
+	backupManifests []backuppb.BackupManifest,
 	endTime hlc.Timestamp,
 	user username.SQLUsername,
 	backupCodec keys.SQLCodec,
@@ -429,7 +430,7 @@ func MakeBackupTableEntry(
 		ind := -1
 		for i, b := range backupManifests {
 			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				if endTime != b.EndTime && b.MVCCFilter != MVCCFilter_All {
+				if endTime != b.EndTime && b.MVCCFilter != backuppb.MVCCFilter_All {
 					errorHints := "reading data for requested time requires that BACKUP was created with %q" +
 						" or should specify the time to be an exact backup time, nearest backup time is %s"
 					return BackupTableEntry{}, errors.WithHintf(
@@ -499,7 +500,7 @@ func MakeBackupTableEntry(
 }
 
 func findLastSchemaChangeTime(
-	backupManifests []BackupManifest, tbDesc catalog.TableDescriptor, endTime hlc.Timestamp,
+	backupManifests []backuppb.BackupManifest, tbDesc catalog.TableDescriptor, endTime hlc.Timestamp,
 ) hlc.Timestamp {
 	lastSchemaChangeTime := endTime
 	for i := len(backupManifests) - 1; i >= 0; i-- {

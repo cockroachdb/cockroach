@@ -34,7 +34,7 @@ go_test(
     ],
     embed = [":storageccl"],
     deps = [
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",

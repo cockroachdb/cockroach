@@ -221,7 +221,7 @@ func (s *adminServer) ChartCatalog(
 ) (*serverpb.ChartCatalogResponse, error) {
 	metricsMetadata := s.server.recorder.GetMetricsMetadata()
 
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata, false /* strict */)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2042,6 +2042,21 @@ func (s *adminServer) jobsHelper(
 	}
 
 	var resp serverpb.JobsResponse
+
+	now := timeutil.Now()
+	if s.server.cfg.TestingKnobs.Server != nil &&
+		s.server.cfg.TestingKnobs.Server.(*TestingKnobs).StubTimeNow != nil {
+		now = s.server.cfg.TestingKnobs.Server.(*TestingKnobs).StubTimeNow()
+	}
+	retentionDuration := func() time.Duration {
+		if s.server.cfg.TestingKnobs.Server != nil &&
+			s.server.cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.RetentionTime != nil {
+			return *s.server.cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs).IntervalOverrides.RetentionTime
+		}
+		return jobs.RetentionTimeSetting.Get(&s.server.st.SV)
+	}
+	resp.EarliestRetainedTime = now.Add(-retentionDuration())
+
 	if !ok {
 		// The query returned 0 rows.
 		return &resp, nil

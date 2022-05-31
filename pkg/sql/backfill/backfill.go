@@ -847,6 +847,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 					colID, tableDesc.GetID(),
 				)
 			}
+			// Note that if this is a computed expr which is not being added,
+			// then this should generally be an assertion failure.
+			if val == tree.DNull && !cols[i].IsNullable() {
+				return sqlerrors.NewNonNullViolationError(cols[i].GetName())
+			}
 			ib.rowVals[colIdx] = val
 		}
 		return nil

@@ -51,7 +51,7 @@ func TestReplicaStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	gceLocalities := map[roachpb.NodeID]string{
 		1: "region=us-east1,zone=us-east1-a",
@@ -213,7 +213,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	awsLocalities := map[roachpb.NodeID]string{
 		1: "region=us-east-1,zone=us-east-1a",
@@ -315,7 +315,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	awsLocalities := map[roachpb.NodeID]string{
 		1: "region=us-east-1,zone=us-east-1a",
 		2: "region=us-east-1,zone=us-east-1b",
@@ -378,7 +378,7 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 
 func genTestingReplicaStats(windowedMultipliers []int, n, offset int) *ReplicaStats {
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	awsLocalities := map[roachpb.NodeID]string{
 		1: "region=us-east-1,zone=us-east-1a",
 		2: "region=us-east-1,zone=us-east-1b",

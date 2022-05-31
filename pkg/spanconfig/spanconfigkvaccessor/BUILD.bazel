@@ -38,7 +38,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/spanconfig",

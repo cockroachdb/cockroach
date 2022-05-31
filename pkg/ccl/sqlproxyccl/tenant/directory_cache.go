@@ -410,7 +410,12 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 				continue
 			}
 
-			// If caller is watching pods, send to its channel now.
+			// Update the directory entry for the tenant with the latest
+			// information about this pod.
+			d.updateTenantEntry(ctx, resp.Pod)
+
+			// If caller is watching pods, send to its channel now. Only do this
+			// after updating the tenant entry in the directory.
 			if d.options.podWatcher != nil {
 				select {
 				case d.options.podWatcher <- resp.Pod:
@@ -418,10 +423,6 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 					return
 				}
 			}
-
-			// Update the directory entry for the tenant with the latest
-			// information about this pod.
-			d.updateTenantEntry(ctx, resp.Pod)
 		}
 	})
 	if err != nil {
@@ -437,8 +438,10 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 // watcher events. When a pod is created, destroyed, or modified, it updates the
 // tenant's entry to reflect that change.
 func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
-	if pod.Addr == "" {
+	if pod.Addr == "" || pod.TenantID == 0 {
 		// Nothing needs to be done if there is no IP address specified.
+		// We also check on TenantID here because roachpb.MakeTenantID will
+		// panic with TenantID = 0.
 		return
 	}
 
@@ -461,16 +464,14 @@ func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 		} else {
 			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
 		}
-	// Update entries of UNKNOWN pods only if they are already present.
-	case UNKNOWN:
-		if entry.UpdatePod(pod) {
-			log.Infof(ctx, "updated IP address %s with load %.3f for tenant %d", pod.Addr, pod.Load, pod.TenantID)
-		}
-	default:
+	case DELETING:
 		// Remove addresses of DELETING pods.
 		if entry.RemovePodByAddr(pod.Addr) {
 			log.Infof(ctx, "deleted IP address %s for tenant %d", pod.Addr, pod.TenantID)
 		}
+	default:
+		// Pods with UNKNOWN state.
+		log.Infof(ctx, "invalid pod entry with IP address %s for tenant %d", pod.Addr, pod.TenantID)
 	}
 }
 

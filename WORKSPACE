@@ -3,7 +3,10 @@
 workspace(
     name = "com_github_cockroachdb_cockroach",
     managed_directories = {
-        "@npm": ["pkg/ui/node_modules"],
+        "@yarn_vendor": ["pkg/ui/yarn-vendor"],
+        "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
+        "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
+        "@npm_db_console": ["pkg/ui/workspaces/db-console/node_modules"],
     },
 )
 
@@ -24,11 +27,15 @@ http_archive(
 
 # Like the above, but for nodeJS.
 http_archive(
+    name = "rules_nodejs",
+    sha256 = "26766278d815a6e2c43d2f6c9c72fde3fec8729e84138ffa4dabee47edc7702a",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-core-5.4.2.tar.gz"],
+)
+
+http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "cfc289523cf1594598215901154a6c2515e8bf3671fd708264a6f6aefe02bf39",
-    urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-4.4.6.tar.gz",
-    ],
+    sha256 = "e328cb2c9401be495fa7d79c306f5ee3040e8a03b2ebb79b022e15ca03770096",
+    urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.4.2.tar.gz" ],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -150,22 +157,22 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.17.6.darwin-amd64.tar.gz", "874bc6f95e07697380069a394a21e05576a18d60f4ba178646e1ebed8f8b1f89"),
-        "darwin_arm64": ("go1.17.6.darwin-arm64.tar.gz", "dc54f3f4099e2be9e9c33bf926a7dc3ad64f34717142f7abcaff9ae44bc03d0c"),
-        "freebsd_386": ("go1.17.6.freebsd-386.tar.gz", "d5fbe0292fc0ae734041d54a5614712fa50337c76927df7bc749c27a543ed6a2"),
-        "freebsd_amd64": ("go1.17.6.freebsd-amd64.tar.gz", "2b759b0eb1fc25bc1da5612ac13f60c4bf4cd6f3c7e4f3fe3476f454d08de318"),
-        "linux_386": ("go1.17.6.linux-386.tar.gz", "06c50fb0d44bb03dd4ea8795f9448379c5825d2765307b51f66905084c3ba541"),
-        "linux_amd64": ("go1.17.6.linux-amd64.tar.gz", "231654bbf2dab3d86c1619ce799e77b03d96f9b50770297c8f4dff8836fc8ca2"),
-        "linux_arm64": ("go1.17.6.linux-arm64.tar.gz", "82c1a033cce9bc1b47073fd6285233133040f0378439f3c4659fe77cc534622a"),
-        "linux_armv6l": ("go1.17.6.linux-armv6l.tar.gz", "9ac723e6b41cb7c3651099a09332a8a778b69aa63a5e6baaa47caf0d818e2d6d"),
-        "linux_ppc64le": ("go1.17.6.linux-ppc64le.tar.gz", "adc35c920b8c0253d4dd001f8979e0db4c6111a60cd5e0785a8bee95dba1fcaa"),
-        "linux_s390x": ("go1.17.6.linux-s390x.tar.gz", "ccb2d4509db846be7055d1105b28154e72cd43162c4ef79c38a936a3e6f26e1d"),
-        "windows_386": ("go1.17.6.windows-386.zip", "3809c4e40482ff047200c8b1e22a43a2c9c79b53ef540668d2b00f7228f093aa"),
-        "windows_amd64": ("go1.17.6.windows-amd64.zip", "5bf8f87aec7edfc08e6bc845f1c30dba6de32b863f89ae46553ff4bbcc1d4954"),
-        "windows_arm64": ("go1.17.6.windows-arm64.zip", "c794af7c7fe32207df2c30a39cad1cca2e382c82a4e9493499fc2feab5967ca0"),
+        "darwin_amd64": ("go1.17.10.darwin-amd64.tar.gz", "84979d5985c70cee6f303050a7e811440aad7f304efdf28665b200f096b01945"),
+        "darwin_arm64": ("go1.17.10.darwin-arm64.tar.gz", "32098bea40117ea1ec23e7124cd188db6bdddd0ea41e2ec9bea3ba35a487e39c"),
+        "freebsd_386": ("go1.17.10.freebsd-386.tar.gz", "37f005846d70f477e89fcf7279f8869c28ba1d266cebf794d2f7a79a1e2127ec"),
+        "freebsd_amd64": ("go1.17.10.freebsd-amd64.tar.gz", "33794d96f58608fdc023c5114ae9baeeb4111a74720c8830ff25029debe508f0"),
+        "linux_386": ("go1.17.10.linux-386.tar.gz", "5c45aad27c3091b07517ed57df5650dad5b3b71111cebdf83153878f140ad981"),
+        "linux_amd64": ("go1.17.10.linux-amd64.tar.gz", "87fc728c9c731e2f74e4a999ef53cf07302d7ed3504b0839027bd9c10edaa3fd"),
+        "linux_arm64": ("go1.17.10.linux-arm64.tar.gz", "649141201efa7195403eb1301b95dc79c5b3e65968986a391da1370521701b0c"),
+        "linux_armv6l": ("go1.17.10.linux-armv6l.tar.gz", "ad2d9053011c24be07c39f337f4a31987381d905874acbf2570511e050418dd3"),
+        "linux_ppc64le": ("go1.17.10.linux-ppc64le.tar.gz", "4e2310864fa9d5a4e2d589dbc5fcd98ce8c4cd25320b335efed04dc67765e66c"),
+        "linux_s390x": ("go1.17.10.linux-s390x.tar.gz", "e1df61f29fb0962b89d7bfe18b7db45eee003d5f8a1a7ff4d9e54616689076bf"),
+        "windows_386": ("go1.17.10.windows-386.zip", "60840a079a04c838dc44b7d48f74ac37506298d34d2a002ced48831ccce6bdae"),
+        "windows_amd64": ("go1.17.10.windows-amd64.zip", "ba9198a29fa5c4f322212d21569e8507165c3b34e1ed1f1f9cf6dfb71ddcdeb2"),
+        "windows_arm64": ("go1.17.10.windows-arm64.zip", "9d06da8d3e9c3f4a5905c4ea9cb271294e2ff956926380322feb2561e84b4d68"),
     },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
-    version = "1.17.6",
+    version = "1.17.10",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -195,8 +202,16 @@ go_register_toolchains(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 # begin rules_nodejs dependencies #
 ###################################
 
+# Install rules_nodejs dependencies
+
+# bazel_skylib handled above.
+# rules_nodejs handled above.
+load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
+build_bazel_rules_nodejs_dependencies()
+
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
+load("@rules_nodejs//nodejs:yarn_repositories.bzl", "yarn_repositories")
 
 node_repositories(
     node_repositories = {
@@ -210,8 +225,11 @@ node_repositories(
         "https://storage.googleapis.com/public-bazel-artifacts/js/node/v{version}/{filename}",
     ],
     node_version = "16.13.0",
-    package_json = ["//pkg/ui:package.json"],
-    yarn_repositories = {
+)
+
+yarn_repositories(
+    name = "yarn",
+    yarn_releases = {
         "1.22.11": ("yarn-v1.22.11.tar.gz", "yarn-v1.22.11", "2c320de14a6014f62d29c34fec78fdbb0bc71c9ccba48ed0668de452c1f5fe6c"),
     },
     yarn_urls = [
@@ -220,21 +238,69 @@ node_repositories(
     yarn_version = "1.22.11",
 )
 
-# install external dependencies for pkg/ui package
+load("//build/bazelutil:seed_yarn_cache.bzl", "seed_yarn_cache")
+seed_yarn_cache(name = "yarn_cache")
+
+# Install external dependencies for NPM packages in pkg/ui/ as separate bazel
+# repositories, to avoid version conflicts between those packages.
+# Unfortunately Bazel's rules_nodejs does not support yarn workspaces, so 
+# packages have isolated dependencies and must be installed as isolated
+# Bazel repositories.
 yarn_install(
-    name = "npm",
+    name = "npm_protos",
     args = [
-        "--ignore-optional",
         "--offline",
+        "--ignore-optional",
     ],
-    package_json = "//pkg/ui:package.json",
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_path = "/",
+    package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui:yarn.lock",
-    links = {
-      "@cockroachlabs/crdb-protobuf-client": "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
-      "@cockroachlabs/crdb-protobuf-client-ccl": "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
-      "@cockroachlabs/cluster-ui": "//pkg/ui/workspaces/cluster-ui:cluster-ui",
-    },
+    yarn_lock = "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
+)
+
+yarn_install(
+    name = "npm_db_console",
+    args = [
+        "--offline",
+        "--ignore-optional",
+    ],
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_json = "//pkg/ui/workspaces/db-console:package.json",
+    yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
+    strict_visibility = False,
+    patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
+    post_install_patches = [
+      "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.db-console.patch",
+    ],
+    symlink_node_modules = True,
+)
+
+yarn_install(
+    name = "npm_cluster_ui",
+    args = [
+        "--verbose",
+        "--offline",
+        "--ignore-optional",
+    ],
+    data = [
+      "//pkg/ui:.yarnrc",
+      "@yarn_cache//:.seed",
+    ],
+    package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
+    strict_visibility = False,
+    yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
+    patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
+    post_install_patches = [
+      "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.cluster-ui.patch",
+    ],
+    symlink_node_modules = True,
 )
 
 #################################

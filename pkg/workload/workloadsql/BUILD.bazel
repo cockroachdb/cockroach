@@ -33,7 +33,7 @@ go_test(
     embed = [":workloadsql"],
     deps = [
         "//pkg/base",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils/serverutils",

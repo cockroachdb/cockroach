@@ -369,9 +369,9 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	@# Also some linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
-	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
+	@# We remove this broken dependency again in pkg/ui/workspaces/db-console/webpack.config.js.
 	@# See the comment there for details.
-	rm -rf pkg/ui/node_modules/@types/node
+	rm -rf pkg/ui/workspaces/db-console/node_modules/@types/node
 	touch $@
 
 vendor/modules.txt: | bin/.submodules-initialized
@@ -1275,8 +1275,8 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' -print))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-PBJS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbjs
-PBTS := $(NODE_RUN) pkg/ui/node_modules/.bin/pbts
+PBJS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbjs
+PBTS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbts
 
 # Unlike the protobuf compiler for Go and C++, the protobuf compiler for
 # JavaScript only needs the entrypoint protobufs to be listed. It automatically
@@ -1386,9 +1386,11 @@ UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 # [1]: http://savannah.gnu.org/bugs/?19108
 .SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
 
+pkg/ui/workspaces/db-console/dist/%.oss.dll.js pkg/ui/workspaces/db-console/%.oss.manifest.json: export NODE_OPTIONS=--max-old-space-size=5000
 pkg/ui/workspaces/db-console/dist/%.oss.dll.js pkg/ui/workspaces/db-console/%.oss.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_OSS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
 
+pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.ccl.manifest.json: export NODE_OPTIONS=--max-old-space-size=5000
 pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.ccl.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
 
@@ -1413,6 +1415,7 @@ pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(s
 pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
+	export NODE_OPTIONS=--max-old-space-size=5000
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
 	touch $@
 

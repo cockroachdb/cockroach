@@ -11,13 +11,16 @@ package backupccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
 
 // checkCoverage verifies that spans are covered by a given chain of backups.
-func checkCoverage(ctx context.Context, spans []roachpb.Span, backups []BackupManifest) error {
+func checkCoverage(
+	ctx context.Context, spans []roachpb.Span, backups []backuppb.BackupManifest,
+) error {
 	if len(spans) == 0 {
 		return nil
 	}

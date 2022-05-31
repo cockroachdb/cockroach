@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cycle"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -29,6 +30,9 @@ const (
 	// FmtPretty performs a breadth-first topological sort on the memo groups,
 	// and shows the root group at the top of the memo.
 	FmtPretty FmtFlags = iota
+	// FmtCycle formats a memo like FmtPretty, but attempts to detect a cycle in
+	// the memo and include it in the formatted output.
+	FmtCycle
 )
 
 type group struct {
@@ -71,8 +75,8 @@ func (mf *memoFormatter) format() string {
 		desc = "optimized"
 	}
 	tpRoot := tp.Childf(
-		"memo (%s, ~%dKB, required=%s)",
-		desc, mf.o.mem.MemoryEstimate()/1024, m.RootProps(),
+		"memo (%s, ~%dKB, required=%s%s)",
+		desc, mf.o.mem.MemoryEstimate()/1024, m.RootProps(), mf.formatCycles(),
 	)
 
 	for i, e := range mf.groups {
@@ -316,4 +320,58 @@ func firstExpr(expr opt.Expr) opt.Expr {
 		return rel.FirstExpr()
 	}
 	return expr
+}
+
+func (mf *memoFormatter) formatCycles() string {
+	m := mf.o.mem
+	var cd cycle.Detector
+
+	if mf.flags != FmtCycle {
+		return ""
+	}
+
+	addExpr := func(from cycle.Vertex, e opt.Expr) {
+		for i := 0; i < e.ChildCount(); i++ {
+			child := e.Child(i)
+			if opt.IsListItemOp(child) {
+				child = child.Child(0)
+			}
+			to := cycle.Vertex(mf.group(child))
+			cd.AddEdge(from, to)
+		}
+	}
+
+	addGroup := func(from cycle.Vertex, first memo.RelExpr) {
+		for member := first; member != nil; member = member.NextExpr() {
+			addExpr(from, member)
+		}
+	}
+
+	// Add an edge to the cycle detector from a group to each of the groups it
+	// references.
+	for i, e := range mf.groups {
+		from := cycle.Vertex(i)
+		rel, ok := e.first.(memo.RelExpr)
+		if !ok {
+			addExpr(from, e.first)
+			continue
+		}
+		addGroup(from, rel)
+	}
+
+	// Search for a cycle from the root expression group.
+	root := cycle.Vertex(mf.group(m.RootExpr()))
+	if cyclePath, ok := cd.FindCycleStartingAtVertex(root); ok {
+		mf.buf.Reset()
+		mf.buf.WriteString(", cycle=[")
+		for i, group := range cyclePath {
+			if i > 0 {
+				mf.buf.WriteString("->")
+			}
+			fmt.Fprintf(mf.buf, "G%d", group+1)
+		}
+		mf.buf.WriteString("]")
+		return mf.buf.String()
+	}
+	return ""
 }

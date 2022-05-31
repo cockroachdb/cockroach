@@ -411,7 +411,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						ClockSource: manualClock.UnixNano,
+						WallClock: manualClock,
 					},
 				},
 			},
@@ -624,7 +624,7 @@ func TestLeaseholderRelocate(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:          manualClock.UnixNano,
+					WallClock:            manualClock,
 					StickyEngineRegistry: stickyRegistry,
 				},
 			},
@@ -723,8 +723,6 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "https://github.com/cockroachdb/cockroach/issues/70113")
-
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyRegistry.CloseAllStickyInMemEngines()
 	ctx := context.Background()
@@ -760,9 +758,14 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:               manualClock.UnixNano,
+					WallClock:                 manualClock,
 					DefaultZoneConfigOverride: &zcfg,
 					StickyEngineRegistry:      stickyRegistry,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// The Raft leadership may not end up on the eu node, but it needs to
+					// be able to acquire the lease anyway.
+					AllowLeaseRequestProposalsWhenNotLeader: true,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{
@@ -915,7 +918,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					ClockSource:               manualClock.UnixNano,
+					WallClock:                 manualClock,
 					DefaultZoneConfigOverride: &zcfg,
 					StickyEngineRegistry:      stickyRegistry,
 				},

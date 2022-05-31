@@ -177,8 +177,11 @@ case "${cmd}" in
     HOST=$(gcloud compute ssh --dry-run ${NAME} | awk '{print $NF}')
     code --wait --remote ssh-remote+$HOST "$@"
     ;;
+    status)
+    gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
+    ;;
     *)
-    echo "$0: unknown command: ${cmd}, use one of create, start, stop, delete, ssh, or sync"
+    echo "$0: unknown command: ${cmd}, use one of create, start, stop, delete, status, ssh, or sync"
     exit 1
     ;;
 esac

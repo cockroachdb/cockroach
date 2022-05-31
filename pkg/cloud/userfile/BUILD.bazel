@@ -33,7 +33,7 @@ go_test(
         "//pkg/blobs",
         "//pkg/cloud",
         "//pkg/cloud/cloudtestutils",
-        "//pkg/security",
+        "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",

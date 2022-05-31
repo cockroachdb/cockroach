@@ -112,7 +112,7 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
 	manualClock := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manualClock.UnixNano, 50*time.Millisecond)
+	clock := hlc.NewClock(manualClock, 50*time.Millisecond /* maxOffset */)
 	cfg := kvserver.TestStoreConfig(clock)
 	tr := cfg.AmbientCtx.Tracer
 	ltc.stopper = stop.NewStopper(stop.WithTracer(tr))
@@ -184,6 +184,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
+		Stopper:                 ltc.stopper,
 		Clock:                   cfg.Clock,
 		DB:                      cfg.DB,
 		Gossip:                  cfg.Gossip,
@@ -272,7 +273,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	if !ltc.DisableLivenessHeartbeat {
 		cfg.NodeLiveness.Start(ctx,
-			liveness.NodeLivenessStartOptions{Stopper: ltc.stopper, Engines: []storage.Engine{ltc.Eng}})
+			liveness.NodeLivenessStartOptions{Engines: []storage.Engine{ltc.Eng}})
 	}
 
 	if err := ltc.Store.Start(ctx, ltc.stopper); err != nil {

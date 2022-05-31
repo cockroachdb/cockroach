@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,9 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment, { Moment } from "moment";
+package xform
 
-export const start = moment.utc("2021.08.08");
-export const end = moment.utc("2021.08.12");
+import "github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 
-export const allowedInterval: [Moment, Moment] = [start, end];
+// EmptySubqueryPrivate returns an empty SubqueryPrivate.
+func (c *CustomFuncs) EmptySubqueryPrivate() *memo.SubqueryPrivate {
+	return &memo.SubqueryPrivate{}
+}

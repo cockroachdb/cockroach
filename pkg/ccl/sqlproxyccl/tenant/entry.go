@@ -130,28 +130,6 @@ func (e *tenantEntry) AddPod(pod *Pod) bool {
 	return true
 }
 
-// UpdatePod updates the given pod in the tenant's list of pods. If an entry
-// with a match Addr is not present, UpdatePod returns false.
-func (e *tenantEntry) UpdatePod(pod *Pod) bool {
-	e.pods.Lock()
-	defer e.pods.Unlock()
-
-	for i, existing := range e.pods.pods {
-		if existing.Addr == pod.Addr {
-			// e.pods.pods is copy on write. Whenever modifications are made,
-			// we must make a copy to avoid accidentally mutating the slice
-			// retrieved by GetPods.
-			pods := e.pods.pods
-			e.pods.pods = make([]*Pod, len(pods))
-			copy(e.pods.pods, pods)
-			e.pods.pods[i] = pod
-			return true
-		}
-	}
-
-	return false
-}
-
 // RemovePodByAddr removes the pod with the given IP address from the tenant's
 // list of pod addresses. If it was not present, RemovePodByAddr returns false.
 func (e *tenantEntry) RemovePodByAddr(addr string) bool {
@@ -239,6 +217,7 @@ func (e *tenantEntry) fetchPodsLocked(
 	ctx context.Context, client DirectoryClient,
 ) (tenantPods []*Pod, err error) {
 	// List the pods for the given tenant.
+	//
 	// TODO(andyk): This races with the pod watcher, which may receive updates
 	// that are newer than what ListPods returns. This could be fixed by adding
 	// version values to the pods in order to detect races.

@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -54,7 +55,7 @@ type fileSSTSink struct {
 	out     io.WriteCloser
 	outName string
 
-	flushedFiles    []BackupManifest_File
+	flushedFiles    []backuppb.BackupManifest_File
 	flushedSize     int64
 	flushedRevStart hlc.Timestamp
 	completedSpans  int32
@@ -186,7 +187,7 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 	s.outName = ""
 	s.out = nil
 
-	progDetails := BackupManifest_Progress{
+	progDetails := backuppb.BackupManifest_Progress{
 		RevStartTime:   s.flushedRevStart,
 		Files:          s.flushedFiles,
 		CompletedSpans: s.completedSpans,

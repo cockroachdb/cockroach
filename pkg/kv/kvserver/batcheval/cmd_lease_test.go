@@ -127,7 +127,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
 			StoreID: voterStoreID,
@@ -188,7 +188,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			desc := roachpb.RangeDescriptor{}
 			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 			manual := hlc.NewManualClock(123)
-			clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 			prevLease := roachpb.Lease{
 				Replica:  replicas[0],
@@ -285,7 +285,7 @@ func TestCheckCanReceiveLease(t *testing.T) {
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], &rngDesc)
+			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas())
 			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
 		})
 	}
@@ -293,6 +293,6 @@ func TestCheckCanReceiveLease(t *testing.T) {
 	t.Run("replica not in range desc", func(t *testing.T) {
 		repDesc := roachpb.ReplicaDescriptor{ReplicaID: 1}
 		rngDesc := roachpb.RangeDescriptor{}
-		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc, &rngDesc))
+		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc, rngDesc.Replicas()))
 	})
 }
