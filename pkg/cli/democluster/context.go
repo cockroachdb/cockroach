@@ -38,10 +38,6 @@ type Context struct {
 	// DisableTelemetry requests that telemetry be disabled.
 	DisableTelemetry bool
 
-	// DisableLicenseAcquisition requests that no evaluation license be
-	// automatically acquired to enable enterprise features.
-	DisableLicenseAcquisition bool
-
 	// NoExampleDatabase prevents the auto-creation of a demo database
 	// from a workload.
 	NoExampleDatabase bool
