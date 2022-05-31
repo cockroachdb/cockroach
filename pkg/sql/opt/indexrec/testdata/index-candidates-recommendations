@@ -14,11 +14,8 @@ exec-ddl
 CREATE TABLE t4 (k INT, i INT, f FLOAT, j JSONB, a INT[])
 ----
 
-# Ensure that spatial indexes don't have candidates. This is temporary until we
-# support spatial index recommendations.
-
-index-candidates
-SELECT * FROM t3 WHERE g IS NULL
+exec-ddl
+CREATE TABLE t5 (geom1 GEOMETRY, geog1 GEOGRAPHY, geom11 GEOMETRY, geog11 GEOGRAPHY, inet1 INET, bbox1 box2d)
 ----
 
 # Ensure that index candidates are not created for virtual tables.
@@ -1781,4 +1778,177 @@ project
 
 exec-ddl
 DROP INDEX t1@expr
+----
+
+index-candidates
+SELECT * FROM t5 WHERE geom1 IS NULL
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE geog1 IS NULL
+----
+t5:
+ (geog1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, 'POINT(0 0 0 0)')
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geog1, geog11)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_coveredby(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_coveredby(geog1, geog11)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_contains(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_containsproperly(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_crosses(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithin(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithin(geog1, geog11, 10)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dfullywithin(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_equals('LINESTRING ( 0 0, 0 2 )'::geometry, geom1)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_intersects('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom1)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_touches(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_within(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geog1, geog11, 10, true)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geog1, geog11, 10)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dfullywithinexclusive(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_hasarc(geom1)
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_isclosed(geom1)
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_iscollection(geom1)
+----
+
+index-candidates
+SELECT st_area(geom1) FROM t5
+----
+
+index-candidates
+SELECT * FROM t5 WHERE postgis_hasbbox(geom1) = true
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_area(geog1) = 1
 ----

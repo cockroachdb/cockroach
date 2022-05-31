@@ -398,8 +398,17 @@ func addIndexToCandidates(
 	}
 
 	// Now we are adding indexes for geospatial indexes: removed the short circuit
+	//// Do not add indexes on spatial columns.
+	//// TODO(rytaft): Support spatial predicates like st_contains() etc.
+	//for _, indexCol := range newIndex {
+	//	colFamily := indexCol.Column.DatumType().Family()
+	//	if colFamily == types.GeometryFamily || colFamily == types.GeographyFamily {
+	//		return
+	//	}
+	//}
 
 	// Do not add duplicate indexes.
+	// Note: spatial indexes are added and supported in index recommendation
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {
 			continue
