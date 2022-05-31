@@ -1136,3 +1136,10 @@ SELECT * FROM t69684 WHERE crdb_internal.increment_feature_counter(a)
 # The output is non-deterministic.
 statement ok
 SELECT crdb_internal.probe_ranges(INTERVAL '1000ms', 'write')
+
+# Regression test for not handling NULL values correctly by an internal builtin
+# (#82056).
+query I
+SELECT crdb_internal.num_inverted_index_entries(NULL::STRING, 0)
+----
+0
