@@ -57,7 +57,6 @@ ALL_TESTS = [
     "//pkg/ccl/telemetryccl:telemetryccl_test",
     "//pkg/ccl/testccl/sqlccl:sqlccl_test",
     "//pkg/ccl/testccl/workload/schemachange:schemachange_test",
-    "//pkg/ccl/upgradeccl/upgradessccl:upgradesccl_test",
     "//pkg/ccl/upgradeccl/upgradessccl:upgradessccl_test",
     "//pkg/ccl/utilccl/sampledataccl:sampledataccl_test",
     "//pkg/ccl/utilccl:utilccl_test",
