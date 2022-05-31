@@ -1,5 +1,5 @@
 @import "src/core/index.module";
-  
+
 .controls-content {
   display: flex;
   align-items: center;
@@ -7,7 +7,8 @@
   flex-direction: row;
   width: 100%;
 
-  .btn__now.active, .btn__now button {
+  .btn__now.active,
+  .btn__now button {
     width: 60px;
     height: 40px;
     border: 1px solid $colors--neutral-4;
@@ -31,14 +32,15 @@
 
   .disabled {
     .icon {
-      opacity: .4;
+      opacity: 0.4;
     }
   }
 
   :global(.ant-btn-group) {
     display: flex;
     flex-direction: row;
-    ._action, ._action > button {
+    ._action,
+    ._action > button {
       margin-right: 0px;
       border-color: $colors--neutral-4;
       width: 40px;
@@ -58,7 +60,7 @@
       }
 
       .anticon {
-          color: $colors--neutral-5;;
+        color: $colors--neutral-5;
       }
 
       &.active {

@@ -12,7 +12,8 @@ import { isUndefined } from "lodash";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DiagnosticStatuses } from "src/statementsDiagnostics";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export function getDiagnosticsStatus(
   diagnosticsRequest: IStatementDiagnosticsReport,

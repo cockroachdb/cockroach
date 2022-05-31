@@ -12,7 +12,6 @@
   text-transform: uppercase;
   letter-spacing: 2px;
   line-height: 17px;
-
 }
 
 .time-range {
@@ -20,7 +19,8 @@
   color: $button-border-color;
   font-size: 12px;
   font-family: $font-family--base;
-  &__time, &__date {
+  &__time,
+  &__date {
     color: $body-color;
   }
 }

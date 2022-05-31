@@ -19,7 +19,8 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 const CancelSessionRequest = cockroach.server.serverpb.CancelSessionRequest;
 const CancelQueryRequest = cockroach.server.serverpb.CancelQueryRequest;
-export type ICancelSessionRequest = cockroach.server.serverpb.ICancelSessionRequest;
+export type ICancelSessionRequest =
+  cockroach.server.serverpb.ICancelSessionRequest;
 export type ICancelQueryRequest = cockroach.server.serverpb.ICancelQueryRequest;
 
 export function* terminateSessionSaga(

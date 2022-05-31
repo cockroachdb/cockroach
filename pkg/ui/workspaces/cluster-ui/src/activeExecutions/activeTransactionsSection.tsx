@@ -45,7 +45,9 @@ type ActiveTransactionsSectionProps = {
   onColumnsSelect: (columns: string[]) => void;
 };
 
-export const ActiveTransactionsSection: React.FC<ActiveTransactionsSectionProps> = ({
+export const ActiveTransactionsSection: React.FC<
+  ActiveTransactionsSectionProps
+> = ({
   filters,
   pagination,
   search,

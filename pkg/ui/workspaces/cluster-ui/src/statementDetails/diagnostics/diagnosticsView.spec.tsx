@@ -21,7 +21,8 @@ import { DiagnosticsView } from "./diagnosticsView";
 import { Table } from "src/table";
 import { TestStoreProvider } from "src/test-utils";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const sandbox = sinon.createSandbox();
 

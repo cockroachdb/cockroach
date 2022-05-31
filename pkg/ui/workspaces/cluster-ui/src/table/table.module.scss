@@ -17,10 +17,11 @@
     background-color: $colors--neutral-0;
     padding: $spacing-smaller $spacing-smaller;
     height: $line-height--x-large;
-    &, span {
+    &,
+    span {
       @include table-header-text;
     }
-    :global{
+    :global {
       .ant-table-header-column .ant-table-column-sorters:hover::before {
         background-color: $colors--neutral-0;
       }
@@ -45,12 +46,12 @@
   }
 
   :global(.ant-table-row-collapsed)::after {
-    content: '▶';
+    content: "▶";
     font-size: 8px;
   }
 
   :global(.ant-table-row-expanded)::after {
-    content: '▼';
+    content: "▼";
     font-size: 8px;
   }
   // END: Expand/Collapse icon
@@ -89,10 +90,18 @@
 
   // Table cell on hover
   :global {
-    .ant-table-thead > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
-    .ant-table-tbody > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
-    .ant-table-thead > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td,
-    .ant-table-tbody > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected) > td {
+    .ant-table-thead
+      > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected)
+      > td,
+    .ant-table-tbody
+      > tr.ant-table-row-hover:not(.ant-table-expanded-row):not(.ant-table-row-selected)
+      > td,
+    .ant-table-thead
+      > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected)
+      > td,
+    .ant-table-tbody
+      > tr:hover:not(.ant-table-expanded-row):not(.ant-table-row-selected)
+      > td {
       background: $colors--neutral-1;
     }
   }
