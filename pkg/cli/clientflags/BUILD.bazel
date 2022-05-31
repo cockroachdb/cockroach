@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clientflags",
+    srcs = [
+        "client_flags.go",
+        "doc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/clientflags",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/clienturl",
+        "//pkg/cli/cliflagcfg",
+        "//pkg/cli/cliflags",
+        "//pkg/cli/clisqlcfg",
+        "//pkg/security/clientsecopts",
+        "//pkg/util/netutil/addr",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

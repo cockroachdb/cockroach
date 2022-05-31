@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/clientflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -553,17 +554,13 @@ func init() {
 	clientCmds = append(clientCmds, stmtDiagCmds...)
 	clientCmds = append(clientCmds, debugResetQuorumCmd)
 	for _, cmd := range clientCmds {
-		f := cmd.PersistentFlags()
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&cliCtx.clientOpts.ServerHost, &cliCtx.clientOpts.ServerPort), cliflags.ClientHost)
-		cliflagcfg.StringFlag(f, &cliCtx.clientOpts.ServerPort, cliflags.ClientPort)
-		_ = f.MarkHidden(cliflags.ClientPort.Name)
+		clientflags.AddBaseFlags(cmd, &cliCtx.clientOpts, &baseCfg.Insecure, &baseCfg.SSLCertsDir)
 
-		// NB: Insecure is deprecated. See #53404.
-		cliflagcfg.BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure)
-
-		// Certificate flags.
-		cliflagcfg.StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
 		// Certificate principal map.
+		// TODO(knz): I think cert principal map is not needed for SQL clients. It might
+		// not even be needed for RPC clients either any more.
+		// This needs to be checked (and the flag removed if needed).
+		f := cmd.PersistentFlags()
 		cliflagcfg.StringSliceFlag(f, &cliCtx.certPrincipalMap, cliflags.CertPrincipalMap)
 	}
 
@@ -641,23 +638,6 @@ func init() {
 		cliflagcfg.BoolFlag(f, &quitCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 	}
 
-	// SQL and demo commands.
-	for _, cmd := range append([]*cobra.Command{sqlShellCmd, demoCmd}, demoCmd.Commands()...) {
-		f := cmd.Flags()
-		cliflagcfg.VarFlag(f, &sqlCtx.ShellCtx.SetStmts, cliflags.Set)
-		cliflagcfg.VarFlag(f, &sqlCtx.ShellCtx.ExecStmts, cliflags.Execute)
-		cliflagcfg.StringFlag(f, &sqlCtx.InputFile, cliflags.File)
-		cliflagcfg.DurationFlag(f, &sqlCtx.ShellCtx.RepeatDelay, cliflags.Watch)
-		cliflagcfg.VarFlag(f, &sqlCtx.SafeUpdates, cliflags.SafeUpdates)
-		cliflagcfg.BoolFlag(f, &sqlCtx.ReadOnly, cliflags.ReadOnly)
-		// The "safe-updates" flag is tri-valued (true, false, not-specified).
-		// If the flag is specified on the command line, but is not given a value,
-		// then use the value "true".
-		f.Lookup(cliflags.SafeUpdates.Name).NoOptDefVal = "true"
-		cliflagcfg.BoolFlag(f, &sqlConnCtx.DebugMode, cliflags.CliDebugMode)
-		cliflagcfg.BoolFlag(f, &cliCtx.EmbeddedMode, cliflags.EmbeddedMode)
-	}
-
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{
 		sqlShellCmd,
@@ -677,46 +657,7 @@ func init() {
 	sqlCmds = append(sqlCmds, importCmds...)
 	sqlCmds = append(sqlCmds, userFileCmds...)
 	for _, cmd := range sqlCmds {
-		f := cmd.Flags()
-		// The --echo-sql flag is special: it is a marker for CLI tests to
-		// recognize SQL-only commands. If/when adding this flag to non-SQL
-		// commands, ensure the isSQLCommand() predicate is updated accordingly.
-		cliflagcfg.BoolFlag(f, &sqlConnCtx.Echo, cliflags.EchoSQL)
-
-		// Even though SQL commands take their connection parameters via
-		// --url / --user (see below), the urlParser{} struct internally
-		// needs the ClientHost and ClientPort flags to be defined -
-		// even if they are invisible - due to the way initialization from
-		// env vars is implemented.
-		//
-		// TODO(knz): if/when env var option initialization is deferred
-		// to parse time, this can be removed.
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&cliCtx.clientOpts.ServerHost, &cliCtx.clientOpts.ServerPort), cliflags.ClientHost)
-		_ = f.MarkHidden(cliflags.ClientHost.Name)
-		cliflagcfg.StringFlag(f, &cliCtx.clientOpts.ServerPort, cliflags.ClientPort)
-		_ = f.MarkHidden(cliflags.ClientPort.Name)
-
-		// The URL flag.
-		cliflagcfg.VarFlag(f, clienturl.NewURLParser(cmd, &cliCtx.clientOpts, false /* strictTLS */, nil /* warnFn */), cliflags.URL)
-
-		// The username flag.
-		cliflagcfg.StringFlag(f, &cliCtx.clientOpts.User, cliflags.User)
-
-		if cmd == sqlShellCmd || cmd == demoCmd {
-			// The target database name.
-			cliflagcfg.StringFlag(f, &cliCtx.clientOpts.Database, cliflags.Database)
-			if cmd == demoCmd {
-				// The 'demo' command does not really support --url or --user.
-				// However, we create the pflag instance so that the user
-				// can use \connect inside the shell session.
-				_ = f.MarkHidden(cliflags.URL.Name)
-				_ = f.MarkHidden(cliflags.User.Name)
-				// As above, 'demo' does not really support --database.
-				// However, we create the pflag instance so that
-				// the user can use \connect inside the shell.
-				_ = f.MarkHidden(cliflags.Database.Name)
-			}
-		}
+		clientflags.AddSQLFlags(cmd, &cliCtx.clientOpts, sqlCtx, cmd == sqlShellCmd, cmd == demoCmd)
 	}
 
 	// Make the non-SQL client commands also recognize --url in strict SSL mode
