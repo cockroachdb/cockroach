@@ -333,6 +333,12 @@ func runBackupProcessor(
 
 			rec := backupTracingSpan.FinishAndGetRecording(tracing.RecordingVerbose)
 			log.Infof(ctx, "Backup trace:\n%s", rec.String())
+			jaegerJSON, err := rec.ToJaegerJSON("backup-trace-jaeger", "", "")
+			if err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+				return
+			}
+			log.Infof(ctx, "Backup trace in JSON form:\n%s", jaegerJSON)
 		}()
 	}
 
