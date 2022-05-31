@@ -45,9 +45,9 @@ func makeUICmd(d *dev) *cobra.Command {
 
 // UIDirectories contains the absolute path to the root of each UI sub-project.
 type UIDirectories struct {
-	// clusterUI is the absolute path to ./pkg/ui/workspaces/cluster-ui.
+	// clusterUI is the absolute path to ./pkg/ui/packages/cluster-ui.
 	clusterUI string
-	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console.
+	// dbConsole is the absolute path to ./pkg/ui/packages/db-console.
 	dbConsole string
 }
 
@@ -59,8 +59,8 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}
 
 	return &UIDirectories{
-		clusterUI: path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
-		dbConsole: path.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		clusterUI: path.Join(workspace, "./pkg/ui/packages/cluster-ui"),
+		dbConsole: path.Join(workspace, "./pkg/ui/packages/db-console"),
 	}, nil
 }
 
@@ -100,10 +100,10 @@ Replaces 'make ui-watch'.`,
 			// Build prerequisites for db-console and cluster-ui.
 			args := []string{
 				"build",
-				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+				"//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
 			}
 			if !isOss {
-				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl")
+				args = append(args, "//pkg/ui/packages/db-console/ccl/src/js:crdb-protobuf-client-ccl")
 			}
 			logCommand("bazel", args...)
 			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
@@ -313,7 +313,7 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 // makes devs pay the cost of node + jest startup times after every file change.
 // As a workaround, arrangeFilesForTestWatchers copies files out of the Bazel
 // sandbox and allows Jest (in watch mode) to be executed from directly within
-// a pkg/ui/workspaces/... directory.
+// a pkg/ui/packages/... directory.
 //
 // See https://github.com/bazelbuild/rules_nodejs/issues/2028
 func arrangeFilesForTestWatchers(d *dev) error {
@@ -322,7 +322,7 @@ func arrangeFilesForTestWatchers(d *dev) error {
 		return err
 	}
 
-	ossProtobufSrc := filepath.Join(bazelBin, "pkg", "ui", "workspaces", "db-console")
+	ossProtobufSrc := filepath.Join(bazelBin, "pkg", "ui", "packages", "db-console")
 	cclProtobufSrc := filepath.Join(ossProtobufSrc, "ccl")
 
 	dstDirs, err := getUIDirs(d)
@@ -357,7 +357,7 @@ func arrangeFilesForTestWatchers(d *dev) error {
 
 	// Copy the cluster-ui output tree back out of the sandbox
 	err = d.os.CopyAll(
-		filepath.Join(bazelBin, "pkg", "ui", "workspaces", "cluster-ui", "dist"),
+		filepath.Join(bazelBin, "pkg", "ui", "packages", "cluster-ui", "dist"),
 		filepath.Join(dstDirs.clusterUI, "dist"),
 	)
 	if err != nil {
@@ -400,7 +400,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				// for us.
 				args := []string{
 					"build",
-					"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+					"//pkg/ui/packages/cluster-ui:cluster-ui",
 				}
 				logCommand("bazel", args...)
 				err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
@@ -467,8 +467,8 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				)
 				args := append([]string{
 					"test",
-					"//pkg/ui/workspaces/db-console:karma",
-					"//pkg/ui/workspaces/cluster-ui:jest",
+					"//pkg/ui/packages/db-console:karma",
+					"//pkg/ui/packages/cluster-ui:jest",
 				}, testOutputArg...)
 
 				if isDebug {

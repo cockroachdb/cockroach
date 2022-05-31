@@ -169,14 +169,14 @@ WEBPACK_DATA_COMMON = [
     "styl",
     "tsconfig.json",
     "webpack.app.js",
-    "//pkg/ui/workspaces/cluster-ui:cluster-ui",
-    "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+    "//pkg/ui/packages/cluster-ui:cluster-ui",
+    "//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
 ]
 
 WEBPACK_DATA_OSS = WEBPACK_DATA_COMMON + DEPENDENCIES
 
 WEBPACK_DATA_CCL = WEBPACK_DATA_COMMON + [
-    "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+    "//pkg/ui/packages/db-console/ccl/src/js:crdb-protobuf-client-ccl",
     "ccl",
 ] + DEPENDENCIES
 
@@ -292,9 +292,9 @@ KARMA_DEPS = [
     "webpack.app.js",
     "karma.conf.js",
     "tests-loader.js",
-    "//pkg/ui/workspaces/cluster-ui:cluster-ui",
-    "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
-    "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+    "//pkg/ui/packages/cluster-ui:cluster-ui",
+    "//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
+    "//pkg/ui/packages/db-console/ccl/src/js:crdb-protobuf-client-ccl",
 ] + SRC_NOT_PROTO_CLIENT + CCL_NOT_PROTO_CLIENT + DEPENDENCIES
 
 karma_test(

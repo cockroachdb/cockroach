@@ -4,9 +4,9 @@ workspace(
     name = "com_github_cockroachdb_cockroach",
     managed_directories = {
         "@yarn_vendor": ["pkg/ui/yarn-vendor"],
-        "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
-        "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
-        "@npm_db_console": ["pkg/ui/workspaces/db-console/node_modules"],
+        "@npm_protos": ["pkg/ui/packages/db-console/src/js/node_modules"],
+        "@npm_cluster_ui": ["pkg/ui/packages/cluster_ui/node_modules"],
+        "@npm_db_console": ["pkg/ui/packages/db-console/node_modules"],
     },
 )
 
@@ -257,9 +257,9 @@ yarn_install(
       "@yarn_cache//:.seed",
     ],
     package_path = "/",
-    package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
+    package_json = "//pkg/ui/packages/db-console/src/js:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
+    yarn_lock = "//pkg/ui/packages/db-console/src/js:yarn.lock",
 )
 
 yarn_install(
@@ -272,8 +272,8 @@ yarn_install(
       "//pkg/ui:.yarnrc",
       "@yarn_cache//:.seed",
     ],
-    package_json = "//pkg/ui/workspaces/db-console:package.json",
-    yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
+    package_json = "//pkg/ui/packages/db-console:package.json",
+    yarn_lock = "//pkg/ui/packages/db-console:yarn.lock",
     strict_visibility = False,
     patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
     post_install_patches = [
@@ -293,9 +293,9 @@ yarn_install(
       "//pkg/ui:.yarnrc",
       "@yarn_cache//:.seed",
     ],
-    package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
+    package_json = "//pkg/ui/packages/cluster-ui:package.json",
     strict_visibility = False,
-    yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
+    yarn_lock = "//pkg/ui/packages/cluster-ui:yarn.lock",
     patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
     post_install_patches = [
       "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.cluster-ui.patch",

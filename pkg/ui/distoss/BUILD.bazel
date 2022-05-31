@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 genrule(
     name = "genassets",
     srcs = select({
-        "//pkg/ui:with_ui": ["//pkg/ui/workspaces/db-console:db-console-oss"],
+        "//pkg/ui:with_ui": ["//pkg/ui/packages/db-console:db-console-oss"],
         "//conditions:default": ["//pkg/ui:gen-empty-index.html"],
     }),
     outs = ["assets.tar.gz"],

@@ -142,7 +142,7 @@ ts_project(
     # necessary.
     validate = False,
     deps = [
-        "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+        "//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
         "@npm_cluster_ui//@babel/parser",
         "@npm_cluster_ui//@babel/types",
         "@npm_cluster_ui//@cockroachlabs/icons",
@@ -186,7 +186,7 @@ webpack(
         ".babelrc",
         "tsconfig.json",
         "webpack.config.js",
-        "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+        "//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
         # A copy of protobufjs from the protobuf client's dependencies is
         # required to avoid "invalid assignment" errors from Terser here, but
         # it's unclear why that's the case.
@@ -252,8 +252,8 @@ tsc_test(
     ) + [
         "tsconfig.json",
         "tsconfig.linting.json",
-        "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
-        "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+        "//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
+        "//pkg/ui/packages/db-console/ccl/src/js:crdb-protobuf-client-ccl",
         "@npm_cluster_ui//@babel/parser",
         "@npm_cluster_ui//@babel/types",
         "@npm_cluster_ui//@cockroachlabs/icons",
@@ -300,8 +300,8 @@ JEST_DEPS = DEPENDENCIES + [
     "src",
     "@npm_cluster_ui//@testing-library/react",
     "@npm_cluster_ui//@testing-library/user-event",
-    "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
-    "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+    "//pkg/ui/packages/db-console/src/js:crdb-protobuf-client",
+    "//pkg/ui/packages/db-console/ccl/src/js:crdb-protobuf-client-ccl",
     # A copy of protobufjs from the protobuf client's dependencies is required
     # to avoid "cannot find module protobufjs/minimal" errors when Babel
     # attempts to transpile the protobuf client during testing.

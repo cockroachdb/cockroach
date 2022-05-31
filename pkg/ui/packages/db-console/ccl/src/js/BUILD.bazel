@@ -1,4 +1,4 @@
-load("@//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
+load("@//pkg/ui/packages/db-console/src/js:defs.bzl", "protobufjs_library")
 load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
 
 protobufjs_library(

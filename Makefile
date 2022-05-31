@@ -359,8 +359,8 @@ endif
 CLUSTER_UI_JS := pkg/ui/cluster-ui/dist/main.js
 
 .SECONDARY: $(CLUSTER_UI_JS)
-$(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/yarn.installed pkg/ui/workspaces/db-console/src/js/protos.d.ts | bin/.submodules-initialized
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn build
+$(CLUSTER_UI_JS): $(shell find pkg/ui/packages/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/yarn.installed pkg/ui/packages/db-console/src/js/protos.d.ts | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/packages/cluster-ui yarn build
 
 .SECONDARY: pkg/ui/yarn.installed
 pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-initialized
@@ -369,9 +369,9 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	@# Also some linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
-	@# We remove this broken dependency again in pkg/ui/workspaces/db-console/webpack.config.js.
+	@# We remove this broken dependency again in pkg/ui/packages/db-console/webpack.config.js.
 	@# See the comment there for details.
-	rm -rf pkg/ui/workspaces/db-console/node_modules/@types/node
+	rm -rf pkg/ui/packages/db-console/node_modules/@types/node
 	touch $@
 
 vendor/modules.txt: | bin/.submodules-initialized
@@ -1275,19 +1275,19 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' -print))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-PBJS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbjs
-PBTS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbts
+PBJS := $(NODE_RUN) pkg/ui/packages/db-console/src/js/node_modules/.bin/pbjs
+PBTS := $(NODE_RUN) pkg/ui/packages/db-console/src/js/node_modules/.bin/pbts
 
 # Unlike the protobuf compiler for Go and C++, the protobuf compiler for
 # JavaScript only needs the entrypoint protobufs to be listed. It automatically
 # compiles any protobufs the entrypoints depend upon.
 JS_PROTOS_CCL := $(filter %/ccl/storageccl/engineccl/enginepbccl/stats.proto,$(GO_PROTOS))
-UI_JS_CCL := pkg/ui/workspaces/db-console/ccl/src/js/protos.js
-UI_TS_CCL := pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
+UI_JS_CCL := pkg/ui/packages/db-console/ccl/src/js/protos.js
+UI_TS_CCL := pkg/ui/packages/db-console/ccl/src/js/protos.d.ts
 UI_PROTOS_CCL := $(UI_JS_CCL) $(UI_TS_CCL)
 
-UI_JS_OSS := pkg/ui/workspaces/db-console/src/js/protos.js
-UI_TS_OSS := pkg/ui/workspaces/db-console/src/js/protos.d.ts
+UI_JS_OSS := pkg/ui/packages/db-console/src/js/protos.js
+UI_TS_OSS := pkg/ui/packages/db-console/src/js/protos.d.ts
 UI_PROTOS_OSS := $(UI_JS_OSS) $(UI_TS_OSS)
 
 $(GOGOPROTO_PROTO): bin/.submodules-initialized
@@ -1349,24 +1349,24 @@ ui-generate: pkg/ui/assets.ccl.installed
 
 .PHONY: ui-fonts
 ui-fonts:
-	pkg/ui/workspaces/db-console/scripts/font-gen
+	pkg/ui/packages/db-console/scripts/font-gen
 
 .PHONY: ui-topo
 ui-topo: pkg/ui/yarn.installed
-	pkg/ui/workspaces/db-console/scripts/topo.js
+	pkg/ui/packages/db-console/scripts/topo.js
 
 .PHONY: ui-lint
 ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(STYLINT) -c .stylintrc styl
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(TSC)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn lint
-	@if $(NODE_RUN) -C pkg/ui/workspaces/db-console yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn --cwd pkg/ui/workspaces/cluster-ui lint
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(STYLINT) -c .stylintrc styl
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(TSC)
+	$(NODE_RUN) -C pkg/ui/packages/db-console yarn lint
+	@if $(NODE_RUN) -C pkg/ui/packages/db-console yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	$(NODE_RUN) -C pkg/ui/packages/cluster-ui yarn --cwd pkg/ui/packages/cluster-ui lint
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_CCL_DLLS := pkg/ui/workspaces/db-console/dist/protos.ccl.dll.js pkg/ui/workspaces/db-console/dist/vendor.oss.dll.js
-UI_CCL_MANIFESTS := pkg/ui/workspaces/db-console/protos.ccl.manifest.json pkg/ui/workspaces/db-console/vendor.oss.manifest.json
+UI_CCL_DLLS := pkg/ui/packages/db-console/dist/protos.ccl.dll.js pkg/ui/packages/db-console/dist/vendor.oss.dll.js
+UI_CCL_MANIFESTS := pkg/ui/packages/db-console/protos.ccl.manifest.json pkg/ui/packages/db-console/vendor.oss.manifest.json
 UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
 UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 
@@ -1386,37 +1386,37 @@ UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 # [1]: http://savannah.gnu.org/bugs/?19108
 .SECONDARY: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS)
 
-pkg/ui/workspaces/db-console/dist/%.oss.dll.js pkg/ui/workspaces/db-console/%.oss.manifest.json: export NODE_OPTIONS=--max-old-space-size=5000
-pkg/ui/workspaces/db-console/dist/%.oss.dll.js pkg/ui/workspaces/db-console/%.oss.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_OSS)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
+pkg/ui/packages/db-console/dist/%.oss.dll.js pkg/ui/packages/db-console/%.oss.manifest.json: export NODE_OPTIONS=--max-old-space-size=5000
+pkg/ui/packages/db-console/dist/%.oss.dll.js pkg/ui/packages/db-console/%.oss.manifest.json: pkg/ui/packages/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_OSS)
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=oss
 
-pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.ccl.manifest.json: export NODE_OPTIONS=--max-old-space-size=5000
-pkg/ui/workspaces/db-console/dist/%.ccl.dll.js pkg/ui/workspaces/db-console/%.ccl.manifest.json: pkg/ui/workspaces/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_CCL)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
+pkg/ui/packages/db-console/dist/%.ccl.dll.js pkg/ui/packages/db-console/%.ccl.manifest.json: export NODE_OPTIONS=--max-old-space-size=5000
+pkg/ui/packages/db-console/dist/%.ccl.dll.js pkg/ui/packages/db-console/%.ccl.manifest.json: pkg/ui/packages/db-console/webpack.%.js pkg/ui/yarn.installed $(CLUSTER_UI_JS) $(UI_PROTOS_CCL)
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(WEBPACK) -p --config webpack.$*.js --env.dist=ccl
 
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(info $(yellow)NOTE: consider using `./dev ui test` instead of `make ui-test`$(term-reset))
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn ci
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(KARMA) start
+	$(NODE_RUN) -C pkg/ui/packages/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(info $(yellow)NOTE: consider using `./dev ui test --watch` instead of `make ui-test-watch`$(term-reset))
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --no-single-run --auto-watch & \
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn test
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(KARMA) start --no-single-run --auto-watch & \
+	$(NODE_RUN) -C pkg/ui/packages/cluster-ui yarn test
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
 .SECONDARY: pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
-pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
+pkg/ui/assets.ccl.installed: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/packages/db-console/ccl -type f)
 pkg/ui/assets.oss.installed: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
-pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.app.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
+pkg/ui/assets.%.installed: pkg/ui/packages/db-console/webpack.app.js $(shell find pkg/ui/packages/db-console/src pkg/ui/packages/db-console/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
 	export NODE_OPTIONS=--max-old-space-size=5000
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
+	$(NODE_RUN) -C pkg/ui/packages/db-console $(WEBPACK) --config webpack.app.js --env.dist=$*
 	touch $@
 
 pkg/ui/yarn.opt.installed:
@@ -1437,8 +1437,8 @@ ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
   # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
   # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
 	$(info $(yellow)NOTE: consider using `./dev ui watch [--secure]` instead of `make ui-watch[-secure]`$(term-reset))
-	yarn --cwd pkg/ui/workspaces/cluster-ui build:watch & \
-	yarn --cwd pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --env.dist=ccl --env.WEBPACK_SERVE --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
+	yarn --cwd pkg/ui/packages/cluster-ui build:watch & \
+	yarn --cwd pkg/ui/packages/db-console webpack-dev-server --config webpack.app.js --env.dist=ccl --env.WEBPACK_SERVE --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
@@ -1446,14 +1446,14 @@ ui-clean: ## Remove build artifacts.
 	find pkg/ui/distccl/assets pkg/ui/distoss/assets -mindepth 1 -not -name .gitkeep -delete
 	rm -rf pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
 	rm -f $(UI_PROTOS_CCL) $(UI_PROTOS_OSS)
-	rm -f pkg/ui/workspaces/db-console/*manifest.json
-	rm -rf pkg/ui/workspaces/cluster-ui/dist
+	rm -f pkg/ui/packages/db-console/*manifest.json
+	rm -rf pkg/ui/packages/cluster-ui/dist
 
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
 	$(info $(yellow)NOTE: consider using `./dev ui clean --all` instead of `make ui-maintainer-clean`$(term-reset))
-	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules
+	rm -rf pkg/ui/node_modules pkg/ui/packages/db-console/node_modules pkg/ui/yarn.installed pkg/ui/packages/cluster-ui/node_modules
 
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
 	(cd pkg/roachprod/vm/aws && $(GO) generate)
@@ -1884,4 +1884,4 @@ $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 # Cypress e2e tests
 .PHONY: db-console-e2e-test
 db-console-e2e-test: pkg/ui/yarn.opt.installed
-	cd pkg/ui/workspaces/db-console && yarn cypress:run
+	cd pkg/ui/packages/db-console && yarn cypress:run

@@ -2874,7 +2874,7 @@ func (s *adminServer) enqueueRangeLocal(
 
 	// Handle mixed-version clusters across the "gc" to "mvccGC" queue rename.
 	// TODO(nvanbenschoten): remove this in v23.1. Inline req.Queue again.
-	// The client logic in pkg/ui/workspaces/db-console/src/views/reports/containers/enqueueRange/index.tsx
+	// The client logic in pkg/ui/packages/db-console/src/views/reports/containers/enqueueRange/index.tsx
 	// should stop sending "gc" in v22.2. When removing, confirm that the
 	// associated TODO in index.tsx was addressed in the previous release.
 	//

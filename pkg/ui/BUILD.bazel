@@ -48,7 +48,7 @@ EOF
 test_suite(
     name = "lint",
     tests = [
-        "//pkg/ui/workspaces/cluster-ui:lint",
-        "//pkg/ui/workspaces/db-console:lint",
+        "//pkg/ui/packages/cluster-ui:lint",
+        "//pkg/ui/packages/db-console:lint",
     ],
 )

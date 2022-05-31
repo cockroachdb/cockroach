@@ -41,9 +41,9 @@ def _seed_yarn_cache_impl(rctx):
         fail("Unable to seed yarn cache: " + res.stderr)
 
     paths = {
-        "protos": "pkg/ui/workspaces/db-console/src/js",
-        "cluster_ui": "pkg/ui/workspaces/cluster-ui",
-        "db_console": "pkg/ui/workspaces/db-console",
+        "protos": "pkg/ui/packages/db-console/src/js",
+        "cluster_ui": "pkg/ui/packages/cluster-ui",
+        "db_console": "pkg/ui/packages/db-console",
     }
     yarn_dir = str(rctx.path(Label("@yarn//:bin/yarn")).dirname)
     for key, path in paths.items():
