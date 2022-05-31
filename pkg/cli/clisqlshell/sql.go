@@ -855,15 +855,14 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue(
+	dbVal, _, hasVal := c.conn.GetServerValue(
 		context.Background(),
 		"transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return
 	}
 
-	txnString := clisqlexec.FormatVal(dbVal, dbColType,
-		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	txnString := fmt.Sprintf("%v", dbVal)
 
 	// Change the prompt based on the response from the server.
 	switch txnString {
@@ -890,7 +889,7 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue(
+	dbVal, _, hasVal := c.conn.GetServerValue(
 		context.Background(),
 		"database name", `SHOW DATABASE`)
 	if !hasVal {
@@ -903,8 +902,7 @@ func (c *cliState) refreshDatabaseName() string {
 			" Use SET database = <dbname> to change, CREATE DATABASE to make a new database.")
 	}
 
-	dbName := clisqlexec.FormatVal(dbVal, dbColType,
-		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	dbName := fmt.Sprintf("%v", dbVal)
 
 	// Preserve the current database name in case of reconnects.
 	c.conn.SetCurrentDatabase(dbName)
