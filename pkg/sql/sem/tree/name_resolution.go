@@ -139,6 +139,14 @@ type SearchPath interface {
 	IterateSearchPath(func(schema string) error) error
 }
 
+// CustomFunctionDefinitionResolver is an interface providing custom
+// function definition resolution functionality.
+type CustomFunctionDefinitionResolver interface {
+	// Resolve resolves function with specified name, and returns
+	// non-nil function definition if resolved successfully.
+	Resolve(name string) *FunctionDefinition
+}
+
 // EmptySearchPath is a SearchPath with no members.
 var EmptySearchPath SearchPath = emptySearchPath{}
 
@@ -146,6 +154,21 @@ type emptySearchPath struct{}
 
 func (emptySearchPath) IterateSearchPath(func(string) error) error {
 	return nil
+}
+
+// getFunctionDefinitionResolver returns a function which
+// is used to resolve function definition.
+func getFunctionDefinitionResolver(sp SearchPath) func(name string) *FunctionDefinition {
+	if custom, ok := sp.(CustomFunctionDefinitionResolver); ok {
+		return custom.Resolve
+	}
+	return func(name string) *FunctionDefinition {
+		fn, ok := FunDefs[name]
+		if ok {
+			return fn
+		}
+		return nil
+	}
 }
 
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
@@ -170,12 +193,14 @@ func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefini
 			"invalid function name: %s", n)
 	}
 
+	resolveFn := getFunctionDefinitionResolver(searchPath)
+
 	// We ignore the catalog part. Like explained above, we currently
 	// only support functions in virtual schemas, which always exist
 	// independently of the database/catalog prefix.
 	function, prefix := n.Parts[0], n.Parts[1]
 
-	if d, ok := FunDefs[function]; ok && prefix == "" {
+	if d := resolveFn(function); d != nil && prefix == "" {
 		// Fast path: return early.
 		return d, nil
 	}
@@ -191,7 +216,7 @@ func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefini
 		// If the user specified public, it may be from a PostgreSQL extension.
 		// Double check the function definition allows resolution on the public
 		// schema, and resolve as such if appropriate.
-		if d, ok := FunDefs[function]; ok && d.AvailableOnPublicSchema {
+		if d := resolveFn(function); d != nil && d.AvailableOnPublicSchema {
 			return d, nil
 		}
 	}
@@ -199,16 +224,14 @@ func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefini
 	if prefix != "" {
 		fullName = prefix + "." + function
 	}
-	def, ok := FunDefs[fullName]
-	if !ok {
-		found := false
+	def := resolveFn(fullName)
+	if def == nil {
 		if prefix == "" {
 			// The function wasn't qualified, so we must search for it via
 			// the search path first.
 			if err := searchPath.IterateSearchPath(func(alt string) error {
 				fullName = alt + "." + function
-				if def, ok = FunDefs[fullName]; ok {
-					found = true
+				if def = resolveFn(fullName); def != nil {
 					return iterutil.StopIteration()
 				}
 				return nil
@@ -216,10 +239,10 @@ func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefini
 				return nil, err
 			}
 		}
-		if !found {
+		if def == nil {
 			extraMsg := ""
 			// Try a little harder.
-			if rdef, ok := FunDefs[strings.ToLower(function)]; ok {
+			if rdef := resolveFn(strings.ToLower(function)); rdef != nil {
 				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
 			}
 			return nil, pgerror.Newf(
