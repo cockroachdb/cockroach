@@ -855,7 +855,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, _, hasVal := c.conn.GetServerValue(
+	dbVal, hasVal := c.conn.GetServerValue(
 		context.Background(),
 		"transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
@@ -889,7 +889,7 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, _, hasVal := c.conn.GetServerValue(
+	dbVal, hasVal := c.conn.GetServerValue(
 		context.Background(),
 		"database name", `SHOW DATABASE`)
 	if !hasVal {
