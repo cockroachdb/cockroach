@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -89,7 +90,7 @@ func makeWriter(
 	}
 
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, dest.Settings(), dest.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, dest.Settings(), dest.ExternalIOConf())
 		if err != nil {
 			return nil, err
 		}
@@ -605,7 +606,7 @@ func debugDumpFileSST(
 ) error {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -651,7 +652,7 @@ func DebugDumpMetadataSST(
 ) error {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -790,7 +791,7 @@ func newBackupMetadata(
 ) (*BackupMetadata, error) {
 	var encOpts *roachpb.FileEncryptionOptions
 	if encryption != nil {
-		key, err := getEncryptionKey(ctx, encryption, exportStore.Settings(), exportStore.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, encryption, exportStore.Settings(), exportStore.ExternalIOConf())
 		if err != nil {
 			return nil, err
 		}
@@ -900,7 +901,7 @@ func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
 	var iters []storage.SimpleMVCCIterator
 	var encOpts *roachpb.FileEncryptionOptions
 	if b.enc != nil {
-		key, err := getEncryptionKey(ctx, b.enc, b.store.Settings(), b.store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.store.Settings(), b.store.ExternalIOConf())
 		if err != nil {
 			return FileIterator{err: err}
 		}
@@ -1217,7 +1218,7 @@ func makeBytesIter(
 ) bytesIter {
 	var encOpts *roachpb.FileEncryptionOptions
 	if enc != nil {
-		key, err := getEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
+		key, err := backupencryption.GetEncryptionKey(ctx, enc, store.Settings(), store.ExternalIOConf())
 		if err != nil {
 			return bytesIter{iterError: err}
 		}

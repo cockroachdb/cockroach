@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
@@ -4490,7 +4491,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			expectError:           true,
 		},
 	} {
-		masterKeyIDToDataKey := newEncryptedDataKeyMap()
+		masterKeyIDToDataKey := backupencryption.NewEncryptedDataKeyMap()
 		ctx := context.Background()
 
 		var defaultEncryptedDataKey []byte
@@ -4499,7 +4500,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			require.NoError(t, err)
 			keyID := strings.TrimPrefix(url.Path, "/")
 
-			masterKeyIDToDataKey.addEncryptedDataKey(plaintextMasterKeyID(keyID),
+			masterKeyIDToDataKey.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(keyID),
 				[]byte("efgh-"+tc.name))
 
 			if defaultEncryptedDataKey == nil {
@@ -4507,7 +4508,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			}
 		}
 
-		kmsInfo, err := validateKMSURIsAgainstFullBackup(
+		kmsInfo, err := backupencryption.ValidateKMSURIsAgainstFullBackup(
 			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey,
 			&testKMSEnv{cluster.NoSettings, &base.ExternalIODirConfig{}})
 		if tc.expectError {
@@ -4521,7 +4522,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 }
 
 // TestGetEncryptedDataKeyByKMSMasterKeyID tests
-// getEncryptedDataKeyByKMSMasterKeyID() which constructs a mapping
+// GetEncryptedDataKeyByKMSMasterKeyID() which constructs a mapping
 // {MasterKeyID : EncryptedDataKey} for each KMS URI.
 // It also returns the default KMSInfo to be used for encryption/decryption
 // thereafter, which defaults to the first URI.
@@ -4544,7 +4545,7 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
 		},
 	} {
-		expectedMap := newEncryptedDataKeyMap()
+		expectedMap := backupencryption.NewEncryptedDataKeyMap()
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, uri := range tc.fullBackupURIs {
 			testKMS, err := MakeTestKMS(ctx, uri, nil)
@@ -4563,11 +4564,11 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 				}
 			}
 
-			expectedMap.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID), encryptedDataKey)
+			expectedMap.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(masterKeyID), encryptedDataKey)
 		}
 
-		gotMap, gotDefaultKMSInfo, err := getEncryptedDataKeyByKMSMasterKeyID(ctx, tc.fullBackupURIs,
-			plaintextDataKey, nil)
+		gotMap, gotDefaultKMSInfo, err := backupencryption.GetEncryptedDataKeyByKMSMasterKeyID(ctx,
+			tc.fullBackupURIs, plaintextDataKey, nil)
 		require.NoError(t, err)
 		require.Equal(t, *expectedMap, *gotMap)
 		require.Equal(t, defaultKMSInfo.Uri, gotDefaultKMSInfo.Uri)

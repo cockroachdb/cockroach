@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -52,7 +53,7 @@ func fetchPreviousBackups(
 	}
 
 	baseBackup := prevBackupURIs[0]
-	encryptionOptions, err := getEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
+	encryptionOptions, err := backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
 		encryptionParams, kmsEnv)
 	if err != nil {
 		return nil, nil, 0, err
