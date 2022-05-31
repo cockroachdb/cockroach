@@ -21,7 +21,7 @@ import RequireLogin from "src/views/login/requireLogin";
 import {
   clusterIdSelector,
   clusterNameSelector,
-  singleVersionSelector,
+  clusterVersionLabelSelector,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import LoginIndicator from "src/views/app/components/loginIndicator";
@@ -112,7 +112,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
 const mapStateToProps = (state: AdminUIState) => {
   return {
     clusterName: clusterNameSelector(state),
-    clusterVersion: singleVersionSelector(state),
+    clusterVersion: clusterVersionLabelSelector(state),
     clusterId: clusterIdSelector(state),
   };
 };
