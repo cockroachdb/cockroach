@@ -97,7 +97,7 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 	for i := range values {
 		rowVal := rd.Values()[i]
 		if rowVal == nil {
-			values[i] = "NULL"
+			values[i] = nil
 			continue
 		}
 		fieldOID := rd.FieldDescriptions()[i].DataTypeOID
