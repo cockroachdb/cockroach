@@ -776,6 +776,9 @@ func mvccGet(
 	traceSpan := tracing.SpanFromContext(ctx)
 	recordIteratorStats(traceSpan, mvccScanner.stats())
 
+	// TODO(irfansharif): Export two sets of cache hit rates: one for contexts
+	// containing exports, one without.
+
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
 	}
