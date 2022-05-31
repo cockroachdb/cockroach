@@ -79,7 +79,7 @@ const (
 
 	// L0SublevelInterval is the period over which to accumulate statistics on
 	// the number of L0 sublevels within a store.
-	L0SublevelInterval = time.Minute * 5
+	L0SublevelInterval = time.Minute * 2
 
 	// L0SublevelMaxSampled is maximum number of L0 sub-levels that may exist
 	// in a sample. This setting limits the extreme skew that could occur by

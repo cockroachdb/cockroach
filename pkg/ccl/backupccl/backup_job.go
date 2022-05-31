@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -510,7 +511,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// generated during BACKUP planning.
 	redactedURI := RedactURIForErrorMessage(details.URI)
 	if details.EncryptionInfo != nil {
-		if err := writeEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
+		if err := backupencryption.WriteEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
 			defaultStore); err != nil {
 			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
 		}
