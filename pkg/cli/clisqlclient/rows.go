@@ -88,6 +88,7 @@ func (r *sqlRows) NextResultSet() (bool, error) {
 }
 
 func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
+	// todo: remove this?
 	o := r.rows.FieldDescriptions()[index].DataTypeOID
 	n := r.ColumnTypeDatabaseTypeName(index)
 	return scanType(o, n)
@@ -96,12 +97,4 @@ func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
 	fieldOID := r.rows.FieldDescriptions()[index].DataTypeOID
 	return databaseTypeName(r.connInfo, fieldOID)
-}
-
-func (r *sqlRows) ColumnTypeNames() []string {
-	colTypes := make([]string, len(r.Columns()))
-	for i := range colTypes {
-		colTypes[i] = r.ColumnTypeDatabaseTypeName(i)
-	}
-	return colTypes
 }

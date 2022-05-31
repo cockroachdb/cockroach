@@ -72,11 +72,12 @@ func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
 		}
 	}
 
-	_, rows, err := sqlExecCtx.RunQuery(ctx,
+	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
 		conn,
 		clisqlclient.MakeQuery(`SELECT node_id FROM crdb_internal.gossip_liveness
                WHERE membership = 'active' OR split_part(expiration,',',1)::decimal > now()::decimal`),
-		false,
+		false, /* showMoreChars */
 	)
 
 	if err != nil {
@@ -246,14 +247,14 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 	switch len(args) {
 	case 0:
 		query := clisqlclient.MakeQuery(queryString + " ORDER BY id")
-		return sqlExecCtx.RunQuery(ctx, conn, query, false)
+		return sqlExecCtx.RunQuery(ctx, conn, query, false /* showMoreChars */)
 	case 1:
 		nodeID, err := strconv.Atoi(args[0])
 		if err != nil {
 			return nil, nil, errors.Errorf("could not parse node_id %s", args[0])
 		}
 		query := clisqlclient.MakeQuery(queryString+" WHERE id = $1", nodeID)
-		headers, rows, err := sqlExecCtx.RunQuery(ctx, conn, query, false)
+		headers, rows, err := sqlExecCtx.RunQuery(ctx, conn, query, false /* showMoreChars */)
 		if err != nil {
 			return nil, nil, err
 		}
