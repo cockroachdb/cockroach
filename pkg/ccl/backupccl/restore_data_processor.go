@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -421,14 +422,31 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		writeAtBatchTS = false
 	}
 
-	// "disallowing" shadowing of anything older than logical=1 is i.e. allow all
-	// shadowing. We must allow shadowing in case the RESTORE has to retry any
-	// ingestions, but setting a (permissive) disallow like this serves to force
-	// evaluation of AddSSTable to check for overlapping keys. That in turn will
-	// result in it maintaining exact MVCC stats rather than estimates. Of course
-	// this comes at the cost of said overlap check, but in the common case of
-	// non-overlapping ingestion into empty spans, that is just one seek.
-	disallowShadowingBelow := hlc.Timestamp{Logical: 1}
+	// disallowShadowingBelow is set to an empty hlc.Timestamp in release builds
+	// i.e. allow all shadowing without AddSSTable having to check for overlapping
+	// keys. This is because RESTORE is expected to ingest into an empty keyspace.
+	// If a restore job is resumed, the un-checkpointed spans that are re-ingested
+	// will perfectly shadow (equal key, value and ts) the already ingested keys.
+	//
+	// NB: disallowShadowingBelow used to be unconditionally set to logical=1.
+	// This permissive value would allow shadowing in case the RESTORE has to
+	// retry ingestions but served to force evaluation of AddSSTable to check for
+	// overlapping keys. It was believed that even across resumptions of a restore
+	// job, `checkForKeyCollisions` would be inexpensive because of our frequent
+	// job checkpointing. Further investigation in
+	// https://github.com/cockroachdb/cockroach/issues/81116 revealed that our
+	// progress checkpointing could significantly lag behind the spans we have
+	// ingested, making a resumed restore spend a lot of time in
+	// `checkForKeyCollisions` leading to severely degraded performance. We have
+	// *never* seen a restore fail because of the invariant enforced by setting
+	// `disallowShadowingBelow` to a non-empty value, and so we feel comfortable
+	// disabling this check entirely. A future release will work on fixing our
+	// progress checkpointing so that we do not have a buildup of un-checkpointed
+	// work, at which point we can reassess reverting to logical=1.
+	disallowShadowingBelow := hlc.Timestamp{}
+	if !build.IsRelease() {
+		disallowShadowingBelow = hlc.Timestamp{Logical: 1}
+	}
 	batcher, err := bulk.MakeSSTBatcher(ctx,
 		"restore",
 		db,
