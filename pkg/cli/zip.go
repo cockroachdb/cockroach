@@ -205,6 +205,9 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
+	// The zip output is sent directly into a text file, so the results should
+	// be scanned into strings.
+	sqlConn.SetAlwaysInferResultTypes(false)
 	if err != nil {
 		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
 	} else {
