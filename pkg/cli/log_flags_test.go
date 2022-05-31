@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -207,8 +209,83 @@ func isServerCmd(thisCmd *cobra.Command) bool {
 	return false
 }
 
+func TestValidateLogConfigVars(t *testing.T) {
+	for i, tc := range []struct {
+		vars        []string
+		expectedErr error
+	}{
+		{
+			vars: []string{"HOST_IP"},
+		},
+		{
+			vars:        []string{"COCKROACH_TEST"},
+			expectedErr: errors.Newf(`use of COCKROACH_TEST is not allowed as a logging configuration variable`),
+		},
+	} {
+		err := validateLogConfigVars(tc.vars)
+
+		if !errors.Is(tc.expectedErr, err) {
+			t.Errorf("%d. validateLogConfigVars err expected '%s', but got '%s'.",
+				i, tc.expectedErr, err)
+		}
+	}
+}
+
+func TestExpandEnvironmentVariables(t *testing.T) {
+	if err := os.Setenv("HOST_IP", "1.2.3.4"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Unsetenv("HOST_IP"); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if err := os.Unsetenv("EXPAND_ABSENT_VAR"); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, tc := range []struct {
+		in           string
+		vars         []string
+		expectedOut  string
+		expectedErrs error
+	}{
+		{
+			in:          "$HOST_IP",
+			vars:        []string{"HOST_IP"},
+			expectedOut: "1.2.3.4",
+		},
+		{
+			in:          "${HOST_IP}",
+			vars:        []string{"HOST_IP"},
+			expectedOut: "1.2.3.4",
+		},
+		{
+			in:           "$EXPAND_ABSENT_VAR",
+			expectedErrs: errors.Newf(`variable "EXPAND_ABSENT_VAR" is not defined`),
+		},
+		{
+			in:           "${EXPAND_ABSENT_VAR}",
+			expectedErrs: errors.Newf(`variable "EXPAND_ABSENT_VAR" is not defined`),
+		},
+	} {
+		out, err := expandEnvironmentVariables(tc.in, tc.vars)
+
+		if !errors.Is(tc.expectedErrs, err) {
+			t.Errorf("%d. expandEnvironmentVariables err expected '%s', but got '%s'.",
+				i, tc.expectedErrs, err)
+		}
+
+		if !reflect.DeepEqual(tc.expectedOut, out) {
+			t.Errorf("%d. expandEnvironmentVariables output expected '%s', but got '%s'.",
+				i, tc.expectedOut, out)
+		}
+	}
+}
+
 // TestLogFlagCombinations checks that --log and --log-config-file properly
-// override each other.
+// override each other and that --log-config-vars stores the appropriate values
+// in the cliContext struct.
 func TestLogFlagCombinations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -238,15 +315,44 @@ func TestLogFlagCombinations(t *testing.T) {
 
 	f := startCmd.Flags()
 	testData := []struct {
-		args           []string
-		expectedLogCfg string
+		args            []string
+		expectedLogCfg  string
+		expectedLogVars []string
 	}{
-		{[]string{"start"}, ""},
-		{[]string{"start", "--log=foo"}, "foo"},
-		{[]string{"start", "--log-config-file=" + tmpfile.Name()}, filecontents},
-		{[]string{"start", "--log=foo", "--log=bar"}, "bar"},
-		{[]string{"start", "--log=foo", "--log-config-file=" + tmpfile.Name()}, filecontents},
-		{[]string{"start", "--log-config-file=" + tmpfile.Name(), "--log=bar"}, "bar"},
+		{
+			args:           []string{"start"},
+			expectedLogCfg: "",
+		},
+		{
+			args:           []string{"start", "--log=foo"},
+			expectedLogCfg: "foo",
+		},
+		{
+			args:           []string{"start", "--log-config-file=" + tmpfile.Name()},
+			expectedLogCfg: filecontents,
+		},
+		{
+			args:           []string{"start", "--log=foo", "--log=bar"},
+			expectedLogCfg: "bar",
+		},
+		{
+			args:           []string{"start", "--log=foo", "--log-config-file=" + tmpfile.Name()},
+			expectedLogCfg: filecontents,
+		},
+		{
+			args:           []string{"start", "--log-config-file=" + tmpfile.Name(), "--log=bar"},
+			expectedLogCfg: "bar",
+		},
+		{
+			args:            []string{"start", "--log-config-file=" + tmpfile.Name(), "--log-config-vars=HOST_IP"},
+			expectedLogCfg:  filecontents,
+			expectedLogVars: []string{"HOST_IP"},
+		},
+		{
+			args:            []string{"start", "--log-config-file=" + tmpfile.Name(), "--log-config-vars=HOST_IP,POD_NAME"},
+			expectedLogCfg:  filecontents,
+			expectedLogVars: []string{"HOST_IP", "POD_NAME"},
+		},
 	}
 
 	for i, td := range testData {
@@ -258,6 +364,11 @@ func TestLogFlagCombinations(t *testing.T) {
 		if td.expectedLogCfg != cliCtx.logConfigInput.s {
 			t.Errorf("%d. cliCtx.logConfigInput.s expected '%s', but got '%s'. td.args was '%#v'.",
 				i, td.expectedLogCfg, cliCtx.logConfigInput.s, td.args)
+		}
+
+		if !reflect.DeepEqual(td.expectedLogVars, cliCtx.logConfigVars) {
+			t.Errorf("%d. cliCtx.logConfigVars expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedLogCfg, cliCtx.logConfigVars, td.args)
 		}
 	}
 }
