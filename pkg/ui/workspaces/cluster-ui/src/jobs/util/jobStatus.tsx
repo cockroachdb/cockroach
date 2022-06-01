@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,32 +7,30 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import React from "react";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
+import React from "react";
+
+import { Duration } from "./duration";
+import { JobStatusVisual, isRetrying, jobToVisual } from "./jobOptions";
 import {
   JobStatusBadge,
-  RetryingStatusBadge,
   ProgressBar,
-} from "src/views/jobs/progressBar";
-import { Duration } from "src/views/jobs/duration";
-import Job = cockroach.server.serverpb.IJobResponse;
-import { cockroach } from "src/js/protos";
-import {
-  JobStatusVisual,
-  jobToVisual,
-  isRetrying,
-} from "src/views/jobs/jobStatusOptions";
-import { InlineAlert } from "src/components";
-import styles from "./jobStatus.module.styl";
+  RetryingStatusBadge,
+} from "./progressBar";
+
+import styles from "../jobs.module.scss";
+
+const cx = classNames.bind(styles);
+
+type Job = cockroach.server.serverpb.IJobResponse;
 
 export interface JobStatusProps {
   job: Job;
   lineWidth?: number;
   compact?: boolean;
 }
-
-const cn = classNames.bind(styles);
 
 export const JobStatus: React.FC<JobStatusProps> = ({
   job,
@@ -48,7 +46,7 @@ export const JobStatus: React.FC<JobStatusProps> = ({
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          <Duration job={job} className="jobs-table__duration" />
+          <Duration job={job} className={cx("jobs-table__duration")} />
         </div>
       );
     case JobStatusVisual.ProgressBarWithDuration: {
@@ -60,10 +58,10 @@ export const JobStatus: React.FC<JobStatusProps> = ({
             lineWidth={lineWidth || 11}
             showPercentage={true}
           />
-          <Duration job={job} className={cn("jobs-table__duration")} />
+          <Duration job={job} className={cx("jobs-table__duration")} />
           {jobIsRetrying && <RetryingStatusBadge />}
           {job.running_status && (
-            <div className="jobs-table__running-status">
+            <div className={cx("jobs-table__running-status")}>
               {job.running_status}
             </div>
           )}
@@ -74,7 +72,7 @@ export const JobStatus: React.FC<JobStatusProps> = ({
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          <span className="jobs-table__running-status">
+          <span className={cx("jobs-table__running-status")}>
             {job.running_status}
           </span>
         </div>
@@ -86,8 +84,8 @@ export const JobStatus: React.FC<JobStatusProps> = ({
           {!compact && (
             <InlineAlert
               title={job.error}
-              intent="error"
-              className={cn("inline-message")}
+              intent="danger"
+              className={cx("inline-message")}
             />
           )}
         </div>

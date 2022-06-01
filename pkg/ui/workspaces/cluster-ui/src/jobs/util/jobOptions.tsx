@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,10 +7,11 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { BadgeStatus } from "src/badge";
 
-import { cockroach } from "src/js/protos";
-import Job = cockroach.server.serverpb.IJobResponse;
-import { BadgeStatus } from "src/components";
+const JobType = cockroach.sql.jobs.jobspb.Type;
+type Job = cockroach.server.serverpb.IJobResponse;
 
 export enum JobStatusVisual {
   BadgeOnly,
@@ -74,15 +75,15 @@ export function isRunning(status: string): boolean {
 }
 
 export const statusOptions = [
-  { value: "", label: "All" },
-  { value: "succeeded", label: "Succeeded" },
-  { value: "failed", label: "Failed" },
-  { value: "paused", label: "Paused" },
-  { value: "canceled", label: "Canceled" },
-  { value: "running", label: "Running" },
-  { value: "pending", label: "Pending" },
-  { value: "reverting", label: "Reverting" },
-  { value: "retrying", label: "Retrying" },
+  { value: "", name: "All" },
+  { value: "succeeded", name: "Succeeded" },
+  { value: "failed", name: "Failed" },
+  { value: "paused", name: "Paused" },
+  { value: "canceled", name: "Canceled" },
+  { value: "running", name: "Running" },
+  { value: "pending", name: "Pending" },
+  { value: "reverting", name: "Reverting" },
+  { value: "retrying", name: "Retrying" },
 ];
 
 export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
@@ -121,3 +122,43 @@ export const jobStatusToBadgeText = (status: string): string => {
       return status;
   }
 };
+
+export const typeOptions = [
+  { value: JobType.UNSPECIFIED.toString(), name: "All" },
+  { value: JobType.BACKUP.toString(), name: "Backups" },
+  { value: JobType.RESTORE.toString(), name: "Restores" },
+  { value: JobType.IMPORT.toString(), name: "Imports" },
+  { value: JobType.SCHEMA_CHANGE.toString(), name: "Schema Changes" },
+  { value: JobType.CHANGEFEED.toString(), name: "Changefeed" },
+  { value: JobType.CREATE_STATS.toString(), name: "Statistics Creation" },
+  {
+    value: JobType.AUTO_CREATE_STATS.toString(),
+    name: "Auto-Statistics Creation",
+  },
+  { value: JobType.SCHEMA_CHANGE_GC.toString(), name: "Schema Change GC" },
+  {
+    value: JobType.TYPEDESC_SCHEMA_CHANGE.toString(),
+    name: "Type Descriptor Schema Changes",
+  },
+  { value: JobType.STREAM_INGESTION.toString(), name: "Stream Ingestion" },
+  { value: JobType.NEW_SCHEMA_CHANGE.toString(), name: "New Schema Changes" },
+  { value: JobType.MIGRATION.toString(), name: "Migrations" },
+  {
+    value: JobType.AUTO_SPAN_CONFIG_RECONCILIATION.toString(),
+    name: "Span Config Reconciliation",
+  },
+  {
+    value: JobType.AUTO_SQL_STATS_COMPACTION.toString(),
+    name: "SQL Stats Compactions",
+  },
+  { value: JobType.STREAM_REPLICATION.toString(), name: "Stream Replication" },
+  {
+    value: JobType.ROW_LEVEL_TTL.toString(),
+    name: "Time-to-live Deletions",
+  },
+];
+
+export const showOptions = [
+  { value: "50", name: "Latest 50" },
+  { value: "0", name: "All" },
+];
