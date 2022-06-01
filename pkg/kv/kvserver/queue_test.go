@@ -690,24 +690,6 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq := makeTestBaseQueue("test", testQueue, s, queueConfig{maxSize: 2})
 	bq.Start(stopper)
 
-	// Check our config.
-	var sysCfg *config.SystemConfig
-	testutils.SucceedsSoon(t, func() error {
-		sysCfg = s.cfg.Gossip.DeprecatedGetSystemConfig()
-		if sysCfg == nil {
-			return errors.New("system config not yet present")
-		}
-		return nil
-	})
-	neverSplitsDesc := neverSplits.Desc()
-	if sysCfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
-		t.Fatal("System config says range needs to be split")
-	}
-	willSplitDesc := willSplit.Desc()
-	if sysCfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
-		t.Fatal("System config says range needs to be split")
-	}
-
 	// There are no user db/table entries, everything should be added and
 	// processed as usual.
 	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
@@ -733,16 +715,6 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(1 << 20)
 	config.TestingSetZoneConfig(config.ObjectID(bootstrap.TestingUserDescID(1)), zoneConfig)
-
-	// Check our config.
-	neverSplitsDesc = neverSplits.Desc()
-	if sysCfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
-		t.Fatal("System config says range needs to be split")
-	}
-	willSplitDesc = willSplit.Desc()
-	if !sysCfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
-		t.Fatal("System config says range does not need to be split")
-	}
 
 	bq.maybeAdd(ctx, neverSplits, hlc.ClockTimestamp{})
 	bq.maybeAdd(ctx, willSplit, hlc.ClockTimestamp{})

@@ -12,6 +12,7 @@ package localtestcluster
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"sort"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"

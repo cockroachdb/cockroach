@@ -25,7 +25,6 @@ import (
 // if the EndTxn checks are important.
 func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
-	cmdFilters.AppendFilter(CheckEndTxnTrigger, true)
 	params := base.TestServerArgs{}
 	params.Knobs = CreateTestingKnobs()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{

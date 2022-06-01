@@ -393,8 +393,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
-        "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/idxusage",

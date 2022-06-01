@@ -538,27 +538,6 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 }
 
-// Test that, if DeprecatedSetSystemConfigTrigger() fails, the systemConfigTrigger has not
-// been set.
-func TestAnchoringErrorNoTrigger(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
-			return nil, nil
-		}), clock, stopper)
-	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	require.EqualError(t, txn.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
-	require.False(t, txn.systemConfigTrigger)
-}
-
 // TestTxnNegotiateAndSend tests the behavior of NegotiateAndSend, both when the
 // server-side fast path is possible (for single-range reads) and when it is not
 // (for cross-range reads).

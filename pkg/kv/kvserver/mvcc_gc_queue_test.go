@@ -584,9 +584,9 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg := tc.gossip.DeprecatedGetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	cfg, err := tc.store.GetConfReader(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// The total size of the GC'able versions of the keys and values in Info.
@@ -869,9 +869,9 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	mgcq := newMVCCGCQueue(tc.store)
-	cfg := tc.gossip.DeprecatedGetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	cfg, err := tc.store.GetConfReader(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	processed, err := mgcq.process(ctx, tc.repl, cfg)

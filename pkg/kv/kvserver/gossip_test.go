@@ -18,15 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -34,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGossipFirstRange(t *testing.T) {
@@ -209,94 +202,5 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
 			t.Errorf("failed Put to node %d: %+v", i, err)
 		}
-	}
-}
-
-// TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents tests
-// that failures to gossip the system config due to intents are rectified when
-// later intents are aborted.
-//
-// Note that this tests the gossip functionality only in the mixed version
-// state. After the release is finalized, these gossip triggers will no longer
-// happen.
-//
-// TODO(ajwerner): Delete this test in 22.2.
-func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryMinSupportedVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
-		false,
-	)
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: settings,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					DisableMergeQueue: true,
-				},
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	require.NoError(t, tc.WaitForFullReplication())
-
-	db := tc.Server(0).DB()
-
-	txA := db.NewTxn(ctx, "a")
-	txB := db.NewTxn(ctx, "b")
-
-	require.NoError(t, txA.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */))
-	db1000 := dbdesc.NewInitial(1000, "1000", username.AdminRoleName())
-	require.NoError(t, txA.Put(ctx,
-		keys.SystemSQLCodec.DescMetadataKey(1000),
-		db1000.DescriptorProto()))
-
-	require.NoError(t, txB.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */))
-	db2000 := dbdesc.NewInitial(2000, "2000", username.AdminRoleName())
-	require.NoError(t, txB.Put(ctx,
-		keys.SystemSQLCodec.DescMetadataKey(2000),
-		db2000.DescriptorProto()))
-
-	const someTime = 10 * time.Millisecond
-	clearNotifictions := func(ch <-chan struct{}) {
-		for {
-			select {
-			case <-ch:
-			case <-time.After(someTime):
-				return
-			}
-		}
-	}
-	systemConfChangeCh := tc.Server(0).GossipI().(*gossip.Gossip).DeprecatedRegisterSystemConfigChannel()
-	clearNotifictions(systemConfChangeCh)
-	require.NoError(t, txB.Commit(ctx))
-	select {
-	case <-systemConfChangeCh:
-		// This case is rare but happens sometimes. We gossip the node liveness
-		// in a bunch of cases so we just let the test finish here. The important
-		// thing is that sometimes we get to the next phase.
-		t.Log("got unexpected update. This can happen for a variety of " +
-			"reasons like lease transfers. The test is exiting without testing anything")
-		return
-	case <-time.After(someTime):
-		// Did not expect an update so this is the happy case
-	}
-	// Roll back the transaction which had laid down the intent which blocked the
-	// earlier gossip update, make sure we get a gossip notification now.
-	const aLongTime = 20 * someTime
-	require.NoError(t, txA.Rollback(ctx))
-	select {
-	case <-systemConfChangeCh:
-		// Got an update.
-	case <-time.After(aLongTime):
-		t.Fatal("expected update")
 	}
 }

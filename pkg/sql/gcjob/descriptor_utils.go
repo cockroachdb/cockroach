@@ -13,7 +13,6 @@ package gcjob
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -75,13 +74,6 @@ func deleteDatabaseZoneConfig(
 		return nil
 	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if !settings.Version.IsActive(
-			ctx, clusterversion.DisableSystemConfigGossipTrigger,
-		) {
-			if err := txn.DeprecatedSetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-				return err
-			}
-		}
 		b := &kv.Batch{}
 
 		// Delete the zone config entry for the dropped database associated with the

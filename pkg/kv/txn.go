@@ -951,9 +951,7 @@ func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) *endTxnReq
 	alloc.req.Deadline = deadline
 	if hasTrigger {
 		alloc.req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-				SystemConfigSpan: true,
-			},
+			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{},
 		}
 	}
 	alloc.union.EndTxn = &alloc.req

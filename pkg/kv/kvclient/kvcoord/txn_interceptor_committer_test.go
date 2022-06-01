@@ -243,9 +243,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	ba.Requests = nil
 	etArgsWithTrigger := etArgs
 	etArgsWithTrigger.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-		ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-			SystemConfigSpan: true,
-		},
+		ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{},
 	}
 	ba.Add(&putArgs, &qiArgs, &etArgsWithTrigger)
 
