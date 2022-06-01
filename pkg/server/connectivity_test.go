@@ -188,11 +188,10 @@ func TestClusterConnectivity(t *testing.T) {
 
 			var wg sync.WaitGroup
 			wg.Add(1)
-			go func() {
+			go func(bootstrapNode int) {
 				defer wg.Done()
 
 				// Attempt to bootstrap the cluster through the configured node.
-				bootstrapNode := test.bootstrapNode
 				testutils.SucceedsSoon(t, func() (e error) {
 					ctx := context.Background()
 					serv := tc.Server(bootstrapNode)
@@ -266,7 +265,7 @@ func TestClusterConnectivity(t *testing.T) {
 
 					return nil
 				})
-			}()
+			}(test.bootstrapNode)
 
 			// Start the test cluster. This is a blocking call, and expects the
 			// configured number of servers in the cluster to be fully
