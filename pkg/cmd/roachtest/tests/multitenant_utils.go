@@ -69,7 +69,7 @@ func createTenantNode(
 	v := version.MustParse(versionStr)
 	require.NoError(t, err)
 	// Tenant scoped certificates were introduced in version 22.1.
-	if v.AtLeast(version.MustParse("22.1.0")) {
+	if v.AtLeast(version.MustParse("v22.1.0")) {
 		tn.recreateClientCertsWithTenantScope(ctx, c)
 	}
 	tn.createTenantCert(ctx, t, c)
