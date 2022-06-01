@@ -1034,18 +1034,14 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 		return nil
 	}
 
-	// Gather the internal IP addresses for every node in the cluster, even
-	// if it won't be added to the cluster itself we still add the IP address
-	// to the node cert.
-	var msg string
-	display := fmt.Sprintf("%s: initializing certs", c.Name)
-	nodes := allNodes(len(c.VMs))
 	nodeNames, err := c.createNodeCertArguments(ctx, l)
 	if err != nil {
 		return err
 	}
 
 	// Generate the ca, client and node certificates on the first node.
+	var msg string
+	display := fmt.Sprintf("%s: initializing certs", c.Name)
 	if err := c.Parallel(l, display, 1, 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(1)
 		if err != nil {
@@ -1079,34 +1075,15 @@ tar cvf certs.tar certs
 		exit.WithCode(exit.UnspecifiedError())
 	}
 
-	var tmpfileName string
-	if c.IsLocal() {
-		tmpfileName = os.ExpandEnv(filepath.Join(c.localVMDir(1), "certs.tar"))
-	} else {
-		// Retrieve the certs.tar that was created on the first node.
-		tmpfile, err := ioutil.TempFile("", "certs")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exit.WithCode(exit.UnspecifiedError())
-		}
-		_ = tmpfile.Close()
-		defer func() {
-			_ = os.Remove(tmpfile.Name()) // clean up
-		}()
-
-		if err := func() error {
-			return c.scp(fmt.Sprintf("%s@%s:certs.tar", c.user(1), c.Host(1)), tmpfile.Name())
-		}(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exit.WithCode(exit.UnspecifiedError())
-		}
-
-		tmpfileName = tmpfile.Name()
+	tarfile, cleanup, err := c.getFileFromFirstNode("certs.tar")
+	if err != nil {
+		return err
 	}
+	defer cleanup()
 
 	// Skip the first node which is where we generated the certs.
-	nodes = nodes[1:]
-	return c.distributeLocalCertsTar(ctx, l, tmpfileName, nodes, 0)
+	nodes := allNodes(len(c.VMs))[1:]
+	return c.distributeLocalCertsTar(ctx, l, tarfile, nodes, 0)
 }
 
 // DistributeTenantCerts will generate and distribute certificates to all of the
@@ -1157,27 +1134,40 @@ tar cvf tenant-certs.tar tenant-certs/certs
 		return err
 	}
 
+	tarfile, cleanup, err := hostCluster.getFileFromFirstNode("tenant-certs.tar")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	return c.distributeLocalCertsTar(ctx, l, tarfile, allNodes(len(c.VMs)), 1)
+}
+
+// getFile retrieves the given file from the first node in the cluster. The
+// filename is assumed to be relative from the home directory of the node's
+// user.
+func (c *SyncedCluster) getFileFromFirstNode(name string) (string, func(), error) {
 	var tmpfileName string
-	if hostCluster.IsLocal() {
-		tmpfileName = os.ExpandEnv(filepath.Join(hostCluster.localVMDir(1), "tenant-certs.tar"))
+	cleanup := func() {}
+	if c.IsLocal() {
+		tmpfileName = os.ExpandEnv(filepath.Join(c.localVMDir(1), name))
 	} else {
-		tmpfile, err := ioutil.TempFile("", "tenant-certs")
+		tmpfile, err := ioutil.TempFile("", name)
 		if err != nil {
-			return err
+			return "", nil, err
 		}
 		_ = tmpfile.Close()
-		defer func() {
+		cleanup = func() {
 			_ = os.Remove(tmpfile.Name()) // clean up
-		}()
+		}
 
-		srcFileName := fmt.Sprintf("%s@%s:tenant-certs.tar", hostCluster.user(1), hostCluster.Host(1))
-		if err := hostCluster.scp(srcFileName, tmpfile.Name()); err != nil {
-			return err
+		srcFileName := fmt.Sprintf("%s@%s:%s", name, c.user(1), c.Host(1))
+		if err := c.scp(srcFileName, tmpfile.Name()); err != nil {
+			cleanup()
+			return "", nil, err
 		}
 		tmpfileName = tmpfile.Name()
 	}
-
-	return c.distributeLocalCertsTar(ctx, l, tmpfileName, allNodes(len(c.VMs)), 1)
+	return tmpfileName, cleanup, nil
 }
 
 // checkForCertificates checks if the cluster already has a certs bundle created
