@@ -73,6 +73,18 @@ var (
 		keysPerValueMin: 1, keysPerValueMax: 100,
 		intentFrac: 1,
 	}
+	someVersionsWithSomeRangeKeys = uniformDistSpec{
+		tsSecFrom: 1, tsSecTo: 100,
+		tsSecMinIntent: 70, tsSecOldIntentTo: 85,
+		keySuffixMin: 8, keySuffixMax: 8,
+		valueLenMin: 8, valueLenMax: 16,
+		deleteFrac:      .1,
+		keysPerValueMin: 1,
+		keysPerValueMax: 100,
+		intentFrac:      .1,
+		oldIntentFrac:   .1,
+		rangeKeyFrac:    .05,
+	}
 )
 
 const intentAgeThreshold = 2 * time.Hour
@@ -222,13 +234,22 @@ func TestNewVsInvariants(t *testing.T) {
 			},
 			ttlSec: 1,
 		},
+		{
+			ds: someVersionsWithSomeRangeKeys,
+			now: hlc.Timestamp{
+				WallTime: 100 * time.Second.Nanoseconds(),
+			},
+			ttlSec:       10,
+			intentAgeSec: 15,
+		},
 	} {
 		t.Run(fmt.Sprintf("%v@%v,ttl=%vsec", tc.ds, tc.now, tc.ttlSec), func(t *testing.T) {
 			rng := rand.New(rand.NewSource(1))
+			desc := tc.ds.desc()
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 
-			tc.ds.dist(N, rng).setupTest(t, eng, *tc.ds.desc())
+			sortedDistribution(tc.ds.dist(N, rng)).setupTest(t, eng, *desc)
 			beforeGC := eng.NewSnapshot()
 
 			// Run GCer over snapshot.
@@ -237,7 +258,7 @@ func TestNewVsInvariants(t *testing.T) {
 			intentThreshold := tc.now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 
 			gcer := makeFakeGCer()
-			gcInfoNew, err := Run(ctx, tc.ds.desc(), beforeGC, tc.now,
+			gcInfoNew, err := Run(ctx, desc, beforeGC, tc.now,
 				gcThreshold, RunOptions{IntentAgeThreshold: intentAgeThreshold}, ttl,
 				&gcer,
 				gcer.resolveIntents,
@@ -258,10 +279,15 @@ func TestNewVsInvariants(t *testing.T) {
 				require.NoError(t, err, "failed to resolve intent")
 			}
 
-			assertLiveData(t, eng, beforeGC, *tc.ds.desc(), tc.now, gcThreshold, intentThreshold, ttl,
+			assertLiveData(t, eng, beforeGC, *desc, tc.now, gcThreshold, intentThreshold, ttl,
 				gcInfoNew)
 		})
 	}
+}
+
+type historyItem struct {
+	storage.MVCCKeyValue
+	isRangeDel bool
 }
 
 // assertLiveData will create a stream of expected values based on full data
@@ -297,7 +323,7 @@ func assertLiveData(
 		storage.IterOptions{
 			LowerBound: desc.StartKey.AsRawKey(),
 			UpperBound: desc.EndKey.AsRawKey(),
-			KeyTypes:   storage.IterKeyTypePointsOnly,
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		})
 	defer pointIt.Close()
 	pointIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
@@ -363,26 +389,62 @@ func getExpectationsGenerator(
 			// For new key, collect intent and all versions from highest to lowest
 			// to make a decision.
 			var baseKey roachpb.Key
-			var history []storage.MVCCKeyValue
+			var history []historyItem
 			for {
 				ok, err := it.Valid()
 				require.NoError(t, err, "failed to read data from unmodified engine")
 				if !ok {
 					break
 				}
-				k := it.Key()
-				v := it.Value()
-				if len(baseKey) == 0 {
-					baseKey = k.Key
-				} else if !baseKey.Equal(k.Key) {
-					break
+				p, r := it.HasPointAndRange()
+				if p {
+					k := it.Key()
+					v := it.Value()
+					if len(baseKey) == 0 {
+						baseKey = k.Key
+						// We are only interested in range tombstones covering current point,
+						// so we will add them to history of current key for analysis.
+						// Bare range tombstones are ignored.
+						if r {
+							for _, r := range it.RangeKeys() {
+								history = append(history, historyItem{
+									MVCCKeyValue: storage.MVCCKeyValue{
+										Key: storage.MVCCKey{
+											Key:       r.RangeKey.StartKey,
+											Timestamp: r.RangeKey.Timestamp,
+										},
+										Value: nil,
+									},
+									isRangeDel: true,
+								})
+							}
+						}
+					} else if !baseKey.Equal(k.Key) {
+						break
+					}
+					history = append(history, historyItem{
+						MVCCKeyValue: storage.MVCCKeyValue{Key: k, Value: v},
+						isRangeDel:   false,
+					})
 				}
-				history = append(history, storage.MVCCKeyValue{Key: k, Value: v})
 				it.Next()
 			}
 			if len(history) == 0 {
 				return storage.MVCCKeyValue{}, false
 			}
+			// Sort with zero timestamp at the beginning of the list. This could only
+			// happen if we have a meta record. There could only be single record,
+			// and it is always at the top of the history so zero timestamp is
+			// prioritized.
+			sort.Slice(history, func(i, j int) bool {
+				if history[i].Key.Timestamp.IsEmpty() {
+					return true
+				}
+				if history[j].Key.Timestamp.IsEmpty() {
+					return false
+				}
+				return history[j].Key.Timestamp.Less(history[i].Key.Timestamp)
+			})
 
 			// Process key history slice by first filtering intents as needed and then
 			// applying invariant that values on or above gc threshold should remain,
@@ -409,8 +471,8 @@ func getExpectationsGenerator(
 					} else {
 						// Intent is not considered as a part of GC removal cycle so we keep
 						// it intact if it doesn't satisfy push age check.
-						pending = append(pending, history[i])
-						pending = append(pending, history[i+1])
+						pending = append(pending, history[i].MVCCKeyValue)
+						pending = append(pending, history[i+1].MVCCKeyValue)
 					}
 					i += 2
 					continue
@@ -420,12 +482,14 @@ func getExpectationsGenerator(
 				switch {
 				case gcThreshold.Less(history[i].Key.Timestamp):
 					// Any value above threshold including intents that have no timestamp.
-					pending = append(pending, history[i])
+					if !history[i].isRangeDel {
+						pending = append(pending, history[i].MVCCKeyValue)
+					}
 					i++
 				case history[i].Key.Timestamp.LessEq(gcThreshold) && len(history[i].Value) > 0:
 					// First value on or under threshold should be preserved, but the rest
 					// of history should be skipped.
-					pending = append(pending, history[i])
+					pending = append(pending, history[i].MVCCKeyValue)
 					i++
 					stop = true
 				default:
@@ -436,10 +500,16 @@ func getExpectationsGenerator(
 
 			// Remaining part of the history is removed, so accumulate it as gc stats.
 			if i < len(history) {
-				expInfo.NumKeysAffected++
+				removedKeys := false
 				for ; i < len(history); i++ {
-					expInfo.AffectedVersionsKeyBytes += int64(history[i].Key.EncodedSize())
-					expInfo.AffectedVersionsValBytes += int64(len(history[i].Value))
+					if !history[i].isRangeDel {
+						expInfo.AffectedVersionsKeyBytes += int64(history[i].Key.EncodedSize())
+						expInfo.AffectedVersionsValBytes += int64(len(history[i].Value))
+						removedKeys = true
+					}
+				}
+				if removedKeys {
+					expInfo.NumKeysAffected++
 				}
 			}
 		}
@@ -452,7 +522,7 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound:           key,
 		UpperBound:           key.Next(),
-		KeyTypes:             storage.IterKeyTypePointsOnly,
+		KeyTypes:             storage.IterKeyTypePointsAndRanges,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
 	defer it.Close()
@@ -461,8 +531,21 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 	for {
 		ok, err := it.Valid()
 		require.NoError(t, err, "failed to read engine iterator")
-		if !ok || !it.UnsafeKey().Key.Equal(key) {
+		if !ok {
 			break
+		}
+		p, r := it.HasPointAndRange()
+		if !p {
+			it.Next()
+			continue
+		}
+		if !it.UnsafeKey().Key.Equal(key) {
+			break
+		}
+		if r && len(result) == 0 {
+			for _, rk := range it.RangeKeys() {
+				result = append(result, fmt.Sprintf("R:%s", rk.RangeKey.String()))
+			}
 		}
 		result = append(result, fmt.Sprintf("P:%s(%d)", it.UnsafeKey().String(), len(it.UnsafeValue())))
 		it.Next()
@@ -492,7 +575,9 @@ func (f *fakeGCer) SetGCThreshold(ctx context.Context, t Threshold) error {
 	return nil
 }
 
-func (f *fakeGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) error {
+func (f *fakeGCer) GC(
+	ctx context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) error {
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
 	}
