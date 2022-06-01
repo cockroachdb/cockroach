@@ -832,7 +832,13 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	db, err := OpenEngine(args[0], stopper,
 		storage.MustExist,
 		storage.DisableAutomaticCompactions,
-		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency))
+		storage.MaxConcurrentCompactions(debugCompactOpts.maxConcurrency),
+		// Currently, any concurrency over 0 enables Writer parallelism.
+		storage.MaxWriterConcurrency(1),
+		// Force Writer Parallelism will allow Writer parallelism to
+		// be enabled without checking the CPU.
+		storage.ForceWriterParallelism,
+	)
 	if err != nil {
 		return err
 	}
