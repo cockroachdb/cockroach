@@ -280,7 +280,7 @@ CREATE TABLE crdb_internal.databases (
 	create_statement STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
+		return forEachDatabaseDesc(ctx, p, nil /* all databases */, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				var survivalGoal tree.Datum = tree.DNull
 				var primaryRegion tree.Datum = tree.DNull
