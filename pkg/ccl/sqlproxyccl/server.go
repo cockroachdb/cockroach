@@ -26,6 +26,10 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+var (
+	awaitNoConnectionsInterval = time.Minute
+)
+
 // Server is a TCP server that proxies SQL connections to a configurable
 // backend. It may also run an HTTP server to expose a health check and
 // prometheus metrics.
@@ -184,6 +188,35 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			return err
 		}
 	}
+}
+
+// AwaitNoConnections returns a channel that is closed once the server has no open connections.
+// This is meant to be used after the server has stopped accepting new connections and we are
+// waiting to shutdown the server without inturrupting existing connections
+//
+// If the context is cancelled the channel will never close because we have to end the async task
+// to allow the stopper to completely finish
+func (s *Server) AwaitNoConnections(ctx context.Context) <-chan struct{} {
+	c := make(chan struct{})
+
+	_ = s.Stopper.RunAsyncTask(ctx, "await-no-connections", func(context.Context) {
+		for {
+			connCount := s.metrics.CurConnCount.Value()
+			if connCount == 0 {
+				close(c)
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(awaitNoConnectionsInterval):
+				continue
+			}
+		}
+
+	})
+
+	return c
 }
 
 // proxyConn is a SQL connection into the proxy.
