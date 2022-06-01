@@ -2009,8 +2009,6 @@ t5:
  (k, i, geom1)
 
 # 5. Geospatial inverted + R + R: combined index (inverted + equal, inverted + equal group, equal group candidates)
-# Todo: geom1 is added to inverted candidates, k and i are added to range candidates
-# Todo: no combined index between inverted + range candidates, no grouped range candidates
 index-candidates
 SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k > 2 AND i > 3
 ----
