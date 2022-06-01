@@ -38,7 +38,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -128,7 +128,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -223,7 +223,7 @@ describe("rest api", function() {
             {},
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -325,7 +325,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -378,7 +378,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -458,7 +458,7 @@ describe("rest api", function() {
             {},
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -543,7 +543,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -624,7 +624,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -716,7 +716,7 @@ describe("rest api", function() {
             },
           ).finish();
           return {
-            body: api.toArrayBuffer(logsResponse),
+            body: logsResponse,
           };
         },
       });
