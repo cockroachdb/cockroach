@@ -43,7 +43,10 @@ func NewColSpanAssembler(
 			sa.colFamStartKeysTotalLength += len(sa.colFamStartKeys[i])
 		}
 		for i := range sa.colFamEndKeys {
-			sa.colFamEndKeysTotalLength += len(sa.colFamEndKeys[i])
+			if len(sa.colFamEndKeys[i]) > 0 {
+				sa.colFamEndKeysTotalLength += len(sa.colFamEndKeys[i])
+				sa.numNonNilColFamEndKeys++
+			}
 		}
 	}
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, fetchSpec.TableID, fetchSpec.IndexID)
@@ -154,6 +157,9 @@ type spanAssembler struct {
 	// combined length of all keys in colFamStartKeys and colFamEndKeys,
 	// respectively.
 	colFamStartKeysTotalLength, colFamEndKeysTotalLength int
+	// numNonNilColFamEndKeys contains the number of non-nil keys in
+	// colFamEndKeys.
+	numNonNilColFamEndKeys int
 }
 
 var _ ColSpanAssembler = (*spanAssembler)(nil)
@@ -186,7 +192,7 @@ func (sa *spanAssembler) ConsumeBatch(batch coldata.Batch, startIdx, endIdx int)
 			copy(span.Key, sa.scratchKey)
 			sa.keyBytes += len(span.Key)
 			// span.Key cannot be empty (because it will at least contain the
-			// table ID and the index ID, so PrefixEnd() will definitely
+			// table ID and the index ID), so PrefixEnd() will definitely
 			// allocate a new slice; therefore, we don't have to preallocate any
 			// memory for span.EndKey.
 			span.EndKey = span.Key.PrefixEnd()
@@ -207,7 +213,7 @@ func (sa *spanAssembler) ConsumeBatch(batch coldata.Batch, startIdx, endIdx int)
 			}
 			// Calculate how much space all start and end keys will take for
 			// this row.
-			keyAllocCap := len(sa.scratchKey)*(len(sa.colFamStartKeys)+len(sa.colFamEndKeys)) +
+			keyAllocCap := len(sa.scratchKey)*(len(sa.colFamStartKeys)+sa.numNonNilColFamEndKeys) +
 				sa.colFamStartKeysTotalLength + sa.colFamEndKeysTotalLength
 			keyAlloc := make([]byte, keyAllocCap)
 			sa.keyBytes += keyAllocCap
