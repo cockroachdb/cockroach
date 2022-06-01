@@ -1569,3 +1569,98 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "row_count": 1
     }
 ]
+
+# Regression test for #76573
+statement ok
+CREATE TABLE t1 (a INT, b INT, c INT)
+
+statement ok
+ANALYZE t1
+
+statement ok
+CREATE STATISTICS t1_ab ON a,b FROM t1
+
+statement ok
+CREATE STATISTICS t1_ac ON a,c FROM t1
+
+statement ok
+CREATE STATISTICS t1_bc ON b,c FROM t1
+
+statement ok
+ALTER TABLE t1 drop column c
+
+statement ok
+show statistics for table t1
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE t1]
+ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {a}           0          0               0           true
+NULL             {b}           0          0               0           true
+NULL             {rowid}       0          0               0           true
+t1_ab            {a,b}         0          0               0           false
+
+query T
+SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
+)
+----
+[
+    {
+        "avg_size": 0,
+        "columns": [
+            "rowid"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "b"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "null_count": 0,
+        "row_count": 0
+    },
+    {
+        "avg_size": 0,
+        "columns": [
+            "a",
+            "b"
+        ],
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "name": "t1_ab",
+        "null_count": 0,
+        "row_count": 0
+    }
+]
