@@ -317,7 +317,7 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 		if remainder[1:] == strSystemConfigSpanStart {
 			remainder = ""
 		}
-		output = SystemConfigSpan.Key
+		output = TableDataMin
 		return
 	}
 	tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
@@ -612,7 +612,7 @@ func print(_ []encoding.Direction, key roachpb.Key) string {
 }
 
 func decodeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
-	if key.Equal(SystemConfigSpan.Key) {
+	if key.Equal(TableDataMin) {
 		return "/SystemConfigSpan/Start"
 	}
 	return encoding.PrettyPrintValue(valDirs, key, "/")

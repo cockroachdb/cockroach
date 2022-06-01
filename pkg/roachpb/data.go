@@ -858,7 +858,7 @@ func (ct InternalCommitTrigger) Kind() redact.SafeString {
 		case ct.ModifiedSpanTrigger.NodeLivenessSpan != nil:
 			return "modified-span (node-liveness)"
 		default:
-			panic("unknown modified-span commit trigger kind")
+			panic(fmt.Sprintf("unknown modified-span commit trigger kind %v", ct))
 		}
 	case ct.StickyBitTrigger != nil:
 		return "sticky-bit"

@@ -115,11 +115,19 @@ func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey
 	//
 	// TODO(irfansharif): Once we've fully phased out the system config span, we
 	// can get rid of this special handling.
-	if keys.SystemConfigSpan.Contains(sp) {
+	// TODO(richardjcai): Can we remove this?
+	if keys.SystemDescriptorTableSpan.Contains(sp) {
 		return nil, nil
 	}
-	if keys.SystemConfigSpan.ContainsKey(sp.Key) {
-		return roachpb.RKey(keys.SystemConfigSpan.EndKey), nil
+	if keys.SystemDescriptorTableSpan.ContainsKey(sp.Key) {
+		return roachpb.RKey(keys.SystemDescriptorTableSpan.EndKey), nil
+	}
+
+	if keys.SystemZonesTableSpan.Contains(sp) {
+		return nil, nil
+	}
+	if keys.SystemZonesTableSpan.ContainsKey(sp.Key) {
+		return roachpb.RKey(keys.SystemZonesTableSpan.EndKey), nil
 	}
 
 	// Generally split keys are going to be the start keys of span config entries.

@@ -1510,8 +1510,10 @@ func (oi *optIndex) Span() roachpb.Span {
 	desc := oi.tab.desc
 	// Tables up to MaxSystemConfigDescID are grouped in a single system config
 	// span.
-	if desc.GetID() <= keys.MaxSystemConfigDescID {
-		return keys.SystemConfigSpan
+	if desc.GetID() == keys.DescriptorTableID {
+		return keys.SystemDescriptorTableSpan
+	} else if desc.GetID() == keys.ZonesTableID {
+		return keys.SystemZonesTableSpan
 	}
 	return desc.IndexSpan(oi.tab.codec, oi.idx.GetID())
 }

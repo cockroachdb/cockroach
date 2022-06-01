@@ -88,16 +88,20 @@ func NewWithAdditionalProvider(
 	c.mu.registry = notificationRegistry{}
 	c.additionalKVsSource = additional
 
-	// TODO(ajwerner): Consider stripping this down to just watching
-	// descriptor and zones.
-	span := roachpb.Span{
-		Key:    append(codec.TenantPrefix(), keys.SystemConfigSplitKey...),
-		EndKey: append(codec.TenantPrefix(), keys.SystemConfigTableDataMax...),
+	spans := []roachpb.Span{
+		{
+			Key:    append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.Key...),
+			EndKey: append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.EndKey...),
+		},
+		{
+			Key:    append(codec.TenantPrefix(), keys.SystemZonesTableSpan.Key...),
+			EndKey: append(codec.TenantPrefix(), keys.SystemZonesTableSpan.EndKey...),
+		},
 	}
 	c.w = rangefeedcache.NewWatcher(
 		"system-config-cache", clock, f,
 		bufferSize,
-		[]roachpb.Span{span},
+		spans,
 		withPrevValue,
 		passThroughTranslation,
 		c.handleUpdate,
