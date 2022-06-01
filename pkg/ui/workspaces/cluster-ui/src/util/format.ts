@@ -171,6 +171,11 @@ export const DurationFitScale =
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 
+/**
+ * Alternate 24 hour UTC format
+ */
+export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] HH:mm UTC";
+
 export function RenderCount(yesCount: Long, totalCount: Long): string {
   if (longToInt(yesCount) == 0) {
     return "No";
