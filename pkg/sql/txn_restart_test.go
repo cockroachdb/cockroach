@@ -1561,15 +1561,15 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			// wouldn't be necessary. Also, the test is currently technically
 			// incorrect, as there's no guarantee that the state check at the end will
 			// happen on the right connection.
-			defer func() {
-				if tc.autoCommit {
+			defer func(autoCommit bool) {
+				if autoCommit {
 					// No cleanup necessary.
 					return
 				}
 				if _, err := sqlDB.Exec("ROLLBACK"); err != nil {
 					t.Fatal(err)
 				}
-			}()
+			}(tc.autoCommit)
 
 			var savepoint string
 			if tc.clientDirectedRetry {

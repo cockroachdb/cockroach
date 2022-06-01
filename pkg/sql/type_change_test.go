@@ -542,16 +542,16 @@ CREATE TYPE db.greetings AS ENUM ('hi', 'yo');
 `)
 			require.NoError(t, err)
 
-			go func() {
-				_, err := sqlDB.Exec(tc.query)
-				if tc.cancelable && !testutils.IsError(err, "job canceled by user") {
+			go func(query string, isCancellable bool) {
+				_, err := sqlDB.Exec(query)
+				if isCancellable && !testutils.IsError(err, "job canceled by user") {
 					t.Errorf("expected user to have canceled job, got %v", err)
 				}
-				if !tc.cancelable && err != nil {
+				if !isCancellable && err != nil {
 					t.Error(err)
 				}
 				close(finishedSchemaChange)
-			}()
+			}(tc.query, tc.cancelable)
 
 			<-typeSchemaChangeStarted
 
