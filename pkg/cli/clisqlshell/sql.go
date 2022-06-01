@@ -1235,13 +1235,16 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\copy`:
 		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
-			return c.beginCopyFrom(ctx, c.concatLines)
+			// Strip out the starting \ in \copy.
+			return c.beginCopyFrom(ctx, line[1:])
 		})
-		if !c.singleStatement {
-			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-		}
-		if c.exitErr != nil && c.iCtx.errExit {
-			return cliStop
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			if c.iCtx.errExit {
+				return cliStop
+			}
 		}
 		return cliStartLine
 
