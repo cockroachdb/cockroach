@@ -1362,10 +1362,10 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequestWithoutTimeout(
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
 						base.SlowRequestThreshold, attempt)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
-					defer func() {
+					defer func(attempt int) {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
 						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
-					}()
+					}(attempt)
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())

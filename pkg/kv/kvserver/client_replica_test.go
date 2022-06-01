@@ -4914,11 +4914,10 @@ func BenchmarkOptimisticEval(b *testing.B) {
 							var writers sync.WaitGroup
 							for i := 0; i < numWriters; i++ {
 								writers.Add(1)
-								go func() {
+								go func(shouldLatch bool) {
 									for {
-										if latches {
+										if shouldLatch {
 											require.NoError(b, db.Put(ctx, writeKey, "foo"))
-
 										} else {
 											require.NoError(b, db.Txn(ctx,
 												func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -4937,7 +4936,7 @@ func BenchmarkOptimisticEval(b *testing.B) {
 										default:
 										}
 									}
-								}()
+								}(latches)
 							}
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
