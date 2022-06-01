@@ -955,17 +955,17 @@ CREATE SEQUENCE db.sq1;
 `)
 			require.NoError(t, err)
 
-			go func() {
+			go func(query string, isCancellable bool) {
 				atomic.StoreUint64(&jobControlHookEnabled, 1)
-				_, err := sqlDB.Exec(tc.query)
-				if tc.cancelable && !testutils.IsError(err, "job canceled by user") {
+				_, err := sqlDB.Exec(query)
+				if isCancellable && !testutils.IsError(err, "job canceled by user") {
 					t.Errorf("expected user to have canceled job, got %v", err)
 				}
-				if !tc.cancelable && err != nil {
+				if !isCancellable && err != nil {
 					t.Error(err)
 				}
 				finishedSchemaChange.Done()
-			}()
+			}(tc.query, tc.cancelable)
 
 			schemaChangeStarted.Wait()
 			rows, err := sqlDB.Query(`

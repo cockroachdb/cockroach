@@ -4475,10 +4475,10 @@ func TestImportDefaultWithResume(t *testing.T) {
 
 			// Execute import; ignore any errors returned
 			// (since we're aborting the first import run.).
-			go func() {
+			go func(targetCols string) {
 				_, _ = sqlDB.DB.ExecContext(ctx,
-					fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA ($1)`, test.targetCols), storage.getGeneratorURIs()[0])
-			}()
+					fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA ($1)`, targetCols), storage.getGeneratorURIs()[0])
+			}(test.targetCols)
 			jobID = <-jobIDCh
 
 			// Wait until we are blocked handling breakpoint.
