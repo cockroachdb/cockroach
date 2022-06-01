@@ -18,33 +18,33 @@ import * as protos from "src/js/protos";
 import * as api from "src/util/api";
 import * as uidata from "./uiData";
 
-describe("UIData reducer", function () {
-  describe("actions", function () {
-    it("setUIDataKey() creates the correct action type.", function () {
+describe("UIData reducer", function() {
+  describe("actions", function() {
+    it("setUIDataKey() creates the correct action type.", function() {
       assert.equal(uidata.setUIDataKey("string", null).type, uidata.SET);
     });
 
-    it("beginSaveUIData() creates the correct action type.", function () {
+    it("beginSaveUIData() creates the correct action type.", function() {
       assert.equal(uidata.beginSaveUIData([]).type, uidata.SAVE);
     });
 
-    it("saveErrorUIData() creates the correct action type.", function () {
+    it("saveErrorUIData() creates the correct action type.", function() {
       assert.equal(uidata.saveErrorUIData(null, null).type, uidata.SAVE_ERROR);
     });
 
-    it("beginLoadUIData() creates the correct action type.", function () {
+    it("beginLoadUIData() creates the correct action type.", function() {
       assert.equal(uidata.beginLoadUIData([]).type, uidata.LOAD);
     });
 
-    it("loadErrorUIData() creates the correct action type.", function () {
+    it("loadErrorUIData() creates the correct action type.", function() {
       assert.equal(uidata.loadErrorUIData(null, null).type, uidata.LOAD_ERROR);
     });
   });
 
-  describe("helper functions", function () {
+  describe("helper functions", function() {
     let state: any;
 
-    beforeEach(function () {
+    beforeEach(function() {
       state = { uiData: uidata.uiDataReducer(undefined, { type: "unknown" }) };
     });
 
@@ -52,7 +52,7 @@ describe("UIData reducer", function () {
       state = { uiData: uidata.uiDataReducer(state.uiData, action) };
     };
 
-    it("isValid", function () {
+    it("isValid", function() {
       const key1 = "key1";
       const key2 = "key2";
 
@@ -70,7 +70,7 @@ describe("UIData reducer", function () {
       assert(uidata.isValid(state, key2));
     });
 
-    it("getData", function () {
+    it("getData", function() {
       const key1 = "key1";
       const key2 = "key2";
       const value1 = "value1";
@@ -90,7 +90,7 @@ describe("UIData reducer", function () {
       assert.equal(uidata.getData(state, key2), value2);
     });
 
-    it("isSaving and isInFlight", function () {
+    it("isSaving and isInFlight", function() {
       const key1 = "key1";
       const key2 = "key2";
       const saving = (k: string) => uidata.isSaving(state, k);
@@ -130,7 +130,7 @@ describe("UIData reducer", function () {
       assert.isFalse(inFlight(key2));
     });
 
-    it("getSaveError and getLoadError", function () {
+    it("getSaveError and getLoadError", function() {
       const key1 = "key1";
       const key2 = "key2";
       const saveError = (k: string) => uidata.getSaveError(state, k);
@@ -203,10 +203,10 @@ describe("UIData reducer", function () {
     });
   });
 
-  describe("reducer", function () {
+  describe("reducer", function() {
     let state: uidata.UIDataState;
 
-    beforeEach(function () {
+    beforeEach(function() {
       state = uidata.uiDataReducer(undefined, { type: "unknown" });
     });
 
@@ -214,12 +214,12 @@ describe("UIData reducer", function () {
       state = uidata.uiDataReducer(state, action);
     };
 
-    it("should have the correct default value.", function () {
+    it("should have the correct default value.", function() {
       const expected = {};
       assert.deepEqual(state, expected);
     });
 
-    it("should correctly dispatch setUIDataKey.", function () {
+    it("should correctly dispatch setUIDataKey.", function() {
       const objKey = "obj";
       const boolKey = "bool";
       const numKey = "num";
@@ -252,7 +252,7 @@ describe("UIData reducer", function () {
       assert.equal(state[objKey].status, uidata.UIDataStatus.VALID);
     });
 
-    it("should correctly dispatch loadErrorUIData.", function () {
+    it("should correctly dispatch loadErrorUIData.", function() {
       const key1 = "key1";
       const err = new Error("an error.");
       assert.isUndefined(state[key1]);
@@ -265,7 +265,7 @@ describe("UIData reducer", function () {
       assert.isNull(state[key1].error);
     });
 
-    it("should correctly dispatch saveErrorUIData.", function () {
+    it("should correctly dispatch saveErrorUIData.", function() {
       const key1 = "key1";
       const err = new Error("an error.");
       assert.isUndefined(state[key1]);
@@ -278,7 +278,7 @@ describe("UIData reducer", function () {
       assert.isNull(state[key1].error);
     });
 
-    it("should correctly dispatch beginSaveUIData", function () {
+    it("should correctly dispatch beginSaveUIData", function() {
       const key1 = "key1";
       const key2 = "key2";
       const keys = [key1, key2];
@@ -292,7 +292,7 @@ describe("UIData reducer", function () {
       assert.equal(state[key2].status, uidata.UIDataStatus.VALID);
     });
 
-    it("should correctly dispatch beginLoadUIData", function () {
+    it("should correctly dispatch beginLoadUIData", function() {
       const key1 = "key1";
       const key2 = "key2";
       const keys = [key1, key2];
@@ -307,7 +307,7 @@ describe("UIData reducer", function () {
     });
   });
 
-  describe("asynchronous actions", function () {
+  describe("asynchronous actions", function() {
     let state: uidata.UIDataState;
 
     const dispatch = (action: Action) => {
@@ -323,25 +323,25 @@ describe("UIData reducer", function () {
     const uiKey2 = "another_key";
     const uiObj2 = 1234;
 
-    const saveUIData = function (...values: uidata.KeyValue[]): Promise<void> {
+    const saveUIData = function(...values: uidata.KeyValue[]): Promise<void> {
       return uidata.saveUIData.apply(this, values)(dispatch, () => {
         return { uiData: state };
       });
     };
 
-    const loadUIData = function (...keys: string[]): Promise<void> {
+    const loadUIData = function(...keys: string[]): Promise<void> {
       return uidata.loadUIData.apply(this, keys)(dispatch, () => {
         return { uiData: state };
       });
     };
 
-    beforeEach(function () {
+    beforeEach(function() {
       state = uidata.uiDataReducer(undefined, { type: "unknown" });
     });
 
     afterEach(fetchMock.restore);
 
-    it("correctly saves UIData", function () {
+    it("correctly saves UIData", function() {
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/uidata`,
         method: "POST",
@@ -355,7 +355,7 @@ describe("UIData reducer", function () {
 
           assert.lengthOf(_.keys(kvs), 2);
 
-          const deserialize = function (buffer: Uint8Array): Object {
+          const deserialize = function(buffer: Uint8Array): Object {
             return JSON.parse(
               protobuf.util.utf8.read(buffer, 0, buffer.byteLength),
             );
@@ -364,12 +364,11 @@ describe("UIData reducer", function () {
           assert.deepEqual(deserialize(kvs[uiKey1]), uiObj1);
           assert.deepEqual(deserialize(kvs[uiKey2]), uiObj2);
 
-          const encodedResponse =
-            protos.cockroach.server.serverpb.SetUIDataResponse.encode(
-              {},
-            ).finish();
+          const encodedResponse = protos.cockroach.server.serverpb.SetUIDataResponse.encode(
+            {},
+          ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -397,8 +396,8 @@ describe("UIData reducer", function () {
       });
     });
 
-    it("correctly reacts to error during save", function (done) {
-      this.timeout(2000);
+    it("correctly reacts to error during save", function(done) {
+      jest.setTimeout(2000);
       fetchMock.mock({
         matcher: `${api.API_PREFIX}/uidata`,
         method: "POST",
@@ -433,7 +432,7 @@ describe("UIData reducer", function () {
       });
     });
 
-    it("correctly loads UIData", function () {
+    it("correctly loads UIData", function() {
       const expectedURL = `${api.API_PREFIX}/uidata?keys=${uiKey1}&keys=${uiKey2}`;
 
       fetchMock.mock({
@@ -445,11 +444,10 @@ describe("UIData reducer", function () {
           assert.equal(state[uiKey1].status, uidata.UIDataStatus.LOADING);
           assert.equal(state[uiKey2].status, uidata.UIDataStatus.LOADING);
 
-          const response: protos.cockroach.server.serverpb.IGetUIDataResponse =
-            {
-              key_values: {},
-            };
-          const setValue = function (key: string, obj: Object) {
+          const response: protos.cockroach.server.serverpb.IGetUIDataResponse = {
+            key_values: {},
+          };
+          const setValue = function(key: string, obj: Object) {
             const stringifiedValue = JSON.stringify(obj);
             const buffer = new Uint8Array(
               protobuf.util.utf8.length(stringifiedValue),
@@ -460,12 +458,11 @@ describe("UIData reducer", function () {
           setValue(uiKey1, uiObj1);
           setValue(uiKey2, uiObj2);
 
-          const encodedResponse =
-            protos.cockroach.server.serverpb.GetUIDataResponse.encode(
-              response,
-            ).finish();
+          const encodedResponse = protos.cockroach.server.serverpb.GetUIDataResponse.encode(
+            response,
+          ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
@@ -485,8 +482,8 @@ describe("UIData reducer", function () {
       });
     });
 
-    it("correctly reacts to error during load", function (done) {
-      this.timeout(2000);
+    it("correctly reacts to error during load", function(done) {
+      jest.setTimeout(2000);
 
       const uidataPrefixMatcher = `begin:${api.API_PREFIX}/uidata`;
 
@@ -520,7 +517,7 @@ describe("UIData reducer", function () {
       });
     });
 
-    it("handles missing keys", function () {
+    it("handles missing keys", function() {
       const missingKey = "missingKey";
 
       const expectedURL = `${api.API_PREFIX}/uidata?keys=${missingKey}`;
@@ -530,12 +527,11 @@ describe("UIData reducer", function () {
         response: () => {
           assert.equal(state[missingKey].status, uidata.UIDataStatus.LOADING);
 
-          const encodedResponse =
-            protos.cockroach.server.serverpb.GetUIDataResponse.encode(
-              {},
-            ).finish();
+          const encodedResponse = protos.cockroach.server.serverpb.GetUIDataResponse.encode(
+            {},
+          ).finish();
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: encodedResponse,
           };
         },
       });
