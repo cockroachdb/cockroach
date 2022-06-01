@@ -4039,8 +4039,6 @@ func MVCCResolveWriteIntentRange(
 // not a mix of the two. This is to accommodate the implementation below
 // that creates an iterator with bounds that span from the first to last
 // key (in sorted order).
-//
-// TODO(erikgrinaker): This must handle MVCC range tombstones.
 func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
@@ -4073,6 +4071,7 @@ func MVCCGarbageCollect(
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
+		KeyTypes:   IterKeyTypePointsAndRanges,
 	})
 	defer iter.Close()
 	supportsPrev := iter.SupportsPrev()
@@ -4081,7 +4080,7 @@ func MVCCGarbageCollect(
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, metaKeySize, metaValSize, _, err := mvccGetMetadata(iter, encKey, meta)
+		ok, metaKeySize, metaValSize, realKeyChanged, err := mvccGetMetadata(iter, encKey, meta)
 		if err != nil {
 			return err
 		}
@@ -4125,6 +4124,12 @@ func MVCCGarbageCollect(
 				}
 				count++
 			}
+		} else if key := iter.UnsafeKey(); meta.Deleted && key.Key.Equal(gcKey.Key) && key.Timestamp.LessEq(gcKey.Timestamp) {
+			// If we have delete meta from range and first key is up for GC then adjust stats
+			// and prev time for gc bytes age calculation.
+			if ms != nil {
+				ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, realKeyChanged.WallTime))
+			}
 		}
 
 		if !implicitMeta {
@@ -4139,11 +4144,15 @@ func MVCCGarbageCollect(
 		// first garbage version.
 		prevNanos := timestamp.WallTime
 		{
-
+			// If true - forward iteration positioned iterator on first garbage
+			// (key.ts <= gc.ts).
 			var foundPrevNanos bool
 			{
 				// If reverse iteration is supported (supportsPrev), we'll step the
 				// iterator a few time before attempting to seek.
+
+				// True if we found next key while iterating. That means there's no
+				// garbage for the key.
 				var foundNextKey bool
 
 				// If there are a large number of versions which are not garbage,
@@ -4208,6 +4217,30 @@ func MVCCGarbageCollect(
 			}
 		}
 
+		// At this point iterator is positioned on first garbage version and forward
+		// iteration will give us all versions to delete up to the next key.
+
+		var ranges []MVCCRangeKeyValue
+		if ms != nil {
+			// We need to iterate ranges only to compute GCBytesAge if we are updating
+			// stats.
+			if _, hasRange := iter.HasPointAndRange(); hasRange {
+				rangeKeys := iter.RangeKeys()
+				ki := sort.Search(len(rangeKeys), func(i int) bool {
+					return rangeKeys[i].RangeKey.Timestamp.Less(gcKey.Timestamp)
+				})
+				if ki > 0 {
+					ki--
+				}
+				copyKeys := len(rangeKeys) - ki
+				ranges = make([]MVCCRangeKeyValue, copyKeys)
+				for i := 0; i < copyKeys; i++ {
+					ranges[i] = rangeKeys[i+ki].Clone()
+				}
+			}
+		}
+		rangeIdx := 0
+
 		// Iterate through the garbage versions, accumulating their stats and
 		// issuing clear operations.
 		for ; ; iter.Next() {
@@ -4241,6 +4274,18 @@ func MVCCGarbageCollect(
 				fromNS := prevNanos
 				if unsafeVal.IsTombstone() {
 					fromNS = unsafeIterKey.Timestamp.WallTime
+				} else {
+					// For non deletions, we need to find if we had a range tombstone
+					// above it to treat it as garbage.
+					for ; rangeIdx < len(ranges); rangeIdx++ {
+						rangeTS := ranges[rangeIdx].RangeKey.Timestamp
+						if rangeTS.LessEq(unsafeIterKey.Timestamp) {
+							break
+						}
+						if rangeTS.WallTime < fromNS {
+							fromNS = rangeTS.WallTime
+						}
+					}
 				}
 
 				ms.Add(updateStatsOnGC(gcKey.Key, keySize, valSize, nil, fromNS))
@@ -4418,6 +4463,8 @@ func ComputeStatsForRangeWithVisitors(
 		}
 
 		hasPoint, hasRange := iter.HasPointAndRange()
+
+		//		fmt.Printf("Next: %s, %t, %t\n", iter.UnsafeKey(), hasPoint, hasRange)
 
 		if hasRange {
 			if rangeStart := iter.RangeBounds().Key; !rangeStart.Equal(prevRangeStart) {

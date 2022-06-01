@@ -50,6 +50,8 @@ func assertEqImpl(
 	if !ms.Equal(expMS) {
 		pretty.Ldiff(t, ms, expMS)
 		t.Errorf("%s: diff(ms, expMS) nontrivial", debug)
+	} else {
+		return
 	}
 
 	keyMin := roachpb.KeyMin
