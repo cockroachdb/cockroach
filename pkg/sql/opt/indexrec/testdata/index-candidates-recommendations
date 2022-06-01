@@ -14,11 +14,8 @@ exec-ddl
 CREATE TABLE t4 (k INT, i INT, f FLOAT, j JSONB, a INT[])
 ----
 
-# Ensure that spatial indexes don't have candidates. This is temporary until we
-# support spatial index recommendations.
-
-index-candidates
-SELECT * FROM t3 WHERE g IS NULL
+exec-ddl
+CREATE TABLE t5 (k INT, i INT, s STRING, geom1 GEOMETRY, geog1 GEOGRAPHY, bbox1 box2d, bbox2 box2d, geom2 GEOMETRY, geog2 GEOGRAPHY, inet1 INET)
 ----
 
 # Ensure that index candidates are not created for virtual tables.
@@ -1782,3 +1779,395 @@ project
 exec-ddl
 DROP INDEX t1@expr
 ----
+
+# Test spatial index recommendations
+# Ensure that geospatial indexes are added as candidates
+index-candidates
+SELECT * FROM t5 WHERE geom1 IS NULL
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE geog1 IS NULL
+----
+t5:
+ (geog1)
+
+# For queries that use index accelerated geospatial functions, recommend geospatial index
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, 'POINT(0 0 0 0)')
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geog1, geog2)
+----
+t5:
+ (geog1)
+ (geog2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_coveredby(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_coveredby(geog1, geog2)
+----
+t5:
+ (geog1)
+ (geog2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_contains(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_containsproperly(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_crosses(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithin(geom1, geom2, 10)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithin(geog1, geog2, 10)
+----
+t5:
+ (geog1)
+ (geog2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dfullywithin(geom1, geom2, 10)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_equals('LINESTRING ( 0 0, 0 2 )'::geometry, geom1)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_intersects('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom1)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_touches(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_within(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geom1, 'LINESTRING ( 0 0, 0 2 )'::geometry, 10)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive('SRID=4326;POINT(-42.89456 75.938299)'::geography, geog2, 10, true)
+----
+t5:
+ (geog2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geog1, geog2, 10)
+----
+t5:
+ (geog1)
+ (geog2)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dfullywithinexclusive(geom1, geom2, 10)
+----
+t5:
+ (geom1)
+ (geom2)
+
+# For queries that use supported operations of BBox2d, recommend their index
+index-candidates
+SELECT * FROM t5 WHERE bbox1 ~ geom1
+----
+t5:
+ (bbox1)
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE geom1 && geom2 AND 'BOX(1 2, 3 4)'::box2d ~ geom1
+----
+t5:
+ (geom1)
+ (geom2)
+
+# For queries that use supported operations but type is not BBox2d, do not recommend their index
+index-candidates
+SELECT * FROM t5 WHERE inet1 && inet1
+----
+
+# For spatial functions that do not use index accelerated geospatial functions, do not recommend geospatial index
+index-candidates
+SELECT * FROM t5 WHERE st_hasarc(geom1)
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_isclosed(geom1)
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_iscollection(geom1)
+----
+
+index-candidates
+SELECT st_area(geom1) FROM t5
+----
+
+index-candidates
+SELECT * FROM t5 WHERE postgis_hasbbox(geom1) = true
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_area(geog1) = 1
+----
+
+# For other general functions (non-spatial functions), do not recommend index
+index-candidates
+SELECT * FROM t5 WHERE family(inet1) = 6
+----
+
+index-candidates
+SELECT * FROM t5 WHERE sign(k) = 2
+----
+
+# Test different cases for multi-column combinations for geospatial functions
+# Note: only equal + inverted index are be combined
+# 1. Geospatial Inverted + Geospatial Inverted: no combined candidates
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom2) AND st_overlaps(geom1, geom2)
+----
+t5:
+ (geom1)
+ (geom2)
+
+# 2. Geospatial Inverted + EQ: combined index (inverted + equal candidates)
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom2) AND k = 2
+----
+t5:
+ (geom1)
+ (geom2)
+ (k)
+ (k, geom1)
+ (k, geom2)
+
+# 3. Geospatial inverted + R: no combined candidates
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom2) AND k > 2
+----
+t5:
+ (geom1)
+ (geom2)
+ (k)
+
+# 4. Geospatial inverted + EQ + EQ: combined index (inverted + equal, inverted + equal group, equal group candidates)
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k = 2 AND i = 3
+----
+t5:
+ (geom1)
+ (i)
+ (i, geom1)
+ (k)
+ (k, geom1)
+ (k, i)
+ (k, i, geom1)
+
+# 5. Geospatial inverted + R + R: combined index (inverted + equal, inverted + equal group, equal group candidates)
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k > 2 AND i > 3
+----
+t5:
+ (geom1)
+ (i)
+ (k)
+
+# 6. Geospatial inverted + EQ + R: combined index (inverted + equal, equal + range candidates)
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k = 2 AND i > 3
+----
+t5:
+ (geom1)
+ (i)
+ (k)
+ (k, geom1)
+ (k, i)
+
+# 7. Geospatial inverted + Geospatial inverted + EQ: combined index (inverted + equal candidates)
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom2) AND st_covers(geog1, geog2) AND k = 2
+----
+t5:
+ (geog1)
+ (geog2)
+ (geom1)
+ (geom2)
+ (k)
+ (k, geog1)
+ (k, geog2)
+ (k, geom1)
+ (k, geom2)
+
+# 8. Geospatial inverted + Geospatial inverted + R: no combined index
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND st_overlaps(geom2, geom2) AND k > 2
+----
+t5:
+ (geom1)
+ (geom2)
+ (k)
+
+# 9. Geospatial inverted + EQ: combined index between inverted + equal
+# Note: geom1 and geom2 are not added as join candidates here
+index-candidates
+SELECT t5.i, t2.i FROM t5 JOIN t2 ON st_overlaps(geom1, geom2) WHERE t5.k = 2
+----
+t5:
+ (geom1)
+ (geom2)
+ (k)
+ (k, geom1)
+ (k, geom2)
+
+# 10. Geospatial inverted + EQ: no combined index since inverted and equal candidates are from different table
+index-candidates
+SELECT * FROM t5 JOIN t2 ON st_crosses(geom1, geom2) WHERE t2.s = 'Hello' AND st_covers(geog1, geog2)
+----
+t2:
+ (s)
+t5:
+ (geog1)
+ (geog2)
+ (geom1)
+ (geom2)
+
+# 11. Geospatial inverted + EQ + J: combined index between inverted + equal candidates from same table
+index-candidates
+SELECT * FROM t5 JOIN t2 ON t5.k = t2.k WHERE st_covers(geog1, geog2)
+----
+t2:
+ (k)
+t5:
+ (geog1)
+ (geog2)
+ (k)
+ (k, geog1)
+ (k, geog2)
+
+# 12. Geospatial inverted + J: no combined index between inverted + join candidates
+index-candidates
+SELECT * FROM t5 JOIN t2 ON t5.k != t2.k WHERE st_covers(geog1, geog2)
+----
+t2:
+ (k)
+t5:
+ (geog1)
+ (geog2)
+ (k)
+
+# 13. Geospatial inverted + J + EQ: combined index between join + equal candidates
+# Note: no combined index between equal and inverted index from different tables
+index-candidates
+SELECT * FROM t5 JOIN t2 ON t5.k != t2.k WHERE st_covers(geog1, geog2) AND t2.i = 2
+----
+t2:
+ (i)
+ (i, k)
+ (k)
+t5:
+ (geog1)
+ (geog2)
+ (k)
+
+# Test different cases for multi-column combinations for Box2d operations
+# Note: BBox2d indexes are added to inverted index
+index-candidates
+SELECT * FROM t5 WHERE geom1 && bbox1 AND k = 2
+----
+t5:
+ (bbox1)
+ (geom1)
+ (k)
+ (k, bbox1)
+ (k, geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE bbox1 ~ bbox2 AND bbox2 && geom2 AND k > 2
+----
+t5:
+ (bbox1)
+ (bbox2)
+ (geom2)
+ (k)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, geom2) AND ~k = 1
+----
+t5:
+ (geom1)
+ (geom2)
+
+index-candidates
+SELECT * FROM t1, t5 WHERE t1.s ~ t5.s AND ~t1.k = t1.k
+----
+t1:
+ (k)
+ (k, s)
+ (s)
+t5:
+ (s)
+
