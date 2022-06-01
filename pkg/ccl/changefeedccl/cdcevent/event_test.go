@@ -305,7 +305,8 @@ CREATE TABLE foo (
 
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
-			decoder := NewEventDecoder(ctx, &serverCfg, details)
+			decoder, err := NewEventDecoder(ctx, &serverCfg, details)
+			require.NoError(t, err)
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
 			for i := 0; i < expectedEvents; i++ {
 				v := popRow(t)
@@ -319,6 +320,131 @@ CREATE TABLE foo (
 				} else {
 					expect, tc.expectOnlyCFamily = tc.expectOnlyCFamily[0], tc.expectOnlyCFamily[1:]
 				}
+				updatedRow, err := decoder.DecodeKV(
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp())
+
+				if expect.expectUnwatchedErr {
+					require.ErrorIs(t, err, ErrUnwatchedFamily)
+					continue
+				}
+
+				require.NoError(t, err)
+				require.True(t, updatedRow.IsInitialized())
+				if expect.deleted {
+					require.True(t, updatedRow.IsDeleted())
+				} else {
+					require.Equal(t, expect.keyValues, slurpDatums(t, updatedRow.ForEachKeyColumn()))
+					require.Equal(t, expect.allValues, slurpDatums(t, updatedRow.ForEachColumn()))
+				}
+
+				prevRow, err := decoder.DecodeKV(
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, v.Timestamp())
+				require.NoError(t, err)
+
+				// prevRow always has key columns initialized.
+				require.Equal(t, expect.keyValues, slurpDatums(t, prevRow.ForEachKeyColumn()))
+
+				if expect.prevDeleted {
+					require.True(t, prevRow.IsDeleted())
+				} else {
+					require.Equal(t, expect.prevAllValues, slurpDatums(t, prevRow.ForEachColumn()))
+				}
+			}
+		})
+	}
+
+}
+
+func TestOldProtos(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `
+CREATE TABLE foo (
+  a INT, 
+  b STRING, 
+  PRIMARY KEY (b, a)
+)`)
+
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
+	defer cleanup()
+
+	type decodeExpectation struct {
+		expectUnwatchedErr bool
+
+		// current value expectations.
+		deleted   bool
+		keyValues []string
+		allValues []string
+
+		// previous value expectations.
+		prevDeleted   bool
+		prevAllValues []string
+	}
+
+	for _, tc := range []struct {
+		testName      string
+		virtualColumn changefeedbase.VirtualColumnVisibility
+		actions       []string
+		expect        []decodeExpectation
+	}{
+		{
+			testName: "main/primary_cols",
+			actions:  []string{"INSERT INTO foo (a, b) VALUES (1, 'first test')"},
+			expect: []decodeExpectation{
+				{
+					keyValues:   []string{"first test", "1"},
+					allValues:   []string{"1", "first test"},
+					prevDeleted: true,
+				},
+			},
+		},
+		{
+			testName: "main/delete",
+			actions: []string{
+				"INSERT INTO foo (a, b) VALUES (1, '7th test')",
+				"DELETE FROM foo WHERE a = 1 and b = '7th test'",
+			},
+			expect: []decodeExpectation{
+				{
+					keyValues:   []string{"7th test", "1"},
+					allValues:   []string{"1", "7th test"},
+					prevDeleted: true,
+				},
+			}},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			details := jobspb.ChangefeedDetails{
+				Opts: map[string]string{
+					changefeedbase.OptVirtualColumns: string(tc.virtualColumn),
+				},
+				Tables: jobspb.ChangefeedTargets{
+					tableDesc.GetID(): jobspb.ChangefeedTargetTable{StatementTimeName: tableDesc.GetName()},
+				},
+			}
+
+			for _, action := range tc.actions {
+				sqlDB.Exec(t, action)
+			}
+
+			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+			ctx := context.Background()
+			decoder, err := NewEventDecoder(ctx, &serverCfg, details)
+			require.NoError(t, err)
+			expectedEvents := len(tc.expect)
+			for i := 0; i < expectedEvents; i++ {
+				v := popRow(t)
+
+				_, _, err := decoder.(*eventDecoder).rfCache.tableDescForKey(ctx, v.Key, v.Timestamp())
+				require.NoError(t, err)
+
+				var expect decodeExpectation
+				expect, tc.expect = tc.expect[0], tc.expect[1:]
 				updatedRow, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp())
 

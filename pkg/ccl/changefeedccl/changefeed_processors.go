@@ -297,9 +297,16 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.eventConsumer = newKVEventToRowConsumer(
+	ca.eventConsumer, err = newKVEventToRowConsumer(
 		ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
 		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
+
+	if err != nil {
+		// Early abort in the case that there is an error creating the sink.
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
 }
 
 func (ca *changeAggregator) startKVFeed(
