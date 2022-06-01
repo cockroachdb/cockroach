@@ -120,7 +120,7 @@ type Thresholder interface {
 
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
-	GC(context.Context, []roachpb.GCRequest_GCKey) error
+	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey) error
 }
 
 // A GCer is an abstraction used by the MVCC GC queue to carry out chunked deletions.
@@ -138,7 +138,11 @@ var _ GCer = NoopGCer{}
 func (NoopGCer) SetGCThreshold(context.Context, Threshold) error { return nil }
 
 // GC implements storage.GCer.
-func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
+func (NoopGCer) GC(
+	context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
+) error {
+	return nil
+}
 
 // Threshold holds the key and txn span GC thresholds, respectively.
 type Threshold struct {
@@ -309,8 +313,10 @@ func processReplicatedKeyRange(
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 
-	batcher := newIntentBatcher(cleanupIntentsFn, options, info)
+	iBatcher := newIntentBatcher(cleanupIntentsFn, options, info)
 
+	// handleIntent will deserialize transaction info and if intent is older than
+	// threshold enqueue it to batcher, otherwise ignore it.
 	handleIntent := func(keyValue *storage.MVCCKeyValue) error {
 		meta := &enginepb.MVCCMetadata{}
 		if err := protoutil.Unmarshal(keyValue.Value, meta); err != nil {
@@ -322,7 +328,7 @@ func processReplicatedKeyRange(
 			// expiration threshold.
 			if meta.Timestamp.ToTimestamp().Less(intentExp) {
 				info.IntentsConsidered++
-				if err := batcher.addAndMaybeFlushIntents(ctx, keyValue.Key.Key, meta); err != nil {
+				if err := iBatcher.addAndMaybeFlushIntents(ctx, keyValue.Key.Key, meta); err != nil {
 					if errors.Is(err, ctx.Err()) {
 						return err
 					}
@@ -349,7 +355,7 @@ func processReplicatedKeyRange(
 		gcTimestampForThisKey hlc.Timestamp
 		sentBatchForThisKey   bool
 	)
-	it := makeGCIterator(desc, snap)
+	it := makeGCIterator(desc, snap, threshold)
 	defer it.close()
 	for ; ; it.step() {
 		s, ok := it.state()
@@ -368,8 +374,9 @@ func processReplicatedKeyRange(
 			}
 			continue
 		}
-		isNewest := s.curIsNewest()
-		if isGarbage(threshold, s.cur, s.next, isNewest) {
+		// No more values in buffer or next value has different key.
+		isNewestPoint := s.curIsNewest()
+		if isGarbage(threshold, s.cur, s.next, isNewestPoint, s.lastTombstone) {
 			keyBytes := int64(s.cur.Key.EncodedSize())
 			batchGCKeysBytes += keyBytes
 			haveGarbageForThisKey = true
@@ -377,11 +384,13 @@ func processReplicatedKeyRange(
 			info.AffectedVersionsKeyBytes += keyBytes
 			info.AffectedVersionsValBytes += int64(len(s.cur.Value))
 		}
-		if affected := isNewest && (sentBatchForThisKey || haveGarbageForThisKey); affected {
+		// We count how many keys processed when we reach newest key and looking
+		// at current garbage + garbage that was sent in previous batch.
+		if affected := isNewestPoint && (sentBatchForThisKey || haveGarbageForThisKey); affected {
 			info.NumKeysAffected++
 		}
 		shouldSendBatch := batchGCKeysBytes >= KeyVersionChunkBytes
-		if shouldSendBatch || isNewest && haveGarbageForThisKey {
+		if shouldSendBatch || isNewestPoint && haveGarbageForThisKey {
 			alloc, s.cur.Key.Key = alloc.Copy(s.cur.Key.Key, 0)
 			batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{
 				Key:       s.cur.Key.Key,
@@ -394,10 +403,11 @@ func processReplicatedKeyRange(
 			// even if it turns out that there's no more garbage for this key.
 			// We want to count a key as affected once even if we paginate the
 			// deletion of its versions.
-			sentBatchForThisKey = shouldSendBatch && !isNewest
+			sentBatchForThisKey = shouldSendBatch && !isNewestPoint
 		}
+		// If limit was reached, delegate to GC'r to remove collected batch.
 		if shouldSendBatch {
-			if err := gcer.GC(ctx, batchGCKeys); err != nil {
+			if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
 				if errors.Is(err, ctx.Err()) {
 					return err
 				}
@@ -413,14 +423,14 @@ func processReplicatedKeyRange(
 		}
 	}
 	// We need to send out last intent cleanup batch.
-	if err := batcher.maybeFlushPendingIntents(ctx); err != nil {
+	if err := iBatcher.maybeFlushPendingIntents(ctx); err != nil {
 		if errors.Is(err, ctx.Err()) {
 			return err
 		}
 		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys); err != nil {
+		if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
 			return err
 		}
 	}
@@ -561,23 +571,29 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 // guaranteed as described above. However if this were the only rule, then if
 // the most recent write was a delete, it would never be removed. Thus, when a
 // deleted value is the most recent before expiration, it can be deleted.
-func isGarbage(threshold hlc.Timestamp, cur, next *storage.MVCCKeyValue, isNewest bool) bool {
+func isGarbage(
+	threshold hlc.Timestamp,
+	cur, next *storage.MVCCKeyValue,
+	isNewestPoint bool,
+	rangeTombstoneTs hlc.Timestamp,
+) bool {
 	// If the value is not at or below the threshold then it's not garbage.
 	if belowThreshold := cur.Key.Timestamp.LessEq(threshold); !belowThreshold {
 		return false
 	}
+	hiddenByRangeTombstone := cur.Key.Timestamp.Less(rangeTombstoneTs)
 	isDelete := len(cur.Value) == 0
-	if isNewest && !isDelete {
+	if isNewestPoint && !isDelete && !hiddenByRangeTombstone {
 		return false
 	}
 	// If this value is not a delete, then we need to make sure that the next
 	// value is also at or below the threshold.
 	// NB: This doesn't need to check whether next is nil because we know
-	// isNewest is false when evaluating rhs of the or below.
-	if !isDelete && next == nil {
+	// isNewestPoint is false when evaluating rhs of the or below.
+	if !isDelete && next == nil && !hiddenByRangeTombstone {
 		panic("huh")
 	}
-	return isDelete || next.Key.Timestamp.LessEq(threshold)
+	return isDelete || hiddenByRangeTombstone || next.Key.Timestamp.LessEq(threshold)
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
@@ -732,7 +748,7 @@ func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
 }
 
 func (b *batchingInlineGCer) Flush(ctx context.Context) {
-	err := b.gcer.GC(ctx, b.gcKeys)
+	err := b.gcer.GC(ctx, b.gcKeys, nil)
 	b.gcKeys = nil
 	b.size = 0
 	if err != nil {
