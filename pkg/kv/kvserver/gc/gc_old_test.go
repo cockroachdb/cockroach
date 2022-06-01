@@ -147,7 +147,7 @@ func runGCOld(
 						if batchGCKeysBytes >= KeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
 
-							err := gcer.GC(ctx, batchGCKeys)
+							err := gcer.GC(ctx, batchGCKeys, nil)
 
 							batchGCKeys = nil
 							batchGCKeysBytes = 0
@@ -206,7 +206,7 @@ func runGCOld(
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys); err != nil {
+		if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
 			return Info{}, err
 		}
 	}
@@ -326,7 +326,6 @@ var (
 
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
-// TODO(oleg): Remove once we don't need old GC.
 func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	gcA := makeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, time.Second)
