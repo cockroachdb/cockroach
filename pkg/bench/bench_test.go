@@ -1167,6 +1167,39 @@ func BenchmarkIndexJoin(b *testing.B) {
 	})
 }
 
+// BenchmarkIndexJoinColumnFamilies is the same as BenchmarkIndexJoin, only with
+// the table having two column families.
+func BenchmarkIndexJoinColumnFamilies(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		// The table will have an extra column not contained in the index to force a
+		// join with the PK.
+		create := `
+		 CREATE TABLE tidx (
+				 k INT NOT NULL,
+				 v INT NULL,
+				 extra STRING NULL,
+				 CONSTRAINT "primary" PRIMARY KEY (k ASC),
+				 INDEX idx (v ASC),
+				 FAMILY f1 (k, v),
+				 FAMILY f2 (extra)
+		 )
+		`
+		// We'll insert 1000 rows with random values below 1000 in the index.
+		// We'll then force scanning of the secondary index which will require
+		// performing an index join to get 'extra' column.
+		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
+
+		db.Exec(b, create)
+		db.Exec(b, insert)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, "select * from bench.tidx@idx where v < 1000")
+		}
+	})
+}
+
 func BenchmarkSortJoinAggregation(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
