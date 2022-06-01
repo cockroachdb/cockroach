@@ -942,11 +942,11 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 			}, nil)
 
 			inboxTested := make(chan struct{})
-			go func() {
+			go func(tester func(*Inbox)) {
 				inbox.Init(ctx)
-				tc.test(inbox)
+				tester(inbox)
 				inboxTested <- struct{}{}
-			}()
+			}(tc.test)
 
 			<-ctxExtract
 			require.NoError(t, rpcLayer.client.CloseSend())

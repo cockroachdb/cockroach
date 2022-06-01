@@ -243,6 +243,7 @@ func readInputFiles(
 				(format.Format == roachpb.IOFileFormat_MysqlOutfile && format.SaveRejected) {
 				rejected = make(chan string)
 			}
+			dataFile := dataFile // copy for safe reference in Go routine
 			if rejected != nil {
 				grp := ctxgroup.WithContext(ctx)
 				grp.GoCtx(func(ctx context.Context) error {
@@ -283,6 +284,7 @@ func readInputFiles(
 					return nil
 				})
 
+				dataFileIndex := dataFileIndex // copy for safe reference in Go routine
 				grp.GoCtx(func(ctx context.Context) error {
 					defer close(rejected)
 					if err := fileFunc(ctx, src, dataFileIndex, resumePos[dataFileIndex], rejected); err != nil {

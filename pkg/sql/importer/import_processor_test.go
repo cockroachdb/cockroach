@@ -128,9 +128,10 @@ func TestConverterFlushesBatches(t *testing.T) {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
 				group := ctxgroup.WithContext(ctx)
+				inputs := testCase.inputs // copy for safe reference in Go routine
 				group.Go(func() error {
 					defer close(kvCh)
-					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
+					return conv.readFiles(ctx, inputs, nil, converterSpec.Format,
 						externalStorageFactory, username.RootUserName())
 				})
 

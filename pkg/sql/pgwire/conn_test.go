@@ -1049,9 +1049,9 @@ func TestMaliciousInputs(t *testing.T) {
 			}()
 
 			errChan := make(chan error, 1)
-			go func() {
+			go func(data []byte) {
 				// Write the malicious data.
-				if _, err := w.Write(tc); err != nil {
+				if _, err := w.Write(data); err != nil {
 					errChan <- err
 					return
 				}
@@ -1062,7 +1062,7 @@ func TestMaliciousInputs(t *testing.T) {
 				_, _ = w.Write([]byte{byte(pgwirebase.ClientMsgSync), 0x00, 0x00, 0x00, 0x04})
 				_, _ = w.Write([]byte{byte(pgwirebase.ClientMsgTerminate), 0x00, 0x00, 0x00, 0x04})
 				close(errChan)
-			}()
+			}(tc)
 
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
@@ -1519,10 +1519,10 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 
 			var connErr error
-			go func() {
+			go func(query string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				defer cancel()
-				url := fmt.Sprintf("%s&%s", baseURL, tc.query)
+				url := fmt.Sprintf("%s&%s", baseURL, query)
 				var c *pgx.Conn
 				c, connErr = pgx.Connect(ctx, url)
 				if connErr != nil {
@@ -1533,7 +1533,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 				_ = c.Ping(ctx)
 				// closing connection immediately, since getSessionArgs is blocking
 				_ = c.Close(ctx)
-			}()
+			}(tc.query)
 			// Wait for the client to connect and perform the handshake.
 			_, args, err := getSessionArgs(ln, true /* trustRemoteAddr */)
 			tc.assert(t, args, err)
