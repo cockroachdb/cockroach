@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+
 	// Imported to allow multi-tenant tests
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	// Imported to allow locality-related table mutations
@@ -6099,18 +6100,18 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 						actualMessages = append(actualMessages, string(m.Value))
 					}
 				})
-				defer func() {
+				defer func(expectedPayload []string) {
 					closeFeed(t, feed)
 					sqlDB.Exec(t, `DROP TABLE foo`)
 					sqlDB.Exec(t, `DROP TABLE bar`)
 					_ = g.Wait()
-					require.Equal(t, len(testData.expectedPayload), len(actualMessages))
-					sort.Strings(testData.expectedPayload)
+					require.Equal(t, len(expectedPayload), len(actualMessages))
+					sort.Strings(expectedPayload)
 					sort.Strings(actualMessages)
-					for i := range testData.expectedPayload {
-						require.Equal(t, testData.expectedPayload[i], actualMessages[i])
+					for i := range expectedPayload {
+						require.Equal(t, expectedPayload[i], actualMessages[i])
 					}
-				}()
+				}(testData.expectedPayload)
 
 				jobFeed := feed.(cdctest.EnterpriseTestFeed)
 				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
