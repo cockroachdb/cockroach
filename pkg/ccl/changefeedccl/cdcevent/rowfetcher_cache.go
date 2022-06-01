@@ -80,7 +80,10 @@ func newRowFetcherCache(
 	cf *descs.CollectionFactory,
 	db *kv.DB,
 	specs []jobspb.ChangefeedTargetSpecification,
-) *rowFetcherCache {
+) (*rowFetcherCache, error) {
+	if len(specs) == 0 {
+		return nil, errors.AssertionFailedf("Expected at least one spec, found 0")
+	}
 	watchedFamilies := make(map[watchedFamily]struct{}, len(specs))
 	for _, s := range specs {
 		watchedFamilies[watchedFamily{tableID: s.TableID, familyName: s.FamilyName}] = struct{}{}
@@ -92,7 +95,7 @@ func newRowFetcherCache(
 		db:              db,
 		fetchers:        cache.NewUnorderedCache(defaultCacheConfig),
 		watchedFamilies: watchedFamilies,
-	}
+	}, nil
 }
 
 func refreshUDT(

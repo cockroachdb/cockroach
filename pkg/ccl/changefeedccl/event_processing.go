@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO (zinger): Add tests for this fi, including backwards compatibility.
+
 // eventContext holds metadata pertaining to event.
 type eventContext struct {
 	updated, mvcc hlc.Timestamp
@@ -55,18 +57,23 @@ func newKVEventToRowConsumer(
 	details jobspb.ChangefeedDetails,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
-) *kvEventToRowConsumer {
+) (*kvEventToRowConsumer, error) {
+	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, AllTargets(details), includeVirtual)
+	if err != nil {
+		return nil, err
+	}
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
-		decoder:              cdcevent.NewEventDecoder(ctx, cfg, details),
+		decoder:              decoder,
 		sink:                 sink,
 		cursor:               cursor,
 		details:              details,
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
-	}
+	}, nil
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {
@@ -75,7 +82,7 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 			return topic, nil
 		}
 	}
-	for _, s := range c.details.TargetSpecifications {
+	for _, s := range AllTargets(c.details) {
 		if s.TableID == eventMeta.TableID && (s.FamilyName == "" || s.FamilyName == eventMeta.FamilyName) {
 			topic, err := makeTopicDescriptorFromSpec(s, eventMeta)
 			if err != nil {
