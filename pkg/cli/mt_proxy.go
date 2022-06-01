@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
@@ -25,6 +26,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
+)
+
+const (
+	// shutdownConnectionTimeout is the maximum amount of time we will wait
+	// for all connections to be closed before forcefully closing them by
+	// shutting down the server
+	shutdownConnectionTimeout = time.Minute * 59
 )
 
 var mtStartSQLProxyCmd = &cobra.Command{
@@ -85,7 +93,7 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 		return err
 	}
 
-	return waitForSignals(ctx, stopper, errChan)
+	return waitForSignals(ctx, server, stopper, proxyLn, errChan)
 }
 
 func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper, err error) {
@@ -107,7 +115,11 @@ func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper
 }
 
 func waitForSignals(
-	ctx context.Context, stopper *stop.Stopper, errChan chan error,
+	ctx context.Context,
+	server *sqlproxyccl.Server,
+	stopper *stop.Stopper,
+	proxyLn net.Listener,
+	errChan chan error,
 ) (returnErr error) {
 	// Need to alias the signals if this has to run on non-unix OSes too.
 	signalCh := make(chan os.Signal, 1)
@@ -130,6 +142,17 @@ func waitForSignals(
 			returnErr = errors.New("interrupted")
 		}
 		go func() {
+			// Begin shutdown by:
+			// 1. Stopping the TCP listener so no new connections can be established
+			// 2. Waiting for all connections to close "naturally" or
+			//    waiting for "shutdownConnectionTimeout" to elapse after which
+			//    open TCP connections will be forcefully closed so the server can stop
+			log.Infof(ctx, "stopping tcp listener")
+			_ = proxyLn.Close()
+			select {
+			case <-server.AwaitNoConnections(ctx):
+			case <-time.After(shutdownConnectionTimeout):
+			}
 			log.Infof(ctx, "server stopping")
 			stopper.Stop(ctx)
 		}()
@@ -138,12 +161,13 @@ func waitForSignals(
 		select {} // Block and wait for logging go routine to shut down the process
 	}
 
+	numInturrupts := 0
 	for {
 		select {
 		case sig := <-signalCh:
-			switch sig {
-			case os.Interrupt: // SIGTERM after SIGTERM
-				log.Ops.Infof(ctx, "received additional signal '%s'; continuing graceful shutdown", sig)
+			if numInturrupts == 0 {
+				numInturrupts++
+				log.Ops.Infof(ctx, "received additional signal '%s'; continuing graceful shutdown. Next signal will force shutdown.", sig)
 				continue
 			}
 
