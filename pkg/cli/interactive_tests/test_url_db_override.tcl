@@ -38,7 +38,7 @@ start_test "Check that the insecure flag overrides the sslmode if URL is already
 set ::env(COCKROACH_INSECURE) "false"
 
 spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=verify-full" --certs-dir=$certs_dir -e "select 1"
-eexpect "SSL is not enabled on the server"
+eexpect "server refused TLS connection"
 eexpect eof
 
 spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=verify-full" --certs-dir=$certs_dir --insecure -e "select 1"

@@ -12,7 +12,6 @@ package clisqlexec
 
 import (
 	"bytes"
-	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"math"
@@ -26,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/lib/pq"
+	"github.com/jackc/pgtype"
 )
 
 func isNotPrintableASCII(r rune) bool { return r < 0x20 || r > 0x7e || r == '"' || r == '\\' }
@@ -44,7 +43,6 @@ func FormatVal(
 		if strings.HasPrefix(colType, "_") && len(b) > 0 && b[0] == '{' {
 			return formatArray(b, colType[1:], showPrintableUnicode, showNewLinesAndTabs)
 		}
-
 		// Names, records, and user-defined types should all be displayed as strings.
 		if colType == "NAME" || colType == "RECORD" || colType == "" {
 			val = string(b)
@@ -88,19 +86,13 @@ func FormatVal(
 		return s[1 : len(s)-1]
 
 	case []byte:
-		// Format the bytes as per bytea_output = escape.
+		// For other []byte types that weren't handled above, we use the "escape"
+		// format because it enables printing readable strings as-is -- the default
+		// hex format would always render as hexadecimal digits. The escape format
+		// is also more compact.
 		//
-		// We use the "escape" format here because it enables printing
-		// readable strings as-is -- the default hex format would always
-		// render as hexadecimal digits. The escape format is also more
-		// compact.
-		//
-		// TODO(knz): this formatting is unfortunate/incorrect, and exists
-		// only because lib/pq incorrectly interprets the bytes received
-		// from the server. The proper behavior would be for the driver to
-		// not interpret the bytes and for us here to print that as-is, so
-		// that we can let the user see and control the result using
-		// `bytea_output`.
+		// Note that the BYTEA type is already a string at this point, so is not
+		// handled here.
 		var buf bytes.Buffer
 		lexbase.EncodeSQLBytesInner(&buf, string(t))
 		return buf.String()
@@ -130,41 +122,45 @@ func formatArray(
 	// backingArray is the array we're going to parse the server data
 	// into.
 	var backingArray interface{}
-	// parsingArray is a helper structure provided by lib/pq to parse
-	// arrays.
-	var parsingArray gosql.Scanner
 
-	// lib.pq has different array parsers for special value types.
-	//
-	// TODO(knz): This would better use a general-purpose parser
-	// using the OID to look up an array parser in crdb's sql package.
-	// However, unfortunately the OID is hidden from us.
+	// parsingArray is a helper structure provided by pgtype to parse
+	// arrays.
+	var parsingArray pgtype.Value
+
+	// pgx has different array parsers for special value types.
 	switch colType {
 	case "BOOL":
 		boolArray := []bool{}
 		backingArray = &boolArray
-		parsingArray = (*pq.BoolArray)(&boolArray)
+		parsingArray = &pgtype.BoolArray{}
 	case "FLOAT4", "FLOAT8":
 		floatArray := []float64{}
 		backingArray = &floatArray
-		parsingArray = (*pq.Float64Array)(&floatArray)
+		parsingArray = &pgtype.Float8Array{}
 	case "INT2", "INT4", "INT8", "OID":
 		intArray := []int64{}
 		backingArray = &intArray
-		parsingArray = (*pq.Int64Array)(&intArray)
+		parsingArray = &pgtype.Int8Array{}
 	case "TEXT", "VARCHAR", "NAME", "CHAR", "BPCHAR", "RECORD":
 		stringArray := []string{}
 		backingArray = &stringArray
-		parsingArray = (*pq.StringArray)(&stringArray)
-	default:
-		genArray := [][]byte{}
-		backingArray = &genArray
-		parsingArray = &pq.GenericArray{A: &genArray}
+		parsingArray = &pgtype.TextArray{}
 	}
 
-	// Now ask the pq array parser to convert the byte slice
+	// Now ask the pgx array parser to convert the byte slice
 	// from the server into a Go array.
-	if err := parsingArray.Scan(b); err != nil {
+	var parseErr error
+	if parsingArray != nil {
+		parseErr = parsingArray.(pgtype.TextDecoder).DecodeText(nil, b)
+		if parseErr == nil {
+			parseErr = parsingArray.AssignTo(backingArray)
+		}
+	} else {
+		var untypedArray *pgtype.UntypedTextArray
+		untypedArray, parseErr = pgtype.ParseUntypedTextArray(string(b))
+		backingArray = &untypedArray.Elements
+	}
+	if parseErr != nil {
 		// A parsing failure is not a catastrophe; we can still print out
 		// the array as a byte slice. This will do in many cases.
 		return FormatVal(b, "BYTEA", showPrintableUnicode, showNewLinesAndTabs)

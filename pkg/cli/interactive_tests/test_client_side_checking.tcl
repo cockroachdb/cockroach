@@ -28,7 +28,7 @@ end_test
 start_test "Check that the syntax checker does not get confused by empty inputs."
 # (issue #22441.)
 send ";\r"
-eexpect "0 rows"
+eexpect "OK"
 eexpect root@
 end_test
 

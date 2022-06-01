@@ -94,7 +94,7 @@ func constructJobTraceZipBundle(ctx context.Context, sqlConn clisqlclient.Conn, 
 		return err
 	}
 
-	zipper := tracezipper.MakeSQLConnInflightTraceZipper(sqlConn.GetDriverConn().(driver.QueryerContext))
+	zipper := tracezipper.MakeSQLConnInflightTraceZipper(sqlConn.GetDriverConn())
 	zipBytes, err := zipper.Zip(ctx, traceID)
 	if err != nil {
 		return err

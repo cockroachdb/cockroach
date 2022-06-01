@@ -33,13 +33,13 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_liveness... writing output: debug/crdb_internal.kv_node_liveness.txt...
-[cluster] retrieving SQL data for crdb_internal.kv_node_liveness: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[cluster] retrieving SQL data for crdb_internal.kv_node_liveness: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [cluster] retrieving SQL data for crdb_internal.kv_node_liveness: creating error output: debug/crdb_internal.kv_node_liveness.txt.err.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_status... writing output: debug/crdb_internal.kv_node_status.txt...
-[cluster] retrieving SQL data for crdb_internal.kv_node_status: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[cluster] retrieving SQL data for crdb_internal.kv_node_status: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [cluster] retrieving SQL data for crdb_internal.kv_node_status: creating error output: debug/crdb_internal.kv_node_status.txt.err.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.txt...
-[cluster] retrieving SQL data for crdb_internal.kv_store_status: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[cluster] retrieving SQL data for crdb_internal.kv_store_status: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [cluster] retrieving SQL data for crdb_internal.kv_store_status: creating error output: debug/crdb_internal.kv_store_status.txt.err.txt... done
 [cluster] retrieving SQL data for crdb_internal.regions... writing output: debug/crdb_internal.regions.txt... done
 [cluster] retrieving SQL data for crdb_internal.schema_changes... writing output: debug/crdb_internal.schema_changes.txt... done
@@ -90,16 +90,16 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] using SQL connection URL: postgresql://...
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt...
-[node 1] retrieving SQL data for crdb_internal.gossip_alerts: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_alerts: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts: creating error output: debug/nodes/1/crdb_internal.gossip_alerts.txt.err.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt...
-[node 1] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness: creating error output: debug/nodes/1/crdb_internal.gossip_liveness.txt.err.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/1/crdb_internal.gossip_network.txt...
-[node 1] retrieving SQL data for crdb_internal.gossip_network: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_network: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_network: creating error output: debug/nodes/1/crdb_internal.gossip_network.txt.err.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt...
-[node 1] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: pq: unimplemented: operation is unsupported in multi-tenancy mode
+[node 1] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes: creating error output: debug/nodes/1/crdb_internal.gossip_nodes.txt.err.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done

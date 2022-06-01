@@ -14,7 +14,8 @@ go_library(
         "//pkg/acceptance/cluster",
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/security/securitytest",  #keep
+        "//pkg/security/securityassets",  # keep
+        "//pkg/security/securitytest",  # keep
         "//pkg/security/username",
         "//pkg/server",  # keep
         "//pkg/testutils",
