@@ -55,18 +55,22 @@ func newKVEventToRowConsumer(
 	details jobspb.ChangefeedDetails,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
-) *kvEventToRowConsumer {
+) (*kvEventToRowConsumer, error) {
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details)
+	if err != nil {
+		return nil, err
+	}
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
-		decoder:              cdcevent.NewEventDecoder(ctx, cfg, details),
+		decoder:              decoder,
 		sink:                 sink,
 		cursor:               cursor,
 		details:              details,
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
-	}
+	}, nil
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {
