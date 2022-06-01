@@ -197,6 +197,7 @@ module.exports = {
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
   transformIgnorePatterns: [
     "/node_module\\/@cockroachlabs\\/crdb-protobuf-client/",
+    "/node_module\\/@cockroachlabs\\/cluster-ui/",
   ],
 
   // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
