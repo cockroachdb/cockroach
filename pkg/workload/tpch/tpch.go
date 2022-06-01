@@ -65,6 +65,7 @@ type tpch struct {
 	vectorize                  string
 	useClusterVectorizeSetting bool
 	verbose                    bool
+	disableImplicitTxn         bool
 
 	queriesRaw      string
 	selectedQueries []int
@@ -91,10 +92,11 @@ var tpchMeta = workload.Meta{
 		g := &tpch{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`queries`:       {RuntimeOnly: true},
-			`dist-sql`:      {RuntimeOnly: true},
-			`enable-checks`: {RuntimeOnly: true},
-			`vectorize`:     {RuntimeOnly: true},
+			`queries`:              {RuntimeOnly: true},
+			`dist-sql`:             {RuntimeOnly: true},
+			`enable-checks`:        {RuntimeOnly: true},
+			`vectorize`:            {RuntimeOnly: true},
+			`disable-implicit-txn`: {RuntimeOnly: true},
 		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
@@ -113,6 +115,8 @@ var tpchMeta = workload.Meta{
 			`Ignore vectorize option and use the current cluster setting sql.defaults.vectorize`)
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms`)
+		g.flags.BoolVar(&g.disableImplicitTxn, `disable-implicit-txn`, false,
+			`Sets 'enable_implicit_transaction_for_batch_statements' session variable to false`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -317,10 +321,19 @@ func (w *tpch) Ops(
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		if w.disableImplicitTxn {
+			if _, err = conn.ExecContext(ctx, "SET enable_implicit_transaction_for_batch_statements = false;"); err != nil {
+				return workload.QueryLoad{}, err
+			}
+		}
 		worker := &worker{
 			config: w,
 			hists:  reg.GetHandle(),
-			db:     db,
+			conn:   conn,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
@@ -330,7 +343,7 @@ func (w *tpch) Ops(
 type worker struct {
 	config *tpch
 	hists  *histogram.Histograms
-	db     *gosql.DB
+	conn   *gosql.Conn
 	ops    int
 }
 
@@ -350,7 +363,7 @@ func (w *worker) run(ctx context.Context) error {
 	}
 
 	start := timeutil.Now()
-	rows, err := w.db.Query(query)
+	rows, err := w.conn.QueryContext(ctx, query)
 	if rows != nil {
 		defer rows.Close()
 	}

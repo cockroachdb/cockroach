@@ -160,9 +160,14 @@ func registerTPCHConcurrency(r registry.Registry) {
 				maxOps := concurrency / 10
 				// Use very short duration for --display-every parameter so that
 				// all query runs are logged.
+				//
+				// We also disable the implicit txn for multi-statement batches
+				// since Q15 consists of three statements (two of which are
+				// schema changes which would contend with each other causing
+				// many retries).
 				cmd := fmt.Sprintf(
 					"./workload run tpch {pgurl:1-%d} --display-every=1ns --tolerate-errors "+
-						"--count-errors --queries=%d --concurrency=%d --max-ops=%d",
+						"--disable-implicit-txn --count-errors --queries=%d --concurrency=%d --max-ops=%d",
 					numNodes-1, queryNum, concurrency, maxOps,
 				)
 				if err := c.RunE(ctx, c.Node(numNodes), cmd); err != nil {
