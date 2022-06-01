@@ -10,10 +10,7 @@
 
 import { merge } from "lodash";
 import uPlot, { Options, Band, AlignedData } from "uplot";
-import {
-  // AxisUnits,
-  AxisDomain,
-} from "../utils/domain";
+import { AxisUnits, AxisDomain } from "../utils/domain";
 import { barTooltipPlugin } from "./plugins";
 
 const seriesPalette = [
@@ -89,12 +86,14 @@ export const getStackedBarOpts = (
   userOptions: Partial<Options>,
   xAxisDomain: AxisDomain,
   yAxisDomain: AxisDomain,
+  yyAxisUnits: AxisUnits,
   colourPalette = seriesPalette,
 ): Options => {
   const options = getBarChartOpts(
     userOptions,
     xAxisDomain,
     yAxisDomain,
+    yyAxisUnits,
     colourPalette,
   );
 
@@ -140,6 +139,7 @@ export const getBarChartOpts = (
   userOptions: Partial<Options>,
   xAxisDomain: AxisDomain,
   yAxisDomain: AxisDomain,
+  yAxisUnits: AxisUnits,
   colourPalette = seriesPalette,
 ): Options => {
   const { series, ...providedOpts } = userOptions;
@@ -188,7 +188,7 @@ export const getBarChartOpts = (
         ...s,
       })),
     ],
-    plugins: [barTooltipPlugin()],
+    plugins: [barTooltipPlugin(yAxisUnits)],
   };
 
   const combinedOpts = merge(opts, providedOpts);
