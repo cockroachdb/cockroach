@@ -138,7 +138,6 @@ func (u *URL) GetExtraOptions() url.Values {
 // all security controls disabled.
 func (u *URL) WithInsecure() *URL {
 	return u.
-		WithUsername("root").
 		WithAuthn(AuthnNone()).
 		WithTransport(TransportNone())
 }

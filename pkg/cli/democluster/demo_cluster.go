@@ -973,7 +973,8 @@ func (c *transientCluster) getNetworkURLForServer(
 	host, port, _ := addr.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
-		WithDatabase(c.defaultDB)
+		WithDatabase(c.defaultDB).
+		WithUsername(c.adminUser.Normalized())
 
 	// For a demo cluster we don't use client TLS certs and instead use
 	// password-based authentication with the password pre-filled in the
@@ -982,7 +983,6 @@ func (c *transientCluster) getNetworkURLForServer(
 		u.WithInsecure()
 	} else {
 		u.
-			WithUsername(c.adminUser.Normalized()).
 			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
 			WithTransport(pgurl.TransportTLS(pgurl.TLSRequire, ""))
 	}

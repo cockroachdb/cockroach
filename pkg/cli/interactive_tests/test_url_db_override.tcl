@@ -23,6 +23,11 @@ spawn $argv sql --url "postgresql://test@localhost:26257" --insecure -e "select 
 eexpect "1 row"
 eexpect eof
 
+# Make sure --insecure does not override --user
+spawn $argv sql --user=test --insecure -e "select 'user=' || current_user()"
+eexpect "user=test"
+eexpect eof
+
 set ::env(COCKROACH_INSECURE) "true"
 end_test
 
