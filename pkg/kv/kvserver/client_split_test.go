@@ -2052,7 +2052,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 		// Closed when the split goroutine is done.
 		splitDone := make(chan struct{})
 
-		go func() {
+		go func(i int) {
 			defer close(splitDone)
 
 			// Split the data range. The split keys are chosen so that they move
@@ -2062,7 +2062,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			splitArgs := adminSplitArgs(splitKey)
 			_, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSender(), splitArgs)
 			errChan <- pErr
-		}()
+		}(i)
 		go func() {
 			defer func() { errChan <- nil }()
 
