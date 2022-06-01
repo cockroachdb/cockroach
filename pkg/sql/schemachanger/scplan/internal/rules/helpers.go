@@ -14,9 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/errors"
 )
 
 func idInIDs(objects []descpb.ID, id descpb.ID) bool {
@@ -32,93 +30,43 @@ func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 	return el, el + "-target", el + "-node"
 }
 
-type depRuleSpec struct {
-	ruleName              scgraph.RuleName
-	edgeKind              scgraph.DepEdgeKind
-	fromTargetStatus      scpb.Status
-	toTargetStatus        scpb.Status
-	from, to              elementSpec
-	joinAttrs             []screl.Attr
-	joinReferencingDescID bool
-	filterLabel           string
-	filter                interface{}
+func currentStatus(node rel.Var, status scpb.Status) rel.Clause {
+	return node.AttrEq(screl.CurrentStatus, status)
 }
 
-func depRule(
-	ruleName scgraph.RuleName,
-	edgeKind scgraph.DepEdgeKind,
-	targetStatus scpb.TargetStatus,
-	from, to elementSpec,
-	joinAttrs ...screl.Attr,
-) depRuleSpec {
-	return depRuleSpec{
-		ruleName:         ruleName,
-		edgeKind:         edgeKind,
-		fromTargetStatus: targetStatus.Status(),
-		toTargetStatus:   targetStatus.Status(),
-		from:             from,
-		to:               to,
-		joinAttrs:        joinAttrs,
-	}
+func targetStatus(target rel.Var, status scpb.TargetStatus) rel.Clause {
+	return target.AttrEq(screl.TargetStatus, status.Status())
 }
 
-type elementSpec struct {
-	status scpb.Status
-	types  []interface{}
+func targetStatusEq(aTarget, bTarget rel.Var, status scpb.TargetStatus) rel.Clause {
+	return rel.And(targetStatus(aTarget, status), targetStatus(bTarget, status))
 }
 
-func element(status scpb.Status, types ...interface{}) elementSpec {
-	return elementSpec{
-		status: status,
-		types:  types,
-	}
+func currentStatusEq(aNode, bNode rel.Var, status scpb.Status) rel.Clause {
+	return rel.And(currentStatus(aNode, status), currentStatus(bNode, status))
 }
 
-func (d depRuleSpec) withFilter(label string, predicate interface{}) depRuleSpec {
-	d.filterLabel = label
-	d.filter = predicate
-	return d
+func join(a, b rel.Var, attr rel.Attr, eqVarName rel.Var) rel.Clause {
+	return joinOn(a, attr, b, attr, eqVarName)
 }
 
-func (d depRuleSpec) withJoinFromReferencedDescIDWithToDescID() depRuleSpec {
-	d.joinReferencingDescID = true
-	return d
-}
-
-func (d depRuleSpec) register() {
-	var (
-		from, fromTarget, fromNode = targetNodeVars("from")
-		to, toTarget, toNode       = targetNodeVars("to")
+func joinOn(a rel.Var, aAttr rel.Attr, b rel.Var, bAttr rel.Attr, eqVarName rel.Var) rel.Clause {
+	return rel.And(
+		a.AttrEqVar(aAttr, eqVarName),
+		b.AttrEqVar(bAttr, eqVarName),
 	)
-	if from == to {
-		panic(errors.AssertionFailedf("elements cannot share same label %q", from))
-	}
-	c := rel.Clauses{
-		from.Type(d.from.types[0], d.from.types[1:]...),
-		fromTarget.AttrEq(screl.TargetStatus, d.fromTargetStatus),
-		to.Type(d.to.types[0], d.to.types[1:]...),
-		toTarget.AttrEq(screl.TargetStatus, d.toTargetStatus),
+}
 
-		fromNode.AttrEq(screl.CurrentStatus, d.from.status),
-		toNode.AttrEq(screl.CurrentStatus, d.to.status),
+func joinOnIndexID(a, b rel.Var) rel.Clause {
+	return rel.And(
+		join(a, b, screl.DescID, "desc-id"),
+		join(a, b, screl.IndexID, "index-id"),
+	)
+}
 
-		screl.JoinTargetNode(from, fromTarget, fromNode),
-		screl.JoinTargetNode(to, toTarget, toNode),
-	}
-	for _, attr := range d.joinAttrs {
-		v := rel.Var(attr.String() + "-join-var")
-		c = append(c, from.AttrEqVar(attr, v), to.AttrEqVar(attr, v))
-	}
-	if d.joinReferencingDescID {
-		v := rel.Var("joined-from-ref-desc-id-with-to-desc-id-var")
-		c = append(c, from.AttrEqVar(screl.ReferencedDescID, v), to.AttrEqVar(screl.DescID, v))
-	}
-
-	c = append(c, from.AttrEqVar(screl.DescID, "var-to-tell-rel-from-is-an-element"))
-	c = append(c, to.AttrEqVar(screl.DescID, "var-to-tell-rel-to-is-an-element"))
-
-	if d.filter != nil {
-		c = append(c, rel.Filter(d.filterLabel, from, to)(d.filter))
-	}
-	registerDepRule(d.ruleName, d.edgeKind, fromNode, toNode, screl.MustQuery(c...))
+func joinOnColumnID(a, b rel.Var) rel.Clause {
+	return rel.And(
+		join(a, b, screl.DescID, "desc-id"),
+		join(a, b, screl.ColumnID, "column-id"),
+	)
 }

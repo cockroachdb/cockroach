@@ -36,7 +36,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
-│       │   │         rule: "column named right before column becomes public"
+│       │   │         rule: "column named right before column type becomes public"
 │       │   │
 │       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}
 │       │       │ ABSENT → BACKFILL_ONLY
@@ -422,6 +422,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
 
 
 
