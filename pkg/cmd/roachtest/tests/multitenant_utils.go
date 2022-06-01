@@ -68,8 +68,8 @@ func createTenantNode(
 	versionStr, err := fetchCockroachVersion(ctx, t.L(), c, n[0])
 	v := version.MustParse(versionStr)
 	require.NoError(t, err)
-	// Tenant scoped certificates were introduced in version 22.1.
-	if v.AtLeast(version.MustParse("22.1.0")) {
+	// Tenant scoped certificates were introduced in version 22.2.
+	if v.AtLeast(version.MustParse("v22.2.0")) {
 		tn.recreateClientCertsWithTenantScope(ctx, c)
 	}
 	tn.createTenantCert(ctx, t, c)
