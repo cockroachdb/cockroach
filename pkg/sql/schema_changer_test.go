@@ -1089,14 +1089,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			// Run the column schema change in a separate goroutine.
 			var wg sync.WaitGroup
 			wg.Add(1)
-			go func() {
+			go func(sql string) {
 				// Start schema change that eventually runs a backfill.
-				if _, err := sqlDB.Exec(testCase.sql); err != nil {
+				if _, err := sqlDB.Exec(sql); err != nil {
 					t.Error(err)
 				}
 
 				wg.Done()
-			}()
+			}(testCase.sql)
 
 			// Wait until the schema change backfill has finished writing its
 			// intents.
@@ -6900,11 +6900,11 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 				injectedError = false
 				sqlDB.Exec(t, tc.setupStmts)
 
-				go func() {
+				go func(scStmt string) {
 					// This transaction will not return until the server is shutdown. Therefore,
 					// we run it in a separate goroutine and don't check the returned error.
-					_, _ = db.Exec(tc.scStmt)
-				}()
+					_, _ = db.Exec(scStmt)
+				}(tc.scStmt)
 				// Verify that the job is in retry state while reverting.
 				const query = `SELECT num_runs > 3 FROM crdb_internal.jobs WHERE status = '` + string(jobs.StatusReverting) + `' AND description ~ '%s'`
 				sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf(query, tc.jobRegex), [][]string{{"true"}})
@@ -7791,10 +7791,10 @@ CREATE TABLE t.test (x INT);`,
 
 			var wg sync.WaitGroup
 			wg.Add(1)
-			go func() {
-				sqlDB.Exec(t, tc.successfulChange)
+			go func(successfulChange string) {
+				sqlDB.Exec(t, successfulChange)
 				wg.Done()
-			}()
+			}(tc.successfulChange)
 
 			<-childJobStartNotification
 
