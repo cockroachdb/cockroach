@@ -122,7 +122,11 @@ func createRangeData(
 }
 
 func verifyRDReplicatedOnlyMVCCIter(
-	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []storage.MVCCKey,
+	t *testing.T,
+	desc *roachpb.RangeDescriptor,
+	eng storage.Engine,
+	expectedKeys []storage.MVCCKey,
+	expectedRangeKeys []storage.MVCCRangeKey,
 ) {
 	t.Helper()
 	verify := func(t *testing.T, useSpanSet, reverse bool) {
@@ -146,22 +150,47 @@ func verifyRDReplicatedOnlyMVCCIter(
 		}
 		iter := NewReplicaMVCCDataIterator(desc, readWriter, reverse /* seekEnd */)
 		defer iter.Close()
+		next := iter.Next
+		if reverse {
+			next = iter.Prev
+		}
+		var rangeStart roachpb.Key
 		actualKeys := []storage.MVCCKey{}
+		actualRanges := []storage.MVCCRangeKey{}
 		for {
 			ok, err := iter.Valid()
 			require.NoError(t, err)
 			if !ok {
 				break
 			}
-			if !reverse {
-				actualKeys = append(actualKeys, iter.Key())
-				iter.Next()
-			} else {
-				actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
-				iter.Prev()
+			p, r := iter.HasPointAndRange()
+			if p {
+				if !reverse {
+					actualKeys = append(actualKeys, iter.Key())
+				} else {
+					actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+				}
 			}
+			if r {
+				rks := iter.RangeKeys()
+				if !rks[0].RangeKey.StartKey.Equal(rangeStart) {
+					if !reverse {
+						for _, rk := range rks {
+							actualRanges = append(actualRanges, rk.RangeKey.Clone())
+						}
+					} else {
+						for i := len(rks) - 1; i >= 0; i-- {
+							actualRanges = append([]storage.MVCCRangeKey{rks[i].RangeKey.Clone()},
+								actualRanges...)
+						}
+					}
+					rangeStart = rks[0].RangeKey.StartKey.Clone()
+				}
+			}
+			next()
 		}
 		require.Equal(t, expectedKeys, actualKeys)
+		require.Equal(t, expectedRangeKeys, actualRanges)
 	}
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 		testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
@@ -230,7 +259,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		EndKey:   roachpb.RKey("z"),
 	}
 
-	verifyRDReplicatedOnlyMVCCIter(t, desc, eng, []storage.MVCCKey{})
+	verifyRDReplicatedOnlyMVCCIter(t, desc, eng, []storage.MVCCKey{}, []storage.MVCCRangeKey{})
 	verifyRDEngineIter(t, desc, eng, false, []interface{}{})
 	verifyRDEngineIter(t, desc, eng, true, []interface{}{})
 }
@@ -286,12 +315,16 @@ func TestReplicaDataIterator(t *testing.T) {
 			// TODO(erikgrinaker): This currently only supports MVCC point keys, so we
 			// ignore MVCC range keys for now.
 			var pointKeys []storage.MVCCKey
+			var rangeKeys []storage.MVCCRangeKey
 			for _, key := range tc.replicatedKeys {
 				if pointKey, ok := key.(storage.MVCCKey); ok {
 					pointKeys = append(pointKeys, pointKey)
+				} else if rangeKey, ok := key.(storage.MVCCRangeKey); ok {
+					// This is very naive and only works if keys don't overlap.
+					rangeKeys = append(rangeKeys, rangeKey)
 				}
 			}
-			verifyRDReplicatedOnlyMVCCIter(t, &tc.desc, eng, pointKeys)
+			verifyRDReplicatedOnlyMVCCIter(t, &tc.desc, eng, pointKeys, rangeKeys)
 		})
 	}
 }

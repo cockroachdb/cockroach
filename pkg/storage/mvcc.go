@@ -4084,8 +4084,6 @@ func MVCCResolveWriteIntentRange(
 // not a mix of the two. This is to accommodate the implementation below
 // that creates an iterator with bounds that span from the first to last
 // key (in sorted order).
-//
-// TODO(erikgrinaker): This must handle MVCC range tombstones.
 func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
@@ -4118,15 +4116,23 @@ func MVCCGarbageCollect(
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
+		KeyTypes:   IterKeyTypePointsAndRanges,
 	})
 	defer iter.Close()
 	supportsPrev := iter.SupportsPrev()
+
+	// To update mvcc stats, we need to go through range tombstones to determine
+	// GCBytesAge. That requires copying current stack of range keys covering
+	// point since returned range key values are unsafe. We try to cache those
+	// copies by checking start of range.
+	var lastRangeTombstoneStart roachpb.Key
+	var rangeTombstoneTss []hlc.Timestamp
 
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, metaKeySize, metaValSize, _, err := mvccGetMetadata(iter, encKey, meta)
+		ok, metaKeySize, metaValSize, realKeyChanged, err := mvccGetMetadata(iter, encKey, meta)
 		if err != nil {
 			return err
 		}
@@ -4170,6 +4176,18 @@ func MVCCGarbageCollect(
 				}
 				count++
 			}
+		} else if meta.Deleted && implicitMeta && !realKeyChanged.IsEmpty() {
+			// In case we have a range key covering point key we know that point key
+			// is present and we can check if its timestamp falls below GC threshold
+			// and all versions should be removed.
+			if iter.UnsafeKey().Timestamp.LessEq(gcKey.Timestamp) {
+				// If we have delete meta from range and first key is up for GC then adjust stats
+				// and prev time for gc bytes age calculation.
+				if ms != nil {
+					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta,
+						realKeyChanged.WallTime))
+				}
+			}
 		}
 
 		if !implicitMeta {
@@ -4184,11 +4202,15 @@ func MVCCGarbageCollect(
 		// first garbage version.
 		prevNanos := timestamp.WallTime
 		{
-
+			// If true - forward iteration positioned iterator on first garbage
+			// (key.ts <= gc.ts).
 			var foundPrevNanos bool
 			{
 				// If reverse iteration is supported (supportsPrev), we'll step the
 				// iterator a few time before attempting to seek.
+
+				// True if we found next key while iterating. That means there's no
+				// garbage for the key.
 				var foundNextKey bool
 
 				// If there are a large number of versions which are not garbage,
@@ -4253,6 +4275,32 @@ func MVCCGarbageCollect(
 			}
 		}
 
+		// At this point iterator is positioned on first garbage version and forward
+		// iteration will give us all versions to delete up to the next key.
+
+		if ms != nil {
+			// We need to iterate ranges only to compute GCBytesAge if we are updating
+			// stats.
+			if _, hasRange := iter.HasPointAndRange(); hasRange && !lastRangeTombstoneStart.Equal(iter.RangeBounds().Key) {
+				rangeKeys := iter.RangeKeys()
+				ki := sort.Search(len(rangeKeys), func(i int) bool {
+					return rangeKeys[i].RangeKey.Timestamp.Less(gcKey.Timestamp)
+				})
+				if ki > 0 {
+					ki--
+				}
+				overlappingKeyCount := len(rangeKeys) - ki
+				rangeTombstoneTss = make([]hlc.Timestamp, overlappingKeyCount)
+				for i := 0; i < overlappingKeyCount; i++ {
+					rangeTombstoneTss[i] = rangeKeys[i+ki].RangeKey.Timestamp
+				}
+				lastRangeTombstoneStart = append(lastRangeTombstoneStart[:0], rangeKeys[0].RangeKey.StartKey...)
+			} else if !hasRange {
+				lastRangeTombstoneStart = lastRangeTombstoneStart[:0]
+			}
+		}
+		rangeIdx := 0
+
 		// Iterate through the garbage versions, accumulating their stats and
 		// issuing clear operations.
 		for ; ; iter.Next() {
@@ -4286,6 +4334,18 @@ func MVCCGarbageCollect(
 				fromNS := prevNanos
 				if unsafeVal.IsTombstone() {
 					fromNS = unsafeIterKey.Timestamp.WallTime
+				} else {
+					// For non deletions, we need to find if we had a range tombstone
+					// above it to treat it as garbage.
+					for ; rangeIdx < len(rangeTombstoneTss); rangeIdx++ {
+						rangeTS := rangeTombstoneTss[rangeIdx]
+						if rangeTombstoneTss[rangeIdx].LessEq(unsafeIterKey.Timestamp) {
+							break
+						}
+						if rangeTS.WallTime < fromNS {
+							fromNS = rangeTS.WallTime
+						}
+					}
 				}
 
 				ms.Add(updateStatsOnGC(gcKey.Key, keySize, valSize, nil, fromNS))
