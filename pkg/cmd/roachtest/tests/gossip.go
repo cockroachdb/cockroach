@@ -409,10 +409,6 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	run(`ALTER DATABASE system %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE meta %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	run(`ALTER RANGE liveness %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
-	// TODO(andrei): Changing the constraints for the system tables shouldn't be
-	// needed given that we've changed them for the system zone. What's going on?
-	// #40921.
-	run(`ALTER TABLE system.jobs %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 	if t.IsBuildVersion("v19.2.0") {
 		run(`ALTER TABLE system.replication_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 		run(`ALTER TABLE system.replication_constraint_stats %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)

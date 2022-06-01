@@ -1,0 +1,9 @@
+statement ok
+INSERT INTO system.users VALUES ('node', '', false);
+GRANT node TO root;
+
+# Any system table other than system.descriptor and system.zones
+# can have their ranges split.
+
+statement ok
+CREATE INDEX ON system.users ("username");

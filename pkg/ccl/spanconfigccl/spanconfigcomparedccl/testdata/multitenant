@@ -18,6 +18,10 @@ initialize tenant=11
 configs version=current offset=43
 ----
 ...
+/Table/44                                  database system (host)
+/Table/45                                  ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/46                                  database system (host)
+/Table/47                                  database system (host)
 /Table/50                                  database system (host)
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
@@ -27,6 +31,11 @@ diff offset=50
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 
 reconcile tenant=11
 ----
@@ -40,8 +49,13 @@ diff offset=48 limit=10
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,6 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 
 # Once tenant-11 starts adding user tables however (with different configs), we
 # should see finer-grained splits). With 10 tables, all with 'range default',
@@ -66,8 +80,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,7 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 
 
@@ -83,8 +102,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,9 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 +/Tenant/11/Table/111                       num_replicas=42
 +/Tenant/11/Table/112                       range default
@@ -101,8 +125,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,9 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 +/Tenant/11/Table/111                       num_replicas=42
 +/Tenant/11/Table/113                       range default
@@ -116,8 +145,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,9 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 +/Tenant/11/Table/110                       num_replicas=42
 +/Tenant/11/Table/113                       range default
@@ -134,8 +168,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,9 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 +/Tenant/11/Table/110                       num_replicas=42
 +/Tenant/11/Table/113                       range default
@@ -149,8 +188,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,9 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 +/Tenant/11/Table/112                       num_replicas=42
 +/Tenant/11/Table/113                       range default
@@ -164,8 +208,13 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
+@@ -42,4 +46,7 @@
+ /Table/46                                  database system (host)
+ /Table/47                                  database system (host)
+-/Table/50                                  range system
++/Table/50                                  database system (host)
++/Tenant/10                                 database system (tenant)
++/Tenant/11                                 database system (tenant)
 +/Tenant/11/Table/106                       range default
 
 # vim:ft=diff
