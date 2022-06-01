@@ -26,7 +26,6 @@ import {
   MetricProps,
   MetricsDataComponentProps,
 } from "src/views/shared/components/metricQuery";
-import {} from "@cockroachlabs/cluster-ui";
 import {
   calculateXAxisDomain,
   calculateYAxisDomain,

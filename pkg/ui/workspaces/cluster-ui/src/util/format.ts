@@ -23,6 +23,7 @@ export const byteUnits: string[] = [
   "YiB",
 ];
 export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
+export const countUnits: string[] = ["", "k", "m", "b"];
 
 interface UnitValue {
   value: number;
@@ -38,7 +39,7 @@ export function ComputePrefixExponent(
   value: number,
   prefixMultiple: number,
   prefixList: string[],
-) {
+): number {
   // Compute the metric prefix that will be used to label the axis.
   let maxUnits = Math.abs(value);
   let prefixScale: number;
@@ -102,7 +103,7 @@ export function Bytes(bytes: number): string {
  * Cast bytes to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const BytesFitScale = (scale: string) => (bytes: number) => {
+export const BytesFitScale = (scale: string) => (bytes: number): string => {
   if (!bytes) {
     return `0.00 ${scale}`;
   }
@@ -156,7 +157,9 @@ export function Duration(nanoseconds: number): string {
  * Cast nanoseconds to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
+export const DurationFitScale = (scale: string) => (
+  nanoseconds: number,
+): string => {
   if (!nanoseconds) {
     return `0.00 ${scale}`;
   }
@@ -166,7 +169,7 @@ export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 
-export function RenderCount(yesCount: Long, totalCount: Long) {
+export function RenderCount(yesCount: Long, totalCount: Long): string {
   if (longToInt(yesCount) == 0) {
     return "No";
   }
@@ -175,4 +178,26 @@ export function RenderCount(yesCount: Long, totalCount: Long) {
   }
   const noCount = longToInt(totalCount) - longToInt(yesCount);
   return `${longToInt(yesCount)} Yes / ${noCount} No`;
+}
+
+/**
+ * ComputeCountScale calculates an appropriate scale factor and unit to use
+ * to display a given count value, without actually converting the value.
+ */
+function ComputeCountScale(count: number): UnitValue {
+  const scale = ComputePrefixExponent(count, 1000, countUnits);
+  return {
+    value: Math.pow(1000, scale),
+    units: countUnits[scale],
+  };
+}
+
+/**
+ * Count creates a string representation for a count.
+ */
+export function Count(count: number): string {
+  const scale = ComputeCountScale(count);
+  const unitVal = count / scale.value;
+  const fractionDigits = Number.isInteger(unitVal) ? 0 : 1;
+  return unitVal.toFixed(fractionDigits) + " " + scale.units;
 }
