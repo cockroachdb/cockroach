@@ -9,14 +9,19 @@
 // licenses/APL.txt.
 
 import uPlot, { Plugin } from "uplot";
-import { formatTimeStamp } from "../utils/domain";
+import { AxisUnits, formatTimeStamp } from "../utils/domain";
+import { Bytes, Duration, Percentage } from "../../util";
 
 // Fallback color for series stroke if one is not defined.
 const DEFAULT_STROKE = "#7e89a9";
 
 // Generate a series legend within the provided div showing the data points
 // relative to the cursor position.
-const generateSeriesLegend = (uPlot: uPlot, seriesLegend: HTMLDivElement) => {
+const generateSeriesLegend = (
+  uPlot: uPlot,
+  seriesLegend: HTMLDivElement,
+  yAxisUnits: AxisUnits,
+) => {
   // idx is the closest data index to the cursor position.
   const { idx } = uPlot.cursor;
 
@@ -62,8 +67,11 @@ const generateSeriesLegend = (uPlot: uPlot, seriesLegend: HTMLDivElement) => {
     value.style.fontFamily = "'Source Sans Pro', sans-serif";
     value.textContent =
       series.value instanceof Function && dataValue
-        ? String(series.value(uPlot, dataValue, index, idx))
-        : String(dataValue);
+        ? getFormattedValue(
+            Number(series.value(uPlot, dataValue, index, idx)),
+            yAxisUnits,
+          )
+        : getFormattedValue(dataValue, yAxisUnits);
 
     container.appendChild(colorBox);
     container.appendChild(label);
@@ -73,8 +81,24 @@ const generateSeriesLegend = (uPlot: uPlot, seriesLegend: HTMLDivElement) => {
   });
 };
 
+// If the value is an integer, returns as is,
+// otherwise fixes to 2 decimals.
+function getFormattedValue(value: number, yAxisUnits: AxisUnits): string {
+  switch (yAxisUnits) {
+    case AxisUnits.Bytes:
+      return Bytes(value);
+    case AxisUnits.Duration:
+      return Duration(value);
+    case AxisUnits.Percentage:
+      return Percentage(value, 1);
+    default:
+      if (Number.isInteger(value)) return String(value);
+      return value.toFixed(2);
+  }
+}
+
 // Tooltip legend plugin for bar charts.
-export function barTooltipPlugin(): Plugin {
+export function barTooltipPlugin(yAxis: AxisUnits): Plugin {
   const cursorToolTip = {
     tooltip: document.createElement("div"),
     timeStamp: document.createElement("div"),
@@ -91,7 +115,7 @@ export function barTooltipPlugin(): Plugin {
     timeStamp.textContent = formatTimeStamp(closestDataPointTimeMillis);
 
     // Generating the series legend based on current state of µPlot
-    generateSeriesLegend(u, seriesLegend);
+    generateSeriesLegend(u, seriesLegend, yAxis);
 
     // set the position of the Tooltip. Adjusting the tooltip away from the
     // cursor for readability.
