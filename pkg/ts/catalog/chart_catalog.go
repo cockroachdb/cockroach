@@ -607,6 +607,12 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"range.snapshots.rcvd-bytes",
 					"range.snapshots.sent-bytes",
+					"range.snapshots.recovery.rcvd-bytes",
+					"range.snapshots.recovery.sent-bytes",
+					"range.snapshots.rebalancing.rcvd-bytes",
+					"range.snapshots.rebalancing.sent-bytes",
+					"range.snapshots.unknown.rcvd-bytes",
+					"range.snapshots.unknown.sent-bytes",
 				},
 			},
 		},
