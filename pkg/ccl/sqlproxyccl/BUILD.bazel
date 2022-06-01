@@ -57,6 +57,7 @@ go_test(
     size = "medium",
     srcs = [
         "authentication_test.go",
+        "backend_dialer_test.go",
         "conn_migration_test.go",
         "connector_test.go",
         "forwarder_test.go",
