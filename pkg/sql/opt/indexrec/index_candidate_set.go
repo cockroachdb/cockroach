@@ -381,7 +381,7 @@ func addIndexToCandidates(
 		return
 	}
 
-	// Note: Spatial indexes columns are now added for index recommendation.
+	// Note: Indexes on spatial columns are now added for index recommendation.
 	// Do not add duplicate indexes.
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {
@@ -403,14 +403,15 @@ func addIndexToCandidates(
 	indexCandidates[currTable] = append(indexCandidates[currTable], newIndex)
 }
 
-// addGeoSpatialIndexes is used to add single-column GIN indexes to inverted candidates for queries which
-// use spatial functions that can be index-accelerated.
+// AddGeoSpatialIndexes is used to add single-column GIN indexes to inverted candidates for
+// spatial functions that can be index-accelerated.
 func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
 	switch expr := expr.(type) {
 	case *memo.FunctionExpr:
-		// check if the function is one of the geo relationship
+		// Ensure that the function is a spatial function AND can be index-accelerated
 		_, ok := geoindex.RelationshipMap[expr.Name]
 		if ok {
+			// Add arguments of the spatial function to inverted indexes
 			for i := range expr.Args {
 				var child = expr.Args.Child(i)
 				ics.addVariableExprIndex(child, indexCandidates)
