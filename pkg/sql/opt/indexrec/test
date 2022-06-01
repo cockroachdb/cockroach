@@ -1,0 +1,2130 @@
+exec-ddl
+CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)
+----
+
+exec-ddl
+CREATE TABLE t2 (k INT, i INT, s STRING)
+----
+
+exec-ddl
+CREATE TABLE t3 (k INT, i INT, f FLOAT, g GEOMETRY)
+----
+
+exec-ddl
+CREATE TABLE t4 (k INT, i INT, f FLOAT, j JSONB, a INT[])
+----
+
+exec-ddl
+CREATE TABLE t5 (geom1 GEOMETRY, geog1 GEOGRAPHY, geom11 GEOMETRY, geog11 GEOGRAPHY, inet1 INET, bbox1 box2d, k INT, i INT)
+----
+
+# Ensure that index candidates are not created for virtual tables.
+index-candidates
+SELECT *
+FROM information_schema.schemata JOIN t1
+ON true
+WHERE information_schema.schemata.SCHEMA_NAME='public' AND t1.k > 3
+----
+t1:
+ (k)
+
+# Ensure that index candidates are not created for system tables.
+index-candidates
+SELECT * FROM system.table_statistics WHERE name = 'foo'
+----
+
+# Ensure that new indexes do not get recommended if an identical existing
+# index exists.
+
+exec-ddl
+CREATE INDEX existing_t1_k ON t1(k) STORING (s)
+----
+
+exec-ddl
+CREATE UNIQUE INDEX existing_t1_i ON t1(i)
+----
+
+exec-ddl
+CREATE INDEX existing_t2_k ON t2(k)
+----
+
+# No recommendations because an identical index exists already.
+index-recommendations
+SELECT i FROM t1 WHERE i >= 3
+----
+No index recommendations.
+--
+Optimal Plan.
+scan t1@existing_t1_i
+ ├── columns: i:2!null
+ ├── constraint: /2: [/3 - ]
+ ├── cost: 354.263333
+ └── key: (2)
+
+# No recommendations because an index with the same explicit columns exists
+# already, and no new columns are being stored.
+index-recommendations
+SELECT k FROM t1 WHERE k >= 3
+----
+No index recommendations.
+--
+Optimal Plan.
+scan t1@existing_t1_k
+ ├── columns: k:1!null
+ ├── constraint: /1/5: [/3 - ]
+ └── cost: 360.686667
+
+# There is a replacement recommendation because an index with the same explicit
+# columns exists already and new columns are being stored here. We stored the
+# existing index's stored columns and any new stored columns.
+index-recommendations
+SELECT i FROM t1 WHERE k >= 3
+----
+index recommendations: 1
+1. type: index replacement
+   SQL commands: CREATE INDEX ON t1 (k) STORING (i, s); DROP INDEX t1@existing_t1_k;
+--
+Optimal Plan.
+project
+ ├── columns: i:2
+ ├── cost: 374.04
+ └── scan t1@_hyp_3
+      ├── columns: k:1!null i:2
+      ├── constraint: /1/5: [/3 - ]
+      ├── cost: 370.686667
+      ├── lax-key: (1,2)
+      └── fd: (2)~~>(1)
+
+# Replacement recommendations for existing unique indexes must also create
+# unique indexes.
+index-recommendations
+SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.i > 3 AND t2.i > 3
+----
+index recommendations: 2
+1. type: index replacement
+   SQL commands: CREATE UNIQUE INDEX ON t1 (i) STORING (k); DROP INDEX t1@existing_t1_i;
+2. type: index creation
+   SQL command: CREATE INDEX ON t2 (i) STORING (k);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null
+ ├── cost: 766.796132
+ └── inner-join (hash)
+      ├── columns: t1.k:1!null t1.i:2!null t2.k:8!null t2.i:9!null
+      ├── cost: 755.793689
+      ├── fd: (2)-->(1), (1)==(8), (8)==(1)
+      ├── scan t2@_hyp_3
+      │    ├── columns: t2.k:8 t2.i:9!null
+      │    ├── constraint: /9/11: [/4 - ]
+      │    └── cost: 367.353333
+      ├── scan t1@_hyp_4
+      │    ├── columns: t1.k:1 t1.i:2!null
+      │    ├── constraint: /2/5: [/4 - ]
+      │    ├── cost: 367.476667
+      │    ├── lax-key: (1,2)
+      │    └── fd: (2)-->(1)
+      └── filters
+           └── t1.k:1 = t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+exec-ddl
+DROP INDEX t1@existing_t1_k
+----
+
+exec-ddl
+DROP INDEX t1@existing_t1_i
+----
+
+exec-ddl
+DROP INDEX t2@existing_t2_k
+----
+
+# Below are tests without existing indexes on the tables. Every query has two
+# tests, one showing its index candidates and the other showing its final index
+# recommendations.
+
+# Basic tests for comparison operator, range, equality, join, order by, and
+# group by candidates.
+
+index-candidates
+SELECT * FROM t1 WHERE i >= 3
+----
+t1:
+ (i)
+
+index-recommendations
+SELECT * FROM t1 WHERE i >= 3
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (i) STORING (k, f, s);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: k:1 i:2!null f:3 s:4
+ ├── constraint: /2/5: [/3 - ]
+ └── cost: 377.353333
+
+
+index-candidates
+SELECT f, k FROM t1 WHERE f > 2 AND f < 8
+----
+t1:
+ (f)
+
+index-recommendations
+SELECT f, k FROM t1 WHERE f > 2 AND f < 8
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (f) STORING (k);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: f:3!null k:1
+ ├── constraint: /3/5: [/2.0000000000000004 - /7.999999999999999]
+ └── cost: 132.908889
+
+index-candidates
+SELECT i FROM t1 WHERE k < 3 AND i > 5
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT i FROM t1 WHERE k < 3 AND i > 5
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k) STORING (i);
+--
+Optimal Plan.
+project
+ ├── columns: i:2!null
+ ├── cost: 377.181111
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── cost: 374.05
+      ├── scan t1@_hyp_1
+      │    ├── columns: k:1!null i:2
+      │    ├── constraint: /1/5: (/NULL - /2]
+      │    └── cost: 370.686667
+      └── filters
+           └── i:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
+
+index-candidates
+SELECT i FROM t1 WHERE k < 3 AND i > 5 OR f < 7
+----
+t1:
+ (f)
+ (i)
+ (k)
+
+index-recommendations
+SELECT i FROM t1 WHERE k < 3 AND i > 5 OR f < 7
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k) STORING (i, f);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (f) STORING (k, i);
+--
+Optimal Plan.
+project
+ ├── columns: i:2
+ ├── cost: 816.218448
+ └── project
+      ├── columns: k:1 i:2 f:3
+      ├── cost: 809.754004
+      └── distinct-on
+           ├── columns: k:1 i:2 f:3 rowid:5!null
+           ├── grouping columns: rowid:5!null
+           ├── cost: 803.289559
+           ├── key: (5)
+           ├── fd: (5)-->(1-3)
+           ├── union-all
+           │    ├── columns: k:1 i:2 f:3 rowid:5!null
+           │    ├── left columns: k:8 i:9 f:10 rowid:12
+           │    ├── right columns: k:15 i:16 f:17 rowid:19
+           │    ├── cost: 764.534445
+           │    ├── select
+           │    │    ├── columns: k:8!null i:9!null f:10 rowid:12!null
+           │    │    ├── cost: 380.716667
+           │    │    ├── key: (12)
+           │    │    ├── fd: (12)-->(8-10)
+           │    │    ├── scan t1@_hyp_1
+           │    │    │    ├── columns: k:8!null i:9 f:10 rowid:12!null
+           │    │    │    ├── constraint: /8/12: (/NULL - /2]
+           │    │    │    ├── cost: 377.353333
+           │    │    │    ├── key: (12)
+           │    │    │    └── fd: (12)-->(8-10)
+           │    │    └── filters
+           │    │         └── i:9 > 5 [outer=(9), constraints=(/9: [/6 - ]; tight)]
+           │    └── scan t1@_hyp_3
+           │         ├── columns: k:15 i:16 f:17!null rowid:19!null
+           │         ├── constraint: /17/19: (/NULL - /6.999999999999999]
+           │         ├── cost: 377.353333
+           │         ├── key: (19)
+           │         └── fd: (19)-->(15-17)
+           └── aggregations
+                ├── const-agg [as=k:1, outer=(1)]
+                │    └── k:1
+                ├── const-agg [as=i:2, outer=(2)]
+                │    └── i:2
+                └── const-agg [as=f:3, outer=(3)]
+                     └── f:3
+
+index-candidates
+SELECT s FROM t1 WHERE s = 'NG'
+----
+t1:
+ (s)
+
+index-recommendations
+SELECT s FROM t1 WHERE s = 'NG'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (s);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: s:4!null
+ ├── constraint: /4/5: [/'NG' - /'NG']
+ ├── cost: 24.6200001
+ └── fd: ()-->(4)
+
+index-candidates
+SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.i
+----
+t1:
+ (k)
+t2:
+ (i)
+
+index-recommendations
+SELECT t1.k FROM t1 JOIN t2 ON t1.k = t2.i
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t2 (i);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null
+ ├── cost: 2375.2
+ └── inner-join (merge)
+      ├── columns: t1.k:1!null t2.i:9!null
+      ├── left ordering: +1
+      ├── right ordering: +9
+      ├── cost: 2277.17
+      ├── fd: (1)==(9), (9)==(1)
+      ├── scan t1@_hyp_1
+      │    ├── columns: t1.k:1
+      │    ├── cost: 1084.62
+      │    └── ordering: +1
+      ├── scan t2@_hyp_1
+      │    ├── columns: t2.i:9
+      │    ├── cost: 1074.52
+      │    └── ordering: +9
+      └── filters (true)
+
+index-candidates
+SELECT t2.s FROM t1 RIGHT JOIN t2 ON t1.s LIKE t2.s
+----
+t1:
+ (s)
+t2:
+ (s)
+
+# See function comment in indexrec.FindIndexRecommendationSet for an explanation
+# as to why there is no recommendation for an index on s.
+index-recommendations
+SELECT t2.s FROM t1 RIGHT JOIN t2 ON t1.s LIKE t2.s
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: s:10
+ ├── cost: 15522.6696
+ └── left-join (cross)
+      ├── columns: t1.s:4 t2.s:10
+      ├── cost: 12189.3163
+      ├── scan t2
+      │    ├── columns: t2.s:10
+      │    └── cost: 1074.52
+      ├── scan t1
+      │    ├── columns: t1.s:4
+      │    └── cost: 1084.62
+      └── filters
+           └── t1.s:4 LIKE t2.s:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
+
+index-candidates
+SELECT i FROM t1 ORDER BY i
+----
+t1:
+ (i)
+
+index-recommendations
+SELECT i FROM t1 ORDER BY i
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: i:2
+ ├── cost: 1084.62
+ └── ordering: +2
+
+
+index-candidates
+SELECT k, i FROM t1 ORDER BY k DESC, i ASC
+----
+t1:
+ (k DESC, i)
+
+index-recommendations
+SELECT k, i FROM t1 ORDER BY k DESC, i ASC
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k DESC, i);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: k:1 i:2
+ ├── cost: 1094.72
+ └── ordering: -1,+2
+
+# Only one index candidate is created with nested ORDER BY clauses.
+index-candidates
+SELECT * FROM (
+  SELECT k, i FROM t1
+  ORDER BY k DESC, i ASC
+)
+ORDER BY k ASC, i DESC
+----
+t1:
+ (k, i DESC)
+
+index-recommendations
+SELECT * FROM (
+  SELECT k, i FROM t1
+  ORDER BY k DESC, i ASC
+)
+ORDER BY k ASC, i DESC
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k, i DESC);
+--
+Optimal Plan.
+scan t1@_hyp_1
+ ├── columns: k:1 i:2
+ ├── cost: 1094.72
+ └── ordering: +1,-2
+
+# Redundant index candidates are created but only one index is recommended.
+index-candidates
+SELECT k FROM t1 WHERE k > 3
+UNION ALL
+SELECT k FROM t1 WHERE k < 10
+ORDER BY k DESC
+----
+t1:
+ (k DESC)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 WHERE k > 3
+UNION ALL
+SELECT k FROM t1 WHERE k < 10
+ORDER BY k DESC
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k DESC);
+--
+Optimal Plan.
+union-all
+ ├── columns: k:15!null
+ ├── left columns: t1.k:1
+ ├── right columns: t1.k:8
+ ├── cost: 741.393334
+ ├── ordering: -15
+ ├── scan t1@_hyp_1
+ │    ├── columns: t1.k:1!null
+ │    ├── constraint: /-1/5: [ - /4]
+ │    ├── cost: 367.353333
+ │    └── ordering: -1
+ └── scan t1@_hyp_1
+      ├── columns: t1.k:8!null
+      ├── constraint: /-8/12: [/9 - /NULL)
+      ├── cost: 367.353333
+      └── ordering: -8
+
+index-candidates
+SELECT count(*) FROM t1 GROUP BY k
+----
+t1:
+ (k)
+
+index-recommendations
+SELECT count(*) FROM t1 GROUP BY k
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+--
+Optimal Plan.
+project
+ ├── columns: count:8!null
+ ├── cost: 1106.67
+ └── group-by (streaming)
+      ├── columns: k:1 count_rows:8!null
+      ├── grouping columns: k:1
+      ├── internal-ordering: +1
+      ├── cost: 1105.65
+      ├── key: (1)
+      ├── fd: (1)-->(8)
+      ├── scan t1@_hyp_1
+      │    ├── columns: k:1
+      │    ├── cost: 1084.62
+      │    └── ordering: +1
+      └── aggregations
+           └── count-rows [as=count_rows:8]
+
+
+index-candidates
+SELECT sum(k) FROM t1 GROUP BY i, f, k
+----
+t1:
+ (k, i, f)
+
+index-recommendations
+SELECT sum(k) FROM t1 GROUP BY i, f, k
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k, i, f);
+--
+Optimal Plan.
+project
+ ├── columns: sum:8
+ ├── cost: 1164.87
+ └── group-by (streaming)
+      ├── columns: k:1 i:2 f:3 sum:8
+      ├── grouping columns: k:1 i:2 f:3
+      ├── internal-ordering: +1,+2,+3
+      ├── cost: 1154.85
+      ├── key: (1-3)
+      ├── fd: (1-3)-->(8)
+      ├── scan t1@_hyp_1
+      │    ├── columns: k:1 i:2 f:3
+      │    ├── cost: 1104.82
+      │    └── ordering: +1,+2,+3
+      └── aggregations
+           └── sum [as=sum:8, outer=(1)]
+                └── k:1
+
+# Test joins with more complex predicates. See rule 3 and rule 4 in
+# indexrec.FindIndexCandidateSet.
+
+index-candidates
+SELECT t1.f, t2.k, t2.i
+FROM t1 FULL JOIN t2
+ON t2.k IS NULL
+AND t1.f::STRING NOT LIKE t2.i::STRING
+----
+t1:
+ (f)
+t2:
+ (i)
+ (k)
+ (k, i)
+
+index-recommendations
+SELECT t1.f, t2.k, t2.i
+FROM t1 FULL JOIN t2
+ON t2.k IS NULL
+AND t1.f::STRING NOT LIKE t2.i::STRING
+----
+No index recommendations.
+--
+Optimal Plan.
+full-join (cross)
+ ├── columns: f:3 k:8 i:9
+ ├── stable
+ ├── cost: 12199.4263
+ ├── scan t1
+ │    ├── columns: f:3
+ │    └── cost: 1084.62
+ ├── scan t2
+ │    ├── columns: t2.k:8 t2.i:9
+ │    └── cost: 1084.62
+ └── filters
+      ├── t2.k:8 IS NULL [outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
+      └── f:3::STRING NOT LIKE t2.i:9::STRING [outer=(3,9), stable]
+
+index-candidates
+SELECT t1.k, t1.s, t2.k, t2.i
+FROM t1 LEFT JOIN t2
+ON t1.k != t2.k
+AND t1.s IS NOT NULL
+AND t2.i IS NULL
+----
+t1:
+ (k)
+ (k, s)
+ (s)
+t2:
+ (i)
+ (i, k)
+ (k)
+
+index-recommendations
+SELECT t1.k, t1.s, t2.k, t2.i
+FROM t1 LEFT JOIN t2
+ON t1.k != t2.k
+AND t1.s IS NOT NULL
+AND t2.i IS NULL
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t2 (i) STORING (k);
+--
+Optimal Plan.
+left-join (cross)
+ ├── columns: k:1 s:4 k:8 i:9
+ ├── cost: 1232.055
+ ├── scan t1
+ │    ├── columns: t1.k:1 t1.s:4
+ │    └── cost: 1094.72
+ ├── scan t2@_hyp_1
+ │    ├── columns: t2.k:8 t2.i:9
+ │    ├── constraint: /9/11: [/NULL - /NULL]
+ │    ├── cost: 24.6200002
+ │    └── fd: ()-->(9)
+ └── filters
+      ├── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      └── t1.s:4 IS NOT NULL [outer=(4), constraints=(/4: (/NULL - ]; tight)]
+
+# Test more complex queries. See rule 5 in indexrec.FindIndexCandidateSet. The
+# aspects of rule 5 that are demonstrated by each test are highlighted the
+# test's comment.
+
+# Multi-column combinations used: EQ.
+index-candidates
+SELECT k, i FROM t1 WHERE k = 1 AND i = 2
+----
+t1:
+ (i)
+ (k)
+ (k, i)
+
+index-recommendations
+SELECT k, i FROM t1 WHERE k = 1 AND i = 2
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k) STORING (i);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i) STORING (k);
+--
+Optimal Plan.
+inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
+ ├── columns: k:1!null i:2!null
+ ├── eq columns: [5] = [5]
+ ├── left fixed columns: [1] = [1]
+ ├── right fixed columns: [2] = [2]
+ ├── cost: 11.9982432
+ ├── fd: ()-->(1,2)
+ └── filters
+      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# Multi-column combinations used: EQ + R.
+index-candidates
+SELECT * FROM t1 WHERE k = 1 AND f > 0
+----
+t1:
+ (f)
+ (k)
+ (k, f)
+
+index-recommendations
+SELECT * FROM t1 WHERE k = 1 AND f > 0
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k, f) STORING (i, s);
+--
+Optimal Plan.
+scan t1@_hyp_3
+ ├── columns: k:1!null i:2 f:3!null s:4
+ ├── constraint: /1/3/5: [/1/5e-324 - /1]
+ ├── cost: 24.1933333
+ └── fd: ()-->(1)
+
+# Multi-column combinations used: EQ, EQ + R.
+index-candidates
+SELECT  k, i, f FROM t1 WHERE k = 1 AND i = 2 AND f > 0
+----
+t1:
+ (f)
+ (i)
+ (k)
+ (k, i)
+ (k, i, f)
+
+index-recommendations
+SELECT k, i, f FROM t1 WHERE k = 1 AND i = 2 AND f > 0
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k) STORING (i, f);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i) STORING (k, f);
+--
+Optimal Plan.
+inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
+ ├── columns: k:1!null i:2!null f:3!null
+ ├── eq columns: [5] = [5]
+ ├── left fixed columns: [1] = [1]
+ ├── right fixed columns: [2] = [2]
+ ├── cost: 10.6474054
+ ├── fd: ()-->(1,2)
+ └── filters
+      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      ├── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      └── f:3 > 0.0 [outer=(3), constraints=(/3: [/5e-324 - ]; tight)]
+
+# Multi-column combinations used: J + R.
+index-candidates
+SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
+----
+t1:
+ (f)
+ (k)
+ (k, f)
+t2:
+ (k)
+
+index-recommendations
+SELECT t1.k, t1.f FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.f > 0
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (f) STORING (k);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null f:3!null
+ ├── cost: 5885.93736
+ └── inner-join (cross)
+      ├── columns: t1.k:1!null f:3!null t2.k:8!null
+      ├── cost: 4796.91736
+      ├── scan t2
+      │    ├── columns: t2.k:8
+      │    └── cost: 1074.52
+      ├── scan t1@_hyp_1
+      │    ├── columns: t1.k:1 f:3!null
+      │    ├── constraint: /3/5: [/5e-324 - ]
+      │    └── cost: 370.686667
+      └── filters
+           └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+
+# Multi-column combinations used: EQ, EQ + J.
+index-candidates
+SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
+----
+t1:
+ (i)
+ (i, s)
+ (i, s, k)
+ (k)
+ (s)
+t2:
+ (k)
+
+index-recommendations
+SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (i) STORING (k, s);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (s) STORING (k, i);
+--
+Optimal Plan.
+project
+ ├── columns: i:2!null s:4!null
+ ├── cost: 1111.17702
+ ├── fd: ()-->(2,4)
+ └── inner-join (cross)
+      ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
+      ├── cost: 1108.1814
+      ├── fd: ()-->(2,4)
+      ├── scan t2
+      │    ├── columns: t2.k:8
+      │    └── cost: 1074.52
+      ├── inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
+      │    ├── columns: t1.k:1 t1.i:2!null t1.s:4!null
+      │    ├── eq columns: [5] = [5]
+      │    ├── left fixed columns: [2] = [2]
+      │    ├── right fixed columns: [4] = ['NG']
+      │    ├── cost: 12.0073514
+      │    ├── fd: ()-->(2,4)
+      │    └── filters
+      │         ├── t1.i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      │         └── t1.s:4 = 'NG' [outer=(4), constraints=(/4: [/'NG' - /'NG']; tight), fd=()-->(4)]
+      └── filters
+           └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+
+# Multi-column combinations used: EQ, EQ + R, J + R, EQ + J, EQ + J + R.
+index-candidates
+SELECT count(*)
+FROM t1 LEFT JOIN t2
+ON t1.k != t2.k
+GROUP BY t2.s, t2.i
+UNION ALL
+SELECT count(*)
+FROM (
+  SELECT *
+  FROM t1
+  WHERE t1.f > t1.i
+  AND t1.s = 'NG'
+)
+----
+t1:
+ (f)
+ (i)
+ (k)
+ (k, f)
+ (k, i)
+ (s)
+ (s, f)
+ (s, i)
+ (s, k)
+ (s, k, f)
+ (s, k, i)
+t2:
+ (i, s)
+ (k)
+
+index-recommendations
+SELECT count(*)
+FROM t1 LEFT JOIN t2
+ON t1.k != t2.k
+GROUP BY t2.s, t2.i
+UNION ALL
+SELECT count(*)
+FROM (
+  SELECT *
+  FROM t1
+  WHERE t1.f > t1.i
+  AND t1.s = 'NG'
+)
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (s, f) STORING (i);
+--
+Optimal Plan.
+union-all
+ ├── columns: count:23!null
+ ├── left columns: count_rows:14
+ ├── right columns: count_rows:22
+ ├── cardinality: [1 - ]
+ ├── cost: 25598.0782
+ ├── project
+ │    ├── columns: count_rows:14!null
+ │    ├── cost: 25563.0458
+ │    └── group-by (hash)
+ │         ├── columns: t2.i:9 t2.s:10 count_rows:14!null
+ │         ├── grouping columns: t2.i:9 t2.s:10
+ │         ├── cost: 25553.0258
+ │         ├── key: (9,10)
+ │         ├── fd: (9,10)-->(14)
+ │         ├── left-join (cross)
+ │         │    ├── columns: t1.k:1 t2.k:8 t2.i:9 t2.s:10
+ │         │    ├── cost: 12209.5163
+ │         │    ├── scan t1
+ │         │    │    ├── columns: t1.k:1
+ │         │    │    └── cost: 1084.62
+ │         │    ├── scan t2
+ │         │    │    ├── columns: t2.k:8 t2.i:9 t2.s:10
+ │         │    │    └── cost: 1094.72
+ │         │    └── filters
+ │         │         └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+ │         └── aggregations
+ │              └── count-rows [as=count_rows:14]
+ └── scalar-group-by
+      ├── columns: count_rows:22!null
+      ├── cardinality: [1 - 1]
+      ├── cost: 25.002367
+      ├── key: ()
+      ├── fd: ()-->(22)
+      ├── select
+      │    ├── columns: t1.i:16!null f:17!null t1.s:18!null
+      │    ├── cost: 24.9391
+      │    ├── fd: ()-->(18)
+      │    ├── scan t1@_hyp_5
+      │    │    ├── columns: t1.i:16 f:17!null t1.s:18!null
+      │    │    ├── constraint: /18/17/19: (/'NG'/NULL - /'NG']
+      │    │    ├── cost: 24.8092
+      │    │    └── fd: ()-->(18)
+      │    └── filters
+      │         └── f:17 > t1.i:16 [outer=(16,17), constraints=(/16: (/NULL - ]; /17: (/NULL - ])]
+      └── aggregations
+           └── count-rows [as=count_rows:22]
+
+
+# No rule 5 multi-column index combinations.
+index-candidates
+SELECT t1.k, t1.i, t2.i
+FROM t1 LEFT JOIN t2
+ON t1.k = t2.k
+WHERE EXISTS (SELECT * FROM t3 WHERE t3.f > t3.k)
+ORDER BY t1.k, t2.i, t1.i DESC
+----
+t1:
+ (k)
+ (k, i DESC)
+t2:
+ (i)
+ (k)
+t3:
+ (f)
+ (k)
+
+index-recommendations
+SELECT t1.k, t1.i, t2.i
+FROM t1 LEFT JOIN t2
+ON t1.k = t2.k
+WHERE EXISTS (SELECT k, i FROM t3 WHERE t3.f > t3.k)
+ORDER BY t1.k, t2.i, t1.i DESC
+----
+index recommendations: 3
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k, i DESC);
+2. type: index creation
+   SQL command: CREATE INDEX ON t2 (k) STORING (i);
+3. type: index creation
+   SQL command: CREATE INDEX ON t3 (f) STORING (k, i);
+--
+Optimal Plan.
+sort (segmented)
+ ├── columns: k:1 i:2 i:9
+ ├── cost: 2416.08954
+ ├── ordering: +1,+9,-2
+ └── project
+      ├── columns: t1.k:1 t1.i:2 t2.i:9
+      ├── cost: 2263.40821
+      ├── ordering: +1
+      └── left-join (merge)
+           ├── columns: t1.k:1 t1.i:2 t2.k:8 t2.i:9
+           ├── left ordering: +1
+           ├── right ordering: +8
+           ├── cost: 2252.08102
+           ├── ordering: +1
+           ├── select
+           │    ├── columns: t1.k:1 t1.i:2
+           │    ├── cost: 1122.09358
+           │    ├── ordering: +1
+           │    ├── scan t1@_hyp_1
+           │    │    ├── columns: t1.k:1 t1.i:2
+           │    │    ├── cost: 1094.72
+           │    │    └── ordering: +1
+           │    └── filters
+           │         └── exists [subquery]
+           │              └── limit
+           │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
+           │                   ├── cardinality: [0 - 1]
+           │                   ├── cost: 17.3435766
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(14-16)
+           │                   ├── select
+           │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
+           │                   │    ├── cost: 17.3235766
+           │                   │    ├── limit hint: 1.00
+           │                   │    ├── scan t3@_hyp_1
+           │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
+           │                   │    │    ├── constraint: /16/18: (/NULL - ]
+           │                   │    │    ├── cost: 17.2632432
+           │                   │    │    └── limit hint: 3.00
+           │                   │    └── filters
+           │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
+           │                   └── 1
+           ├── select
+           │    ├── columns: t2.k:8 t2.i:9
+           │    ├── cost: 1111.99358
+           │    ├── ordering: +8
+           │    ├── scan t2@_hyp_2
+           │    │    ├── columns: t2.k:8 t2.i:9
+           │    │    ├── cost: 1084.62
+           │    │    └── ordering: +8
+           │    └── filters
+           │         └── exists [subquery]
+           │              └── limit
+           │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
+           │                   ├── cardinality: [0 - 1]
+           │                   ├── cost: 17.3435766
+           │                   ├── key: ()
+           │                   ├── fd: ()-->(14-16)
+           │                   ├── select
+           │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
+           │                   │    ├── cost: 17.3235766
+           │                   │    ├── limit hint: 1.00
+           │                   │    ├── scan t3@_hyp_1
+           │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
+           │                   │    │    ├── constraint: /16/18: (/NULL - ]
+           │                   │    │    ├── cost: 17.2632432
+           │                   │    │    └── limit hint: 3.00
+           │                   │    └── filters
+           │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
+           │                   └── 1
+           └── filters (true)
+
+# Tests for set operation indexes. See rule 6 in indexrec.FindIndexCandidateSet.
+
+index-candidates
+SELECT k FROM t1 UNION SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 UNION SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+union
+ ├── columns: k:15
+ ├── left columns: t1.k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +15
+ ├── cost: 2171.26
+ ├── key: (15)
+ ├── scan t1@_hyp_1
+ │    ├── columns: t1.k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 INTERSECT SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 INTERSECT SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+intersect
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2170.26
+ ├── key: (1)
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 INTERSECT ALL SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 INTERSECT ALL SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+intersect-all
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2179.26
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 EXCEPT SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 EXCEPT SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+except
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2170.26
+ ├── key: (1)
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k FROM t1 EXCEPT ALL SELECT i FROM t1
+----
+t1:
+ (i)
+ (k)
+
+index-recommendations
+SELECT k FROM t1 EXCEPT ALL SELECT i FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i);
+--
+Optimal Plan.
+except-all
+ ├── columns: k:1
+ ├── left columns: k:1
+ ├── right columns: i:9
+ ├── internal-ordering: +1
+ ├── cost: 2179.26
+ ├── scan t1@_hyp_1
+ │    ├── columns: k:1
+ │    ├── cost: 1084.62
+ │    └── ordering: +1
+ └── scan t1@_hyp_2
+      ├── columns: i:9
+      ├── cost: 1084.62
+      └── ordering: +9
+
+index-candidates
+SELECT k, f FROM t1 UNION SELECT i, f FROM t1
+----
+t1:
+ (i, f)
+ (k, f)
+
+index-recommendations
+SELECT k, f FROM t1 UNION SELECT i, f FROM t1
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t1 (k, f);
+2. type: index creation
+   SQL command: CREATE INDEX ON t1 (i, f);
+--
+Optimal Plan.
+union
+ ├── columns: k:15 f:16
+ ├── left columns: t1.k:1 t1.f:3
+ ├── right columns: i:9 t1.f:10
+ ├── internal-ordering: +15,+16
+ ├── cost: 2209.46
+ ├── key: (15,16)
+ ├── scan t1@_hyp_1
+ │    ├── columns: t1.k:1 t1.f:3
+ │    ├── cost: 1094.72
+ │    └── ordering: +1,+3
+ └── scan t1@_hyp_2
+      ├── columns: i:9 t1.f:10
+      ├── cost: 1094.72
+      └── ordering: +9,+10
+
+# Tests for inverted index recommendations. See rule 7 of
+# indexrec.FindIndexCandidateSet.
+
+index-candidates
+SELECT k, f FROM t4 WHERE j->'a' = '1'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j->'a' = '1'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 807.393333
+ └── index-join t4
+      ├── columns: t4.k:1 f:3 j:4
+      ├── immutable
+      ├── cost: 806.262222
+      └── scan t4@_hyp_1
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /9/6
+           │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           ├── cost: 128.464444
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE j @> '{"foo": "1"}'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j @> '{"foo": "1"}'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 805.048889
+ └── index-join t4
+      ├── columns: t4.k:1 f:3 j:4!null
+      ├── immutable
+      ├── cost: 803.928889
+      └── scan t4@_hyp_1
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /9/6
+           │    └── spans: ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+           ├── cost: 128.464444
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 816.998889
+ └── select
+      ├── columns: t4.k:1 f:3 j:4
+      ├── immutable
+      ├── cost: 813.645556
+      ├── index-join t4
+      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── cost: 812.504444
+      │    └── inverted-filter
+      │         ├── columns: rowid:6!null
+      │         ├── inverted expression: /9
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x019", "7\x00\x019"]
+      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         ├── cost: 134.706667
+      │         ├── key: (6)
+      │         └── scan t4@_hyp_1
+      │              ├── columns: rowid:6!null k:9!null
+      │              ├── inverted constraint: /9/6
+      │              │    └── spans
+      │              │         ├── ["7\x00\x019", "7\x00\x019"]
+      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │              ├── cost: 133.575556
+      │              ├── key: (6)
+      │              └── fd: (6)-->(9)
+      └── filters
+           └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
+
+index-candidates
+SELECT j FROM t4 WHERE j @> '{"foo": "1", "bar": "2"}'
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT j FROM t4 WHERE j @> '{"foo": "1", "bar": "2"}'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+inner-join (lookup t4)
+ ├── columns: j:4!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── cost: 110.790741
+ ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
+ │    ├── columns: rowid:6!null
+ │    ├── eq columns: [6] = [6]
+ │    ├── left fixed columns: [9] = ['\x37626172000112320001']
+ │    ├── right fixed columns: [9] = ['\x37666f6f000112310001']
+ │    ├── cost: 35.6990123
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"bar": "2", "foo": "1"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+index-candidates
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
+----
+t4:
+ (j)
+ (k)
+ (k, j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (k, j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null f:3
+ ├── immutable
+ ├── cost: 22.1100001
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: t4.k:1!null f:3 j:4
+      ├── immutable
+      ├── cost: 22.0566667
+      ├── fd: ()-->(1)
+      ├── index-join t4
+      │    ├── columns: t4.k:1 f:3 j:4
+      │    ├── cost: 22.0155556
+      │    └── inverted-filter
+      │         ├── columns: rowid:6!null
+      │         ├── inverted expression: /10
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x019", "7\x00\x019"]
+      │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │         ├── cost: 15.2177778
+      │         ├── key: (6)
+      │         └── scan t4@_hyp_3
+      │              ├── columns: rowid:6!null k:10!null
+      │              ├── constraint: /1: [/1 - /1]
+      │              ├── inverted constraint: /10/6
+      │              │    └── spans
+      │              │         ├── ["7\x00\x019", "7\x00\x019"]
+      │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+      │              ├── cost: 15.1866667
+      │              ├── key: (6)
+      │              └── fd: (6)-->(10)
+      └── filters
+           └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
+
+index-candidates
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
+----
+t4:
+ (i)
+ (i, j)
+ (j)
+ (k)
+ (k, i)
+ (k, i, j)
+ (k, j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
+----
+index recommendations: 2
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (k) STORING (i, f, j);
+2. type: index creation
+   SQL command: CREATE INDEX ON t4 (i) STORING (k, f, j);
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null f:3
+ ├── immutable
+ ├── cost: 10.7379279
+ ├── fd: ()-->(1)
+ └── inner-join (zigzag t4@_hyp_1 t4@_hyp_2)
+      ├── columns: t4.k:1!null i:2!null f:3 j:4
+      ├── eq columns: [6] = [6]
+      ├── left fixed columns: [1] = [1]
+      ├── right fixed columns: [2] = [2]
+      ├── immutable
+      ├── cost: 10.7148919
+      ├── fd: ()-->(1,2)
+      └── filters
+           ├── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
+           ├── t4.k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+index-candidates
+SELECT k, f FROM t4 WHERE j IS NULL
+----
+t4:
+ (j)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE j IS NULL
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 1125.07
+ └── select
+      ├── columns: t4.k:1 f:3 j:4
+      ├── immutable
+      ├── cost: 1124.95
+      ├── fd: ()-->(4)
+      ├── scan t4
+      │    ├── columns: t4.k:1 f:3 j:4
+      │    └── cost: 1114.92
+      └── filters
+           └── j:4 IS NULL [outer=(4), immutable, constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
+
+index-candidates
+SELECT k, f FROM t4 WHERE a IS NULL
+----
+t4:
+ (a)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a IS NULL
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── cost: 1125.07
+ └── select
+      ├── columns: t4.k:1 f:3 a:5
+      ├── cost: 1124.95
+      ├── fd: ()-->(5)
+      ├── scan t4
+      │    ├── columns: t4.k:1 f:3 a:5
+      │    └── cost: 1114.92
+      └── filters
+           └── a:5 IS NULL [outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
+
+index-candidates
+SELECT k, f FROM t4 WHERE a @> ARRAY[1]
+----
+t4:
+ (a)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a @> ARRAY[1]
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (a);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 805.048889
+ └── index-join t4
+      ├── columns: t4.k:1 f:3 a:5!null
+      ├── immutable
+      ├── cost: 803.928889
+      └── scan t4@_hyp_1
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /9/6
+           │    └── spans: ["\x89", "\x89"]
+           ├── cost: 128.464444
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE a = ARRAY[1]
+----
+t4:
+ (a)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a = ARRAY[1]
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── cost: 1125.07
+ └── select
+      ├── columns: t4.k:1 f:3 a:5!null
+      ├── cost: 1124.95
+      ├── fd: ()-->(5)
+      ├── scan t4
+      │    ├── columns: t4.k:1 f:3 a:5
+      │    └── cost: 1114.92
+      └── filters
+           └── a:5 = ARRAY[1] [outer=(5), constraints=(/5: [/ARRAY[1] - /ARRAY[1]]; tight), fd=()-->(5)]
+
+index-candidates
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
+----
+t4:
+ (a)
+ (i)
+ (i, a)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (i, a);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3
+ ├── immutable
+ ├── cost: 21.9920001
+ └── index-join t4
+      ├── columns: t4.k:1 i:2!null f:3 a:5!null
+      ├── immutable
+      ├── cost: 21.9610001
+      ├── fd: ()-->(2)
+      └── scan t4@_hyp_3
+           ├── columns: rowid:6!null
+           ├── constraint: /2: [/1 - /1]
+           ├── inverted constraint: /10/6
+           │    └── spans: ["\x89", "\x89"]
+           ├── cost: 15.1755556
+           └── key: (6)
+
+index-candidates
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
+----
+t4:
+ (a)
+ (f)
+
+index-recommendations
+SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (f) STORING (k, a);
+--
+Optimal Plan.
+project
+ ├── columns: k:1 f:3!null
+ ├── immutable
+ ├── cost: 381.103333
+ └── select
+      ├── columns: t4.k:1 f:3!null a:5!null
+      ├── immutable
+      ├── cost: 380.716667
+      ├── scan t4@_hyp_1
+      │    ├── columns: t4.k:1 f:3!null a:5
+      │    ├── constraint: /3/6: [/3.0000000000000004 - ]
+      │    └── cost: 377.353333
+      └── filters
+           └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+
+# Ensure that index recommendations are not made if there is an existing
+# inverted, partial, or expression index that can be used to create an
+# equivalent or better plan.
+
+# 1. Inverted index case:
+
+exec-ddl
+CREATE INVERTED INDEX inverted ON t4 (k, j)
+----
+
+index-recommendations
+SELECT k, j FROM t4 WHERE k = 1 AND j->'a' = '1'
+----
+No index recommendations.
+--
+Optimal Plan.
+index-join t4
+ ├── columns: k:1!null j:4
+ ├── immutable
+ ├── cost: 21.9622223
+ ├── fd: ()-->(1)
+ └── scan t4@inverted
+      ├── columns: rowid:6!null
+      ├── constraint: /1: [/1 - /1]
+      ├── inverted constraint: /9/6
+      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      ├── cost: 15.1755556
+      └── key: (6)
+
+exec-ddl
+DROP INDEX t4@inverted
+----
+
+# 2. Partial index case:
+
+# Test queries that should use existing partial indexes, partial unique indexes,
+# and partial inverted indexes.
+
+exec-ddl
+CREATE INDEX partial_idx ON t4 (i) WHERE k > 1;
+----
+
+index-recommendations
+SELECT i FROM t4 WHERE i = 1 AND k > 1;
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: i:2!null
+ ├── cost: 23.84
+ ├── fd: ()-->(2)
+ └── scan t4@partial_idx,partial
+      ├── columns: i:2!null rowid:6!null
+      ├── constraint: /2/6: [/1 - /1]
+      ├── cost: 23.7266667
+      ├── key: (6)
+      └── fd: ()-->(2)
+
+exec-ddl
+CREATE UNIQUE INDEX partial_unique_idx ON t4 (f) WHERE i > 1;
+----
+
+index-recommendations
+SELECT f FROM t4 WHERE f > 5 AND i > 1
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: f:3!null
+ ├── cost: 340.706667
+ └── scan t4@partial_unique_idx,partial
+      ├── columns: f:3!null rowid:6!null
+      ├── constraint: /3: [/5.000000000000001 - ]
+      ├── cost: 337.575556
+      ├── key: (6)
+      └── fd: (6)-->(3), (3)-->(6)
+
+exec-ddl
+CREATE INVERTED INDEX partial_inverted_idx ON t4 (j) WHERE i = 1;
+----
+
+index-recommendations
+SELECT j FROM t4 WHERE j->'a' = '1' AND i = 1
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: j:4
+ ├── immutable
+ ├── cost: 21.9822223
+ └── index-join t4
+      ├── columns: i:2!null j:4
+      ├── immutable
+      ├── cost: 21.9511112
+      ├── fd: ()-->(2)
+      └── scan t4@partial_inverted_idx,partial
+           ├── columns: rowid:6!null
+           ├── inverted constraint: /10/6
+           │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           ├── cost: 15.1644445
+           └── key: (6)
+
+# Ensure that we don't recommend replacing partial indexes, partial unique
+# indexes, or partial inverted indexes.
+
+index-recommendations
+SELECT i FROM t4 WHERE i > 5
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (i);
+--
+Optimal Plan.
+scan t4@_hyp_4
+ ├── columns: i:2!null
+ ├── constraint: /2/6: [/6 - ]
+ └── cost: 377.353333
+
+index-recommendations
+SELECT i, f FROM t4 WHERE f > 5
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t4 (f) STORING (i);
+--
+Optimal Plan.
+scan t4@_hyp_4
+ ├── columns: i:2 f:3!null
+ ├── constraint: /3/6: [/5.000000000000001 - ]
+ └── cost: 380.686667
+
+index-recommendations
+SELECT j FROM t4 WHERE j->'a' = '1'
+----
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INVERTED INDEX ON t4 (j);
+--
+Optimal Plan.
+index-join t4
+ ├── columns: j:4
+ ├── immutable
+ ├── cost: 804.04
+ └── scan t4@_hyp_4
+      ├── columns: rowid:6!null
+      ├── inverted constraint: /11/6
+      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      ├── cost: 128.464444
+      └── key: (6)
+
+exec-ddl
+DROP INDEX t4@partial_idx
+----
+
+exec-ddl
+DROP INDEX t4@partial_unique_idx
+----
+
+exec-ddl
+DROP INDEX t4@partial_inverted_idx
+----
+
+# 3. Expression index case:
+
+exec-ddl
+CREATE INDEX expr ON t1 (k, lower(s))
+----
+
+index-recommendations
+SELECT k FROM t1 WHERE lower(s) = 'cockroach' AND k = 1
+----
+No index recommendations.
+--
+Optimal Plan.
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── cost: 15.0296847
+ ├── fd: ()-->(1)
+ └── scan t1@expr
+      ├── columns: k:1!null rowid:5!null
+      ├── constraint: /1/8/5: [/1/'cockroach' - /1/'cockroach']
+      ├── cost: 14.9763514
+      ├── key: (5)
+      └── fd: ()-->(1)
+
+exec-ddl
+DROP INDEX t1@expr
+----
+
+# Test spatial index recommendations
+# Ensure that geospatial indexes are added as candidates
+index-candidates
+SELECT * FROM t5 WHERE geom1 IS NULL
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE geog1 IS NULL
+----
+t5:
+ (geog1)
+
+# For queries that use index accelerated geospatial functions, recommend geospatial index
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, 'POINT(0 0 0 0)')
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_covers(geog1, geog11)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_coveredby(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_coveredby(geog1, geog11)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_contains(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_containsproperly(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_crosses(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithin(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithin(geog1, geog11, 10)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dfullywithin(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_equals('LINESTRING ( 0 0, 0 2 )'::geometry, geom1)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_intersects('POLYGON (( 1 2, 1 4, 3 4, 3 2, 1 2))'::geometry, geom1)
+----
+t5:
+ (geom1)
+
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_touches(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_within(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geog1, geog11, 10, true)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dwithinexclusive(geog1, geog11, 10)
+----
+t5:
+ (geog1)
+ (geog11)
+
+index-candidates
+SELECT * FROM t5 WHERE st_dfullywithinexclusive(geom1, geom11, 10)
+----
+t5:
+ (geom1)
+ (geom11)
+
+# For spatial functions that do not use index accelerated geospatial functions, do not recommend geospatial index
+index-candidates
+SELECT * FROM t5 WHERE st_hasarc(geom1)
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_isclosed(geom1)
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_iscollection(geom1)
+----
+
+index-candidates
+SELECT st_area(geom1) FROM t5
+----
+
+index-candidates
+SELECT * FROM t5 WHERE postgis_hasbbox(geom1) = true
+----
+
+index-candidates
+SELECT * FROM t5 WHERE st_area(geog1) = 1
+----
+
+# For other general functions (non-spatial functions), do not recommend index
+index-candidates
+SELECT * FROM t5 WHERE family(inet1) = 6
+----
+
+index-candidates
+SELECT * FROM t5 WHERE sign(k) = 2
+----
+
+# Test different cases for multi-column combinations
+# 1. Geospatial Inverted + Geospatial Inverted: no combined candidates
+# Todo: geom1, geom11 are both added to inverted candidates, no combined index between inverted indexes
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom11) AND st_overlaps(geom1, geom11)
+----
+t5:
+ (geom1)
+ (geom11)
+
+# 2. Geospatial Inverted + EQ: combined index (inverted + equal candidates)
+# Todo: geom1 and geom11 are added to inverted candidates, k is added to equal candidates
+# Todo: combined index between inverted + k (equal candidates)
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom11) AND k = 2
+----
+t5:
+ (geom1)
+ (geom11)
+ (k)
+ (k, geom1)
+ (k, geom11)
+
+# 3. Geospatial inverted + R: no combined candidates
+# Todo: geom1 and geom11 are added to inverted candidates, k is added to range candidates
+# Todo: no combined index between inverted + range index
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom11) AND k > 2
+----
+t5:
+ (geom1)
+ (geom11)
+ (k)
+
+# 4. Geospatial inverted + EQ + EQ: combined index (inverted + equal, inverted + equal group, equal group candidates)
+# Todo: geom1 is added to inverted candidates, k and i are added to equal candidates
+# Todo: combined index between inverted, equal, and equal group candidates
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k = 2 AND i = 3
+----
+t5:
+ (geom1)
+ (i)
+ (i, geom1)
+ (k)
+ (k, geom1)
+ (k, i)
+ (k, i, geom1)
+
+# 5. Geospatial inverted + R + R: combined index (inverted + equal, inverted + equal group, equal group candidates)
+# Todo: geom1 is added to inverted candidates, k and i are added to range candidates
+# Todo: no combined index between inverted + range candidates, no grouped range candidates
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k > 2 AND i > 3
+----
+t5:
+ (geom1)
+ (i)
+ (k)
+
+# 6. Geospatial inverted + EQ + R: combined index (inverted + equal, equal + range candidates)
+# Todo: geom1 is added to inverted candidates, k is added to equal candidates, i is added to range candidates
+# Todo: combined index between inverted + equal, equal + range
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND k = 2 AND i > 3
+----
+t5:
+ (geom1)
+ (i)
+ (k)
+ (k, geom1)
+ (k, i)
+
+# 7. Geospatial inverted + Geospatial inverted + EQ: combined index (inverted + equal candidates)
+# Todo: geom1, geom11, geog1, geog11 are added to inverted candidates, k is added to equal candidates
+# Todo: combined index between inverted + equal candidates
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom11) AND st_covers(geog1, geog11) AND k = 2
+----
+t5:
+ (geog1)
+ (geog11)
+ (geom1)
+ (geom11)
+ (k)
+ (k, geog1)
+ (k, geog11)
+ (k, geom1)
+ (k, geom11)
+
+# 8. Geospatial inverted + Geospatial inverted + R: no combined index
+# Todo: geom1 and geom11 are added to inverted candidates, k is added to range candidates, no combined index
+index-candidates
+SELECT * FROM t5 WHERE st_overlaps(geom1, geom1) AND st_overlaps(geom11, geom11) AND k > 2
+----
+t5:
+ (geom1)
+ (geom11)
+ (k)
+
+# 9. Geospatial inverted + EQ: combined index between inverted + equal
+# Note: geom1 and geom11 are not added as join candidates here
+# Todo: geom1 and geom11 are added to inverted candidates, k is added to equal candidates, combined index between inverted and join
+index-candidates
+SELECT t5.i, t2.i FROM t5 JOIN t2 ON st_overlaps(geom1, geom11) WHERE t5.k = 2
+----
+t5:
+ (geom1)
+ (geom11)
+ (k)
+ (k, geom1)
+ (k, geom11)
+
+# 10. Geospatial inverted + EQ: no combined index since inverted and equal candidates are from different table
+index-candidates
+SELECT * FROM t5 JOIN t2 ON st_crosses(geom1, geom11) WHERE t2.s = 'Hello' AND st_covers(geog1, geog11)
+----
+t2:
+ (s)
+t5:
+ (geog1)
+ (geog11)
+ (geom1)
+ (geom11)
+
+# 11. Geospatial inverted + EQ + J: combined index between inverted + equal candidates from same table
+index-candidates
+SELECT * FROM t5 JOIN t2 ON t5.k = t2.k WHERE st_covers(geog1, geog11)
+----
+t2:
+ (k)
+t5:
+ (geog1)
+ (geog11)
+ (k)
+ (k, geog1)
+ (k, geog11)
+
+# 11. Geospatial inverted + J: no combined index between inverted + join candidates
+index-candidates
+SELECT * FROM t5 JOIN t2 ON t5.k != t2.k WHERE st_covers(geog1, geog11)
+----
+t2:
+ (k)
+t5:
+ (geog1)
+ (geog11)
+ (k)
+
+# 12. Geospatial inverted + J + EQ: combined index between join + equal candidates
+# Note: no combined indec between equal and inverted index from different tables
+index-candidates
+SELECT * FROM t5 JOIN t2 ON t5.k != t2.k WHERE st_covers(geog1, geog11) AND t2.i = 2
+----
+t2:
+ (i)
+ (i, k)
+ (k)
+t5:
+ (geog1)
+ (geog11)
+ (k)
