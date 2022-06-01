@@ -207,7 +207,7 @@ func waitForJobToHaveStatus(
 	expectedStatus jobs.Status,
 	nodesWithAdoptionDisabled option.NodeListOption,
 ) {
-	if err := retry.ForDuration(time.Minute*2, func() error {
+	if err := retry.ForDuration(time.Minute*1, func() error {
 		// TODO(adityamaru): This is unfortunate and can be deleted once
 		// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
 		// 21.2 and the mixed version map for roachtests is bumped to the 21.2
@@ -569,6 +569,84 @@ func registerBackupMixedVersion(r registry.Registry) {
 				verifyBackupStep(roachNodes.RandNode(), "nodelocal://1/old-node-full-backup",
 					"bank", "bank", "bank4", fingerprints),
 			)
+			u.run(ctx, t)
+		},
+	})
+
+	// TODO(adityamaru): Delete in 22.2 since nodes will no longer rely on
+	// BACKUP-CHECKPOINT to lock their location.
+	r.Add(registry.TestSpec{
+		Name:              "backup/mixed-version-concurrent-backups",
+		Owner:             registry.OwnerBulkIO,
+		Cluster:           r.MakeClusterSpec(4),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		RequiresLicense:   true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// An empty string means that the cockroach binary specified by flag
+			// `cockroach` will be used.
+			const mainVersion = ""
+			roachNodes := c.All()
+			upgradedNodes := c.Nodes(1, 2)
+			oldNodes := c.Nodes(3, 4)
+			predV, err := PredecessorVersion(*t.BuildVersion())
+			require.NoError(t, err)
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
+
+			u := newVersionUpgradeTest(c,
+				uploadAndStartFromCheckpointFixture(roachNodes, predV),
+				waitForUpgradeStep(roachNodes),
+				preventAutoUpgradeStep(1),
+				setShortJobIntervalsStep(1),
+				loadBackupDataStep(c),
+				// Upgrade a node.
+				binaryUpgradeStep(upgradedNodes, mainVersion),
+				disableJobAdoptionStep(c, oldNodes),
+
+				// Plan and run a backup on an upgraded node.
+				//
+				// Since the cluster is in a mixed-version state, the backup will lock
+				// its bucket, and perform destination resolution during planning.
+				func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					t.L().Printf("running and pausing BACKUP on upgraded node")
+					gatewayDB := c.Conn(ctx, t.L(), upgradedNodes[0])
+					defer gatewayDB.Close()
+					_, err := gatewayDB.Exec(`SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
+					require.NoError(t, err)
+					var jobID jobspb.JobID
+					err = gatewayDB.QueryRow(`BACKUP TABLE bank.bank TO 'userfile:///upgraded-node-checkpoint' WITH detached `).Scan(&jobID)
+					require.NoError(t, err)
+					waitForJobToHaveStatus(ctx, t, gatewayDB, jobID, jobs.StatusPaused, oldNodes)
+					_, err = gatewayDB.Exec(`SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+					require.NoError(t, err)
+				},
+
+				// Now, run a backup to the same location but from a 21.2 node. This
+				// backup should fail because it sees a BACKUP-CHECKPOINT written by the
+				// previous backup job.
+				enableJobAdoptionStep(c, oldNodes),
+				func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					t.L().Printf("running BACKUP to the same location on old node; waiting for failure")
+					gatewayDB := c.Conn(ctx, t.L(), oldNodes[0])
+					defer gatewayDB.Close()
+					var jobID jobspb.JobID
+					err := gatewayDB.QueryRow(`BACKUP TABLE bank.bank TO 'userfile:///upgraded-node-checkpoint' WITH detached `).Scan(&jobID)
+					testutils.IsError(err, "userfile:///upgraded-node-checkpoint already contains a BACKUP-CHECKPOINT file (is another operation already in progress?)")
+				},
+				disableJobAdoptionStep(c, oldNodes),
+				// Resume the paused backup job and get an upgraded node to complete it.
+				func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+					t.L().Printf("resuming BACKUP on upgraded node; waiting for success")
+					gatewayDB := c.Conn(ctx, t.L(), upgradedNodes[0])
+					defer gatewayDB.Close()
+					var jobID jobspb.JobID
+					err = gatewayDB.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE status = 'paused' AND job_type = 'BACKUP'`).Scan(&jobID)
+					require.NoError(t, err)
+					_, err = gatewayDB.ExecContext(ctx, `RESUME JOB $1`, jobID)
+					require.NoError(t, err)
+					waitForJobToHaveStatus(ctx, t, gatewayDB, jobID, jobs.StatusSucceeded, oldNodes)
+				},
+			)
+
 			u.run(ctx, t)
 		},
 	})
