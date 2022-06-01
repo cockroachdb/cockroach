@@ -347,15 +347,18 @@ func getEventDescriptorCached(
 // NewEventDecoder returns key value decoder.
 func NewEventDecoder(
 	ctx context.Context, cfg *execinfra.ServerConfig, details jobspb.ChangefeedDetails,
-) Decoder {
-	rfCache := newRowFetcherCache(
+) (Decoder, error) {
+	rfCache, err := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
 		cfg.LeaseManager.(*lease.Manager),
 		cfg.CollectionFactory,
 		cfg.DB,
-		details.TargetSpecifications,
+		changefeedbase.AllTargets(details),
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
 	eventDescriptorCache := cache.NewUnorderedCache(defaultCacheConfig)
@@ -370,7 +373,7 @@ func NewEventDecoder(
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
-	}
+	}, nil
 }
 
 // DecodeKV decodes key value at specified schema timestamp.
