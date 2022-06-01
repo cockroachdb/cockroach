@@ -2100,9 +2100,15 @@ func (s *Store) startGossip() {
 			interval:    s.cfg.SentinelGossipTTL() / 2,
 		},
 		{
-			key:         keys.SystemConfigSpan.Key,
+			key:         keys.SystemDescriptorTableSpan.Key,
 			fn:          wakeReplica,
-			description: "system config",
+			description: "system descriptor",
+			interval:    systemDataGossipInterval,
+		},
+		{
+			key:         keys.SystemZonesTableSpan.Key,
+			fn:          wakeReplica,
+			description: "system zones",
 			interval:    systemDataGossipInterval,
 		},
 		{

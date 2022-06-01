@@ -126,13 +126,19 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 
 var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
 
-// loadSystemConfig scans the system config span and returns the system
-// config.
-func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEntries, error) {
+// loadSystemDescriptorAndZonesTableSpans scans the system.descriptor
+// and system.zones spans and the fixed spans for the two tables.
+// TODO(richardjcai): Do we still need this? It is only used in tests.
+func (r *Replica) loadSystemDescriptorAndZonesTableSpans(
+	ctx context.Context,
+) (*config.SystemConfigEntries, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
+	ba.Add(
+		&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemDescriptorTableSpan)},
+		&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemZonesTableSpan)},
+	)
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(
 		ctx, r, todoSpanSet, false, /* requiresClosedTSOlderThanStorageSnap */

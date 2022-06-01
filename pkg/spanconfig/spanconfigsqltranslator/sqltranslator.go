@@ -395,7 +395,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// (tiny) re-splitting costs when switching between the two
 			// subsystems.
 			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
-				Key:    keys.SystemConfigSpan.Key,
+				Key:    keys.TableDataMin,
 				EndKey: tableEndKey,
 			}), tableSpanConfig)
 			if err != nil {

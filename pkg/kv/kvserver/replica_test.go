@@ -6932,7 +6932,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
-	scStartSddr, err := keys.Addr(keys.SystemConfigSpan.Key)
+	scStartSddr, err := keys.Addr(keys.SystemDescriptorTableSpan.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6941,9 +6941,8 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 		t.Fatalf("no replica contains the SystemConfig span")
 	}
 
-	// Create a transaction and write an intent to the system
-	// config span.
-	key := keys.SystemConfigSpan.Key
+	// Create a transaction and write an intent to the system descriptor span.
+	key := keys.SystemDescriptorTableSpan.Key
 	pushee := newTransaction("test", key, 1, repl.store.Clock())
 	pushee.Priority = enginepb.MinTxnPriority // low so it can be pushed
 	put := putArgs(key, []byte("foo"))
@@ -6962,8 +6961,9 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Verify that the intent trips up loading the SystemConfig data.
-	if _, err := repl.loadSystemConfig(ctx); !errors.Is(err, errSystemConfigIntent) {
+	// Verify that the intent trips up loading the system.descriptor and
+	// system.zones spans.
+	if _, err := repl.loadSystemDescriptorAndZonesTableSpans(ctx); !errors.Is(err, errSystemConfigIntent) {
 		t.Fatal(err)
 	}
 
@@ -6972,18 +6972,18 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	v := roachpb.MakeValueFromString("foo")
 	testutils.SucceedsSoon(t, func() error {
 		if err := storage.MVCCPut(ctx, repl.store.Engine(), &enginepb.MVCCStats{},
-			keys.SystemConfigSpan.Key, repl.store.Clock().Now(), hlc.ClockTimestamp{}, v, nil); err != nil {
+			key, repl.store.Clock().Now(), hlc.ClockTimestamp{}, v, nil); err != nil {
 			return err
 		}
 
-		cfg, err := repl.loadSystemConfig(ctx)
+		cfg, err := repl.loadSystemDescriptorAndZonesTableSpans(ctx)
 		if err != nil {
 			return err
 		}
 
 		var found bool
 		for _, cur := range cfg.Values {
-			if !cur.Key.Equal(keys.SystemConfigSpan.Key) {
+			if !keys.SystemDescriptorTableSpan.ContainsKey(cur.Key) {
 				continue
 			}
 			if !v.EqualTagAndData(cur.Value) {
@@ -6995,7 +6995,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 		if found {
 			return nil
 		}
-		return errors.New("recent write not found in gossiped SystemConfig")
+		return errors.New("recent write not found in gossiped system.descriptor and system.zones spans")
 	})
 }
 

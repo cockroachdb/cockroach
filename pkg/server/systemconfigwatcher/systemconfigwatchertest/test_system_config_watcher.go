@@ -71,7 +71,7 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 			runTest(t, tenant, tenantDB, func(t *testing.T) []roachpb.KeyValue {
 				return kvtenant.GossipSubscriptionSystemConfigMask.Apply(
 					config.SystemConfigEntries{
-						Values: getSystemConfig(ctx, t, keys.SystemSQLCodec, kvDB),
+						Values: getSystemDescriptorAndZonesSpans(ctx, t, keys.SystemSQLCodec, kvDB),
 					},
 				).Values
 			})
@@ -102,11 +102,12 @@ func runTest(
 		if rs == nil {
 			return errors.New("nil config")
 		}
-		sc := getSystemConfig(ctx, t, execCfg.Codec, kvDB)
+		sc := getSystemDescriptorAndZonesSpans(ctx, t, execCfg.Codec, kvDB)
 		if extraRows != nil {
 			sc = append(sc, extraRows(t)...)
 			sort.Sort(roachpb.KeyValueByKey(sc))
 		}
+		sort.Sort(roachpb.KeyValueByKey(rs.Values))
 		if !assert.Equal(noopT{}, sc, rs.Values) {
 			return errors.Errorf("mismatch: %v", pretty.Diff(sc, rs.Values))
 		}
@@ -124,18 +125,37 @@ func runTest(
 	waitForEqual(t)
 }
 
-func getSystemConfig(
+func getSystemDescriptorAndZonesSpans(
 	ctx context.Context, t *testing.T, codec keys.SQLCodec, kvDB *kv.DB,
 ) []roachpb.KeyValue {
 	var ba roachpb.BatchRequest
-	ba.Add(roachpb.NewScan(
-		append(codec.TenantPrefix(), keys.SystemConfigSpan.Key...),
-		append(codec.TenantPrefix(), keys.SystemConfigSpan.EndKey...),
-		false, // forUpdate
-	))
+	ba.Add(
+		roachpb.NewScan(
+			append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.Key...),
+			append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.EndKey...),
+			false, // forUpdate
+		),
+	)
 	br, pErr := kvDB.NonTransactionalSender().Send(ctx, ba)
 	require.NoError(t, pErr.GoError())
-	return br.Responses[0].GetScan().Rows
+
+	rows1 := br.Responses[0].GetScan().Rows
+
+	ba.Reset()
+
+	ba.Add(
+		roachpb.NewScan(
+			append(codec.TenantPrefix(), keys.SystemZonesTableSpan.Key...),
+			append(codec.TenantPrefix(), keys.SystemZonesTableSpan.EndKey...),
+			false, // forUpdate
+		),
+	)
+	br, pErr = kvDB.NonTransactionalSender().Send(ctx, ba)
+	require.NoError(t, pErr.GoError())
+
+	rows2 := br.Responses[0].GetScan().Rows
+
+	return append(rows1, rows2...)
 }
 
 type noopT struct{}
