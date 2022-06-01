@@ -62,8 +62,8 @@ const generateSeriesLegend = (uPlot: uPlot, seriesLegend: HTMLDivElement) => {
     value.style.fontFamily = "'Source Sans Pro', sans-serif";
     value.textContent =
       series.value instanceof Function && dataValue
-        ? String(series.value(uPlot, dataValue, index, idx))
-        : String(dataValue);
+        ? getFormattedValue(Number(series.value(uPlot, dataValue, index, idx)))
+        : getFormattedValue(dataValue);
 
     container.appendChild(colorBox);
     container.appendChild(label);
@@ -72,6 +72,13 @@ const generateSeriesLegend = (uPlot: uPlot, seriesLegend: HTMLDivElement) => {
     seriesLegend.appendChild(container);
   });
 };
+
+// if the value has no decimal value, returns as is,
+// otherwise fixes to 2 decimals.
+function getFormattedValue(value: number): string {
+  if (value % 1 == 0) return String(value);
+  return value.toFixed(2);
+}
 
 // Tooltip legend plugin for bar charts.
 export function barTooltipPlugin(): Plugin {

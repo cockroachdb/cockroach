@@ -156,7 +156,12 @@ export const getBarChartOpts = (
     },
     scales: {
       x: {
-        range: () => [xAxisDomain.extent[0], xAxisDomain.extent[1]],
+        range: () => [
+          xAxisDomain.extent[0],
+          xAxisDomain.extent[1]
+            ? xAxisDomain.extent[1]
+            : xAxisDomain.extent[0] + 10 * 60 * 1e9,
+        ],
       },
     },
     axes: [
