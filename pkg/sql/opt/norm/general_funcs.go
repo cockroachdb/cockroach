@@ -933,6 +933,10 @@ func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
 	return mult.JoinPreservesRightRows(join.Op())
 }
 
+func (c *CustomFuncs) IndexJoinPreservesRows(expr memo.RelExpr) bool {
+	return !memo.CheckIgnorePreservedConsistency(c.mem.Metadata(), expr)
+}
+
 // NoJoinHints returns true if no hints were specified for this join.
 func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
 	return p.Flags.Empty()

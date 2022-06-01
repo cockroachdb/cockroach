@@ -872,7 +872,8 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS IGNORE_PRESERVED_CONSISTENCY ILIKE IMMEDIATE
+%token <str> IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -11349,6 +11350,12 @@ index_flags_param:
     $$.val = &tree.IndexFlags{IgnoreForeignKeys: true}
   }
 |
+  IGNORE_PRESERVED_CONSISTENCY
+  {
+    /* SKIP DOC */
+    $$.val = &tree.IndexFlags{IgnorePreservedConsistency: true}
+  }
+|
   FORCE_ZIGZAG
   {
      $$.val = &tree.IndexFlags{ForceZigzag: true}
@@ -11425,6 +11432,7 @@ opt_index_flags:
 //   '{' NO_ZIGZAG_JOIN [, ...] '}'
 //   '{' NO_FULL_SCAN [, ...] '}'
 //   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
+//   '{' IGNORE_PRESERVED_CONSISTENCY [, ...] '}'
 //   '{' FORCE_ZIGZAG = <idxname> [, ...]  '}'
 //
 // Join types:
@@ -14958,6 +14966,7 @@ unreserved_keyword:
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
+| IGNORE_PRESERVED_CONSISTENCY
 | INSENSITIVE
 | OF
 | OFF

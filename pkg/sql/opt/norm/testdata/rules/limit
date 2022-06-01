@@ -1571,3 +1571,11 @@ distinct-on
       │    └── column1
       └── first-agg
            └── "?column?"
+
+exec-ddl
+CREATE TABLE m (n INT PRIMARY KEY, o INT, p INT, INDEX (p))
+----
+
+optsteps
+SELECT * FROM m WHERE p > 5 AND p < 100 ORDER BY p LIMIT 5
+----
