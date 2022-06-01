@@ -942,7 +942,7 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 	b.StopTimer()
 }
 
-func runMVCCPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize int) {
+func runMVCCPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize, versions int, useBatch bool) {
 	rng, _ := randutil.NewTestRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -950,14 +950,23 @@ func runMVCCPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize in
 	eng := emk(b, fmt.Sprintf("put_%d", valueSize))
 	defer eng.Close()
 
+	rw := ReadWriter(eng)
+	if useBatch {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		rw = batch
+	}
+
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
-			b.Fatalf("failed put: %+v", err)
+		for j := 0; j < versions; j++ {
+			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			if err := MVCCPut(ctx, rw, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+				b.Fatalf("failed put: %+v", err)
+			}
 		}
 	}
 
