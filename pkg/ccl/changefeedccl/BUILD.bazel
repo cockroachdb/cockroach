@@ -137,6 +137,7 @@ go_test(
         "bench_test.go",
         "changefeed_test.go",
         "encoder_test.go",
+        "event_processing_test.go",
         "helpers_tenant_shim_test.go",
         "helpers_test.go",
         "main_test.go",
