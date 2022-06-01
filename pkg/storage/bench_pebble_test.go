@@ -190,10 +190,14 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 
 func BenchmarkMVCCPut_Pebble(b *testing.B) {
 	ctx := context.Background()
-	for _, valueSize := range []int{10, 100, 1000, 10000} {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize)
-		})
+	for _, batch := range []bool{false, true} {
+		for _, valueSize := range []int{10, 100, 1000, 10000} {
+			for _, versions := range []int{1, 10} {
+				b.Run(fmt.Sprintf("batch=%t,valueSize=%d,versions=%d", batch, valueSize, versions), func(b *testing.B) {
+					runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize, versions, batch)
+				})
+			}
+		}
 	}
 }
 
