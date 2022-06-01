@@ -30,8 +30,15 @@ function genValuesInRange(range: [number, number], length: number): number[] {
 const mockData: AlignedData = [
   generateTimestampsMillis(1546300800, 20),
   genValuesInRange([0, 100], 20),
-  genValuesInRange([0, 100], 20),
-  genValuesInRange([0, 100], 20),
+  genValuesInRange([0, 10000], 20),
+  genValuesInRange([0, 100000], 20),
+];
+const mockDataSingle: AlignedData = [[1654115121], [0], [1], [2]];
+const mockDataDuration: AlignedData = [
+  generateTimestampsMillis(1546300800, 20),
+  genValuesInRange([0, 1e7], 20),
+  genValuesInRange([0, 1e7], 20),
+  genValuesInRange([0, 1e7], 20),
 ];
 
 const mockOpts: Partial<Options> = {
@@ -58,7 +65,7 @@ storiesOf("BarGraphTimeSeries", module)
         alignedData={mockData}
         uPlotOptions={mockOpts}
         tooltip={
-          <div>This is an example stacked bar graph axis unit = count.</div>
+          <div>This is an example stacked bar graph axis unit = Count.</div>
         }
         yAxisUnits={AxisUnits.Count}
       />
@@ -83,6 +90,45 @@ storiesOf("BarGraphTimeSeries", module)
           <div>This is an example bar graph with axis unit = percent.</div>
         }
         yAxisUnits={AxisUnits.Percentage}
+      />
+    );
+  })
+  .add("with single stacked multi-series", () => {
+    return (
+      <BarGraphTimeSeries
+        title="Example one Stacked - Count"
+        alignedData={mockDataSingle}
+        uPlotOptions={mockOpts}
+        tooltip={
+          <div>This is an example stacked bar graph axis unit = Count.</div>
+        }
+        yAxisUnits={AxisUnits.Count}
+      />
+    );
+  })
+  .add("with duration stacked multi-series", () => {
+    return (
+      <BarGraphTimeSeries
+        title="Example one Stacked - Duration"
+        alignedData={mockDataDuration}
+        uPlotOptions={mockOpts}
+        tooltip={
+          <div>This is an example stacked bar graph axis unit = Duration.</div>
+        }
+        yAxisUnits={AxisUnits.Duration}
+      />
+    );
+  })
+  .add("with bytes stacked multi-series", () => {
+    return (
+      <BarGraphTimeSeries
+        title="Example one Stacked - Bytes"
+        alignedData={mockDataDuration}
+        uPlotOptions={mockOpts}
+        tooltip={
+          <div>This is an example stacked bar graph axis unit = Bytes.</div>
+        }
+        yAxisUnits={AxisUnits.Bytes}
       />
     );
   });
