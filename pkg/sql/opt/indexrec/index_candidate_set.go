@@ -403,8 +403,8 @@ func addIndexToCandidates(
 	indexCandidates[currTable] = append(indexCandidates[currTable], newIndex)
 }
 
-// addGeoSpatialIndexes is used to add single-column indexes to inverted candidates for queries which use
-// spatial functions that can be index-accelerated.
+// addGeoSpatialIndexes is used to add single-column GIN indexes to inverted candidates for queries which
+// use spatial functions that can be index-accelerated.
 func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
 	switch expr := expr.(type) {
 	case *memo.FunctionExpr:
