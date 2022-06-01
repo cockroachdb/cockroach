@@ -186,11 +186,6 @@ Please perform the following steps:
 	}
 	d.log.Println("doctor: running patch check")
 	{
-		stdouts, err := d.exec.CommandContextSilent(ctx, "which", "patch")
-		if err != nil {
-			panic(err)
-		}
-		d.log.Printf("which patch = %s", string(stdouts))
 		stdout, err := d.exec.CommandContextSilent(ctx, "patch", "-v")
 		stdoutStr := strings.TrimSpace(string(stdout))
 		if err != nil {
