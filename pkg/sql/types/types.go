@@ -2812,3 +2812,15 @@ func (m *GeoMetadata) SQLString() string {
 	}
 	return ""
 }
+
+// Delimiter selects the correct delimiter rune based on the datum type specified.
+func Delimiter(t *T) string {
+	switch t.Family() {
+	case Geometry.Family(), Geography.Family():
+		return ":"
+	case Box2D.Family():
+		return ";"
+	default:
+		return ","
+	}
+}

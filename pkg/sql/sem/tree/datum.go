@@ -4438,7 +4438,7 @@ func (d *DArray) Format(ctx *FmtCtx) {
 	for _, v := range d.Array {
 		ctx.WriteString(comma)
 		ctx.FormatNode(v)
-		comma = ","
+		comma = types.Delimiter(d.ParamTyp)
 	}
 	ctx.WriteByte(']')
 }
