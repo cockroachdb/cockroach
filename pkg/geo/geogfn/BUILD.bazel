@@ -53,6 +53,7 @@ go_test(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoprojbase",
+        "//pkg/geo/geotest",
         "@com_github_golang_geo//s1",
         "@com_github_golang_geo//s2",
         "@com_github_stretchr_testify//require",
