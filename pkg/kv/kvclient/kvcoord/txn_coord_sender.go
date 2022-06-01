@@ -11,12 +11,10 @@
 package kvcoord
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"runtime/debug"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -992,20 +990,6 @@ func (tc *TxnCoordSender) setTxnAnchorKeyLocked(key roachpb.Key) error {
 	}
 	tc.mu.txn.Key = key
 	return nil
-}
-
-// AnchorOnSystemConfigRange is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) AnchorOnSystemConfigRange() error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	// Allow this to be called more than once.
-	if bytes.Equal(tc.mu.txn.Key, keys.SystemConfigSpan.Key) {
-		return nil
-	}
-	// The system-config trigger must be run on the system-config range which
-	// means any transaction with the trigger set needs to be anchored to the
-	// system-config range.
-	return tc.setTxnAnchorKeyLocked(keys.SystemConfigSpan.Key)
 }
 
 // TxnStatus is part of the client.TxnSender interface.

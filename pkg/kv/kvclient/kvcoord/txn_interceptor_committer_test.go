@@ -242,11 +242,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	// parallel commits.
 	ba.Requests = nil
 	etArgsWithTrigger := etArgs
-	etArgsWithTrigger.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-		ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-			SystemConfigSpan: true,
-		},
-	}
+	etArgsWithTrigger.InternalCommitTrigger = &roachpb.InternalCommitTrigger{}
 	ba.Add(&putArgs, &qiArgs, &etArgsWithTrigger)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {

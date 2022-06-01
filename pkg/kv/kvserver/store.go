@@ -2193,7 +2193,6 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 
 	if s.cfg.SpanConfigsDisabled ||
 		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-		!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) ||
 		s.TestingKnobs().UseSystemConfigSpanForQueues {
 
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()

@@ -3051,13 +3051,6 @@ func DeleteTableDescAndZoneConfig(
 ) error {
 	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if !settings.Version.IsActive(
-			ctx, clusterversion.DisableSystemConfigGossipTrigger,
-		) {
-			if err := txn.DeprecatedSetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-				return err
-			}
-		}
 		b := &kv.Batch{}
 
 		// Delete the descriptor.
