@@ -162,7 +162,7 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 		if len(buf) > 0 {
 			fmt.Printf("COMMAND STDOUT:\n%s\n", string(buf))
 		}
-		var cmderr exec.ExitError
+		var cmderr *exec.ExitError
 		if errors.As(err, &cmderr) && len(cmderr.Stderr) > 0 {
 			fmt.Printf("COMMAND STDERR:\n%s\n", string(cmderr.Stderr))
 		}
