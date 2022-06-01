@@ -1203,26 +1203,8 @@ func getChangefeedTargetName(
 // AllTargets gets all the targets listed in a ChangefeedDetails,
 // from the statement time name map in old protos
 // or the TargetSpecifications in new ones.
-func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetSpecification) {
-	// TODO: Use a version gate for this once we have CDC version gates
-	if len(cd.TargetSpecifications) > 0 {
-		for _, ts := range cd.TargetSpecifications {
-			if ts.TableID > 0 {
-				ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
-				targets = append(targets, ts)
-			}
-		}
-	} else {
-		for id, t := range cd.Tables {
-			ct := jobspb.ChangefeedTargetSpecification{
-				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				TableID:           id,
-				StatementTimeName: t.StatementTimeName,
-			}
-			targets = append(targets, ct)
-		}
-	}
-	return
+func AllTargets(cd jobspb.ChangefeedDetails) []jobspb.ChangefeedTargetSpecification {
+	return changefeedbase.AllTargets(cd)
 }
 
 func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record) {

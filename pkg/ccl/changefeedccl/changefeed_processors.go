@@ -168,7 +168,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	if _, needTopics := ca.spec.Feed.Opts[changefeedbase.OptTopicInValue]; needTopics {
-		ca.topicNamer, err = MakeTopicNamer(ca.spec.Feed.TargetSpecifications)
+		ca.topicNamer, err = MakeTopicNamer(AllTargets(ca.spec.Feed))
 		if err != nil {
 			return nil, err
 		}
@@ -297,9 +297,16 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.eventConsumer = newKVEventToRowConsumer(
+	ca.eventConsumer, err = newKVEventToRowConsumer(
 		ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
 		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
+
+	if err != nil {
+		// Early abort in the case that there is an error setting up the consumption.
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
 }
 
 func (ca *changeAggregator) startKVFeed(
