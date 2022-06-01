@@ -135,6 +135,7 @@
     "glob": "^7.1.1",
     "html-webpack-template": "^6.0.1",
     "http-proxy-middleware": "^0.19.1",
+    "identity-obj-proxy": "3.0.0",
     "jest": "27.5.1",
     "jest-canvas-mock": "^2.4.0",
     "jest-cli": "27.5.1",
