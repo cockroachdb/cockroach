@@ -205,3 +205,11 @@ CREATE SEQUENCE a AS INT2 -- normalized!
 CREATE SEQUENCE a AS INT2 -- fully parenthesized
 CREATE SEQUENCE a AS INT2 -- literals removed
 CREATE SEQUENCE _ AS INT2 -- identifiers removed
+
+error
+CREATE SEQUENCE s1 AS abc
+----
+at or near "EOF": syntax error: type "abc" does not exist
+DETAIL: source SQL:
+CREATE SEQUENCE s1 AS abc
+                         ^

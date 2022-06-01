@@ -33,6 +33,8 @@ import (
     "github.com/cockroachdb/cockroach/pkg/roachpb"
     "github.com/cockroachdb/cockroach/pkg/security"
     "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+    "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+    "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/scanner"
@@ -8133,6 +8135,11 @@ sequence_option_elem:
   AS typename                  {
                                   // Valid option values must be integer types (ex. int2, bigint)
                                   parsedType := $2.colType()
+                                  if parsedType == nil {
+                                      sqllex.(*lexer).lastError = pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", $2.val)
+                                      sqllex.(*lexer).populateErrorDetails()
+                                      return 1
+                                  }
                                   if parsedType.Family() != types.IntFamily {
                                       sqllex.Error(fmt.Sprintf("invalid integer type: %s", parsedType.SQLString()))
                                       return 1
