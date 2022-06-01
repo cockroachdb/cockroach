@@ -2761,18 +2761,18 @@ CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 
 			// Start ALTER TYPE statement(s) that will block.
 			for _, query := range tc.queries {
-				go func(query string) {
+				go func(query string, totalQueries int) {
 					// Note we don't use sqlDB.Exec here because we can't Fatal from within a goroutine.
 					if _, err := sqlDB.DB.ExecContext(context.Background(), query); err != nil {
 						t.Error(err)
 					}
 					mu.Lock()
 					numTypeChangesFinished++
-					if numTypeChangesFinished == len(tc.queries) {
+					if numTypeChangesFinished == totalQueries {
 						close(typeChangesFinished)
 					}
 					mu.Unlock()
-				}(query)
+				}(query, len(tc.queries))
 			}
 
 			// Wait on the type changes to start.
@@ -7371,16 +7371,16 @@ func TestClientDisconnect(t *testing.T) {
 			done := make(chan struct{})
 			ctxToCancel, cancel := context.WithCancel(ctx)
 			defer cancel()
-			go func() {
+			go func(command string) {
 				defer close(done)
 				connCfg, err := pgx.ParseConfig(pgURL.String())
 				assert.NoError(t, err)
 				db, err := pgx.ConnectConfig(ctx, connCfg)
 				assert.NoError(t, err)
 				defer func() { assert.NoError(t, db.Close(ctx)) }()
-				_, err = db.Exec(ctxToCancel, testCase.jobCommand)
+				_, err = db.Exec(ctxToCancel, command)
 				assert.Equal(t, context.Canceled, errors.Unwrap(err))
-			}()
+			}(testCase.jobCommand)
 
 			// Wait for the job to start.
 			var jobID string
