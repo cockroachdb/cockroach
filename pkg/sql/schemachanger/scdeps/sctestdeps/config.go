@@ -90,11 +90,11 @@ func WithCurrentDatabase(db string) Option {
 	})
 }
 
-// WithBackfillTracker injects a BackfillTracker to be provided by the
+// WithBackfillerTracker injects a BackfillerTracker to be provided by the
 // TestState. If this option is not provided, the default tracker will
 // resolve any descriptor referenced and return an empty backfill progress.
 // All writes in the default tracker are ignored.
-func WithBackfillTracker(backfillTracker scexec.BackfillTracker) Option {
+func WithBackfillerTracker(backfillTracker scexec.BackfillerTracker) Option {
 	return optionFunc(func(state *TestState) {
 		state.backfillTracker = backfillTracker
 	})
@@ -115,6 +115,14 @@ func WithComments(comments map[descmetadata.CommentKey]string) Option {
 	})
 }
 
+// WithMerger injects a Merger to be provided by the TestState.
+// The default merger logs the merge event into the test state.
+func WithMerger(merger scexec.Merger) Option {
+	return optionFunc(func(state *TestState) {
+		state.merger = merger
+	})
+}
+
 var (
 	// defaultOverriddenCreatedAt is used to populate the CreatedAt timestamp for
 	// all descriptors injected into the catalog. We inject this to make the
@@ -128,8 +136,9 @@ var (
 
 var defaultOptions = []Option{
 	optionFunc(func(state *TestState) {
-		state.backfillTracker = &testBackfillTracker{deps: state}
+		state.backfillTracker = &testBackfillerTracker{deps: state}
 		state.backfiller = &testBackfiller{s: state}
+		state.merger = &testBackfiller{s: state}
 		state.indexSpanSplitter = &indexSpanSplitter{}
 		state.approximateTimestamp = defaultCreatedAt
 	}),

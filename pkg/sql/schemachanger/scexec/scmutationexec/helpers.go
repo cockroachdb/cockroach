@@ -96,9 +96,9 @@ func mutationStateChange(
 func (m *visitor) removeMutation(
 	tbl *tabledesc.Mutable,
 	f MutationSelector,
-	exp descpb.DescriptorMutation_State,
 	metadata scpb.TargetMetadata,
 	details eventpb.CommonSQLEventDetails,
+	exp ...descpb.DescriptorMutation_State,
 ) (descpb.DescriptorMutation, error) {
 	mut, err := FindMutation(tbl, f)
 	if err != nil {
@@ -106,7 +106,14 @@ func (m *visitor) removeMutation(
 	}
 	foundIdx := mut.MutationOrdinal()
 	cpy := tbl.Mutations[foundIdx]
-	if cpy.State != exp {
+	var foundExpState bool
+	for _, s := range exp {
+		if cpy.State == s {
+			foundExpState = true
+			break
+		}
+	}
+	if !foundExpState {
 		return descpb.DescriptorMutation{}, errors.AssertionFailedf(
 			"remove mutation from %d: unexpected state: got %v, expected %v: %v",
 			tbl.GetID(), cpy.State, exp, tbl,
@@ -212,8 +219,12 @@ func enqueueDropColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescrip
 	return nil
 }
 
-func enqueueAddIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
-	if err := tbl.DeprecatedAddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
+func enqueueAddIndexMutation(
+	tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor, state descpb.DescriptorMutation_State,
+) error {
+	if err := tbl.AddIndexMutation(
+		idx, descpb.DescriptorMutation_ADD, state,
+	); err != nil {
 		return err
 	}
 	tbl.NextMutationID--
@@ -221,7 +232,9 @@ func enqueueAddIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor
 }
 
 func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
-	if err := tbl.DeprecatedAddIndexMutation(idx, descpb.DescriptorMutation_DROP); err != nil {
+	if err := tbl.AddIndexMutation(
+		idx, descpb.DescriptorMutation_DROP, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+	); err != nil {
 		return err
 	}
 	tbl.NextMutationID--

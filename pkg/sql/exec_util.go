@@ -1266,6 +1266,9 @@ type ExecutorConfig struct {
 	// object which mostly just holds on to an ExecConfig.
 	IndexBackfiller *IndexBackfillPlanner
 
+	// IndexMerger is also used to backfill indexes and is also rather circular.
+	IndexMerger *IndexBackfillerMergePlanner
+
 	// IndexValidator is used to validate indexes.
 	IndexValidator scexec.IndexValidator
 

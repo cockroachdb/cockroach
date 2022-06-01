@@ -20,25 +20,17 @@ func init() {
 	opRegistry.register((*scpb.SecondaryIndex)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			to(scpb.Status_DELETE_ONLY,
+			to(scpb.Status_BACKFILL_ONLY,
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
-					return &scop.MakeAddedIndexDeleteOnly{
+					return &scop.MakeAddedIndexBackfilling{
 						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
 						IsSecondaryIndex: true,
 					}
 				}),
 			),
-			to(scpb.Status_WRITE_ONLY,
-				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
-					return &scop.MakeAddedIndexDeleteAndWriteOnly{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
-					}
-				}),
-			),
 			to(scpb.Status_BACKFILLED,
+				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.BackfillIndex{
 						TableID:       this.TableID,
@@ -47,8 +39,36 @@ func init() {
 					}
 				}),
 			),
+			to(scpb.Status_DELETE_ONLY,
+				emit(func(this *scpb.SecondaryIndex) scop.Op {
+					return &scop.MakeBackfillingIndexDeleteOnly{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
+			),
+			to(scpb.Status_MERGE_ONLY,
+				emit(func(this *scpb.SecondaryIndex) scop.Op {
+					return &scop.MakeAddedIndexDeleteAndWriteOnly{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
+			),
+			equiv(scpb.Status_WRITE_ONLY),
+			to(scpb.Status_MERGED,
+				emit(func(this *scpb.SecondaryIndex) scop.Op {
+					return &scop.MergeIndex{
+						TableID:           this.TableID,
+						TemporaryIndexID:  this.TemporaryIndexID,
+						BackfilledIndexID: this.IndexID,
+					}
+				}),
+			),
 			to(scpb.Status_VALIDATED,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
+					// TODO(ajwerner): Should this say something other than
+					// ValidateUniqueIndex for a non-unique index?
 					return &scop.ValidateUniqueIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
@@ -80,7 +100,8 @@ func init() {
 				minPhase(scop.PostCommitPhase),
 				revertible(false),
 			),
-			equiv(scpb.Status_BACKFILLED),
+			equiv(scpb.Status_MERGE_ONLY),
+			equiv(scpb.Status_MERGED),
 			to(scpb.Status_DELETE_ONLY,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeDroppedIndexDeleteOnly{
@@ -89,6 +110,8 @@ func init() {
 					}
 				}),
 			),
+			equiv(scpb.Status_BACKFILLED),
+			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.CreateGcJobForIndex{

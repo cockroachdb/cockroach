@@ -34,32 +34,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:generate mockgen -package scexec_test -destination=mocks_generated_test.go --self_package scexec . Catalog,Dependencies,Backfiller,BackfillTracker,IndexSpanSplitter,PeriodicProgressFlusher
+//go:generate mockgen -package scexec_test -destination=mocks_generated_test.go --self_package scexec . Catalog,Dependencies,Backfiller,Merger,BackfillerTracker,IndexSpanSplitter,PeriodicProgressFlusher
 
-// TestExecBackfill uses generated mocks to ensure that the exec logic for
-// backfills deals with state appropriately.
-func TestExecBackfill(t *testing.T) {
+// TestExecBackfiller uses generated mocks to ensure that the exec logic for
+// backfills and merges deals with state appropriately.
+func TestExecBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
 
 	setupTestDeps := func(
 		t *testing.T, tdb *sqlutils.SQLRunner, descs nstree.Catalog,
-	) (*gomock.Controller, *MockBackfillTracker, *MockBackfiller, *sctestdeps.TestState) {
+	) (*gomock.Controller, *MockBackfillerTracker, *MockBackfiller, *MockMerger, *sctestdeps.TestState) {
 		mc := gomock.NewController(t)
-		bt := NewMockBackfillTracker(mc)
+		bt := NewMockBackfillerTracker(mc)
 		bf := NewMockBackfiller(mc)
+		m := NewMockMerger(mc)
 		deps := sctestdeps.NewTestDependencies(
 			sctestdeps.WithDescriptors(descs),
 			sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
-			sctestdeps.WithBackfillTracker(bt),
+			sctestdeps.WithBackfillerTracker(bt),
 			sctestdeps.WithBackfiller(bf),
+			sctestdeps.WithMerger(m),
 		)
-		return mc, bt, bf, deps
+		return mc, bt, bf, m, deps
 	}
 
 	addIndexMutation := func(
-		t *testing.T, mut *tabledesc.Mutable, name string, id descpb.IndexID, columns ...string,
+		t *testing.T, mut *tabledesc.Mutable, name string, id descpb.IndexID, isTempIndex bool, columns ...string,
 	) catalog.Index {
 		var dirs []descpb.IndexDescriptor_Direction
 		var columnIDs, keySuffixColumnIDs []descpb.ColumnID
@@ -77,18 +79,19 @@ func TestExecBackfill(t *testing.T) {
 				keySuffixColumnIDs = append(keySuffixColumnIDs, id)
 			}
 		}
-		require.NoError(t, mut.DeprecatedAddIndexMutation(&descpb.IndexDescriptor{
-			Name:                name,
-			ID:                  id,
-			Version:             descpb.LatestIndexDescriptorVersion,
-			KeyColumnNames:      columns,
-			KeyColumnDirections: dirs,
-			KeyColumnIDs:        columnIDs,
-			KeySuffixColumnIDs:  keySuffixColumnIDs,
-			Type:                descpb.IndexDescriptor_FORWARD,
-			CreatedExplicitly:   true,
-			EncodingType:        descpb.SecondaryIndexEncoding,
-		}, descpb.DescriptorMutation_ADD))
+		require.NoError(t, mut.AddIndexMutation(&descpb.IndexDescriptor{
+			Name:                        name,
+			ID:                          id,
+			Version:                     descpb.LatestIndexDescriptorVersion,
+			KeyColumnNames:              columns,
+			KeyColumnDirections:         dirs,
+			KeyColumnIDs:                columnIDs,
+			KeySuffixColumnIDs:          keySuffixColumnIDs,
+			Type:                        descpb.IndexDescriptor_FORWARD,
+			CreatedExplicitly:           true,
+			EncodingType:                descpb.SecondaryIndexEncoding,
+			UseDeletePreservingEncoding: isTempIndex,
+		}, descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_BACKFILLING))
 		idx, err := mut.FindIndexWithName(name)
 		require.NoError(t, err)
 		return idx
@@ -121,15 +124,15 @@ func TestExecBackfill(t *testing.T) {
 		f    func(t *testing.T, tdb *sqlutils.SQLRunner)
 	}
 	testCases := []testCase{
-		{name: "simple", f: func(t *testing.T, tdb *sqlutils.SQLRunner) {
+		{name: "simple backfill", f: func(t *testing.T, tdb *sqlutils.SQLRunner) {
 			tdb.Exec(t, "create table foo (i INT PRIMARY KEY, j INT)")
 			descs := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)
 			tab := findTableWithName(descs.Catalog, "foo")
 			require.NotNil(t, tab)
 			mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
-			addIndexMutation(t, mut, "idx", 2, "j")
+			addIndexMutation(t, mut, "idx", 2, false /* isTempIndex */, "j")
 			descs.UpsertDescriptorEntry(mut)
-			mc, bt, bf, deps := setupTestDeps(t, tdb, descs.Catalog)
+			mc, bt, bf, _, deps := setupTestDeps(t, tdb, descs.Catalog)
 			defer mc.Finish()
 			read, err := deps.Catalog().MustReadImmutableDescriptors(ctx, mut.GetID())
 			require.NoError(t, err)
@@ -157,7 +160,7 @@ func TestExecBackfill(t *testing.T) {
 				FlushCheckpoint(gomock.Any()).
 				After(setProgress)
 			backfillCall := bf.EXPECT().
-				BackfillIndex(gomock.Any(), scanned, bt, desc).
+				BackfillIndexes(gomock.Any(), scanned, bt, desc).
 				After(flushAfterScan)
 			bt.EXPECT().
 				FlushCheckpoint(gomock.Any()).
@@ -185,8 +188,8 @@ func TestExecBackfill(t *testing.T) {
 					require.NotNil(t, tab)
 					fooID = tab.GetID()
 					mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
-					addIndexMutation(t, mut, "idx", 2, "j")
-					addIndexMutation(t, mut, "idx", 3, "k", "j")
+					addIndexMutation(t, mut, "idx", 2, false /* isTempIndex */, "j")
+					addIndexMutation(t, mut, "idx", 3, false /* isTempIndex */, "k", "j")
 					descs.UpsertDescriptorEntry(mut)
 				}
 				var barID descpb.ID
@@ -195,12 +198,12 @@ func TestExecBackfill(t *testing.T) {
 					require.NotNil(t, tab)
 					barID = tab.GetID()
 					mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
-					addIndexMutation(t, mut, "idx", 4, "j")
-					addIndexMutation(t, mut, "idx", 5, "k", "j")
+					addIndexMutation(t, mut, "idx", 4, false /* isTempIndex */, "j")
+					addIndexMutation(t, mut, "idx", 5, false /* isTempIndex */, "k", "j")
 					descs.UpsertDescriptorEntry(mut)
 				}
 
-				mc, bt, bf, deps := setupTestDeps(t, tdb, descs.Catalog)
+				mc, bt, bf, _, deps := setupTestDeps(t, tdb, descs.Catalog)
 				defer mc.Finish()
 				foo := getTableDescriptor(ctx, t, deps, fooID)
 				bar := getTableDescriptor(ctx, t, deps, barID)
@@ -242,10 +245,10 @@ func TestExecBackfill(t *testing.T) {
 					FlushCheckpoint(gomock.Any()).
 					After(setProgress)
 				backfillBarCall := bf.EXPECT().
-					BackfillIndex(gomock.Any(), scannedBar, bt, bar).
+					BackfillIndexes(gomock.Any(), scannedBar, bt, bar).
 					After(flushAfterScan)
 				backfillFooCall := bf.EXPECT().
-					BackfillIndex(gomock.Any(), progressFoo, bt, foo).
+					BackfillIndexes(gomock.Any(), progressFoo, bt, foo).
 					After(flushAfterScan)
 				bt.EXPECT().
 					FlushCheckpoint(gomock.Any()).
@@ -263,8 +266,64 @@ func TestExecBackfill(t *testing.T) {
 				}
 				rand.Shuffle(len(ops), func(i, j int) { ops[i], ops[j] = ops[j], ops[i] })
 				require.NoError(t, scexec.ExecuteStage(ctx, deps, ops))
-			}},
+			},
+		},
+		{name: "simple merge", f: func(t *testing.T, tdb *sqlutils.SQLRunner) {
+			tdb.Exec(t, "create table foo (i INT PRIMARY KEY, j INT)")
+			descs := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)
+			tab := findTableWithName(descs.Catalog, "foo")
+			require.NotNil(t, tab)
+			mut := tabledesc.NewBuilder(tab.TableDesc()).BuildExistingMutableTable()
+			addIdx := addIndexMutation(t, mut, "idx", 2, false /* isTempIndex */, "j")
+			tmpIdx := addIndexMutation(t, mut, "idx_temp", 3, true /* isTempIndex */, "j")
+			for i := range mut.Mutations {
+				m := &mut.Mutations[i]
+				idx := m.GetIndex()
+				if idx == nil {
+					continue
+				}
+				switch idx.ID {
+				case addIdx.GetID():
+					m.State = descpb.DescriptorMutation_MERGING
+				case tmpIdx.GetID():
+					m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+				}
+			}
+			descs.UpsertDescriptorEntry(mut)
+			mc, bt, _, m, deps := setupTestDeps(t, tdb, descs.Catalog)
+			defer mc.Finish()
+			read, err := deps.Catalog().MustReadImmutableDescriptors(ctx, mut.GetID())
+			require.NoError(t, err)
+			desc := read[0]
+
+			merge := scexec.Merge{
+				TableID:        tab.GetID(),
+				SourceIndexIDs: []descpb.IndexID{tmpIdx.GetID()},
+				DestIndexIDs:   []descpb.IndexID{addIdx.GetID()},
+			}
+			progress := scexec.MergeProgress{Merge: merge}
+			getProgress := bt.EXPECT().
+				GetMergeProgress(gomock.Any(), merge).
+				Return(progress, nil)
+			mergeCall := m.EXPECT().
+				MergeIndexes(gomock.Any(), progress, bt, desc).
+				After(getProgress)
+			bt.EXPECT().
+				FlushCheckpoint(gomock.Any()).
+				After(mergeCall)
+			bt.EXPECT().
+				FlushFractionCompleted(gomock.Any()).
+				After(mergeCall)
+
+			require.NoError(t, scexec.ExecuteStage(ctx, deps, []scop.Op{
+				&scop.MergeIndex{
+					TableID:           tab.GetID(),
+					TemporaryIndexID:  tmpIdx.GetID(),
+					BackfilledIndexID: addIdx.GetID(),
+				}}))
+		}},
 	}
+
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			defer log.Scope(t).Close(t)

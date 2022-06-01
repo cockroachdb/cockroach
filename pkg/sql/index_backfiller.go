@@ -64,11 +64,11 @@ func (ib *IndexBackfillPlanner) MaybePrepareDestIndexesForBackfill(
 	}, nil
 }
 
-// BackfillIndex is part of the scexec.Backfiller interface.
-func (ib *IndexBackfillPlanner) BackfillIndex(
+// BackfillIndexes is part of the scexec.Backfiller interface.
+func (ib *IndexBackfillPlanner) BackfillIndexes(
 	ctx context.Context,
 	progress scexec.BackfillProgress,
-	tracker scexec.BackfillProgressWriter,
+	tracker scexec.BackfillerProgressWriter,
 	descriptor catalog.TableDescriptor,
 ) error {
 	var completed = struct {
@@ -172,7 +172,11 @@ func (ib *IndexBackfillPlanner) plan(
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
-		spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, false /* writeAtRequestTimestamp */, chunkSize, indexesToBackfill)
+		const writeAtRequestTimestamp = true
+		spec, err := initIndexBackfillerSpec(
+			*td.TableDesc(), writeAsOf, readAsOf, writeAtRequestTimestamp, chunkSize,
+			indexesToBackfill,
+		)
 		if err != nil {
 			return err
 		}

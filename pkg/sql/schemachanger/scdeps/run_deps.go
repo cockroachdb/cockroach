@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -36,7 +37,8 @@ func NewJobRunDependencies(
 	db *kv.DB,
 	internalExecutor sqlutil.InternalExecutor,
 	backfiller scexec.Backfiller,
-	rangeCounter RangeCounter,
+	merger scexec.Merger,
+	rangeCounter backfiller.RangeCounter,
 	eventLoggerFactory EventLoggerFactory,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
@@ -55,6 +57,7 @@ func NewJobRunDependencies(
 		db:                    db,
 		internalExecutor:      internalExecutor,
 		backfiller:            backfiller,
+		merger:                merger,
 		rangeCounter:          rangeCounter,
 		eventLoggerFactory:    eventLoggerFactory,
 		jobRegistry:           jobRegistry,
@@ -78,8 +81,9 @@ type jobExecutionDeps struct {
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
+	merger                scexec.Merger
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
-	rangeCounter          RangeCounter
+	rangeCounter          backfiller.RangeCounter
 	jobRegistry           *jobs.Registry
 	job                   *jobs.Job
 	kvTrace               bool
@@ -121,13 +125,15 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				kvTrace:            d.kvTrace,
 			},
 			backfiller: d.backfiller,
-			backfillTracker: newBackfillTracker(d.codec,
-				newBackfillTrackerConfig(ctx, d.codec, d.db, d.rangeCounter, d.job),
-				convertFromJobBackfillProgress(
-					d.codec, pl.GetNewSchemaChange().BackfillProgress,
-				),
+			merger:     d.merger,
+			backfillerTracker: backfiller.NewTracker(
+				d.codec,
+				d.rangeCounter,
+				d.job,
+				pl.GetNewSchemaChange().BackfillProgress,
+				pl.GetNewSchemaChange().MergeProgress,
 			),
-			periodicProgressFlusher: newPeriodicProgressFlusherForIndexBackfill(d.settings),
+			periodicProgressFlusher: backfiller.NewPeriodicProgressFlusherForIndexBackfill(d.settings),
 			statements:              d.statements,
 			user:                    pl.UsernameProto.Decode(),
 			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
