@@ -11,11 +11,11 @@
 package indexrec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -165,6 +165,14 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 	case *memo.ContainedByExpr:
 		ics.addVariableExprIndex(expr.Left, ics.overallCandidates)
 		ics.addVariableExprIndex(expr.Right, ics.overallCandidates)
+	case *memo.FunctionExpr:
+		ics.addGeoSpatialIndexes(expr, ics.overallCandidates)
+	case *memo.BBoxCoversExpr:
+		ics.addVariableExprIndex(expr.Left, ics.overallCandidates)
+		ics.addVariableExprIndex(expr.Right, ics.overallCandidates)
+	case *memo.BBoxIntersectsExpr:
+		ics.addVariableExprIndex(expr.Left, ics.overallCandidates)
+		ics.addVariableExprIndex(expr.Right, ics.overallCandidates)
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
 		ics.categorizeIndexCandidates(expr.Child(i))
@@ -300,6 +308,7 @@ func (ics *indexCandidateSet) addVariableExprIndex(
 	switch expr := expr.(type) {
 	case *memo.VariableExpr:
 		col := expr.Col
+
 		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) {
 			ics.addSingleColumnIndex(col, false /* desc */, indexCandidates)
 		} else {
@@ -379,15 +388,6 @@ func addIndexToCandidates(
 		return
 	}
 
-	// Do not add indexes on spatial columns.
-	// TODO(rytaft): Support spatial predicates like st_contains() etc.
-	for _, indexCol := range newIndex {
-		colFamily := indexCol.Column.DatumType().Family()
-		if colFamily == types.GeometryFamily || colFamily == types.GeographyFamily {
-			return
-		}
-	}
-
 	// Do not add duplicate indexes.
 	for _, existingIndex := range indexCandidates[currTable] {
 		if len(existingIndex) != len(newIndex) {
@@ -407,4 +407,21 @@ func addIndexToCandidates(
 	}
 	// Index does not exist already, so add it.
 	indexCandidates[currTable] = append(indexCandidates[currTable], newIndex)
+}
+
+// AddGeoSpatialIndexes is used to add single-column GIN indexes to inverted candidates for
+// spatial functions that can be index-accelerated.
+func (ics *indexCandidateSet) addGeoSpatialIndexes(expr opt.Expr, indexCandidates map[cat.Table][][]cat.IndexColumn) {
+	switch expr := expr.(type) {
+	case *memo.FunctionExpr:
+		// Ensure that the function is a spatial function AND can be index-accelerated
+		_, ok := geoindex.RelationshipMap[expr.Name]
+		if ok {
+			// Add arguments of the spatial function to inverted indexes
+			for i := range expr.Args {
+				var child = expr.Args.Child(i)
+				ics.addVariableExprIndex(child, indexCandidates)
+			}
+		}
+	}
 }
