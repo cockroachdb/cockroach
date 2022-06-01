@@ -1529,13 +1529,13 @@ func TestClusterNameMismatch(t *testing.T) {
 			var wg sync.WaitGroup
 			for i := 0; i < 10; i++ {
 				wg.Add(1)
-				go func() {
+				go func(expectedErr string) {
 					_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
-					if !testutils.IsError(err, c.expectedErr) {
-						t.Errorf("expected %s error, got %v", c.expectedErr, err)
+					if !testutils.IsError(err, expectedErr) {
+						t.Errorf("expected %s error, got %v", expectedErr, err)
 					}
 					wg.Done()
-				}()
+				}(c.expectedErr)
 			}
 			wg.Wait()
 		})
