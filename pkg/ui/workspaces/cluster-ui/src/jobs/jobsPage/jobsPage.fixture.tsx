@@ -7,16 +7,17 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import { JobsTableProps } from "src/views/jobs/index";
-import moment from "moment";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { cockroach } from "src/js/protos";
+import { createMemoryHistory } from "history";
+import Long from "long";
+import { JobsPageProps } from "./jobsPage";
+
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import Job = cockroach.server.serverpb.IJobResponse;
-import Long from "long";
-import { createMemoryHistory } from "history";
-import { jobsTimeoutErrorMessage } from "src/util/api";
+
+const jobsTimeoutErrorMessage =
+  "Unable to retrieve the Jobs table. To reduce the amount of data, try filtering the table.";
 
 const defaultJobProperties = {
   username: "root",
@@ -275,7 +276,7 @@ export const allJobsFixture = [
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
 const staticJobProps: Pick<
-  JobsTableProps,
+  JobsPageProps,
   | "history"
   | "location"
   | "match"
@@ -316,44 +317,34 @@ const staticJobProps: Pick<
   refreshJobs: () => null,
 };
 
-const now = moment("Mon Oct 21 2021 14:01:45 GMT-0400 (Eastern Daylight Time)");
 export const earliestRetainedTime = new protos.google.protobuf.Timestamp({
   seconds: new Long(1633611318),
   nanos: 200459000,
 });
 
-const getJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
+const getJobsPageProps = (
+  jobs: Array<Job>,
+  error: Error | null = null,
+  loading = false,
+): JobsPageProps => ({
   ...staticJobProps,
-  jobs: {
-    inFlight: false,
-    valid: false,
-    requestedAt: now,
-    setAt: moment("Mon Oct 21 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
-    lastError: null,
-    data: JobsResponse.create({
-      jobs: jobs,
-      earliest_retained_time: earliestRetainedTime,
-    }),
-  },
+  jobs: JobsResponse.create({
+    jobs: jobs,
+    earliest_retained_time: earliestRetainedTime,
+  }),
+  jobsError: error,
+  jobsLoading: loading,
 });
 
-export const withData: JobsTableProps = getJobsTableProps(allJobsFixture);
-export const empty: JobsTableProps = getJobsTableProps([]);
-export const loading: JobsTableProps = {
-  ...staticJobProps,
-  jobs: {
-    inFlight: true,
-    valid: false,
-    requestedAt: now,
-  },
-};
-
-export const error: JobsTableProps = {
-  ...staticJobProps,
-  jobs: {
-    inFlight: false,
-    valid: false,
-    requestedAt: now,
-    lastError: new Error(jobsTimeoutErrorMessage),
-  },
-};
+export const withData: JobsPageProps = getJobsPageProps(allJobsFixture);
+export const empty: JobsPageProps = getJobsPageProps([]);
+export const loading: JobsPageProps = getJobsPageProps(
+  allJobsFixture,
+  null,
+  true,
+);
+export const error: JobsPageProps = getJobsPageProps(
+  allJobsFixture,
+  new Error(jobsTimeoutErrorMessage),
+  false,
+);

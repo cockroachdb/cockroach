@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,39 +7,37 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import React, { MouseEvent } from "react";
-import { cockroach } from "src/js/protos";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
-import { JobStatusCell } from "src/views/jobs/jobStatusCell";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import { isEqual, map } from "lodash";
-import { JobDescriptionCell } from "src/views/jobs/jobDescriptionCell";
-import Job = cockroach.server.serverpb.IJobResponse;
-import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import React, { MouseEvent } from "react";
+import { Anchor } from "src/anchor";
+import { JobsResponse } from "src/api/jobsApi";
+import emptyTableResultsIcon from "src/assets/emptyState/empty-table-results.svg";
+import magnifyingGlassIcon from "src/assets/emptyState/magnifying-glass.svg";
+import { EmptyTable } from "src/empty";
+import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
+import { TimestampToMoment } from "src/util";
 import {
-  ColumnDescriptor,
-  EmptyTable,
-  Pagination,
-  ResultsPerPageLabel,
-  SortSetting,
-  SortedTable,
-  util,
-} from "@cockroachlabs/cluster-ui";
-import {
-  jobsCancel,
-  jobsPause,
-  jobsResume,
+  cancelJob,
   jobStatus,
   jobTable,
+  pauseJob,
+  resumeJob,
 } from "src/util/docs";
-import { trackDocsLink } from "src/util/analytics";
-import { Anchor } from "src/components";
-import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
-import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
+
+import { HighwaterTimestamp } from "../util/highwaterTimestamp";
+import { JobDescriptionCell } from "./jobDescriptionCell";
+import { JobStatusCell } from "../util/jobStatusCell";
+
+import styles from "../jobs.module.scss";
+import classNames from "classnames/bind";
+const cx = classNames.bind(styles);
+
+type ITimestamp = google.protobuf.ITimestamp;
+type Job = cockroach.server.serverpb.IJobResponse;
 
 class JobsSortedTable extends SortedTable<Job> {}
 
@@ -49,6 +47,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     title: (
       <Tooltip
         placement="bottom"
+        style="tableTitle"
         content={
           <p>
             The description of the job, if set, or the SQL statement if there is
@@ -59,7 +58,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         {"Description"}
       </Tooltip>
     ),
-    className: "cl-table__col-query-text",
+    className: cx("cl-table__col-query-text"),
     cell: job => <JobDescriptionCell job={job} />,
     sort: job => job.statement || job.description || job.type,
   },
@@ -96,15 +95,15 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         content={
           <p>
             {"Unique job ID. This value is used to "}
-            <Anchor href={jobsPause} target="_blank">
+            <Anchor href={pauseJob} target="_blank">
               pause
             </Anchor>
             {", "}
-            <Anchor href={jobsResume} target="_blank">
+            <Anchor href={resumeJob} target="_blank">
               resume
             </Anchor>
             {", or "}
-            <Anchor href={jobsCancel} target="_blank">
+            <Anchor href={cancelJob} target="_blank">
               cancel
             </Anchor>
             {" jobs."}
@@ -143,9 +142,8 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         {"Creation Time (UTC)"}
       </Tooltip>
     ),
-    cell: job =>
-      util.TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
-    sort: job => util.TimestampToMoment(job?.created).valueOf(),
+    cell: job => TimestampToMoment(job?.created).format(DATE_FORMAT_24_UTC),
+    sort: job => TimestampToMoment(job?.created).valueOf(),
   },
   {
     name: "lastModifiedTime",
@@ -158,9 +156,8 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         {"Modified Time (UTC)"}
       </Tooltip>
     ),
-    cell: job =>
-      util.TimestampToMoment(job?.modified).format(DATE_FORMAT_24_UTC),
-    sort: job => util.TimestampToMoment(job?.modified).valueOf(),
+    cell: job => TimestampToMoment(job?.modified).format(DATE_FORMAT_24_UTC),
+    sort: job => TimestampToMoment(job?.modified).valueOf(),
   },
   {
     name: "lastExecutionTime",
@@ -173,12 +170,11 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         {"Last Execution Time (UTC)"}
       </Tooltip>
     ),
-    cell: job =>
-      util.TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
-    sort: job => util.TimestampToMoment(job?.last_run).valueOf(),
+    cell: job => TimestampToMoment(job?.last_run).format(DATE_FORMAT_24_UTC),
+    sort: job => TimestampToMoment(job?.last_run).valueOf(),
   },
   {
-    name: "High-water Timestamp",
+    name: "highWaterTimestamp",
     title: (
       <Tooltip
         placement="bottom"
@@ -195,7 +191,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
           decimalString={job.highwater_decimal}
         />
       ) : null,
-    sort: job => util.TimestampToMoment(job?.highwater_timestamp).valueOf(),
+    sort: job => TimestampToMoment(job?.highwater_timestamp).valueOf(),
   },
   {
     name: "executionCount",
@@ -235,7 +231,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
 export interface JobTableProps {
   sort: SortSetting;
   setSort: (value: SortSetting) => void;
-  jobs: CachedDataReducerState<JobsResponse>;
+  jobs: JobsResponse;
   pageSize?: number;
   current?: number;
   isUsedFilter: boolean;
@@ -271,7 +267,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
 
   renderEmptyState = () => {
     const { isUsedFilter, jobs } = this.props;
-    const hasData = jobs?.data?.jobs?.length > 0;
+    const hasData = jobs?.jobs.length > 0;
 
     if (hasData) {
       return null;
@@ -283,11 +279,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
           title="No jobs match your search"
           icon={magnifyingGlassIcon}
           footer={
-            <Anchor
-              href={jobTable}
-              target="_blank"
-              onClick={this.redirectToLearnMore}
-            >
+            <Anchor href={jobTable} target="_blank">
               Learn more about jobs
             </Anchor>
           }
@@ -300,11 +292,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
           icon={emptyTableResultsIcon}
           message="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
           footer={
-            <Anchor
-              href={jobTable}
-              target="_blank"
-              onClick={this.redirectToLearnMore}
-            >
+            <Anchor href={jobTable} target="_blank">
               Learn more about jobs
             </Anchor>
           }
@@ -313,35 +301,31 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
     }
   };
 
-  redirectToLearnMore = (e: MouseEvent<HTMLAnchorElement>) => {
-    trackDocsLink(e.currentTarget.text);
-  };
-
-  formatJobsRetentionMessage = (
-    earliestRetainedTime: protos.google.protobuf.ITimestamp,
-  ): string => {
-    return `Since ${util
-      .TimestampToMoment(earliestRetainedTime)
-      .format(DATE_FORMAT_24_UTC)}`;
+  formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp): string => {
+    return `Since ${TimestampToMoment(earliestRetainedTime).format(
+      DATE_FORMAT_24_UTC,
+    )}`;
   };
 
   render() {
-    const jobs = this.props.jobs.data.jobs;
+    const jobs = this.props.jobs.jobs;
     const { pagination } = this.state;
 
     return (
       <React.Fragment>
-        <div className="cl-table-statistic jobs-table-summary">
-          <h4 className="cl-count-title">
+        <div className={cx("cl-table-statistic jobs-table-summary")}>
+          <h4 className={cx("cl-count-title")}>
             <ResultsPerPageLabel
               pagination={{ ...pagination, total: jobs.length }}
               pageName="jobs"
             />
-            {this.props.jobs.data.earliest_retained_time && (
+            {this.props.jobs.earliest_retained_time && (
               <>
-                <span className="jobs-table-summary__retention-divider">|</span>
+                <span className={cx("jobs-table-summary__retention-divider")}>
+                  |
+                </span>
                 {this.formatJobsRetentionMessage(
-                  this.props.jobs.data.earliest_retained_time,
+                  this.props.jobs.earliest_retained_time,
                 )}
               </>
             )}
@@ -351,8 +335,8 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
           data={jobs}
           sortSetting={this.props.sort}
           onChangeSortSetting={this.props.setSort}
-          className="jobs-table"
-          rowClass={job => "jobs-table__row--" + job.status}
+          className={cx("jobs-table")}
+          rowClass={job => cx("jobs-table__row--" + job.status)}
           columns={jobsTableColumns}
           renderNoResult={this.renderEmptyState()}
           pagination={pagination}
@@ -370,10 +354,10 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
   private setCurrentPageToOneIfJobsChanged(prevProps: Readonly<JobTableProps>) {
     if (
       !isEqual(
-        map(prevProps.jobs.data.jobs, j => {
+        map(prevProps.jobs.jobs, j => {
           return j.id;
         }),
-        map(this.props.jobs.data.jobs, j => {
+        map(this.props.jobs.jobs, j => {
           return j.id;
         }),
       )
