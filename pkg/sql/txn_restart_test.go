@@ -1237,7 +1237,6 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var cmdFilters tests.CommandFilters
-	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
 	testKey := []byte("test_key")
 	testingKnobs := &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{

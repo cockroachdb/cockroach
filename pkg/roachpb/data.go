@@ -855,8 +855,6 @@ func (ct InternalCommitTrigger) Kind() redact.SafeString {
 		return "change-replicas"
 	case ct.ModifiedSpanTrigger != nil:
 		switch {
-		case ct.ModifiedSpanTrigger.SystemConfigSpan:
-			return "modified-span (system-config)"
 		case ct.ModifiedSpanTrigger.NodeLivenessSpan != nil:
 			return "modified-span (node-liveness)"
 		default:

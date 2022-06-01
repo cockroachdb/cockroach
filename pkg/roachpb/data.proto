@@ -249,7 +249,7 @@ message ChangeReplicasTrigger {
 // ModifiedSpanTrigger indicates that a specific span has been modified.
 // This can be used to trigger scan-and-gossip for the given span.
 message ModifiedSpanTrigger {
-  bool system_config_span = 1;
+  reserved 1;
   // node_liveness_span is set to indicate that node liveness records
   // need re-gossiping after modification or range lease updates. The
   // span is set to a single key when nodes update their liveness records

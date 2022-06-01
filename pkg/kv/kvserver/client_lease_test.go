@@ -22,8 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -94,135 +91,6 @@ func TestStoreRangeLease(t *testing.T) {
 			t.Fatalf("expected lease type epoch; got %d", lt)
 		}
 	}
-}
-
-// TestStoreGossipSystemData verifies that the system-config and node-liveness
-// data is gossiped at startup in the mixed version state.
-//
-// TODO(ajwerner): Delete this test in 22.2.
-func TestStoreGossipSystemData(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	zcfg := zonepb.DefaultZoneConfig()
-	version := clusterversion.ByKey(clusterversion.DisableSystemConfigGossipTrigger - 1)
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		version, version, false, /* initializeVersion */
-	)
-	serverArgs := base.TestServerArgs{
-		Settings: settings,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-			},
-			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride:      &zcfg,
-				BinaryVersionOverride:          version,
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-			},
-		},
-	}
-	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      serverArgs,
-		},
-	)
-	defer tc.Stopper().Stop(context.Background())
-
-	store := tc.GetFirstStoreFromServer(t, 0)
-	splitKey := keys.SystemConfigSplitKey
-	tc.SplitRangeOrFatal(t, splitKey)
-	if _, err := store.DB().Inc(context.Background(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %+v", err)
-	}
-
-	getSystemConfig := func(s *kvserver.Store) *config.SystemConfig {
-		systemConfig := s.Gossip().DeprecatedGetSystemConfig()
-		return systemConfig
-	}
-	getNodeLiveness := func(s *kvserver.Store) livenesspb.Liveness {
-		var liveness livenesspb.Liveness
-		if err := s.Gossip().GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
-			return liveness
-		}
-		return livenesspb.Liveness{}
-	}
-
-	// Restart the store and verify that both the system-config and node-liveness
-	// data is gossiped.
-	tc.AddAndStartServer(t, serverArgs)
-	tc.StopServer(0)
-
-	testutils.SucceedsSoon(t, func() error {
-		if !getSystemConfig(tc.GetFirstStoreFromServer(t, 1)).DefaultZoneConfig.Equal(zcfg) {
-			return errors.New("system config not gossiped")
-		}
-		if getNodeLiveness(tc.GetFirstStoreFromServer(t, 1)) == (livenesspb.Liveness{}) {
-			return errors.New("node liveness not gossiped")
-		}
-		return nil
-	})
-}
-
-// TestGossipSystemConfigOnLeaseChange verifies that the system-config gets
-// re-gossiped on lease transfer even if it hasn't changed. This helps prevent
-// situations where a previous leaseholder can restart and not receive the
-// system config because it was the original source of it within the gossip
-// network. This test only applies in the mixed version state.
-//
-// TODO(ajwerner): Remove this test in 22.2.
-func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const numStores = 3
-	tc := testcluster.StartTestCluster(t, numStores,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						DisableMergeQueue: true,
-					},
-					Server: &server.TestingKnobs{
-						BinaryVersionOverride: clusterversion.ByKey(
-							clusterversion.DisableSystemConfigGossipTrigger - 1,
-						),
-						DisableAutomaticVersionUpgrade: make(chan struct{}),
-					},
-				},
-			},
-		},
-	)
-	defer tc.Stopper().Stop(context.Background())
-
-	key := keys.SystemConfigSpan.Key
-	tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
-
-	initialStoreIdx := -1
-	for i := range tc.Servers {
-		if tc.GetFirstStoreFromServer(t, i).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
-			initialStoreIdx = i
-		}
-	}
-	if initialStoreIdx == -1 {
-		t.Fatalf("no store has gossiped system config; gossip contents: %+v", tc.GetFirstStoreFromServer(t, 0).Gossip().GetInfoStatus())
-	}
-
-	newStoreIdx := (initialStoreIdx + 1) % numStores
-	if err := tc.TransferRangeLease(tc.LookupRangeOrFatal(t, key), tc.Target(newStoreIdx)); err != nil {
-		t.Fatalf("Unexpected error %v", err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		if tc.GetFirstStoreFromServer(t, initialStoreIdx).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
-			return errors.New("system config still most recently gossiped by original leaseholder")
-		}
-		if !tc.GetFirstStoreFromServer(t, newStoreIdx).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
-			return errors.New("system config not most recently gossiped by new leaseholder")
-		}
-		return nil
-	})
 }
 
 func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {

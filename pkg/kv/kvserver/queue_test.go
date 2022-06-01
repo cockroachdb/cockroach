@@ -691,20 +691,21 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(stopper)
 
 	// Check our config.
-	var sysCfg *config.SystemConfig
+	var cfg spanconfig.StoreReader
 	testutils.SucceedsSoon(t, func() error {
-		sysCfg = s.cfg.Gossip.DeprecatedGetSystemConfig()
-		if sysCfg == nil {
+		cfg, err = bq.store.GetConfReader(ctx)
+		require.NoError(t, err)
+		if cfg == nil {
 			return errors.New("system config not yet present")
 		}
 		return nil
 	})
 	neverSplitsDesc := neverSplits.Desc()
-	if sysCfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
+	if cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 	willSplitDesc := willSplit.Desc()
-	if sysCfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
+	if cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 
@@ -736,11 +737,11 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 
 	// Check our config.
 	neverSplitsDesc = neverSplits.Desc()
-	if sysCfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
+	if cfg.NeedsSplit(ctx, neverSplitsDesc.StartKey, neverSplitsDesc.EndKey) {
 		t.Fatal("System config says range needs to be split")
 	}
 	willSplitDesc = willSplit.Desc()
-	if !sysCfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
+	if !cfg.NeedsSplit(ctx, willSplitDesc.StartKey, willSplitDesc.EndKey) {
 		t.Fatal("System config says range does not need to be split")
 	}
 
