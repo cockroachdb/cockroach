@@ -3960,7 +3960,7 @@ create_stats_option:
 // CREATE CHANGEFEED
 // FOR <targets> [INTO sink] [WITH <options>]
 //
-// Sink: Data caputre stream stream destination.  Enterprise only.
+// sink: data capture stream destination (Enterprise only)
 create_changefeed_stmt:
   CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
   {
