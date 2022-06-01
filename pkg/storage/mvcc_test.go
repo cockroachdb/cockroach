@@ -4781,14 +4781,14 @@ func TestMVCCGarbageCollect(t *testing.T) {
 
 			ms := &enginepb.MVCCStats{}
 
-			bytes := []byte("value")
+			val := []byte("value")
 			ts1 := hlc.Timestamp{WallTime: 1e9}
 			ts2 := hlc.Timestamp{WallTime: 2e9}
 			ts3 := hlc.Timestamp{WallTime: 3e9}
-			val1 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts1)
-			val2 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts2)
-			val3 := roachpb.MakeValueFromBytesAndTimestamp(bytes, ts3)
-			valInline := roachpb.MakeValueFromBytesAndTimestamp(bytes, hlc.Timestamp{})
+			val1 := roachpb.MakeValueFromBytesAndTimestamp(val, ts1)
+			val2 := roachpb.MakeValueFromBytesAndTimestamp(val, ts2)
+			val3 := roachpb.MakeValueFromBytesAndTimestamp(val, ts3)
+			valInline := roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{})
 
 			testData := []struct {
 				key       roachpb.Key
@@ -4800,6 +4800,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				{roachpb.Key("b"), []roachpb.Value{val1, val2, val3}, false},
 				{roachpb.Key("b-del"), []roachpb.Value{val1, val2, val3}, true},
 				{roachpb.Key("inline"), []roachpb.Value{valInline}, false},
+				{roachpb.Key("r-del"), []roachpb.Value{val1}, false},
 			}
 
 			for i := 0; i < 3; i++ {
@@ -4822,6 +4823,10 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					}
 				}
 			}
+			if err := ExperimentalMVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("r"),
+				roachpb.Key("r-del").Next(), ts2, hlc.ClockTimestamp{}, 0); err != nil {
+				t.Fatal(err)
+			}
 			if log.V(1) {
 				kvsn, err := Scan(engine, localMax, keyMax, 0)
 				if err != nil {
@@ -4832,7 +4837,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				}
 			}
 
-			keys := []roachpb.GCRequest_GCKey{
+			gcKeys := []roachpb.GCRequest_GCKey{
 				{Key: roachpb.Key("a"), Timestamp: ts1},
 				{Key: roachpb.Key("a-del"), Timestamp: ts2},
 				{Key: roachpb.Key("b"), Timestamp: ts1},
@@ -4841,11 +4846,24 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				// Keys that don't exist, which should result in a no-op.
 				{Key: roachpb.Key("a-bad"), Timestamp: ts2},
 				{Key: roachpb.Key("inline-bad"), Timestamp: hlc.Timestamp{}},
+				// Keys that are hidden by range key.
+				{Key: roachpb.Key("r-del"), Timestamp: ts1},
 			}
 			if err := MVCCGarbageCollect(
-				context.Background(), engine, ms, keys, ts3,
+				context.Background(), engine, ms, gcKeys, ts3,
 			); err != nil {
 				t.Fatal(err)
+			}
+
+			if log.V(1) {
+				kvsn, err := Scan(engine, localMax, keyMax, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				log.Info(context.Background(), "after")
+				for i, kv := range kvsn {
+					log.Infof(context.Background(), "%d: %s", i, kv.Key)
+				}
 			}
 
 			expEncKeys := []MVCCKey{
@@ -4868,7 +4886,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			}
 
 			// Verify aggregated stats match computed stats after GC.
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax, KeyTypes: IterKeyTypePointsAndRanges})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {

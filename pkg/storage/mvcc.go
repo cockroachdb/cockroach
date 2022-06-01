@@ -896,17 +896,17 @@ func MVCCGetAsTxn(
 // metadata is known not to exist.
 func mvccGetMetadata(
 	iter MVCCIterator, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
-) (ok bool, keyBytes, valBytes int64, err error) {
+) (ok bool, keyBytes, valBytes int64, synthesizedFromRange bool, err error) {
 	if iter == nil {
-		return false, 0, 0, nil
+		return false, 0, 0, false, nil
 	}
 	iter.SeekGE(metaKey)
 	if ok, err = iter.Valid(); !ok {
-		return false, 0, 0, err
+		return false, 0, 0, false, err
 	}
 	unsafeKey := iter.UnsafeKey()
 	if !unsafeKey.Key.Equal(metaKey.Key) {
-		return false, 0, 0, nil
+		return false, 0, 0, false, nil
 	}
 
 	hasPoint, hasRange := iter.HasPointAndRange()
@@ -916,9 +916,9 @@ func mvccGetMetadata(
 	// keys here.
 	if hasPoint && !unsafeKey.IsValue() {
 		if err := iter.ValueProto(meta); err != nil {
-			return false, 0, 0, err
+			return false, 0, 0, false, err
 		}
-		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())), nil
+		return true, int64(unsafeKey.EncodedSize()), int64(len(iter.UnsafeValue())), false, nil
 	}
 
 	// Synthesize point key metadata. For values, the size of keys is always
@@ -933,7 +933,7 @@ func mvccGetMetadata(
 
 		iter.Next()
 		if ok, err = iter.Valid(); err != nil {
-			return false, 0, 0, err
+			return false, 0, 0, false, err
 		} else if ok {
 			// NB: For !ok, hasPoint is already false.
 			hasPoint, hasRange = iter.HasPointAndRange()
@@ -944,7 +944,7 @@ func mvccGetMetadata(
 		if !hasPoint || !unsafeKey.Key.Equal(metaKey.Key) {
 			meta.Deleted = true
 			meta.Timestamp = rkTimestamp.ToLegacyTimestamp()
-			return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
+			return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, true, nil
 		}
 	}
 
@@ -954,7 +954,7 @@ func mvccGetMetadata(
 		if rkTS := iter.RangeKeys()[0].RangeKey.Timestamp; unsafeKey.Timestamp.LessEq(rkTS) {
 			meta.Deleted = true
 			meta.Timestamp = rkTS.ToLegacyTimestamp()
-			return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
+			return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, true, nil
 		}
 	}
 
@@ -965,14 +965,14 @@ func mvccGetMetadata(
 		unsafeVal, err = decodeExtendedMVCCValue(unsafeValRaw)
 	}
 	if err != nil {
-		return false, 0, 0, err
+		return false, 0, 0, false, err
 	}
 
 	meta.ValBytes = int64(len(unsafeValRaw))
 	meta.Deleted = unsafeVal.IsTombstone()
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 
-	return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, nil
+	return true, int64(encodedMVCCKeyPrefixLength(metaKey.Key)), 0, false, nil
 }
 
 // putBuffer holds pointer data needed by mvccPutInternal. Bundling
@@ -1401,7 +1401,7 @@ func mvccPutInternal(
 	}
 
 	metaKey := MakeMVCCMetadataKey(key)
-	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
+	ok, origMetaKeySize, origMetaValSize, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
 	if err != nil {
 		return err
 	}
@@ -3723,6 +3723,7 @@ func MVCCGarbageCollect(
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
+		KeyTypes:   IterKeyTypePointsAndRanges,
 	})
 	defer iter.Close()
 	supportsPrev := iter.SupportsPrev()
@@ -3731,7 +3732,7 @@ func MVCCGarbageCollect(
 	meta := &enginepb.MVCCMetadata{}
 	for _, gcKey := range keys {
 		encKey := MakeMVCCMetadataKey(gcKey.Key)
-		ok, metaKeySize, metaValSize, err := mvccGetMetadata(iter, encKey, meta)
+		ok, metaKeySize, metaValSize, hiddenByRangeDel, err := mvccGetMetadata(iter, encKey, meta)
 		if err != nil {
 			return err
 		}
@@ -3782,6 +3783,12 @@ func MVCCGarbageCollect(
 			iter.Next()
 		}
 
+		// When working with range tombstones, we need to handle the case where last
+		// point key is deleted by range tombstone. In normal case it is handled by
+		// adjusting for metadata above, but for range keys we don't use that because
+		// calculations are different.
+		allPointsDeleted := true
+
 		// For GCBytesAge, this requires keeping track of the previous key's
 		// timestamp (prevNanos). See ComputeStatsForRange for a more easily digested
 		// and better commented version of this logic. The below block will set
@@ -3789,11 +3796,15 @@ func MVCCGarbageCollect(
 		// first garbage version.
 		prevNanos := timestamp.WallTime
 		{
-
+			// If true - forward iteration positioned iterator on first garbage
+			// (key.ts <= gc.ts).
 			var foundPrevNanos bool
 			{
 				// If reverse iteration is supported (supportsPrev), we'll step the
 				// iterator a few time before attempting to seek.
+
+				// True if we found next key while iterating. That means there's no
+				// garbage for the key.
 				var foundNextKey bool
 
 				// If there are a large number of versions which are not garbage,
@@ -3810,6 +3821,7 @@ func MVCCGarbageCollect(
 				for i := 0; !supportsPrev || i < nextsBeforeSeekLT; i++ {
 					if i > 0 {
 						iter.Next()
+						allPointsDeleted = false
 					}
 					if ok, err := iter.Valid(); err != nil {
 						return err
@@ -3858,6 +3870,9 @@ func MVCCGarbageCollect(
 			}
 		}
 
+		// At this point iterator is positioned on first garbage version and forward
+		// iteration will give us all versions to delete up to the next key.
+
 		// Iterate through the garbage versions, accumulating their stats and
 		// issuing clear operations.
 		for ; ; iter.Next() {
@@ -3893,6 +3908,15 @@ func MVCCGarbageCollect(
 					fromNS = unsafeIterKey.Timestamp.WallTime
 				}
 
+				// If metadata was synthesized from range tombstone and no live versions
+				// were found, adjust for key count. In non synthesized metadata case,
+				// key adjustment is done when removing metadata key.
+				if allPointsDeleted && hiddenByRangeDel {
+					updateStatsForLastPointKey(ms)
+					keySize += int64(encodedMVCCKeyPrefixLength(unsafeIterKey.Key))
+					// Reset the flag so that we only do any stat adjustment for only once.
+					allPointsDeleted = false
+				}
 				ms.Add(updateStatsOnGC(gcKey.Key, keySize, valSize, nil, fromNS))
 			}
 			count++
@@ -3904,6 +3928,10 @@ func MVCCGarbageCollect(
 	}
 
 	return nil
+}
+
+func updateStatsForLastPointKey(ms *enginepb.MVCCStats) {
+	ms.KeyCount--
 }
 
 // MVCCFindSplitKey finds a key from the given span such that the left side of
