@@ -24,7 +24,8 @@ import {
   routerMiddleware,
   RouterState,
 } from "connected-react-router";
-import { createHashHistory, History } from "history";
+import { History } from "history";
+import { history } from "./history";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { hoverReducer, HoverState } from "./hover";
@@ -36,6 +37,7 @@ import { timeScaleReducer, TimeScaleState } from "./timeScale";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
+import { initializeAnalytics } from "./analytics";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -50,8 +52,6 @@ export interface AdminUIState {
   uiData: UIDataState;
   login: LoginAPIState;
 }
-
-const history = createHashHistory();
 
 const routerReducer = connectRouter(history);
 
@@ -96,6 +96,7 @@ export function createAdminUIStore(historyInst: History<any>) {
   );
 
   sagaMiddleware.run(rootSaga);
+  initializeAnalytics(s);
   return s;
 }
 
@@ -103,4 +104,4 @@ const store = createAdminUIStore(history);
 
 export type AppDispatch = ThunkDispatch<AdminUIState, unknown, Action>;
 
-export { history, store };
+export { store };
