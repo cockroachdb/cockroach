@@ -156,7 +156,15 @@ export const getBarChartOpts = (
     },
     scales: {
       x: {
-        range: () => [xAxisDomain.extent[0], xAxisDomain.extent[1]],
+        range: () => [
+          xAxisDomain.extent[0],
+          xAxisDomain.extent[1]
+            ? xAxisDomain.extent[1]
+            : // When there is only one bar to load, the value of xAxisDomain.extent[1] will be NaN,
+              // so we add a value to xAxisDomain.extent[0] (e.g. 60 * 1e9 ns = 1 min) and use that
+              // as the max value of the range, so the bar can load.
+              xAxisDomain.extent[0] + 60 * 1e9,
+        ],
       },
     },
     axes: [
