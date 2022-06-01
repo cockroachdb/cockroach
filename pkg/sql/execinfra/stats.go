@@ -30,13 +30,13 @@ func ShouldCollectStats(ctx context.Context, flowCtx *FlowCtx) bool {
 }
 
 // GetCumulativeContentionTime is a helper function to calculate the cumulative
-// contention time from the tracing span from the context. All contention events
-// found in the trace are included.
-func GetCumulativeContentionTime(ctx context.Context) time.Duration {
+// contention time from the given recording or, if the recording is nil, from
+// the tracing span from the context. All contention events found in the trace
+// are included.
+func GetCumulativeContentionTime(ctx context.Context, recording tracing.Recording) time.Duration {
 	var cumulativeContentionTime time.Duration
-	recording := GetTraceData(ctx)
 	if recording == nil {
-		return cumulativeContentionTime
+		recording = GetTraceData(ctx)
 	}
 	var ev roachpb.ContentionEvent
 	for i := range recording {
@@ -81,12 +81,12 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.NumInternalSeeks = optional.MakeUint(ss.NumInternalSeeks)
 }
 
-// GetScanStats is a helper function to calculate scan stats from the tracing
-// span from the context.
-func GetScanStats(ctx context.Context) (ss ScanStats) {
-	recording := GetTraceData(ctx)
+// GetScanStats is a helper function to calculate scan stats from the given
+// recording or, if the recording is nil, from the tracing span from the
+// context.
+func GetScanStats(ctx context.Context, recording tracing.Recording) (ss ScanStats) {
 	if recording == nil {
-		return ScanStats{}
+		recording = GetTraceData(ctx)
 	}
 	var ev roachpb.ScanStats
 	for i := range recording {
