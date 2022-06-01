@@ -66,7 +66,9 @@ func registerRebalanceLoad(r registry.Registry) {
 		splits := numStores - 1 // n-1 splits => n ranges => 1 lease per store
 
 		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
+		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
+			startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
+		}
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
