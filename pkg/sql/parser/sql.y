@@ -8124,6 +8124,10 @@ sequence_option_elem:
   AS typename                  {
                                   // Valid option values must be integer types (ex. int2, bigint)
                                   parsedType := $2.colType()
+                                  if parsedType == nil {
+                                      sqllex.Error(fmt.Sprintf("invalid type name: %s", $2.val))
+                                      return 1
+                                  }
                                   if parsedType.Family() != types.IntFamily {
                                       sqllex.Error(fmt.Sprintf("invalid integer type: %s", parsedType.SQLString()))
                                       return 1

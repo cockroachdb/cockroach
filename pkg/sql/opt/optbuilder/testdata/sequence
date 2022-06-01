@@ -123,3 +123,8 @@ build
 INSERT INTO x VALUES (0, 0, false)
 ----
 error (42809): "x" is not a table
+
+build
+CREATE SEQUENCE s1 AS abc
+----
+error (42601): at or near "EOF": syntax error: invalid type name: abc
