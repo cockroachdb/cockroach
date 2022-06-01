@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,28 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
+import { assert, expect } from "chai";
 import moment from "moment";
-import { cockroach } from "src/js/protos";
-import { formatDuration } from ".";
-import { JobsTable, JobsTableProps } from "src/views/jobs/index";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { JobsPage, JobsPageProps } from "./jobsPage";
+import { formatDuration } from "../util/duration";
 import {
   allJobsFixture,
-  earliestRetainedTime,
   retryRunningJobFixture,
-} from "src/views/jobs/jobsTable.fixture";
-import { refreshJobs } from "src/redux/apiReducers";
+  earliestRetainedTime,
+} from "./jobsPage.fixture";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
 
-import { expectPopperTooltipActivated } from "src/test-utils/tooltip";
-
 import Job = cockroach.server.serverpb.IJobResponse;
 
-const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => {
+const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
   const history = H.createHashHistory();
   return {
     sort: { columnTitle: null, ascending: true },
@@ -41,15 +38,13 @@ const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => {
     setShow: () => {},
     setType: () => {},
     jobs: {
-      data: {
-        jobs: jobs,
-        earliest_retained_time: earliestRetainedTime,
-        toJSON: () => ({}),
-      },
-      inFlight: false,
-      valid: true,
+      jobs: jobs,
+      earliest_retained_time: earliestRetainedTime,
+      toJSON: () => ({}),
     },
-    refreshJobs,
+    jobsLoading: false,
+    jobsError: null,
+    refreshJobs: () => {},
     location: history.location,
     history,
     match: {
@@ -76,7 +71,7 @@ describe("Jobs", () => {
   it("renders expected jobs table columns", () => {
     const { getByText } = render(
       <MemoryRouter>
-        <JobsTable {...getMockJobsTableProps(allJobsFixture)} />
+        <JobsPage {...getMockJobsPageProps(allJobsFixture)} />
       </MemoryRouter>,
     );
     const expectedColumnTitles = [
@@ -97,7 +92,7 @@ describe("Jobs", () => {
   it("renders a message when the table is empty", () => {
     const { getByText } = render(
       <MemoryRouter>
-        <JobsTable {...getMockJobsTableProps([])} />
+        <JobsPage {...getMockJobsPageProps([])} />
       </MemoryRouter>,
     );
     const expectedText = [
@@ -113,15 +108,14 @@ describe("Jobs", () => {
   it("shows next execution time on hovering a retry status", async () => {
     const { getByText } = render(
       <MemoryRouter>
-        <JobsTable {...getMockJobsTableProps([retryRunningJobFixture])} />
+        <JobsPage {...getMockJobsPageProps([retryRunningJobFixture])} />
       </MemoryRouter>,
     );
 
-    await waitFor(expectPopperTooltipActivated);
-    userEvent.hover(getByText("retrying"));
+    userEvent.hover(getByText("Retrying"));
 
     await waitFor(() =>
-      screen.getByText("Next Execution Time", { exact: false }),
+      screen.getByText("Next Execution Time:", { exact: false }),
     );
   });
 });

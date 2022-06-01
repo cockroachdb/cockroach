@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,15 +7,16 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import React from "react";
-import { cockroach } from "src/js/protos";
-import { JobStatus } from "./jobStatus";
-import { isRetrying } from "src/views/jobs/jobStatusOptions";
-import { util } from "@cockroachlabs/cluster-ui";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import Job = cockroach.server.serverpb.IJobResponse;
+import React from "react";
+import { TimestampToMoment } from "src/util";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
+
+import { JobStatus } from "./jobStatus";
+import { isRetrying } from "./jobOptions";
+
+type Job = cockroach.server.serverpb.IJobResponse;
 
 export interface JobStatusCellProps {
   job: Job;
@@ -40,7 +41,7 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
           <>
             Next Execution Time:
             <br />
-            {util.TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
+            {TimestampToMoment(job.next_run).format(DATE_FORMAT_24_UTC)}
           </>
         }
       >
