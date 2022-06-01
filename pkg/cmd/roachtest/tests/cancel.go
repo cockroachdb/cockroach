@@ -69,8 +69,9 @@ func registerCancel(r registry.Registry) {
 				// Any error regarding the cancellation (or of its absence) will
 				// be sent on errCh.
 				errCh := make(chan error, 1)
-				go func(query string) {
+				go func(queryNum int) {
 					defer close(errCh)
+					query := tpch.QueriesByNumber[queryNum]
 					t.L().Printf("executing q%d\n", queryNum)
 					sem <- struct{}{}
 					close(sem)
@@ -85,7 +86,7 @@ func registerCancel(r registry.Registry) {
 							errCh <- errors.Wrap(err, "unexpected error")
 						}
 					}
-				}(tpch.QueriesByNumber[queryNum])
+				}(queryNum)
 
 				// Wait for the query-runner goroutine to start.
 				<-sem
