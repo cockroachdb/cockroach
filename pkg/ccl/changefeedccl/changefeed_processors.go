@@ -173,7 +173,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	if _, needTopics := ca.spec.Feed.Opts[changefeedbase.OptTopicInValue]; needTopics {
-		ca.topicNamer, err = MakeTopicNamer(ca.spec.Feed.TargetSpecifications)
+		ca.topicNamer, err = MakeTopicNamer(AllTargets(ca.spec.Feed))
 		if err != nil {
 			return nil, err
 		}
@@ -705,7 +705,7 @@ func newKVEventToRowConsumer(
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
 ) kvEventConsumer {
-	rfCache := newRowFetcherCache(
+	rfCache, err := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
 		cfg.LeaseManager.(*lease.Manager),
@@ -713,6 +713,11 @@ func newKVEventToRowConsumer(
 		cfg.DB,
 		details,
 	)
+	if err != nil {
+		logcrash.ReportOrPanic(ctx, &cfg.Settings.SV,
+			`error creating rowfetcher cache for details`,
+			details)
+	}
 
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
@@ -860,7 +865,7 @@ func (c *kvEventToRowConsumer) topicForRow(r encodeRow) (TopicDescriptor, error)
 	if err != nil {
 		return noTopic{}, err
 	}
-	for _, s := range c.details.TargetSpecifications {
+	for _, s := range AllTargets(c.details) {
 		if s.TableID == r.tableDesc.GetID() && (s.FamilyName == "" || s.FamilyName == family.Name) {
 			topic, err := makeTopicDescriptorFromSpecForRow(s, r)
 			if err != nil {

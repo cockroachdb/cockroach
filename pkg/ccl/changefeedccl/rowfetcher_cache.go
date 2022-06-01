@@ -79,8 +79,11 @@ func newRowFetcherCache(
 	cf *descs.CollectionFactory,
 	db *kv.DB,
 	details jobspb.ChangefeedDetails,
-) *rowFetcherCache {
-	specs := details.TargetSpecifications
+) (*rowFetcherCache, error) {
+	specs := AllTargets(details)
+	if len(specs) == 0 {
+		return nil, errors.Newf("Could not derive any target specifications from %v", details)
+	}
 	watchedFamilies := make(map[watchedFamily]struct{}, len(specs))
 	for _, s := range specs {
 		watchedFamilies[watchedFamily{tableID: s.TableID, familyName: s.FamilyName}] = struct{}{}
@@ -92,7 +95,7 @@ func newRowFetcherCache(
 		db:              db,
 		fetchers:        cache.NewUnorderedCache(rfCacheConfig),
 		watchedFamilies: watchedFamilies,
-	}
+	}, nil
 }
 
 func (c *rowFetcherCache) TableDescForKey(
