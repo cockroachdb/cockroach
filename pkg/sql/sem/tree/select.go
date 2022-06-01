@@ -282,6 +282,7 @@ type IndexID = catid.IndexID
 //  - NO_ZIGZAG_JOIN
 //  - NO_FULL_SCAN
 //  - IGNORE_FOREIGN_KEYS
+//  - IGNORE_PRESERVED_CONSISTENCY
 //  - FORCE_ZIGZAG
 //  - FORCE_ZIGZAG=<index_name|index_id>*
 // It is used optionally after a table name in SELECT statements.
@@ -304,6 +305,11 @@ type IndexFlags struct {
 	// IgnoreUniqueWithoutIndexKeys disables optimizations based on unique without
 	// index constraints.
 	IgnoreUniqueWithoutIndexKeys bool
+	// IgnorePreservedConsistency disables optimizations based on
+	// preserved-multiplicity consistency of this table (e.g. consistency of
+	// primary and secondary index rows, consistency of foreign key
+	// references). This is used for SKIP LOCKED queries.
+	IgnorePreservedConsistency bool
 	// Zigzag hinting fields are distinct:
 	// ForceZigzag means we saw a TABLE@{FORCE_ZIGZAG}
 	// ZigzagIndexes means we saw TABLE@{FORCE_ZIGZAG=name}
@@ -345,6 +351,8 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
 	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
 		other.IgnoreUniqueWithoutIndexKeys
+	result.IgnorePreservedConsistency = ih.IgnorePreservedConsistency ||
+		other.IgnorePreservedConsistency
 
 	if other.Direction != 0 {
 		if ih.Direction != 0 {
@@ -470,6 +478,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 		if ih.IgnoreUniqueWithoutIndexKeys {
 			sep()
 			ctx.WriteString("IGNORE_UNIQUE_WITHOUT_INDEX_KEYS")
+		}
+
+		if ih.IgnorePreservedConsistency {
+			sep()
+			ctx.WriteString("IGNORE_PRESERVED_CONSISTENCY")
 		}
 
 		if ih.ForceZigzag || len(ih.ZigzagIndexes) > 0 || len(ih.ZigzagIndexIDs) > 0 {

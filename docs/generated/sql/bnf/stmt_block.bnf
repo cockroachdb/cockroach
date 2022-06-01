@@ -1127,6 +1127,7 @@ unreserved_keyword ::=
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
+	| 'IGNORE_PRESERVED_CONSISTENCY'
 	| 'INSENSITIVE'
 	| 'OF'
 	| 'OFF'

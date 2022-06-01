@@ -461,6 +461,9 @@ func (b *Builder) buildScan(
 		if indexFlags.IgnoreUniqueWithoutIndexKeys {
 			tabMeta.IgnoreUniqueWithoutIndexKeys = true
 		}
+		if indexFlags.IgnorePreservedConsistency {
+			tabMeta.IgnorePreservedConsistency = true
+		}
 	}
 
 	outScope = inScope.push()
