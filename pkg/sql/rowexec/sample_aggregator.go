@@ -434,7 +434,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
-			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
+			if si.spec.GenerateHistogram {
 				colIdx := int(si.spec.Columns[0])
 				typ := s.inTypes[colIdx]
 

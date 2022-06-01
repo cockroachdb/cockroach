@@ -129,7 +129,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(
 func (js *JSONStatistic) GetHistogram(
 	semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*HistogramData, error) {
-	if len(js.HistogramBuckets) == 0 {
+	if js.HistogramColumnType == "" {
 		return nil, nil
 	}
 	h := &HistogramData{}
