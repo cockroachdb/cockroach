@@ -359,6 +359,14 @@ type ProcessorBaseNoHelper struct {
 	//
 	// Can return nil.
 	ExecStatsForTrace func() *execinfrapb.ComponentStats
+	// storeExecStatsTrace indicates whether ExecStatsTrace should be populated
+	// in InternalClose.
+	storeExecStatsTrace bool
+	// ExecStatsTrace stores the recording in case HijackExecStatsForTrace has
+	// been called. This is needed in order to provide the access to the
+	// recording after the span has been finished in InternalClose. Only set if
+	// storeExecStatsTrace is true.
+	ExecStatsTrace tracing.Recording
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling InternalClose()) and generate the trailing meta that
@@ -607,9 +615,18 @@ var _ ExecStatsForTraceHijacker = &ProcessorBase{}
 
 // HijackExecStatsForTrace is a part of the ExecStatsForTraceHijacker interface.
 func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	if pb.ExecStatsForTrace == nil {
+		return nil
+	}
 	execStatsForTrace := pb.ExecStatsForTrace
 	pb.ExecStatsForTrace = nil
-	return execStatsForTrace
+	pb.storeExecStatsTrace = true
+	return func() *execinfrapb.ComponentStats {
+		cs := execStatsForTrace()
+		// Make sure to unset the trace since we don't need it anymore.
+		pb.ExecStatsTrace = nil
+		return cs
+	}
 }
 
 // moveToTrailingMeta switches the processor to the "trailing meta" state: only
@@ -643,6 +660,9 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 		}
 		if trace := pb.span.GetConfiguredRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			if pb.storeExecStatsTrace {
+				pb.ExecStatsTrace = trace
+			}
 		}
 	}
 
