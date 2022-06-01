@@ -14,13 +14,6 @@ exec-ddl
 CREATE TABLE t4 (k INT, i INT, f FLOAT, j JSONB, a INT[])
 ----
 
-# Ensure that spatial indexes don't have candidates. This is temporary until we
-# support spatial index recommendations.
-
-index-candidates
-SELECT * FROM t3 WHERE g IS NULL
-----
-
 # Ensure that index candidates are not created for virtual tables.
 index-candidates
 SELECT *
