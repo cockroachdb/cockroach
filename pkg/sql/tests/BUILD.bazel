@@ -5,15 +5,12 @@ go_library(
     srcs = [
         "command_filters.go",
         "data.go",
-        "end_txn_trigger.go",
         "server_params.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",

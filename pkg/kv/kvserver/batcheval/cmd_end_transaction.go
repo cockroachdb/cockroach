@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -425,17 +424,6 @@ func EndTxn(
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
 		}
-	} else if reply.Txn.Status == roachpb.ABORTED {
-		// If this is the system config span and we're aborted, add a trigger to
-		// potentially gossip now that we've removed an intent. This is important
-		// to deal with cases where previously committed values were not gossipped
-		// due to an outstanding intent.
-		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) &&
-			!cArgs.EvalCtx.ClusterSettings().Version.IsActive(
-				ctx, clusterversion.DisableSystemConfigGossipTrigger,
-			) {
-			txnResult.Local.MaybeGossipSystemConfigIfHaveFailure = true
-		}
 	}
 
 	return txnResult, nil
@@ -691,31 +679,6 @@ func RunCommitTrigger(
 	}
 	if ct.GetModifiedSpanTrigger() != nil {
 		var pd result.Result
-		if ct.ModifiedSpanTrigger.SystemConfigSpan {
-			// Check if we need to gossip the system config.
-			// NOTE: System config gossiping can only execute correctly if
-			// the transaction record is located on the range that contains
-			// the system span. If a transaction is created which modifies
-			// both system *and* non-system data, it should be ensured that
-			// the transaction record itself is on the system span. This can
-			// be done by making sure a system key is the first key touched
-			// in the transaction.
-			if rec.ContainsKey(keys.SystemConfigSpan.Key) {
-				if err := pd.MergeAndDestroy(
-					result.Result{
-						Local: result.LocalResult{
-							MaybeGossipSystemConfig: true,
-						},
-					},
-				); err != nil {
-					return result.Result{}, err
-				}
-			} else {
-				log.Errorf(ctx, "System configuration span was modified, but the "+
-					"modification trigger is executing on a non-system range. "+
-					"Configuration changes will not be gossiped.")
-			}
-		}
 		if nlSpan := ct.ModifiedSpanTrigger.NodeLivenessSpan; nlSpan != nil {
 			if err := pd.MergeAndDestroy(
 				result.Result{

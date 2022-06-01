@@ -1293,10 +1293,6 @@ func (ef *execFactory) ConstructInsert(
 	tabDesc := table.(*optTable).desc
 	cols := makeColList(table, insertColOrdSet)
 
-	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
-		return nil, err
-	}
-
 	// Create the table inserter, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
@@ -1367,10 +1363,6 @@ func (ef *execFactory) ConstructInsertFastPath(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	cols := makeColList(table, insertColOrdSet)
-
-	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
-		return nil, err
-	}
 
 	// Create the table inserter, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
@@ -1464,10 +1456,6 @@ func (ef *execFactory) ConstructUpdate(
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
 	fetchCols := makeColList(table, fetchColOrdSet)
-
-	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
-		return nil, err
-	}
 
 	// Add each column to update as a sourceSlot. The CBO only uses scalarSlot,
 	// since it compiles tuples and subqueries into a simple sequence of target
@@ -1580,10 +1568,6 @@ func (ef *execFactory) ConstructUpsert(
 	fetchCols := makeColList(table, fetchColOrdSet)
 	updateCols := makeColList(table, updateColOrdSet)
 
-	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
-		return nil, err
-	}
-
 	// Create the table inserter, which does the bulk of the insert-related work.
 	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
@@ -1677,10 +1661,6 @@ func (ef *execFactory) ConstructDelete(
 	tabDesc := table.(*optTable).desc
 	fetchCols := makeColList(table, fetchColOrdSet)
 
-	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
-		return nil, err
-	}
-
 	// Create the table deleter, which does the bulk of the work. In the HP,
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
@@ -1741,10 +1721,6 @@ func (ef *execFactory) ConstructDeleteRange(
 	tabDesc := table.(*optTable).desc
 	var sb span.Builder
 	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
-
-	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
-		return nil, err
-	}
 
 	spans, err := sb.SpansFromConstraint(indexConstraint, span.NoopSplitter())
 	if err != nil {

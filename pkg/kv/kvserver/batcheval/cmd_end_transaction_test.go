@@ -1154,7 +1154,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				}
 				if commitTrigger {
 					req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-						ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{SystemConfigSpan: true},
+						ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{NodeLivenessSpan: &roachpb.Span{}},
 					}
 				}
 				var resp roachpb.EndTxnResponse
@@ -1175,7 +1175,7 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 
 				if cfg.expError {
 					require.Error(t, err)
-					require.Regexp(t, `txn .* with modified-span \(system-config\) commit trigger needs commit wait`, err)
+					require.Regexp(t, `txn .* with modified-span \(node-liveness\) commit trigger needs commit wait`, err)
 				} else {
 					require.NoError(t, err)
 				}

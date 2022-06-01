@@ -3790,10 +3790,6 @@ func TestStrictGCEnforcement(t *testing.T) {
 					s := tc.Server(i)
 					_, r := getFirstStoreReplica(t, s, tableKey)
 					if c := r.SpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
-						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
-						sysCfg.RaftLock()
-						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
-						sysCfg.RaftUnlock()
 						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
@@ -3805,11 +3801,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 			sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = `+fmt.Sprint(val))
 			testutils.SucceedsSoon(t, func() error {
 				for i := 0; i < tc.NumServers(); i++ {
-					s, r := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
+					s, _ := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 					if kvserver.StrictGCEnforcement.Get(&s.ClusterSettings().SV) != val {
-						r.RaftLock()
-						require.NoError(t, r.MaybeGossipSystemConfigRaftMuLocked(ctx))
-						r.RaftUnlock()
 						return errors.Errorf("expected %v, got %v", val, !val)
 					}
 				}

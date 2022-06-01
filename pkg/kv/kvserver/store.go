@@ -1068,6 +1068,7 @@ type StoreConfig struct {
 
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
+	// TODO(richardjcai): We can likely remove this.
 	SpanConfigsDisabled bool
 	// Used to subscribe to span configuration changes, keeping up-to-date a
 	// data structure useful for retrieving span configs. Only available if
@@ -2193,7 +2194,6 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 
 	if s.cfg.SpanConfigsDisabled ||
 		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-		!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) ||
 		s.TestingKnobs().UseSystemConfigSpanForQueues {
 
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()

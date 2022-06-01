@@ -401,9 +401,6 @@ func (r *Replica) leasePostApplyLocked(
 				// Nothing to do.
 				return
 			}
-			if err := r.MaybeGossipSystemConfigRaftMuLocked(ctx); err != nil {
-				log.Errorf(ctx, "%v", err)
-			}
 			if err := r.MaybeGossipNodeLivenessRaftMuLocked(ctx, keys.NodeLivenessSpan); err != nil {
 				log.Errorf(ctx, "%v", err)
 			}
@@ -594,26 +591,6 @@ func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult re
 	if lResult.MaybeAddToSplitQueue {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 		lResult.MaybeAddToSplitQueue = false
-	}
-
-	// The gossip triggers below require raftMu to be held, but
-	// handleReadWriteLocalEvalResult() may be called from non-Raft code paths (in
-	// particular for noop proposals). LocalResult.RequiresRaft() will force
-	// results that set these gossip triggers to always go via Raft such that
-	// raftMu is held. The triggers assert that callers hold the mutex during race
-	// tests via raftMu.AssertHeld().
-	if lResult.MaybeGossipSystemConfig {
-		if err := r.MaybeGossipSystemConfigRaftMuLocked(ctx); err != nil {
-			log.Errorf(ctx, "%v", err)
-		}
-		lResult.MaybeGossipSystemConfig = false
-	}
-
-	if lResult.MaybeGossipSystemConfigIfHaveFailure {
-		if err := r.MaybeGossipSystemConfigIfHaveFailureRaftMuLocked(ctx); err != nil {
-			log.Errorf(ctx, "%v", err)
-		}
-		lResult.MaybeGossipSystemConfigIfHaveFailure = false
 	}
 
 	if lResult.MaybeGossipNodeLiveness != nil {

@@ -70,9 +70,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
 	}
 
-	cfg := tc.gossip.DeprecatedGetSystemConfig()
-	if cfg == nil {
-		t.Fatal("config not set")
+	cfg, err := tc.store.GetConfReader(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 	for i, test := range testCases {
 		// Create a replica for testing that is not hooked up to the store. This

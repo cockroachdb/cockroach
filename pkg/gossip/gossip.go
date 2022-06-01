@@ -1145,37 +1145,6 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 	}
 }
 
-// DeprecatedGetSystemConfig returns the local unmarshaled version of the system config.
-// Returns nil if the system config hasn't been set yet.
-//
-// TODO(ajwerner): Remove this in 22.2.
-func (g *Gossip) DeprecatedGetSystemConfig() *config.SystemConfig {
-	g.systemConfigMu.RLock()
-	defer g.systemConfigMu.RUnlock()
-	return g.systemConfig
-}
-
-// DeprecatedRegisterSystemConfigChannel registers a channel to signify updates for the
-// system config. It is notified after registration (if a system config is
-// already set), and whenever a new system config is successfully unmarshaled.
-//
-// TODO(ajwerner): Remove this in 22.2.
-func (g *Gossip) DeprecatedRegisterSystemConfigChannel() <-chan struct{} {
-	// Create channel that receives new system config notifications.
-	// The channel has a size of 1 to prevent gossip from having to block on it.
-	c := make(chan struct{}, 1)
-
-	g.systemConfigMu.Lock()
-	defer g.systemConfigMu.Unlock()
-	g.systemConfigChannels = append(g.systemConfigChannels, c)
-
-	// Notify the channel right away if we have a config.
-	if g.systemConfig != nil {
-		c <- struct{}{}
-	}
-	return c
-}
-
 // updateSystemConfig is the raw gossip info callback. Unmarshal the
 // system config, and if successful, send on each system config
 // channel.

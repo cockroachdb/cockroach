@@ -2003,18 +2003,6 @@ func (r *Replica) GetExternalStorageFromURI(
 	return r.store.cfg.ExternalStorageFromURI(ctx, uri, user)
 }
 
-func (r *Replica) markSystemConfigGossipSuccess() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.failureToGossipSystemConfig = false
-}
-
-func (r *Replica) markSystemConfigGossipFailed() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.failureToGossipSystemConfig = true
-}
-
 // GetResponseMemoryAccount implements the batcheval.EvalContext interface.
 func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 	// Return an empty account, which places no limits. Places where a real

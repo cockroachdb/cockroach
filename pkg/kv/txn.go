@@ -63,9 +63,6 @@ type Txn struct {
 
 	// commitTriggers are run upon successful commit.
 	commitTriggers []func(ctx context.Context)
-	// systemConfigTrigger is set to true when modifying keys from the SystemConfig
-	// span. This sets the SystemConfigTrigger on EndTxnRequest.
-	systemConfigTrigger bool
 
 	// mu holds fields that need to be synchronized for concurrent request execution.
 	mu struct {
@@ -402,30 +399,6 @@ func (txn *Txn) RequiredFrontier() hlc.Timestamp {
 	return txn.mu.sender.RequiredFrontier()
 }
 
-// DeprecatedSetSystemConfigTrigger sets the system db trigger to true on this transaction.
-// This will impact the EndTxnRequest. Note that this method takes a boolean
-// argument indicating whether this transaction is intended for the system
-// tenant. Only transactions for the system tenant need to set the system config
-// trigger which is used to gossip updates to the system config to KV servers.
-// The KV servers need access to an up-to-date system config in order to
-// determine split points and zone configurations.
-func (txn *Txn) DeprecatedSetSystemConfigTrigger(forSystemTenant bool) error {
-	if txn.typ != RootTxn {
-		return errors.AssertionFailedf("DeprecatedSetSystemConfigTrigger() called on leaf txn")
-	}
-	if !forSystemTenant {
-		return nil
-	}
-
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	if err := txn.mu.sender.AnchorOnSystemConfigRange(); err != nil {
-		return err
-	}
-	txn.systemConfigTrigger = true
-	return nil
-}
-
 // DisablePipelining instructs the transaction not to pipeline requests. It
 // should rarely be necessary to call this method.
 //
@@ -701,7 +674,7 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// to reduce contention by releasing locks. In multi-tenant settings, it
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
-	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	et := endTxnReq(true, txn.deadline())
 	ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
@@ -757,7 +730,7 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
-	et := endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger)
+	et := endTxnReq(true, txn.deadline())
 	b.growReqs(1)
 	b.reqs[len(b.reqs)-1].Value = &et.union
 	b.initResult(1 /* calls */, 0, b.raw, nil)
@@ -877,7 +850,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		et := endTxnReq(false, nil /* deadline */)
 		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
@@ -903,7 +876,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// order to reduce contention by releasing locks. In multi-tenant
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
-		et := endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */)
+		et := endTxnReq(false, nil /* deadline */)
 		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
@@ -945,17 +918,10 @@ type endTxnReqAlloc struct {
 	unionArr [1]roachpb.RequestUnion
 }
 
-func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) *endTxnReqAlloc {
+func endTxnReq(commit bool, deadline *hlc.Timestamp) *endTxnReqAlloc {
 	alloc := new(endTxnReqAlloc)
 	alloc.req.Commit = commit
 	alloc.req.Deadline = deadline
-	if hasTrigger {
-		alloc.req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-				SystemConfigSpan: true,
-			},
-		}
-	}
 	alloc.union.EndTxn = &alloc.req
 	alloc.unionArr[0].Value = &alloc.union
 	return alloc
