@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -152,27 +153,38 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 			v := p.newContainerValuesNode(columns, 0)
 			if n.UsingJSON {
-				result := make([]stats.JSONStatistic, len(rows))
-				for i, r := range rows {
-					result[i].CreatedAt = tree.AsStringWithFlags(r[createdAtIdx], tree.FmtBareStrings)
-					result[i].RowCount = (uint64)(*r[rowCountIdx].(*tree.DInt))
-					result[i].DistinctCount = (uint64)(*r[distinctCountIdx].(*tree.DInt))
-					result[i].NullCount = (uint64)(*r[nullCountIdx].(*tree.DInt))
+				result := make([]stats.JSONStatistic, 0, len(rows))
+				for _, r := range rows {
+					var statsRow stats.JSONStatistic
+					statsRow.CreatedAt = tree.AsStringWithFlags(r[createdAtIdx], tree.FmtBareStrings)
+					statsRow.RowCount = (uint64)(*r[rowCountIdx].(*tree.DInt))
+					statsRow.DistinctCount = (uint64)(*r[distinctCountIdx].(*tree.DInt))
+					statsRow.NullCount = (uint64)(*r[nullCountIdx].(*tree.DInt))
 					if avgSizeColVerActive {
-						result[i].AvgSize = (uint64)(*r[avgSizeIdx].(*tree.DInt))
+						statsRow.AvgSize = (uint64)(*r[avgSizeIdx].(*tree.DInt))
 					}
 					if r[nameIdx] != tree.DNull {
-						result[i].Name = string(*r[nameIdx].(*tree.DString))
+						statsRow.Name = string(*r[nameIdx].(*tree.DString))
 					}
 					colIDs := r[columnIDsIdx].(*tree.DArray).Array
-					result[i].Columns = make([]string, len(colIDs))
+					statsRow.Columns = make([]string, len(colIDs))
+					ignoreStatsRowWithDroppedColumn := false
 					for j, d := range colIDs {
-						result[i].Columns[j] = statColumnString(desc, d)
+						id := descpb.ColumnID(*d.(*tree.DInt))
+						_, err := desc.FindColumnWithID(id)
+						if err != nil && sqlerrors.IsUndefinedColumnError(err) {
+							ignoreStatsRowWithDroppedColumn = true
+						}
+						statsRow.Columns[j] = statColumnString(desc, d)
 					}
-					if err := result[i].DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
+					if ignoreStatsRowWithDroppedColumn {
+						continue
+					}
+					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
 					}
+					result = append(result, statsRow)
 				}
 				encoded, err := encjson.Marshal(result)
 				if err != nil {
@@ -200,8 +212,17 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				colIDs := r[columnIDsIdx].(*tree.DArray).Array
 				colNames := tree.NewDArray(types.String)
 				colNames.Array = make(tree.Datums, len(colIDs))
+				ignoreStatsRowWithDroppedColumn := false
 				for i, d := range colIDs {
+					id := descpb.ColumnID(*d.(*tree.DInt))
+					_, err := desc.FindColumnWithID(id)
+					if err != nil && sqlerrors.IsUndefinedColumnError(err) {
+						ignoreStatsRowWithDroppedColumn = true
+					}
 					colNames.Array[i] = tree.NewDString(statColumnString(desc, d))
+				}
+				if ignoreStatsRowWithDroppedColumn {
+					continue
 				}
 
 				histogramID := tree.DNull
