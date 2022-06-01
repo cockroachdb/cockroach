@@ -346,6 +346,9 @@ export function calculateXAxisDomainBarChart(
   endMillis: number,
   samplingIntervalMillis: number,
 ): AxisDomain {
+  if (Number.isNaN(samplingIntervalMillis)) {
+    samplingIntervalMillis = 1e3;
+  }
   // For bar charts, we want to render past endMillis to fully render the
   // last bar. We should extend the x axis to the next sampling interval.
   return ComputeTimeAxisDomain([

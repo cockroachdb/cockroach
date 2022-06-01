@@ -34,6 +34,8 @@ const mockData: AlignedData = [
   genValuesInRange([0, 100], 20),
 ];
 
+const mockDataSingle: AlignedData = [[1654115121], [0], [1], [2]];
+
 const mockOpts: Partial<Options> = {
   axes: [{}, { label: "values" }],
   series: [
@@ -58,7 +60,7 @@ storiesOf("BarGraphTimeSeries", module)
         alignedData={mockData}
         uPlotOptions={mockOpts}
         tooltip={
-          <div>This is an example stacked bar graph axis unit = count.</div>
+          <div>This is an example stacked bar graph axis unit = Count.</div>
         }
         yAxisUnits={AxisUnits.Count}
       />
@@ -83,6 +85,32 @@ storiesOf("BarGraphTimeSeries", module)
           <div>This is an example bar graph with axis unit = percent.</div>
         }
         yAxisUnits={AxisUnits.Percentage}
+      />
+    );
+  })
+  .add("with single stacked multi-series", () => {
+    return (
+      <BarGraphTimeSeries
+        title="Example one Stacked - Count"
+        alignedData={mockDataSingle}
+        uPlotOptions={mockOpts}
+        tooltip={
+          <div>This is an example stacked bar graph axis unit = count.</div>
+        }
+        yAxisUnits={AxisUnits.Count}
+      />
+    );
+  })
+  .add("with duration stacked multi-series", () => {
+    return (
+      <BarGraphTimeSeries
+        title="Example one Stacked - Duration"
+        alignedData={mockData}
+        uPlotOptions={mockOpts}
+        tooltip={
+          <div>This is an example stacked bar graph axis unit = Duration.</div>
+        }
+        yAxisUnits={AxisUnits.Duration}
       />
     );
   });
