@@ -60,7 +60,11 @@ eexpect "COPY 3"
 eexpect root@
 
 # Try \copy as well.
-send "\copy t FROM STDIN CSV;\r"
+send "\\copy t FROM STDIN CSV INVALID;\r"
+eexpect "syntax error"
+eexpect root@
+
+send "\\copy t FROM STDIN CSV;\r"
 eexpect ">>"
 send "4,epa! epa!\r"
 send_eof
