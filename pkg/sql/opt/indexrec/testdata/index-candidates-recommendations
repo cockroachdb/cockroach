@@ -2089,7 +2089,7 @@ t5:
  (k, geog1)
  (k, geog11)
 
-# 11. Geospatial inverted + J: no combined index between inverted + join candidates
+# 12. Geospatial inverted + J: no combined index between inverted + join candidates
 index-candidates
 SELECT * FROM t5 JOIN t2 ON t5.k != t2.k WHERE st_covers(geog1, geog11)
 ----
@@ -2100,7 +2100,7 @@ t5:
  (geog11)
  (k)
 
-# 12. Geospatial inverted + J + EQ: combined index between join + equal candidates
+# 13. Geospatial inverted + J + EQ: combined index between join + equal candidates
 # Note: no combined index between equal and inverted index from different tables
 index-candidates
 SELECT * FROM t5 JOIN t2 ON t5.k != t2.k WHERE st_covers(geog1, geog11) AND t2.i = 2
