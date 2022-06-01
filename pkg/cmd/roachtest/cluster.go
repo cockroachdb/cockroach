@@ -1717,7 +1717,8 @@ func (c *clusterImpl) GitClone(
 ) error {
 	cmd := []string{"bash", "-e", "-c", fmt.Sprintf(`'
 		if ! test -d %[1]s; then
-			git clone -b %[2]s --depth 1 %[3]s %[1]s --add safe.directory %[1]s
+			git config --global --add safe.directory %[1]s
+			git clone -b %[2]s --depth 1 %[3]s %[1]s
   		else
 			cd %[1]s
 		git fetch origin
