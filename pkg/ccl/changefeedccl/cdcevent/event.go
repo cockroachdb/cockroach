@@ -354,7 +354,7 @@ func NewEventDecoder(
 		cfg.LeaseManager.(*lease.Manager),
 		cfg.CollectionFactory,
 		cfg.DB,
-		details.TargetSpecifications,
+		changefeedbase.AllTargets(details),
 	)
 
 	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
