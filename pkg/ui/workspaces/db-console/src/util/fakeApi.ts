@@ -11,7 +11,7 @@
 import * as $protobuf from "protobufjs";
 
 import { cockroach } from "src/js/protos";
-import { API_PREFIX, STATUS_PREFIX, toArrayBuffer } from "src/util/api";
+import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
 const {
@@ -119,5 +119,5 @@ export function stubIndexStats(
 }
 
 function stubGet(path: string, writer: $protobuf.Writer, prefix: string) {
-  fetchMock.get(`${prefix}${path}`, toArrayBuffer(writer.finish()));
+  fetchMock.get(`${prefix}${path}`, writer.finish());
 }
