@@ -27,6 +27,7 @@ go_library(
         "cluster_init.go",
         "connection_latency.go",
         "copy.go",
+        "copyfrom.go",
         "costfuzz.go",
         "decommission.go",
         "decommission_self.go",
