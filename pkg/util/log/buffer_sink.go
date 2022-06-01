@@ -123,12 +123,16 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 			b.byteLen += len(m.b.Bytes()) + 1 // account for the final newline.
 			if m.flush || m.errorCh != nil || (bs.triggerSize > 0 && b.byteLen > bs.triggerSize) {
 				flush = true
-				// TODO(knz): This seems incorrect. If there is a non-empty
-				// bufferSinkBundle already; with errorCh already set
-				// (ie. synchronous previous log entry) and then an entry
-				// is emitted with *another* errorCh, the first one gets lost.
-				// See: https://github.com/cockroachdb/cockroach/issues/72454
-				b.errorCh = m.errorCh
+				// Assert that b.errorCh is not already set. It shouldn't be set
+				// because, if there was a previous message with errorCh set, that
+				// message must have had the forceSink flag set and thus acts as a barrier:
+				// no more messages are sent until the flush of that message completes.
+				//
+				// If b.errorCh were to be set, we wouldn't know what to do about it
+				// since we can't overwrite it in case m.errorCh is also set.
+				if b.errorCh != nil {
+					panic("unexpected errorCh already set")
+				}
 			} else if timer == nil && bs.maxStaleness != 0 {
 				timer = time.After(bs.maxStaleness)
 			}
@@ -319,10 +323,10 @@ func (bs *bufferSink) output(b []byte, opts sinkOutputOptions) error {
 	}
 	if opts.forceSync {
 		errorCh := make(chan error)
-		bs.messageCh <- bufferSinkMessage{buf, opts.extraFlush, errorCh}
+		bs.messageCh <- bufferSinkMessage{b: buf, flush: opts.extraFlush, errorCh: errorCh}
 		return <-errorCh
 	}
-	bs.messageCh <- bufferSinkMessage{buf, opts.extraFlush, nil}
+	bs.messageCh <- bufferSinkMessage{b: buf, flush: opts.extraFlush, errorCh: nil}
 	return nil
 }
 
