@@ -149,12 +149,12 @@ CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"
 CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 			require.NoError(t, err)
 
-			go func() {
-				if _, err := sqlDB.Exec(tc.firstOp); err != nil {
+			go func(firstOp string) {
+				if _, err := sqlDB.Exec(firstOp); err != nil {
 					t.Error(err)
 				}
 				close(firstOpFinished)
-			}()
+			}(tc.firstOp)
 
 			// Wait for the first operation to reach the type schema changer.
 			<-firstOpStarted
@@ -405,14 +405,14 @@ CREATE TABLE db.global () LOCALITY GLOBAL;`)
 			require.NoError(t, err)
 			_, err = sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.multiregion_placement_policy.enabled = true;`)
 			require.NoError(t, err)
-			go func() {
+			go func(regionOp string) {
 				defer func() {
 					close(regionOpFinished)
 				}()
 
-				_, err := sqlDB.Exec(tc.regionOp)
+				_, err := sqlDB.Exec(regionOp)
 				require.NoError(t, err)
-			}()
+			}(tc.regionOp)
 
 			<-regionOpStarted
 			_, err = sqlDB.Exec(tc.placementOp)
