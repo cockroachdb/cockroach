@@ -55,7 +55,8 @@ func NewExecutorDependencies(
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
 	backfiller scexec.Backfiller,
-	backfillTracker scexec.BackfillTracker,
+	merger scexec.Merger,
+	backfillTracker scexec.BackfillerTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	clock scmutationexec.Clock,
@@ -80,7 +81,8 @@ func NewExecutorDependencies(
 			kvTrace:            kvTrace,
 		},
 		backfiller:              backfiller,
-		backfillTracker:         backfillTracker,
+		merger:                  merger,
+		backfillerTracker:       backfillTracker,
 		commentUpdaterFactory:   commentUpdaterFactory,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
@@ -332,7 +334,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
 }
 
-// GetResumeSpans implements the scexec.BackfillTracker interface.
+// GetResumeSpans implements the scexec.BackfillerTracker interface.
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
@@ -348,7 +350,7 @@ func (d *txnDeps) GetResumeSpans(
 	return []roachpb.Span{table.IndexSpan(d.codec, indexID)}, nil
 }
 
-// SetResumeSpans implements the scexec.BackfillTracker interface.
+// SetResumeSpans implements the scexec.BackfillerTracker interface.
 func (d *txnDeps) SetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
 ) error {
@@ -360,7 +362,8 @@ type execDeps struct {
 	clock                   scmutationexec.Clock
 	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
 	backfiller              scexec.Backfiller
-	backfillTracker         scexec.BackfillTracker
+	merger                  scexec.Merger
+	backfillerTracker       scexec.BackfillerTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
 	statements              []string
 	user                    username.SQLUsername
@@ -384,9 +387,14 @@ func (d *execDeps) IndexBackfiller() scexec.Backfiller {
 	return d.backfiller
 }
 
+// IndexMerger implements the scexec.Dependencies interface.
+func (d *execDeps) IndexMerger() scexec.Merger {
+	return d.merger
+}
+
 // BackfillProgressTracker implements the scexec.Dependencies interface.
-func (d *execDeps) BackfillProgressTracker() scexec.BackfillTracker {
-	return d.backfillTracker
+func (d *execDeps) BackfillProgressTracker() scexec.BackfillerTracker {
+	return d.backfillerTracker
 }
 
 // PeriodicProgressFlusher implements the scexec.Dependencies interface.
@@ -452,11 +460,11 @@ func (d *execDeps) StatsRefresher() scexec.StatsRefreshQueue {
 	return d
 }
 
-// NewNoOpBackfillTracker constructs a backfill tracker which does not do
-// anything. It will always return progress for a given backfill which
+// NewNoOpBackfillerTracker constructs a backfiller tracker which does not do
+// anything. It will always return backfillProgress for a given backfill which
 // contains a full set of CompletedSpans corresponding to the source index
-// span and an empty MinimumWriteTimestamp.
-func NewNoOpBackfillTracker(codec keys.SQLCodec) scexec.BackfillTracker {
+// span and an empty MinimumWriteTimestamp. Similarly for merges.
+func NewNoOpBackfillerTracker(codec keys.SQLCodec) scexec.BackfillerTracker {
 	return noopBackfillProgress{codec: codec}
 }
 
@@ -484,8 +492,28 @@ func (n noopBackfillProgress) GetBackfillProgress(
 	}, nil
 }
 
+func (n noopBackfillProgress) GetMergeProgress(
+	ctx context.Context, m scexec.Merge,
+) (scexec.MergeProgress, error) {
+	p := scexec.MergeProgress{
+		Merge:          m,
+		CompletedSpans: make([][]roachpb.Span, len(m.SourceIndexIDs)),
+	}
+	for i, sourceID := range m.SourceIndexIDs {
+		prefix := n.codec.IndexPrefix(uint32(m.TableID), uint32(sourceID))
+		p.CompletedSpans[i] = []roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
+	}
+	return p, nil
+}
+
 func (n noopBackfillProgress) SetBackfillProgress(
 	ctx context.Context, progress scexec.BackfillProgress,
+) error {
+	return nil
+}
+
+func (n noopBackfillProgress) SetMergeProgress(
+	ctx context.Context, progress scexec.MergeProgress,
 ) error {
 	return nil
 }
@@ -500,7 +528,7 @@ func NewNoopPeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 }
 
 func (n noopPeriodicProgressFlusher) StartPeriodicUpdates(
-	ctx context.Context, tracker scexec.BackfillProgressFlusher,
+	ctx context.Context, tracker scexec.BackfillerProgressFlusher,
 ) (stop func() error) {
 	return func() error { return nil }
 }

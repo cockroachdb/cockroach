@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package scdeps
+package backfiller
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func (f fakeBackfillFlusher) FlushFractionCompleted(ctx context.Context) error {
 	return f.flushFractionCompleted(ctx)
 }
 
-var _ scexec.BackfillProgressFlusher = (*fakeBackfillFlusher)(nil)
+var _ scexec.BackfillerProgressFlusher = (*fakeBackfillFlusher)(nil)
 
 func TestPeriodicBackfillProgressFlusher(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -250,10 +250,11 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
+		execCfg.IndexMerger,
 		// Use a no-op tracker and flusher because while backfilling in a
 		// transaction because we know there's no existing progress and there's
 		// nothing to save because nobody will ever try to resume.
-		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
+		scdeps.NewNoOpBackfillerTracker(execCfg.Codec),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),

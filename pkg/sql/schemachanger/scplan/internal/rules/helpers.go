@@ -35,7 +35,8 @@ func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 type depRuleSpec struct {
 	ruleName              scgraph.RuleName
 	edgeKind              scgraph.DepEdgeKind
-	targetStatus          scpb.Status
+	fromTargetStatus      scpb.Status
+	toTargetStatus        scpb.Status
 	from, to              elementSpec
 	joinAttrs             []screl.Attr
 	joinReferencingDescID bool
@@ -51,12 +52,13 @@ func depRule(
 	joinAttrs ...screl.Attr,
 ) depRuleSpec {
 	return depRuleSpec{
-		ruleName:     ruleName,
-		edgeKind:     edgeKind,
-		targetStatus: targetStatus.Status(),
-		from:         from,
-		to:           to,
-		joinAttrs:    joinAttrs,
+		ruleName:         ruleName,
+		edgeKind:         edgeKind,
+		fromTargetStatus: targetStatus.Status(),
+		toTargetStatus:   targetStatus.Status(),
+		from:             from,
+		to:               to,
+		joinAttrs:        joinAttrs,
 	}
 }
 
@@ -93,9 +95,9 @@ func (d depRuleSpec) register() {
 	}
 	c := rel.Clauses{
 		from.Type(d.from.types[0], d.from.types[1:]...),
-		fromTarget.AttrEq(screl.TargetStatus, d.targetStatus),
+		fromTarget.AttrEq(screl.TargetStatus, d.fromTargetStatus),
 		to.Type(d.to.types[0], d.to.types[1:]...),
-		toTarget.AttrEq(screl.TargetStatus, d.targetStatus),
+		toTarget.AttrEq(screl.TargetStatus, d.toTargetStatus),
 
 		fromNode.AttrEq(screl.CurrentStatus, d.from.status),
 		toNode.AttrEq(screl.CurrentStatus, d.to.status),

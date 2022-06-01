@@ -377,7 +377,7 @@ ALL_TESTS = [
     "//pkg/sql/schemachanger/rel:rel_test",
     "//pkg/sql/schemachanger/scbuild:scbuild_test",
     "//pkg/sql/schemachanger/scdecomp:scdecomp_test",
-    "//pkg/sql/schemachanger/scdeps:scdeps_test",
+    "//pkg/sql/schemachanger/scexec/backfiller:backfiller_test",
     "//pkg/sql/schemachanger/scexec:scexec_test",
     "//pkg/sql/schemachanger/scplan/internal/opgen:opgen_test",
     "//pkg/sql/schemachanger/scplan/internal/rules:rules_test",

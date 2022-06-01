@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -41,6 +41,74 @@ type IndexBackfillerMergePlanner struct {
 // NewIndexBackfillerMergePlanner creates a new IndexBackfillerMergePlanner.
 func NewIndexBackfillerMergePlanner(execCfg *ExecutorConfig) *IndexBackfillerMergePlanner {
 	return &IndexBackfillerMergePlanner{execCfg: execCfg}
+}
+
+// MergeIndexes is part of the scexec.Merger interface.
+func (im *IndexBackfillerMergePlanner) MergeIndexes(
+	ctx context.Context,
+	progress scexec.MergeProgress,
+	tracker scexec.BackfillerProgressWriter,
+	descriptor catalog.TableDescriptor,
+) error {
+	spansToDo := make([][]roachpb.Span, len(progress.SourceIndexIDs))
+	if len(progress.CompletedSpans) != len(progress.SourceIndexIDs) {
+		return errors.AssertionFailedf("invalid MergeProgress, CompletedSpans should " +
+			"be parallel to SourceIndexIDs")
+	}
+	var hasToDo bool
+	for i, sourceID := range progress.SourceIndexIDs {
+		sourceIndexSpan := descriptor.IndexSpan(im.execCfg.Codec, sourceID)
+		var g roachpb.SpanGroup
+		g.Add(sourceIndexSpan)
+		g.Sub(progress.CompletedSpans[i]...)
+		spansToDo[i] = g.Slice()
+		if len(spansToDo) > 0 {
+			hasToDo = true
+		}
+	}
+	if !hasToDo { // already done
+		return nil
+	}
+	completed := struct {
+		syncutil.Mutex
+		g []roachpb.SpanGroup
+	}{
+		g: make([]roachpb.SpanGroup, len(progress.SourceIndexIDs)),
+	}
+	addCompleted := func(idxs []int32, spans []roachpb.Span) (ret [][]roachpb.Span) {
+		completed.Lock()
+		defer completed.Unlock()
+		for i, idx := range idxs {
+			completed.g[idx].Add(spans[i])
+		}
+		for _, g := range completed.g {
+			ret = append(ret, g.Slice())
+		}
+		return ret
+	}
+	updateFunc := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+		if meta.BulkProcessorProgress == nil {
+			return nil
+		}
+		progress.CompletedSpans = addCompleted(
+			meta.BulkProcessorProgress.CompletedSpanIdx,
+			meta.BulkProcessorProgress.CompletedSpans,
+		)
+		return tracker.SetMergeProgress(ctx, progress)
+	}
+	run, err := im.plan(
+		ctx,
+		descriptor,
+		spansToDo,
+		progress.DestIndexIDs,
+		progress.SourceIndexIDs,
+		updateFunc,
+		getMergeTimestamp(im.execCfg.Clock),
+	)
+	if err != nil {
+		return err
+	}
+	return run(ctx)
 }
 
 func (im *IndexBackfillerMergePlanner) plan(
@@ -164,7 +232,7 @@ type IndexMergeTracker struct {
 	fractionScaler *multiStageFractionScaler
 }
 
-var _ scexec.BackfillProgressFlusher = (*IndexMergeTracker)(nil)
+var _ scexec.BackfillerProgressFlusher = (*IndexMergeTracker)(nil)
 
 type rangeCounter func(ctx context.Context, spans []roachpb.Span) (int, error)
 
@@ -263,7 +331,7 @@ func (imt *IndexMergeTracker) UpdateMergeProgress(
 }
 
 func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgressFlusher {
-	return scdeps.NewPeriodicProgressFlusher(
+	return backfiller.NewPeriodicProgressFlusher(
 		func() time.Duration {
 			return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
 		},
