@@ -277,7 +277,7 @@ func initFlags() {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd} {
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}

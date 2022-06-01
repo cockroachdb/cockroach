@@ -117,8 +117,9 @@ type StartOpts struct {
 	EncryptedStores bool
 
 	// -- Options that apply only to StartTenantSQL target --
-	TenantID int
-	KVAddrs  string
+	TenantID  int
+	KVAddrs   string
+	KVCluster *SyncedCluster
 }
 
 // StartTarget identifies what flavor of cockroach we are starting.
@@ -153,8 +154,15 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	if startOpts.Target == StartTenantProxy {
 		return fmt.Errorf("start tenant proxy not implemented")
 	}
-	if err := c.distributeCerts(ctx, l); err != nil {
-		return err
+	switch startOpts.Target {
+	case StartDefault:
+		if err := c.distributeCerts(ctx, l); err != nil {
+			return err
+		}
+	case StartTenantSQL:
+		if err := c.distributeTenantCerts(ctx, l, startOpts.KVCluster, startOpts.TenantID); err != nil {
+			return err
+		}
 	}
 
 	nodes := c.TargetNodes()
@@ -746,6 +754,16 @@ func (c *SyncedCluster) distributeCerts(ctx context.Context, l *logger.Logger) e
 		if node == 1 && c.Secure {
 			return c.DistributeCerts(ctx, l)
 		}
+	}
+	return nil
+}
+
+// distributeCerts distributes certs if it's a secure cluster.
+func (c *SyncedCluster) distributeTenantCerts(
+	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
+) error {
+	if c.Secure {
+		return c.DistributeTenantCerts(ctx, l, hostCluster, tenantID)
 	}
 	return nil
 }
