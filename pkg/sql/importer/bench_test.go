@@ -90,10 +90,11 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 
 		kvCh := make(chan row.KVBatch)
 		g := ctxgroup.WithContext(ctx)
+		table := t // copy for safe reference in Go routine
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(kvCh)
 			wc := importer.NewWorkloadKVConverter(
-				0, tableDesc, t.InitialRows, 0, t.InitialRows.NumBatches, kvCh, db)
+				0, tableDesc, table.InitialRows, 0, table.InitialRows.NumBatches, kvCh, db)
 			evalCtx := &eval.Context{
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				Codec:            keys.SystemSQLCodec,
