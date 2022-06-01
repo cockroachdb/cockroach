@@ -80,7 +80,7 @@ func newRowFetcherCache(
 	db *kv.DB,
 	details jobspb.ChangefeedDetails,
 ) *rowFetcherCache {
-	specs := details.TargetSpecifications
+	specs := AllTargets(details)
 	watchedFamilies := make(map[watchedFamily]struct{}, len(specs))
 	for _, s := range specs {
 		watchedFamilies[watchedFamily{tableID: s.TableID, familyName: s.FamilyName}] = struct{}{}
