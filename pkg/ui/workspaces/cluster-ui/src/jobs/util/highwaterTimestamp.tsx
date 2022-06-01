@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,13 +7,13 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import React from "react";
+import { google } from "@cockroachlabs/crdb-protobuf-client";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import moment from "moment";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { DATE_FORMAT } from "src/util/format";
-import { google } from "src/js/protos";
-import ITimestamp = google.protobuf.ITimestamp;
+import React from "react";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
+
+type ITimestamp = google.protobuf.ITimestamp;
 
 interface HighwaterProps {
   timestamp: ITimestamp;
@@ -36,9 +36,13 @@ export class HighwaterTimestamp extends React.PureComponent<HighwaterProps> {
     }
 
     return (
-      <ToolTipWrapper text={highwaterMoment.format(DATE_FORMAT)}>
+      <Tooltip
+        placement="bottom"
+        style="default"
+        content={highwaterMoment.format(DATE_FORMAT_24_UTC)}
+      >
         {this.props.decimalString}
-      </ToolTipWrapper>
+      </Tooltip>
     );
   }
 }

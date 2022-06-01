@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,14 +7,12 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
 import React from "react";
-import { shallow } from "enzyme";
 import { assert } from "chai";
-import { JobTable, JobTableProps } from "src/views/jobs/jobTable";
+import { shallow } from "enzyme";
+import { earliestRetainedTime } from "./jobsPage.fixture";
 
-import "src/enzymeInit";
-import { earliestRetainedTime } from "src/views/jobs/jobsTable.fixture";
+import { JobTable, JobTableProps } from "./jobTable";
 
 describe("<JobTable>", () => {
   it("should reset page to 1 after job list prop changes", () => {
@@ -25,13 +23,9 @@ describe("<JobTable>", () => {
       sort: { columnTitle: null, ascending: true },
       setSort: () => {},
       jobs: {
-        data: {
-          jobs: [{}, {}, {}, {}],
-          earliest_retained_time: earliestRetainedTime,
-          toJSON,
-        },
-        inFlight: false,
-        valid: true,
+        jobs: [{}, {}, {}, {}],
+        earliest_retained_time: earliestRetainedTime,
+        toJSON: toJSON,
       },
       current: 2,
       pageSize: 2,
@@ -49,7 +43,11 @@ describe("<JobTable>", () => {
     );
     assert.equal(jobTable.state().pagination.current, 2);
     jobTable.setProps({
-      jobs: { data: { jobs: [{}, {}], toJSON }, inFlight: false, valid: true },
+      jobs: {
+        jobs: [{}, {}],
+        earliest_retained_time: earliestRetainedTime,
+        toJSON: toJSON,
+      },
     });
     assert.equal(jobTable.state().pagination.current, 1);
   });
