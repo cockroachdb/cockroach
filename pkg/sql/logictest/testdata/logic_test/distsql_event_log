@@ -16,7 +16,7 @@ CREATE TABLE a (id INT PRIMARY KEY, x INT, y INT, INDEX x_idx (x, y))
 statement ok
 CREATE STATISTICS s1 ON id FROM a
 
-statement ok
+statement ok retry
 CREATE STATISTICS __auto__ FROM a
 
 # Check explicitly for table id 106. System tables could trigger autostats
