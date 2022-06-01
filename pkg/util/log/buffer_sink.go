@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/errors"
 )
 
 // bufferSink wraps a child logSink to add buffering and asynchronous behavior.
@@ -63,6 +64,9 @@ type bufferSink struct {
 
 	// inErrorState is used internally to temporarily disable the sink during error handling.
 	inErrorState bool
+
+	// onMsgDrop is a hook that's called, if set, before dropping messages.
+	onMsgDrop func()
 }
 
 const bufferSinkDefaultMaxInFlight = 4
@@ -163,6 +167,9 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 				atomic.AddInt32(&bs.nInFlight, 1)
 				reset()
 			} else {
+				if bs.onMsgDrop != nil {
+					bs.onMsgDrop()
+				}
 				b.compact()
 			}
 		}
@@ -262,6 +269,10 @@ type bufferSinkBundle struct {
 // important messages if there's room. Maybe the timestamp
 // range too.
 func (b *bufferSinkBundle) compact() {
+	if b.errorCh != nil {
+		b.errorCh <- errSyncMsgDropped
+		b.errorCh = nil
+	}
 	b.droppedCount += len(b.messages)
 	for _, m := range b.messages {
 		putBuffer(m.b)
@@ -280,6 +291,10 @@ func (bs *bufferSink) attachHints(b []byte) []byte {
 	return bs.child.attachHints(b)
 }
 
+// errSyncMsgDropped is returned by bufferSink.output() whenever a message sent
+// with with the forceSync option is dropped.
+var errSyncMsgDropped = errors.New("sync log message dropped")
+
 // output emits some formatted bytes to this sink.
 // the sink is invited to perform an extra flush if indicated
 // by the argument. This is set to true for e.g. Fatal
@@ -289,8 +304,10 @@ func (bs *bufferSink) attachHints(b []byte) []byte {
 // sinks must not recursively call into logging when implementing
 // this method.
 //
-// If forceSync is set, returns the child sink's error (which is otherwise
-// handled via the bufferSink's errCallback.)
+// If forceSync is set, the output() call blocks on the child sink flush and
+// returns the child sink's error (which is otherwise handled via the
+// bufferSink's errCallback). If the bufferSink drops this message instead of
+// passing it to the child sink, errSyncMsgDropped is returned.
 func (bs *bufferSink) output(b []byte, opts sinkOutputOptions) error {
 	// Make a copy to live in the async buffer.
 	// We can't take ownership of the slice we're passed --
