@@ -92,10 +92,10 @@ func TestAdaptiveThrottling(t *testing.T) {
 		var wg sync.WaitGroup
 		for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 			wg.Add(1)
-			go func() {
+			go func(load int) {
 				runLoad(load, cancel)
 				wg.Done()
-			}()
+			}(load)
 		}
 
 		// Sleep for 2 * DefaultMetricsSampleInterval, to make sure the runtime

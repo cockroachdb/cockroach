@@ -97,13 +97,13 @@ func TestMemoryLimit(t *testing.T) {
 				wg.Add(tc.concurrency)
 				errCh := make(chan error, tc.concurrency)
 				for i := 0; i < tc.concurrency; i++ {
-					go func() {
+					go func(query string) {
 						defer wg.Done()
-						_, err := db.Exec(tc.query)
+						_, err := db.Exec(query)
 						if err != nil {
 							errCh <- err
 						}
-					}()
+					}(tc.query)
 				}
 				wg.Wait()
 				close(errCh)
