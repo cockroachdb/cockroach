@@ -129,9 +129,9 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteByte('{')
-	comma := ""
+	delimiter := ""
 	for _, v := range d.Array {
-		ctx.WriteString(comma)
+		ctx.WriteString(delimiter)
 		switch dv := UnwrapDOidWrapper(v).(type) {
 		case dNull:
 			ctx.WriteString("NULL")
@@ -152,7 +152,7 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInArray(ctx, s)
 		}
-		comma = ","
+		delimiter = d.ParamTyp.Delimiter()
 	}
 	ctx.WriteByte('}')
 	if ctx.HasFlags(FmtPGCatalog) {
