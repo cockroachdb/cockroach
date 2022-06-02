@@ -195,6 +195,6 @@ VALUES ($1, $2, $3, $4, $5)`,
 }
 
 // The long-running upgrade resumer has no reverting logic.
-func (r resumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r resumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
 	return nil
 }
