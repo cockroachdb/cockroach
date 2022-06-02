@@ -173,7 +173,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	if _, needTopics := ca.spec.Feed.Opts[changefeedbase.OptTopicInValue]; needTopics {
-		ca.topicNamer, err = MakeTopicNamer(ca.spec.Feed.TargetSpecifications)
+		ca.topicNamer, err = MakeTopicNamer(AllTargets(ca.spec.Feed))
 		if err != nil {
 			return nil, err
 		}
@@ -302,9 +302,15 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if ca.spec.Feed.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatNative) {
 		ca.eventConsumer = newNativeKVConsumer(ca.sink)
 	} else {
-		ca.eventConsumer = newKVEventToRowConsumer(
+		ca.eventConsumer, err = newKVEventToRowConsumer(
 			ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), initialHighWater,
 			ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
+	}
+	if err != nil {
+		// Early abort in the case that there is an error creating the consumer.
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
 	}
 }
 
@@ -704,8 +710,8 @@ func newKVEventToRowConsumer(
 	details jobspb.ChangefeedDetails,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
-) kvEventConsumer {
-	rfCache := newRowFetcherCache(
+) (kvEventConsumer, error) {
+	rfCache, err := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
 		cfg.LeaseManager.(*lease.Manager),
@@ -713,6 +719,9 @@ func newKVEventToRowConsumer(
 		cfg.DB,
 		details,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
@@ -724,7 +733,7 @@ func newKVEventToRowConsumer(
 		knobs:                knobs,
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
-	}
+	}, nil
 }
 
 type tableDescriptorTopic struct {
@@ -860,7 +869,7 @@ func (c *kvEventToRowConsumer) topicForRow(r encodeRow) (TopicDescriptor, error)
 	if err != nil {
 		return noTopic{}, err
 	}
-	for _, s := range c.details.TargetSpecifications {
+	for _, s := range AllTargets(c.details) {
 		if s.TableID == r.tableDesc.GetID() && (s.FamilyName == "" || s.FamilyName == family.Name) {
 			topic, err := makeTopicDescriptorFromSpecForRow(s, r)
 			if err != nil {
