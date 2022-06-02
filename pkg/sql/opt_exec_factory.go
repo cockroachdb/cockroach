@@ -1899,7 +1899,8 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+	knobs := ef.planner.ExecCfg().TenantTestingKnobs
+	if !(knobs != nil && knobs.AllowSplitAndScatter) && !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 

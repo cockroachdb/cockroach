@@ -34,7 +34,8 @@ type scatterNode struct {
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
 func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
-	if !p.ExecCfg().Codec.ForSystemTenant() {
+	knobs := p.ExecCfg().TenantTestingKnobs
+	if !(knobs != nil && knobs.AllowSplitAndScatter) && !p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54255)
 	}
 

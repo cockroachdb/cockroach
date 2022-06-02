@@ -1522,6 +1522,10 @@ type TenantTestingKnobs struct {
 	// OverrideTokenBucketProvider allows a test-only TokenBucketProvider (which
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
+
+	// AllowSplitAndScatter, if set, allows secondary tenants to execute ALTER
+	// TABLE ... SPLIT AT and SCATTER SQL commands.
+	AllowSplitAndScatter bool
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
