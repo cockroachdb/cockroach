@@ -1,9 +1,11 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "schemafeed",
     srcs = [
+        "gen-tableEventType-stringer",  # keep
         "metrics.go",
         "schema_feed.go",
         "table_event_filter.go",
@@ -45,20 +47,26 @@ go_test(
     name = "schemafeed_test",
     size = "medium",
     srcs = [
+        "helpers_test.go",
         "main_test.go",
         "schema_feed_test.go",
+        "table_event_filter_datadriven_test.go",
         "table_event_filter_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":schemafeed"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/ccl/utilccl",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
@@ -70,10 +78,19 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-tableEventType-stringer",
+    src = "table_event_filter.go",
+    additional_args = ["--trimprefix=tableEvent"],
+    typ = "tableEventType",
 )
 
 get_x_data(name = "get_x_data")
