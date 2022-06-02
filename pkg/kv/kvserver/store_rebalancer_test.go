@@ -613,30 +613,23 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 		},
 
 		// NB: s1 serves 1500 qps and s5 serves 500. Without the lease, s1 would
-		// be projected to have 700 qps, which is close enough to 500 that we
-		// wouldn't expect a lease transfer in this situation.
+		// be projected to have 700 qps, ans s5 would have 1300 - this move makes
+		// the target store hotter than the current one. This behavior was not
+		// allowed before (see https://github.com/cockroachdb/cockroach/issues/81638).
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
 			qps:          800,
-			expectTarget: 0,
+			expectTarget: 5,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 4, 5},
 			qps:          800,
-			expectTarget: 0,
+			expectTarget: 5,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 3, 4, 5},
 			qps:          800,
-			expectTarget: 0,
-		},
-		// If s1 is projected to have 701qps and s5 is projected to have 1299qps, we
-		// would not transfer the lease because doing so would significantly switch
-		// the relative dispositions of s1 and s5.
-		{
-			storeIDs:     []roachpb.StoreID{1, 3, 4, 5},
-			qps:          799,
-			expectTarget: 0,
+			expectTarget: 5,
 		},
 		// NB: However, if s1 is projected to have 750 qps, we would expect a lease
 		// transfer to s5.
@@ -1281,13 +1274,12 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			shouldRebalance: false,
 		},
 		{
-			voters:             []roachpb.StoreID{1, 2, 3},
-			QPS:                10000,
-			rebalanceThreshold: 0.01,
-			// NB: Rebalancing a replica with 10000qps from s1 to s5 would switch the
-			// relative dispositions of s1 and s5 significantly. We expect no
-			// rebalance in this situation, see maxQPSTransferOvershoot.
-			shouldRebalance: false,
+			voters:              []roachpb.StoreID{1, 2, 3},
+			expRebalancedVoters: []roachpb.StoreID{5, 2, 3},
+			QPS:                 10000,
+			rebalanceThreshold:  0.01,
+			// NB: s5 will be hotter than s1 after this move.
+			shouldRebalance: true,
 		},
 	} {
 		t.Run("", func(t *testing.T) {
