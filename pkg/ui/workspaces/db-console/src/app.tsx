@@ -12,7 +12,7 @@ import { ConnectedRouter } from "connected-react-router";
 import { History } from "history";
 import "nvd3/build/nv.d3.min.css";
 import React from "react";
-import { Provider } from "react-redux";
+import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
@@ -98,8 +98,8 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
   const { store, history } = props;
 
   return (
-    <Provider store={store}>
-      <ConnectedRouter history={history}>
+    <Provider store={store} context={ReactReduxContext}>
+      <ConnectedRouter history={history} context={ReactReduxContext}>
         <Switch>
           {/* login */}
           {createLoginRoute()}
