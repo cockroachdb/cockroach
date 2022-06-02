@@ -101,7 +101,7 @@ enum Strength {
   //
   // To avoid this potential deadlock problem, an Upgrade lock can be used in
   // place of a Shared lock. Upgrade locks are not compatible with any other
-  // form of locking. As with Shared locks, the lock holder of a Shared lock
+  // form of locking. As with Shared locks, the lock holder of an Upgrade lock
   // on a key is only allowed to read from the key while the lock is held.
   // This resolves the deadlock scenario presented above because only one of
   // the transactions would have been able to acquire an Upgrade lock at a
