@@ -379,13 +379,6 @@ var (
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaLBLeaseTransferSignificantlySwitchesRelativeDisposition = metric.Metadata{
-		Name: "kv.allocator.load_based_lease_transfers.significantly_switches_relative_disposition",
-		Help: "The number times the allocator decided to not transfer the lease because" +
-			" it would invert the dispositions of the sending and the receiving stores",
-		Measurement: "Attempts",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaLBLeaseTransferShouldTransfer = metric.Metadata{
 		Name: "kv.allocator.load_based_lease_transfers.should_transfer",
 		Help: "The number times the allocator determined that the lease should be" +
@@ -422,13 +415,6 @@ var (
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaLBReplicaRebalancingSignificantlySwitchesRelativeDisposition = metric.Metadata{
-		Name: "kv.allocator.load_based_replica_rebalancing.significantly_switches_relative_disposition",
-		Help: "The number times the allocator decided to not rebalance the replica" +
-			" because it would invert the dispositions of the sending and the receiving stores",
-		Measurement: "Attempts",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaLBReplicaRebalancingShouldTransfer = metric.Metadata{
 		Name: "kv.allocator.load_based_replica_rebalancing.should_transfer",
 		Help: "The number times the allocator determined that the replica should be" +
@@ -439,21 +425,19 @@ var (
 )
 
 type loadBasedLeaseTransferMetrics struct {
-	CannotFindBetterCandidate                *metric.Counter
-	ExistingNotOverfull                      *metric.Counter
-	DeltaNotSignificant                      *metric.Counter
-	MissingStatsForExistingStore             *metric.Counter
-	SignificantlySwitchesRelativeDisposition *metric.Counter
-	ShouldTransfer                           *metric.Counter
+	CannotFindBetterCandidate    *metric.Counter
+	ExistingNotOverfull          *metric.Counter
+	DeltaNotSignificant          *metric.Counter
+	MissingStatsForExistingStore *metric.Counter
+	ShouldTransfer               *metric.Counter
 }
 
 type loadBasedReplicaRebalanceMetrics struct {
-	CannotFindBetterCandidate                *metric.Counter
-	ExistingNotOverfull                      *metric.Counter
-	DeltaNotSignificant                      *metric.Counter
-	MissingStatsForExistingStore             *metric.Counter
-	SignificantlySwitchesRelativeDisposition *metric.Counter
-	ShouldRebalance                          *metric.Counter
+	CannotFindBetterCandidate    *metric.Counter
+	ExistingNotOverfull          *metric.Counter
+	DeltaNotSignificant          *metric.Counter
+	MissingStatsForExistingStore *metric.Counter
+	ShouldRebalance              *metric.Counter
 }
 
 // AllocatorMetrics capture metrics about the allocator's decisions.
@@ -478,20 +462,18 @@ type Allocator struct {
 func makeAllocatorMetrics() AllocatorMetrics {
 	return AllocatorMetrics{
 		LoadBasedLeaseTransferMetrics: loadBasedLeaseTransferMetrics{
-			CannotFindBetterCandidate:                metric.NewCounter(metaLBLeaseTransferCannotFindBetterCandidate),
-			ExistingNotOverfull:                      metric.NewCounter(metaLBLeaseTransferExistingNotOverfull),
-			DeltaNotSignificant:                      metric.NewCounter(metaLBLeaseTransferDeltaNotSignificant),
-			MissingStatsForExistingStore:             metric.NewCounter(metaLBLeaseTransferMissingStatsForExistingStore),
-			SignificantlySwitchesRelativeDisposition: metric.NewCounter(metaLBLeaseTransferSignificantlySwitchesRelativeDisposition),
-			ShouldTransfer:                           metric.NewCounter(metaLBLeaseTransferShouldTransfer),
+			CannotFindBetterCandidate:    metric.NewCounter(metaLBLeaseTransferCannotFindBetterCandidate),
+			ExistingNotOverfull:          metric.NewCounter(metaLBLeaseTransferExistingNotOverfull),
+			DeltaNotSignificant:          metric.NewCounter(metaLBLeaseTransferDeltaNotSignificant),
+			MissingStatsForExistingStore: metric.NewCounter(metaLBLeaseTransferMissingStatsForExistingStore),
+			ShouldTransfer:               metric.NewCounter(metaLBLeaseTransferShouldTransfer),
 		},
 		LoadBasedReplicaRebalanceMetrics: loadBasedReplicaRebalanceMetrics{
-			CannotFindBetterCandidate:                metric.NewCounter(metaLBReplicaRebalancingCannotFindBetterCandidate),
-			ExistingNotOverfull:                      metric.NewCounter(metaLBReplicaRebalancingExistingNotOverfull),
-			DeltaNotSignificant:                      metric.NewCounter(metaLBReplicaRebalancingDeltaNotSignificant),
-			MissingStatsForExistingStore:             metric.NewCounter(metaLBReplicaRebalancingMissingStatsForExistingStore),
-			SignificantlySwitchesRelativeDisposition: metric.NewCounter(metaLBReplicaRebalancingSignificantlySwitchesRelativeDisposition),
-			ShouldRebalance:                          metric.NewCounter(metaLBReplicaRebalancingShouldTransfer),
+			CannotFindBetterCandidate:    metric.NewCounter(metaLBReplicaRebalancingCannotFindBetterCandidate),
+			ExistingNotOverfull:          metric.NewCounter(metaLBReplicaRebalancingExistingNotOverfull),
+			DeltaNotSignificant:          metric.NewCounter(metaLBReplicaRebalancingDeltaNotSignificant),
+			MissingStatsForExistingStore: metric.NewCounter(metaLBReplicaRebalancingMissingStatsForExistingStore),
+			ShouldRebalance:              metric.NewCounter(metaLBReplicaRebalancingShouldTransfer),
 		},
 	}
 }
@@ -1787,12 +1769,6 @@ func (a *Allocator) TransferLeaseTarget(
 				"r%d: delta between s%d and the coldest follower (ignoring r%d's lease) is not large enough",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID(), leaseRepl.GetRangeID(),
 			)
-			return roachpb.ReplicaDescriptor{}
-		case significantlySwitchesRelativeDisposition:
-			a.Metrics.LoadBasedLeaseTransferMetrics.SignificantlySwitchesRelativeDisposition.Inc(1)
-			log.VEventf(ctx, 5,
-				"r%d: lease transfer away from s%d would make it hotter than the coldest follower",
-				leaseRepl.GetRangeID(), leaseRepl.StoreID())
 			return roachpb.ReplicaDescriptor{}
 		case missingStatsForExistingStore:
 			a.Metrics.LoadBasedLeaseTransferMetrics.MissingStatsForExistingStore.Inc(1)
