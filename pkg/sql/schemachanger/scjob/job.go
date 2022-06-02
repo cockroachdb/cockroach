@@ -42,7 +42,9 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	return n.run(ctx, execCtxI)
 }
 
-func (n *newSchemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (n *newSchemaChangeResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	n.rollback = true
 	return n.run(ctx, execCtx)
 }

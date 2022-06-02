@@ -215,7 +215,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (r *resumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+func (r *resumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
 	if jobs.HasErrJobCanceled(errors.DecodeError(ctx, *r.job.Payload().FinalResumeError)) {
 		return errors.AssertionFailedf("span config reconciliation job cannot be canceled")
 	}

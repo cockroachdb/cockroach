@@ -270,12 +270,13 @@ func doCreateBackupSchedules(
 	if err != nil {
 		return err
 	}
-	fullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
+	origFullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
 	if err != nil {
 		return err
 	}
 
 	fullRecurrencePicked := false
+	fullRecurrence := origFullRecurrence
 	if incRecurrence != nil && fullRecurrence == nil {
 		// It's an enterprise user; let's see if we can pick a reasonable
 		// full  backup recurrence based on requested incremental recurrence.
@@ -361,7 +362,8 @@ func doCreateBackupSchedules(
 	}
 
 	// Check if backups were already taken to this collection.
-	if _, ignoreExisting := scheduleOptions[optIgnoreExistingBackups]; !ignoreExisting {
+	_, ignoreExisting := scheduleOptions[optIgnoreExistingBackups]
+	if !ignoreExisting {
 		if err := checkForExistingBackupsInCollection(ctx, p, destinations); err != nil {
 			return err
 		}
@@ -473,7 +475,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
+	collectScheduledBackupTelemetry(ctx, incRecurrence, fullRecurrence, inc, full, firstRun, fullRecurrencePicked, ignoreExisting, details)
 	return emitSchedule(full, backupNode, destinations, nil, /* incrementalFrom */
 		kmsURIs, nil, resultsCh)
 }
@@ -859,9 +861,14 @@ var scheduledBackupHeader = colinfo.ResultColumns{
 }
 
 func collectScheduledBackupTelemetry(
+	ctx context.Context,
 	incRecurrence *scheduleRecurrence,
+	fullRecurrence *scheduleRecurrence,
+	incScheduledJob *jobs.ScheduledJob,
+	fullScheduledJob *jobs.ScheduledJob,
 	firstRun *time.Time,
 	fullRecurrencePicked bool,
+	ignoreExisting bool,
 	details jobspb.ScheduleDetails,
 ) {
 	telemetry.Count("scheduled-backup.create.success")
@@ -890,6 +897,8 @@ func collectScheduledBackupTelemetry(
 	case jobspb.ScheduleDetails_PAUSE_SCHED:
 		telemetry.Count("scheduled-backup.error-policy.pause-schedule")
 	}
+
+	logCreateScheduleTelemetry(ctx, incRecurrence, fullRecurrence, incScheduledJob, fullScheduledJob, firstRun, ignoreExisting, details)
 }
 
 func createBackupScheduleHook(

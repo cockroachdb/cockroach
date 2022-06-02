@@ -90,18 +90,19 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
 
-	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
-		if knobs.OverrideAsOfClause != nil {
-			knobs.OverrideAsOfClause(&backupStmt.AsOf)
-		}
-	}
-
 	log.Infof(ctx, "Starting scheduled backup %d: %s",
 		sj.ScheduleID(), tree.AsString(backupStmt))
 
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
 	defer cleanup()
+
+	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.OverrideAsOfClause != nil {
+			knobs.OverrideAsOfClause(&backupStmt.AsOf, hook.(sql.PlanHookState).ExtendedEvalContext().StmtTimestamp)
+		}
+	}
+
 	backupFn, err := planBackup(ctx, hook.(sql.PlanHookState), backupStmt)
 	if err != nil {
 		return err

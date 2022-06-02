@@ -92,3 +92,5 @@ func (m *CommonJobEventDetails) CommonJobDetails() *CommonJobEventDetails { retu
 
 var _ EventWithCommonJobPayload = (*Import)(nil)
 var _ EventWithCommonJobPayload = (*Restore)(nil)
+
+type RecoveryEventType string
