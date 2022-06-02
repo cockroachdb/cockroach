@@ -121,9 +121,18 @@ type SSTBatcher struct {
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	settings *cluster.Settings,
+	flushBytes func() int64,
+	disallowShadowing bool,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	b := &SSTBatcher{
+		db:                db,
+		settings:          settings,
+		maxSize:           flushBytes,
+		disallowShadowing: disallowShadowing,
+	}
 	err := b.Reset(ctx)
 	return b, err
 }
