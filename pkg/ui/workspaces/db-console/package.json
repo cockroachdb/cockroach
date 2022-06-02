@@ -86,7 +86,7 @@
     "@types/enzyme-adapter-react-16": "^1.0.2",
     "@types/fetch-mock": "^5.8.1",
     "@types/highlight.js": "^10.1.0",
-    "@types/jest": "25.1.2",
+    "@types/jest": "27",
     "@types/lodash": "^4.14.149",
     "@types/long": "^4.0.1",
     "@types/mocha": "^2.2.40",

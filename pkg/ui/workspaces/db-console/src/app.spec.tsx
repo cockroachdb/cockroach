@@ -8,11 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { stubComponentInModule } from "./test-utils/mockComponent";
+stubComponentInModule("src/views/databases/databaseDetailsPage", "DatabaseDetailsPage");
+stubComponentInModule("src/views/databases/databaseTablePage", "DatabaseTablePage");
+stubComponentInModule("src/views/cluster/containers/dataDistribution", "default");
+stubComponentInModule("src/views/statements/statementsPage", "default");
+stubComponentInModule("src/views/transactions/transactionsPage", "default");
+
 import React from "react";
 import { assert } from "chai";
 import { Action, Store } from "redux";
-import { createMemoryHistory } from "history";
-import { mount, ReactWrapper } from "enzyme";
+import { createMemoryHistory, MemoryHistory } from "history";
+import { mount } from "enzyme";
 
 import { App } from "src/app";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -28,18 +35,15 @@ import { JobsTable } from "src/views/jobs";
 import { DatabasesPage } from "src/views/databases/databasesPage";
 import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
 import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
-import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
+import DataDistributionPageConnected from "src/views/cluster/containers/dataDistribution";
+import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
+import StatementsPage from "src/views/statements/statementsPage";
+import TransactionsPage from "src/views/transactions/transactionsPage";
 import {
-  StatementsPage,
   StatementDetails,
-  TransactionsPage,
   TransactionDetails,
-  TransactionsPageRoot,
-  ActiveTransactionsView,
   ActiveStatementDetails,
   ActiveTransactionDetails,
-  StatementsPageRoot,
-  ActiveStatementsView,
 } from "@cockroachlabs/cluster-ui";
 import Debug from "src/views/reports/containers/debug";
 import { ReduxDebug } from "src/views/reports/containers/redux";
@@ -60,15 +64,20 @@ import { Range } from "src/views/reports/containers/range";
 import { Stores } from "src/views/reports/containers/stores";
 
 describe("Routing to", () => {
-  const history = createMemoryHistory({
-    initialEntries: ["/"],
-  });
-  const store: Store<AdminUIState, Action> = createAdminUIStore(history);
-  const appWrapper: ReactWrapper = mount(
-    <App history={history} store={store} />,
-  );
+  let history: MemoryHistory<unknown>;
+  let appWrapper: ReturnType<typeof mount>;
 
-  afterAll(() => {
+  beforeEach(() => {
+    history = createMemoryHistory({
+      initialEntries: ["/"],
+    });
+    const store: Store<AdminUIState, Action> = createAdminUIStore(history);
+    appWrapper = mount(
+      <App history={history} store={store} />,
+    );
+  });
+
+  afterEach(() => {
     appWrapper.unmount();
   });
 
@@ -313,7 +322,7 @@ describe("Routing to", () => {
   describe("'/data-distribution' path", () => {
     it("routes to <DataDistributionPage> component", () => {
       navigateToPath("/data-distribution");
-      assert.lengthOf(appWrapper.find(DataDistributionPage), 1);
+      assert.lengthOf(appWrapper.find(DataDistributionPageConnected), 1);
     });
   });
 
@@ -321,9 +330,9 @@ describe("Routing to", () => {
     /* statement statistics */
   }
   describe("'/statements' path", () => {
-    it("routes to <StatementsPage> component", () => {
+    it("redirects to '/sql-activity' statement tab", () => {
       navigateToPath("/statements");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      assert.lengthOf(appWrapper.find(SQLActivityPage), 1);
     });
   });
 
@@ -367,19 +376,19 @@ describe("Routing to", () => {
   });
 
   describe("'/sql-activity?tab=Statements' path", () => {
-    it("routes to <StatementsPageRoot> component", () => {
+    it("routes to <StatementsPage> component", () => {
       navigateToPath("/sql-activity?tab=Statements");
-      assert.lengthOf(appWrapper.find(StatementsPageRoot), 1);
+      assert.lengthOf(appWrapper.find(StatementsPage), 1);
     });
 
-    it("routes to <TransactionsPage> component with view=fingerprints", () => {
+    it("routes to <StatementsPage> component with view=fingerprints", () => {
       navigateToPath("/sql-activity?tab=Statements&view=fingerprints");
       assert.lengthOf(appWrapper.find(StatementsPage), 1);
     });
 
-    it("routes to <ActiveTransactionsView> component with view=active", () => {
+    it("routes to <ActiveStatementsView> component with view=active", () => {
       navigateToPath("/sql-activity?tab=Statements&view=active");
-      assert.lengthOf(appWrapper.find(ActiveStatementsView), 1);
+      assert.lengthOf(appWrapper.find(StatementsPage), 1);
     });
   });
 
@@ -387,9 +396,9 @@ describe("Routing to", () => {
     /* transactions statistics */
   }
   describe("'/sql-activity?tab=Transactions' path", () => {
-    it("routes to <TransactionsPageRoot> component", () => {
+    it("routes to <TransactionsPage> component", () => {
       navigateToPath("/sql-activity?tab=Transactions");
-      assert.lengthOf(appWrapper.find(TransactionsPageRoot), 1);
+      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
     });
 
     it("routes to <TransactionsPage> component with view=fingerprints", () => {
@@ -399,7 +408,7 @@ describe("Routing to", () => {
 
     it("routes to <ActiveTransactionsView> component with view=active", () => {
       navigateToPath("/sql-activity?tab=Transactions&view=active");
-      assert.lengthOf(appWrapper.find(ActiveTransactionsView), 1);
+      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
     });
   });
 
