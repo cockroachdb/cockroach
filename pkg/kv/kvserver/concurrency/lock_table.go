@@ -40,7 +40,7 @@ const (
 	_ waitKind = iota
 
 	// waitFor indicates that the request is waiting on another transaction to
-	// to release its locks or complete its own request. waitingStates with this
+	// release its locks or complete its own request. waitingStates with this
 	// waitKind will provide information on who the request is waiting on. The
 	// request will likely want to eventually push the conflicting transaction.
 	waitFor
