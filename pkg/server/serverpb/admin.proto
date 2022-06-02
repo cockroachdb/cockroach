@@ -539,6 +539,7 @@ message SettingsResponse {
       string type = 2;
       string description = 3;
       bool public = 4;
+      google.protobuf.Timestamp last_updated = 5 [(gogoproto.nullable) = true, (gogoproto.stdtime) = true];
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
