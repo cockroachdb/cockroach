@@ -46,7 +46,7 @@ func (d FakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	return nil
 }
 
-func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
 	if d.FailOrCancel != nil {
 		return d.FailOrCancel(ctx)
 	}

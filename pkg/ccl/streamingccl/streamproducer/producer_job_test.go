@@ -89,8 +89,10 @@ func (c coordinatedResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 // OnFailOrCancel is called after the job reaches 'reverting' status
 // and notifies watcher after it finishes.
-func (c coordinatedResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	err := c.resumer.OnFailOrCancel(ctx, execCtx)
+func (c coordinatedResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
+	err := c.resumer.OnFailOrCancel(ctx, execCtx, jobErr)
 	c.revertingFinished <- struct{}{}
 	return err
 }

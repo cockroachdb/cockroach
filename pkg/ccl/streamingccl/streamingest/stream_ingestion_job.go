@@ -441,7 +441,7 @@ func (s *streamIngestionResumer) cancelProducerJob(
 // TODO(adityamaru): Add ClearRange logic once we have introduced
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
 	// Cancel the producer job on best effort. The source job's protected timestamp is no
 	// longer needed as this ingestion job is in 'reverting' status and we won't resume
 	// ingestion anymore.

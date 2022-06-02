@@ -353,7 +353,7 @@ func waitForWork(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}) error {
+func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}, error) error {
 	return nil
 }
 

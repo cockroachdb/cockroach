@@ -11,9 +11,11 @@ package backupccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -38,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -598,6 +603,54 @@ func upsertUntilBackpressure(
 		if !testutils.IsError(err, "backpressure") {
 			return errors.NewAssertionErrorWithWrappedErrf(err, "expected `backpressure` error")
 		}
+		return nil
+	})
+}
+
+// requireRecoveryEvent fetches all available log entries on disk after
+// startTime, and requires that the first RecoveryEvent of recoveryType matches
+// the expected event. requireRecoveryEvent will fail the test if the first
+// event does not match what's expected or if no RecoveryEvents of recoveryType
+// appear in the logs after a preset timeout.
+func requireRecoveryEvent(
+	t *testing.T,
+	startTime int64,
+	recoveryType eventpb.RecoveryEventType,
+	expected eventpb.RecoveryEvent,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(
+			startTime,
+			math.MaxInt64,
+			1000,
+			regexp.MustCompile(fmt.Sprintf(`"EventType":"recovery_event".*"RecoveryType":"%s"`, recoveryType)),
+			log.WithMarkedSensitiveData,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(entries) == 0 {
+			return errors.New("structured entry for recovery event not found in logs")
+		}
+
+		sort.Slice(entries, func(a int, b int) bool {
+			return entries[a].Time < entries[b].Time
+		})
+
+		jsonPayload := []byte(entries[0].Message)
+		var actual eventpb.RecoveryEvent
+		if err := json.Unmarshal(jsonPayload, &actual); err != nil {
+			t.Errorf("unmarshalling %q: %v", entries[0].Message, err)
+		}
+
+		// Exclude Job ID and timestamp from the comparison by clearing those values
+		// on the actual event.
+		actual.Timestamp = 0
+		actual.JobID = 0
+
+		require.Equal(t, expected, actual)
 		return nil
 	})
 }

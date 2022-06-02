@@ -564,7 +564,7 @@ func (r *cancellableImportResumer) Resume(ctx context.Context, execCtx interface
 	return errors.New("job succeed, but we're forcing it to be paused")
 }
 
-func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *cancellableImportResumer) OnFailOrCancel(context.Context, interface{}, error) error {
 	// This callback is invoked when an error or cancellation occurs
 	// during the import. Since our Resume handler returned an
 	// error (after pausing the job), we need to short-circuits
