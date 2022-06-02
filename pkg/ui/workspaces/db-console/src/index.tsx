@@ -14,7 +14,8 @@ import "src/polyfills";
 import "src/protobufInit";
 import { alertDataSync } from "src/redux/alerts";
 import { App } from "src/app";
-import { store, history } from "src/redux/state";
+import { history } from "src/redux/history";
+import { store } from "src/redux/state";
 import "src/redux/analytics";
 import {
   DataFromServer,
