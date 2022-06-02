@@ -157,12 +157,20 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 
 		done := b.done
 		if flush {
+			// Drop if we have too many pending flushes. But don't drop a batch with
+			// the done flag set, since that's responsible for stopping the flusher.
+			//
 			// TODO(knz): This logic seems to contain a race condition (with
 			// the flusher). Also it's not clear why this is using a custom
 			// atomic counter? Why not using a buffered channel and check
 			// via `select` that the write is possible?
 			// See: https://github.com/cockroachdb/cockroach/issues/72460
-			if atomic.LoadInt32(&bs.nInFlight) < bs.maxInFlight {
+			if done || atomic.LoadInt32(&bs.nInFlight) < bs.maxInFlight {
+				// bs.flushCh has a buffer of capacity maxInFlight, so this write is
+				// generally non-blocking. There is one case where it might block: if
+				// done is set, then the buffer might be full and we're sending anyway.
+				// In that case, it doesn't matter whether we block or not since we're
+				// about to return anyway.
 				bs.flushCh <- b
 				atomic.AddInt32(&bs.nInFlight, 1)
 				reset()
