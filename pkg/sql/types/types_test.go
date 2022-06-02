@@ -1072,7 +1072,7 @@ func TestDelimiter(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if actual := Delimiter(tc.t); actual != tc.expected {
+		if actual := tc.t.Delimiter(); actual != tc.expected {
 			t.Errorf("%v: expected <%v>, got <%v>", tc.t.Family(), tc.expected, actual)
 		}
 	}
