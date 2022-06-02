@@ -109,7 +109,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 				t.Status("running Q", queryNum)
 				// To aid during the debugging later, we'll print the DistSQL
 				// diagram of the query.
-				rows, err := conn.Query("EXPLAIN (DISTSQL) " + tpch.QueriesByNumber[queryNum])
+				rows, err := conn.Query("EXPLAIN (DISTSQL) " + tpch.GetQueryByNumber(queryNum, 0 /* streamID */))
 				if err != nil {
 					t.Fatal(err)
 				}

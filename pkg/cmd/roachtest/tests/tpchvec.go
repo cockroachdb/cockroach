@@ -267,7 +267,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				for i := 0; i < runConfig.numRunsPerQuery; i++ {
 					t.Status(fmt.Sprintf("\nRunning EXPLAIN ANALYZE (DEBUG) for setup=%s\n", runConfig.setupNames[setupIdx]))
 					rows, err := tempConn.Query(fmt.Sprintf(
-						"EXPLAIN ANALYZE (DEBUG) %s;", tpch.QueriesByNumber[queryNum],
+						"EXPLAIN ANALYZE (DEBUG) %s;", tpch.GetQueryByNumber(queryNum, 0 /* streamID */),
 					))
 					if err != nil {
 						t.Fatal(err)

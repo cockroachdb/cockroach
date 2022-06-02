@@ -10,10 +10,20 @@
 
 package tpch
 
+import (
+	"fmt"
+
+	"github.com/cockroachdb/errors"
+)
+
 var (
-	// QueriesByNumber is a mapping from the number of a TPC-H query to the actual
+	// queriesByNumber is a mapping from the number of a TPC-H query to the actual
 	// query.
-	QueriesByNumber = map[int]string{
+	//
+	// Note that Q15 is a "format-string template" expecting a single
+	// non-negative integer argument (i.e. it should be used as
+	// fmt.Sprintf(query15, <id>) where <id> is an integer).
+	queriesByNumber = map[int]string{
 		1:  query1,
 		2:  query2,
 		3:  query3,
@@ -39,8 +49,23 @@ var (
 	}
 
 	// NumQueries specifies the number of queries in TPC-H benchmark.
-	NumQueries = len(QueriesByNumber)
+	NumQueries = len(queriesByNumber)
 )
+
+// GetQueryByNumber returns the TPC-H query based on its number. streamID must
+// be non-negative integer that uniquely identifies the connection that will be
+// executing the query. If the query runs with no concurrency, then 0 could be
+// used.
+func GetQueryByNumber(queryNum int, streamID int) string {
+	query := queriesByNumber[queryNum]
+	if queryNum == 15 {
+		if streamID < 0 {
+			panic(errors.AssertionFailedf("unexpectedly negative streamID: %d", streamID))
+		}
+		query = fmt.Sprintf(query, streamID)
+	}
+	return query
+}
 
 const (
 	query1 = `
@@ -459,11 +484,13 @@ WHERE
 	// floating point computations when the order of summation is different
 	// (see #53946 for more details).
 	//
-	// Additionally, CREATE VIEW statement has been adjusted to include IF NOT
-	// EXISTS modifier so that query15 could be run with concurrency greater
-	// than one without hitting the "view already exists" error.
+	// Note that this string is a "format-string template" expecting a single
+	// non-negative integer argument (i.e. it should be used as
+	// fmt.Sprintf(query15, <id>) where <id> is an integer). This integer is
+	// called StreamID in the TPC-H and allows executing the query with
+	// concurrency.
 	query15 = `
-CREATE VIEW IF NOT EXISTS revenue0 (supplier_no, total_revenue) AS
+CREATE VIEW revenue%[1]d (supplier_no, total_revenue) AS
 	SELECT
 		l_suppkey,
 		sum(l_extendedprice * (1 - l_discount))
@@ -483,7 +510,7 @@ SELECT
 	total_revenue
 FROM
 	supplier,
-	revenue0
+	revenue%[1]d
 WHERE
 	s_suppkey = supplier_no
 	AND abs(total_revenue - (
@@ -495,7 +522,7 @@ WHERE
 ORDER BY
 	s_suppkey;
 
-DROP VIEW revenue0;
+DROP VIEW revenue%[1]d;
 `
 
 	query16 = `

@@ -85,7 +85,7 @@ func registerCancel(r registry.Registry) {
 							errCh <- errors.Wrap(err, "unexpected error")
 						}
 					}
-				}(tpch.QueriesByNumber[queryNum])
+				}(tpch.GetQueryByNumber(queryNum, 0 /* streamID */))
 
 				// Wait for the query-runner goroutine to start.
 				<-sem

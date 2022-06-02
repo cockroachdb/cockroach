@@ -138,7 +138,7 @@ func (w *tpch) Hooks() workload.Hooks {
 				if err != nil {
 					return err
 				}
-				if _, ok := QueriesByNumber[queryNum]; !ok {
+				if _, ok := queriesByNumber[queryNum]; !ok {
 					return errors.Errorf(`unknown query: %s`, queryName)
 				}
 				w.selectedQueries = append(w.selectedQueries, queryNum)
@@ -318,9 +318,10 @@ func (w *tpch) Ops(
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		worker := &worker{
-			config: w,
-			hists:  reg.GetHandle(),
-			db:     db,
+			config:   w,
+			hists:    reg.GetHandle(),
+			db:       db,
+			streamID: i,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
@@ -328,10 +329,11 @@ func (w *tpch) Ops(
 }
 
 type worker struct {
-	config *tpch
-	hists  *histogram.Histograms
-	db     *gosql.DB
-	ops    int
+	config   *tpch
+	hists    *histogram.Histograms
+	db       *gosql.DB
+	ops      int
+	streamID int
 }
 
 func (w *worker) run(ctx context.Context) error {
@@ -342,7 +344,7 @@ func (w *worker) run(ctx context.Context) error {
 	if !w.config.useClusterVectorizeSetting {
 		prefix = fmt.Sprintf("SET vectorize = '%s';", w.config.vectorize)
 	}
-	query := fmt.Sprintf("%s %s", prefix, QueriesByNumber[queryNum])
+	query := fmt.Sprintf("%s %s", prefix, GetQueryByNumber(queryNum, w.streamID))
 
 	vals := make([]interface{}, maxCols)
 	for i := range vals {
