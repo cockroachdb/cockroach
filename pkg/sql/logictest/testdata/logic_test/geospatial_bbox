@@ -20,7 +20,7 @@ query ITTT
 SELECT * FROM box2d_encoding_test ORDER BY id ASC
 ----
 1  BOX(1 2,3 4)              BOX(3 4,5 6)      {"BOX(-1 -2,-3 -4)"}
-2  BOX(10.1 20.1,30.5 40.6)  BOX(30 40,50 60)  {"BOX(-1 -2,-3 -4)","BOX(3 -4,5 -6)"}
+2  BOX(10.1 20.1,30.5 40.6)  BOX(30 40,50 60)  {"BOX(-1 -2,-3 -4)";"BOX(3 -4,5 -6)"}
 
 subtest st_makebox2d
 
