@@ -628,6 +628,11 @@
           "type": "boolean",
           "x-go-name": "IsDistributed"
         },
+        "is_full_scan": {
+          "description": "True if the query contains a full table or index scan. Note that this\nfield is only valid if the query is in the EXECUTING phase.",
+          "type": "boolean",
+          "x-go-name": "IsFullScan"
+        },
         "phase": {
           "$ref": "#/definitions/ActiveQuery_Phase"
         },
@@ -1520,6 +1525,11 @@
         "is_historical": {
           "type": "boolean",
           "x-go-name": "IsHistorical"
+        },
+        "last_auto_retry_reason": {
+          "description": "Error message describing the cause for the txn's last automatic retry.",
+          "type": "string",
+          "x-go-name": "LastAutoRetryReason"
         },
         "max_alloc_bytes": {
           "description": "High water mark of allocated bytes in the txn memory monitor.",

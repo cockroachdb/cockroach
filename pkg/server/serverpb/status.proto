@@ -858,6 +858,9 @@ message TxnInfo {
   string priority = 13;
 
   string quality_of_service = 14;
+
+  // Error message describing the cause for the txn's last automatic retry.
+  string last_auto_retry_reason = 15;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -896,6 +899,11 @@ message ActiveQuery {
 
   // A summarized version of the sql query.
   string sql_summary = 9;
+
+  // True if the query contains a full table or index scan. Note that this
+  // field is only valid if the query is in the EXECUTING phase.
+  bool is_full_scan = 10;
+
 }
 
 // Request object for ListSessions and ListLocalSessions.
