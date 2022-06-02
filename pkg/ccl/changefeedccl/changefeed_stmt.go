@@ -579,7 +579,7 @@ func getTableDescriptors(
 		}
 	}
 
-	_, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	_, _, _, targetDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -1076,7 +1076,9 @@ func (b *changefeedResumer) resumeWithRetries(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *changefeedResumer) OnFailOrCancel(ctx context.Context, jobExec interface{}) error {
+func (b *changefeedResumer) OnFailOrCancel(
+	ctx context.Context, jobExec interface{}, _ error,
+) error {
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()

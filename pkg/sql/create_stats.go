@@ -720,7 +720,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}) error { return nil }
+func (r *createStatsResumer) OnFailOrCancel(context.Context, interface{}, error) error { return nil }
 
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {

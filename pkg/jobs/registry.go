@@ -1073,7 +1073,7 @@ type Resumer interface {
 	// which is not guaranteed to run on the node where the job is running. So it
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
-	OnFailOrCancel(ctx context.Context, execCtx interface{}) error
+	OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error
 }
 
 // PauseRequester is an extension of Resumer which allows job implementers to inject
@@ -1263,7 +1263,7 @@ func (r *Registry) stepThroughStateMachine(
 				jm.CurrentlyRunning.Dec(1)
 				r.metrics.RunningNonIdleJobs.Dec(1)
 			}()
-			err = resumer.OnFailOrCancel(onFailOrCancelCtx, execCtx)
+			err = resumer.OnFailOrCancel(onFailOrCancelCtx, execCtx, jobErr)
 		}()
 		if successOnFailOrCancel := err == nil; successOnFailOrCancel {
 			jm.FailOrCancelCompleted.Inc(1)
