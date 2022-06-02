@@ -183,7 +183,7 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 		GoroutineID:  s.GoroutineID,
 	}
 
-	if len(s.TagsV2) == 0 {
+	if len(s.TagGroups) == 0 {
 		// Sort the tags.
 		tagKeys := make([]string, 0, len(s.Tags))
 		for k := range s.Tags {
@@ -195,33 +195,41 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 		for i, k := range tagKeys {
 			p.Tags[i] = processTag(k, s.Tags[k], snap)
 		}
-	} else {
-		// Sort the tags.
-		tagKeys := make([]string, 0, len(s.TagsV2))
-		for k := range s.TagsV2 {
-			tagKeys = append(tagKeys, k)
-		}
-		sort.Strings(tagKeys)
-
-		p.Tags = make([]ProcessedTag, len(s.TagsV2))
-		for i, k := range tagKeys {
-			tag := s.TagsV2[k]
-			p.Tags[i] = processTag(k, tag.Value, snap)
-
-			// Process any child tags.
-			// Sort the child tags.
-			childTagKeys := make([]string, 0, len(tag.Tags))
-			for k := range tag.Tags {
-				childTagKeys = append(childTagKeys, k)
-			}
-			sort.Strings(childTagKeys)
-
-			p.Tags[i].Children = make([]ProcessedTag, len(tag.Tags))
-			for j, childKey := range childTagKeys {
-				p.Tags[i].Children[j] = processTag(childKey, tag.Tags[childKey], snap)
-			}
-		}
+		return p
 	}
+	p.Tags = make([]ProcessedTag, 0)
+	for _, tagGroup := range s.TagGroups {
+		// If the tag group has exactly one tag, use its key and value.
+		// Otherwise, use the name as the key, and value should be empty.
+
+		var key string
+		var value string
+		if len(tagGroup.Tags) == 1 {
+			tag := tagGroup.Tags[0]
+			p.Tags = append(p.Tags, processTag(
+				tag.Key,
+				tag.Value,
+				snap))
+			continue
+		}
+
+		key = tagGroup.Name
+		value = ""
+
+		processedParentTag := processTag(key, value, snap)
+		processedParentTag.Children = make([]ProcessedTag, len(tagGroup.Tags))
+		for i, tag := range tagGroup.Tags {
+			processedParentTag.Children[i] = processTag(tag.Key, tag.Value, snap)
+		}
+
+		p.Tags = append(p.Tags, processedParentTag)
+	}
+	sort.Slice(p.Tags, func(i, j int) bool {
+		a := p.Tags[i]
+		b := p.Tags[j]
+		return a.Key < b.Key
+	})
+
 	return p
 }
 
@@ -280,23 +288,23 @@ func findTxnState(txnID string, snap tracing.SpansSnapshot) txnState {
 			if s.Operation != "sql txn" {
 				continue
 			}
-			txnTagV2, ok := s.TagsV2["txn"]
-			if s.Tags["txn"] != txnID && (!ok || txnTagV2.Value != txnID) {
+			txnTagGroup := s.FindTagGroup("txn")
+			if s.Tags["txn"] != txnID && (txnTagGroup == nil || *txnTagGroup.FindTag("txn") != txnID) {
 				continue
 			}
 			// I've found the transaction. Look through its children and find a SQL query.
 			for _, s2 := range t {
 				if s2.Operation == "sql query" {
-					if len(s2.TagsV2) == 0 {
+					if len(s2.TagGroups) == 0 {
 						return txnState{
 							found:    true,
 							curQuery: s2.Tags["statement"],
 						}
 					}
 					stmt := ""
-					stmtTag := s2.TagsV2["statement"]
+					stmtTag := s2.FindTagGroup("statement")
 					if stmtTag != nil {
-						stmt = stmtTag.Value
+						stmt = *stmtTag.FindTag("statement")
 					}
 					return txnState{
 						found:    true,

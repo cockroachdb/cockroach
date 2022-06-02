@@ -127,12 +127,11 @@ func CheckRecordedSpans(rec Recording, expected string) error {
 	for _, rs := range rec {
 		d := depth(rs.SpanID)
 		row(d, "span: %s", rs.Operation)
-		if len(rs.TagsV2) > 0 {
+		if len(rs.TagGroups) > 0 {
 			var tags []string
-			for k, v := range rs.TagsV2 {
-				tags = append(tags, fmt.Sprintf("%s=%v", k, v.Value))
-				for childK, childV := range v.Tags {
-					tags = append(tags, fmt.Sprintf("%s=%v", childK, childV))
+			for _, tagGroup := range rs.TagGroups {
+				for _, tag := range tagGroup.Tags {
+					tags = append(tags, fmt.Sprintf("%s=%v", tag.Key, tag.Value))
 				}
 			}
 			sort.Strings(tags)

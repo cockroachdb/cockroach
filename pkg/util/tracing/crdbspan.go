@@ -751,7 +751,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		Verbose:        s.recordingType() == RecordingVerbose,
 		RecordingMode:  s.recordingType().ToProto(),
 		Tags:           make(map[string]string),
-		TagsV2:         make(map[string]*tracingpb.CompositeTag),
+		TagGroups:      make([]*tracingpb.TagGroup, 0),
 	}
 
 	if rs.Duration == -1 {
@@ -767,15 +767,24 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	addTag := func(k, v string) {
 		rs.Tags[k] = v
 
-		rs.TagsV2[k] = &tracingpb.CompositeTag{
-			Value: v,
-			Tags:  make(map[string]string),
-		}
+		rs.TagGroups = append(rs.TagGroups, &tracingpb.TagGroup{
+			Tags: []*tracingpb.TagKV{
+				{
+					Key:   k,
+					Value: v,
+				},
+			},
+		})
 	}
 
-	addNestedTag := func(childKey, childValue, parentKey string) {
+	addNestedTag := func(childKey, childValue string, tagGroup *tracingpb.TagGroup) {
 		rs.Tags[childKey] = childValue
-		rs.TagsV2[parentKey].Tags[childKey] = childValue
+		tagGroup.Tags = append(tagGroup.Tags,
+			&tracingpb.TagKV{
+				Key:   childKey,
+				Value: childValue,
+			},
+		)
 	}
 
 	// If the span is not verbose, optimize by avoiding the tags.
@@ -819,12 +828,12 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.lazyTags {
 			switch v := kv.Value.(type) {
 			case LazyTag:
-				rs.TagsV2[kv.Key] = &tracingpb.CompositeTag{
-					Value: "",
-					Tags:  make(map[string]string),
+				tagGroup := &tracingpb.TagGroup{
+					Name: kv.Key,
 				}
+				rs.TagGroups = append(rs.TagGroups, tagGroup)
 				for _, tag := range v.Render() {
-					addNestedTag(string(tag.Key), tag.Value.Emit(), kv.Key)
+					addNestedTag(string(tag.Key), tag.Value.Emit(), tagGroup)
 				}
 			case fmt.Stringer:
 				addTag(kv.Key, v.String())
