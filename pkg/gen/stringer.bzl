@@ -2,6 +2,7 @@
 
 STRINGER_SRCS = [
   "//pkg/base:testclusterreplicationmode_string.go",
+  "//pkg/ccl/changefeedccl/schemafeed:tableeventtype_string.go",
   "//pkg/ccl/sqlproxyccl:errorcode_string.go",
   "//pkg/cli:keytype_string.go",
   "//pkg/clusterversion:key_string.go",
