@@ -11,7 +11,9 @@
 package log
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -19,18 +21,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
+const noMaxStaleness = time.Duration(0)
+const noSizeTrigger = 0
+const noMaxBufferSize = 0
+
 func getMockBufferSync(
-	t *testing.T, maxStaleness time.Duration, sizeTrigger int, errCallback func(error),
-) (sink *bufferSink, mock *MockLogSink, cleanup func()) {
+	t *testing.T, maxStaleness time.Duration, sizeTrigger uint64, maxBufferSize uint64,
+) (sink *bufferedSink, mock *MockLogSink, cleanup func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctrl := gomock.NewController(t)
 	mock = NewMockLogSink(ctrl)
-	sink = newBufferSink(ctx, mock, maxStaleness, sizeTrigger, 2 /* maxInFlight */, errCallback)
+	sink = newBufferedSink(mock, maxStaleness, sizeTrigger, maxBufferSize, false /* crashOnAsyncFlushErr */)
+	sink.Start(ctx)
 	cleanup = func() {
 		cancel()
 		ctrl.Finish()
@@ -48,7 +56,7 @@ func addArgs(f func()) func([]byte, sinkOutputOptions) {
 
 func TestBufferOneLine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferSync(t, 0 /* maxStaleness*/, 0 /* sizeTrigger */, nil /* errCallback*/)
+	sink, mock, cleanup := getMockBufferSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize)
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -63,27 +71,36 @@ func TestBufferOneLine(t *testing.T) {
 	require.NoError(t, sink.output(message, sinkOutputOptions{extraFlush: true}))
 }
 
-func TestBufferManyLinesOneFlush(t *testing.T) {
+func TestBufferSinkBuffers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferSync(t, 0 /* maxStaleness*/, 0 /* sizeTrigger */, nil /* errCallback*/)
+	sink, mock, cleanup := getMockBufferSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize)
 	defer cleanup()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer wg.Wait()
+	flushC := make(chan struct{})
 
 	message := []byte("test")
 	mock.EXPECT().
 		output(gomock.Eq([]byte("test\ntest")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
-		Do(addArgs(wg.Done))
+		Do(addArgs(func() { close(flushC) }))
 
+	// Send one message; it should be buffered.
 	require.NoError(t, sink.output(message, sinkOutputOptions{}))
+	// Sleep a little bit to convince ourselves that no flush is happening. The
+	// mock would yell if it did happen.
+	time.Sleep(50 * time.Millisecond)
+	// Send another message and ask for a flush.
 	require.NoError(t, sink.output(message, sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flushC:
+	// Good, we got our flush.
+	case <-time.After(10 * time.Second):
+		t.Fatalf("expected flush didn't happen")
+	}
 }
 
 func TestBufferMaxStaleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferSync(t, time.Second /* maxStaleness*/, 0 /* sizeTrigger */, nil /* errCallback*/)
+	sink, mock, cleanup := getMockBufferSync(t, time.Second /* maxStaleness*/, noSizeTrigger, noMaxBufferSize)
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -100,7 +117,7 @@ func TestBufferMaxStaleness(t *testing.T) {
 
 func TestBufferSizeTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferSync(t, 0 /* maxStaleness*/, 2 /* sizeTrigger */, nil /* errCallback*/)
+	sink, mock, cleanup := getMockBufferSync(t, noMaxStaleness, 2 /* sizeTrigger */, noMaxBufferSize)
 	defer cleanup()
 
 	var wg sync.WaitGroup
@@ -117,56 +134,75 @@ func TestBufferSizeTrigger(t *testing.T) {
 
 func TestBufferSizeTriggerMultipleFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferSync(t, 0 /* maxStaleness*/, 8 /* sizeTrigger */, nil /* errCallback*/)
+	sink, mock, cleanup := getMockBufferSync(t, noMaxStaleness, 8 /* sizeTrigger */, noMaxBufferSize)
 	defer cleanup()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	defer wg.Wait()
+	flush1C := make(chan struct{})
+	flush2C := make(chan struct{})
 
 	gomock.InOrder(
 		mock.EXPECT().
 			output(gomock.Eq([]byte("test1\ntest2")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
-			Do(addArgs(wg.Done)),
+			Do(addArgs(func() { close(flush1C) })),
 		mock.EXPECT().
 			output(gomock.Eq([]byte("test3")), sinkOutputOptionsMatcher{extraFlush: gomock.Eq(true)}).
-			Do(addArgs(wg.Done)),
+			Do(addArgs(func() { close(flush2C) })),
 	)
 
 	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
-	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{extraFlush: true}))
-}
-
-type testError struct{}
-
-func (testError) Error() string {
-	return "Test Error"
-}
-
-func TestBufferErrCallback(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCh := make(chan struct{})
-	errCallback := func(error) {
-		close(testCh)
+	select {
+	case <-flush1C:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first flush didn't happen")
 	}
-
-	sink, mock, cleanup := getMockBufferSync(t, 0 /* maxStaleness*/, 0 /* sizeTrigger */, errCallback)
-	defer cleanup()
-
-	message := []byte("test")
-	err := testError{}
-	mock.EXPECT().
-		output(gomock.Eq(message), gomock.Any()).Return(err)
-	require.NoError(t, sink.output(message, sinkOutputOptions{extraFlush: true}))
-
-	<-testCh
+	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{extraFlush: true}))
+	select {
+	case <-flush2C:
+	case <-time.After(10 * time.Second):
+		t.Fatal("first flush didn't happen")
+	}
 }
 
-func TestBufferForceSync(t *testing.T) {
+func TestBufferedSinkCrashOnAsyncFlushErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sink, mock, cleanup := getMockBufferSync(t, 0 /* maxStaleness*/, 0 /* sizeTrigger */, nil /* errCallback*/)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mock := NewMockLogSink(ctrl)
+	bufferMaxSize := uint64(20)
+	triggerSize := uint64(10)
+	// Configure a sink to crash on flush errors.
+	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, true /* crashOnAsyncFlushErr */)
+	sink.Start(ctx)
+
+	crashC := make(chan struct{})
+	SetExitFunc(false /* hideStack */, func(code exit.Code) {
+		close(crashC)
+	})
+	defer ResetExitFunc()
+
+	// Inject an error in flushes.
+	mock.EXPECT().output(gomock.Any(), gomock.Any()).Return(errors.New("boom"))
+	mock.EXPECT().exitCode().Return(exit.LoggingNetCollectorUnavailable())
+	// Force a flush.
+	require.NoError(t, sink.output([]byte("test"), sinkOutputOptions{extraFlush: true}))
+	// Check that we crashed.
+	select {
+	case <-crashC:
+		// Good; we would have crashed in production.
+	case <-time.After(10 * time.Second):
+		t.Fatalf("expected crash didn't happen")
+	}
+}
+
+// Test that a call to output() with the forceSync option doesn't return until
+// the flush is done.
+func TestBufferedSinkForceSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sink, mock, cleanup := getMockBufferSync(t, noMaxStaleness, noSizeTrigger, noMaxBufferSize)
 	defer cleanup()
 
 	ch := make(chan struct{})
@@ -180,7 +216,7 @@ func TestBufferForceSync(t *testing.T) {
 	go func() {
 		// Wait a second, verify that the call to output() is still blocked,
 		// then close the channel to unblock it.
-		<-time.After(time.Second)
+		<-time.After(50 * time.Millisecond)
 		if atomic.LoadInt32(&marker) != 0 {
 			t.Error("sink.output returned while child sync should be blocking")
 		}
@@ -192,66 +228,101 @@ func TestBufferForceSync(t *testing.T) {
 	atomic.StoreInt32(&marker, 1)
 }
 
-// Test that a forceSync message that is dropped by the bufferSink does not lead
-// to the respective output() call deadlocking.
-func TestForceSyncDropNoDeadlock(t *testing.T) {
+// Test that messages are buffered while a flush is in-flight.
+func TestBufferedSinkBlockedFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
-	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 1 /*triggerSize*/, 1 /* maxInFlight */, nil /*errCallback*/)
+	bufferMaxSize := uint64(20)
+	triggerSize := uint64(10)
+	sink := newBufferedSink(mock, noMaxStaleness, triggerSize, bufferMaxSize, false /* crashOnAsyncFlushErr */)
+	sink.Start(ctx)
 
-	// firstFlushC will be signaled when the bufferSink flushes for the first
+	// firstFlushSem will be signaled when the bufferedSink flushes for the first
 	// time. That flush will be blocked until the channel is written to again.
 	firstFlushSem := make(chan struct{})
 
-	// We'll write a message. This message will trigger a flush based on the byte
-	// limit. We'll block that flush and write a second message.
-	m1 := []byte("some message")
+	// We'll write a large message which will trigger a flush based on the
+	// triggerSize limit. We'll block that flush and then write more messages.
+	largeMsg := bytes.Repeat([]byte("a"), int(triggerSize))
 	mock.EXPECT().
 		output(gomock.Any(), gomock.Any()).
 		Do(func([]byte, sinkOutputOptions) {
 			firstFlushSem <- struct{}{}
 			<-firstFlushSem
 		})
-	require.NoError(t, sink.output(m1, sinkOutputOptions{}))
+	require.NoError(t, sink.output(largeMsg, sinkOutputOptions{}))
 	select {
 	case <-firstFlushSem:
 	case <-time.After(10 * time.Second):
 		t.Fatal("expected flush didn't happen")
 	}
-	// Unblock the flush when the test is done.
-	defer func() {
-		firstFlushSem <- struct{}{}
-	}()
 
-	// With the flush blocked, we now send a second message with the forceSync
-	// option. This message is expected to be dropped because of the maxInFlight
-	// limit. We install an onCompact hook to intercept the message drop so we can
-	// synchronize with it.
-	compactCh := make(chan struct{}, 1)
-	sink.onMsgDrop = func() {
-		select {
-		case compactCh <- struct{}{}:
-		default:
-		}
+	// With the flush blocked, we now send more messages. These messages will run
+	// into the bufferMaxSize limit, and so the oldest will be dropped.
+
+	// First, we arm a channel for a second flush. We don't expect this to fire
+	// yet.
+	secondFlush := make(chan []byte)
+	mock.EXPECT().
+		output(gomock.Any(), gomock.Any()).
+		Do(func(logs []byte, _ sinkOutputOptions) {
+			secondFlush <- logs
+		})
+
+	// We're going to send a sequence of messages. They'll overflow the buffer,
+	// and we'll expect only the last few to be eventually flushed.
+	for i := 0; i < 10; i++ {
+		s := fmt.Sprintf("a%d", i)
+		require.NoError(t, sink.output([]byte(s), sinkOutputOptions{}))
 	}
-	m2 := []byte("a sync message")
-	logCh := make(chan error)
-	go func() {
-		logCh <- sink.output(m2, sinkOutputOptions{forceSync: true})
-	}()
-	// Wait to be notified that the message was dropped.
-	<-compactCh
+	for i := 0; i < 10; i++ {
+		s := fmt.Sprintf("b%d", i)
+		require.NoError(t, sink.output([]byte(s), sinkOutputOptions{}))
+	}
 
 	select {
-	case err := <-logCh:
-		require.ErrorIs(t, err, errSyncMsgDropped)
-	case <-time.After(10 * time.Second):
-		t.Fatal("sink.Output call never returned. Deadlock?")
+	case <-secondFlush:
+		t.Fatalf("unexpected second flush while first flush is in-flight")
+	case <-time.After(10 * time.Millisecond):
+		// Good; it appears that a second flush does not happen while the first is in-flight.
 	}
+
+	// Now unblock the original flush, which in turn will allow a second flush to happen.
+	firstFlushSem <- struct{}{}
+
+	// Check that the second flush happens, and delivers the tail of the messages.
+	select {
+	case <-time.After(10 * time.Second):
+		t.Fatal("expected 2nd flush didn't happen")
+	case out := <-secondFlush:
+		require.Equal(t, []byte(`b4
+b5
+b6
+b7
+b8
+b9`), out)
+	}
+}
+
+// Test that multiple messages with the forceSync option work.
+func TestBufferedSinkSyncFlush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mock := NewMockLogSink(ctrl)
+	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
+	sink.Start(ctx)
+
+	mock.EXPECT().output(gomock.Eq([]byte("a")), gomock.Any())
+	mock.EXPECT().output(gomock.Eq([]byte("b")), gomock.Any())
+	require.NoError(t, sink.output([]byte("a"), sinkOutputOptions{forceSync: true}))
+	require.NoError(t, sink.output([]byte("b"), sinkOutputOptions{forceSync: true}))
 }
 
 func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
@@ -259,7 +330,8 @@ func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctrl := gomock.NewController(t)
 	mock := NewMockLogSink(ctrl)
-	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 0 /*sizeTrigger*/, 2 /* maxInFlight */, nil /*errCallback*/)
+	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
+	sink.Start(ctx)
 	defer ctrl.Finish()
 
 	var wg sync.WaitGroup

@@ -389,6 +389,7 @@ set to "NONE" to disable buffering. Example configuration:
        buffering:
           max-staleness: 20s
           flush-trigger-size: 25KB
+          max-buffer-size: 10MB
     sinks:
        file-groups:
           health:
@@ -404,6 +405,6 @@ set to "NONE" to disable buffering. Example configuration:
 |--|--|
 | `max-staleness` | the maximum time a log message will sit in the buffer before a flush is triggered. |
 | `flush-trigger-size` | the number of bytes that will trigger the buffer to flush. |
-| `max-in-flight` | the maximum number of buffered flushes before messages start being dropped. |
+| `max-buffer-size` | the limit on the size of the messages that are buffered. If this limit is exceeded, messages are dropped. The limit is expected to be higher than FlushTriggerSize. A buffer is flushed as soon as FlushTriggerSize is reached, and a new buffer is created once the flushing is started. Only one flushing operation is active at a time. |
 
 
