@@ -13,7 +13,6 @@ import { shallow } from "enzyme";
 import { assert } from "chai";
 import { JobTable, JobTableProps } from "src/views/jobs/jobTable";
 
-import "src/enzymeInit";
 import { earliestRetainedTime } from "src/views/jobs/jobsTable.fixture";
 
 describe("<JobTable>", () => {
