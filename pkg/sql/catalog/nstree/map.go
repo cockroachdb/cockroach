@@ -36,8 +36,15 @@ type EntryIterator func(entry catalog.NameEntry) error
 // tree with the same name or id, it will be removed.
 func (dt *Map) Upsert(d catalog.NameEntry) {
 	dt.maybeInitialize()
-	if replaced := dt.byName.upsert(d); replaced != nil {
-		dt.byID.delete(replaced.GetID())
+	skipByName := false
+	// TODO (Chengxiong): UDF need a better way to skip byName cache.
+	if _, ok := d.(catalog.FunctionDescriptor); ok {
+		skipByName = true
+	}
+	if !skipByName {
+		if replaced := dt.byName.upsert(d); replaced != nil {
+			dt.byID.delete(replaced.GetID())
+		}
 	}
 	if replaced := dt.byID.upsert(d); replaced != nil {
 		dt.byName.delete(replaced)

@@ -293,6 +293,12 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
 }
 
+func (*DummyEvalPlanner) ResolveFunction(
+	ctx context.Context, fName *tree.FunctionName, argType []*types.T,
+) (*tree.FunctionDefinition, error) {
+	return nil, nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

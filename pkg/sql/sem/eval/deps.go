@@ -141,6 +141,7 @@ type TypeResolver interface {
 type Planner interface {
 	DatabaseCatalog
 	TypeResolver
+	tree.FunctionResolver
 
 	// ExecutorConfig returns *ExecutorConfig
 	ExecutorConfig() interface{}

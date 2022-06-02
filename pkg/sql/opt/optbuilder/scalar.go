@@ -522,7 +522,7 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
+	def, err := f.Func.Resolve(b.semaCtx, b.semaCtx.SearchPath, nil)
 	if err != nil {
 		panic(err)
 	}

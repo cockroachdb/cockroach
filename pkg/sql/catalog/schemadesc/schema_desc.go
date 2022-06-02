@@ -55,6 +55,11 @@ func (desc *immutable) SafeMessage() string {
 	return formatSafeMessage("schemadesc.immutable", desc)
 }
 
+func (desc *immutable) GetFunction(name string) (bool, descpb.SchemaDescriptor_Function) {
+	fn, found := desc.Functions[name]
+	return found, fn
+}
+
 // SafeMessage makes Mutable a SafeMessager.
 func (desc *Mutable) SafeMessage() string {
 	return formatSafeMessage("schemadesc.Mutable", desc)

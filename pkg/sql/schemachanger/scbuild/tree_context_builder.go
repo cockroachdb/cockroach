@@ -46,6 +46,7 @@ func newSemaCtx(d Dependencies) *tree.SemaContext {
 	}
 	semaCtx.TypeResolver = d.CatalogReader()
 	semaCtx.TableNameResolver = d.CatalogReader()
+	// TODO (Chengxiong): UDF add function resolver here
 	semaCtx.DateStyle = d.SessionData().GetDateStyle()
 	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
 	return &semaCtx

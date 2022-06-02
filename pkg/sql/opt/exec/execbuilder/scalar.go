@@ -11,6 +11,8 @@
 package execbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -282,7 +284,23 @@ func (b *Builder) buildFunction(
 			return nil, err
 		}
 	}
-	funcRef := tree.WrapFunction(fn.Name)
+
+	//funcRef := tree.WrapFunction(fn.Name)
+	var funcRef tree.ResolvableFunctionReference
+	fnName := tree.FunctionName{}
+	fnName.ObjectName = tree.Name(fn.Name)
+	argTypes := make([]*types.T, len(fn.Args), len(fn.Args))
+	for i, arg := range fn.Args {
+		argTypes[i] = arg.DataType()
+	}
+	fd, err := b.evalCtx.Planner.ResolveFunction(context.Background(), &fnName, argTypes)
+	if fd == nil {
+		funcRef = tree.WrapFunction(fn.Name)
+	} else {
+		funcRef = tree.ResolvableFunctionReference{
+			FunctionReference: fd,
+		}
+	}
 	return tree.NewTypedFuncExpr(
 		funcRef,
 		0, /* aggQualifier */

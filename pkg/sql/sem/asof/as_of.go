@@ -63,7 +63,7 @@ func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType 
 	if !ok {
 		return funcTypeInvalid
 	}
-	def, err := fe.Func.Resolve(searchPath)
+	def, err := fe.Func.Resolve(nil, searchPath, nil)
 	if err != nil {
 		return funcTypeInvalid
 	}

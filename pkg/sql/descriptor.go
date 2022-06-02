@@ -250,6 +250,8 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 
+	// TODO (Chengxiong): UDF probably need a better interface to skip namespace
+	// creation.
 	if !descriptor.SkipNamespace() {
 		b.CPut(idKey, descID, nil)
 	}

@@ -9,6 +9,7 @@ go_library(
         "direct.go",
         "dist_sql_type_resolver.go",
         "factory.go",
+        "function.go",
         "hydrate.go",
         "kv_descriptors.go",
         "leased_descriptors.go",

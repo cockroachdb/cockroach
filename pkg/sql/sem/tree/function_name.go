@@ -11,8 +11,10 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -41,17 +43,39 @@ func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 
 // Resolve checks if the function name is already resolved and
 // resolves it as necessary.
-func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*FunctionDefinition, error) {
+// TODO (Chengxiong): UDF refactor so that it takes only SemaContext and a context.Context
+func (fn *ResolvableFunctionReference) Resolve(
+	semaCtx *SemaContext, searchPath SearchPath, argTypes []*types.T,
+) (*FunctionDefinition, error) {
 	switch t := fn.FunctionReference.(type) {
 	case *FunctionDefinition:
 		return t, nil
 	case *UnresolvedName:
-		fd, err := t.ResolveFunction(searchPath)
-		if err != nil {
-			return nil, err
+		if semaCtx != nil && semaCtx.FunctionResolver != nil {
+			objName, err := t.ToUnresolvedObjectName(0)
+			if err != nil {
+				return nil, err
+			}
+			fnName := objName.ToFunctionName()
+			fd, err := semaCtx.FunctionResolver.ResolveFunction(context.Background(), &fnName, argTypes)
+			if fd != nil {
+				fn.FunctionReference = fd
+				return fd, nil
+			}
+			fd, err = t.ResolveFunction(searchPath)
+			if err != nil {
+				return nil, err
+			}
+			fn.FunctionReference = fd
+			return fd, nil
+		} else {
+			fd, err := t.ResolveFunction(searchPath)
+			if err != nil {
+				return nil, err
+			}
+			fn.FunctionReference = fd
+			return fd, nil
 		}
-		fn.FunctionReference = fd
-		return fd, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown function name type: %+v (%T)",
 			fn.FunctionReference, fn.FunctionReference,

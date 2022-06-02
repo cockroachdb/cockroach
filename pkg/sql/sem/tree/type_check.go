@@ -62,6 +62,8 @@ type SemaContext struct {
 	// name of a table given its ID.
 	TableNameResolver QualifiedNameResolver
 
+	FunctionResolver FunctionResolver
+
 	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
 	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
 	CastSessionOptions cast.SessionOptions
@@ -1033,7 +1035,16 @@ func (expr *FuncExpr) TypeCheck(
 	if semaCtx != nil {
 		searchPath = semaCtx.SearchPath
 	}
-	def, err := expr.Func.Resolve(searchPath)
+
+	typs := make([]*types.T, len(expr.Exprs), len(expr.Exprs))
+	for i, ex := range expr.Exprs {
+		typ, err := ex.TypeCheck(ctx, semaCtx, types.Any)
+		if err != nil {
+			return nil, err
+		}
+		typs[i] = typ.ResolvedType()
+	}
+	def, err := expr.Func.Resolve(semaCtx, searchPath, typs)
 	if err != nil {
 		return nil, err
 	}

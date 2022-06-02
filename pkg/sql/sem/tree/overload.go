@@ -269,6 +269,7 @@ var _ TypeList = VariadicType{}
 // ArgTypes is very similar to ArgTypes except it allows keeping a string
 // name for each argument as well and using those when printing the
 // human-readable signature.
+// TODO (Chengxiong): UDF we can add something similar but with default values. Like "ArgTypesWithDefault"
 type ArgTypes []struct {
 	Name string
 	Typ  *types.T

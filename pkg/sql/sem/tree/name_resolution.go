@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
@@ -126,6 +127,10 @@ const (
 type QualifiedNameResolver interface {
 	GetQualifiedTableNameByID(ctx context.Context, id int64, requiredType RequiredTableKind) (*TableName, error)
 	CurrentDatabase() string
+}
+
+type FunctionResolver interface {
+	ResolveFunction(ctx context.Context, fName *FunctionName, argType []*types.T) (*FunctionDefinition, error)
 }
 
 // SearchPath encapsulates the ordered list of schemas in the current database
