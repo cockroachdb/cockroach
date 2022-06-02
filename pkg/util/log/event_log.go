@@ -12,6 +12,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -20,6 +21,7 @@ import (
 
 // StructuredEvent emits a structured event to the debug log.
 func StructuredEvent(ctx context.Context, event eventpb.EventPayload) {
+	fmt.Println("@@@ event", event)
 	// Populate the missing common fields.
 	common := event.CommonDetails()
 	if common.Timestamp == 0 {

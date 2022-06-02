@@ -2908,6 +2908,338 @@ func (m *QueryExecute) AppendJSONFields(printComma bool, b redact.RedactableByte
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.RecoveryType != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RecoveryType\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.RecoveryType)))
+		b = append(b, '"')
+	}
+
+	if m.TargetScope != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TargetScope\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TargetScope)))
+		b = append(b, '"')
+	}
+
+	if m.IsMultiregionTarget {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsMultiregionTarget\":true"...)
+	}
+
+	if m.TargetCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TargetCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.TargetCount), 10)
+	}
+
+	if m.DestinationSubdirType != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DestinationSubdirType\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.DestinationSubdirType)))
+		b = append(b, '"')
+	}
+
+	if len(m.DestinationStorageTypes) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DestinationStorageTypes\":["...)
+		for i, v := range m.DestinationStorageTypes {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
+			b = append(b, '"')
+		}
+		b = append(b, ']')
+	}
+
+	if len(m.AuthTypes) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AuthTypes\":["...)
+		for i, v := range m.AuthTypes {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
+			b = append(b, '"')
+		}
+		b = append(b, ']')
+	}
+
+	if m.IsLocalityAware {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsLocalityAware\":true"...)
+	}
+
+	if m.AsOf != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"AsOf\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.AsOf)))
+		b = append(b, '"')
+	}
+
+	if m.WithRevisionHistory {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WithRevisionHistory\":true"...)
+	}
+
+	if m.IsDetached {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsDetached\":true"...)
+	}
+
+	if m.HasEncryptionPassphrase {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HasEncryptionPassphrase\":true"...)
+	}
+
+	if m.KmsType != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KmsType\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.KmsType)))
+		b = append(b, '"')
+	}
+
+	if m.KmsCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KmsCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.KmsCount), 10)
+	}
+
+	if m.JobID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobID\":"...)
+		b = strconv.AppendUint(b, uint64(m.JobID), 10)
+	}
+
+	if m.ScheduleID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ScheduleID\":"...)
+		b = strconv.AppendUint(b, uint64(m.ScheduleID), 10)
+	}
+
+	if m.ResultStatus != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ResultStatus\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ResultStatus)))
+		b = append(b, '"')
+	}
+
+	if m.ErrorText != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ErrorText\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ErrorText)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.IncrementalScheduleID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IncrementalScheduleID\":"...)
+		b = strconv.AppendUint(b, uint64(m.IncrementalScheduleID), 10)
+	}
+
+	if m.FullScheduleID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FullScheduleID\":"...)
+		b = strconv.AppendUint(b, uint64(m.FullScheduleID), 10)
+	}
+
+	if m.RecurringCron != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RecurringCron\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.RecurringCron)))
+		b = append(b, '"')
+	}
+
+	if m.FullBackupCron != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FullBackupCron\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.FullBackupCron)))
+		b = append(b, '"')
+	}
+
+	if m.CustomFirstRunTime != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CustomFirstRunTime\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.CustomFirstRunTime)))
+		b = append(b, '"')
+	}
+
+	if m.OnExecutionFailure != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"OnExecutionFailure\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.OnExecutionFailure)))
+		b = append(b, '"')
+	}
+
+	if m.OnPreviousRunning != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"OnPreviousRunning\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.OnPreviousRunning)))
+		b = append(b, '"')
+	}
+
+	if m.IgnoreExistingBackup {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IgnoreExistingBackup\":true"...)
+	}
+
+	if m.IntoDB != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IntoDB\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.IntoDB)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.RenameDB != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RenameDB\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.RenameDB)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.SkipMissingFK {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkipMissingFK\":true"...)
+	}
+
+	if m.SkipMissingSequences {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkipMissingSequences\":true"...)
+	}
+
+	if m.SkipMissingViews {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkipMissingViews\":true"...)
+	}
+
+	if m.SkipLocalitiesCheck {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkipLocalitiesCheck\":true"...)
+	}
+
+	if m.DebugPauseOn != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DebugPauseOn\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.DebugPauseOn)))
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *RemoveZoneConfig) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

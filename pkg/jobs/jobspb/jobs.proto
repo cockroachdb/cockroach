@@ -219,7 +219,19 @@ message BackupDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 20;
+  // RequestedTargets contains descriptors resolved from any explicit targets
+  // (and is empty for full-cluster backups, which have no explicit targets).
+  // This is different from ResolvedTargets in that it contains exactly one
+  // entry per target from the original backup statement. For targets that
+  // specify exactly one table or database, the entry is just the descriptor of
+  // the table or database. For targets that specify all tables in a database or
+  // schema with a wildcard, the descriptor is that of the database or schema.
+  repeated sqlbase.Descriptor requested_targets = 20 [(gogoproto.nullable) = false];
+
+  bool detached = 21;
+
+  string as_of = 22;
+  // NEXT ID: 23;
 }
 
 message BackupProgress {
@@ -339,7 +351,15 @@ message RestoreDetails {
   // job if its only purpose is to validate the user's restore command.
   RestoreValidation validation = 24;
 
-  // NEXT ID: 25.
+//  repeated sqlbase.Descriptor requested_targets = 25 [(gogoproto.nullable) = false];
+//
+//  string subdir = 26;
+//
+//  string as_of = 27;
+//
+//  bool detached = 28;
+
+  // NEXT ID: 29.
 }
 
 enum RestoreValidation {

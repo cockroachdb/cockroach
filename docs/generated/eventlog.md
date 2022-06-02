@@ -2447,6 +2447,54 @@ ChangefeedFailed events.
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
 
+### `recovery_event`
+
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RecoveryType` |  | no |
+| `TargetScope` |  | no |
+| `IsMultiregionTarget` |  | no |
+| `TargetCount` |  | no |
+| `DestinationSubdirType` |  | no |
+| `DestinationStorageTypes` |  | no |
+| `AuthTypes` |  | no |
+| `IsLocalityAware` |  | no |
+| `AsOf` |  | no |
+| `WithRevisionHistory` |  | no |
+| `IsDetached` |  | no |
+| `HasEncryptionPassphrase` |  | no |
+| `KmsType` |  | no |
+| `KmsCount` |  | no |
+| `JobID` |  | no |
+| `ScheduleID` |  | no |
+| `ResultStatus` |  | no |
+| `ErrorText` |  | yes |
+| `IncrementalScheduleID` |  | no |
+| `FullScheduleID` |  | no |
+| `RecurringCron` |  | no |
+| `FullBackupCron` |  | no |
+| `CustomFirstRunTime` |  | no |
+| `OnExecutionFailure` |  | no |
+| `OnPreviousRunning` |  | no |
+| `IgnoreExistingBackup` |  | no |
+| `IntoDB` |  | yes |
+| `RenameDB` |  | yes |
+| `SkipMissingFK` |  | no |
+| `SkipMissingSequences` |  | no |
+| `SkipMissingViews` |  | no |
+| `SkipLocalitiesCheck` |  | no |
+| `DebugPauseOn` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `sampled_query`
 
 An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It

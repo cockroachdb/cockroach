@@ -86,5 +86,49 @@ message ChangefeedFailed {
 
   // The reason / environment with which the changefeed failed (ex:
   // connection_closed, changefeed_behind)
-  string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+  string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+message RecoveryEvent {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  string recovery_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string target_scope = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  bool is_multiregion_target = 4 [(gogoproto.jsontag) = ",omitempty"];
+  uint32 target_count = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  string destination_subdir_type = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  repeated string destination_storage_types = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  repeated string auth_types = 8 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  bool is_locality_aware = 9 [(gogoproto.jsontag) = ",omitempty"];
+  string as_of = 10 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  bool with_revision_history = 11 [(gogoproto.jsontag) = ",omitempty"];
+  bool is_detached = 12 [(gogoproto.jsontag) = ",omitempty"];
+
+  bool has_encryption_passphrase = 13 [(gogoproto.jsontag) = ",omitempty"];
+  string kms_type = 14 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  uint32 kms_count = 15 [(gogoproto.jsontag) = ",omitempty"];
+
+  uint64 job_id = 16 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "JobID"];
+  uint64 schedule_id = 17 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "ScheduleID"];
+  string result_status = 18 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string error_text = 19 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  uint64 incremental_schedule_id = 20[(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "IncrementalScheduleID"];
+  uint64 full_schedule_id = 21[(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "FullScheduleID"];
+  string recurring_cron = 22 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string full_backup_cron = 23 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string custom_first_run_time = 24 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string on_execution_failure = 25 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string on_previous_running = 26 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  bool ignore_existing_backup = 27 [(gogoproto.jsontag) = ",omitempty"];
+
+  string into_db = 28 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "IntoDB", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string rename_db = 29 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "RenameDB", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  bool skip_missing_fk = 30 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "SkipMissingFK"];
+  bool skip_missing_sequences = 31 [(gogoproto.jsontag) = ",omitempty"];
+  bool skip_missing_views = 32 [(gogoproto.jsontag) = ",omitempty"];
+  bool skip_localities_check = 33 [(gogoproto.jsontag) = ",omitempty"];
+  string debug_pause_on = 34 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }

@@ -649,16 +649,22 @@ func LoadAllDescs(
 // TODO(ajwerner): adopt the collection here.
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.TargetList,
-) ([]catalog.Descriptor, []descpb.ID, map[tree.TablePattern]catalog.Descriptor, error) {
+) (
+	[]catalog.Descriptor,
+	[]descpb.ID,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	error,
+) {
 	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	var matched DescriptorsMatched
 	if matched, err = DescriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// This sorting was originally required to support interleaves.
@@ -667,5 +673,5 @@ func ResolveTargetsToDescriptors(
 	// that certain tests rely on.
 	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
 
-	return matched.Descs, matched.ExpandedDB, matched.DescsByTablePattern, nil
+	return matched.Descs, matched.ExpandedDB, matched.RequestedDBs, matched.DescsByTablePattern, nil
 }

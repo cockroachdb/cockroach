@@ -623,6 +623,7 @@ func backupPlanHook(
 				" aware URIs as the full backup destination")
 		}
 
+		var asOfStr string
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, backupStmt.AsOf)
@@ -630,6 +631,7 @@ func backupPlanHook(
 				return err
 			}
 			endTime = asOf.Timestamp
+			asOfStr = backupStmt.AsOf.Expr.String()
 		}
 
 		switch encryptionParams.Mode {
@@ -662,11 +664,13 @@ func backupPlanHook(
 
 		var targetDescs []catalog.Descriptor
 		var completeDBs []descpb.ID
+		var requestedDBs []catalog.DatabaseDescriptor
+		var descsByTablePattern map[tree.TablePattern]catalog.Descriptor
 
 		switch backupStmt.Coverage() {
 		case tree.RequestedDescriptors:
 			var err error
-			targetDescs, completeDBs, _, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			targetDescs, completeDBs, requestedDBs, descsByTablePattern, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 			if err != nil {
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
@@ -694,6 +698,8 @@ func backupPlanHook(
 			FullCluster:         backupStmt.Coverage() == tree.AllDescriptors,
 			ResolvedCompleteDbs: completeDBs,
 			EncryptionOptions:   &encryptionParams,
+			AsOf:                asOfStr,
+			Detached:            backupStmt.Options.Detached,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
@@ -708,6 +714,14 @@ func backupPlanHook(
 				descriptorProtos = append(descriptorProtos, *desc.DescriptorProto())
 			}
 			initialDetails.ResolvedTargets = descriptorProtos
+
+			for _, desc := range descsByTablePattern {
+				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *desc.DescriptorProto())
+			}
+
+			for _, desc := range requestedDBs {
+				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *desc.DescriptorProto())
+			}
 		}
 
 		if backupStmt.Nested {
@@ -880,7 +894,7 @@ func backupPlanHook(
 			}
 
 			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-			collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
+			collectTelemetry(ctx, backupManifest, initialDetails, backupDetails, lic, jobID)
 			return nil
 		}
 
@@ -915,7 +929,7 @@ func backupPlanHook(
 			return err
 		}
 
-		collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
+		collectTelemetry(ctx, backupManifest, initialDetails, backupDetails, lic, jobID)
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}
@@ -932,7 +946,11 @@ func backupPlanHook(
 }
 
 func collectTelemetry(
-	backupManifest BackupManifest, initialDetails, backupDetails jobspb.BackupDetails, licensed bool,
+	ctx context.Context,
+	backupManifest BackupManifest,
+	initialDetails, backupDetails jobspb.BackupDetails,
+	licensed bool,
+	jobID jobspb.JobID,
 ) {
 	// sourceSuffix specifies if this schedule was created by a schedule.
 	sourceSuffix := ".manual"
@@ -1010,6 +1028,8 @@ func collectTelemetry(
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		countSource("backup.targets.full_cluster")
 	}
+
+	logBackupTelemetry(ctx, backupManifest, initialDetails, backupDetails, jobID)
 }
 
 func getScheduledBackupExecutionArgsFromSchedule(

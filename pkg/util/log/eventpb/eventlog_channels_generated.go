@@ -285,6 +285,9 @@ func (m *ChangefeedFailed) LoggingChannel() logpb.Channel { return logpb.Channel
 func (m *CreateChangefeed) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *RecoveryEvent) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *SampledQuery) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
