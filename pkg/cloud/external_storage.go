@@ -109,8 +109,8 @@ type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
 // SQLConnI encapsulates the interfaces which will be implemented by the network
 // backed SQLConn which is used to interact with the userfile tables.
 type SQLConnI interface {
-	driver.QueryerContext
-	driver.ExecerContext
+	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
+	Exec(ctx context.Context, query string, args ...interface{}) error
 }
 
 // ErrFileDoesNotExist is a sentinel error for indicating that a specified

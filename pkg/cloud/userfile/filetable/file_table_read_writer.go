@@ -116,18 +116,8 @@ func (i *SQLConnFileToTableExecutor) Query(
 ) (*FileToTableExecutorRows, error) {
 	result := FileToTableExecutorRows{}
 
-	argVals := make([]driver.NamedValue, len(qargs))
-	for i, qarg := range qargs {
-		namedVal := driver.NamedValue{
-			// Ordinal position is 1 indexed.
-			Ordinal: i + 1,
-			Value:   qarg,
-		}
-		argVals[i] = namedVal
-	}
-
 	var err error
-	result.sqlConnExecResults, err = i.executor.QueryContext(ctx, query, argVals)
+	result.sqlConnExecResults, err = i.executor.Query(ctx, query, qargs...)
 	if err != nil {
 		return nil, err
 	}
@@ -138,17 +128,7 @@ func (i *SQLConnFileToTableExecutor) Query(
 func (i *SQLConnFileToTableExecutor) Exec(
 	ctx context.Context, _, query string, _ username.SQLUsername, qargs ...interface{},
 ) error {
-	argVals := make([]driver.NamedValue, len(qargs))
-	for i, qarg := range qargs {
-		namedVal := driver.NamedValue{
-			// Ordinal position is 1 indexed.
-			Ordinal: i + 1,
-			Value:   qarg,
-		}
-		argVals[i] = namedVal
-	}
-	_, err := i.executor.ExecContext(ctx, query, argVals)
-	return err
+	return i.executor.Exec(ctx, query, qargs...)
 }
 
 // FileToTableSystem can be used to store, retrieve and delete the
@@ -318,7 +298,9 @@ func (f *FileToTableSystem) FileSize(ctx context.Context, filename string) (int6
 
 // ListFiles returns a list of all the files which are currently stored in the
 // user scoped tables.
-func (f *FileToTableSystem) ListFiles(ctx context.Context, pattern string) ([]string, error) {
+func (f *FileToTableSystem) ListFiles(
+	ctx context.Context, pattern string,
+) (retFiles []string, retErr error) {
 	var files []string
 	listFilesQuery := fmt.Sprintf(`SELECT filename FROM %s WHERE filename LIKE $1 ORDER BY
 filename`, f.GetFQFileTableName())
@@ -334,6 +316,12 @@ filename`, f.GetFQFileTableName())
 	case *InternalFileToTableExecutor:
 		// Verify that all the filenames are strings and aggregate them.
 		it := rows.internalExecResultsIterator
+		defer func() {
+			if err := it.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+				log.Warningf(ctx, "failed to close %+v", err)
+			}
+		}()
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			files = append(files, string(tree.MustBeDString(it.Cur()[0])))
@@ -342,6 +330,12 @@ filename`, f.GetFQFileTableName())
 			return nil, err
 		}
 	case *SQLConnFileToTableExecutor:
+		defer func() {
+			if err := rows.sqlConnExecResults.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+				log.Warningf(ctx, "failed to close %+v", err)
+			}
+		}()
 		vals := make([]driver.Value, 1)
 		for {
 			if err := rows.sqlConnExecResults.Next(vals); err == io.EOF {
@@ -351,10 +345,6 @@ filename`, f.GetFQFileTableName())
 			}
 			filename := vals[0].(string)
 			files = append(files, filename)
-		}
-
-		if err = rows.sqlConnExecResults.Close(); err != nil {
-			return nil, err
 		}
 	default:
 		return []string{}, errors.New("unsupported executor type in FileSize")
@@ -649,7 +639,7 @@ func newFileTableReader(
 	fileTableName, payloadTableName string,
 	ie FileToTableSystemExecutor,
 	offset int64,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (_ ioctx.ReadCloserCtx, _ int64, retErr error) {
 	// Get file_id from metadata entry in File table.
 	var fileID []byte
 	var sz int64
@@ -668,6 +658,7 @@ func newFileTableReader(
 		it := metaRows.internalExecResultsIterator
 		defer func() {
 			if err := it.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
 				log.Warningf(ctx, "failed to close %+v", err)
 			}
 		}()
@@ -685,6 +676,7 @@ func newFileTableReader(
 	case *SQLConnFileToTableExecutor:
 		defer func() {
 			if err := metaRows.sqlConnExecResults.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
 				log.Warningf(ctx, "failed to close %+v", err)
 			}
 		}()
@@ -695,7 +687,8 @@ func newFileTableReader(
 		} else if err != nil {
 			return nil, 0, errors.Wrap(err, "failed to read returned file metadata")
 		}
-		fileID = vals[0].([]byte)
+		uuidBytes := vals[0].([16]byte)
+		fileID = uuidBytes[:]
 		if vals[1] != nil {
 			sz = vals[1].(int64)
 		}
@@ -709,7 +702,7 @@ func newFileTableReader(
 
 	const bufSize = 256 << 10
 
-	fn := func(p []byte, pos int64) (int, error) {
+	fn := func(p []byte, pos int64) (_ int, retErr error) {
 		if pos >= sz {
 			return 0, io.EOF
 		}
@@ -730,6 +723,7 @@ func newFileTableReader(
 			it := rows.internalExecResultsIterator
 			defer func() {
 				if err := it.Close(); err != nil {
+					retErr = errors.CombineErrors(retErr, err)
 					log.Warningf(ctx, "failed to close %+v", err)
 				}
 			}()
@@ -744,6 +738,7 @@ func newFileTableReader(
 		case *SQLConnFileToTableExecutor:
 			defer func() {
 				if err := rows.sqlConnExecResults.Close(); err != nil {
+					retErr = errors.CombineErrors(retErr, err)
 					log.Warningf(ctx, "failed to close %+v", err)
 				}
 			}()

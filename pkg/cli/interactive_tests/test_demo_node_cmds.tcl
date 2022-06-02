@@ -42,11 +42,11 @@ eexpect "node 3 has been shutdown"
 eexpect "movr>"
 
 send "select node_id, draining, decommissioning, membership from crdb_internal.gossip_liveness ORDER BY node_id;\r"
-eexpect "1 |  false   |      false      | active"
-eexpect "2 |  false   |      false      | active"
-eexpect "3 |   true   |      false      | active"
-eexpect "4 |  false   |      false      | active"
-eexpect "5 |  false   |      false      | active"
+eexpect "1 |    f     |        f        | active"
+eexpect "2 |    f     |        f        | active"
+eexpect "3 |    t     |        f        | active"
+eexpect "4 |    f     |        f        | active"
+eexpect "5 |    f     |        f        | active"
 eexpect "movr>"
 
 # Cannot shut it down again.

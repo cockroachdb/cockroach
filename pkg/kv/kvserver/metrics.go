@@ -565,6 +565,42 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapshotUnknownRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.unknown.rcvd-bytes",
+		Help:        "Number of unknown snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotUnknownSentBytes = metric.Metadata{
+		Name:        "range.snapshots.unknown.sent-bytes",
+		Help:        "Number of unknown snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRebalancingRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.rebalancing.rcvd-bytes",
+		Help:        "Number of rebalancing snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRebalancingSentBytes = metric.Metadata{
+		Name:        "range.snapshots.rebalancing.sent-bytes",
+		Help:        "Number of rebalancing snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRecoveryRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.recovery.rcvd-bytes",
+		Help:        "Number of recovery snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRecoverySentBytes = metric.Metadata{
+		Name:        "range.snapshots.recovery.sent-bytes",
+		Help:        "Number of recovery snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -1524,6 +1560,12 @@ type StoreMetrics struct {
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
 	RangeSnapshotRcvdBytes                       *metric.Counter
 	RangeSnapshotSentBytes                       *metric.Counter
+	RangeSnapshotUnknownRcvdBytes                *metric.Counter
+	RangeSnapshotUnknownSentBytes                *metric.Counter
+	RangeSnapshotRecoveryRcvdBytes               *metric.Counter
+	RangeSnapshotRecoverySentBytes               *metric.Counter
+	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
+	RangeSnapshotRebalancingSentBytes            *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1973,6 +2015,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
 		RangeSnapshotRcvdBytes:                       metric.NewCounter(metaRangeSnapshotRcvdBytes),
 		RangeSnapshotSentBytes:                       metric.NewCounter(metaRangeSnapshotSentBytes),
+		RangeSnapshotUnknownRcvdBytes:                metric.NewCounter(metaRangeSnapshotUnknownRcvdBytes),
+		RangeSnapshotUnknownSentBytes:                metric.NewCounter(metaRangeSnapshotUnknownSentBytes),
+		RangeSnapshotRecoveryRcvdBytes:               metric.NewCounter(metaRangeSnapshotRecoveryRcvdBytes),
+		RangeSnapshotRecoverySentBytes:               metric.NewCounter(metaRangeSnapshotRecoverySentBytes),
+		RangeSnapshotRebalancingRcvdBytes:            metric.NewCounter(metaRangeSnapshotRebalancingRcvdBytes),
+		RangeSnapshotRebalancingSentBytes:            metric.NewCounter(metaRangeSnapshotRebalancingSentBytes),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 

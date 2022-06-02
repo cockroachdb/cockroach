@@ -23,7 +23,7 @@ start_test "Check that the client properly detects the server went down"
 force_stop_server $argv
 
 send "select 1;\r"
-eexpect "bad connection"
+eexpect "connection closed unexpectedly"
 eexpect root@
 eexpect " ?>"
 end_test
@@ -56,7 +56,7 @@ stop_server $argv
 start_server $argv
 
 send "select 1;\r"
-eexpect "bad connection"
+eexpect "connection closed unexpectedly"
 eexpect root@
 
 send "select 1;\r"

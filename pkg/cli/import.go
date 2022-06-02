@@ -111,7 +111,7 @@ func runImport(
 	importFormat, source, tableName string,
 	mode importMode,
 ) error {
-	if err := conn.EnsureConn(); err != nil {
+	if err := conn.EnsureConn(ctx); err != nil {
 		return err
 	}
 
@@ -216,7 +216,7 @@ func runImport(
 		return nil
 	}
 
-	_, err = ex.ExecContext(ctx, importQuery, nil)
+	err = ex.Exec(ctx, importQuery)
 	if err != nil {
 		return err
 	}

@@ -160,6 +160,11 @@ func (s *Store) HandleDelegatedSnapshot(
 ) error {
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot delegation"
+
+	if fn := s.cfg.TestingKnobs.SendSnapshot; fn != nil {
+		fn()
+	}
+
 	return s.stopper.RunTaskWithErr(
 		ctx, name, func(ctx context.Context) error {
 			sender, err := s.GetReplica(req.RangeID)

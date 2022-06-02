@@ -12,7 +12,6 @@ package clisqlclient
 
 import (
 	"context"
-	"database/sql/driver"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 )
@@ -28,23 +27,4 @@ func MakeQuery(query string, parameters ...interface{}) QueryFn {
 		rows, err := conn.Query(ctx, query, parameters...)
 		return rows, isMultiStatementQuery, err
 	}
-}
-
-func convertArgs(parameters []interface{}) ([]driver.NamedValue, error) {
-	dVals := make([]driver.NamedValue, len(parameters))
-	for i := range parameters {
-		// driver.NamedValue.Value is an alias for interface{}, but must adhere to a restricted
-		// set of types when being passed to driver.Queryer.Query (see
-		// driver.IsValue). We use driver.DefaultParameterConverter to perform the
-		// necessary conversion. This is usually taken care of by the sql package,
-		// but we have to do so manually because we're talking directly to the
-		// driver.
-		var err error
-		dVals[i].Ordinal = i + 1
-		dVals[i].Value, err = driver.DefaultParameterConverter.ConvertValue(parameters[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return dVals, nil
 }

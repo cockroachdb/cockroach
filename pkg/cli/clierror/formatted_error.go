@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 )
 
 // OutputError prints out an error object on the given writer.
@@ -77,15 +77,15 @@ func (f *formattedError) Error() string {
 	// Extract the fields.
 	var message, hint, detail, location, constraintName string
 	var code pgcode.Code
-	if pqErr := (*pq.Error)(nil); errors.As(f.err, &pqErr) {
-		if pqErr.Severity != "" {
-			severity = pqErr.Severity
+	if pgErr := (*pgconn.PgError)(nil); errors.As(f.err, &pgErr) {
+		if pgErr.Severity != "" {
+			severity = pgErr.Severity
 		}
-		constraintName = pqErr.Constraint
-		message = pqErr.Message
-		code = pgcode.MakeCode(string(pqErr.Code))
-		hint, detail = pqErr.Hint, pqErr.Detail
-		location = formatLocation(pqErr.File, pqErr.Line, pqErr.Routine)
+		constraintName = pgErr.ConstraintName
+		message = pgErr.Message
+		code = pgcode.MakeCode(pgErr.Code)
+		hint, detail = pgErr.Hint, pgErr.Detail
+		location = formatLocation(pgErr.File, int(pgErr.Line), pgErr.Routine)
 	} else {
 		message = f.err.Error()
 		code = pgerror.GetPGCode(f.err)
@@ -93,7 +93,7 @@ func (f *formattedError) Error() string {
 		hint = errors.FlattenHints(f.err)
 		detail = errors.FlattenDetails(f.err)
 		if file, line, fn, ok := errors.GetOneLineSource(f.err); ok {
-			location = formatLocation(file, strconv.FormatInt(int64(line), 10), fn)
+			location = formatLocation(file, line, fn)
 		}
 	}
 
@@ -144,10 +144,10 @@ func (f *formattedError) Error() string {
 // formatLocation spells out the error's location in a format
 // similar to psql: routine then file:num. The routine part is
 // skipped if empty.
-func formatLocation(file, line, fn string) string {
+func formatLocation(file string, line int, fn string) string {
 	var res strings.Builder
 	res.WriteString(fn)
-	if file != "" || line != "" {
+	if file != "" || line != 0 {
 		if fn != "" {
 			res.WriteString(", ")
 		}
@@ -156,9 +156,9 @@ func formatLocation(file, line, fn string) string {
 		} else {
 			res.WriteString(file)
 		}
-		if line != "" {
+		if line != 0 {
 			res.WriteByte(':')
-			res.WriteString(line)
+			res.WriteString(strconv.Itoa(line))
 		}
 	}
 	return res.String()

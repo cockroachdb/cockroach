@@ -349,5 +349,5 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	sqlCtx.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, cliCtx.clientOpts)
-	return sqlCtx.Run(conn)
+	return sqlCtx.Run(ctx, conn)
 }
