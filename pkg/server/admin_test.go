@@ -1062,7 +1062,7 @@ func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	// Any bool that defaults to true will work here.
@@ -1096,6 +1096,20 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		if typ != v.Type {
 			t.Errorf("%s: expected type %s, got %s", k, typ, v.Type)
+		}
+		if v.LastUpdated != nil {
+			db := sqlutils.MakeSQLRunner(conn)
+			q := makeSQLQuery()
+			q.Append(`SELECT name, "lastUpdated" FROM system.settings WHERE name=$`, k)
+			rows := db.Query(
+				t,
+				q.String(),
+				q.QueryArguments()...,
+			)
+			defer rows.Close()
+			if rows.Next() == false {
+				t.Errorf("missing sql row for %s", k)
+			}
 		}
 	}
 
