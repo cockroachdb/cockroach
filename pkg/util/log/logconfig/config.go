@@ -168,9 +168,16 @@ type CommonBufferSinkConfig struct {
 	// to flush.
 	FlushTriggerSize *ByteSize `yaml:"flush-trigger-size,omitempty"`
 
-	// MaxInFlight is the maximum number of buffered flushes before messages
-	// start being dropped.
-	MaxInFlight *int `yaml:"max-in-flight,omitempty"`
+	// MaxBufferSize is the limit on the size of the messages that are buffered.
+	// If this limit is exceeded, messages are dropped. The limit is expected to
+	// be higher than FlushTriggerSize. A buffer is flushed as soon as
+	// FLushTriggerSize is reached, and a new buffer is created once the flushing
+	// is started. Only once flushing operation is active at a time.
+	MaxBufferSize *ByteSize `yaml:"max-buffer-size,omitempty"`
+
+	// DeprecatedMaxInFlight is not used. Maintained (forever?) for backwards
+	// compatibility with users' old yaml configs.
+	DeprecatedMaxInFlight *int `yaml:"max-in-flight,omitempty"`
 }
 
 // CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
@@ -1064,6 +1071,8 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 		}
 	}
 	return fn(&w.CommonBufferSinkConfig)
+	// !!! is this the right place to validate that FlushTriggerSize and
+	// MaxBufferSize are copacetic?
 }
 
 // IsNone before default propagation indicates that the config explicitly disables

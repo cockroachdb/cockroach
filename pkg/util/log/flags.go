@@ -401,6 +401,9 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 	}
 }
 
+// attachBufferWrapper modifies s, wrapping its sink in a bufferedSink.
+//
+// ctx needs to be canceled to stop the bufferedSink internal goroutines.
 func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig) {
 	b := c.Buffering
 	if b.IsNone() {
@@ -432,7 +435,9 @@ func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSin
 			}
 		}
 	}
-	s.sink = newBufferSink(ctx, s.sink, *b.MaxStaleness, int(*b.FlushTriggerSize), int32(*b.MaxInFlight), errCallback)
+	bs := newBufferedSink(s.sink, *b.MaxStaleness, uint64(*b.FlushTriggerSize), uint64(*b.MaxBufferSize), errCallback)
+	bs.Start(ctx)
+	s.sink = bs
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.
