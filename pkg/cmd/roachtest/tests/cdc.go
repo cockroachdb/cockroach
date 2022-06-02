@@ -500,26 +500,19 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec(`INSERT INTO foo VALUES (1)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`ALTER TABLE foo ADD COLUMN b STRING`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO foo VALUES (2, '2')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`ALTER TABLE foo ADD COLUMN c INT`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO foo VALUES (3, '3', 3)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`ALTER TABLE foo DROP COLUMN b`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO foo VALUES (4, 4)`); err != nil {
-		t.Fatal(err)
+	for _, stmt := range []string{
+		`INSERT INTO foo VALUES (1)`,
+		`ALTER TABLE foo ADD COLUMN b STRING`,
+		`INSERT INTO foo VALUES (2, '2')`,
+		`ALTER TABLE foo ADD COLUMN c INT`,
+		`INSERT INTO foo VALUES (3, '3', 3)`,
+		`ALTER TABLE foo DROP COLUMN b`,
+		`INSERT INTO foo VALUES (4, 4)`,
+	} {
+		t.L().Printf("Executing SQL: %s", stmt)
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("failed to execute %s: %v", stmt, err)
+		}
 	}
 
 	// There are various internal races and retries in changefeeds that can
