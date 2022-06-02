@@ -11,7 +11,6 @@
 import { assert } from "chai";
 import { Store } from "redux";
 import moment from "moment";
-import sinon from "sinon";
 import { createHashHistory } from "history";
 
 import * as protos from "src/js/protos";
@@ -52,30 +51,25 @@ import {
 import Long from "long";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 
-const sandbox = sinon.createSandbox();
-
-describe("alerts", function () {
+describe("alerts", function() {
   let store: Store<AdminUIState>;
   let dispatch: typeof store.dispatch;
   let state: typeof store.getState;
 
-  beforeEach(function () {
+  beforeEach(function() {
     store = createAdminUIStore(createHashHistory());
     dispatch = store.dispatch;
     state = store.getState;
-    // localSettings persist values in sessionStorage and
-    // this stub disables caching values between tests.
-    sandbox.stub(sessionStorage, "getItem").returns(null);
   });
 
-  afterEach(function () {
-    sandbox.restore();
+  afterEach(function() {
     fetchMock.restore();
+    sessionStorage.clear();
   });
 
-  describe("selectors", function () {
-    describe("versions", function () {
-      it("tolerates missing liveness data", function () {
+  describe("selectors", function() {
+    describe("versions", function() {
+      it("tolerates missing liveness data", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -94,7 +88,7 @@ describe("alerts", function () {
         assert.deepEqual(versions, ["0.1", "0.2"]);
       });
 
-      it("ignores decommissioning/decommissioned nodes", function () {
+      it("ignores decommissioning/decommissioned nodes", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -150,13 +144,13 @@ describe("alerts", function () {
       });
     });
 
-    describe("version mismatch warning", function () {
-      it("requires versions to be loaded before displaying", function () {
+    describe("version mismatch warning", function() {
+      it("requires versions to be loaded before displaying", function() {
         const numAlert = staggeredVersionWarningSelector(state());
         assert.isUndefined(numAlert);
       });
 
-      it("does not display when versions match", function () {
+      it("does not display when versions match", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -175,7 +169,7 @@ describe("alerts", function () {
         assert.isUndefined(numAlert);
       });
 
-      it("displays when mismatch detected and not dismissed", function () {
+      it("displays when mismatch detected and not dismissed", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -203,7 +197,7 @@ describe("alerts", function () {
         );
       });
 
-      it("does not display if dismissed locally", function () {
+      it("does not display if dismissed locally", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -223,7 +217,7 @@ describe("alerts", function () {
         assert.isUndefined(numAlert);
       });
 
-      it("dismisses by setting local dismissal", function () {
+      it("dismisses by setting local dismissal", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -243,7 +237,7 @@ describe("alerts", function () {
         assert.isTrue(staggeredVersionDismissedSetting.selector(state()));
       });
 
-      it("num alert dismisses by setting local dismissal", function () {
+      it("num alert dismisses by setting local dismissal", function() {
         dispatch(
           nodesReducerObj.receiveData([
             {
@@ -264,14 +258,14 @@ describe("alerts", function () {
       });
     });
 
-    describe("new version available notification", function () {
-      it("displays nothing when versions have not yet been loaded", function () {
+    describe("new version available notification", function() {
+      it("displays nothing when versions have not yet been loaded", function() {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
         const alert = newVersionNotificationSelector(state());
         assert.isUndefined(alert);
       });
 
-      it("displays nothing when persistent dismissal has not been checked", function () {
+      it("displays nothing when persistent dismissal has not been checked", function() {
         dispatch(
           versionReducerObj.receiveData({
             details: [
@@ -286,7 +280,7 @@ describe("alerts", function () {
         assert.isUndefined(alert);
       });
 
-      it("displays nothing when no new version is available", function () {
+      it("displays nothing when no new version is available", function() {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
         dispatch(
           versionReducerObj.receiveData({
@@ -297,7 +291,7 @@ describe("alerts", function () {
         assert.isUndefined(alert);
       });
 
-      it("displays when new version available and not dismissed", function () {
+      it("displays when new version available and not dismissed", function() {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
         dispatch(
           versionReducerObj.receiveData({
@@ -315,7 +309,7 @@ describe("alerts", function () {
         assert.equal(alert.title, "New Version Available");
       });
 
-      it("respects local dismissal setting", function () {
+      it("respects local dismissal setting", function() {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
         dispatch(
           versionReducerObj.receiveData({
@@ -339,7 +333,7 @@ describe("alerts", function () {
         assert.isDefined(alert);
       });
 
-      it("respects persistent dismissal setting", function () {
+      it("respects persistent dismissal setting", function() {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, moment().valueOf()));
         dispatch(
           versionReducerObj.receiveData({
@@ -358,22 +352,23 @@ describe("alerts", function () {
         dispatch(
           setUIDataKey(
             VERSION_DISMISSED_KEY,
-            moment().subtract(2, "days").valueOf(),
+            moment()
+              .subtract(2, "days")
+              .valueOf(),
           ),
         );
         alert = newVersionNotificationSelector(state());
         assert.isDefined(alert);
       });
 
-      it("dismisses by setting local and persistent dismissal", function (done) {
+      it("dismisses by setting local and persistent dismissal", function(done) {
         fetchMock.mock({
           matcher: `${API_PREFIX}/uidata`,
           method: "POST",
           response: (_url: string) => {
-            const encodedResponse =
-              protos.cockroach.server.serverpb.SetUIDataResponse.encode(
-                {},
-              ).finish();
+            const encodedResponse = protos.cockroach.server.serverpb.SetUIDataResponse.encode(
+              {},
+            ).finish();
             return {
               body: encodedResponse,
             };
@@ -411,13 +406,13 @@ describe("alerts", function () {
       });
     });
 
-    describe("disconnected alert", function () {
-      it("requires health to be available before displaying", function () {
+    describe("disconnected alert", function() {
+      it("requires health to be available before displaying", function() {
         const alert = disconnectedAlertSelector(state());
         assert.isUndefined(alert);
       });
 
-      it("does not display when cluster is healthy", function () {
+      it("does not display when cluster is healthy", function() {
         dispatch(
           healthReducerObj.receiveData(
             new protos.cockroach.server.serverpb.ClusterResponse({}),
@@ -427,7 +422,7 @@ describe("alerts", function () {
         assert.isUndefined(alert);
       });
 
-      it("displays when cluster health endpoint returns an error", function () {
+      it("displays when cluster health endpoint returns an error", function() {
         dispatch(healthReducerObj.errorData(new Error("error")));
         const alert = disconnectedAlertSelector(state());
         assert.isObject(alert);
@@ -438,14 +433,14 @@ describe("alerts", function () {
         );
       });
 
-      it("does not display if dismissed locally", function () {
+      it("does not display if dismissed locally", function() {
         dispatch(healthReducerObj.errorData(new Error("error")));
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         const alert = disconnectedAlertSelector(state());
         assert.isUndefined(alert);
       });
 
-      it("dismisses by setting local dismissal", function (done) {
+      it("dismisses by setting local dismissal", function(done) {
         dispatch(healthReducerObj.errorData(new Error("error")));
         const alert = disconnectedAlertSelector(state());
         const beforeDismiss = moment();
@@ -535,9 +530,9 @@ describe("alerts", function () {
     });
   });
 
-  describe("data sync listener", function () {
+  describe("data sync listener", function() {
     let sync: () => void;
-    beforeEach(function () {
+    beforeEach(function() {
       // We don't care about the responses, we only care that the sync listener
       // is making requests, which can be verified using "inFlight" settings.
       fetchMock.mock({
@@ -549,7 +544,7 @@ describe("alerts", function () {
       sync = alertDataSync(store);
     });
 
-    it("dispatches requests for expected data on empty store", function () {
+    it("dispatches requests for expected data on empty store", function() {
       sync();
       assert.isTrue(isInFlight(state(), VERSION_DISMISSED_KEY));
       assert.isTrue(state().cachedData.cluster.inFlight);
@@ -558,7 +553,7 @@ describe("alerts", function () {
       assert.isTrue(state().cachedData.health.inFlight);
     });
 
-    it("dispatches request for version data when cluster ID and nodes are available", function () {
+    it("dispatches request for version data when cluster ID and nodes are available", function() {
       dispatch(
         nodesReducerObj.receiveData([
           {
@@ -580,7 +575,7 @@ describe("alerts", function () {
       assert.isTrue(state().cachedData.version.inFlight);
     });
 
-    it("does not request version data when version is staggered", function () {
+    it("does not request version data when version is staggered", function() {
       dispatch(
         nodesReducerObj.receiveData([
           {
@@ -607,7 +602,7 @@ describe("alerts", function () {
       assert.isFalse(state().cachedData.version.inFlight);
     });
 
-    it("refreshes health function whenever the last health response is no longer valid.", function () {
+    it("refreshes health function whenever the last health response is no longer valid.", function() {
       dispatch(
         healthReducerObj.receiveData(
           new protos.cockroach.server.serverpb.ClusterResponse({}),
@@ -618,7 +613,7 @@ describe("alerts", function () {
       assert.isTrue(state().cachedData.health.inFlight);
     });
 
-    it("does not do anything when all data is available.", function () {
+    it("does not do anything when all data is available.", function() {
       dispatch(
         nodesReducerObj.receiveData([
           {
