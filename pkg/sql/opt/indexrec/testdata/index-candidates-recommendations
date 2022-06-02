@@ -2134,7 +2134,6 @@ t5:
  (k)
 
 # Test different cases for multi-column combinations for Box2d operations
-# Note: BBox2d indexes are added to inverted index
 index-candidates
 SELECT * FROM t5 WHERE geom1 && bbox1 AND k = 2
 ----
@@ -2142,7 +2141,6 @@ t5:
  (bbox1)
  (geom1)
  (k)
- (k, bbox1)
  (k, geom1)
 
 index-candidates

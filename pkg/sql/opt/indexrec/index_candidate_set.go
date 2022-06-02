@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -309,12 +308,11 @@ func (ics *indexCandidateSet) addVariableExprIndex(
 	switch expr := expr.(type) {
 	case *memo.VariableExpr:
 		col := expr.Col
-		// Note: Box2D geospatial indexes is added to inverted candidates as a special case
-		// because ColumnTypeIsInvertedIndexable returns false for it
-		if (!colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type)) || (expr.DataType().Family() == types.Box2DFamily) {
-			ics.addSingleColumnIndex(col, false /* desc */, ics.invertedCandidates)
-		} else {
+
+		if colinfo.ColumnTypeIsIndexable(ics.md.ColumnMeta(col).Type) {
 			ics.addSingleColumnIndex(col, false /* desc */, indexCandidates)
+		} else {
+			ics.addSingleColumnIndex(col, false /* desc */, ics.invertedCandidates)
 		}
 	}
 }
