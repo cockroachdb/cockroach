@@ -116,13 +116,13 @@ func ClearRange(
 	if statsDelta.ContainsEstimates == 0 && statsDelta.Total() < ClearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear",
 			statsDelta.Total(), ClearRangeBytesThreshold)
-		if err = readWriter.ClearIterRange(from, to); err != nil {
+		if err = readWriter.ClearMVCCIteratorRange(from, to); err != nil {
 			return result.Result{}, err
 		}
 		return pd, nil
 	}
 
-	if err := readWriter.ClearMVCCRangeAndIntents(from, to); err != nil {
+	if err := readWriter.ClearMVCCRange(from, to); err != nil {
 		return result.Result{}, err
 	}
 	return pd, nil
