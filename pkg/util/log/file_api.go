@@ -250,7 +250,7 @@ func GetLogReader(filename string) (io.ReadCloser, error) {
 	sb, ok := fs.mu.file.(*syncBuffer)
 	if ok && baseFileName == filepath.Base(sb.file.Name()) {
 		// If the file being read is also the file being written to, then we
-		// want mutual exclusion between the reader and the flusher.
+		// want mutual exclusion between the reader and the runFlusher.
 		lr := &lockedReader{}
 		lr.mu.RWMutex = &fs.mu.RWMutex
 		lr.mu.wrappedFile = file
@@ -371,7 +371,7 @@ var _ io.ReadCloser = (*lockedReader)(nil)
 // lockedReader locks accesses to a wrapped io.ReadCloser,
 // using a RWMutex shared with another component.
 // We use this when reading log files (using the GetLogReader API)
-// that are concurrently being written to by the log flusher,
+// that are concurrently being written to by the log runFlusher,
 // to ensure that read operations cannot observe partial flushes.
 type lockedReader struct {
 	mu struct {
