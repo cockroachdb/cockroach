@@ -43,10 +43,9 @@ func init() {
 
 func checkVarName(name string) {
 	// Env vars must:
-	//  - start with COCKROACH_
 	//  - be uppercase
 	//  - only contain letters, digits, and _
-	valid := strings.HasPrefix(name, "COCKROACH_")
+	valid := true
 	for i := 0; valid && i < len(name); i++ {
 		c := name[i]
 		valid = ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
@@ -56,15 +55,51 @@ func checkVarName(name string) {
 	}
 }
 
-// getEnv retrieves an environment variable, keeps track of where
+func checkInternalVarName(name string) {
+	// Env vars must:
+	//  - start with COCKROACH_
+	//  - pass basic validity checks in checkVarName
+	if !strings.HasPrefix(name, "COCKROACH_") {
+		panic("invalid env var name " + name)
+	}
+	checkVarName(name)
+}
+
+func checkExternalVarName(name string) {
+	// Env vars must:
+	//  - not start with COCKROACH_
+	//  - pass basic validity checks in checkVarName
+	if strings.HasPrefix(name, "COCKROACH_") {
+		panic("invalid env var name " + name)
+	}
+	checkVarName(name)
+}
+
+// getEnv performs all of the same actions as getAndCacheEnv but also includes
+// a validity check of the variable name.
+func getEnv(varName string, depth int) (string, bool) {
+	checkInternalVarName(varName)
+	return getAndCacheEnv(varName, depth+1)
+}
+
+// getExternalEnv performs all of the same actions as getEnv but also asserts
+// that the variable is not of the form of an internal environment variable,
+// eg. "COCKROACH_".
+func getExternalEnv(varName string, depth int) (string, bool) {
+	checkExternalVarName(varName)
+	return getAndCacheEnv(varName, depth+1)
+}
+
+// getAndCacheEnv retrieves an environment variable, keeps track of where
 // it was accessed, and checks that each environment variable is accessed
 // from at most one place.
 // The bookkeeping enables a report of all influential environment
 // variables with "cockroach debug env". To keep this report useful,
 // all relevant environment variables should be read during start up.
-func getEnv(varName string, depth int) (string, bool) {
+// This function should not be used directly; getEnv or getExternalEnv should
+// be used instead.
+func getAndCacheEnv(varName string, depth int) (string, bool) {
 	_, consumer, _, _ := runtime.Caller(depth + 1)
-	checkVarName(varName)
 
 	envVarRegistry.mu.Lock()
 	defer envVarRegistry.mu.Unlock()
@@ -166,6 +201,7 @@ var valueReportableUnsafeVarRegistry = map[redact.SafeString]struct{}{
 	"DEBUG_HTTP2_GOROUTINES":      {},
 	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
 	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
+	"HOST_IP":                     {},
 	"LANG":                        {},
 	"LC_ALL":                      {},
 	"LC_COLLATE":                  {},
@@ -270,6 +306,16 @@ func HomeDir() (string, error) {
 // The returned boolean flag indicates if the variable is set.
 func EnvString(name string, depth int) (string, bool) {
 	return getEnv(name, depth+1)
+}
+
+// ExternalEnvString returns the value set by the specified environment
+// variable. Only non-CRDB environment variables should be accessed via this
+// method. CRDB specific variables should be accessed via EnvString. The depth
+// argument indicates the stack depth of the caller that should be associated
+// with the variable. The returned boolean flag indicates if the variable is
+// set.
+func ExternalEnvString(name string, depth int) (string, bool) {
+	return getExternalEnv(name, depth+1)
 }
 
 // EnvOrDefaultString returns the value set by the specified
