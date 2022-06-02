@@ -53,12 +53,11 @@ export interface AdminUIState {
   login: LoginAPIState;
 }
 
-const routerReducer = connectRouter(history);
-
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
 export function createAdminUIStore(historyInst: History<any>) {
   const sagaMiddleware = createSagaMiddleware();
+  const routerReducer = connectRouter(historyInst);
 
   const s: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
