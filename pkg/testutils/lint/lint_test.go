@@ -445,6 +445,7 @@ func TestLint(t *testing.T) {
 					":!util/sdnotify/sdnotify_unix.go",
 					":!util/grpcutil", // GRPC_GO_* variables
 					":!roachprod",     // roachprod requires AWS environment variables
+					":!cli/env.go",    // The CLI needs the PGHOST variable.
 				},
 			},
 		} {

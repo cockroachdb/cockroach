@@ -215,7 +215,7 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 	}
 
 	sqlCtx.ShellCtx.DemoCluster = c
-	return sqlCtx.Run(conn)
+	return sqlCtx.Run(ctx, conn)
 }
 
 // placeholderRe matches the placeholder format at the bottom of statement.txt
