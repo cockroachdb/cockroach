@@ -11,7 +11,6 @@ import React from "react";
 import { assert } from "chai";
 import { shallow } from "enzyme";
 import { earliestRetainedTime } from "./jobsPage.fixture";
-
 import { JobTable, JobTableProps } from "./jobTable";
 
 describe("<JobTable>", () => {
@@ -21,7 +20,7 @@ describe("<JobTable>", () => {
     };
     const jobTableProps: JobTableProps = {
       sort: { columnTitle: null, ascending: true },
-      setSort: () => {},
+      setSort: () => { },
       jobs: {
         jobs: [{}, {}, {}, {}],
         earliest_retained_time: earliestRetainedTime,
