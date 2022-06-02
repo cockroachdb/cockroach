@@ -406,7 +406,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	var backupManifest *backuppb.BackupManifest
 
-	// If planning didn't resolve the external destination, then we need to now.
+	// If the backup job has already resolved the destination in a previous
+	// resumption, we can skip this step.
 	if details.URI == "" {
 		initialDetails := details
 		backupDetails, m, err := getBackupDetailAndManifest(
@@ -465,7 +466,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Ideally we'd re-render the description now that we know the subdir, but
 		// we don't have backup AST node anymore to easily call the rendering func.
 		// Instead we can just do a bit of dirty string replacement iff there is one
-		// "INTO 'LATEST' IN" (if there's >1, somenoe has a weird table/db names and
+		// "INTO 'LATEST' IN" (if there's >1, someone has a weird table/db names and
 		// we should just leave the description as-is, since it is just for humans).
 		description := b.job.Payload().Description
 		const unresolvedText = "INTO 'LATEST' IN"
