@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-no-los
 
 # Tests in this file assume no multi-region tenant setup as tenants have no
 # access to nodelocal.

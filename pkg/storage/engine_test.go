@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
@@ -1595,6 +1596,64 @@ func TestFS(t *testing.T) {
 			// descendant files.
 			require.NoError(t, fs.RemoveAll(path("a/b")))
 			expectLS(path("a"), []string{})
+		})
+	}
+}
+
+func TestGetIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	reader, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer reader.Close()
+
+	txn1ID := uuid.MakeV4()
+	txn1TS := hlc.Timestamp{Logical: 1}
+	txn1 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS, CoordinatorNodeID: 1}, ReadTimestamp: txn1TS}
+
+	for _, keyName := range []string{"a", "aa"} {
+		key := roachpb.Key(keyName)
+		err := MVCCPut(ctx, reader, nil, key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: key}, txn1)
+		require.NoError(t, err)
+	}
+
+	txn2ID := uuid.MakeV4()
+	txn2TS := hlc.Timestamp{Logical: 2}
+	txn2 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Epoch: 2, WriteTimestamp: txn2TS, MinTimestamp: txn2TS, CoordinatorNodeID: 2}, ReadTimestamp: txn2TS}
+
+	key := roachpb.Key("b")
+	err = MVCCPut(ctx, reader, nil, key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: key}, txn2)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		key   string
+		txn   *roachpb.Transaction
+		err   bool
+		found bool
+	}{
+		{"found a", "a", txn1, false, true},
+		{"found aa", "aa", txn1, false, true},
+		{"found b", "b", txn2, false, true},
+		{"not found", "c", nil, false, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			intent, err := GetIntent(reader, roachpb.Key(test.key))
+			if test.err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if test.found {
+					require.NotNil(t, intent)
+					require.Equal(t, roachpb.Key(test.key), intent.Key)
+					require.Equal(t, test.txn.TxnMeta, intent.Txn)
+				} else {
+					require.Nil(t, intent)
+				}
+			}
 		})
 	}
 }

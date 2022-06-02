@@ -104,6 +104,7 @@ go_test(
         "cmd_export_test.go",
         "cmd_get_test.go",
         "cmd_lease_test.go",
+        "cmd_query_intent_test.go",
         "cmd_query_resolved_timestamp_test.go",
         "cmd_recover_txn_test.go",
         "cmd_refresh_range_bench_test.go",
