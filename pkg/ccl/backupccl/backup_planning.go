@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -695,137 +694,29 @@ func backupPlanHook(
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.BackupResolutionInJob) {
-			description, err := backupJobDescription(p,
-				backupStmt.Backup, to, incrementalFrom,
-				encryptionParams.RawKmsUris,
-				initialDetails.Destination.Subdir,
-				initialDetails.Destination.IncrementalStorage,
-			)
-			if err != nil {
-				return err
-			}
-			jr := jobs.Record{
-				Description: description,
-				Details:     initialDetails,
-				Progress:    jobspb.BackupProgress{},
-				CreatedBy:   backupStmt.CreatedByInfo,
-				Username:    p.User(),
-				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-					for i := range targetDescs {
-						sqlDescIDs = append(sqlDescIDs, targetDescs[i].GetID())
-					}
-					return sqlDescIDs
-				}(),
-			}
-			plannerTxn := p.Txn()
-
-			if backupStmt.Options.Detached {
-				// When running inside an explicit transaction, we simply create the job
-				// record. We do not wait for the job to finish.
-				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-					ctx, jr, jobID, plannerTxn)
-				if err != nil {
-					return err
-				}
-				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-				return nil
-			}
-			var sj *jobs.StartableJob
-			if err := func() (err error) {
-				defer func() {
-					if err == nil || sj == nil {
-						return
-					}
-					if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-						log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
-					}
-				}()
-				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
-					return err
-				}
-				// We commit the transaction here so that the job can be started. This
-				// is safe because we're in an implicit transaction. If we were in an
-				// explicit transaction the job would have to be run with the detached
-				// option and would have been handled above.
-				return plannerTxn.Commit(ctx)
-			}(); err != nil {
-				return err
-			}
-			if err := sj.Start(ctx); err != nil {
-				return err
-			}
-			if err := sj.AwaitCompletion(ctx); err != nil {
-				return err
-			}
-			return sj.ReportExecutionResults(ctx, resultsCh)
-		}
-
-		// TODO(dt): delete this in 22.2.
-		backupDetails, backupManifest, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.Txn(), initialDetails, p.User(),
+		description, err := backupJobDescription(p,
+			backupStmt.Backup, to, incrementalFrom,
+			encryptionParams.RawKmsUris,
+			initialDetails.Destination.Subdir,
+			initialDetails.Destination.IncrementalStorage,
 		)
 		if err != nil {
 			return err
 		}
-
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.RawKmsUris, backupDetails.Destination.Subdir, initialDetails.Destination.IncrementalStorage)
-		if err != nil {
-			return err
-		}
-
-		// We create the job record in the planner's transaction to ensure that
-		// the job record creation happens transactionally.
-		plannerTxn := p.Txn()
-
-		// Write backup manifest into a temporary checkpoint file.
-		// This accomplishes 2 purposes:
-		//  1. Persists large state needed for backup job completion.
-		//  2. Verifies we can write to destination location.
-		// This temporary checkpoint file gets renamed to real checkpoint
-		// file when the backup jobs starts execution.
-		//
-		// TODO (pbardea): For partitioned backups, also add verification for other
-		// stores we are writing to in addition to the default.
-		if err := planSchedulePTSChaining(ctx, p.ExecCfg(), plannerTxn, &backupDetails, backupStmt.CreatedByInfo); err != nil {
-			return err
-		}
-
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
-			protectedtsID := uuid.MakeV4()
-			backupDetails.ProtectedTimestampRecord = &protectedtsID
-		} else if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
-			protectedtsID := uuid.MakeV4()
-			backupDetails.ProtectedTimestampRecord = &protectedtsID
-		}
-
 		jr := jobs.Record{
 			Description: description,
+			Details:     initialDetails,
+			Progress:    jobspb.BackupProgress{},
+			CreatedBy:   backupStmt.CreatedByInfo,
 			Username:    p.User(),
-			// TODO(yevgeniy): Consider removing -- this info available in backup manifest.
 			DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-				for i := range backupManifest.Descriptors {
-					sqlDescIDs = append(sqlDescIDs,
-						descpb.GetDescriptorID(&backupManifest.Descriptors[i]))
+				for i := range targetDescs {
+					sqlDescIDs = append(sqlDescIDs, targetDescs[i].GetID())
 				}
 				return sqlDescIDs
 			}(),
-			Details:   backupDetails,
-			Progress:  jobspb.BackupProgress{},
-			CreatedBy: backupStmt.CreatedByInfo,
 		}
-
-		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
-		) != nil
-
-		if backupDetails.ProtectedTimestampRecord != nil {
-			if err := protectTimestampForBackup(
-				ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
-			); err != nil {
-				return err
-			}
-		}
+		plannerTxn := p.Txn()
 
 		if backupStmt.Options.Detached {
 			// When running inside an explicit transaction, we simply create the job
@@ -835,20 +726,9 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-
-			if err := writeBackupManifestCheckpoint(
-				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
-			); err != nil {
-				return err
-			}
-
 			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-			collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
 			return nil
 		}
-
-		// Construct the job and commit the transaction. Perform this work in a
-		// closure to ensure that the job is cleaned up if an error occurs.
 		var sj *jobs.StartableJob
 		if err := func() (err error) {
 			defer func() {
@@ -862,13 +742,6 @@ func backupPlanHook(
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
-
-			if err := writeBackupManifestCheckpoint(
-				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
-			); err != nil {
-				return err
-			}
-
 			// We commit the transaction here so that the job can be started. This
 			// is safe because we're in an implicit transaction. If we were in an
 			// explicit transaction the job would have to be run with the detached
@@ -877,8 +750,6 @@ func backupPlanHook(
 		}(); err != nil {
 			return err
 		}
-
-		collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}
@@ -998,12 +869,11 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
-// writebackuppb.BackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST
-// and CHECKSUM file. If it is a pure v22.1 cluster or later, it will write
-// a timestamped BACKUP-CHECKPOINT to the /progress directory.
-// If it is a mixed cluster version, it will write a non timestamped BACKUP-CHECKPOINT
-// to the base directory in order to not break backup jobs that resume
-// on a v21.2 node.
+// writeBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST and
+// CHECKSUM file. If it is a pure v22.1 cluster or later, it will write a
+// timestamped BACKUP-CHECKPOINT to the /progress directory. If it is a mixed
+// cluster version, it will write a non timestamped BACKUP-CHECKPOINT to the
+// base directory in order to not break backup jobs that resume on a v21.2 node.
 func writeBackupManifestCheckpoint(
 	ctx context.Context,
 	storageURI string,

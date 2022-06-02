@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "geotest",
+    srcs = ["geotest.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geotest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
+    ],
+)

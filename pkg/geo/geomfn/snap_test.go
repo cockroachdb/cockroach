@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -79,7 +80,7 @@ func TestSnap(t *testing.T) {
 			actual, err := Snap(input, target, tc.tolerance)
 			require.NoError(t, err)
 
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
