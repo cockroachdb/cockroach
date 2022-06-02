@@ -3808,11 +3808,11 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// WITH only_initial_scan and end_time disallowed
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and end_time`,
+		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, end_time = '1'`, `kafka://nope`,
 	)
 	sqlDB.ExpectErr(
-		t, `cannot specify both initial_scan_only and end_time`,
+		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan_only`, `kafka://nope`,
 	)
 
@@ -3826,6 +3826,26 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan='only' and resolved`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH resolved, initial_scan = 'only'`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan='only' and diff`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, initial_scan = 'only'`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan='only' and mvcc_timestamp`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH mvcc_timestamp, initial_scan = 'only'`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `cannot specify both initial_scan='only' and updated`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, initial_scan = 'only'`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
 		t, `unknown initial_scan: foo`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'foo'`, `kafka://nope`,
 	)
@@ -3836,6 +3856,11 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `cannot specify both initial_scan and initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'no', initial_scan_only`, `kafka://nope`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `format=csv is only usable with initial_scan='only'`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format = csv`, `kafka://nope`,
 	)
 
 	var tsCurrent string
@@ -5866,6 +5891,149 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := map[string]struct {
+		changefeedStmt  string
+		expectedPayload []string
+	}{
+		`initial scan only with csv`: {
+			changefeedStmt: `CREATE CHANGEFEED FOR foo WITH initial_scan_only, format = csv`,
+			expectedPayload: []string{
+				`1,'Alice'`,
+				`2,'Bob'`,
+				`3,'Carol'`,
+			},
+		},
+		`initial backfill only with csv`: {
+			changefeedStmt: `CREATE CHANGEFEED FOR foo WITH initial_scan = 'only', format = csv`,
+			expectedPayload: []string{
+				`1,'Alice'`,
+				`2,'Bob'`,
+				`3,'Carol'`,
+			},
+		},
+		`initial backfill only with csv multiple tables`: {
+			changefeedStmt: `CREATE CHANGEFEED FOR foo, bar WITH initial_scan = 'only', format = csv`,
+			expectedPayload: []string{
+				`1,'a'`,
+				`2,'b'`,
+				`3,'c'`,
+				`1,'Alice'`,
+				`2,'Bob'`,
+				`3,'Carol'`,
+			},
+		},
+	}
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		for testName, testData := range tests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, name STRING)")
+				sqlDB.Exec(t, "CREATE TABLE bar (id INT PRIMARY KEY, name STRING)")
+
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
+				sqlDB.Exec(t, "INSERT INTO bar VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+				feed := feed(t, f, testData.changefeedStmt)
+
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
+				sqlDB.Exec(t, "INSERT INTO bar VALUES (4, 'd'), (5, 'e'), (6, 'f')")
+
+				var actualMessages []string
+				g := ctxgroup.WithContext(context.Background())
+				g.Go(func() error {
+					for {
+						m, err := feed.Next()
+						if err != nil {
+							return err
+						}
+						actualMessages = append(actualMessages, string(m.Value))
+					}
+				})
+				defer func() {
+					closeFeed(t, feed)
+					sqlDB.Exec(t, `DROP TABLE foo`)
+					sqlDB.Exec(t, `DROP TABLE bar`)
+					_ = g.Wait()
+					require.Equal(t, len(testData.expectedPayload), len(actualMessages))
+					sort.Strings(testData.expectedPayload)
+					sort.Strings(actualMessages)
+					for i := range testData.expectedPayload {
+						require.Equal(t, testData.expectedPayload[i], actualMessages[i])
+					}
+				}()
+
+				jobFeed := feed.(cdctest.EnterpriseTestFeed)
+				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+					return s == jobs.StatusSucceeded
+				}))
+			})
+		}
+	}
+	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+	t.Run(`kafka`, kafkaTest(testFn))
+	t.Run(`webhook`, webhookTest(testFn))
+	t.Run(`pubsub`, pubsubTest(testFn))
+}
+
+func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	initialScanOnlyCSVTests := map[string]string{
+		`initial scan only with csv`:     `CREATE CHANGEFEED FOR foo WITH initial_scan_only, format = csv`,
+		`initial backfill only with csv`: `CREATE CHANGEFEED FOR foo WITH initial_scan = 'only', format = csv`,
+	}
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		for testName, changefeedStmt := range initialScanOnlyCSVTests {
+			t.Run(testName, func(t *testing.T) {
+				sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, name STRING)")
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
+
+				feed := feed(t, f, changefeedStmt)
+
+				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
+
+				expectedMessages := []string{
+					`1,'Alice'`,
+					`2,'Bob'`,
+					`3,'Carol'`,
+				}
+				var actualMessages []string
+
+				defer func() {
+					closeFeed(t, feed)
+					sqlDB.Exec(t, `DROP TABLE foo`)
+					require.Equal(t, len(expectedMessages), len(actualMessages))
+					sort.Strings(expectedMessages)
+					sort.Strings(actualMessages)
+					for i := range expectedMessages {
+						require.Equal(t, expectedMessages[i], actualMessages[i])
+					}
+				}()
+
+				for {
+					m, err := feed.Next()
+					if err != nil || m == nil {
+						break
+					}
+					actualMessages = append(actualMessages, string(m.Value))
+				}
+			})
+		}
+	}
+	t.Run(`sinkless`, sinklessTest(testFn))
 }
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
