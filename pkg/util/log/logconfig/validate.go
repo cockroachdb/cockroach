@@ -46,11 +46,14 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		Redactable:  &bt,
 		Redact:      &bf,
 		Criticality: &bf,
+		// !!! where should I validate that FlushTriggerSize and MaxBufferSize make sense? I don't
+		// understand where these values come from.
 		Buffering: CommonBufferSinkConfigWrapper{
 			CommonBufferSinkConfig: CommonBufferSinkConfig{
-				MaxStaleness:     &zeroDuration,
-				FlushTriggerSize: &zeroByteSize,
-				MaxInFlight:      &zeroInt,
+				MaxStaleness:          &zeroDuration,
+				FlushTriggerSize:      &zeroByteSize,
+				MaxBufferSize:         &zeroByteSize,
+				DeprecatedMaxInFlight: &zeroInt,
 			},
 		},
 	}
