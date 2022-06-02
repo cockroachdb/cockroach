@@ -244,7 +244,7 @@ func (ih *instrumentationHelper) Setup(
 		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		if sp.IsVerbose() {
+		if sp.IsVerbose() && !cfg.TestingKnobs.NoStatsCollectionWithVerboseTracing {
 			// If verbose tracing was enabled at a higher level, stats
 			// collection is enabled so that stats are shown in the traces, but
 			// no extra work is needed by the instrumentationHelper.
