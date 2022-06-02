@@ -243,10 +243,10 @@ func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
 	dropColBackfill := schematestutils.AddColumnDropBackfillMutation
 
 	incompleteFilter := tableEventFilter{
-		// tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   true,
-		// tableEventTypeUnknown:               true,
+		// tableEventDropColumn:            false,
+		tableEventAddColumnWithBackfill: false,
+		tableEventAddColumnNoBackfill:   true,
+		// tableEventUnknown:               true,
 		tableEventPrimaryKeyChange: false,
 	}
 	dropColEvent := TableEvent{
