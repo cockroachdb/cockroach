@@ -16,6 +16,7 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -1091,14 +1092,32 @@ func (s *Server) PreStart(ctx context.Context) error {
 			log.Error(ctx, err.Error())
 			return
 		}
+
 		m := jsonpb.Marshaler{}
 		result, _ := m.MarshalToString(sample)
 		log.Infof(ctx, "Span Stat: %s", result)
+
+
+		// write to file
+		filename := fmt.Sprintf("span_stats_%d.json", time.Now().Unix())
+		f, err := os.OpenFile(filename, os.O_CREATE | os.O_WRONLY, 0777)
+		if err != nil {
+			log.Fatal(ctx, err.Error())
+		}
+
+		if _, err := f.WriteString(result); err != nil {
+			s := fmt.Sprintf("%s %s", "could not write", err.Error())
+			panic(s)
+		}
+		f.Close()
+
+		// update bucket boundaries for next time
+		s.spanStatsServer.SetSpanBoundaries(ctx, &serverpb.SetSpanBoundariesRequest{})
 	}
 
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(10 * time.Second)
 			collectStats()
 		}
 	}()

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	"time"
 )
 
 var _ serverpb.SpanStatsServer = &spanStatsServer{}
@@ -64,7 +65,9 @@ func (s *spanStatsServer) GetSpanStatistics(
 			return err
 		}
 
-		res.Samples = append(res.Samples, &serverpb.Sample{SampleTime: &hlc.Timestamp{}, SpanStats: sample})
+		//c := hlc.NewClock(hlc.UnixNano,0)
+		t := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+		res.Samples = append(res.Samples, &serverpb.Sample{SampleTime: &t, SpanStats: sample})
 
 
 		return nil
