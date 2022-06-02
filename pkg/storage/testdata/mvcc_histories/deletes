@@ -1,14 +1,17 @@
 ## A simple txn that deletes.
 ## The delete tombstone is placed alongside the previous value, at the newer timestamp.
 
-run ok
+run stats ok
 with t=A
   txn_begin  ts=44
   del   k=a resolve
   txn_remove
 ----
+>> del k=a resolve t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+784
 >> at end:
 data: "a"/44.000000000,0 -> /<empty>
+stats: key_count=1 key_bytes=14 val_count=1 gc_bytes_age=784
 
 # Show the value disappears from gets.
 

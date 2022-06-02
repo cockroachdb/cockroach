@@ -16,11 +16,14 @@ error: (*roachpb.ConditionFailedError:) unexpected value: <nil>
 
 # Do a conditional put with expectation that the value is completely missing; will succeed.
 
-run ok
+run stats ok
 cput k=k v=v ts=123,2
 ----
+>> cput k=k v=v ts=123,2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20
 >> at end:
 data: "k"/123.000000000,2 -> /BYTES/v
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=6 live_count=1 live_bytes=20
 
 # Another conditional put expecting value missing will fail, now that value1 is written.
 
@@ -42,12 +45,15 @@ error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\00
 
 # Move to an empty value. Will succeed.
 
-run ok
+run stats ok
 cput k=k v= cond=v ts=123,5
 ----
+>> cput k=k v= cond=v ts=123,5
+stats: key_bytes=+12 val_count=+1 val_bytes=+5 live_bytes=-1 gc_bytes_age=-414
 >> at end:
 data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
+stats: key_count=1 key_bytes=26 val_count=2 val_bytes=11 live_count=1 live_bytes=19 gc_bytes_age=-414
 
 # Move key2 (which does not exist) to from value1 to value2.
 # Expect it to fail since it does not exist with value1.
@@ -63,13 +69,16 @@ error: (*roachpb.ConditionFailedError:) unexpected value: <nil>
 # Move key2 (which does not yet exist) to from value1 to value2, but
 # allowing for it not existing.
 
-run ok
+run stats ok
 cput k=k2 v=v2 cond=v ts=123,7 allow_missing
 ----
+>> cput k=k2 v=v2 cond=v ts=123,7 allow_missing
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
 >> at end:
 data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
 data: "k2"/123.000000000,7 -> /BYTES/v2
+stats: key_count=2 key_bytes=41 val_count=3 val_bytes=18 live_count=2 live_bytes=41 gc_bytes_age=-414
 
 # Try to move key2 (which has value2) from value1 to empty. Expect error.
 
@@ -84,26 +93,32 @@ error: (*roachpb.ConditionFailedError:) unexpected value: raw_bytes:"\000\000\00
 
 # Try to move key2 (which has value2) from value2 to empty. Expect success.
 
-run ok
+run stats ok
 cput k=k2 v= cond=v2 allow_missing ts=123,9
 ----
+>> cput k=k2 v= cond=v2 allow_missing ts=123,9
+stats: key_bytes=+12 val_count=+1 val_bytes=+5 live_bytes=-2 gc_bytes_age=-437
 >> at end:
 data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
 data: "k2"/123.000000000,9 -> /BYTES/
 data: "k2"/123.000000000,7 -> /BYTES/v2
+stats: key_count=2 key_bytes=53 val_count=4 val_bytes=23 live_count=2 live_bytes=39 gc_bytes_age=-851
 
 # Now move to value2 from expected empty value.
 
-run ok
+run stats ok
 cput k=k v=v2 cond= ts=123,10
 ----
+>> cput k=k v=v2 cond= ts=123,10
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_bytes=+2 gc_bytes_age=-391
 >> at end:
 data: "k"/123.000000000,10 -> /BYTES/v2
 data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
 data: "k2"/123.000000000,9 -> /BYTES/
 data: "k2"/123.000000000,7 -> /BYTES/v2
+stats: key_count=2 key_bytes=65 val_count=5 val_bytes=30 live_count=2 live_bytes=41 gc_bytes_age=-1242
 
 # Verify we get value2 as expected.
 
