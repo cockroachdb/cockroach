@@ -1288,7 +1288,9 @@ func (t *typeChangeResumer) Resume(ctx context.Context, execCtx interface{}) err
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (t *typeChangeResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	// If the job failed, just try again to clean up any draining names.
 	tc := &typeSchemaChanger{
 		typeID:               t.job.Details().(jobspb.TypeSchemaChangeDetails).TypeID,
