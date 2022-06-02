@@ -740,9 +740,7 @@ describe("rest api", function() {
         method: "GET",
         response: (_url: string) => {
           return {
-            throws: new Error(
-              "not allowed (due to the 'server.remote_debugging.mode' setting)",
-            ),
+            throws: new Error(REMOTE_DEBUGGING_ERROR_TEXT),
           };
         },
       });
