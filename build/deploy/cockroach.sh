@@ -96,6 +96,10 @@ setup_certs_dir() {
     --ca-key="$certs_dir"/ca.key
     $cockroach_entrypoint cert create-client --certs-dir="$certs_dir" \
     --ca-key="$certs_dir"/ca.key root
+    if [[ "$COCKROACH_USER" != "root" ]]; then
+      $cockroach_entrypoint cert create-client --certs-dir="$certs_dir" \
+      --ca-key="$certs_dir"/ca.key "$COCKROACH_USER"
+    fi
   fi
 
   # If there are no files with the name started with "node", we create key
