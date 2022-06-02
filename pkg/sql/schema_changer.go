@@ -2794,7 +2794,9 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r schemaChangeResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 

@@ -93,7 +93,9 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 }
 
 // OnFailOrCancel implements jobs.Resumer interface
-func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (p *producerJobResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 

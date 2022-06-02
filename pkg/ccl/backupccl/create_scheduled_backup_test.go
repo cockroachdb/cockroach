@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -776,7 +777,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 
 	// We'll be manipulating schedule time via th.env, but we can't fool actual backup
 	// when it comes to AsOf time.  So, override AsOf backup clause to be the current time.
-	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause) {
+	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 		expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
@@ -1038,7 +1039,7 @@ INSERT INTO t values (1), (10), (100);
 	// when it comes to AsOf time.  So, override AsOf backup clause to be the current time.
 	useRealTimeAOST := func() func() {
 		knobs := th.cfg.TestingKnobs.(*jobs.TestingKnobs)
-		knobs.OverrideAsOfClause = func(clause *tree.AsOfClause) {
+		knobs.OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
 			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
 			require.NoError(t, err)
 			clause.Expr = expr
@@ -1344,4 +1345,87 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestCreateScheduledBackupTelemetry tests CREATE SCHEDULE FOR BACKUP correctly
+// publishes telemetry events about the schedule creation.
+func TestCreateScheduledBackupTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+	var asOfInterval int64
+
+	// We'll be manipulating schedule time via th.env, but we can't fool actual backup
+	// when it comes to AsOf time.  So, override AsOf backup clause to be the current time.
+	useRealTimeAOST := func() func() {
+		knobs := th.cfg.TestingKnobs.(*jobs.TestingKnobs)
+		knobs.OverrideAsOfClause = func(clause *tree.AsOfClause, stmtTimestamp time.Time) {
+			expr, err := tree.MakeDTimestampTZ(th.cfg.DB.Clock().PhysicalTime(), time.Microsecond)
+			asOfInterval = expr.Time.UnixNano() - stmtTimestamp.UnixNano()
+			require.NoError(t, err)
+			clause.Expr = expr
+		}
+		return func() {
+			knobs.OverrideAsOfClause = nil
+		}
+	}
+	defer useRealTimeAOST()()
+
+	// Create a schedule and verify that the correct telemetry event was logged.
+	query := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily' 
+WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, first_run=$2`
+	loc := "userfile:///logging"
+
+	beforeBackup := th.env.Now()
+	firstRun := th.env.Now().Add(time.Minute).Round(time.Microsecond)
+
+	schedules, err := th.createBackupSchedule(t, query, loc, firstRun)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, 2, len(schedules))
+
+	expectedCreateSchedule := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType:            createdScheduleEventType,
+		TargetScope:             clusterScope.String(),
+		TargetCount:             1,
+		DestinationSubdirType:   standardSubdirType,
+		DestinationStorageTypes: []string{"userfile"},
+		DestinationAuthTypes:    []string{"specified"},
+		AsOfInterval:            asOfInterval,
+		Options:                 []string{telemetryOptionDetached},
+		RecurringCron:           "@hourly",
+		FullBackupCron:          "@daily",
+		OnExecutionFailure:      "PAUSE_SCHED",
+		OnPreviousRunning:       "WAIT",
+		IgnoreExistingBackup:    true,
+		CustomFirstRunTime:      firstRun.UnixNano(),
+	}
+
+	requireRecoveryEvent(t, beforeBackup.UnixNano(), createdScheduleEventType, expectedCreateSchedule)
+
+	// Also verify that BACKUP telemetry is logged when the BACKUP job in the
+	// schedule is executed.
+	th.env.AdvanceTime(2 * time.Minute)
+	require.NoError(t, th.executeSchedules())
+
+	expectedScheduledBackup := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType:            scheduledBackupEventType,
+		TargetScope:             clusterScope.String(),
+		TargetCount:             1,
+		DestinationSubdirType:   standardSubdirType,
+		DestinationStorageTypes: []string{"userfile"},
+		DestinationAuthTypes:    []string{"specified"},
+		AsOfInterval:            asOfInterval,
+		Options:                 []string{telemetryOptionDetached},
+	}
+	requireRecoveryEvent(t, beforeBackup.UnixNano(), scheduledBackupEventType, expectedScheduledBackup)
 }

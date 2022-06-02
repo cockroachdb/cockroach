@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -551,7 +552,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		lic := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
-		collectTelemetry(m, details, details, lic)
+		collectTelemetry(ctx, m, initialDetails, details, lic, b.job.ID())
 	}
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
@@ -754,6 +755,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
 			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numClusterNodes))
 		}
+		logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil)
 	}
 
 	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
@@ -866,10 +868,13 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (b *backupResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (b *backupResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, jobErr error,
+) error {
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
+	logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), false, jobErr)
 
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
@@ -924,6 +929,13 @@ func (b *backupResumer) deleteCheckpoint(
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}
+}
+
+func (b *backupResumer) getTelemetryEventType() eventpb.RecoveryEventType {
+	if b.job.Details().(jobspb.BackupDetails).ScheduleID != 0 {
+		return scheduledBackupJobEventType
+	}
+	return backupJobEventType
 }
 
 var _ jobs.Resumer = &backupResumer{}

@@ -1392,7 +1392,7 @@ func createNonDropDatabaseChangeJob(
 // been committed from a import that has failed or been canceled. It does this
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
 	p := execCtx.(sql.JobExecContext)
 
 	// Emit to the event log that the job has started reverting.

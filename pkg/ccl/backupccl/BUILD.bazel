@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "backupccl",
@@ -15,6 +16,7 @@ go_library(
         "backup_processor.go",
         "backup_processor_planning.go",
         "backup_span_coverage.go",
+        "backup_telemetry.go",
         "create_scheduled_backup.go",
         "incrementals.go",
         "key_rewriter.go",
@@ -33,6 +35,7 @@ go_library(
         "system_schema.go",
         "targets.go",
         "testutils.go",
+        ":gen-targetscope-stringer",  # keep
     ],
     embed = [":backupccl_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl",
@@ -140,6 +143,7 @@ go_library(
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//types",
         "@com_github_kr_pretty//:pretty",
@@ -263,6 +267,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/limit",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
@@ -279,6 +284,7 @@ go_test(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//types",
         "@com_github_jackc_pgx_v4//:pgx",
@@ -320,4 +326,11 @@ go_proto_library(
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
+)
+
+stringer(
+    name = "gen-targetscope-stringer",
+    src = "backup_telemetry.go",
+    additional_args = ["-linecomment"],
+    typ = "targetScope",
 )
