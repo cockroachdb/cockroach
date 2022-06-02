@@ -10,10 +10,19 @@
 
 package tpch
 
+import "fmt"
+
 var (
 	// QueriesByNumber is a mapping from the number of a TPC-H query to the actual
 	// query.
-	QueriesByNumber = map[int]string{
+	QueriesByNumber = makeQueriesForStream(0 /* streamID */)
+
+	// NumQueries specifies the number of queries in TPC-H benchmark.
+	NumQueries = len(QueriesByNumber)
+)
+
+func makeQueriesForStream(streamID int) map[int]string {
+	return map[int]string{
 		1:  query1,
 		2:  query2,
 		3:  query3,
@@ -28,7 +37,7 @@ var (
 		12: query12,
 		13: query13,
 		14: query14,
-		15: query15,
+		15: fmt.Sprintf(query15, streamID),
 		16: query16,
 		17: query17,
 		18: query18,
@@ -37,10 +46,7 @@ var (
 		21: query21,
 		22: query22,
 	}
-
-	// NumQueries specifies the number of queries in TPC-H benchmark.
-	NumQueries = len(QueriesByNumber)
-)
+}
 
 const (
 	query1 = `
@@ -459,11 +465,11 @@ WHERE
 	// floating point computations when the order of summation is different
 	// (see #53946 for more details).
 	//
-	// Additionally, CREATE VIEW statement has been adjusted to include IF NOT
-	// EXISTS modifier so that query15 could be run with concurrency greater
-	// than one without hitting the "view already exists" error.
+	// Note that Q15 is a "format-string template" expecting a single
+	// non-negative integer argument (i.e. it should be used as
+	// fmt.Sprintf(query15, <id>) where <id> is an integer).
 	query15 = `
-CREATE VIEW IF NOT EXISTS revenue0 (supplier_no, total_revenue) AS
+CREATE VIEW revenue%[1]d (supplier_no, total_revenue) AS
 	SELECT
 		l_suppkey,
 		sum(l_extendedprice * (1 - l_discount))
@@ -483,19 +489,19 @@ SELECT
 	total_revenue
 FROM
 	supplier,
-	revenue0
+	revenue%[1]d
 WHERE
 	s_suppkey = supplier_no
 	AND abs(total_revenue - (
 		SELECT
 			max(total_revenue)
 		FROM
-			revenue0
+			revenue%[1]d
 	)) < 0.001
 ORDER BY
 	s_suppkey;
 
-DROP VIEW revenue0;
+DROP VIEW revenue%[1]d;
 `
 
 	query16 = `
