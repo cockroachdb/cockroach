@@ -27,3 +27,104 @@ func TestEnvOrDefault(t *testing.T) {
 		t.Errorf("expected %d, got %d", def, act)
 	}
 }
+
+func TestCheckVarName(t *testing.T) {
+	t.Run("checkVarName", func(t *testing.T) {
+		for _, tc := range []struct {
+			name  string
+			valid bool
+		}{
+			{
+				name:  "abc123",
+				valid: false,
+			},
+			{
+				name:  "ABC 123",
+				valid: false,
+			},
+			{
+				name:  "@&) 123",
+				valid: false,
+			},
+			{
+				name:  "ABC123",
+				valid: true,
+			},
+			{
+				name:  "ABC_123",
+				valid: true,
+			},
+		} {
+			func() {
+				defer func() {
+					r := recover()
+					if !tc.valid && r == nil {
+						t.Errorf("expected panic for name %q, got none", tc.name)
+					} else if tc.valid && r != nil {
+						t.Errorf("unexpected panic for name %q, got %q", tc.name, r)
+					}
+				}()
+
+				checkVarName(tc.name)
+			}()
+		}
+	})
+
+	t.Run("checkInternalVarName", func(t *testing.T) {
+		for _, tc := range []struct {
+			name  string
+			valid bool
+		}{
+			{
+				name:  "ABC_123",
+				valid: false,
+			},
+			{
+				name:  "COCKROACH_X",
+				valid: true,
+			},
+		} {
+			func() {
+				defer func() {
+					r := recover()
+					if !tc.valid && r == nil {
+						t.Errorf("expected panic for name %q, got none", tc.name)
+					} else if tc.valid && r != nil {
+						t.Errorf("unexpected panic for name %q, got %q", tc.name, r)
+					}
+				}()
+
+				checkInternalVarName(tc.name)
+			}()
+		}
+	})
+
+	t.Run("checkExternalVarName", func(t *testing.T) {
+		for _, tc := range []struct {
+			name  string
+			valid bool
+		}{
+			{
+				name:  "COCKROACH_X",
+				valid: false,
+			},
+			{
+				name:  "ABC_123",
+				valid: true,
+			},
+		} {
+			func() {
+				defer func() {
+					r := recover()
+					if !tc.valid && r == nil {
+						t.Errorf("expected panic for name %q, got none", tc.name)
+					} else if tc.valid && r != nil {
+						t.Errorf("unexpected panic for name %q, got %q", tc.name, r)
+					}
+				}()
+
+				checkExternalVarName(tc.name)
+			}()
+		}
+	})
+}
