@@ -1,4 +1,4 @@
-run trace ok
+run trace stats ok
 with t=A
   txn_begin ts=2
   put k=k1 v=v1
@@ -9,8 +9,10 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,
 called PutIntent("k1", _, 00000000-0000-0000-0000-000000000001)
 meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k1"/2.000000000,0 -> /BYTES/v1
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+70 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+98
+stats: key_count=1 key_bytes=15 val_count=1 val_bytes=55 live_count=1 live_bytes=70 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=98
 
-run trace ok
+run trace stats ok
 with t=A
   txn_advance ts=3
   txn_step
@@ -25,14 +27,17 @@ txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,
 called PutIntent("k1", _, 00000000-0000-0000-0000-000000000001)
 meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/3.000000000,0 -> /BYTES/v1
+stats: val_bytes=+13 live_bytes=+13 intent_age=-1
 >> put k=k2 v=v2 t=A
 called PutIntent("k2", _, 00000000-0000-0000-0000-000000000001)
 meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 ih={{0 /BYTES/v1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/3.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/3.000000000,0 -> /BYTES/v2
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+57 live_count=+1 live_bytes=+72 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+97
+stats: key_count=2 key_bytes=30 val_count=2 val_bytes=125 live_count=2 live_bytes=155 intent_count=2 intent_bytes=38 separated_intent_count=2 intent_age=194
 
-run trace ok
+run trace stats ok
 put k=k3 v=v3 ts=1
 ----
 >> put k=k3 v=v3 ts=1
@@ -41,8 +46,10 @@ data: "k1"/3.000000000,0 -> /BYTES/v1
 meta: "k2"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/3.000000000,0 -> /BYTES/v2
 data: "k3"/1.000000000,0 -> /BYTES/v3
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+22
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=132 live_count=3 live_bytes=177 intent_count=2 intent_bytes=38 separated_intent_count=2 intent_age=194
 
-run trace ok
+run trace stats ok
 with t=A
   put k=k3 v=v33
 ----
@@ -55,11 +62,13 @@ data: "k2"/3.000000000,0 -> /BYTES/v2
 meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k3"/3.000000000,0 -> /BYTES/v33
 data: "k3"/1.000000000,0 -> /BYTES/v3
+stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+51 gc_bytes_age=+1843 intent_count=+1 intent_bytes=+20 separated_intent_count=+1 intent_age=+97
+stats: key_count=3 key_bytes=57 val_count=4 val_bytes=190 live_count=3 live_bytes=228 gc_bytes_age=1843 intent_count=3 intent_bytes=58 separated_intent_count=3 intent_age=291
 
 # transactionDidNotUpdateMeta (TDNUM) is false below for k2 and k3 since
 # disallowSeparatedIntents=true causes mvcc.go to always set it to false to maintain
 # consistency in a mixed version cluster.
-run trace ok
+run trace stats ok
 with t=A
   resolve_intent k=k1
   resolve_intent k=k2 status=ABORTED
@@ -74,14 +83,18 @@ data: "k2"/3.000000000,0 -> /BYTES/v2
 meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k3"/3.000000000,0 -> /BYTES/v33
 data: "k3"/1.000000000,0 -> /BYTES/v3
+stats: val_bytes=-61 live_bytes=-61 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-97
 >> resolve_intent k=k2 status=ABORTED t=A
 called ClearIntent("k2", TDNUM(false), 00000000-0000-0000-0000-000000000001)
 data: "k1"/3.000000000,0 -> /BYTES/v1
 meta: "k3"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k3"/3.000000000,0 -> /BYTES/v33
 data: "k3"/1.000000000,0 -> /BYTES/v3
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-57 live_count=-1 live_bytes=-72 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-97
 >> resolve_intent k=k3 status=ABORTED t=A
 called ClearIntent("k3", TDNUM(false), 00000000-0000-0000-0000-000000000001)
 data: "k1"/3.000000000,0 -> /BYTES/v1
 data: "k3"/1.000000000,0 -> /BYTES/v3
+stats: key_bytes=-12 val_count=-1 val_bytes=-58 live_bytes=-51 gc_bytes_age=-1843 intent_count=-1 intent_bytes=-20 separated_intent_count=-1 intent_age=-97
 >> txn_remove t=A
+stats: key_count=2 key_bytes=30 val_count=2 val_bytes=14 live_count=2 live_bytes=44

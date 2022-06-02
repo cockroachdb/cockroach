@@ -1,22 +1,35 @@
 # Exercise each write operation with a local timestamp.
 
-run ok
+run stats ok
 with ts=20
   put localTs=10 k=k1 v=v
   put localTs=20 k=k2 v=v
   put localTs=30 k=k3 v=v
 ----
+>> put localTs=10 k=k1 v=v ts=20
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+19 live_count=+1 live_bytes=+34
+>> put localTs=20 k=k2 v=v ts=20
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21
+>> put localTs=30 k=k3 v=v ts=20
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21
 >> at end:
 data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=31 live_count=3 live_bytes=76
 
-run ok
+run stats ok
 with ts=30
   cput localTs=40 k=k1 v=v cond=v
   cput localTs=30 k=k2 v=v cond=v
   cput localTs=20 k=k3 v=v cond=v
 ----
+>> cput localTs=40 k=k1 v=v cond=v ts=30
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_bytes=-13 gc_bytes_age=+2170
+>> cput localTs=30 k=k2 v=v cond=v ts=30
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 gc_bytes_age=+1260
+>> cput localTs=20 k=k3 v=v cond=v ts=30
+stats: key_bytes=+12 val_count=+1 val_bytes=+19 live_bytes=+13 gc_bytes_age=+1260
 >> at end:
 data: "k1"/30.000000000,0 -> /BYTES/v
 data: "k1"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
@@ -24,13 +37,20 @@ data: "k2"/30.000000000,0 -> /BYTES/v
 data: "k2"/20.000000000,0 -> /BYTES/v
 data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
+stats: key_count=3 key_bytes=81 val_count=6 val_bytes=62 live_count=3 live_bytes=76 gc_bytes_age=4690
 
-run ok
+run stats ok
 with ts=40
   del localTs=30 k=k1
   del localTs=40 k=k2
   del localTs=50 k=k3
 ----
+>> del localTs=30 k=k1 ts=40
+stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+2760
+>> del localTs=40 k=k2 ts=40
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+1980
+>> del localTs=50 k=k3 ts=40
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-34 gc_bytes_age=+2760
 >> at end:
 data: "k1"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /<empty>
 data: "k1"/30.000000000,0 -> /BYTES/v
@@ -41,16 +61,23 @@ data: "k2"/20.000000000,0 -> /BYTES/v
 data: "k3"/40.000000000,0 -> /<empty>
 data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
+stats: key_count=3 key_bytes=117 val_count=9 val_bytes=75 gc_bytes_age=12190
 
-run ok
+run stats ok
 with ts=50
   increment localTs=60 k=k1
   increment localTs=50 k=k2
   increment localTs=40 k=k3
 ----
+>> increment localTs=60 k=k1 ts=50
 inc: current value = 1
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21 gc_bytes_age=-180
+>> increment localTs=50 k=k2 ts=50
 inc: current value = 1
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21 gc_bytes_age=-180
+>> increment localTs=40 k=k3 ts=50
 inc: current value = 1
+stats: key_bytes=+12 val_count=+1 val_bytes=+20 live_count=+1 live_bytes=+35 gc_bytes_age=-180
 >> at end:
 data: "k1"/50.000000000,0 -> /INT/1
 data: "k1"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /<empty>
@@ -64,16 +91,23 @@ data: "k3"/50.000000000,0 -> vheader{ localTs=40.000000000,0 } /INT/1
 data: "k3"/40.000000000,0 -> /<empty>
 data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
+stats: key_count=3 key_bytes=153 val_count=12 val_bytes=107 live_count=3 live_bytes=77 gc_bytes_age=11650
 
-run ok
+run stats ok
 with ts=60
   del_range localTs=50 k=k1 end=k2
   del_range localTs=60 k=k2 end=k3
   del_range localTs=70 k=k3 end=k4
 ----
+>> del_range localTs=50 k=k1 end=k2 ts=60
 del_range: "k1"-"k2" -> deleted 1 key(s)
+stats: key_bytes=+12 val_count=+1 val_bytes=+14 live_count=-1 live_bytes=-21 gc_bytes_age=+1880
+>> del_range localTs=60 k=k2 end=k3 ts=60
 del_range: "k2"-"k3" -> deleted 1 key(s)
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+1320
+>> del_range localTs=70 k=k3 end=k4 ts=60
 del_range: "k3"-"k4" -> deleted 1 key(s)
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-35 gc_bytes_age=+1880
 >> at end:
 data: "k1"/60.000000000,0 -> vheader{ localTs=50.000000000,0 } /<empty>
 data: "k1"/50.000000000,0 -> /INT/1
@@ -90,6 +124,7 @@ data: "k3"/50.000000000,0 -> vheader{ localTs=40.000000000,0 } /INT/1
 data: "k3"/40.000000000,0 -> /<empty>
 data: "k3"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v
 data: "k3"/20.000000000,0 -> /BYTES/v
+stats: key_count=3 key_bytes=189 val_count=15 val_bytes=121 gc_bytes_age=16730
 
 run ok
 with ts=19
@@ -200,7 +235,7 @@ clear_range k=k1 end=k4
 
 # Exercise intent resolution with and without prior observation timestamps.
 
-run ok
+run stats ok
 with t=A ts=20 localTs=10
   txn_begin
   put k=k1  v=v
@@ -216,6 +251,30 @@ with t=A ts=20 localTs=10
   put k=k11 v=v
   put k=k12 v=v
 ----
+>> put k=k1 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k2 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k3 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k4 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k5 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k6 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k7 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k8 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k9 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+82 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k10 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k11 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
+>> put k=k12 v=v t=A ts=20 localTs=10
+stats: key_count=+1 key_bytes=+16 val_count=+1 val_bytes=+67 live_count=+1 live_bytes=+83 intent_count=+1 intent_bytes=+31 separated_intent_count=+1 intent_age=+80
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -242,6 +301,7 @@ meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000
 data: "k8"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
 meta: "k9"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=false klen=12 vlen=19 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k9"/20.000000000,0 -> vheader{ localTs=10.000000000,0 } /BYTES/v
+stats: key_count=12 key_bytes=183 val_count=12 val_bytes=804 live_count=12 live_bytes=987 intent_count=12 intent_bytes=372 separated_intent_count=12 intent_age=960
 
 run ok
 with t=A
@@ -251,7 +311,7 @@ with t=A
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 
-run ok
+run stats ok
 with t=A localTs=20
   put k=k1  v=v2
   put k=k2  v=v2
@@ -266,6 +326,30 @@ with t=A localTs=20
   put k=k11 v=v2
   put k=k12 v=v2
 ----
+>> put k=k1 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k2 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k3 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k4 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k5 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k6 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k7 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k8 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k9 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k10 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k11 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
+>> put k=k12 v=v2 t=A localTs=20
+stats: val_bytes=+26 live_bytes=+26 intent_bytes=+1 intent_age=-10
 >> at end:
 meta: "k1"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k1"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
@@ -291,8 +375,9 @@ meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000
 data: "k8"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
 meta: "k9"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=1} ts=30.000000000,0 del=false klen=12 vlen=20 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k9"/30.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
+stats: key_count=12 key_bytes=183 val_count=12 val_bytes=1116 live_count=12 live_bytes=1299 intent_count=12 intent_bytes=384 separated_intent_count=12 intent_age=840
 
-run ok
+run stats ok
 with t=A
   txn_advance ts=40
   resolve_intent k=k1  status=ABORTED
@@ -308,6 +393,30 @@ with t=A
   resolve_intent k=k11 status=COMMITTED clockWhilePending=30
   resolve_intent k=k12 status=COMMITTED clockWhilePending=40
 ----
+>> resolve_intent k=k1 status=ABORTED t=A
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k2 status=ABORTED clockWhilePending=20 t=A
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k3 status=ABORTED clockWhilePending=30 t=A
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k4 status=ABORTED clockWhilePending=40 t=A
+stats: key_count=-1 key_bytes=-15 val_count=-1 val_bytes=-93 live_count=-1 live_bytes=-108 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k5 status=PENDING t=A
+stats: val_bytes=+2 live_bytes=+2 intent_age=-10
+>> resolve_intent k=k6 status=PENDING clockWhilePending=20 t=A
+stats: val_bytes=+2 live_bytes=+2 intent_age=-10
+>> resolve_intent k=k7 status=PENDING clockWhilePending=30 t=A
+stats: val_bytes=+2 live_bytes=+2 intent_age=-10
+>> resolve_intent k=k8 status=PENDING clockWhilePending=40 t=A
+stats: val_bytes=-11 live_bytes=-11 intent_bytes=-13 intent_age=-10
+>> resolve_intent k=k9 status=COMMITTED t=A
+stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k10 status=COMMITTED clockWhilePending=20 t=A
+stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k11 status=COMMITTED clockWhilePending=30 t=A
+stats: val_bytes=-73 live_bytes=-73 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
+>> resolve_intent k=k12 status=COMMITTED clockWhilePending=40 t=A
+stats: val_bytes=-86 live_bytes=-86 intent_count=-1 intent_bytes=-32 separated_intent_count=-1 intent_age=-70
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k10"/40.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
@@ -322,3 +431,4 @@ data: "k7"/40.000000000,0 -> vheader{ localTs=30.000000000,0 } /BYTES/v2
 meta: "k8"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=1} ts=40.000000000,0 del=false klen=12 vlen=7 ih={{0 vheader{ localTs=10.000000000,0 } /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k8"/40.000000000,0 -> /BYTES/v2
 data: "k9"/40.000000000,0 -> vheader{ localTs=20.000000000,0 } /BYTES/v2
+stats: key_count=8 key_bytes=123 val_count=8 val_bytes=434 live_count=8 live_bytes=557 intent_count=4 intent_bytes=115 separated_intent_count=4 intent_age=240
