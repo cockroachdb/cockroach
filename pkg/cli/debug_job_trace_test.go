@@ -61,7 +61,7 @@ func (r *traceSpanResumer) Resume(ctx context.Context, _ interface{}) error {
 	return nil
 }
 
-func (r *traceSpanResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *traceSpanResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
 	return errors.New("unimplemented")
 }
 
