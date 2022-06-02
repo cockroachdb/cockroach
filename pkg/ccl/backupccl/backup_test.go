@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
@@ -133,7 +135,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	// have been stored in the GZip compressed format.
 	t.Run("GZipBackupManifest", func(t *testing.T) {
 		backupDir := fmt.Sprintf("%s/foo", dir)
-		backupManifestFile := backupDir + "/" + backupManifestName
+		backupManifestFile := backupDir + "/" + backupbase.BackupManifestName
 		backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 		if err != nil {
 			t.Fatal(err)
@@ -578,21 +580,21 @@ func TestBackupRestoreAppend(t *testing.T) {
 			defer store.Close()
 			var files []string
 			require.NoError(t, store.List(ctx, "/", "", func(f string) error {
-				ok, err := path.Match("*/*/*/"+backupManifestName, f)
+				ok, err := path.Match("*/*/*/"+backupbase.BackupManifestName, f)
 				if ok {
 					files = append(files, f)
 				}
 				return err
 			}))
-			full1 = strings.TrimSuffix(files[0], backupManifestName)
-			full2 = strings.TrimSuffix(files[1], backupManifestName)
+			full1 = strings.TrimSuffix(files[0], backupbase.BackupManifestName)
+			full2 = strings.TrimSuffix(files[1], backupbase.BackupManifestName)
 
 			// Find the full-backups written to the specified subdirectories, and within
 			// each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
 			var subdirFiles []string
 			require.NoError(t, store.List(ctx, "foo/", "", func(f string) error {
-				ok, err := path.Match(specifiedSubdir+"*/"+backupManifestName, f)
+				ok, err := path.Match(specifiedSubdir+"*/"+backupbase.BackupManifestName, f)
 				if ok {
 					subdirFiles = append(subdirFiles, f)
 				}
@@ -600,20 +602,20 @@ func TestBackupRestoreAppend(t *testing.T) {
 			}))
 			require.NoError(t, err)
 			subdirFull1 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[0], "foo"),
-				backupManifestName)
+				backupbase.BackupManifestName)
 			subdirFull2 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[1], "foo"),
-				backupManifestName)
+				backupbase.BackupManifestName)
 		} else {
 			// Find the backup times in the collection and try RESTORE'ing to each, and
 			// within each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
-			full1, full2 = findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/"+backupManifestName))
+			full1, full2 = findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/"+backupbase.BackupManifestName))
 
 			// Find the full-backups written to the specified subdirectories, and within
 			// each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
 			subdirFull1, subdirFull2 = findFullBackupPaths(path.Join(tmpDir, "foo"),
-				path.Join(tmpDir, "foo", fmt.Sprintf("%s*", specifiedSubdir), backupManifestName))
+				path.Join(tmpDir, "foo", fmt.Sprintf("%s*", specifiedSubdir), backupbase.BackupManifestName))
 		}
 		runRestores(test.collections, full1, full2)
 		runRestores(test.collectionsWithSubdir, subdirFull1, subdirFull2)
@@ -676,7 +678,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	}
 
 	// Find the subdirectory created by the full BACKUP INTO statement.
-	matches, err := filepath.Glob(path.Join(tmpDir, "full/*/*/*/"+backupManifestName))
+	matches, err := filepath.Glob(path.Join(tmpDir, "full/*/*/*/"+backupbase.BackupManifestName))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(matches))
 	for i := range matches {
@@ -1625,7 +1627,7 @@ func TestBackupRestoreResume(t *testing.T) {
 
 				// If the backup properly took the (incorrect) checkpoint into account, it
 				// won't have tried to re-export any keys within backupCompletedSpan.
-				backupManifestFile := backupDir + "/" + backupManifestName
+				backupManifestFile := backupDir + "/" + backupbase.BackupManifestName
 				backupManifestBytes, err := ioutil.ReadFile(backupManifestFile)
 				if err != nil {
 					t.Fatal(err)
@@ -3982,7 +3984,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	var backupManifest backuppb.BackupManifest
 	{
-		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupManifestName))
+		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, backupbase.BackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -8070,7 +8072,7 @@ func TestManifestTooNew(t *testing.T) {
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
 	// Load/deserialize the manifest so we can mess with it.
-	manifestPath := filepath.Join(rawDir, "too_new", backupManifestName)
+	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
 	manifestData, err := ioutil.ReadFile(manifestPath)
 	require.NoError(t, err)
 	manifestData, err = decompressData(context.Background(), nil, manifestData)
@@ -8152,7 +8154,7 @@ func flipBitInManifests(t *testing.T, rawDir string) {
 	foundManifest := false
 	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
 		log.Infof(context.Background(), "visiting %s", path)
-		if filepath.Base(path) == backupManifestName {
+		if filepath.Base(path) == backupbase.BackupManifestName {
 			foundManifest = true
 			data, err := ioutil.ReadFile(path)
 			require.NoError(t, err)
@@ -9793,7 +9795,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 
 	// Find the latest file so we know where the directory is that we want
 	// to list from.
-	r, err := findLatestFile(ctx, store)
+	r, err := backupdestination.FindLatestFile(ctx, store)
 	require.NoError(t, err)
 	latest, err := ioctx.ReadAll(ctx, r)
 	latestFilePath := (string)(latest)
@@ -9966,7 +9968,7 @@ func TestBackupNoOverwriteLatest(t *testing.T) {
 	findNumLatestFiles := func() (int, string) {
 		var numLatestFiles int
 		var latestFile string
-		err = store.List(ctx, latestHistoryDirectory, "", func(p string) error {
+		err = store.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
 			if numLatestFiles == 0 {
 				latestFile = p
 			}
@@ -10028,7 +10030,7 @@ func TestBackupLatestInBaseDirectory(t *testing.T) {
 	sqlDB.Exec(t, query)
 
 	// Confirm that the LATEST file was written to the base directory.
-	r, err := store.ReadFile(ctx, latestFileName)
+	r, err := store.ReadFile(ctx, backupbase.LatestFileName)
 	require.NoError(t, err)
 	r.Close(ctx)
 

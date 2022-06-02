@@ -9,6 +9,7 @@ ALL_TESTS = [
     "//pkg/blobs:blobs_test",
     "//pkg/build/starlarkutil:starlarkutil_test",
     "//pkg/build/util:util_test",
+    "//pkg/ccl/backupccl/backupdestination:backupdestination_test",
     "//pkg/ccl/backupccl/backupresolver:backupresolver_test",
     "//pkg/ccl/backupccl:backupccl_test",
     "//pkg/ccl/baseccl:baseccl_test",

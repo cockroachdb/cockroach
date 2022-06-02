@@ -6,68 +6,70 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupdestination
 
 import (
 	"context"
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// fetchPreviousBackups takes a list of URIs of previous backups and returns
-// their manifest as well as the encryption options of the first backup in the
-// chain.
-func fetchPreviousBackups(
-	ctx context.Context,
-	mem *mon.BoundAccount,
-	user username.SQLUsername,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	prevBackupURIs []string,
-	encryptionParams jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
-	if len(prevBackupURIs) == 0 {
-		return nil, nil, 0, nil
-	}
+const (
+	localityURLParam     = "COCKROACH_LOCALITY"
+	defaultLocalityValue = "default"
+)
 
-	baseBackup := prevBackupURIs[0]
-	encryptionOptions, err := backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
-		encryptionParams, kmsEnv)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
-		encryptionOptions)
-	if err != nil {
-		return nil, nil, 0, err
-	}
+// On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
+// omit a leading slash. However, backups in a subdirectory of a base bucket
+// will contain one.
+var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase.BackupManifestName + "$")
 
-	return prevBackups, encryptionOptions, size, nil
+// featureFullBackupUserSubdir, when true, will create a full backup at a user
+// specified subdirectory if no backup already exists at that subdirectory. As
+// of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
+var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
+	"when true, a backup command with a user specified subdirectory will create a full backup at"+
+		" the subdirectory if no backup already exists at that subdirectory.",
+	false,
+).WithPublic()
+
+// TODO(adityamaru): Move this to the soon to be `backupinfo` package.
+func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
+	r, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName)
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	r.Close(ctx)
+	return true, nil
 }
 
-// resolveDest resolves the true destination of a backup. The backup command
+// ResolveDest resolves the true destination of a backup. The backup command
 // provided by the user may point to a backup collection, or a backup location
 // which auto-appends incremental backups to it. This method checks for these
 // cases and finds the actual directory where we'll write this new backup.
@@ -76,7 +78,7 @@ func fetchPreviousBackups(
 // explicitly, or due to the auto-append feature), it will resolve the
 // encryption options based on the base backup, as well as find all previous
 // backup manifests in the backup chain.
-func resolveDest(
+func ResolveDest(
 	ctx context.Context,
 	user username.SQLUsername,
 	dest jobspb.BackupDetails_Destination,
@@ -95,7 +97,7 @@ func resolveDest(
 ) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
-	defaultURI, _, err := getURIsByLocalityKV(dest.To, "")
+	defaultURI, _, err := GetURIsByLocalityKV(dest.To, "")
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
@@ -106,8 +108,8 @@ func resolveDest(
 		// The legacy backup syntax, BACKUP TO, leaves the dest.Subdir and collection parameters empty.
 		collectionURI = defaultURI
 
-		if chosenSuffix == latestFileName {
-			latest, err := readLatestFile(ctx, defaultURI, makeCloudStorage, user)
+		if chosenSuffix == backupbase.LatestFileName {
+			latest, err := ReadLatestFile(ctx, defaultURI, makeCloudStorage, user)
 			if err != nil {
 				return "", "", "", nil, nil, err
 			}
@@ -115,7 +117,7 @@ func resolveDest(
 		}
 	}
 
-	plannedBackupDefaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, chosenSuffix)
+	plannedBackupDefaultURI, urisByLocalityKV, err = GetURIsByLocalityKV(dest.To, chosenSuffix)
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
@@ -178,7 +180,7 @@ func resolveDest(
 	}
 
 	// The defaultStore contains a full backup; consequently, we're conducting an incremental backup.
-	fullyResolvedIncrementalsLocation, err := resolveIncrementalsBackupLocation(
+	fullyResolvedIncrementalsLocation, err := ResolveIncrementalsBackupLocation(
 		ctx,
 		user,
 		execCfg,
@@ -189,7 +191,7 @@ func resolveDest(
 		return "", "", "", nil, nil, err
 	}
 
-	priorsDefaultURI, _, err := getURIsByLocalityKV(fullyResolvedIncrementalsLocation, "")
+	priorsDefaultURI, _, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, "")
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
@@ -199,7 +201,7 @@ func resolveDest(
 	}
 	defer incrementalStore.Close()
 
-	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
+	priors, err := FindPriorBackups(ctx, incrementalStore, backupbase.OmitManifest)
 	if err != nil {
 		return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -210,88 +212,23 @@ func resolveDest(
 			return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
 				priorsDefaultURI)
 		}
-		priorURI.Path = JoinURLPath(priorURI.Path, prior)
+		priorURI.Path = backuputils.JoinURLPath(priorURI.Path, prior)
 		prevBackupURIs = append(prevBackupURIs, priorURI.String())
 	}
 	prevBackupURIs = append([]string{plannedBackupDefaultURI}, prevBackupURIs...)
 
 	// Within the chosenSuffix dir, differentiate incremental backups with partName.
-	partName := endTime.GoTime().Format(DateBasedIncFolderName)
-	defaultIncrementalsURI, urisByLocalityKV, err := getURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
+	partName := endTime.GoTime().Format(backupbase.DateBasedIncFolderName)
+	defaultIncrementalsURI, urisByLocalityKV, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
 	return collectionURI, defaultIncrementalsURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 }
 
-// getBackupManifests fetches the backup manifest from a list of backup URIs.
-func getBackupManifests(
-	ctx context.Context,
-	mem *mon.BoundAccount,
-	user username.SQLUsername,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	backupURIs []string,
-	encryption *jobspb.BackupEncryptionOptions,
-) ([]backuppb.BackupManifest, int64, error) {
-	manifests := make([]backuppb.BackupManifest, len(backupURIs))
-	if len(backupURIs) == 0 {
-		return manifests, 0, nil
-	}
-
-	memMu := struct {
-		syncutil.Mutex
-		total int64
-		mem   *mon.BoundAccount
-	}{}
-	memMu.mem = mem
-
-	g := ctxgroup.WithContext(ctx)
-	for i := range backupURIs {
-		i := i
-		// boundAccount isn't threadsafe so we'll make a new one this goroutine to
-		// pass while reading. When it is done, we'll lock an mu, reserve its size
-		// from the main one tracking the total amount reserved.
-		subMem := mem.Monitor().MakeBoundAccount()
-		g.GoCtx(func(ctx context.Context) error {
-			defer subMem.Close(ctx)
-			// TODO(lucy): We may want to upgrade the table descs to the newer
-			// foreign key representation here, in case there are backups from an
-			// older cluster. Keeping the descriptors as they are works for now
-			// since all we need to do is get the past backups' table/index spans,
-			// but it will be safer for future code to avoid having older-style
-			// descriptors around.
-			uri := backupURIs[i]
-			desc, size, err := ReadBackupManifestFromURI(
-				ctx, &subMem, uri, user, makeCloudStorage, encryption,
-			)
-			if err != nil {
-				return errors.Wrapf(err, "failed to read backup from %q",
-					RedactURIForErrorMessage(uri))
-			}
-
-			memMu.Lock()
-			err = memMu.mem.Grow(ctx, size)
-
-			if err == nil {
-				memMu.total += size
-				manifests[i] = desc
-			}
-			subMem.Shrink(ctx, size)
-			memMu.Unlock()
-
-			return err
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		mem.Shrink(ctx, memMu.total)
-		return nil, 0, err
-	}
-
-	return manifests, memMu.total, nil
-}
-
-func readLatestFile(
+// ReadLatestFile reads the LATEST file from collectionURI and returns the path
+// stored in the file.
+func ReadLatestFile(
 	ctx context.Context,
 	collectionURI string,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
@@ -303,7 +240,7 @@ func readLatestFile(
 	}
 	defer collection.Close()
 
-	latestFile, err := findLatestFile(ctx, collection)
+	latestFile, err := FindLatestFile(ctx, collection)
 
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
@@ -321,11 +258,11 @@ func readLatestFile(
 	return string(latest), nil
 }
 
-// findLatestFile returns a ioctx.ReaderCloserCtx of the most recent LATEST
+// FindLatestFile returns a ioctx.ReaderCloserCtx of the most recent LATEST
 // file. First it tries reading from the latest directory. If
 // the backup is from an older version, it may not exist there yet so
 // it tries reading in the base directory if the first attempt fails.
-func findLatestFile(
+func FindLatestFile(
 	ctx context.Context, exportStore cloud.ExternalStorage,
 ) (ioctx.ReadCloserCtx, error) {
 	var latestFile string
@@ -336,7 +273,7 @@ func findLatestFile(
 
 	// We name files such that the most recent latest file will always
 	// be at the top, so just grab the first filename.
-	err := exportStore.List(ctx, latestHistoryDirectory, "", func(p string) error {
+	err := exportStore.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
 		p = strings.TrimPrefix(p, "/")
 		latestFile = p
 		latestFileFound = true
@@ -349,7 +286,7 @@ func findLatestFile(
 	// file directly. This can still fail if it is a mixed cluster and the
 	// latest file was written in the base directory.
 	if errors.Is(err, cloud.ErrListingUnsupported) {
-		r, err := exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
+		r, err := exportStore.ReadFile(ctx, backupbase.LatestHistoryDirectory+"/"+backupbase.LatestFileName)
 		if err == nil {
 			return r, nil
 		}
@@ -358,28 +295,28 @@ func findLatestFile(
 	}
 
 	if latestFileFound {
-		return exportStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFile)
+		return exportStore.ReadFile(ctx, backupbase.LatestHistoryDirectory+"/"+latestFile)
 	}
 
 	// The latest file couldn't be found in the latest directory,
 	// try the base directory instead.
-	r, err := exportStore.ReadFile(ctx, latestFileName)
+	r, err := exportStore.ReadFile(ctx, backupbase.LatestFileName)
 	if err != nil {
 		return nil, errors.Wrap(err, "LATEST file could not be read in base or metadata directory")
 	}
 	return r, nil
 }
 
-// writeNewLatestFile writes a new LATEST file to both the base directory
+// WriteNewLatestFile writes a new LATEST file to both the base directory
 // and latest-history directory, depending on cluster version.
-func writeNewLatestFile(
+func WriteNewLatestFile(
 	ctx context.Context, settings *cluster.Settings, exportStore cloud.ExternalStorage, suffix string,
 ) error {
 	// If the cluster is still running on a mixed version, we want to write
 	// to the base directory instead of the metadata/latest directory. That
 	// way an old node can still find the LATEST file.
 	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		return cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
+		return cloud.WriteFile(ctx, exportStore, backupbase.LatestFileName, strings.NewReader(suffix))
 	}
 
 	// HTTP storage does not support listing and so we cannot rely on the
@@ -387,7 +324,7 @@ func writeNewLatestFile(
 	// Instead, we disregard write once semantics and always read and write
 	// a non-timestamped latest file for HTTP.
 	if exportStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
-		return cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
+		return cloud.WriteFile(ctx, exportStore, backupbase.LatestFileName, strings.NewReader(suffix))
 	}
 
 	// We timestamp the latest files in order to enforce write once backups.
@@ -408,5 +345,120 @@ func writeNewLatestFile(
 func newTimestampedLatestFileName() string {
 	var buffer []byte
 	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
-	return fmt.Sprintf("%s/%s-%s", latestHistoryDirectory, latestFileName, hex.EncodeToString(buffer))
+	return fmt.Sprintf("%s/%s-%s", backupbase.LatestHistoryDirectory, backupbase.LatestFileName, hex.EncodeToString(buffer))
+}
+
+// CheckForLatestFileInCollection checks whether the directory pointed by store contains the
+// latestFileName pointer directory.
+func CheckForLatestFileInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) (bool, error) {
+	r, err := FindLatestFile(ctx, store)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, pgerror.WithCandidateCode(err, pgcode.Io)
+		}
+
+		r, err = store.ReadFile(ctx, backupbase.LatestFileName)
+	}
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, pgerror.WithCandidateCode(err, pgcode.Io)
+	}
+	r.Close(ctx)
+	return true, nil
+}
+
+func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return "", "", err
+	}
+	q := parsedURI.Query()
+	localityKV := q.Get(localityURLParam)
+	// Remove the backup locality parameter.
+	q.Del(localityURLParam)
+	parsedURI.RawQuery = q.Encode()
+
+	parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, appendPath)
+
+	baseURI := parsedURI.String()
+	return localityKV, baseURI, nil
+}
+
+// GetURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
+// backup, and returns the default backup destination URI and a map of all other
+// URIs by locality KV, appending appendPath to the path component of both the
+// default URI and all the locality URIs. The URIs in the result do not include
+// the COCKROACH_LOCALITY parameter.
+func GetURIsByLocalityKV(
+	to []string, appendPath string,
+) (defaultURI string, urisByLocalityKV map[string]string, err error) {
+	urisByLocalityKV = make(map[string]string)
+	if len(to) == 1 {
+		localityKV, baseURI, err := getLocalityAndBaseURI(to[0], appendPath)
+		if err != nil {
+			return "", nil, err
+		}
+		if localityKV != "" && localityKV != defaultLocalityValue {
+			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
+				localityURLParam, localityKV)
+		}
+		return baseURI, urisByLocalityKV, nil
+	}
+
+	for _, uri := range to {
+		localityKV, baseURI, err := getLocalityAndBaseURI(uri, appendPath)
+		if err != nil {
+			return "", nil, err
+		}
+		if localityKV == "" {
+			return "", nil, errors.Errorf(
+				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
+				localityURLParam,
+			)
+		}
+		if localityKV == defaultLocalityValue {
+			if defaultURI != "" {
+				return "", nil, errors.Errorf("multiple default URLs provided for partition backup")
+			}
+			defaultURI = baseURI
+		} else {
+			kv := roachpb.Tier{}
+			if err := kv.FromString(localityKV); err != nil {
+				return "", nil, errors.Wrap(err, "failed to parse backup locality")
+			}
+			if _, ok := urisByLocalityKV[localityKV]; ok {
+				return "", nil, errors.Errorf("duplicate URIs for locality %s", localityKV)
+			}
+			urisByLocalityKV[localityKV] = baseURI
+		}
+	}
+	if defaultURI == "" {
+		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
+	}
+	return defaultURI, urisByLocalityKV, nil
+}
+
+// ListFullBackupsInCollection lists full backup paths in the collection
+// of an export store
+func ListFullBackupsInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) ([]string, error) {
+	var backupPaths []string
+	if err := store.List(ctx, "", listingDelimDataSlash, func(f string) error {
+		if backupPathRE.MatchString(f) {
+			backupPaths = append(backupPaths, f)
+		}
+		return nil
+	}); err != nil {
+		// Can't happen, just required to handle the error for lint.
+		return nil, err
+	}
+	for i, backupPath := range backupPaths {
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.BackupManifestName)
+	}
+	return backupPaths, nil
 }

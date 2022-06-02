@@ -14,8 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -292,14 +295,15 @@ func showBackupPlanHook(
 
 		fullyResolvedDest := dest
 		if subdir != "" {
-			if strings.EqualFold(subdir, latestFileName) {
-				subdir, err = readLatestFile(ctx, dest[0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+			if strings.EqualFold(subdir, backupbase.LatestFileName) {
+				subdir, err = backupdestination.ReadLatestFile(ctx, dest[0],
+					p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 					p.User())
 				if err != nil {
 					return errors.Wrap(err, "read LATEST path")
 				}
 			}
-			fullyResolvedDest, err = appendPaths(dest, subdir)
+			fullyResolvedDest, err = backuputils.AppendPaths(dest, subdir)
 			if err != nil {
 				return err
 			}
@@ -381,8 +385,8 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 		}
 
-		collection, computedSubdir := CollectionAndSubdir(dest[0], subdir)
-		fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+		collection, computedSubdir := backupdestination.CollectionAndSubdir(dest[0], subdir)
+		fullyResolvedIncrementalsDirectory, err := backupdestination.ResolveIncrementalsBackupLocation(
 			ctx,
 			p.User(),
 			p.ExecCfg(),
@@ -428,7 +432,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						"Consider using the new `BACKUP INTO` syntax and `SHOW BACKUP"+
 						" FROM <backup> IN <collection>`"))
 			} else if errors.Is(err, cloud.ErrFileDoesNotExist) {
-				latestFileExists, errLatestFile := checkForLatestFileInCollection(ctx, baseStores[0])
+				latestFileExists, errLatestFile := backupdestination.CheckForLatestFileInCollection(ctx, baseStores[0])
 
 				if errLatestFile == nil && latestFileExists {
 					return errors.WithHintf(err, "The specified path is the root of a backup collection. "+
@@ -513,7 +517,7 @@ func checkBackupFiles(
 		for _, metaFile := range []string{
 			fileInfoPath,
 			metadataSSTName,
-			backupManifestName + backupManifestChecksumSuffix} {
+			backupbase.BackupManifestName + backupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 					info.defaultURIs[layer], metaFile)
@@ -1065,10 +1069,10 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 	}
 
 	var incSubdir string
-	if strings.HasSuffix(incRoot, DefaultIncrementalsSubdir) {
+	if strings.HasSuffix(incRoot, backupbase.DefaultIncrementalsSubdir) {
 		// The incremental backup is stored in the default incremental
 		// directory (i.e. collectionURI/incrementals/fullSubdir)
-		incSubdir = path.Join("/"+DefaultIncrementalsSubdir, fullSubdir)
+		incSubdir = path.Join("/"+backupbase.DefaultIncrementalsSubdir, fullSubdir)
 	} else {
 		// Implies one of two scenarios:
 		// 1) the incremental chain is stored in the pre 22.1
@@ -1148,7 +1152,7 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := ListFullBackupsInCollection(ctx, store)
+		res, err := backupdestination.ListFullBackupsInCollection(ctx, store)
 		if err != nil {
 			return err
 		}

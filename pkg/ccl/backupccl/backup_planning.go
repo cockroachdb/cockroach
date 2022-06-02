@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
@@ -20,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
@@ -68,8 +69,6 @@ const (
 	backupOptAsJSON           = "as_json"
 	backupOptWithDebugIDs     = "debug_ids"
 	backupOptIncStorage       = "incremental_location"
-	localityURLParam          = "COCKROACH_LOCALITY"
-	defaultLocalityValue      = "default"
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
 	backupOptEncDir           = "encryption_info_dir"
 	backupOptCheckFiles       = "check_files"
@@ -86,17 +85,6 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
-
-// featureFullBackupUserSubdir, when true, will create a full backup at a user
-// specified subdirectory if no backup already exists at that subdirectory. As
-// of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
-var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
-	"when true, a backup command with a user specified subdirectory will create a full backup at"+
-		" the subdirectory if no backup already exists at that subdirectory.",
-	false,
 ).WithPublic()
 
 // forEachPublicIndexTableSpan constructs a span for each public index of the
@@ -177,77 +165,6 @@ func spansForAllTableIndexes(
 	}
 
 	return mergedSpans, nil
-}
-
-func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
-	parsedURI, err := url.Parse(uri)
-	if err != nil {
-		return "", "", err
-	}
-	q := parsedURI.Query()
-	localityKV := q.Get(localityURLParam)
-	// Remove the backup locality parameter.
-	q.Del(localityURLParam)
-	parsedURI.RawQuery = q.Encode()
-
-	parsedURI.Path = JoinURLPath(parsedURI.Path, appendPath)
-
-	baseURI := parsedURI.String()
-	return localityKV, baseURI, nil
-}
-
-// getURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
-// backup, and returns the default backup destination URI and a map of all other
-// URIs by locality KV, appending appendPath to the path component of both the
-// default URI and all the locality URIs. The URIs in the result do not include
-// the COCKROACH_LOCALITY parameter.
-func getURIsByLocalityKV(
-	to []string, appendPath string,
-) (defaultURI string, urisByLocalityKV map[string]string, err error) {
-	urisByLocalityKV = make(map[string]string)
-	if len(to) == 1 {
-		localityKV, baseURI, err := getLocalityAndBaseURI(to[0], appendPath)
-		if err != nil {
-			return "", nil, err
-		}
-		if localityKV != "" && localityKV != defaultLocalityValue {
-			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
-				localityURLParam, localityKV)
-		}
-		return baseURI, urisByLocalityKV, nil
-	}
-
-	for _, uri := range to {
-		localityKV, baseURI, err := getLocalityAndBaseURI(uri, appendPath)
-		if err != nil {
-			return "", nil, err
-		}
-		if localityKV == "" {
-			return "", nil, errors.Errorf(
-				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
-				localityURLParam,
-			)
-		}
-		if localityKV == defaultLocalityValue {
-			if defaultURI != "" {
-				return "", nil, errors.Errorf("multiple default URLs provided for partition backup")
-			}
-			defaultURI = baseURI
-		} else {
-			kv := roachpb.Tier{}
-			if err := kv.FromString(localityKV); err != nil {
-				return "", nil, errors.Wrap(err, "failed to parse backup locality")
-			}
-			if _, ok := urisByLocalityKV[localityKV]; ok {
-				return "", nil, errors.Errorf("duplicate URIs for locality %s", localityKV)
-			}
-			urisByLocalityKV[localityKV] = baseURI
-		}
-	}
-	if defaultURI == "" {
-		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
-	}
-	return defaultURI, urisByLocalityKV, nil
 }
 
 func resolveOptionsForBackupJobDescription(
@@ -674,14 +591,14 @@ func backupPlanHook(
 
 		if backupStmt.Nested {
 			if backupStmt.AppendToLatest {
-				initialDetails.Destination.Subdir = latestFileName
+				initialDetails.Destination.Subdir = backupbase.LatestFileName
 				initialDetails.Destination.Exists = true
 
 			} else if subdir != "" {
 				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
 				initialDetails.Destination.Exists = true
 			} else {
-				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
+				initialDetails.Destination.Subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)
 			}
 		}
 
@@ -819,7 +736,7 @@ func collectTelemetry(
 	if backupDetails.CollectionURI != "" {
 		countSource("backup.nested")
 		timeBaseSubdir := true
-		if _, err := time.Parse(DateBasedIntoFolderName,
+		if _, err := time.Parse(backupbase.DateBasedIntoFolderName,
 			initialDetails.Destination.Subdir); err != nil {
 			timeBaseSubdir = false
 		}
@@ -832,7 +749,7 @@ func collectTelemetry(
 				countSource("backup.full-no-subdir")
 			}
 		} else {
-			if initialDetails.Destination.Subdir == latestFileName {
+			if initialDetails.Destination.Subdir == backupbase.LatestFileName {
 				countSource("backup.incremental-latest-subdir")
 			} else if !timeBaseSubdir {
 				countSource("backup.deprecated-incremental-nontime-subdir")
@@ -1278,7 +1195,7 @@ func getBackupDetailAndManifest(
 	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 	// backupDestination struct.
 	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-		resolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
+		backupdestination.ResolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}

@@ -15,8 +15,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -1374,9 +1377,10 @@ func doRestorePlan(
 
 	var fullyResolvedSubdir string
 
-	if strings.EqualFold(subdir, latestFileName) {
+	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		// set subdir to content of latest file
-		latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+		latest, err := backupdestination.ReadLatestFile(ctx, from[0][0],
+			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 		if err != nil {
 			return err
 		}
@@ -1385,12 +1389,12 @@ func doRestorePlan(
 		fullyResolvedSubdir = subdir
 	}
 
-	fullyResolvedBaseDirectory, err := appendPaths(from[0][:], fullyResolvedSubdir)
+	fullyResolvedBaseDirectory, err := backuputils.AppendPaths(from[0][:], fullyResolvedSubdir)
 	if err != nil {
 		return err
 	}
 
-	fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+	fullyResolvedIncrementalsDirectory, err := backupdestination.ResolveIncrementalsBackupLocation(
 		ctx,
 		p.User(),
 		p.ExecCfg(),

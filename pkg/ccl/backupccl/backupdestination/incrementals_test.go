@@ -6,11 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupdestination
 
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -21,15 +22,15 @@ func TestJoinURLPath(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// path.Join has identical behavior for these inputs.
-	require.Equal(t, "/top/path", JoinURLPath("/top", "path"))
-	require.Equal(t, "top/path", JoinURLPath("top", "path"))
+	require.Equal(t, "/top/path", backuputils.JoinURLPath("/top", "path"))
+	require.Equal(t, "top/path", backuputils.JoinURLPath("top", "path"))
 
-	require.Equal(t, "/path", JoinURLPath("/top", "../path"))
-	require.Equal(t, "path", JoinURLPath("top", "../path"))
+	require.Equal(t, "/path", backuputils.JoinURLPath("/top", "../path"))
+	require.Equal(t, "path", backuputils.JoinURLPath("top", "../path"))
 
-	require.Equal(t, "../path", JoinURLPath("top", "../../path"))
+	require.Equal(t, "../path", backuputils.JoinURLPath("top", "../../path"))
 
 	// path.Join has different behavior for this input.
-	require.Equal(t, "/../path", JoinURLPath("/top", "../../path"))
+	require.Equal(t, "/../path", backuputils.JoinURLPath("/top", "../../path"))
 
 }

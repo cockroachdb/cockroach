@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -814,7 +815,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 				ctx := context.Background()
 				store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, destination, username.RootUserName())
 				require.NoError(t, err)
-				r, err := findLatestFile(ctx, store)
+				r, err := backupdestination.FindLatestFile(ctx, store)
 				require.NoError(t, err)
 				latest, err := ioctx.ReadAll(ctx, r)
 				require.NoError(t, err)

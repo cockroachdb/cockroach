@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -129,7 +130,7 @@ ORDER BY object_type, object_name`, full)
 	require.NotNil(t, matchResult)
 	backupTime, err := time.Parse("2006-01-02 15:04:05.00", matchResult[1])
 	require.NoError(t, err)
-	backupFolder := backupTime.Format(DateBasedIntoFolderName)
+	backupFolder := backupTime.Format(backupbase.DateBasedIntoFolderName)
 	resolvedBackupFolder := full + backupFolder
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, incTS), full)

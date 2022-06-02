@@ -17,8 +17,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdestination"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -317,7 +320,7 @@ func backup(
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
-	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
+	if err := writeBackupManifest(ctx, settings, defaultStore, backupbase.BackupManifestName, encryption, backupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
@@ -408,6 +411,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// If the backup job has already resolved the destination in a previous
 	// resumption, we can skip this step.
+	//
+	// TODO(adityamaru: Break this code block into helper methods.
 	if details.URI == "" {
 		initialDetails := details
 		backupDetails, m, err := getBackupDetailAndManifest(
@@ -510,7 +515,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// EncryptionInfo is non-nil only when new encryption information has been
 	// generated during BACKUP planning.
-	redactedURI := RedactURIForErrorMessage(details.URI)
+	redactedURI := backuputils.RedactURIForErrorMessage(details.URI)
 	if details.EncryptionInfo != nil {
 		if err := backupencryption.WriteEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
 			defaultStore); err != nil {
@@ -660,7 +665,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		defer c.Close()
 
-		if err := writeNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
+		if err := backupdestination.WriteNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
 			return err
 		}
 	}

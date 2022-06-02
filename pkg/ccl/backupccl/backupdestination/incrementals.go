@@ -6,16 +6,17 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupdestination
 
 import (
 	"context"
-	"net/url"
 	"path"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -25,15 +26,12 @@ import (
 
 // The default subdirectory for incremental backups.
 const (
-	DefaultIncrementalsSubdir = "incrementals"
-	incBackupSubdirGlob       = "/[0-9]*/[0-9]*.[0-9][0-9]/"
+	incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
 
 	// listingDelimDataSlash is used when listing to find backups and groups all the
 	// data sst files in each backup, which start with "data/", into a single result
 	// that can be skipped over quickly.
 	listingDelimDataSlash = "data/"
-
-	URLSeparator = '/'
 )
 
 // backupSubdirRE identifies the portion of a larger path that refers to the full backup subdirectory.
@@ -65,20 +63,20 @@ func FindPriorBackups(
 ) ([]string, error) {
 	var prev []string
 	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
+		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
 			return err
 		} else if ok {
 			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupManifestName)
+				p = strings.TrimSuffix(p, "/"+backupbase.BackupManifestName)
 			}
 			prev = append(prev, p)
 			return nil
 		}
-		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
+		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupOldManifestName, p); err != nil {
 			return err
 		} else if ok {
 			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
+				p = strings.TrimSuffix(p, "/"+backupbase.BackupOldManifestName)
 			}
 			prev = append(prev, p)
 		}
@@ -88,63 +86,6 @@ func FindPriorBackups(
 	}
 	sort.Strings(prev)
 	return prev, nil
-}
-
-func appendPaths(uris []string, tailDir ...string) ([]string, error) {
-	retval := make([]string, len(uris))
-	for i, uri := range uris {
-		parsed, err := url.Parse(uri)
-		if err != nil {
-			return nil, err
-		}
-		joinArgs := append([]string{parsed.Path}, tailDir...)
-		parsed.Path = JoinURLPath(joinArgs...)
-		retval[i] = parsed.String()
-	}
-	return retval, nil
-}
-
-// JoinURLPath forces a relative path join by removing any leading slash, then
-// re-prepending it later.
-//
-// Stores are an odd combination of absolute and relative path.
-// They present as absolute paths, since they contain a hostname. URL.Parse
-// thus prepends each URL.Path with a leading slash.
-// But some schemes, e.g. nodelocal, can legally travel _above_ the ostensible
-// root (e.g. nodelocal://0/.../). This is not typically possible in file
-// paths, and the standard path package doesn't like it. Specifically, it will
-// clean up something like nodelocal://0/../ to nodelocal://0. This is normally
-// correct behavior, but is wrong here.
-//
-// In point of fact we block this URLs resolved this way elsewhere. But we
-// still want to make sure to resolve the paths correctly here. We don't want
-// to accidentally correct an unauthorized file path to an authorized one, then
-// write a backup to an unexpected place or print the wrong error message on
-// a restore.
-func JoinURLPath(args ...string) string {
-	argsCopy := make([]string, 0)
-	for _, arg := range args {
-		if len(arg) == 0 {
-			continue
-		}
-		// We only want non-empty tokens.
-		argsCopy = append(argsCopy, arg)
-	}
-	if len(argsCopy) == 0 {
-		return path.Join(argsCopy...)
-	}
-
-	// We have at least 1 arg, and each has at least length 1.
-	isAbs := false
-	if argsCopy[0][0] == URLSeparator {
-		isAbs = true
-		argsCopy[0] = argsCopy[0][1:]
-	}
-	joined := path.Join(argsCopy...)
-	if isAbs {
-		joined = string(URLSeparator) + joined
-	}
-	return joined
 }
 
 // backupsFromLocation is a small helper function to retrieve all prior
@@ -162,7 +103,11 @@ func backupsFromLocation(
 	return prev, err
 }
 
-func resolveIncrementalsBackupLocation(
+// ResolveIncrementalsBackupLocation returns the resolved locations of
+// incremental backups by looking into either the explicitly provided
+// incremental backup collections, or the full backup collections if no explicit
+// incremental collections are provided.
+func ResolveIncrementalsBackupLocation(
 	ctx context.Context,
 	user username.SQLUsername,
 	execCfg *sql.ExecutorConfig,
@@ -171,7 +116,7 @@ func resolveIncrementalsBackupLocation(
 	subdir string,
 ) ([]string, error) {
 	if len(explicitIncrementalCollections) > 0 {
-		incPaths, err := appendPaths(explicitIncrementalCollections, subdir)
+		incPaths, err := backuputils.AppendPaths(explicitIncrementalCollections, subdir)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +133,7 @@ func resolveIncrementalsBackupLocation(
 		return incPaths, nil
 	}
 
-	resolvedIncrementalsBackupLocationOld, err := appendPaths(fullBackupCollections, subdir)
+	resolvedIncrementalsBackupLocationOld, err := backuputils.AppendPaths(fullBackupCollections, subdir)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +147,7 @@ func resolveIncrementalsBackupLocation(
 		return nil, err
 	}
 
-	resolvedIncrementalsBackupLocation, err := appendPaths(fullBackupCollections, DefaultIncrementalsSubdir, subdir)
+	resolvedIncrementalsBackupLocation, err := backuputils.AppendPaths(fullBackupCollections, backupbase.DefaultIncrementalsSubdir, subdir)
 	if err != nil {
 		return nil, err
 	}
