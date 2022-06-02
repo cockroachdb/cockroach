@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -78,20 +77,6 @@ var (
 		"target size for individual data files produced during BACKUP",
 		128<<20,
 	).WithPublic()
-
-	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
-		"backup-merge-file-buffer-size",
-		128<<20, /* defaultValue */
-		1<<20,   /* metamorphic min */
-		16<<20,  /* metamorphic max */
-	)
-	smallFileBuffer = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
-		"bulkio.backup.merge_file_buffer_size",
-		"size limit used when buffering backup files before merging them",
-		int64(defaultSmallFileBuffer),
-		settings.NonNegativeInt,
-	)
 
 	splitKeysOnTimestamps = settings.RegisterBoolSetting(
 		settings.TenantWritable,

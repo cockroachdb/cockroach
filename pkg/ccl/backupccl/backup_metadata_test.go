@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -80,7 +81,7 @@ func checkMetadata(
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := testingReadBackupManifest(ctx, store, backupManifestName)
+	m, err := testingReadBackupManifest(ctx, store, backupbase.BackupManifestName)
 	if err != nil {
 		t.Fatal(err)
 	}

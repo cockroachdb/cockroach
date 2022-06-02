@@ -17,12 +17,14 @@ import (
 	"fmt"
 	"net/url"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -36,24 +38,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // Files that may appear in a backup directory.
 const (
-	// backupManifestName is the file name used for serialized BackupManifest
-	// protos.
-	backupManifestName = "BACKUP_MANIFEST"
-	// backupOldManifestName is an old name for the serialized BackupManifest
-	// proto. It is used by 20.1 nodes and earlier.
-	backupOldManifestName = "BACKUP"
-
 	// backupManifestChecksumSuffix indicates where the checksum for the manifest
 	// is stored if present. It can be found in the name of the backup manifest +
 	// this suffix.
@@ -78,34 +75,7 @@ const (
 	// CHECKPOINT files will be stored as we no longer want to overwrite
 	// them.
 	backupProgressDirectory = "progress"
-
-	// DateBasedIncFolderName is the date format used when creating sub-directories
-	// storing incremental backups for auto-appendable backups.
-	// It is exported for testing backup inspection tooling.
-	DateBasedIncFolderName = "/20060102/150405.00"
-
-	// DateBasedIntoFolderName is the date format used when creating sub-directories
-	// for storing backups in a collection.
-	// Also exported for testing backup inspection tooling.
-	DateBasedIntoFolderName = "/2006/01/02-150405.00"
-
-	// latestFileName is the name of a file in the collection which contains the
-	// path of the most recently taken full backup in the backup collection.
-	latestFileName = "LATEST"
-
-	// latestHistoryDirectory is the directory where all 22.1 and beyond
-	// LATEST files will be stored as we no longer want to overwrite it.
-	latestHistoryDirectory = backupMetadataDirectory + "/" + "latest"
-
-	// backupMetadataDirectory is the directory where metadata about a backup
-	// collection is stored. In v22.1 it contains the latest directory.
-	backupMetadataDirectory = "metadata"
 )
-
-// On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
-// omit a leading slash. However, backups in a subdirectory of a base bucket
-// will contain one.
-var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupManifestName + "$")
 
 var writeMetadataSST = settings.RegisterBoolSetting(
 	settings.TenantWritable,
@@ -168,10 +138,10 @@ func ReadBackupManifestFromStore(
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (backuppb.BackupManifest, int64, error) {
-	backupManifest, memSize, err := readBackupManifest(ctx, mem, exportStore, backupManifestName,
+	backupManifest, memSize, err := readBackupManifest(ctx, mem, exportStore, backupbase.BackupManifestName,
 		encryption)
 	if err != nil {
-		oldManifest, newMemSize, newErr := readBackupManifest(ctx, mem, exportStore, backupOldManifestName,
+		oldManifest, newMemSize, newErr := readBackupManifest(ctx, mem, exportStore, backupbase.BackupOldManifestName,
 			encryption)
 		if newErr != nil {
 			return backuppb.BackupManifest{}, 0, err
@@ -183,18 +153,6 @@ func ReadBackupManifestFromStore(
 	// TODO(dan): Sanity check this BackupManifest: non-empty EndTime, non-empty
 	// Paths, and non-overlapping Spans and keyranges in Files.
 	return backupManifest, memSize, nil
-}
-
-func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, err := exportStore.ReadFile(ctx, backupManifestName)
-	if err != nil {
-		if errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	r.Close(ctx)
-	return true, nil
 }
 
 // compressData compresses data buffer and returns compressed
@@ -671,7 +629,7 @@ func getLocalityInfo(
 				kv := roachpb.Tier{}
 				if err := kv.FromString(origLocalityKV); err != nil {
 					return info, errors.Wrapf(err, "reading backup manifest from %s",
-						RedactURIForErrorMessage(uris[i]))
+						backuputils.RedactURIForErrorMessage(uris[i]))
 				}
 				if _, ok := urisByOrigLocality[origLocalityKV]; ok {
 					return info, errors.Errorf("duplicate locality %s found in backup", origLocalityKV)
@@ -687,36 +645,6 @@ func getLocalityInfo(
 	}
 	info.URIsByOriginalLocalityKV = urisByOrigLocality
 	return info, nil
-}
-
-const (
-	// IncludeManifest is a named const that can be passed to FindPriorBackups.
-	IncludeManifest = true
-	// OmitManifest is a named const that can be passed to FindPriorBackups.
-	OmitManifest = false
-)
-
-// checkForLatestFileInCollection checks whether the directory pointed by store contains the
-// latestFileName pointer directory.
-func checkForLatestFileInCollection(
-	ctx context.Context, store cloud.ExternalStorage,
-) (bool, error) {
-	r, err := findLatestFile(ctx, store)
-	if err != nil {
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return false, pgerror.WithCandidateCode(err, pgcode.Io)
-		}
-
-		r, err = store.ReadFile(ctx, latestFileName)
-	}
-	if err != nil {
-		if errors.Is(err, cloud.ErrFileDoesNotExist) {
-			return false, nil
-		}
-		return false, pgerror.WithCandidateCode(err, pgcode.Io)
-	}
-	r.Close(ctx)
-	return true, nil
 }
 
 func resolveBackupManifestsExplicitIncrementals(
@@ -839,7 +767,7 @@ func resolveBackupManifests(
 
 	var prev []string
 	if len(incStores) > 0 {
-		prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+		prev, err = backupdest.FindPriorBackups(ctx, incStores[0], backupbase.IncludeManifest)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -891,7 +819,7 @@ func resolveBackupManifests(
 			partitionURIs := make([]string, numPartitions)
 			for j := range baseURIs {
 				u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
-				u.Path = JoinURLPath(u.Path, incSubDir)
+				u.Path = backuputils.JoinURLPath(u.Path, incSubDir)
 				partitionURIs[j] = u.String()
 			}
 			defaultURIs[i+1] = partitionURIs[0]
@@ -1077,16 +1005,6 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
-// RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
-// return to the client in an error message.
-func RedactURIForErrorMessage(uri string) string {
-	redactedURI, err := cloud.SanitizeExternalStorageURI(uri, []string{})
-	if err != nil {
-		return "<uri_failed_to_redact>"
-	}
-	return redactedURI
-}
-
 // checkForPreviousBackup ensures that the target location does not already
 // contain a BACKUP or checkpoint, locking out accidental concurrent operations
 // on that location. Note that the checkpoint file should be written as soon as
@@ -1094,19 +1012,19 @@ func RedactURIForErrorMessage(uri string) string {
 func checkForPreviousBackup(
 	ctx context.Context, exportStore cloud.ExternalStorage, defaultURI string,
 ) error {
-	redactedURI := RedactURIForErrorMessage(defaultURI)
-	r, err := exportStore.ReadFile(ctx, backupManifestName)
+	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
+	r, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName)
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
-			redactedURI, backupManifestName)
+			redactedURI, backupbase.BackupManifestName)
 	}
 
 	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
-			redactedURI, backupManifestName)
+			redactedURI, backupbase.BackupManifestName)
 	}
 
 	r, err = readLatestCheckpointFile(ctx, exportStore, backupManifestCheckpointName)
@@ -1129,27 +1047,6 @@ func checkForPreviousBackup(
 // tempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
 func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 	return fmt.Sprintf("%s-%d", backupManifestCheckpointName, jobID)
-}
-
-// ListFullBackupsInCollection lists full backup paths in the collection
-// of an export store
-func ListFullBackupsInCollection(
-	ctx context.Context, store cloud.ExternalStorage,
-) ([]string, error) {
-	var backupPaths []string
-	if err := store.List(ctx, "", listingDelimDataSlash, func(f string) error {
-		if backupPathRE.MatchString(f) {
-			backupPaths = append(backupPaths, f)
-		}
-		return nil
-	}); err != nil {
-		// Can't happen, just required to handle the error for lint.
-		return nil, err
-	}
-	for i, backupPath := range backupPaths {
-		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
-	}
-	return backupPaths, nil
 }
 
 // readLatestCheckpointFile returns an ioctx.ReaderCloserCtx of the latest
@@ -1222,4 +1119,102 @@ func newTimestampedCheckpointFileName() string {
 	var buffer []byte
 	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
 	return fmt.Sprintf("%s-%s", backupManifestCheckpointName, hex.EncodeToString(buffer))
+}
+
+// FetchPreviousBackups takes a list of URIs of previous backups and returns
+// their manifest as well as the encryption options of the first backup in the
+// chain.
+func fetchPreviousBackups(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	user username.SQLUsername,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	prevBackupURIs []string,
+	encryptionParams jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
+	if len(prevBackupURIs) == 0 {
+		return nil, nil, 0, nil
+	}
+
+	baseBackup := prevBackupURIs[0]
+	encryptionOptions, err := backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
+		encryptionParams, kmsEnv)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
+		encryptionOptions)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	return prevBackups, encryptionOptions, size, nil
+}
+
+// getBackupManifests fetches the backup manifest from a list of backup URIs.
+func getBackupManifests(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	user username.SQLUsername,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	backupURIs []string,
+	encryption *jobspb.BackupEncryptionOptions,
+) ([]backuppb.BackupManifest, int64, error) {
+	manifests := make([]backuppb.BackupManifest, len(backupURIs))
+	if len(backupURIs) == 0 {
+		return manifests, 0, nil
+	}
+
+	memMu := struct {
+		syncutil.Mutex
+		total int64
+		mem   *mon.BoundAccount
+	}{}
+	memMu.mem = mem
+
+	g := ctxgroup.WithContext(ctx)
+	for i := range backupURIs {
+		i := i
+		// boundAccount isn't threadsafe so we'll make a new one this goroutine to
+		// pass while reading. When it is done, we'll lock an mu, reserve its size
+		// from the main one tracking the total amount reserved.
+		subMem := mem.Monitor().MakeBoundAccount()
+		g.GoCtx(func(ctx context.Context) error {
+			defer subMem.Close(ctx)
+			// TODO(lucy): We may want to upgrade the table descs to the newer
+			// foreign key representation here, in case there are backups from an
+			// older cluster. Keeping the descriptors as they are works for now
+			// since all we need to do is get the past backups' table/index spans,
+			// but it will be safer for future code to avoid having older-style
+			// descriptors around.
+			uri := backupURIs[i]
+			desc, size, err := ReadBackupManifestFromURI(
+				ctx, &subMem, uri, user, makeCloudStorage, encryption,
+			)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read backup from %q",
+					backuputils.RedactURIForErrorMessage(uri))
+			}
+
+			memMu.Lock()
+			err = memMu.mem.Grow(ctx, size)
+
+			if err == nil {
+				memMu.total += size
+				manifests[i] = desc
+			}
+			subMem.Shrink(ctx, size)
+			memMu.Unlock()
+
+			return err
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		mem.Shrink(ctx, memMu.total)
+		return nil, 0, err
+	}
+
+	return manifests, memMu.total, nil
 }

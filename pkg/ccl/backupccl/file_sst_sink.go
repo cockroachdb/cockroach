@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -81,11 +82,11 @@ func makeFileSSTSink(
 	s.memAcc.ba = backupMem
 
 	// Reserve memory for the file buffer. Incrementally reserve memory in chunks
-	// upto a maximum of the `smallFileBuffer` cluster setting value. If we fail
+	// upto a maximum of the `SmallFileBuffer` cluster setting value. If we fail
 	// to grow the bound account at any stage, use the buffer size we arrived at
 	// prior to the error.
 	incrementSize := int64(32 << 20)
-	maxSize := smallFileBuffer.Get(s.conf.settings)
+	maxSize := backupbase.SmallFileBuffer.Get(s.conf.settings)
 	for {
 		if s.queueCap >= maxSize {
 			break
