@@ -155,9 +155,6 @@ func (c *sqlConn) SetAlwaysInferResultTypes(b bool) {
 	c.alwaysInferResultTypes = b
 }
 
-// The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
-var defaultDialer = &net.Dialer{}
-
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	if c.conn != nil {
@@ -176,13 +173,13 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
 	}
-	// By default, pgx uses a Dialer with a KeepAlive of 5 minutes, which is not
-	// desired here, so we override it.
-	defaultDialer.Timeout = 0
+	// The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
+	dialer := &net.Dialer{}
+	dialer.Timeout = 0
 	if base.ConnectTimeout > 0 {
-		defaultDialer.Timeout = base.ConnectTimeout
+		dialer.Timeout = base.ConnectTimeout
 	}
-	base.DialFunc = defaultDialer.DialContext
+	base.DialFunc = dialer.DialContext
 	// Override LookupFunc to be a no-op, so that the Dialer is responsible for
 	// resolving hostnames. This fixes an issue where pgx would error out too
 	// quickly if using TLS when an ipv6 address is resolved, but the networking
