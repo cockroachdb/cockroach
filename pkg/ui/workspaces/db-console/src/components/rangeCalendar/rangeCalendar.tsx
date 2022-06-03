@@ -132,11 +132,10 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
     [endDate, startDate, minTimeRange, onInvalidRangeSelect],
   );
 
-  const onSubmitClick = useCallback(() => onSubmit([startDate, endDate]), [
-    onSubmit,
-    startDate,
-    endDate,
-  ]);
+  const onSubmitClick = useCallback(
+    () => onSubmit([startDate, endDate]),
+    [onSubmit, startDate, endDate],
+  );
 
   const timePickerDefaultProps: TimePickerProps & RcTimePickerProps = {
     allowClear: false,

@@ -19,9 +19,7 @@ import { Loading, util } from "@cockroachlabs/cluster-ui";
 
 interface LogTableProps {
   rangeID: Long;
-  log: CachedDataReducerState<
-    protos.cockroach.server.serverpb.RangeLogResponse
-  >;
+  log: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
 }
 
 function printLogEventType(

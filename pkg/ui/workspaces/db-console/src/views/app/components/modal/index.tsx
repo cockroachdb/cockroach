@@ -49,13 +49,8 @@ class CustomModal extends React.Component<
   };
 
   render() {
-    const {
-      trigger,
-      visible,
-      children,
-      triggerStyle,
-      triggerTitle,
-    } = this.props;
+    const { trigger, visible, children, triggerStyle, triggerTitle } =
+      this.props;
     return (
       <Fragment>
         {trigger ? (

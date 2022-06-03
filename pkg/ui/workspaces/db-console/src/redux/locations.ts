@@ -15,7 +15,8 @@ import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { Pick } from "src/util/pick";
 
-export type ILocation = protos.cockroach.server.serverpb.LocationsResponse.ILocation;
+export type ILocation =
+  protos.cockroach.server.serverpb.LocationsResponse.ILocation;
 
 type LocationState = Pick<AdminUIState, "cachedData", "locations">;
 

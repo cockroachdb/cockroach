@@ -215,9 +215,8 @@ export const adjustTimeScale = (
   }
 
   const resolution30minDate = now.subtract(resolution30mStorageTTL);
-  const isOutsideOf30minResolution = timeWindow.start.isBefore(
-    resolution30minDate,
-  );
+  const isOutsideOf30minResolution =
+    timeWindow.start.isBefore(resolution30minDate);
   if (isOutsideOf30minResolution) {
     result.adjustmentReason = "deleted_data_period";
   }

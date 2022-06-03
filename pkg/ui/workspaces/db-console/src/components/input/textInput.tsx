@@ -84,14 +84,8 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
   };
 
   render() {
-    const {
-      initialValue,
-      placeholder,
-      className,
-      name,
-      value,
-      label,
-    } = this.props;
+    const { initialValue, placeholder, className, name, value, label } =
+      this.props;
     const { isDirty, isValid, validationMessage } = this.state;
     const textValue = isDirty ? value : initialValue;
 

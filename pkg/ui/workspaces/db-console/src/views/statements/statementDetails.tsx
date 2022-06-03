@@ -56,7 +56,8 @@ import {
   statementDetailsLatestQueryAction,
   statementDetailsLatestFormattedQueryAction,
 } from "src/redux/sqlActivity";
-type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const { generateStmtDetailsToID } = util;
 
@@ -141,7 +142,8 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
     };
   },
   onStatementDetailsQueryChange: statementDetailsLatestQueryAction,
-  onStatementDetailsFormattedQueryChange: statementDetailsLatestFormattedQueryAction,
+  onStatementDetailsFormattedQueryChange:
+    statementDetailsLatestFormattedQueryAction,
   refreshNodes: refreshNodes,
   refreshNodesLiveness: refreshLiveness,
   refreshUserSQLRoles: refreshUserSQLRoles,

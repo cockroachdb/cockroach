@@ -108,21 +108,21 @@ class TestDriver {
   }
 }
 
-describe("Database Details Page", function() {
+describe("Database Details Page", function () {
   let driver: TestDriver;
 
-  beforeEach(function() {
+  beforeEach(function () {
     driver = new TestDriver(
       createAdminUIStore(createMemoryHistory()),
       "things",
     );
   });
 
-  afterEach(function() {
+  afterEach(function () {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", function() {
+  it("starts in a pre-loading state", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
@@ -135,7 +135,7 @@ describe("Database Details Page", function() {
     });
   });
 
-  it("makes a row for each table", async function() {
+  it("makes a row for each table", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo", "bar"],
     });
@@ -197,7 +197,7 @@ describe("Database Details Page", function() {
     });
   });
 
-  it("loads table details", async function() {
+  it("loads table details", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo", "bar"],
     });
@@ -341,7 +341,7 @@ describe("Database Details Page", function() {
     });
   });
 
-  it("sorts roles meaningfully", async function() {
+  it("sorts roles meaningfully", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo"],
     });
@@ -370,7 +370,7 @@ describe("Database Details Page", function() {
     ]);
   });
 
-  it("sorts grants meaningfully", async function() {
+  it("sorts grants meaningfully", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo"],
     });
@@ -403,7 +403,7 @@ describe("Database Details Page", function() {
     ]);
   });
 
-  it("loads table stats", async function() {
+  it("loads table stats", async function () {
     fakeApi.stubDatabaseDetails("things", {
       table_names: ["foo", "bar"],
     });

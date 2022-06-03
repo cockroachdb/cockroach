@@ -21,57 +21,90 @@ import { propsToQueryString } from "src/util/query";
 import { cockroach } from "src/js/protos";
 import TakeTracingSnapshotRequest = cockroach.server.serverpb.TakeTracingSnapshotRequest;
 
-export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
-export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
+export type DatabasesRequestMessage =
+  protos.cockroach.server.serverpb.DatabasesRequest;
+export type DatabasesResponseMessage =
+  protos.cockroach.server.serverpb.DatabasesResponse;
 
-export type DatabaseDetailsRequestMessage = protos.cockroach.server.serverpb.DatabaseDetailsRequest;
-export type DatabaseDetailsResponseMessage = protos.cockroach.server.serverpb.DatabaseDetailsResponse;
+export type DatabaseDetailsRequestMessage =
+  protos.cockroach.server.serverpb.DatabaseDetailsRequest;
+export type DatabaseDetailsResponseMessage =
+  protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 
-export type TableDetailsRequestMessage = protos.cockroach.server.serverpb.TableDetailsRequest;
-export type TableDetailsResponseMessage = protos.cockroach.server.serverpb.TableDetailsResponse;
+export type TableDetailsRequestMessage =
+  protos.cockroach.server.serverpb.TableDetailsRequest;
+export type TableDetailsResponseMessage =
+  protos.cockroach.server.serverpb.TableDetailsResponse;
 
-export type EventsRequestMessage = protos.cockroach.server.serverpb.EventsRequest;
-export type EventsResponseMessage = protos.cockroach.server.serverpb.EventsResponse;
+export type EventsRequestMessage =
+  protos.cockroach.server.serverpb.EventsRequest;
+export type EventsResponseMessage =
+  protos.cockroach.server.serverpb.EventsResponse;
 
-export type LocationsRequestMessage = protos.cockroach.server.serverpb.LocationsRequest;
-export type LocationsResponseMessage = protos.cockroach.server.serverpb.LocationsResponse;
+export type LocationsRequestMessage =
+  protos.cockroach.server.serverpb.LocationsRequest;
+export type LocationsResponseMessage =
+  protos.cockroach.server.serverpb.LocationsResponse;
 
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
-export type NodesResponseMessage = protos.cockroach.server.serverpb.NodesResponse;
-export type NodesResponseExternalMessage = protos.cockroach.server.serverpb.NodesResponseExternal;
+export type NodesResponseMessage =
+  protos.cockroach.server.serverpb.NodesResponse;
+export type NodesResponseExternalMessage =
+  protos.cockroach.server.serverpb.NodesResponseExternal;
 
-export type GetUIDataRequestMessage = protos.cockroach.server.serverpb.GetUIDataRequest;
-export type GetUIDataResponseMessage = protos.cockroach.server.serverpb.GetUIDataResponse;
+export type GetUIDataRequestMessage =
+  protos.cockroach.server.serverpb.GetUIDataRequest;
+export type GetUIDataResponseMessage =
+  protos.cockroach.server.serverpb.GetUIDataResponse;
 
-export type SetUIDataRequestMessage = protos.cockroach.server.serverpb.SetUIDataRequest;
-export type SetUIDataResponseMessage = protos.cockroach.server.serverpb.SetUIDataResponse;
+export type SetUIDataRequestMessage =
+  protos.cockroach.server.serverpb.SetUIDataRequest;
+export type SetUIDataResponseMessage =
+  protos.cockroach.server.serverpb.SetUIDataResponse;
 
-export type RaftDebugRequestMessage = protos.cockroach.server.serverpb.RaftDebugRequest;
-export type RaftDebugResponseMessage = protos.cockroach.server.serverpb.RaftDebugResponse;
+export type RaftDebugRequestMessage =
+  protos.cockroach.server.serverpb.RaftDebugRequest;
+export type RaftDebugResponseMessage =
+  protos.cockroach.server.serverpb.RaftDebugResponse;
 
-export type TimeSeriesQueryRequestMessage = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
-export type TimeSeriesQueryResponseMessage = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
+export type TimeSeriesQueryRequestMessage =
+  protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
+export type TimeSeriesQueryResponseMessage =
+  protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
-export type HealthRequestMessage = protos.cockroach.server.serverpb.HealthRequest;
-export type HealthResponseMessage = protos.cockroach.server.serverpb.HealthResponse;
+export type HealthRequestMessage =
+  protos.cockroach.server.serverpb.HealthRequest;
+export type HealthResponseMessage =
+  protos.cockroach.server.serverpb.HealthResponse;
 
-export type ClusterRequestMessage = protos.cockroach.server.serverpb.ClusterRequest;
-export type ClusterResponseMessage = protos.cockroach.server.serverpb.ClusterResponse;
+export type ClusterRequestMessage =
+  protos.cockroach.server.serverpb.ClusterRequest;
+export type ClusterResponseMessage =
+  protos.cockroach.server.serverpb.ClusterResponse;
 
-export type TableStatsRequestMessage = protos.cockroach.server.serverpb.TableStatsRequest;
-export type TableStatsResponseMessage = protos.cockroach.server.serverpb.TableStatsResponse;
+export type TableStatsRequestMessage =
+  protos.cockroach.server.serverpb.TableStatsRequest;
+export type TableStatsResponseMessage =
+  protos.cockroach.server.serverpb.TableStatsResponse;
 
-export type IndexStatsRequestMessage = protos.cockroach.server.serverpb.TableIndexStatsRequest;
-export type IndexStatsResponseMessage = protos.cockroach.server.serverpb.TableIndexStatsResponse;
+export type IndexStatsRequestMessage =
+  protos.cockroach.server.serverpb.TableIndexStatsRequest;
+export type IndexStatsResponseMessage =
+  protos.cockroach.server.serverpb.TableIndexStatsResponse;
 
-export type NonTableStatsRequestMessage = protos.cockroach.server.serverpb.NonTableStatsRequest;
-export type NonTableStatsResponseMessage = protos.cockroach.server.serverpb.NonTableStatsResponse;
+export type NonTableStatsRequestMessage =
+  protos.cockroach.server.serverpb.NonTableStatsRequest;
+export type NonTableStatsResponseMessage =
+  protos.cockroach.server.serverpb.NonTableStatsResponse;
 
 export type LogsRequestMessage = protos.cockroach.server.serverpb.LogsRequest;
-export type LogEntriesResponseMessage = protos.cockroach.server.serverpb.LogEntriesResponse;
+export type LogEntriesResponseMessage =
+  protos.cockroach.server.serverpb.LogEntriesResponse;
 
-export type LivenessRequestMessage = protos.cockroach.server.serverpb.LivenessRequest;
-export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessResponse;
+export type LivenessRequestMessage =
+  protos.cockroach.server.serverpb.LivenessRequest;
+export type LivenessResponseMessage =
+  protos.cockroach.server.serverpb.LivenessResponse;
 
 export type JobsRequestMessage = protos.cockroach.server.serverpb.JobsRequest;
 export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
@@ -79,95 +112,154 @@ export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
 export type JobRequestMessage = protos.cockroach.server.serverpb.JobRequest;
 export type JobResponseMessage = protos.cockroach.server.serverpb.JobResponse;
 
-export type QueryPlanRequestMessage = protos.cockroach.server.serverpb.QueryPlanRequest;
-export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPlanResponse;
+export type QueryPlanRequestMessage =
+  protos.cockroach.server.serverpb.QueryPlanRequest;
+export type QueryPlanResponseMessage =
+  protos.cockroach.server.serverpb.QueryPlanResponse;
 
-export type ProblemRangesRequestMessage = protos.cockroach.server.serverpb.ProblemRangesRequest;
-export type ProblemRangesResponseMessage = protos.cockroach.server.serverpb.ProblemRangesResponse;
+export type ProblemRangesRequestMessage =
+  protos.cockroach.server.serverpb.ProblemRangesRequest;
+export type ProblemRangesResponseMessage =
+  protos.cockroach.server.serverpb.ProblemRangesResponse;
 
-export type CertificatesRequestMessage = protos.cockroach.server.serverpb.CertificatesRequest;
-export type CertificatesResponseMessage = protos.cockroach.server.serverpb.CertificatesResponse;
+export type CertificatesRequestMessage =
+  protos.cockroach.server.serverpb.CertificatesRequest;
+export type CertificatesResponseMessage =
+  protos.cockroach.server.serverpb.CertificatesResponse;
 
 export type RangeRequestMessage = protos.cockroach.server.serverpb.RangeRequest;
-export type RangeResponseMessage = protos.cockroach.server.serverpb.RangeResponse;
+export type RangeResponseMessage =
+  protos.cockroach.server.serverpb.RangeResponse;
 
-export type AllocatorRangeRequestMessage = protos.cockroach.server.serverpb.AllocatorRangeRequest;
-export type AllocatorRangeResponseMessage = protos.cockroach.server.serverpb.AllocatorRangeResponse;
+export type AllocatorRangeRequestMessage =
+  protos.cockroach.server.serverpb.AllocatorRangeRequest;
+export type AllocatorRangeResponseMessage =
+  protos.cockroach.server.serverpb.AllocatorRangeResponse;
 
-export type RangeLogRequestMessage = protos.cockroach.server.serverpb.RangeLogRequest;
-export type RangeLogResponseMessage = protos.cockroach.server.serverpb.RangeLogResponse;
+export type RangeLogRequestMessage =
+  protos.cockroach.server.serverpb.RangeLogRequest;
+export type RangeLogResponseMessage =
+  protos.cockroach.server.serverpb.RangeLogResponse;
 
-export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
-export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
+export type SettingsRequestMessage =
+  protos.cockroach.server.serverpb.SettingsRequest;
+export type SettingsResponseMessage =
+  protos.cockroach.server.serverpb.SettingsResponse;
 
-export type SessionsRequestMessage = protos.cockroach.server.serverpb.ListSessionsRequest;
-export type SessionsResponseMessage = protos.cockroach.server.serverpb.ListSessionsResponse;
+export type SessionsRequestMessage =
+  protos.cockroach.server.serverpb.ListSessionsRequest;
+export type SessionsResponseMessage =
+  protos.cockroach.server.serverpb.ListSessionsResponse;
 
-export type CancelSessionRequestMessage = protos.cockroach.server.serverpb.CancelSessionRequest;
-export type CancelSessionResponseMessage = protos.cockroach.server.serverpb.CancelSessionResponse;
+export type CancelSessionRequestMessage =
+  protos.cockroach.server.serverpb.CancelSessionRequest;
+export type CancelSessionResponseMessage =
+  protos.cockroach.server.serverpb.CancelSessionResponse;
 
-export type CancelQueryRequestMessage = protos.cockroach.server.serverpb.CancelQueryRequest;
-export type CancelQueryResponseMessage = protos.cockroach.server.serverpb.CancelQueryResponse;
+export type CancelQueryRequestMessage =
+  protos.cockroach.server.serverpb.CancelQueryRequest;
+export type CancelQueryResponseMessage =
+  protos.cockroach.server.serverpb.CancelQueryResponse;
 
-export type UserLoginRequestMessage = protos.cockroach.server.serverpb.UserLoginRequest;
-export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLoginResponse;
+export type UserLoginRequestMessage =
+  protos.cockroach.server.serverpb.UserLoginRequest;
+export type UserLoginResponseMessage =
+  protos.cockroach.server.serverpb.UserLoginResponse;
 
-export type StoresRequestMessage = protos.cockroach.server.serverpb.StoresRequest;
-export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresResponse;
+export type StoresRequestMessage =
+  protos.cockroach.server.serverpb.StoresRequest;
+export type StoresResponseMessage =
+  protos.cockroach.server.serverpb.StoresResponse;
 
-export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
+export type UserLogoutResponseMessage =
+  protos.cockroach.server.serverpb.UserLogoutResponse;
 
-export type StatementsResponseMessage = protos.cockroach.server.serverpb.StatementsResponse;
-export type StatementDetailsResponseMessage = protos.cockroach.server.serverpb.StatementDetailsResponse;
+export type StatementsResponseMessage =
+  protos.cockroach.server.serverpb.StatementsResponse;
+export type StatementDetailsResponseMessage =
+  protos.cockroach.server.serverpb.StatementDetailsResponse;
 
-export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
+export type DataDistributionResponseMessage =
+  protos.cockroach.server.serverpb.DataDistributionResponse;
 
-export type EnqueueRangeRequestMessage = protos.cockroach.server.serverpb.EnqueueRangeRequest;
-export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.EnqueueRangeResponse;
+export type EnqueueRangeRequestMessage =
+  protos.cockroach.server.serverpb.EnqueueRangeRequest;
+export type EnqueueRangeResponseMessage =
+  protos.cockroach.server.serverpb.EnqueueRangeResponse;
 
-export type MetricMetadataRequestMessage = protos.cockroach.server.serverpb.MetricMetadataRequest;
-export type MetricMetadataResponseMessage = protos.cockroach.server.serverpb.MetricMetadataResponse;
+export type MetricMetadataRequestMessage =
+  protos.cockroach.server.serverpb.MetricMetadataRequest;
+export type MetricMetadataResponseMessage =
+  protos.cockroach.server.serverpb.MetricMetadataResponse;
 
-export type StatementDiagnosticsReportsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
-export type StatementDiagnosticsReportsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
+export type StatementDiagnosticsReportsRequestMessage =
+  protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
+export type StatementDiagnosticsReportsResponseMessage =
+  protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
 
-export type CreateStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
+export type CreateStatementDiagnosticsReportRequestMessage =
+  protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+export type CreateStatementDiagnosticsReportResponseMessage =
+  protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
 
-export type CancelStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
-export type CancelStatementDiagnosticsReportResponseMessage = protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
+export type CancelStatementDiagnosticsReportRequestMessage =
+  protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+export type CancelStatementDiagnosticsReportResponseMessage =
+  protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
 
-export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
-export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
+export type StatementDiagnosticsRequestMessage =
+  protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
+export type StatementDiagnosticsResponseMessage =
+  protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
-export type StatementsRequestMessage = protos.cockroach.server.serverpb.StatementsRequest;
-export type StatementDetailsRequestMessage = protos.cockroach.server.serverpb.StatementDetailsRequest;
+export type StatementsRequestMessage =
+  protos.cockroach.server.serverpb.StatementsRequest;
+export type StatementDetailsRequestMessage =
+  protos.cockroach.server.serverpb.StatementDetailsRequest;
 
-export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
-export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
+export type ResetSQLStatsRequestMessage =
+  protos.cockroach.server.serverpb.ResetSQLStatsRequest;
+export type ResetSQLStatsResponseMessage =
+  protos.cockroach.server.serverpb.ResetSQLStatsResponse;
 
-export type ResetIndexUsageStatsRequestMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsRequest;
-export type ResetIndexUsageStatsResponseMessage = protos.cockroach.server.serverpb.ResetIndexUsageStatsResponse;
+export type ResetIndexUsageStatsRequestMessage =
+  protos.cockroach.server.serverpb.ResetIndexUsageStatsRequest;
+export type ResetIndexUsageStatsResponseMessage =
+  protos.cockroach.server.serverpb.ResetIndexUsageStatsResponse;
 
-export type UserSQLRolesRequestMessage = protos.cockroach.server.serverpb.UserSQLRolesRequest;
-export type UserSQLRolesResponseMessage = protos.cockroach.server.serverpb.UserSQLRolesResponse;
+export type UserSQLRolesRequestMessage =
+  protos.cockroach.server.serverpb.UserSQLRolesRequest;
+export type UserSQLRolesResponseMessage =
+  protos.cockroach.server.serverpb.UserSQLRolesResponse;
 
-export type HotRangesRequestMessage = protos.cockroach.server.serverpb.HotRangesRequest;
-export type HotRangesV2ResponseMessage = protos.cockroach.server.serverpb.HotRangesResponseV2;
-export type ListTracingSnapshotsRequestMessage = protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
-export type ListTracingSnapshotsResponseMessage = protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
+export type HotRangesRequestMessage =
+  protos.cockroach.server.serverpb.HotRangesRequest;
+export type HotRangesV2ResponseMessage =
+  protos.cockroach.server.serverpb.HotRangesResponseV2;
+export type ListTracingSnapshotsRequestMessage =
+  protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
+export type ListTracingSnapshotsResponseMessage =
+  protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
 
-export type TakeTracingSnapshotRequestMessage = protos.cockroach.server.serverpb.TakeTracingSnapshotRequest;
-export type TakeTracingSnapshotResponseMessage = protos.cockroach.server.serverpb.TakeTracingSnapshotResponse;
+export type TakeTracingSnapshotRequestMessage =
+  protos.cockroach.server.serverpb.TakeTracingSnapshotRequest;
+export type TakeTracingSnapshotResponseMessage =
+  protos.cockroach.server.serverpb.TakeTracingSnapshotResponse;
 
-export type GetTracingSnapshotRequestMessage = protos.cockroach.server.serverpb.GetTracingSnapshotRequest;
-export type GetTracingSnapshotResponseMessage = protos.cockroach.server.serverpb.GetTracingSnapshotResponse;
+export type GetTracingSnapshotRequestMessage =
+  protos.cockroach.server.serverpb.GetTracingSnapshotRequest;
+export type GetTracingSnapshotResponseMessage =
+  protos.cockroach.server.serverpb.GetTracingSnapshotResponse;
 
-export type GetTraceRequestMessage = protos.cockroach.server.serverpb.GetTraceRequest;
-export type GetTraceResponseMessage = protos.cockroach.server.serverpb.GetTraceResponse;
+export type GetTraceRequestMessage =
+  protos.cockroach.server.serverpb.GetTraceRequest;
+export type GetTraceResponseMessage =
+  protos.cockroach.server.serverpb.GetTraceResponse;
 
-export type SetTraceRecordingTypeRequestMessage = protos.cockroach.server.serverpb.SetTraceRecordingTypeRequest;
-export type SetTraceRecordingTypeResponseMessage = protos.cockroach.server.serverpb.SetTraceRecordingTypeResponse;
+export type SetTraceRecordingTypeRequestMessage =
+  protos.cockroach.server.serverpb.SetTraceRecordingTypeRequest;
+export type SetTraceRecordingTypeResponseMessage =
+  protos.cockroach.server.serverpb.SetTraceRecordingTypeResponse;
 
 // API constants
 
@@ -252,7 +344,7 @@ function timeoutFetch<
       writer?: protobuf.Writer,
     ): protobuf.Writer;
     decode(reader: protobuf.Reader | Uint8Array, length?: number): TResponse;
-  }
+  },
 >(
   builder: TResponseBuilder,
   url: string,

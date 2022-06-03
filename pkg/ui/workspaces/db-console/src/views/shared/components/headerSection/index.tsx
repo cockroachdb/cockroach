@@ -24,8 +24,9 @@ export interface HeaderSectionProps {
   };
 }
 
-const HeaderSection: React.FC<HeaderSectionProps &
-  RouteComponentProps> = props => {
+const HeaderSection: React.FC<
+  HeaderSectionProps & RouteComponentProps
+> = props => {
   const { navigationBackConfig, title } = props;
   return (
     <div className="header-section">

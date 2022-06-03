@@ -427,9 +427,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
  * DecommissionedNodeList renders a view with a table for recently "decommissioned"
  * nodes on a link on a full list of decommissioned nodes.
  */
-class DecommissionedNodeList extends React.Component<
-  DecommissionedNodeListProps
-> {
+class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps> {
   columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "nodes",
@@ -512,32 +510,28 @@ export const liveNodesTableDataSelector = createSelector(
       })
       .map(
         (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
-          const nestedRows = nodesPerRegion.map(
-            (ns, idx): NodeStatusRow => {
-              const {
-                used: usedCapacity,
-                usable: availableCapacity,
-              } = nodeCapacityStats(ns);
-              return {
-                key: `${regionKey}-${idx}`,
-                nodeId: ns.desc.node_id,
-                nodeName: ns.desc.address.address_field,
-                uptime: moment
-                  .duration(util.LongToMoment(ns.started_at).diff(moment()))
-                  .humanize(),
-                replicas: ns.metrics[MetricConstants.replicas],
-                usedCapacity,
-                availableCapacity,
-                usedMemory: ns.metrics[MetricConstants.rss],
-                availableMemory: FixLong(ns.total_system_memory).toNumber(),
-                numCpus: ns.num_cpus,
-                version: ns.build_info.tag,
-                status:
-                  nodesSummary.livenessStatusByNodeID[ns.desc.node_id] ||
-                  LivenessStatus.NODE_STATUS_LIVE,
-              };
-            },
-          );
+          const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
+            const { used: usedCapacity, usable: availableCapacity } =
+              nodeCapacityStats(ns);
+            return {
+              key: `${regionKey}-${idx}`,
+              nodeId: ns.desc.node_id,
+              nodeName: ns.desc.address.address_field,
+              uptime: moment
+                .duration(util.LongToMoment(ns.started_at).diff(moment()))
+                .humanize(),
+              replicas: ns.metrics[MetricConstants.replicas],
+              usedCapacity,
+              availableCapacity,
+              usedMemory: ns.metrics[MetricConstants.rss],
+              availableMemory: FixLong(ns.total_system_memory).toNumber(),
+              numCpus: ns.num_cpus,
+              version: ns.build_info.tag,
+              status:
+                nodesSummary.livenessStatusByNodeID[ns.desc.node_id] ||
+                LivenessStatus.NODE_STATUS_LIVE,
+            };
+          });
 
           // Grouped buckets with node statuses contain at least one element.
           // The list of tires and lower level location are the same for every

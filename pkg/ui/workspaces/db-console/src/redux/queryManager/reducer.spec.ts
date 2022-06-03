@@ -21,21 +21,21 @@ import {
   QueryManagerState,
 } from "./reducer";
 
-describe("Query Manager State", function() {
-  describe("managed query reducer", function() {
+describe("Query Manager State", function () {
+  describe("managed query reducer", function () {
     const testMoment = moment();
     const testError = new Error("err");
     let state: ManagedQueryState;
 
-    beforeEach(function() {
+    beforeEach(function () {
       state = managedQueryReducer(undefined, {} as any);
     });
 
-    it("has the correct initial state", function() {
+    it("has the correct initial state", function () {
       assert.deepEqual(state, new ManagedQueryState());
     });
 
-    it("dispatches queryBegin correctly", function() {
+    it("dispatches queryBegin correctly", function () {
       // We expect "isRunning" to be true and all other fields to be null.
       const expected = new ManagedQueryState();
       expected.isRunning = true;
@@ -46,7 +46,7 @@ describe("Query Manager State", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("dispatches queryError correctly", function() {
+    it("dispatches queryError correctly", function () {
       // We expect "isRunning" to be false; both the error field and completedAt
       // should be populated with the supplied information from the action.
       const expected = new ManagedQueryState();
@@ -62,7 +62,7 @@ describe("Query Manager State", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("dispatches queryComplete correctly", function() {
+    it("dispatches queryComplete correctly", function () {
       // We expect "isRunning" to be false, completedAt to be populated, and
       // the error field to be null.
       const expected = new ManagedQueryState();
@@ -75,7 +75,7 @@ describe("Query Manager State", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("clears error on queryBegin", function() {
+    it("clears error on queryBegin", function () {
       const expected = new ManagedQueryState();
       expected.isRunning = true;
       expected.lastError = null;
@@ -89,27 +89,27 @@ describe("Query Manager State", function() {
       assert.deepEqual(state, expected);
     });
 
-    it("ignores unrecognized actions", function() {
+    it("ignores unrecognized actions", function () {
       const origState = state;
       state = managedQueryReducer(state, { type: "unsupported" } as any);
       assert.equal(state, origState);
     });
   });
 
-  describe("query manager reducer", function() {
+  describe("query manager reducer", function () {
     const testMoment = moment();
     const testError = new Error("err");
     let state: QueryManagerState;
 
-    beforeEach(function() {
+    beforeEach(function () {
       state = queryManagerReducer(undefined, {} as any);
     });
 
-    it("has the correct initial value", function() {
+    it("has the correct initial value", function () {
       assert.deepEqual(state, {});
     });
 
-    it("correctly dispatches based on ID", function() {
+    it("correctly dispatches based on ID", function () {
       const expected = {
         "1": managedQueryReducer(undefined, queryBegin("1")),
         "2": managedQueryReducer(

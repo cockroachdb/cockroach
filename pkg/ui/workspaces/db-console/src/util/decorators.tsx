@@ -24,9 +24,9 @@ const store = createStore(
   }),
 );
 
-export const styledWrapper = (styles: React.CSSProperties) => (
-  storyFn: RenderFunction,
-) => <div style={styles}>{storyFn()}</div>;
+export const styledWrapper =
+  (styles: React.CSSProperties) => (storyFn: RenderFunction) =>
+    <div style={styles}>{storyFn()}</div>;
 
 export const withRouterDecorator = (storyFn: RenderFunction) => (
   <Provider store={store}>

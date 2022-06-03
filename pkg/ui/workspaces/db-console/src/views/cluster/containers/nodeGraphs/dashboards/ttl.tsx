@@ -17,7 +17,7 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import { GraphDashboardProps } from "./dashboardUtils";
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { nodeSources } = props;
 
   const percentiles = ["p50", "p75", "p90", "p95", "p99"];

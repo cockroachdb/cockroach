@@ -15,7 +15,7 @@ import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps } from "./dashboardUtils";
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { storeSources } = props;
 
   return [

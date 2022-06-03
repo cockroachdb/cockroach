@@ -63,8 +63,10 @@ import {
   mapStateToActiveStatementViewProps,
 } from "./activeStatementsSelectors";
 
-type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+type ICollectedStatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type IStatementDiagnosticsReport =
+  protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const {
   aggregateStatementStats,
