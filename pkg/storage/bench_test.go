@@ -905,7 +905,9 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
-func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions) {
+func runMVCCGet(
+	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions, useBatch bool,
+) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
@@ -918,6 +920,13 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 	eng, _ := setupMVCCData(ctx, b, emk, opts)
 	defer eng.Close()
 
+	r := Reader(eng)
+	if useBatch {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		r = batch
+	}
+
 	b.SetBytes(int64(opts.valueBytes))
 	b.ResetTimer()
 
@@ -928,7 +937,7 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		if v, _, err := MVCCGet(ctx, eng, key, ts, MVCCGetOptions{}); err != nil {
+		if v, _, err := MVCCGet(ctx, r, key, ts, MVCCGetOptions{}); err != nil {
 			b.Fatalf("failed get: %+v", err)
 		} else if v == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
