@@ -943,7 +943,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84.tar.gz": "692421b0c5e04ae4bc0bfff42fb1ce8671fe68daee2b8d8ea94657bb1fcddc0a",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-gazelle-v0.24.0-0-g3ea1d64.tar.gz": "9fba095e4bebd8c6748154ca53c365862af47fa1651f7c0d25459e6ca5bb208f",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_foreign_cc-6f7f1b1.tar.gz": "272ac2cde4efd316c8d7c0140dee411c89da104466701ac179286ef5a89c7b58",
-    "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-56-g58cb947.tar.gz": "8a993815a6a7cfe47e46238383f0e36a80b9ce0ac482f855c7288a31565b5661",
+    "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-117-g3fc3373.tar.gz": "8b4ac0c07e95679766c55dba4b83df3f466fe9e383ae06177bc0e00198ffb907",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/platforms-0.0.4.tar.gz": "079945598e4b6cc075846f7fd6a9d0857c33a7afc0de868c2ccb96405225135d",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/protobuf-e809d75ecb5770fdc531081eef306b3e672bcdd2.tar.gz": "071ccf561d127d5702910340cf038cb869aa239683544e1cca68a78ea865099e",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_java-981f06c3d2bd10225e85209904090eb7b5fb26bd.tar.gz": "f5a3e477e579231fca27bf202bb0e8fbe4fc6339d63b38ccb87c2760b533d1c3",
