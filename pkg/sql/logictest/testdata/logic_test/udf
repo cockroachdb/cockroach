@@ -7,58 +7,66 @@ CREATE TABLE cd (
   c INT PRIMARY KEY,
   d INT
 );
-INSERT INTO ab SELECT i, 5 FROM generate_series(1, 10) AS g(i);
+INSERT INTO ab SELECT i, i*2 FROM generate_series(1, 10) AS g(i);
 INSERT INTO cd VALUES (1, 10), (2, 200), (3, 30), (5, 40);
 
 # udf:
 # CREATE FUNCTION UDF(n int) RETURNS INT LANGUAGE SQL AS $$
-#   SELECT floor(random()*10)::INT;
+#   SELECT 2 + n;
 # $$
 
 query T
 EXPLAIN (OPT, VERBOSE)
-SELECT udf() FROM ab
+SELECT a, b, udf(a), udf(b) FROM ab
 ----
 project
- ├── columns: udf:5
+ ├── columns: a:1 b:2 udf:5 udf:6
  ├── stats: [rows=1000]
- ├── cost: 1084.44
- ├── fd: ()-->(5)
+ ├── cost: 1134.84
+ ├── key: (1)
+ ├── fd: (1)-->(2,5), (2)-->(6)
  ├── distribution: test
- ├── prune: (5)
+ ├── prune: (1,2,5,6)
  ├── scan ab
+ │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1064.42
- │    └── distribution: test
+ │    ├── cost: 1104.82
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── distribution: test
+ │    └── prune: (1,2)
  └── projections
-      └── routine: name=udf,type=int [as=udf:5]
+      ├── routine: name=udf,type=int [as=udf:5, outer=(1)]
+      │    └── a:1
+      └── routine: name=udf,type=int [as=udf:6, outer=(2)]
+           └── b:2
 
-query I
-SELECT udf() FROM ab
+query IIII
+SELECT a, b, udf(a), udf(b) FROM ab
 ----
-5
-0
-7
-1
-7
-7
-1
-5
-0
-5
+1   2   3   4
+2   4   4   6
+3   6   5   8
+4   8   6   10
+5   10  7   12
+6   12  8   14
+7   14  9   16
+8   16  10  18
+9   18  11  20
+10  20  12  22
 
 query T
 EXPLAIN (OPT, VERBOSE)
-SELECT * FROM ab WHERE b = udf()
+SELECT * FROM ab WHERE b = udf(b) - 2 AND a = udf(a) - 2
 ----
 select
  ├── columns: a:1 b:2
- ├── stats: [rows=330, distinct(2)=100, null(2)=0, avgsize(2)=4]
- ├── cost: 1114.85
+ ├── immutable
+ ├── stats: [rows=110, distinct(1)=110, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=0, avgsize(2)=4]
+ ├── cost: 1114.86
  ├── key: (1)
- ├── fd: ()-->(2)
+ ├── fd: (1)-->(2)
  ├── distribution: test
- ├── prune: (1)
  ├── scan ab
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
@@ -68,11 +76,29 @@ select
  │    ├── distribution: test
  │    └── prune: (1,2)
  └── filters
-      └── eq [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
-           ├── b:2
-           └── routine: name=udf,type=int
+      ├── eq [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      │    ├── b:2
+      │    └── minus
+      │         ├── routine: name=udf,type=int
+      │         │    └── b:2
+      │         └── 2
+      └── eq [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+           ├── a:1
+           └── minus
+                ├── routine: name=udf,type=int
+                │    └── a:1
+                └── 2
 
 query II
-SELECT * FROM ab WHERE b = udf()
+SELECT * FROM ab WHERE b = udf(b) - 2 AND a = udf(a) - 2
 ----
-3  5
+1   2
+2   4
+3   6
+4   8
+5   10
+6   12
+7   14
+8   16
+9   18
+10  20

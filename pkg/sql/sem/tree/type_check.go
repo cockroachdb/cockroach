@@ -1041,6 +1041,7 @@ func (expr *FuncExpr) TypeCheck(
 	if def.Name == "udf" {
 		expr.IsUDF = true
 		expr.typ = types.Int
+		expr.fnProps = &FunctionProperties{}
 		return expr, nil
 	}
 

@@ -3,12 +3,14 @@
 # or a set of rows.
 [Scalar]
 define Routine {
+    Args ScalarListExpr
     _ RoutinePrivate
 }
 
 [Private]
 define RoutinePrivate {
     Name string
+    ArgNames StringList
     Statements StringList
     Typ Type
 }

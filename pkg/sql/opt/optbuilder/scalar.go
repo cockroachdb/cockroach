@@ -518,11 +518,17 @@ func (b *Builder) buildFunction(
 ) (out opt.ScalarExpr) {
 
 	if f.IsUDF {
+		args := make(memo.ScalarListExpr, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		}
 		// Hard code the definition of a user-defined function "udf()".
-		stmts := []string{"SELECT floor(random()*10)::INT"}
+		stmts := []string{"SELECT 2 + n"}
 		out = b.factory.ConstructRoutine(
+			args,
 			&memo.RoutinePrivate{
 				Name:       "udf",
+				ArgNames:   []string{"n"},
 				Statements: stmts,
 				Typ:        types.Int,
 			},

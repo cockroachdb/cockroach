@@ -377,7 +377,9 @@ func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
-func (ep *DummyEvalPlanner) EvalRoutine(expr *tree.Routine) (tree.Datum, error) {
+func (ep *DummyEvalPlanner) EvalRoutine(
+	expr *tree.Routine, args tree.RoutineArgs,
+) (tree.Datum, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

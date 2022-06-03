@@ -1002,6 +1002,13 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		colI, resolveErr := colinfo.ResolveColumnItem(s.builder.ctx, s, t)
 		if resolveErr != nil {
 			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				// Attempt to resolve as a routine argument's value.
+				if argIdx, ok := s.builder.evalCtx.RoutineArgs.FindArgWithName(t.ColumnName); ok {
+					// We cannot reuse the memo if we fill in a routine argument
+					// with a constant.
+					s.builder.DisableMemoReuse = true
+					return false, s.builder.evalCtx.RoutineArgs.Values[argIdx]
+				}
 				// Attempt to resolve as columnname.*, which allows items
 				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
 				return func() (bool, tree.Expr) {

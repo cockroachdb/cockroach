@@ -648,7 +648,17 @@ func (b *Builder) addSubquery(
 
 func (b *Builder) buildRoutine(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
 	routine := scalar.(*memo.RoutineExpr)
+	args := make(tree.TypedExprs, len(routine.Args))
+	var err error
+	for i := range args {
+		args[i], err = b.buildScalar(ctx, routine.Args[i])
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &tree.Routine{
+		ArgNames:   routine.ArgNames,
+		Args:       args,
 		Statements: routine.Statements,
 		Typ:        routine.Typ,
 	}, nil

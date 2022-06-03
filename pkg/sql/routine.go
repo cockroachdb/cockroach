@@ -22,7 +22,9 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-func (p *planner) EvalRoutine(expr *tree.Routine) (result tree.Datum, err error) {
+func (p *planner) EvalRoutine(
+	expr *tree.Routine, args tree.RoutineArgs,
+) (result tree.Datum, err error) {
 	// TODO(mgartner): Why does the query get canceled when I use EvalContext's
 	// ctx?
 	// ctx := p.EvalContext().Ctx()
@@ -41,7 +43,7 @@ func (p *planner) EvalRoutine(expr *tree.Routine) (result tree.Datum, err error)
 			return nil, err
 		}
 
-		_, _, err = p.ex.execStmtInOpenState(ctx, stmt, nil, nil, &res, false /* canAutoCommit */)
+		_, _, err = p.ex.execStmtInOpenState(ctx, stmt, nil, nil, args, &res, false /* canAutoCommit */)
 		if err != nil {
 			return nil, err
 		}
