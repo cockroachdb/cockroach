@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -156,7 +157,21 @@ func (c *sqlConn) SetAlwaysInferResultTypes(b bool) {
 }
 
 // The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
-var defaultDialer = &net.Dialer{}
+var defaultDialer = struct {
+	// The dialer is protected by a mutex, since pgx uses DialFunc in an async
+	// goroutine.
+	mu struct {
+		syncutil.Mutex
+		d *net.Dialer
+	}
+}{
+	mu: struct {
+		syncutil.Mutex
+		d *net.Dialer
+	}{
+		d: &net.Dialer{},
+	},
+}
 
 // EnsureConn (re-)establishes the connection to the server.
 func (c *sqlConn) EnsureConn(ctx context.Context) error {
@@ -176,13 +191,19 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
 	}
-	// By default, pgx uses a Dialer with a KeepAlive of 5 minutes, which is not
-	// desired here, so we override it.
-	defaultDialer.Timeout = 0
-	if base.ConnectTimeout > 0 {
-		defaultDialer.Timeout = base.ConnectTimeout
+	func() {
+		defaultDialer.mu.Lock()
+		defer defaultDialer.mu.Unlock()
+		defaultDialer.mu.d.Timeout = 0
+		if base.ConnectTimeout > 0 {
+			defaultDialer.mu.d.Timeout = base.ConnectTimeout
+		}
+	}()
+	base.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		defaultDialer.mu.Lock()
+		defer defaultDialer.mu.Unlock()
+		return defaultDialer.mu.d.DialContext(ctx, network, addr)
 	}
-	base.DialFunc = defaultDialer.DialContext
 	// Override LookupFunc to be a no-op, so that the Dialer is responsible for
 	// resolving hostnames. This fixes an issue where pgx would error out too
 	// quickly if using TLS when an ipv6 address is resolved, but the networking

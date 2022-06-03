@@ -27,6 +27,7 @@ go_library(
         "//pkg/security/pprompt",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/scanner",
+        "//pkg/util/syncutil",
         "//pkg/util/version",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
