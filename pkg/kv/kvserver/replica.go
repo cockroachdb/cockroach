@@ -402,18 +402,6 @@ type Replica struct {
 		// mergeTxnID contains the ID of the in-progress merge transaction, if a
 		// merge is currently in progress. Otherwise, the ID is empty.
 		mergeTxnID uuid.UUID
-		// freezeStart indicates the subsumption time of this range when it is the
-		// right-hand range in an ongoing merge. This range will allow read-only
-		// traffic below this timestamp, while blocking everything else, until the
-		// merge completes.
-		// TODO(nvanbenschoten): get rid of this. It seemed like a good idea at
-		// the time (b192bba), but in retrospect, it's a premature optimization
-		// that prevents us from being more optimal about the read summary we
-		// ship to the LHS during a merge. Serving reads below the closed
-		// timestamp seems fine because that can't advance after the range is
-		// frozen, but serving reads above the closed timestamp but below the
-		// freeze start time is dangerous.
-		freezeStart hlc.Timestamp
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState
 		// Last index/term persisted to the raft log (not necessarily
@@ -478,6 +466,23 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.ClockTimestamp
+
+		// minValidObservedTimestamp is the minimum timestamp from an external
+		// transaction that the leaseholder will respect. This protects the case
+		// where a store becomes the leaseholder for data that it didn't previously
+		// own. In the case where no leases or data ever move, the store uses the
+		// observed timestamp on transactions to minimize the size of the
+		// uncertainty window for transactions that hit the same store multiple
+		// times. This prevents uncertainty restarts and generally helps
+		// performance. The problem occurs if a store transfers either its lease or
+		// data to a different store. Since the clocks are different, the strong
+		// guarantee of the local limit is violated, and stale reads can occur. By
+		// setting this value as part of any data movement, and checking this when
+		// determining whether to perform an uncertainty restart, this violation is
+		// prevented.
+		//
+		// For more, see pkg/kv/kvserver/uncertainty/doc.go.
+		minValidObservedTimestamp hlc.ClockTimestamp
 
 		// The span config for this replica.
 		conf roachpb.SpanConfig
