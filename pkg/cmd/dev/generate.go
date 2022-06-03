@@ -57,14 +57,6 @@ type configuration struct {
 	Arch string
 }
 
-var archivedCdepConfigurations = []configuration{
-	{"linux", "amd64"},
-	{"linux", "arm64"},
-	{"darwin", "amd64"},
-	{"darwin", "arm64"},
-	{"windows", "amd64"},
-}
-
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
 		"bazel":    d.generateBazel,
@@ -231,28 +223,10 @@ import "C"
 `
 
 	tpl := template.Must(template.New("source").Parse(cgoTmpl))
-	var archived string
-	// If force_build_cdeps is set then the prebuilt libraries won't be in
-	// the archived location anyway.
-	forceBuildCdeps, err := d.os.ReadFile(filepath.Join(bazelBin, "build", "bazelutil", "test_force_build_cdeps.txt"))
+	archived, err := d.getArchivedCdepString(bazelBin)
 	if err != nil {
 		return err
 	}
-	// force_build_cdeps is activated if the length of this file is not 0.
-	if len(forceBuildCdeps) == 0 {
-		for _, config := range archivedCdepConfigurations {
-			if config.Os == runtime.GOOS && config.Arch == runtime.GOARCH {
-				archived = config.Os
-				if archived == "darwin" {
-					archived = "macos"
-				}
-				if config.Arch == "arm64" {
-					archived += "arm"
-				}
-			}
-		}
-	}
-
 	// Figure out where to find the c-deps libraries.
 	var jemallocDir, projDir, krbDir string
 	if archived != "" {

@@ -167,6 +167,7 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 		}
 		dirs := []string{
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
+			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/artifacts/"),
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib+suffix),
 			filepath.Join(os.ExpandEnv("$PWD"), binOrLib+suffix),
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib),
