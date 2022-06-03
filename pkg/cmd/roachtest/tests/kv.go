@@ -207,7 +207,7 @@ func registerKV(r registry.Registry) {
 		// Configs for comparing single store and multi store clusters.
 		{nodes: 4, cpus: 8, readPercent: 95},
 		{nodes: 4, cpus: 8, readPercent: 95, ssds: 8},
-		{nodes: 4, cpus: 8, readPercent: 95, ssds: 8, raid0: true},
+		{nodes: 4, cpus: 8, readPercent: 95, ssds: 8, raid0: true /* single store */},
 
 		// Configs with encryption.
 		{nodes: 1, cpus: 8, readPercent: 0, encryption: true},
@@ -284,7 +284,7 @@ func registerKV(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    strings.Join(nameParts, "/"),
 			Owner:   owner,
-			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0)),
+			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.MultipleStores(!opts.raid0)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},

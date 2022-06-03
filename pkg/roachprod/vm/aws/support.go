@@ -43,7 +43,7 @@ sudo apt-get install -qy --no-install-recommends mdadm
 mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 
-use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
+use_multiple_stores='{{ .UseMultipleStores }}'
 
 disks=()
 mount_prefix="/mnt/data"
@@ -64,7 +64,7 @@ if [ "${#disks[@]}" -eq "0" ]; then
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+elif [ "${#disks[@]}" -eq "1" ] || [ "$use_multiple_stores" == 'true' ]; then
   disknum=1
   for disk in "${disks[@]}"
   do
@@ -158,11 +158,11 @@ sudo touch /mnt/data1/.roachprod-initialized
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts   string
-		UseMultipleDisks bool
+		ExtraMountOpts    string
+		UseMultipleStores bool
 	}
 
-	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}
+	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleStores: useMultiple}
 
 	tmpfile, err := ioutil.TempFile("", "aws-startup-script")
 	if err != nil {

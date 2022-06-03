@@ -35,7 +35,7 @@ func registerPebbleWriteThroughput(r registry.Registry) {
 		Name:    fmt.Sprintf("pebble/write/size=%d", size),
 		Owner:   registry.OwnerStorage,
 		Timeout: 10 * time.Hour,
-		Cluster: r.MakeClusterSpec(5, spec.CPU(16), spec.SSD(16), spec.RAID0(true)),
+		Cluster: r.MakeClusterSpec(5, spec.CPU(16), spec.SSD(16), spec.MultipleStores(false)),
 		Tags:    []string{"pebble_nightly_write"},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPebbleWriteBenchmark(ctx, t, c, size, pebble)

@@ -52,7 +52,7 @@ mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
 {{ end }}
 
-use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
+use_multiple_stores='{{ .UseMultipleStores }}'
 
 disks=()
 mount_prefix="/mnt/data"
@@ -85,7 +85,7 @@ if [ "${#disks[@]}" -eq "0" ]; then
   echo "No disks mounted, creating ${mountpoint}"
   mkdir -p ${mountpoint}
   chmod 777 ${mountpoint}
-elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+elif [ "${#disks[@]}" -eq "1" ] || [ "$use_multiple_stores" == "true" ]; then
   disknum=1
   for disk in "${disks[@]}"
   do
@@ -225,15 +225,15 @@ func writeStartupScript(
 	extraMountOpts string, fileSystem string, useMultiple bool,
 ) (string, error) {
 	type tmplParams struct {
-		ExtraMountOpts   string
-		UseMultipleDisks bool
-		Zfs              bool
+		ExtraMountOpts    string
+		UseMultipleStores bool
+		Zfs               bool
 	}
 
 	args := tmplParams{
-		ExtraMountOpts:   extraMountOpts,
-		UseMultipleDisks: useMultiple,
-		Zfs:              fileSystem == vm.Zfs,
+		ExtraMountOpts:    extraMountOpts,
+		UseMultipleStores: useMultiple,
+		Zfs:               fileSystem == vm.Zfs,
 	}
 
 	tmpfile, err := ioutil.TempFile("", "gce-startup-script")

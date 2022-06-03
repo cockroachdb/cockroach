@@ -213,13 +213,13 @@ func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
 
 // ProviderOpts provides user-configurable, aws-specific create options.
 type ProviderOpts struct {
-	MachineType      string
-	SSDMachineType   string
-	CPUOptions       string
-	RemoteUserName   string
-	DefaultEBSVolume ebsVolume
-	EBSVolumes       ebsVolumeList
-	UseMultipleDisks bool
+	MachineType       string
+	SSDMachineType    string
+	CPUOptions        string
+	RemoteUserName    string
+	DefaultEBSVolume  ebsVolume
+	EBSVolumes        ebsVolumeList
+	UseMultipleStores bool
 
 	// Use specified ImageAMI when provisioning.
 	// Overrides config.json AMI.
@@ -312,7 +312,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"of geo (default [%s])", strings.Join(defaultCreateZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
-	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+	flags.BoolVar(&o.UseMultipleStores, ProviderName+"-enable-multiple-stores",
 		false, "Enable the use of multiple stores by creating one store directory per disk. "+
 			"Default is to raid0 stripe all disks. "+
 			"See repeating --"+ProviderName+"-ebs-volume for adding extra volumes.")
@@ -885,7 +885,7 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleStores)
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}

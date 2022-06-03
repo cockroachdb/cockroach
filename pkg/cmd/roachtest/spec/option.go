@@ -50,15 +50,17 @@ func SSD(n int) Option {
 	return nodeSSDOption(n)
 }
 
-type raid0Option bool
+type multipleStoresOption bool
 
-func (o raid0Option) apply(spec *ClusterSpec) {
-	spec.RAID0 = bool(o)
+func (o multipleStoresOption) apply(spec *ClusterSpec) {
+	spec.MultipleStores = bool(o)
 }
 
-// RAID0 enables RAID 0 striping across all disks on the node.
-func RAID0(enabled bool) Option {
-	return raid0Option(enabled)
+// MultipleStores enables multiple stores on the nodes, provided there are
+// multiple storage devices available. If multiple stores are disabled, devices
+// are combined into a single RAID0 (striped) volume.
+func MultipleStores(enabled bool) Option {
+	return multipleStoresOption(enabled)
 }
 
 type nodeGeoOption struct{}

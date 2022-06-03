@@ -60,13 +60,13 @@ func registerRebalanceLoad(r registry.Registry) {
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 		numStores := len(roachNodes)
-		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
+		if c.Spec().SSDs > 1 && c.Spec().MultipleStores {
 			numStores *= c.Spec().SSDs
 		}
 		splits := numStores - 1 // n-1 splits => n ranges => 1 lease per store
 
 		startOpts := option.DefaultStartOpts()
-		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
+		if c.Spec().SSDs > 1 && c.Spec().MultipleStores {
 			startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
 		}
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,

@@ -213,14 +213,14 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	MachineType      string
-	MinCPUPlatform   string
-	Zones            []string
-	Image            string
-	SSDCount         int
-	PDVolumeType     string
-	PDVolumeSize     int
-	UseMultipleDisks bool
+	MachineType       string
+	MinCPUPlatform    string
+	Zones             []string
+	Image             string
+	SSDCount          int
+	PDVolumeType      string
+	PDVolumeSize      int
+	UseMultipleStores bool
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
@@ -318,7 +318,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Type of the persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
-	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+	flags.BoolVar(&o.UseMultipleStores, ProviderName+"-enable-multiple-stores",
 		false, "Enable the use of multiple stores by creating one store directory per disk. "+
 			"Default is to raid0 stripe all disks.")
 
@@ -483,7 +483,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleStores)
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}

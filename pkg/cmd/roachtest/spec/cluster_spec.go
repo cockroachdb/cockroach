@@ -45,7 +45,7 @@ type ClusterSpec struct {
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	SSDs                 int
-	RAID0                bool
+	MultipleStores       bool
 	VolumeSize           int
 	PreferLocalSSD       bool
 	Zones                string
@@ -64,7 +64,7 @@ type ClusterSpec struct {
 // MakeClusterSpec makes a ClusterSpec.
 func MakeClusterSpec(cloud string, instanceType string, nodeCount int, opts ...Option) ClusterSpec {
 	spec := ClusterSpec{Cloud: cloud, InstanceType: instanceType, NodeCount: nodeCount}
-	defaultOpts := []Option{CPU(4), nodeLifetimeOption(12 * time.Hour), ReuseAny()}
+	defaultOpts := []Option{CPU(4), nodeLifetimeOption(12 * time.Hour), ReuseAny(), MultipleStores(true)}
 	for _, o := range append(defaultOpts, opts...) {
 		o.apply(&spec)
 	}
@@ -98,7 +98,9 @@ func awsMachineSupportsSSD(machineType string) bool {
 	return false
 }
 
-func getAWSOpts(machineType string, zones []string, localSSD bool) vm.ProviderOpts {
+func getAWSOpts(
+	machineType string, zones []string, localSSD bool, multipleStores bool,
+) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if localSSD {
 		opts.SSDMachineType = machineType
@@ -108,6 +110,7 @@ func getAWSOpts(machineType string, zones []string, localSSD bool) vm.ProviderOp
 	if len(zones) != 0 {
 		opts.CreateZones = zones
 	}
+	opts.UseMultipleStores = multipleStores
 	return opts
 }
 
@@ -115,9 +118,8 @@ func getGCEOpts(
 	machineType string,
 	zones []string,
 	volumeSize, localSSDCount int,
-	localSSD bool,
-	RAID0 bool,
 	terminateOnMigration bool,
+	multipleStores bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -128,13 +130,7 @@ func getGCEOpts(
 		opts.Zones = zones
 	}
 	opts.SSDCount = localSSDCount
-	if localSSD && localSSDCount > 0 {
-		// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
-		// to mount multiple disks as a single store using a RAID 0 array, we
-		// must explicitly ask for multiple stores to be enabled, _unless_ the
-		// test has explicitly asked for RAID0.
-		opts.UseMultipleDisks = !RAID0
-	}
+	opts.UseMultipleStores = multipleStores
 	opts.TerminateOnMigration = terminateOnMigration
 
 	return opts
@@ -239,10 +235,9 @@ func (s *ClusterSpec) RoachprodOpts(
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD)
+		providerOpts = getAWSOpts(machineType, zones, createVMOpts.SSDOpts.UseLocalSSD, s.MultipleStores)
 	case GCE:
-		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
-			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
+		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount, s.TerminateOnMigration, s.MultipleStores)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
 	}
