@@ -1220,6 +1220,16 @@ func MustBeDString(e Expr) DString {
 	return i
 }
 
+// MustBeDStringOrDNull attempts to retrieve a DString or DNull from an Expr, panicking if the
+// assertion fails.
+func MustBeDStringOrDNull(e Expr) DString {
+	i, ok := AsDString(e)
+	if !ok && e != DNull {
+		panic(errors.AssertionFailedf("expected *DString or DNull, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DString) ResolvedType() *types.T {
 	return types.String
