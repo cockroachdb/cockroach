@@ -246,6 +246,8 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 			"distribution": info.Distribution,
 			"rev":          info.Revision,
 			"goversion":    info.GoVersion,
+			"buildchannel": info.Channel,
+			"envchannel":   info.EnvChannel,
 		})
 	})
 }
