@@ -59,18 +59,26 @@ import (
 //    the uncertainty interval to the range merge's freeze time, which
 //    is guaranteed to be greater than any write which occurred on the
 //    right-hand side.
-// TODO(nvanbenschoten): fix this bug with range merges.
 //
 func ComputeInterval(
-	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+	h *roachpb.Header,
+	leaseState kvserverpb.LeaseState,
+	nodeId roachpb.NodeID,
+	maxOffset time.Duration,
+	minUncertaintyLimit hlc.ClockTimestamp,
 ) Interval {
 	if h.Txn != nil {
-		return computeIntervalForTxn(h.Txn, status)
+		return computeIntervalForTxn(h.Txn, leaseState, nodeId, minUncertaintyLimit)
 	}
-	return computeIntervalForNonTxn(h, status, maxOffset)
+	return computeIntervalForNonTxn(h, leaseState, maxOffset, minUncertaintyLimit)
 }
 
-func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStatus) Interval {
+func computeIntervalForTxn(
+	txn *roachpb.Transaction,
+	leaseState kvserverpb.LeaseState,
+	nodeId roachpb.NodeID,
+	limit hlc.ClockTimestamp,
+) Interval {
 	in := Interval{
 		// The transaction's global uncertainty limit is computed by its coordinator
 		// when the transaction is initiated. It stays constant across all requests
@@ -78,7 +86,7 @@ func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStat
 		GlobalLimit: txn.GlobalUncertaintyLimit,
 	}
 
-	if status.State != kvserverpb.LeaseState_VALID {
+	if leaseState != kvserverpb.LeaseState_VALID {
 		// If the lease is invalid, this must be a follower read. In such cases, we
 		// must use the most pessimistic uncertainty limit.
 		return in
@@ -93,14 +101,14 @@ func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStat
 	// Note that we care about an observed timestamp from the leaseholder's node,
 	// even if this is a follower read on a different node. See the comment in
 	// doc.go about "Follower Reads" for more.
-	obsTs, ok := txn.GetObservedTimestamp(status.Lease.Replica.NodeID)
+	obsTs, ok := txn.GetObservedTimestamp(nodeId)
 	if !ok {
 		return in
 	}
 	in.LocalLimit = obsTs
 
 	// Adjust the uncertainty interval for the lease it is being used under.
-	in.LocalLimit.Forward(minimumLocalLimitForLeaseholder(status.Lease))
+	in.LocalLimit.Forward(limit)
 
 	// The local uncertainty limit should always be <= the global uncertainty
 	// limit.
@@ -109,7 +117,10 @@ func computeIntervalForTxn(txn *roachpb.Transaction, status kvserverpb.LeaseStat
 }
 
 func computeIntervalForNonTxn(
-	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
+	h *roachpb.Header,
+	leaseState kvserverpb.LeaseState,
+	maxOffset time.Duration,
+	limit hlc.ClockTimestamp,
 ) Interval {
 	if h.TimestampFromServerClock == nil || h.ReadConsistency != roachpb.CONSISTENT {
 		// Non-transactional requests with client-provided timestamps do not
@@ -140,7 +151,7 @@ func computeIntervalForNonTxn(
 		GlobalLimit: h.TimestampFromServerClock.ToTimestamp().Add(maxOffset.Nanoseconds(), 0),
 	}
 
-	if status.State != kvserverpb.LeaseState_VALID {
+	if leaseState != kvserverpb.LeaseState_VALID {
 		// If the lease is invalid, this is either a lease request or we are computing
 		// the request's uncertainty interval before grabbing latches and checking for
 		// the current lease. Either way, return without a local limit.
@@ -152,29 +163,10 @@ func computeIntervalForNonTxn(
 	in.LocalLimit = *h.TimestampFromServerClock
 
 	// Adjust the uncertainty interval for the lease it is being used under.
-	in.LocalLimit.Forward(minimumLocalLimitForLeaseholder(status.Lease))
+	in.LocalLimit.Forward(limit)
 
 	// The local uncertainty limit should always be <= the global uncertainty
 	// limit.
 	in.LocalLimit.BackwardWithTimestamp(in.GlobalLimit)
 	return in
-}
-
-// minimumLocalLimitForLeaseholder returns the minimum timestamp that can be
-// used as a local limit when evaluating a request under the specified lease.
-// See the comment on ComputeInterval for an explanation of cases where observed
-// timestamps captured on the current leaseholder's node are not applicable to
-// data written by prior leaseholders (either before a lease change or before a
-// range merge).
-func minimumLocalLimitForLeaseholder(lease roachpb.Lease) hlc.ClockTimestamp {
-	// If the lease is valid, we use the greater of the observed timestamp and
-	// the lease start time. This ensures we avoid incorrect assumptions about
-	// when data was written, in absolute time on a different node, which held
-	// the lease before this replica acquired it.
-	min := lease.Start
-
-	// TODO(nvanbenschoten): handle RHS freeze timestamp after merge here when
-	// we fix https://github.com/cockroachdb/cockroach/issues/73292.
-
-	return min
 }

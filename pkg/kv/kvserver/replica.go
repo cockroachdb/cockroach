@@ -402,18 +402,6 @@ type Replica struct {
 		// mergeTxnID contains the ID of the in-progress merge transaction, if a
 		// merge is currently in progress. Otherwise, the ID is empty.
 		mergeTxnID uuid.UUID
-		// freezeStart indicates the subsumption time of this range when it is the
-		// right-hand range in an ongoing merge. This range will allow read-only
-		// traffic below this timestamp, while blocking everything else, until the
-		// merge completes.
-		// TODO(nvanbenschoten): get rid of this. It seemed like a good idea at
-		// the time (b192bba), but in retrospect, it's a premature optimization
-		// that prevents us from being more optimal about the read summary we
-		// ship to the LHS during a merge. Serving reads below the closed
-		// timestamp seems fine because that can't advance after the range is
-		// frozen, but serving reads above the closed timestamp but below the
-		// freeze start time is dangerous.
-		freezeStart hlc.Timestamp
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState
 		// Last index/term persisted to the raft log (not necessarily
@@ -478,6 +466,21 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.ClockTimestamp
+
+		// minAllowedObservedTS is the minimum timestamp from an external
+		// transaction that the leaseholder will accept. This protects the case
+		// where a store becomes the leaseholder for data that it didn't previously
+		// own. In the case where no leases or data ever move, the store uses the
+		// observed timestamp on transactions to minimize the size of the
+		// uncertainty window for transactions that hit the same store multiple
+		// times. This prevents uncertainty restarts and generally helps
+		// performance. The problem occurs if a store transfers either its lease or
+		// data to a different store. Since the clocks are different, the strong
+		// guarantee of the local limit is violated, and stale reads can occur. By
+		// setting this value as part of any data movement, and checking this when
+		// determining whether to perform an uncertainty restart, this violation is
+		// prevented.
+		minAllowedObservedTS hlc.ClockTimestamp
 
 		// The span config for this replica.
 		conf roachpb.SpanConfig
@@ -1175,6 +1178,23 @@ func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.T
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return storage.MVCCPutProto(
 		ctx, r.store.Engine(), nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &timestamp)
+}
+
+// MinimumUncertaintyLimit returns the minimum timestamp that can be
+// used as a local limit when evaluating a request.
+// See the comment on ComputeInterval for an explanation of cases where observed
+// timestamps captured on the current leaseholder's node are not applicable to
+// data written by prior leaseholders (either before a lease change or before a
+// range merge).
+func (r *Replica) MinimumUncertaintyLimit() (timestamp hlc.ClockTimestamp) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.minAllowedObservedTS
+}
+
+func (r *Replica) setMinimumUncertaintyLimitLocked(timestamp hlc.ClockTimestamp) {
+	r.mu.AssertHeld()
+	r.mu.minAllowedObservedTS.Forward(timestamp)
 }
 
 // getQueueLastProcessed returns the last processed timestamp for the

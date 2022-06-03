@@ -179,6 +179,9 @@ func (s *Store) MergeRange(
 			// see the comment on TestStoreRangeMergeTimestampCacheCausality.
 			s.Clock().Update(freezeStart)
 
+			// Prevent any uncertainty reads from before this point
+			leftRepl.setMinimumUncertaintyLimitLocked(freezeStart)
+
 			var sum rspb.ReadSummary
 			if rightReadSum != nil {
 				sum = *rightReadSum

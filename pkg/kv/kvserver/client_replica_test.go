@@ -1664,6 +1664,202 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 	})
 }
 
+// TestRangeLocalUncertaintyLimitAfterRangeMerge verifies that on a merge of two
+// ranges, the limiting of the uncertainty timestamp from the RHS is preserved.
+// The following series demonstrates the problem.
+//
+// +-----------+            +-----------+        +-----------+       +----------+
+// | S1* (A-B) |            | S2 (A-B)  |        | S3* (C-D) |       | S4 (C-D) |
+// +-----------+            +-----------+        +-----------+       +----------+
+// | - Time 1               | - Time 1           | - Time 2000       | - Time 1
+// | 	                      |                    |                   |
+// | 	                      |                    | - Put(C)          |
+// | - Get(A, TX1)          |                    |                   |
+// |  Observed TS (1)       |                    |                   |
+// |                        |                    |                   |
+// |<-----------------------|--------------------|-- Transfer(C-D) --X
+// |                        X -- Transfer(A-B) ->|
+// |                                             |
+// |<----------------------- Merge (A-D) --------X - no longer leaseholder
+// | - Time bumped to 2000
+// |
+// | - Get(C, TX1)
+// | - BUG - Not found!
+//
+// This is a bug because from a causality perspective, the put of C
+// happened before the later get of C. It is not found because the transaction
+// uncertainty window is incorrectly (0). Note that leaseholder protection would
+// not help here as there are no lease changes or transfers.
+
+// The underlying issue is that the observed timestamp on S0 becomes "invalid"
+// after the merge. This is one scenario where this can occur, but not the only one.
+// Fundamentally the guarantee the observed timestamp is intended to provide,
+// that no writes for any names were written before the time T0 is broken.
+// The underlying cause for this is an implicit, but incorrect mapping between
+// leaseholders and leases which is stored by the client.
+
+// The situation for the test is 4 nodes total, 2 holding the "LHS" and 2
+// holding the RHS of the range that is going to merge. The nodes are merged so
+// that the leaseholders are unaligned at the time of the merge, and the RHS
+// leaseholder clock is ahead of the LHS.
+func TestRangeLocalUncertaintyLimitAfterRangeMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The stores 0 and 1 are the "LHS", and the stores 2 and 3 are the RHS.
+	// The stores 0 and 2 are leaseholders, and the clocks on the replicas are fast
+	// Before the merge operation, need to align replicas, so 3 => 0 and 1 => 2 to
+	// avoid moving leases and triggering leaseholder protection.
+	// After the merge, the only leaseholder is store 0. Store 2 is the replica of
+	// that store.
+	const numServers = 4
+	// First set up all the four stores with manual clocks
+	var manuals [numServers]*hlc.HybridManualClock
+	for i := 0; i < numServers; i++ {
+		manuals[i] = hlc.NewHybridManualClock()
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manuals[i],
+				},
+			},
+		}
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numServers,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// Now, generate two scratch ranges that will later be merged together.
+	keyA, keyC := roachpb.Key("A"), roachpb.Key("C")
+	tc.SplitRangeOrFatal(t, keyA)
+	// Split the range in half to create the ranges that will later be merged.
+	_, keyCDesc := tc.SplitRangeOrFatal(t, keyC)
+	// Next, we place key A's replicas on nodes 0 and 1 and key C's replicas on nodes 2 and 3.
+	tc.AddVotersOrFatal(t, keyA, tc.Target(1))
+	tc.AddVotersOrFatal(t, keyC, tc.Target(2))
+	tc.AddVotersOrFatal(t, keyC, tc.Target(3))
+	// Finally, transfer the lease for the RHS to node 2.
+	tc.TransferRangeLeaseOrFatal(t, keyCDesc, tc.Target(2))
+	tc.RemoveVotersOrFatal(t, keyC, tc.Target(0))
+	// At this point all the ranges are in the right places.
+
+	tc.Servers[0].Clock()
+	// Pause the hybrid clocks, so we can make exact measurements.
+	for _, clock := range manuals {
+		clock.Pause()
+	}
+
+	// Record the offset for logging purposes.
+	//	offset := tc.Servers[0].Clock().Now()
+	offset := -manuals[0].UnixNano()
+
+	// TODO: Watch for flakiness - sometimes clocks on 2 and 3 move ahead by an
+	// additional 1000ns as a result of the lease transfers. This is why we push clocks by 2000.
+
+	// Now move the RHS leaseholders clocks forward past the observed timestamp before writing.
+	manuals[2].Increment(2000)
+
+	// Write the data from a different transaction to establish the time for the
+	// key as 10 ns in the future.
+	if resp, err := kv.SendWrapped(ctx, tc.Servers[2].DistSender(), putArgs(keyC, []byte("value"))); err != nil {
+		t.Fatal(err)
+	} else {
+		log.Warningf(context.Background(), "Write %v", resp)
+	}
+
+	// Create two identical transactions. The first one will perform a read to a
+	// store before the merge, the second will only read after the merge.
+	txn := roachpb.MakeTransaction("txn1", keyA, 1 /* userPriority */, tc.Servers[0].Clock().Now(), tc.Servers[0].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[0].SQLInstanceID()))
+	txn2 := roachpb.MakeTransaction("txn2", keyA, 1 /* userPriority */, tc.Servers[0].Clock().Now(), tc.Servers[0].Clock().MaxOffset().Nanoseconds() /* maxOffsetNs */, int32(tc.Servers[0].SQLInstanceID()))
+
+	// Simulate a read which will cause the observed time to be set to now
+	//	txn.UpdateObservedTimestamp(2, tc.Servers[0].Clock().NowAsClockTimestamp())
+	if resp, err := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), roachpb.Header{Txn: &txn}, getArgs(keyA)); err != nil {
+		t.Fatalf("problem reading key %v %v", keyA, err)
+	} else {
+		log.Warningf(context.Background(), "PASS: %v %v", err, resp)
+		// The client needs to update its transaction to the returned transaction which has observed timestamps in it
+		txn = *resp.Header().Txn
+	}
+
+	for i, s := range tc.Servers {
+		log.Warningf(context.Background(), "STEP 1: %d, %v", i, s.Clock().Now().Add(offset, 0))
+	}
+
+	// Now move the ranges, being careful not to move either leaseholder
+	// C: 3 (RHS - replica) => 0 (LHS leaseholder)
+	// A: 1 (LHS - replica) => 2 (RHS leaseholder)
+	tc.AddVotersOrFatal(t, keyC, tc.Target(0))
+	tc.AddVotersOrFatal(t, keyA, tc.Target(2))
+
+	tc.RemoveVotersOrFatal(t, keyA, tc.Target(1))
+	tc.RemoveVotersOrFatal(t, keyC, tc.Target(3))
+	// Now we actually merge the ranges - TODO: Check clocks at this point
+	for i, s := range tc.Servers {
+		log.Warningf(context.Background(), "STEP 2: %d, %v", i, s.Clock().Now().Add(offset, 0))
+	}
+	require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, keyA))
+
+	for i, s := range tc.Servers {
+		log.Warningf(context.Background(), "STEP 3: %d, %v", i, s.Clock().Now().Add(offset, 0))
+	}
+
+	// TODO Move to the actual code - transfer LHS lease back to itself
+	replicaA := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(keyA))
+	replicaADesc, err := replicaA.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if err := replicaA.AdminTransferLease(ctx, replicaADesc.StoreID); err != nil {
+			t.Fatal(err)
+		}
+		lease, _ := replicaA.GetLease()
+		if lease.Replica.NodeID != replicaA.NodeID() {
+			return errors.Errorf("expected lease transfer to node2: %s", lease)
+		}
+		return nil
+	})
+
+	// Verify that observed timestamps has exactly one entry which is node 1 with a timestamp "in the past"
+	//	log.Warningf(context.Background(), "Txn Observed timestamps = %v", txn.ObservedTimestamps[0].Timestamp.ToTimestamp().WallTime-offset)
+
+	// Try and read the transaction from the context of a new transaction. This
+	// will fail as expected as the observed timestamp will not be set.
+	if value, err := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), roachpb.Header{Txn: &txn2}, getArgs(keyC)); !testutils.IsPError(err, "uncertainty") {
+		t.Fatalf("Failed to get uncertainty on a new transaction %v %v", value, err)
+	}
+
+	// Finally, try and read the key, this should return an uncertainty error, it
+	// doesn't know if the data can be returned.
+	// There are four possible outcomes:
+	// - Uncertainty (Good) - Expected since the read and write timestamps cross.
+	// - Other error (Bad) - We expect an uncertainty error so the client can choose a new timestamp and retry.
+	// - Not found (Bad) - Error because the was written before us.
+	// - Found (Bad) - The write HLC timestamp is after our timestamp.
+	if value, err := kv.SendWrappedWith(ctx, tc.Servers[0].DistSender(), roachpb.Header{Txn: &txn}, getArgs(keyC)); !testutils.IsPError(err, "uncertainty") {
+		if err != nil {
+			t.Fatalf("Expected an uncertainty interval error; got %v", err)
+		} else {
+			getResponse := value.(*roachpb.GetResponse)
+			if getResponse.Value == nil {
+				t.Fatalf("Not found, expected uncertainty error")
+			} else {
+				t.Fatalf("Read unexpectedly succeeded; got %v", getResponse.Value)
+			}
+		}
+	}
+
+}
+
 // TestRangeLocalUncertaintyLimitAfterNewLease verifies that on lease
 // transfer, the normal limiting of a request's local uncertainty limit
 // to the first observed timestamp on a node is extended to include the
@@ -2661,8 +2857,8 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 
 		// Partition node 2 from the rest of its range. Once partitioned, perform
 		// another write and truncate the Raft log on the two connected nodes. This
-		// ensures that that when node 2 comes back up it will require a snapshot
-		// from Raft.
+		// ensures that when node 2 comes back up it will require a snapshot from
+		// Raft.
 		funcs := noopRaftHandlerFuncs()
 		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
@@ -3187,7 +3383,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// to a newer replica ID (in this case a heartbeat) removes an initialized
 		// Replica.
 		//
-		// Don't use tc.AddVoter; this would retry internally as we're faking a
+		// Don't use tc.AddVoter; this would retry internally as we're faking
 		// a snapshot error here (and these are all considered retriable).
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
 			ctx, key, tc.LookupRangeOrFatal(t, key), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
@@ -3235,12 +3431,10 @@ func TestReplicaTombstone(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					DisableReplicaGCQueue: true,
-					TestingProposalFilter: kvserverbase.ReplicaProposalFilter(
-						func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
-							return proposalFilter.
-								Load().(func(kvserverbase.ProposalFilterArgs) *roachpb.Error)(args)
-						},
-					),
+					TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+						return proposalFilter.
+							Load().(func(kvserverbase.ProposalFilterArgs) *roachpb.Error)(args)
+					},
 				}},
 			},
 			ReplicationMode: base.ReplicationManual,
@@ -3434,7 +3628,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 // TestChangeReplicasLeaveAtomicRacesWithMerge exercises a hazardous case which
 // arises during concurrent AdminChangeReplicas requests. The code reads the
 // descriptor from range id local, checks to make sure that the read
-// descriptor matches the expectation and then uses the bytes of the read read
+// descriptor matches the expectation and then uses the bytes of the read
 // bytes in a CPut with the update. The code contains an optimization to
 // transition out of joint consensus even if the read descriptor does not match
 // the expectation. That optimization did not verify anything about the read
@@ -3467,8 +3661,8 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 			if req, isGet := ba.GetArg(roachpb.Get); !isGet ||
 				ba.RangeID != rangeToBlockRangeDescriptorRead.Load().(roachpb.RangeID) ||
 				!ba.IsSingleRequest() ||
-				!bytes.HasSuffix([]byte(req.(*roachpb.GetRequest).Key),
-					[]byte(keys.LocalRangeDescriptorSuffix)) {
+				!bytes.HasSuffix(req.(*roachpb.GetRequest).Key,
+					keys.LocalRangeDescriptorSuffix) {
 				return nil
 			}
 			select {
@@ -3636,20 +3830,18 @@ func TestTransferLeaseBlocksWrites(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: kvserverbase.ReplicaProposalFilter(
-					func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
-						if args.Req.RangeID != scratchRangeID.Load().(roachpb.RangeID) {
-							return nil
-						}
-						// Block increment requests on blockInc.
-						if _, isInc := args.Req.GetArg(roachpb.Increment); isInc {
-							unblock := make(chan struct{})
-							blockInc <- unblock
-							<-unblock
-						}
+				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+					if args.Req.RangeID != scratchRangeID.Load().(roachpb.RangeID) {
 						return nil
-					},
-				),
+					}
+					// Block increment requests on blockInc.
+					if _, isInc := args.Req.GetArg(roachpb.Increment); isInc {
+						unblock := make(chan struct{})
+						blockInc <- unblock
+						<-unblock
+					}
+					return nil
+				},
 			}},
 		},
 		ReplicationMode: base.ReplicationManual,
@@ -4379,7 +4571,7 @@ func TestTenantID(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(
 						snapshot kvserver.IncomingSnapshot,
-						request_type kvserverpb.SnapshotRequest_Type,
+						requestType kvserverpb.SnapshotRequest_Type,
 						strings []string,
 					) error {
 						if snapshot.Desc.RangeID == repl.RangeID {

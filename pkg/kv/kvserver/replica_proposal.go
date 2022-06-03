@@ -322,6 +322,9 @@ func (r *Replica) leasePostApplyLocked(
 		r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 	}
 
+	// Prevent any uncertainty reads from before this point
+	r.setMinimumUncertaintyLimitLocked(newLease.Start)
+
 	// Inform the concurrency manager that the lease holder has been updated.
 	// We do this before installing the new lease in `r.mu.state` as we have
 	// an invariant that any replica with a lease has the concurrency manager
