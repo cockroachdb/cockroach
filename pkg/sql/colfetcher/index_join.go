@@ -51,6 +51,9 @@ type ColIndexJoin struct {
 
 	state indexJoinState
 
+	// This allocator is shared with the spanAssembler.
+	allocator *colmem.Allocator
+
 	// spanAssembler is used to construct the lookup spans for each input batch.
 	spanAssembler colexecspan.ColSpanAssembler
 
@@ -127,9 +130,11 @@ type ColIndexJoin struct {
 	usesStreamer bool
 	streamerInfo struct {
 		*kvstreamer.Streamer
-		budgetAcc   *mon.BoundAccount
-		budgetLimit int64
-		diskBuffer  kvstreamer.ResultDiskBuffer
+		budgetAcc               *mon.BoundAccount
+		budgetLimit             int64
+		diskBuffer              kvstreamer.ResultDiskBuffer
+		reqsScratch             []roachpb.RequestUnion
+		reqsScratchAccountedFor int64
 	}
 }
 
@@ -245,12 +250,16 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// memory from its account in GetSpans().
 			var err error
 			if s.usesStreamer {
-				err = s.cf.StartScanStreaming(
+				s.streamerInfo.reqsScratch, err = s.cf.StartScanStreaming(
 					s.Ctx,
 					s.streamerInfo.Streamer,
 					spans,
 					rowinfra.NoRowLimit,
+					s.streamerInfo.reqsScratch,
 				)
+				oldReqsScratchAccountedFor := s.streamerInfo.reqsScratchAccountedFor
+				s.streamerInfo.reqsScratchAccountedFor = roachpb.RequestUnionSize * int64(cap(s.streamerInfo.reqsScratch))
+				s.allocator.AdjustMemoryUsage(s.streamerInfo.reqsScratchAccountedFor - oldReqsScratchAccountedFor)
 			} else {
 				err = s.cf.StartScan(
 					s.Ctx,
@@ -566,6 +575,7 @@ func NewColIndexJoin(
 
 	op := &ColIndexJoin{
 		OneInputNode:     colexecop.NewOneInputNode(input),
+		allocator:        allocator,
 		flowCtx:          flowCtx,
 		cf:               fetcher,
 		spanAssembler:    spanAssembler,
@@ -690,6 +700,7 @@ func (s *ColIndexJoin) closeInternal() {
 	}
 	if s.streamerInfo.Streamer != nil {
 		s.streamerInfo.Streamer.Close(ctx)
+		s.streamerInfo.reqsScratch = nil
 	}
 	s.batch = nil
 }
