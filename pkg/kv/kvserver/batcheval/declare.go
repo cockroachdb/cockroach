@@ -75,7 +75,7 @@ func DefaultDeclareIsolatedKeys(
 		// uncertainty interval used by the request may be smaller (i.e. contain a
 		// local limit), but we can't determine that until after we have declared
 		// keys, acquired latches, and consulted the replica's lease.
-		in := uncertainty.ComputeInterval(header, kvserverpb.LeaseStatus{}, maxOffset)
+		in := uncertainty.ComputeInterval(header, kvserverpb.LeaseState_UNUSABLE, roachpb.NodeID(0), maxOffset, hlc.ClockTimestamp{})
 		timestamp.Forward(in.GlobalLimit)
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)

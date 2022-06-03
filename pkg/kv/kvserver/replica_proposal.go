@@ -288,6 +288,12 @@ func (r *Replica) leasePostApplyLocked(
 		// in pkg/util/hlc/doc.go.
 		r.Clock().Update(newLease.Start)
 
+		// As a result of moving the lease, update the minimum valid observed
+		// timestamp so that times before the lease start time are no longer
+		// respected. The observed timestamp on transactions refer to the previous
+		// leaseholder node which can have a different clock.
+		r.mu.minValidObservedTimestamp.Forward(newLease.Start)
+
 		// If this replica is a new holder of the lease, update the timestamp
 		// cache. Note that clock offset scenarios are handled via a stasis
 		// period inherent in the lease which is documented in the Lease struct.

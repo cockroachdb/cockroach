@@ -48,7 +48,8 @@ func (r *Replica) executeReadOnlyBatch(
 
 	// Compute the transaction's local uncertainty limit using observed
 	// timestamps, which can help avoid uncertainty restarts.
-	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
+	ui := uncertainty.ComputeInterval(&ba.Header, st.State, r.NodeID(), r.Clock().MaxOffset(),
+		st.MinValidObservedTimestamp)
 
 	// Evaluate read-only batch command.
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())

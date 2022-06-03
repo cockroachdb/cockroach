@@ -32,32 +32,29 @@ func TestComputeInterval(t *testing.T) {
 	}
 	txn.UpdateObservedTimestamp(1, now)
 
-	repl1 := roachpb.ReplicaDescriptor{NodeID: 1}
-	repl2 := roachpb.ReplicaDescriptor{NodeID: 2}
-	lease := kvserverpb.LeaseStatus{
-		Lease: roachpb.Lease{Replica: repl1},
-		State: kvserverpb.LeaseState_VALID,
-	}
-
 	testCases := []struct {
 		name              string
 		txn               *roachpb.Transaction
 		tsFromServerClock *hlc.ClockTimestamp
-		lease             kvserverpb.LeaseStatus
+		leaseState        kvserverpb.LeaseState
+		nodeID            roachpb.NodeID
 		exp               Interval
+		minUncertainty    hlc.ClockTimestamp
 	}{
 		{
 			name:              "no txn, client ts",
 			txn:               nil,
 			tsFromServerClock: nil,
-			lease:             lease,
+			leaseState:        kvserverpb.LeaseState_VALID,
+			nodeID:            1,
 			exp:               Interval{},
 		},
 		{
 			name:              "no txn, server ts",
 			txn:               nil,
 			tsFromServerClock: &now,
-			lease:             lease,
+			leaseState:        kvserverpb.LeaseState_VALID,
+			nodeID:            1,
 			exp: Interval{
 				GlobalLimit: hlc.Timestamp{WallTime: 25},
 				LocalLimit:  hlc.ClockTimestamp{WallTime: 15},
@@ -67,11 +64,8 @@ func TestComputeInterval(t *testing.T) {
 			name:              "no txn, server ts, invalid lease",
 			txn:               nil,
 			tsFromServerClock: &now,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.State = kvserverpb.LeaseState_EXPIRED
-				return leaseClone
-			}(),
+			leaseState:        kvserverpb.LeaseState_EXPIRED,
+			nodeID:            1,
 			exp: Interval{
 				GlobalLimit: hlc.Timestamp{WallTime: 25},
 			},
@@ -80,11 +74,9 @@ func TestComputeInterval(t *testing.T) {
 			name:              "no txn, server ts, lease with start time above server ts",
 			txn:               nil,
 			tsFromServerClock: &now,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 18}
-				return leaseClone
-			}(),
+			leaseState:        kvserverpb.LeaseState_VALID,
+			nodeID:            1,
+			minUncertainty:    hlc.ClockTimestamp{WallTime: 18},
 			exp: Interval{
 				GlobalLimit: hlc.Timestamp{WallTime: 25},
 				LocalLimit:  hlc.ClockTimestamp{WallTime: 18},
@@ -94,66 +86,56 @@ func TestComputeInterval(t *testing.T) {
 			name:              "no txn, server ts, lease with start time above server ts + max offset",
 			txn:               nil,
 			tsFromServerClock: &now,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 32}
-				return leaseClone
-			}(),
+			leaseState:        kvserverpb.LeaseState_VALID,
+			minUncertainty:    hlc.ClockTimestamp{WallTime: 32},
+			nodeID:            1,
 			exp: Interval{
 				GlobalLimit: hlc.Timestamp{WallTime: 25},
 				LocalLimit:  hlc.ClockTimestamp{WallTime: 25},
 			},
 		},
 		{
-			name: "txn, invalid lease",
-			txn:  txn,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.State = kvserverpb.LeaseState_EXPIRED
-				return leaseClone
-			}(),
+			name:       "txn, invalid lease",
+			txn:        txn,
+			leaseState: kvserverpb.LeaseState_EXPIRED,
+			nodeID:     1,
+			exp:        Interval{GlobalLimit: txn.GlobalUncertaintyLimit},
+		},
+		{
+			name:       "txn, no observed timestamp",
+			txn:        txn,
+			leaseState: kvserverpb.LeaseState_VALID,
+			nodeID:     2,
+
 			exp: Interval{GlobalLimit: txn.GlobalUncertaintyLimit},
 		},
 		{
-			name: "txn, no observed timestamp",
-			txn:  txn,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.Lease.Replica = repl2
-				return leaseClone
-			}(),
-			exp: Interval{GlobalLimit: txn.GlobalUncertaintyLimit},
-		},
-		{
-			name:  "valid lease",
-			txn:   txn,
-			lease: lease,
+			name:       "valid lease",
+			txn:        txn,
+			leaseState: kvserverpb.LeaseState_VALID,
+			nodeID:     1,
 			exp: Interval{
 				GlobalLimit: txn.GlobalUncertaintyLimit,
 				LocalLimit:  hlc.ClockTimestamp{WallTime: 15},
 			},
 		},
 		{
-			name: "txn, valid lease with start time above observed timestamp",
-			txn:  txn,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 18}
-				return leaseClone
-			}(),
+			name:           "txn, valid lease with start time above observed timestamp",
+			txn:            txn,
+			leaseState:     kvserverpb.LeaseState_VALID,
+			nodeID:         1,
+			minUncertainty: hlc.ClockTimestamp{WallTime: 18},
 			exp: Interval{
 				GlobalLimit: txn.GlobalUncertaintyLimit,
 				LocalLimit:  hlc.ClockTimestamp{WallTime: 18},
 			},
 		},
 		{
-			name: "txn, valid lease with start time above max timestamp",
-			txn:  txn,
-			lease: func() kvserverpb.LeaseStatus {
-				leaseClone := lease
-				leaseClone.Lease.Start = hlc.ClockTimestamp{WallTime: 22}
-				return leaseClone
-			}(),
+			name:           "txn, valid lease with start time above max timestamp",
+			txn:            txn,
+			leaseState:     kvserverpb.LeaseState_VALID,
+			nodeID:         1,
+			minUncertainty: hlc.ClockTimestamp{WallTime: 22},
 			exp: Interval{
 				GlobalLimit: txn.GlobalUncertaintyLimit,
 				LocalLimit:  hlc.ClockTimestamp{WallTime: 20},
@@ -165,7 +147,7 @@ func TestComputeInterval(t *testing.T) {
 			var h roachpb.Header
 			h.Txn = test.txn
 			h.TimestampFromServerClock = test.tsFromServerClock
-			require.Equal(t, test.exp, ComputeInterval(&h, test.lease, maxOffset))
+			require.Equal(t, test.exp, ComputeInterval(&h, test.leaseState, test.nodeID, maxOffset, test.minUncertainty))
 		})
 	}
 }
