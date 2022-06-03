@@ -179,6 +179,12 @@ func (s *Store) MergeRange(
 			// see the comment on TestStoreRangeMergeTimestampCacheCausality.
 			s.Clock().Update(freezeStart)
 
+			// As a result of moving the lease, update the minimum valid observed
+			// timestamp so that times before the lease start time are no longer
+			// respected. The observed timestamp on transactions refer to the previous
+			// leaseholder node which can have a different clock.
+			leftRepl.mu.minValidObservedTimestamp.Forward(freezeStart)
+
 			var sum rspb.ReadSummary
 			if rightReadSum != nil {
 				sum = *rightReadSum
