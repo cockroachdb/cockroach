@@ -1066,7 +1066,7 @@ func TestDelimiter(t *testing.T) {
 		{INet, ","},
 		{Geometry, ":"},
 		{Geography, ":"},
-		{Box2D, ";"},
+		{Box2D, ","},
 		{Void, ","},
 		{EncodedKey, ","},
 	}
