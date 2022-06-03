@@ -1565,6 +1565,9 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 	BuildSharedProps(item.Fn, &scalar.Shared, b.evalCtx)
 }
 
+func (b *logicalPropsBuilder) buildRoutineProps(udf *RoutineExpr, rel *props.Relational) {
+}
+
 // BuildSharedProps fills in the shared properties derived from the given
 // expression's subtree. It will only recurse into a child when it is not
 // already caching properties.

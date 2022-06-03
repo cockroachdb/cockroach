@@ -67,6 +67,8 @@ func init() {
 		// Subquery operators.
 		opt.ExistsOp:   (*Builder).buildExistsSubquery,
 		opt.SubqueryOp: (*Builder).buildSubquery,
+
+		opt.RoutineOp: (*Builder).buildRoutine,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -642,4 +644,12 @@ func (b *Builder) addSubquery(
 	// by index (1-based).
 	exprNode.Idx = len(b.subqueries)
 	return exprNode
+}
+
+func (b *Builder) buildRoutine(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+	routine := scalar.(*memo.RoutineExpr)
+	return &tree.Routine{
+		Statements: routine.Statements,
+		Typ:        routine.Typ,
+	}, nil
 }

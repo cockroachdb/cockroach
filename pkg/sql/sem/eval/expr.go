@@ -557,6 +557,10 @@ func (e *evaluator) EvalSubquery(subquery *tree.Subquery) (tree.Datum, error) {
 	return e.Planner.EvalSubquery(subquery)
 }
 
+func (e *evaluator) EvalRoutine(routine *tree.Routine) (tree.Datum, error) {
+	return e.Planner.EvalRoutine(routine)
+}
+
 func (e *evaluator) EvalTuple(t *tree.Tuple) (tree.Datum, error) {
 	tuple := tree.NewDTupleWithLen(t.ResolvedType(), len(t.Exprs))
 	for i, expr := range t.Exprs {

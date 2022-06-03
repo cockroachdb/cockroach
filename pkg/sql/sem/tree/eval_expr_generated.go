@@ -41,6 +41,7 @@ type ExprEvaluator interface {
 	EvalParenExpr(*ParenExpr) (Datum, error)
 	EvalPlaceholder(*Placeholder) (Datum, error)
 	EvalRangeCond(*RangeCond) (Datum, error)
+	EvalRoutine(*Routine) (Datum, error)
 	EvalSubquery(*Subquery) (Datum, error)
 	EvalTuple(*Tuple) (Datum, error)
 	EvalTupleStar(*TupleStar) (Datum, error)
@@ -319,6 +320,11 @@ func (node *Placeholder) Eval(v ExprEvaluator) (Datum, error) {
 // Eval is part of the TypedExpr interface.
 func (node *RangeCond) Eval(v ExprEvaluator) (Datum, error) {
 	return v.EvalRangeCond(node)
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *Routine) Eval(v ExprEvaluator) (Datum, error) {
+	return v.EvalRoutine(node)
 }
 
 // Eval is part of the TypedExpr interface.

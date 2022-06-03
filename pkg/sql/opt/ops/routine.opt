@@ -1,0 +1,14 @@
+# TODO(mgartner): We may want two types - ScalarRoutine and RelationalRoutine to
+# differentiate between routines that return a single value vs a set of values
+# or a set of rows.
+[Scalar]
+define Routine {
+    _ RoutinePrivate
+}
+
+[Private]
+define RoutinePrivate {
+    Name string
+    Statements StringList
+    Typ Type
+}

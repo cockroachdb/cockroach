@@ -1,0 +1,78 @@
+statement ok
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT
+);
+CREATE TABLE cd (
+  c INT PRIMARY KEY,
+  d INT
+);
+INSERT INTO ab SELECT i, 5 FROM generate_series(1, 10) AS g(i);
+INSERT INTO cd VALUES (1, 10), (2, 200), (3, 30), (5, 40);
+
+# udf:
+# CREATE FUNCTION UDF(n int) RETURNS INT LANGUAGE SQL AS $$
+#   SELECT floor(random()*10)::INT;
+# $$
+
+query T
+EXPLAIN (OPT, VERBOSE)
+SELECT udf() FROM ab
+----
+project
+ ├── columns: udf:5
+ ├── stats: [rows=1000]
+ ├── cost: 1084.44
+ ├── fd: ()-->(5)
+ ├── distribution: test
+ ├── prune: (5)
+ ├── scan ab
+ │    ├── stats: [rows=1000]
+ │    ├── cost: 1064.42
+ │    └── distribution: test
+ └── projections
+      └── routine: name=udf,type=int [as=udf:5]
+
+query I
+SELECT udf() FROM ab
+----
+5
+0
+7
+1
+7
+7
+1
+5
+0
+5
+
+query T
+EXPLAIN (OPT, VERBOSE)
+SELECT * FROM ab WHERE b = udf()
+----
+select
+ ├── columns: a:1 b:2
+ ├── stats: [rows=330, distinct(2)=100, null(2)=0, avgsize(2)=4]
+ ├── cost: 1114.85
+ ├── key: (1)
+ ├── fd: ()-->(2)
+ ├── distribution: test
+ ├── prune: (1)
+ ├── scan ab
+ │    ├── columns: a:1 b:2
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(2)=100, null(2)=10, avgsize(2)=4]
+ │    ├── cost: 1104.82
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── distribution: test
+ │    └── prune: (1,2)
+ └── filters
+      └── eq [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+           ├── b:2
+           └── routine: name=udf,type=int
+
+query II
+SELECT * FROM ab WHERE b = udf()
+----
+3  5

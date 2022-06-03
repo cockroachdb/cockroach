@@ -516,6 +516,20 @@ func (b *Builder) buildAnyScalar(
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
+
+	if f.IsUDF {
+		// Hard code the definition of a user-defined function "udf()".
+		stmts := []string{"SELECT floor(random()*10)::INT"}
+		out = b.factory.ConstructRoutine(
+			&memo.RoutinePrivate{
+				Name:       "udf",
+				Statements: stmts,
+				Typ:        types.Int,
+			},
+		)
+		return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+	}
+
 	if f.WindowDef != nil {
 		if inScope.inAgg {
 			panic(sqlerrors.NewWindowInAggError())
