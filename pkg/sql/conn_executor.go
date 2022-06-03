@@ -327,6 +327,10 @@ type Metrics struct {
 	// GuardrailMetrics contains metrics related to different guardrails in the
 	// SQL layer.
 	GuardrailMetrics GuardrailMetrics
+
+	// LongRunningMetrics contains metrics related to tracking long-running
+	// statements and transactions.
+	LongRunningMetrics LongRunningMetrics
 }
 
 // ServerMetrics collects timeseries data about Server activities that are
@@ -343,7 +347,10 @@ type ServerMetrics struct {
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
-	metrics := makeMetrics(false /* internal */)
+	smt := newSessionMetricsTracker(
+		cfg.SessionRegistry, cfg.SessionMetricsTrackerTestingKnobs,
+	)
+	metrics := makeMetrics(false /* internal */, smt)
 	serverMetrics := makeServerMetrics(cfg)
 	reportedSQLStats := sslocal.New(
 		cfg.Settings,
@@ -355,8 +362,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
-	reportedSQLStatsController :=
-		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
+	reportedSQLStatsController := reportedSQLStats.GetController(
+		cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor,
+	)
 	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -370,7 +378,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
-		InternalMetrics:         makeMetrics(true /* internal */),
+		InternalMetrics:         makeMetrics(true /* internal */, smt),
 		ServerMetrics:           serverMetrics,
 		pool:                    pool,
 		reportedStats:           reportedSQLStats,
@@ -409,7 +417,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	return s
 }
 
-func makeMetrics(internal bool) Metrics {
+func makeMetrics(internal bool, smt *sessionMetricsTracker) Metrics {
 	return Metrics{
 		EngineMetrics: EngineMetrics{
 			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
@@ -444,6 +452,7 @@ func makeMetrics(internal bool) Metrics {
 			TxnRowsReadLogCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadLog, internal)),
 			TxnRowsReadErrCount:    metric.NewCounter(getMetricMeta(MetaTxnRowsReadErr, internal)),
 		},
+		LongRunningMetrics: makeLongRunningMetrics(internal, smt),
 	}
 }
 

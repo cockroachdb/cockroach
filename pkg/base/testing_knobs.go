@@ -50,4 +50,5 @@ type TestingKnobs struct {
 	CapturedIndexUsageStatsKnobs ModuleTestingKnobs
 	AdmissionControl             ModuleTestingKnobs
 	UnusedIndexRecommendKnobs    ModuleTestingKnobs
+	SessionMetricTrackerKnobs    ModuleTestingKnobs
 }
