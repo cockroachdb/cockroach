@@ -52,16 +52,16 @@ func TestNoopPredicate(t *testing.T) {
 
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	ctx := context.Background()
-	decoder := cdcevent.NewEventDecoder(ctx, &serverCfg,
-		jobspb.ChangefeedDetails{
-			TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
-				{
-					Type:       jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-					TableID:    desc.GetID(),
-					FamilyName: "most",
-				},
+	decoder, err := cdcevent.NewEventDecoder(
+		ctx, &serverCfg,
+		[]jobspb.ChangefeedTargetSpecification{
+			{
+				Type:       jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
+				TableID:    desc.GetID(),
+				FamilyName: "most",
 			},
-		})
+		}, false)
+	require.NoError(t, err)
 
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), desc)
 	defer cleanup()
@@ -452,18 +452,18 @@ CREATE TABLE foo (
 				targetType = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
 			}
 
-			details := jobspb.ChangefeedDetails{
-				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
-					{
-						Type:       targetType,
-						TableID:    desc.GetID(),
-						FamilyName: tc.familyName,
-					},
+			targets := []jobspb.ChangefeedTargetSpecification{
+				{
+					Type:       targetType,
+					TableID:    desc.GetID(),
+					FamilyName: tc.familyName,
 				},
 			}
+
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
-			decoder := cdcevent.NewEventDecoder(ctx, &serverCfg, details)
+			decoder, err := cdcevent.NewEventDecoder(ctx, &serverCfg, targets, false)
+			require.NoError(t, err)
 
 			for _, action := range tc.setupActions {
 				sqlDB.Exec(t, action)

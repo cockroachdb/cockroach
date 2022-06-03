@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -149,7 +148,7 @@ CREATE TABLE foo (
 	for _, tc := range []struct {
 		testName          string
 		familyName        string // Must be set if targetType ChangefeedTargetSpecification_COLUMN_FAMILY
-		virtualColumn     changefeedbase.VirtualColumnVisibility
+		includeVirtual    bool
 		actions           []string
 		expectMainFamily  []decodeExpectation
 		expectOnlyCFamily []decodeExpectation
@@ -167,10 +166,10 @@ CREATE TABLE foo (
 			},
 		},
 		{
-			testName:      "main/primary_cols_with_virtual",
-			familyName:    "main",
-			actions:       []string{"INSERT INTO foo (a, b) VALUES (1, 'second test')"},
-			virtualColumn: changefeedbase.OptVirtualColumnsNull,
+			testName:       "main/primary_cols_with_virtual",
+			familyName:     "main",
+			actions:        []string{"INSERT INTO foo (a, b) VALUES (1, 'second test')"},
+			includeVirtual: true,
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues:   []string{"second test", "1"},
@@ -286,26 +285,21 @@ CREATE TABLE foo (
 				targetType = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
 			}
 
-			details := jobspb.ChangefeedDetails{
-				Opts: map[string]string{
-					changefeedbase.OptVirtualColumns: string(tc.virtualColumn),
-				},
-				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
-					{
-						Type:       targetType,
-						TableID:    tableDesc.GetID(),
-						FamilyName: tc.familyName,
-					},
-				},
-			}
-
 			for _, action := range tc.actions {
 				sqlDB.Exec(t, action)
 			}
 
+			targets := []jobspb.ChangefeedTargetSpecification{
+				{
+					Type:       targetType,
+					TableID:    tableDesc.GetID(),
+					FamilyName: tc.familyName,
+				},
+			}
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
-			decoder := NewEventDecoder(ctx, &serverCfg, details)
+			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual)
+			require.NoError(t, err)
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
 			for i := 0; i < expectedEvents; i++ {
 				v := popRow(t)
