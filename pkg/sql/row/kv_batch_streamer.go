@@ -59,25 +59,37 @@ type TxnKVStreamer struct {
 var _ KVBatchFetcher = &TxnKVStreamer{}
 
 // NewTxnKVStreamer creates a new TxnKVStreamer.
+//
+// reqsScratch is a scratch space used to convert spans to requests. The caller
+// should not use it outside of this method. Possibly updated scratch space is
+// returned. It is the caller's responsibility to account for this memory if it
+// decides to reuse it.
 func NewTxnKVStreamer(
 	ctx context.Context,
 	streamer *kvstreamer.Streamer,
 	spans roachpb.Spans,
 	spanIDs []int,
 	lockStrength descpb.ScanLockingStrength,
-) (*TxnKVStreamer, error) {
+	reqsScratch []roachpb.RequestUnion,
+) (*TxnKVStreamer, []roachpb.RequestUnion, error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", spans)
 	}
 	keyLocking := getKeyLockingStrength(lockStrength)
-	reqs := spansToRequests(spans, false /* reverse */, keyLocking)
+	reqs := spansToRequests(spans, false /* reverse */, keyLocking, reqsScratch)
 	if err := streamer.Enqueue(ctx, reqs, spanIDs); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	// Make sure to nil out requests in order to lose references to the
+	// underlying Get and Scan requests which could keep large byte slices
+	// alive.
+	for i := range reqs {
+		reqs[i] = roachpb.RequestUnion{}
 	}
 	return &TxnKVStreamer{
 		streamer: streamer,
 		spans:    spans,
-	}, nil
+	}, reqs, nil
 }
 
 // proceedWithLastResult processes the result which must be already set on the

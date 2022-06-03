@@ -574,19 +574,27 @@ func (cf *cFetcher) StartScan(
 // spans slice after the fetcher has been closed (which happens when the fetcher
 // emits the first zero batch), and if the caller does, it becomes responsible
 // for the memory accounting.
+//
+// reqsScratch, which can be nil, is a scratch space that can be shared across
+// StartScanStreaming calls. The caller should not use it outside of this
+// method. Possibly updated scratch space is returned. It is the caller's
+// responsibility to account for this memory if it decides to reuse it.
 func (cf *cFetcher) StartScanStreaming(
 	ctx context.Context,
 	streamer *kvstreamer.Streamer,
 	spans roachpb.Spans,
 	limitHint rowinfra.RowLimit,
-) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength)
+	reqsScratch []roachpb.RequestUnion,
+) ([]roachpb.RequestUnion, error) {
+	kvBatchFetcher, reqsScratch, err := row.NewTxnKVStreamer(
+		ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength, reqsScratch,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	f := row.NewKVStreamingFetcher(kvBatchFetcher)
 	cf.setFetcher(f, limitHint)
-	return nil
+	return reqsScratch, nil
 }
 
 // fetcherState is the state enum for NextBatch.

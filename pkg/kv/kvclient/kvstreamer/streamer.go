@@ -1254,9 +1254,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 ) error {
 	numIncompleteRequests := numIncompleteGets + numIncompleteScans
 	var resumeReq singleRangeBatch
-	// We have to allocate the new slice for requests, but we can reuse the
-	// positions slice.
-	resumeReq.reqs = make([]roachpb.RequestUnion, numIncompleteRequests)
+	// We have to allocate the new Get and Scan requests, but we can reuse the
+	// reqs and the positions slices.
+	resumeReq.reqs = req.reqs[:numIncompleteRequests]
 	resumeReq.positions = req.positions[:0]
 	resumeReq.subRequestIdx = req.subRequestIdx[:0]
 	// We've already reconciled the budget with the actual reservation for the
@@ -1443,7 +1443,14 @@ func (w *workerCoordinator) processSingleRangeResults(
 
 	// If we have any incomplete requests, add them back into the work
 	// pool.
-	if len(resumeReq.reqs) > 0 {
+	if numIncompleteRequests > 0 {
+		// Make to sure to nil out old requests that we didn't include into the
+		// resume request. We don't have to do this if there aren't any
+		// incomplete requests since req and resumeReq will be garbage collected
+		// on their own.
+		for i := numIncompleteRequests; i < len(req.reqs); i++ {
+			req.reqs[i] = roachpb.RequestUnion{}
+		}
 		w.s.requestsToServe.add(resumeReq)
 	}
 
