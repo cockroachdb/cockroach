@@ -1117,35 +1117,7 @@ message TableDescriptor {
     (gogoproto.customname) = "DropJobID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
-  message GCDescriptorMutation {
-    option (gogoproto.equal) = true;
-    optional int64 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID",
-                                (gogoproto.casttype) = "IndexID"];
-
-    optional int64 drop_time = 2 [(gogoproto.nullable) = false, deprecated = true];
-
-    // The job id for a mutation job is the id in the system.jobs table of the
-    // schema change job executing the mutation referenced by mutation_id.
-    optional int64 job_id = 3 [
-      (gogoproto.nullable) = false,
-      (gogoproto.customname) = "JobID", deprecated = true,
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
-  }
-
-  // Before 22.1:
-  // The schema elements that have been dropped and whose underlying
-  // data needs to be gc-ed. These schema elements have already transitioned
-  // through the drop state machine when they were in the above mutations
-  // list, and can be safely deleted. The names for these schema elements
-  // can be reused. This list is separate because mutations can
-  // lie in this list for a long time (gc deadline) and should not block
-  // the execution of other schema changes on the table.
-  //
-  // Since 22.1 this is field is deprecated and no longer maintained.
-  // The index GC job still removes mutations it finds in this list.
-  repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
-                                                   (gogoproto.customname) = "GCMutations",
-                                                   deprecated = true];
+  reserved 33;
 
   optional string create_query = 34 [(gogoproto.nullable) = false];
 
