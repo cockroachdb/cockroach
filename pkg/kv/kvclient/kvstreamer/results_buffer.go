@@ -157,7 +157,7 @@ func (b *resultsBufferBase) initLocked(isEmpty bool, numExpectedResponses int) e
 
 func (b *resultsBufferBase) findCompleteResponses(results []Result) {
 	for i := range results {
-		if results[i].GetResp != nil || results[i].ScanResp.Complete {
+		if results[i].GetResp != nil || results[i].scanComplete {
 			b.numCompleteResponses++
 		}
 	}
@@ -320,7 +320,7 @@ type inOrderResultsBuffer struct {
 	// multiple ranges - in such a scenario, multiple Results are created. For
 	// Get requests and for single-range Scan requests this will always stay at
 	// zero.
-	headOfLineSubRequestIdx int
+	headOfLineSubRequestIdx int32
 	// buffered contains all buffered Results, regardless of whether they are
 	// stored in-memory or on disk.
 	buffered []inOrderBufferedResult
@@ -475,7 +475,7 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 			// of the sub-request.
 			b.headOfLineSubRequestIdx++
 		}
-		if result.GetResp != nil || result.ScanResp.Complete {
+		if result.GetResp != nil || result.scanComplete {
 			// If the current Result is complete, then we need to advance the
 			// head-of-the-line position.
 			b.headOfLinePosition++
@@ -595,8 +595,9 @@ func (b *inOrderResultsBuffer) close(ctx context.Context) {
 // inOrderBufferedResult describes a single Result for InOrder mode, regardless
 // of where it is stored (in-memory or on disk).
 type inOrderBufferedResult struct {
-	// If onDisk is true, then only Result.ScanResp.Complete, Result.memoryTok,
-	// Result.Position, Result.subRequestIdx, and Result.subRequestDone are set.
+	// If onDisk is true, then only Result.Position, Result.memoryTok,
+	// Result.subRequestIdx, Result.subRequestDone, and Result.scanComplete are
+	// set.
 	Result
 	// addEpoch indicates the value of addCounter variable when this result was
 	// added to the buffer. This "epoch" allows us to order correctly two
@@ -623,7 +624,7 @@ type inOrderBufferedResult struct {
 // spill updates r to represent a result that has been spilled to disk and is
 // identified by the provided ordinal in the disk buffer.
 func (r *inOrderBufferedResult) spill(diskResultID int) {
-	isScanComplete := r.ScanResp.Complete
+	isScanComplete := r.scanComplete
 	*r = inOrderBufferedResult{
 		Result: Result{
 			memoryTok:      r.memoryTok,
@@ -635,7 +636,7 @@ func (r *inOrderBufferedResult) spill(diskResultID int) {
 		onDisk:       true,
 		diskResultID: diskResultID,
 	}
-	r.ScanResp.Complete = isScanComplete
+	r.scanComplete = isScanComplete
 }
 
 // get returns the Result, deserializing it from disk if necessary. toConsume

@@ -85,10 +85,10 @@ func TestInOrderResultsBuffer(t *testing.T) {
 				}
 				for j := 0; j < numRanges; j++ {
 					scan := makeResultWithScanResp(rng)
-					scan.ScanResp.Complete = j+1 == numRanges
+					scan.scanComplete = j+1 == numRanges
 					scan.memoryTok.toRelease = rng.Int63n(100)
 					scan.Position = i
-					scan.subRequestIdx = j
+					scan.subRequestIdx = int32(j)
 					scan.subRequestDone = true
 					results = append(results, scan)
 				}
@@ -160,13 +160,6 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	}
 }
 
-func fillEnqueueKeys(r *Result, rng *rand.Rand) {
-	r.EnqueueKeysSatisfied = make([]int, rng.Intn(20)+1)
-	for i := range r.EnqueueKeysSatisfied {
-		r.EnqueueKeysSatisfied[i] = rng.Int()
-	}
-}
-
 func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 	var r Result
 	r.GetResp = &roachpb.GetResponse{}
@@ -182,7 +175,6 @@ func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 			},
 		}
 	}
-	fillEnqueueKeys(&r, rng)
 	return r
 }
 
@@ -195,9 +187,8 @@ func makeResultWithScanResp(rng *rand.Rand) Result {
 		rng.Read(batchResponse)
 		batchResponses[i] = batchResponse
 	}
-	r.ScanResp.ScanResponse = &roachpb.ScanResponse{
+	r.ScanResp = &roachpb.ScanResponse{
 		BatchResponses: batchResponses,
 	}
-	fillEnqueueKeys(&r, rng)
 	return r
 }
