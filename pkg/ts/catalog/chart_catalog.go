@@ -3293,4 +3293,17 @@ var charts = []sectionDescription{
 			},
 		},
 	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Latency"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Execution duration for read batch evaluation.",
+				Metrics: []string{"kv.replica_read_batch_evaluate.latency"},
+			},
+			{
+				Title:   "Execution duration for read batch evaluation.",
+				Metrics: []string{"kv.replica_write_batch_evaluate.latency"},
+			},
+		},
+	},
 }
