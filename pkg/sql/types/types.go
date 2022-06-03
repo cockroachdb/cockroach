@@ -2818,8 +2818,6 @@ func (t *T) Delimiter() string {
 	switch t.Family() {
 	case Geometry.Family(), Geography.Family():
 		return ":"
-	case Box2D.Family():
-		return ";"
 	default:
 		return ","
 	}
