@@ -57,6 +57,12 @@ function renderExplainPlan(
   plan: PlanHashStats,
   backToPlanTable: () => void,
 ): React.ReactElement {
+  let planBox;
+  if (plan.explain_plan === "") {
+    planBox = <SqlBox value={"unavailable"} />;
+  } else {
+    planBox = <SqlBox value={plan.explain_plan} size={SqlBoxSize.large} />;
+  }
   return (
     <div>
       <Helmet title="Plan Details" />
@@ -70,7 +76,7 @@ function renderExplainPlan(
       >
         All Plans
       </Button>
-      <SqlBox value={plan.explain_plan} size={SqlBoxSize.large} />
+      {planBox}
     </div>
   );
 }

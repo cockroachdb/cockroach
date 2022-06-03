@@ -53,7 +53,6 @@ pkg/streaming/api.go | `StreamID`
 pkg/util/hlc/timestamp.go | `ClockTimestamp`
 pkg/util/hlc/timestamp.go | `LegacyTimestamp`
 pkg/util/hlc/timestamp.go | `Timestamp`
-vendor/github.com/cockroachdb/pebble/internal/humanize/humanize.go | `FormattedString`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`
 pkg/util/log/redact.go | `reflect.TypeOf(Channel(0))`
 pkg/util/log/redact.go | `reflect.TypeOf(complex128(0))`

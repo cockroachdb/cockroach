@@ -24,7 +24,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -1216,6 +1216,16 @@ func MustBeDString(e Expr) DString {
 	i, ok := AsDString(e)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DString, found %T", e))
+	}
+	return i
+}
+
+// MustBeDStringOrDNull attempts to retrieve a DString or DNull from an Expr, panicking if the
+// assertion fails.
+func MustBeDStringOrDNull(e Expr) DString {
+	i, ok := AsDString(e)
+	if !ok && e != DNull {
+		panic(errors.AssertionFailedf("expected *DString or DNull, found %T", e))
 	}
 	return i
 }
