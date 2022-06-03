@@ -3249,6 +3249,13 @@ func (t *logicTest) processSubtest(
 				}
 			}
 			cleanupUserFunc := t.setUser(fields[1], nodeIdx)
+			// In multi-tenant tests, we may need to also create database test when
+			// we switch to a different tenant.
+			if t.cfg.useTenant && strings.HasPrefix(fields[1], "host-cluster-") {
+				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
+					return errors.Wrapf(err, "error creating database on admin tenant")
+				}
+			}
 			defer cleanupUserFunc()
 
 		case "skip":
