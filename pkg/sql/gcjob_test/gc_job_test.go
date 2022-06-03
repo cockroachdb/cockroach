@@ -132,9 +132,6 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					ParentID: myTableID,
 				}
 				myTableDesc.SetPublicNonPrimaryIndexes([]descpb.IndexDescriptor{})
-				myTableDesc.GCMutations = append(myTableDesc.GCMutations, descpb.TableDescriptor_GCDescriptorMutation{
-					IndexID: descpb.IndexID(2),
-				})
 				expectedRunningStatus = "performing garbage collection on index 2"
 			case TABLE:
 				details = jobspb.SchemaChangeGCDetails{
@@ -253,21 +250,6 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				return nil
 			}); err != nil {
 				t.Fatal(err)
-			}
-
-			switch dropItem {
-			case INDEX:
-				if ttlTime == FUTURE {
-					require.Equal(t, 1, len(myTableDesc.GCMutations))
-				} else {
-					require.Equal(t, 0, len(myTableDesc.GCMutations))
-				}
-			case TABLE:
-			case DATABASE:
-				// Already handled the case where the TTL was lowered, since we expect
-				// to not find the descriptor.
-				// If the TTL was not lowered, we just expect to have not found an error
-				// when fetching the TTL.
 			}
 		}
 	}

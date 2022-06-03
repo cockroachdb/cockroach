@@ -197,7 +197,6 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	}
 
 	tableDesc.Mutations = nil
-	tableDesc.GCMutations = nil
 
 	// Collect all of the old indexes and reset all of the index IDs.
 	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.ActiveIndexes()))
