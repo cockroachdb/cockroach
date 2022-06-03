@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -346,18 +345,23 @@ func getEventDescriptorCached(
 
 // NewEventDecoder returns key value decoder.
 func NewEventDecoder(
-	ctx context.Context, cfg *execinfra.ServerConfig, details jobspb.ChangefeedDetails,
-) Decoder {
-	rfCache := newRowFetcherCache(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	targets []jobspb.ChangefeedTargetSpecification,
+	includeVirtual bool,
+) (Decoder, error) {
+	rfCache, err := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
 		cfg.LeaseManager.(*lease.Manager),
 		cfg.CollectionFactory,
 		cfg.DB,
-		details.TargetSpecifications,
+		targets,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
 	eventDescriptorCache := cache.NewUnorderedCache(defaultCacheConfig)
 	getEventDescriptor := func(
 		desc catalog.TableDescriptor,
@@ -370,7 +374,7 @@ func NewEventDecoder(
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
-	}
+	}, nil
 }
 
 // DecodeKV decodes key value at specified schema timestamp.
