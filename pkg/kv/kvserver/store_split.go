@@ -212,11 +212,14 @@ func splitPostApply(
 func prepareRightReplicaForSplit(
 	ctx context.Context, split *roachpb.SplitTrigger, r *Replica,
 ) (rightReplicaOrNil *Replica) {
-	// Copy out the minLeaseProposedTS from the LHS so we can assign it to the
-	// RHS. This ensures that if the LHS was not able to use its current lease
-	// because of a restart or lease transfer, the RHS will also not be able to.
+	// Copy out the minLeaseProposedTS and minValidObservedTimestamp from the LHS,
+	// so we can assign it to the RHS. minLeaseProposedTS ensures that if the LHS
+	// was not able to use its current lease because of a restart or lease
+	// transfer, the RHS will also not be able to. minValidObservedTS ensures that
+	// the bounds for uncertainty interval are preserved.
 	r.mu.RLock()
 	minLeaseProposedTS := r.mu.minLeaseProposedTS
+	minValidObservedTS := r.mu.minValidObservedTimestamp
 	r.mu.RUnlock()
 
 	// The right hand side of the split was already created (and its raftMu
@@ -248,8 +251,11 @@ func prepareRightReplicaForSplit(
 	}
 
 	// Copy the minLeaseProposedTS from the LHS. loadRaftMuLockedReplicaMuLocked
-	// has already assigned a value for this field; this will be overwrite it.
+	// has already assigned a value for this field; this will overwrite it.
 	rightRepl.mu.minLeaseProposedTS = minLeaseProposedTS
+
+	// Copy the minValidObservedTimestamp field from the LHS.
+	rightRepl.mu.minValidObservedTimestamp = minValidObservedTS
 
 	// Invoke the leasePostApplyLocked method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables the
