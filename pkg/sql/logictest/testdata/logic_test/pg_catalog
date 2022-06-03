@@ -2035,7 +2035,7 @@ oid         typname                                typcategory  typispreferred  
 90001       _geometry                              A            false           true          ,         0           90000    0
 90002       geography                              U            false           true          :         0           0        90003
 90003       _geography                             A            false           true          ,         0           90002    0
-90004       box2d                                  U            false           true          ;         0           0        90005
+90004       box2d                                  U            false           true          ,         0           0        90005
 90005       _box2d                                 A            false           true          ,         0           90004    0
 100110      t1                                     C            false           true          ,         110         0        0
 100111      t1_m_seq                               C            false           true          ,         111         0        0
