@@ -55,9 +55,9 @@ function makeNodesState(
   return store.getState();
 }
 
-describe("node data selectors", function() {
-  describe("display name by ID", function() {
-    it("display name is node id appended to address", function() {
+describe("node data selectors", function () {
+  describe("display name by ID", function () {
+    it("display name is node id appended to address", function () {
       const state: any = makeNodesState(
         { id: 1, address: "addressA" },
         { id: 2, address: "addressB" },
@@ -74,7 +74,7 @@ describe("node data selectors", function() {
       });
     });
 
-    it("generates unique names for re-used addresses", function() {
+    it("generates unique names for re-used addresses", function () {
       const state: any = makeNodesState(
         { id: 1, address: "addressA" },
         { id: 2, address: "addressB" },
@@ -97,7 +97,7 @@ describe("node data selectors", function() {
       });
     });
 
-    it("adds decommissioned flag to decommissioned nodes", function() {
+    it("adds decommissioned flag to decommissioned nodes", function () {
       const state: any = makeNodesState(
         {
           id: 1,
@@ -145,14 +145,14 @@ describe("node data selectors", function() {
       });
     });
 
-    it("returns empty collection for empty state", function() {
+    it("returns empty collection for empty state", function () {
       const store = createAdminUIStore(createHashHistory());
       assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
     });
   });
 
-  describe("store IDs by node ID", function() {
-    it("correctly creates storeID map", function() {
+  describe("store IDs by node ID", function () {
+    it("correctly creates storeID map", function () {
       const data = [
         {
           desc: { node_id: 1 },
@@ -220,7 +220,7 @@ describe("node data selectors", function() {
   });
 });
 
-describe("selectCommissionedNodeStatuses", function() {
+describe("selectCommissionedNodeStatuses", function () {
   const nodeStatuses: INodeStatus[] = [
     {
       desc: {
@@ -250,7 +250,7 @@ describe("selectCommissionedNodeStatuses", function() {
     };
   }
 
-  it("selects all nodes when liveness status missing", function() {
+  it("selects all nodes when liveness status missing", function () {
     const state = makeStateForLiveness({});
 
     const result = selectCommissionedNodeStatuses(state);
@@ -279,7 +279,7 @@ describe("selectCommissionedNodeStatuses", function() {
   ];
 
   testCases.forEach(([name, status, expected]) => {
-    it(name, function() {
+    it(name, function () {
       const state = makeStateForLiveness({ "1": status });
 
       const result = selectCommissionedNodeStatuses(state);
@@ -289,7 +289,7 @@ describe("selectCommissionedNodeStatuses", function() {
   });
 });
 
-describe("sumNodeStats", function() {
+describe("sumNodeStats", function () {
   // Each of these nodes only has half of its capacity "usable" for cockroach data.
   // See diagram for what these stats mean:
   // https://github.com/cockroachdb/cockroach/blob/31e4299ab73a43f539b1ba63ed86be5ee18685f6/pkg/storage/metrics.go#L145-L153
@@ -312,7 +312,7 @@ describe("sumNodeStats", function() {
     },
   ];
 
-  it("sums stats from an array of nodes", function() {
+  it("sums stats from an array of nodes", function () {
     const livenessStatusByNodeID: { [key: string]: LivenessStatus } = {
       1: LivenessStatus.NODE_STATUS_LIVE,
       2: LivenessStatus.NODE_STATUS_LIVE,

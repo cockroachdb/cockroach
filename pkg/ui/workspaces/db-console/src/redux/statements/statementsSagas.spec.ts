@@ -45,13 +45,12 @@ describe("statementsSagas", () => {
         minExecLatency,
         expiresAfter,
       );
-      const createDiagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest(
-        {
+      const createDiagnosticsReportRequest =
+        new CreateStatementDiagnosticsReportRequest({
           statement_fingerprint: statementFingerprint,
           min_execution_latency: minExecLatency,
           expires_after: expiresAfter,
-        },
-      );
+        });
 
       return expectSaga(createDiagnosticsReportSaga, action)
         .provide([
@@ -73,13 +72,12 @@ describe("statementsSagas", () => {
       minExecLatency,
       expiresAfter,
     );
-    const createDiagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest(
-      {
+    const createDiagnosticsReportRequest =
+      new CreateStatementDiagnosticsReportRequest({
         statement_fingerprint: statementFingerprint,
         min_execution_latency: minExecLatency,
         expires_after: expiresAfter,
-      },
-    );
+      });
 
     return expectSaga(createDiagnosticsReportSaga, action)
       .provide([
@@ -95,11 +93,10 @@ describe("statementsSagas", () => {
     it("calls api#cancelStatementDiagnosticsReport with the diagnostic request ID field as payload", () => {
       const requestID = Long.fromNumber(12345);
       const action = cancelStatementDiagnosticsReportAction(requestID);
-      const cancelDiagnosticsReportRequest = new CancelStatementDiagnosticsReportRequest(
-        {
+      const cancelDiagnosticsReportRequest =
+        new CancelStatementDiagnosticsReportRequest({
           request_id: requestID,
-        },
-      );
+        });
 
       return expectSaga(cancelDiagnosticsReportSaga, action)
         .provide([
@@ -118,11 +115,10 @@ describe("statementsSagas", () => {
   it("calls dispatched failed action if api#cancelStatementDiagnosticsReport request failed ", () => {
     const requestID = new Long(12345);
     const action = cancelStatementDiagnosticsReportAction(requestID);
-    const cancelDiagnosticsReportRequest = new CancelStatementDiagnosticsReportRequest(
-      {
+    const cancelDiagnosticsReportRequest =
+      new CancelStatementDiagnosticsReportRequest({
         request_id: requestID,
-      },
-    );
+      });
 
     return expectSaga(cancelDiagnosticsReportSaga, action)
       .provide([

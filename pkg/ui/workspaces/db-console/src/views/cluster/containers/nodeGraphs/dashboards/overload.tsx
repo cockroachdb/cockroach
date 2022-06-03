@@ -21,7 +21,7 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources } = props;
 
   return [

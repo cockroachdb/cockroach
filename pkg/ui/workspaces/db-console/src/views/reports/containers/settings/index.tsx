@@ -29,9 +29,7 @@ import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface SettingsOwnProps {
-  settings: CachedDataReducerState<
-    protos.cockroach.server.serverpb.SettingsResponse
-  >;
+  settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
   refreshSettings: typeof refreshSettings;
 }
 

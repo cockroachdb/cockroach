@@ -36,9 +36,11 @@ import {
   selectNodeRequestStatus,
 } from "src/redux/nodes";
 
-type DataDistributionResponse = cockroach.server.serverpb.DataDistributionResponse;
+type DataDistributionResponse =
+  cockroach.server.serverpb.DataDistributionResponse;
 type NodeDescriptor = cockroach.roachpb.INodeDescriptor;
-type ZoneConfig$Properties = cockroach.server.serverpb.DataDistributionResponse.IZoneConfig;
+type ZoneConfig$Properties =
+  cockroach.server.serverpb.DataDistributionResponse.IZoneConfig;
 
 const ZONE_CONFIG_TEXT = (
   <span>
@@ -157,9 +159,7 @@ interface DataDistributionPageProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-export class DataDistributionPage extends React.Component<
-  DataDistributionPageProps
-> {
+export class DataDistributionPage extends React.Component<DataDistributionPageProps> {
   componentDidMount() {
     this.props.refreshDataDistribution();
     this.props.refreshNodes();
