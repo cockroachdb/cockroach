@@ -23,7 +23,7 @@ import {
   PaginatedCachedDataReducerState,
 } from "./cachedDataReducer";
 
-describe("basic cachedDataReducer", function() {
+describe("basic cachedDataReducer", function () {
   class Request {
     constructor(public request: string) {}
   }
@@ -38,30 +38,30 @@ describe("basic cachedDataReducer", function() {
 
   let expected: CachedDataReducerState<Response>;
 
-  describe("reducerObj", function() {
+  describe("reducerObj", function () {
     const actionNamespace = "test";
     const testReducerObj = new CachedDataReducer<Request, Response>(
       apiEndpointMock,
       actionNamespace,
     );
 
-    describe("actions", function() {
-      it("requestData() creates the correct action type.", function() {
+    describe("actions", function () {
+      it("requestData() creates the correct action type.", function () {
         assert.equal(testReducerObj.requestData().type, testReducerObj.REQUEST);
       });
 
-      it("receiveData() creates the correct action type.", function() {
+      it("receiveData() creates the correct action type.", function () {
         assert.equal(
           testReducerObj.receiveData(null).type,
           testReducerObj.RECEIVE,
         );
       });
 
-      it("errorData() creates the correct action type.", function() {
+      it("errorData() creates the correct action type.", function () {
         assert.equal(testReducerObj.errorData(null).type, testReducerObj.ERROR);
       });
 
-      it("invalidateData() creates the correct action type.", function() {
+      it("invalidateData() creates the correct action type.", function () {
         assert.equal(
           testReducerObj.invalidateData().type,
           testReducerObj.INVALIDATE,
@@ -73,18 +73,18 @@ describe("basic cachedDataReducer", function() {
     const testMoment = moment();
     testReducerObj.setTimeSource(() => testMoment);
 
-    describe("reducer", function() {
+    describe("reducer", function () {
       let state: CachedDataReducerState<Response>;
       beforeEach(() => {
         state = reducer(undefined, { type: "unknown" });
       });
 
-      it("should have the correct default value.", function() {
+      it("should have the correct default value.", function () {
         expected = new CachedDataReducerState<Response>();
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch requestData", function() {
+      it("should correctly dispatch requestData", function () {
         state = reducer(state, testReducerObj.requestData());
         expected = new CachedDataReducerState<Response>();
         expected.inFlight = true;
@@ -92,7 +92,7 @@ describe("basic cachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch receiveData", function() {
+      it("should correctly dispatch receiveData", function () {
         const expectedResponse = new Response(null);
         state = reducer(
           state,
@@ -106,7 +106,7 @@ describe("basic cachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch errorData", function() {
+      it("should correctly dispatch errorData", function () {
         const e = new Error();
 
         state = reducer(state, testReducerObj.errorData(e, null));
@@ -115,14 +115,14 @@ describe("basic cachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch invalidateData", function() {
+      it("should correctly dispatch invalidateData", function () {
         state = reducer(state, testReducerObj.invalidateData());
         expected = new CachedDataReducerState<Response>();
         assert.deepEqual(state, expected);
       });
     });
 
-    describe("refresh", function() {
+    describe("refresh", function () {
       let state: {
         cachedData: {
           test: CachedDataReducerState<Response>;
@@ -137,7 +137,7 @@ describe("basic cachedDataReducer", function() {
         return undefined;
       };
 
-      it("correctly dispatches refresh", function() {
+      it("correctly dispatches refresh", function () {
         state = {
           cachedData: {
             test: new CachedDataReducerState<Response>(),
@@ -165,8 +165,8 @@ describe("basic cachedDataReducer", function() {
     });
   });
 
-  describe("multiple reducer objects", function() {
-    it("should throw an error if the same actionNamespace is used twice", function() {
+  describe("multiple reducer objects", function () {
+    it("should throw an error if the same actionNamespace is used twice", function () {
       new CachedDataReducer<Request, Response>(
         apiEndpointMock,
         "duplicatenamespace",
@@ -187,7 +187,7 @@ describe("basic cachedDataReducer", function() {
   });
 });
 
-describe("keyed cachedDataReducer", function() {
+describe("keyed cachedDataReducer", function () {
   class Request {
     constructor(public request: string) {}
   }
@@ -204,7 +204,7 @@ describe("keyed cachedDataReducer", function() {
 
   let expected: KeyedCachedDataReducerState<Response>;
 
-  describe("reducerObj", function() {
+  describe("reducerObj", function () {
     const actionNamespace = "keyedTest";
     const testReducerObj = new KeyedCachedDataReducer<Request, Response>(
       apiEndpointMock,
@@ -212,12 +212,11 @@ describe("keyed cachedDataReducer", function() {
       requestToID,
     );
 
-    describe("actions", function() {
-      it("requestData() creates the correct action type.", function() {
+    describe("actions", function () {
+      it("requestData() creates the correct action type.", function () {
         const request = new Request("testRequestRequest");
-        const requestAction = testReducerObj.cachedDataReducer.requestData(
-          request,
-        );
+        const requestAction =
+          testReducerObj.cachedDataReducer.requestData(request);
         assert.equal(
           requestAction.type,
           testReducerObj.cachedDataReducer.REQUEST,
@@ -225,7 +224,7 @@ describe("keyed cachedDataReducer", function() {
         assert.deepEqual(requestAction.payload, { request });
       });
 
-      it("receiveData() creates the correct action type.", function() {
+      it("receiveData() creates the correct action type.", function () {
         const response = new Response("testResponse");
         const request = new Request("testResponseRequest");
         const receiveAction = testReducerObj.cachedDataReducer.receiveData(
@@ -239,7 +238,7 @@ describe("keyed cachedDataReducer", function() {
         assert.deepEqual(receiveAction.payload, { request, data: response });
       });
 
-      it("errorData() creates the correct action type.", function() {
+      it("errorData() creates the correct action type.", function () {
         const error = new Error();
         const request = new Request("testErrorRequest");
         const errorAction = testReducerObj.cachedDataReducer.errorData(
@@ -250,11 +249,10 @@ describe("keyed cachedDataReducer", function() {
         assert.deepEqual(errorAction.payload, { request, data: error });
       });
 
-      it("invalidateData() creates the correct action type.", function() {
+      it("invalidateData() creates the correct action type.", function () {
         const request = new Request("testInvalidateRequest");
-        const invalidateAction = testReducerObj.cachedDataReducer.invalidateData(
-          request,
-        );
+        const invalidateAction =
+          testReducerObj.cachedDataReducer.invalidateData(request);
         assert.equal(
           invalidateAction.type,
           testReducerObj.cachedDataReducer.INVALIDATE,
@@ -267,7 +265,7 @@ describe("keyed cachedDataReducer", function() {
     const testMoment = moment();
     testReducerObj.setTimeSource(() => testMoment);
 
-    describe("keyed reducer", function() {
+    describe("keyed reducer", function () {
       let state: KeyedCachedDataReducerState<Response>;
       let id: string;
       let request: Request;
@@ -277,12 +275,12 @@ describe("keyed cachedDataReducer", function() {
         request = new Request(id);
       });
 
-      it("should have the correct default value.", function() {
+      it("should have the correct default value.", function () {
         expected = new KeyedCachedDataReducerState<Response>();
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch requestData", function() {
+      it("should correctly dispatch requestData", function () {
         state = reducer(
           state,
           testReducerObj.cachedDataReducer.requestData(request),
@@ -294,7 +292,7 @@ describe("keyed cachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch receiveData", function() {
+      it("should correctly dispatch receiveData", function () {
         const expectedResponse = new Response(null);
 
         state = reducer(
@@ -313,7 +311,7 @@ describe("keyed cachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch errorData", function() {
+      it("should correctly dispatch errorData", function () {
         const e = new Error();
 
         state = reducer(
@@ -326,7 +324,7 @@ describe("keyed cachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch invalidateData", function() {
+      it("should correctly dispatch invalidateData", function () {
         state = reducer(
           state,
           testReducerObj.cachedDataReducer.invalidateData(request),
@@ -339,7 +337,7 @@ describe("keyed cachedDataReducer", function() {
   });
 });
 
-describe("PaginatedCachedDataReducer", function() {
+describe("PaginatedCachedDataReducer", function () {
   class Request implements WithPaginationRequest {
     constructor(
       public request: string,
@@ -376,7 +374,7 @@ describe("PaginatedCachedDataReducer", function() {
 
   let expected: PaginatedCachedDataReducerState<Response>;
 
-  describe("reducerObj", function() {
+  describe("reducerObj", function () {
     const actionNamespace = "paginatedKey";
     const totalPagesNum = 5;
     const testReducerObj = new PaginatedCachedDataReducer<Request, Response>(
@@ -385,12 +383,11 @@ describe("PaginatedCachedDataReducer", function() {
       requestToID,
     );
 
-    describe("actions", function() {
-      it("requestData() creates the correct action type.", function() {
+    describe("actions", function () {
+      it("requestData() creates the correct action type.", function () {
         const request = new Request("testRequestRequest", undefined, undefined);
-        const requestAction = testReducerObj.cachedDataReducer.requestData(
-          request,
-        );
+        const requestAction =
+          testReducerObj.cachedDataReducer.requestData(request);
         assert.equal(
           requestAction.type,
           testReducerObj.cachedDataReducer.REQUEST,
@@ -398,7 +395,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(requestAction.payload, { request });
       });
 
-      it("receiveData() creates the correct action type.", function() {
+      it("receiveData() creates the correct action type.", function () {
         const response = new Response("testResponse", "1");
         const request = new Request("testRequestRequest", 5, undefined);
         const receiveAction = testReducerObj.cachedDataReducer.receiveData(
@@ -412,7 +409,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(receiveAction.payload, { request, data: response });
       });
 
-      it("errorData() creates the correct action type.", function() {
+      it("errorData() creates the correct action type.", function () {
         const error = new Error();
         const request = new Request("testRequestRequest", 5, undefined);
         const errorAction = testReducerObj.cachedDataReducer.errorData(
@@ -423,11 +420,10 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(errorAction.payload, { request, data: error });
       });
 
-      it("invalidateData() creates the correct action type.", function() {
+      it("invalidateData() creates the correct action type.", function () {
         const request = new Request("testRequestRequest", 5, undefined);
-        const invalidateAction = testReducerObj.cachedDataReducer.invalidateData(
-          request,
-        );
+        const invalidateAction =
+          testReducerObj.cachedDataReducer.invalidateData(request);
         assert.equal(
           invalidateAction.type,
           testReducerObj.cachedDataReducer.INVALIDATE,
@@ -440,7 +436,7 @@ describe("PaginatedCachedDataReducer", function() {
     const testMoment = moment();
     testReducerObj.setTimeSource(() => testMoment);
 
-    describe("paginated reducer", function() {
+    describe("paginated reducer", function () {
       let state: PaginatedCachedDataReducerState<Response>;
       let id: string;
       let request: Request;
@@ -450,12 +446,12 @@ describe("PaginatedCachedDataReducer", function() {
         request = new Request(id, 10, id);
       });
 
-      it("should have the correct default value.", function() {
+      it("should have the correct default value.", function () {
         expected = new PaginatedCachedDataReducerState<Response>();
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch requestData", function() {
+      it("should correctly dispatch requestData", function () {
         state = reducer(
           state,
           testReducerObj.cachedDataReducer.requestData(request),
@@ -466,7 +462,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch receiveData", function() {
+      it("should correctly dispatch receiveData", function () {
         const expectedResponse = new Response(null, "1");
 
         state = reducer(
@@ -485,7 +481,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch errorData", function() {
+      it("should correctly dispatch errorData", function () {
         const e = new Error();
         state = reducer(
           state,
@@ -496,7 +492,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch invalidateData", function() {
+      it("should correctly dispatch invalidateData", function () {
         state = reducer(
           state,
           testReducerObj.cachedDataReducer.invalidateData(request),
@@ -506,7 +502,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch cleanData", function() {
+      it("should correctly dispatch cleanData", function () {
         state = reducer(state, testReducerObj.clearData(request));
         expected = new PaginatedCachedDataReducerState<Response>();
         expected.data = {};
@@ -518,7 +514,7 @@ describe("PaginatedCachedDataReducer", function() {
         assert.deepEqual(state, expected);
       });
 
-      it("should correctly dispatch receiveCompleted", function() {
+      it("should correctly dispatch receiveCompleted", function () {
         state = reducer(state, testReducerObj.receiveCompleted(request));
         expected = new PaginatedCachedDataReducerState<Response>();
         expected.valid = true;
@@ -529,7 +525,7 @@ describe("PaginatedCachedDataReducer", function() {
       });
     });
 
-    describe("refresh", function() {
+    describe("refresh", function () {
       let state: PaginatedCachedDataReducerState<Response>;
       let id: string;
       let request: Request;
@@ -545,7 +541,7 @@ describe("PaginatedCachedDataReducer", function() {
         return undefined;
       };
 
-      it("correctly dispatches refresh", function() {
+      it("correctly dispatches refresh", function () {
         const pageState = new PaginatedCachedDataReducerState<Response>();
         pageState.valid = true;
         pageState.lastError = null;

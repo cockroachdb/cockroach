@@ -59,9 +59,8 @@ const HotRangesPage = () => {
     );
   }, [dispatch]);
 
-  const [filteredHotRanges, setFilteredHotRanges] = useState<HotRange[]>(
-    hotRanges,
-  );
+  const [filteredHotRanges, setFilteredHotRanges] =
+    useState<HotRange[]>(hotRanges);
 
   const clearButtonRef = useRef<HTMLSpanElement>();
 

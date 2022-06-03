@@ -56,163 +56,162 @@ const HotRangesTable = ({
     columnTitle: "qps",
   });
 
-  const columns: ColumnDescriptor<
-    cockroach.server.serverpb.HotRangesResponseV2.IHotRange
-  >[] = [
-    {
-      name: "rangeId",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title={
-            <span>
-              The internal ID of the hot range. Click the range ID to view the{" "}
-              <Anchor href={uiDebugPages} className={cx("light-anchor")}>
-                range report
-              </Anchor>{" "}
-              for this range.
-            </span>
-          }
-        >
-          Range ID
-        </Tooltip>
-      ),
-      cell: (val: cockroach.server.serverpb.HotRangesResponseV2.IHotRange) => (
-        <Link to={`/reports/range/${val.range_id}`}>{val.range_id}</Link>
-      ),
-      sort: val => val.range_id,
-    },
-    {
-      name: "qps",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The total number of `SELECT`, `UPDATE`, `INSERT`, and `DELETE` queries
+  const columns: ColumnDescriptor<cockroach.server.serverpb.HotRangesResponseV2.IHotRange>[] =
+    [
+      {
+        name: "rangeId",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title={
+              <span>
+                The internal ID of the hot range. Click the range ID to view the{" "}
+                <Anchor href={uiDebugPages} className={cx("light-anchor")}>
+                  range report
+                </Anchor>{" "}
+                for this range.
+              </span>
+            }
+          >
+            Range ID
+          </Tooltip>
+        ),
+        cell: (
+          val: cockroach.server.serverpb.HotRangesResponseV2.IHotRange,
+        ) => <Link to={`/reports/range/${val.range_id}`}>{val.range_id}</Link>,
+        sort: val => val.range_id,
+      },
+      {
+        name: "qps",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of `SELECT`, `UPDATE`, `INSERT`, and `DELETE` queries
           executed per second on this range."
-        >
-          QPS
-        </Tooltip>
-      ),
-      cell: val => <>{round(val.qps, 2)}</>,
-      sort: val => val.qps,
-    },
-    {
-      name: "nodes",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The ID of each node where the range data is found."
-        >
-          Nodes
-        </Tooltip>
-      ),
-      cell: val => (
-        <>
-          {val.replica_node_ids.map((nodeId, idx, arr) => (
-            <Link to={`/node/${nodeId}`}>
-              {nodeId}
-              {idx < arr.length - 1 && ", "}
-            </Link>
-          ))}
-        </>
-      ),
-      sort: val => val.replica_node_ids[0],
-    },
+          >
+            QPS
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.qps, 2)}</>,
+        sort: val => val.qps,
+      },
+      {
+        name: "nodes",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The ID of each node where the range data is found."
+          >
+            Nodes
+          </Tooltip>
+        ),
+        cell: val => (
+          <>
+            {val.replica_node_ids.map((nodeId, idx, arr) => (
+              <Link to={`/node/${nodeId}`}>
+                {nodeId}
+                {idx < arr.length - 1 && ", "}
+              </Link>
+            ))}
+          </>
+        ),
+        sort: val => val.replica_node_ids[0],
+      },
 
-    {
-      name: "storeId",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The internal ID of the store where the range data is found."
-        >
-          Store ID
-        </Tooltip>
-      ),
-      cell: val => <>{val.store_id}</>,
-      sort: val => val.store_id,
-    },
-    {
-      name: "leasholder",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title={
-            <span>
-              The internal ID of the node that has the{" "}
-              <Anchor
-                href={readsAndWritesOverviewPage}
-                className={cx("light-anchor")}
-              >
-                range lease
-              </Anchor>
-              .
-            </span>
-          }
-        >
-          Leaseholder
-        </Tooltip>
-      ),
-      cell: val => <>{val.leaseholder_node_id}</>,
-      sort: val => val.leaseholder_node_id,
-    },
-    {
-      name: "database",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="Name of the database where the range data is found."
-        >
-          Database
-        </Tooltip>
-      ),
-      cell: val => <>{val.database_name}</>,
-      sort: val => val.database_name,
-    },
-    {
-      name: "table",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="Name of the table where the range data is found."
-        >
-          Table
-        </Tooltip>
-      ),
-      cell: val => (
-        <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
-          {val.table_name}
-        </Link>
-      ),
-      sort: val => val.table_name,
-    },
-    {
-      name: "index",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="Name of the index where the range data is indexed, if applicable."
-        >
-          Index
-        </Tooltip>
-      ),
-      cell: val => <>{val.index_name}</>,
-      sort: val => val.index_name,
-    },
-    {
-      name: "locality",
-      title: (
-        <Tooltip
-          placement="bottom"
-          title="The locality of the node where the range data is found."
-        >
-          Locality
-        </Tooltip>
-      ),
-      cell: val => <>{nodeIdToLocalityMap.get(val.node_id)}</>,
-      sort: val => nodeIdToLocalityMap.get(val.node_id),
-    },
-  ];
+      {
+        name: "storeId",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The internal ID of the store where the range data is found."
+          >
+            Store ID
+          </Tooltip>
+        ),
+        cell: val => <>{val.store_id}</>,
+        sort: val => val.store_id,
+      },
+      {
+        name: "leasholder",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title={
+              <span>
+                The internal ID of the node that has the{" "}
+                <Anchor
+                  href={readsAndWritesOverviewPage}
+                  className={cx("light-anchor")}
+                >
+                  range lease
+                </Anchor>
+                .
+              </span>
+            }
+          >
+            Leaseholder
+          </Tooltip>
+        ),
+        cell: val => <>{val.leaseholder_node_id}</>,
+        sort: val => val.leaseholder_node_id,
+      },
+      {
+        name: "database",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Name of the database where the range data is found."
+          >
+            Database
+          </Tooltip>
+        ),
+        cell: val => <>{val.database_name}</>,
+        sort: val => val.database_name,
+      },
+      {
+        name: "table",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Name of the table where the range data is found."
+          >
+            Table
+          </Tooltip>
+        ),
+        cell: val => (
+          <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
+            {val.table_name}
+          </Link>
+        ),
+        sort: val => val.table_name,
+      },
+      {
+        name: "index",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="Name of the index where the range data is indexed, if applicable."
+          >
+            Index
+          </Tooltip>
+        ),
+        cell: val => <>{val.index_name}</>,
+        sort: val => val.index_name,
+      },
+      {
+        name: "locality",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The locality of the node where the range data is found."
+          >
+            Locality
+          </Tooltip>
+        ),
+        cell: val => <>{nodeIdToLocalityMap.get(val.node_id)}</>,
+        sort: val => nodeIdToLocalityMap.get(val.node_id),
+      },
+    ];
 
   return (
     <div className="section">

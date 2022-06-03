@@ -38,8 +38,8 @@ function makeStateWithLocalities(localities: LocalityTier[][]) {
   };
 }
 
-describe("selectLocalityTree", function() {
-  it("puts nodes without locality at the top-level", function() {
+describe("selectLocalityTree", function () {
+  it("puts nodes without locality at the top-level", function () {
     const state = makeStateWithLocalities([[]]);
 
     const tree = selectLocalityTree(state);
@@ -50,7 +50,7 @@ describe("selectLocalityTree", function() {
     assert.lengthOf(tree.nodes, 1);
   });
 
-  it("organizes nodes by locality", function() {
+  it("organizes nodes by locality", function () {
     const state = makeStateWithLocalities([
       [{ key: "region", value: "us-east-1" }],
       [{ key: "region", value: "us-east-2" }],
@@ -82,8 +82,8 @@ describe("selectLocalityTree", function() {
   });
 });
 
-describe("selectNodeLocalities", function() {
-  it("should return map of nodes with localities", function() {
+describe("selectNodeLocalities", function () {
+  it("should return map of nodes with localities", function () {
     const localities = [
       [
         { key: "region", value: "us-east-1" },
@@ -100,7 +100,7 @@ describe("selectNodeLocalities", function() {
     });
   });
 
-  it("should return empty map if no locality is provided", function() {
+  it("should return empty map if no locality is provided", function () {
     const state = makeStateWithLocalities([]);
     const result = selectNodeLocalities.resultFunc(state.cachedData.nodes.data);
     assert.equal(result.size, 0);

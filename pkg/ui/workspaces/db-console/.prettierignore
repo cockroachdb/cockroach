@@ -1,0 +1,3 @@
+# Ignore protobuf client
+src/js
+ccl/src/js

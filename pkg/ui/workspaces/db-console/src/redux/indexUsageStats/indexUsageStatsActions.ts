@@ -15,7 +15,7 @@ export const RESET_INDEX_USAGE_STATS =
   "cockroachui/indexUsageStats/RESET_INDEX_USAGE_STATS";
 export const RESET_INDEX_USAGE_STATS_COMPLETE =
   "cockroachui/indexUsageStats/RESET_INDEX_USAGE_STATS_COMPLETE";
-"cockroachui/indexUsageStats/RESET_INDEX_USAGE_STATS_COMPLETE";
+("cockroachui/indexUsageStats/RESET_INDEX_USAGE_STATS_COMPLETE");
 export const RESET_INDEX_USAGE_STATS_FAILED =
   "cockroachui/indexUsageStats/RESET_INDEX_USAGE_STATS_FAILED";
 

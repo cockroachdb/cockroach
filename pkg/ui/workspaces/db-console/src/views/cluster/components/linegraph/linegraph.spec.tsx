@@ -28,7 +28,7 @@ import {
 import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import Long from "long";
 
-describe("<LineGraph>", function() {
+describe("<LineGraph>", function () {
   let spy: sinon.SinonSpy;
   let mockProps: LineGraphProps;
   const linegraph = (props: LineGraphProps) =>
@@ -87,7 +87,7 @@ describe("<LineGraph>", function() {
       ...mockProps,
       history: { ...mockProps.history, push: spy },
     });
-    const instance = (wrapper.instance() as any) as LineGraph;
+    const instance = wrapper.instance() as any as LineGraph;
     instance.setNewTimeRange(111111, 222222);
     assert.isTrue(
       spy.calledWith({ pathname: "", search: "start=111&end=222" }),
@@ -96,7 +96,7 @@ describe("<LineGraph>", function() {
 
   it("should set a new chart on update", () => {
     const wrapper = linegraph({ ...mockProps });
-    const instance = (wrapper.instance() as any) as LineGraph;
+    const instance = wrapper.instance() as any as LineGraph;
     wrapper.setProps({
       data: {
         results: [
@@ -125,7 +125,7 @@ describe("<LineGraph>", function() {
       ...mockProps,
       data: { results: [{}], toJSON: sinon.spy },
     });
-    const instance = (wrapper.instance() as unknown) as LineGraph;
+    const instance = wrapper.instance() as unknown as LineGraph;
     const mockFn = sinon.spy();
     const mockMetrics = [
       {
@@ -143,7 +143,8 @@ describe("<LineGraph>", function() {
       _owner: {},
       _store: { validated: false },
     };
-    const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
+    const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse =
+      new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
     const resultDatapoints = _.flatMap(mockData.results, result =>
       result.datapoints.map(dp => dp.value),
     );

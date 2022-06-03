@@ -88,9 +88,8 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
   );
   const [filterTableName, setFilterTableName] = useState<string>();
   const [filterIndexName, setFilterIndexName] = useState<string>();
-  const [filterLocalities, setFilterLocalities] = useState<
-    FilterCheckboxOptionsType
-  >([]);
+  const [filterLocalities, setFilterLocalities] =
+    useState<FilterCheckboxOptionsType>([]);
 
   // stagedFilteredHotRanges preserves intermediate filters states that are selected but
   // is not Applied yet.

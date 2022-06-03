@@ -21,7 +21,7 @@ import {
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
 
   return [

@@ -16,7 +16,7 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import { GraphDashboardProps } from "./dashboardUtils";
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { storeSources } = props;
 
   return [

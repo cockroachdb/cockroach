@@ -155,9 +155,8 @@ class MetricsDataProvider extends React.Component<
     ({ children }: MetricsDataProviderProps) => children,
     children => {
       // MetricsDataProvider should contain only one direct child.
-      const child: React.ReactElement<MetricsDataComponentProps> = React.Children.only(
-        this.props.children,
-      );
+      const child: React.ReactElement<MetricsDataComponentProps> =
+        React.Children.only(this.props.children);
       // Perform a simple DFS to find all children which are Metric objects.
       const selectors: React.ReactElement<MetricProps>[] = findChildrenOfType(
         children,
@@ -279,12 +278,7 @@ const current = () => {
   now = moment(Math.floor(now.valueOf() / 10000) * 10000);
   return {
     start: Long.fromNumber(
-      util.MilliToNano(
-        now
-          .clone()
-          .subtract(30, "s")
-          .valueOf(),
-      ),
+      util.MilliToNano(now.clone().subtract(30, "s").valueOf()),
     ),
     end: Long.fromNumber(util.MilliToNano(now.valueOf())),
     sampleDuration: Long.fromNumber(

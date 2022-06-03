@@ -35,11 +35,8 @@ import {
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
 
-const {
-  DatabaseDetailsRequest,
-  TableDetailsRequest,
-  TableStatsRequest,
-} = cockroach.server.serverpb;
+const { DatabaseDetailsRequest, TableDetailsRequest, TableStatsRequest } =
+  cockroach.server.serverpb;
 
 function normalizeRoles(raw: string[]): string[] {
   const rolePrecedence: Record<string, number> = {

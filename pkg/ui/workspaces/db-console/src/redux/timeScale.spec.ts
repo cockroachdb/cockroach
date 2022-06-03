@@ -13,9 +13,9 @@ import { defaultTimeScaleOptions } from "@cockroachlabs/cluster-ui";
 import * as timeScale from "./timeScale";
 import moment from "moment";
 
-describe("time scale reducer", function() {
-  describe("actions", function() {
-    it("should create the correct SET_METRICS_MOVING_WINDOW action to set the current time window", function() {
+describe("time scale reducer", function () {
+  describe("actions", function () {
+    it("should create the correct SET_METRICS_MOVING_WINDOW action to set the current time window", function () {
       const start = moment();
       const end = start.add(10, "s");
       const expectedSetting = {
@@ -31,7 +31,7 @@ describe("time scale reducer", function() {
       );
     });
 
-    it("should create the correct SET_SCALE action to set time window settings", function() {
+    it("should create the correct SET_SCALE action to set time window settings", function () {
       const payload: timeScale.TimeScale = {
         windowSize: moment.duration(10, "s"),
         windowValid: moment.duration(10, "s"),
