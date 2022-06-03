@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"sort"
 	"sync"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -500,12 +499,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		//}
 
 		r := singleRangeBatch{
-			reqs:              singleRangeReqs,
-			positions:         positions,
-			subRequestIdx:     subRequestIdx,
-			reqsReservedBytes: requestsMemUsage(singleRangeReqs),
+			reqs:                 singleRangeReqs,
+			positions:            positions,
+			subRequestIdx:        subRequestIdx,
+			reqsReservedBytes:    requestsMemUsage(singleRangeReqs),
+			overheadAccountedFor: roachpb.RequestUnionSize * int64(cap(singleRangeReqs)),
 		}
-		totalReqsMemUsage += r.reqsReservedBytes
+		totalReqsMemUsage += r.reqsReservedBytes + r.overheadAccountedFor
 
 		if s.mode == OutOfOrder {
 			// Sort all single-range requests to be in the key order.
@@ -1083,6 +1083,12 @@ func (w *workerCoordinator) performRequestAsync(
 			// non-empty responses as well as resume spans, if any.
 			respOverestimate := targetBytes - memoryFootprintBytes
 			reqOveraccounted := req.reqsReservedBytes - resumeReqsMemUsage
+			if resumeReqsMemUsage == 0 {
+				// There will be no resume request, so we will lose the
+				// reference to the req.reqs slice and can release its memory
+				// reservation.
+				reqOveraccounted += req.overheadAccountedFor
+			}
 			overaccountedTotal := respOverestimate + reqOveraccounted
 			if overaccountedTotal >= 0 {
 				w.s.budget.release(ctx, overaccountedTotal)
@@ -1206,9 +1212,6 @@ func calculateFootprint(
 			}
 		}
 	}
-	// This addendum is the first step of requestsMemUsage() and we've already
-	// added the size of each resume request above.
-	resumeReqsMemUsage += requestUnionOverhead * int64(numIncompleteGets+numIncompleteScans)
 	return memoryFootprintBytes, resumeReqsMemUsage, numIncompleteGets, numIncompleteScans
 }
 
@@ -1229,14 +1232,15 @@ func (w *workerCoordinator) processSingleRangeResults(
 ) error {
 	numIncompleteRequests := numIncompleteGets + numIncompleteScans
 	var resumeReq singleRangeBatch
-	// We have to allocate the new slice for requests, but we can reuse the
-	// positions slice.
-	resumeReq.reqs = make([]roachpb.RequestUnion, numIncompleteRequests)
+	// We have to allocate the new Get and Scan requests, but we can reuse the
+	// reqs and the positions slices.
+	resumeReq.reqs = req.reqs[:numIncompleteRequests]
 	resumeReq.positions = req.positions[:0]
 	resumeReq.subRequestIdx = req.subRequestIdx[:0]
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
 	resumeReq.reqsReservedBytes = resumeReqsMemUsage
+	resumeReq.overheadAccountedFor = req.overheadAccountedFor
 	gets := make([]struct {
 		req   roachpb.GetRequest
 		union roachpb.RequestUnion_Get
@@ -1408,7 +1412,14 @@ func (w *workerCoordinator) processSingleRangeResults(
 
 	// If we have any incomplete requests, add them back into the work
 	// pool.
-	if len(resumeReq.reqs) > 0 {
+	if numIncompleteRequests > 0 {
+		// Make to sure to nil out old requests that we didn't include into the
+		// resume request. We don't have to do this if there aren't any
+		// incomplete requests since req and resumeReq will be garbage collected
+		// on their own.
+		for i := numIncompleteRequests; i < len(req.reqs); i++ {
+			req.reqs[i] = roachpb.RequestUnion{}
+		}
 		w.s.requestsToServe.add(resumeReq)
 	}
 
@@ -1495,12 +1506,7 @@ func init() {
 	zeroInt32Slice = make([]int32, 1<<10)
 }
 
-const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
-
-func requestsMemUsage(reqs []roachpb.RequestUnion) int64 {
-	// RequestUnion.Size() ignores the overhead of RequestUnion object, so we'll
-	// account for it separately first.
-	memUsage := requestUnionOverhead * int64(cap(reqs))
+func requestsMemUsage(reqs []roachpb.RequestUnion) (memUsage int64) {
 	// No need to account for elements past len(reqs) because those must be
 	// unset and we have already accounted for RequestUnion object above.
 	for _, r := range reqs {
