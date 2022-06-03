@@ -239,6 +239,9 @@ create_default_user() {
   # Check if the username specified in COCKROACH_USER already exists.
   # If not, create a new user.
   if [[ -z $(user_already_exists "$COCKROACH_USER") ]]; then
+    $cockroach_entrypoint cert create-client --certs-dir="$certs_dir" \
+    --ca-key="$certs_dir"/ca.key "$COCKROACH_USER"
+    echo "==== create key for new user $COCKROACH_USER ===="
     # Create a new user with the given name.
     local create_user_query="CREATE USER "$COCKROACH_USER""
     if [[ -n "$COCKROACH_PASSWORD" ]]; then
