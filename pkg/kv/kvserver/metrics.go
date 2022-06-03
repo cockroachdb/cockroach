@@ -1440,6 +1440,20 @@ Replicas in this state will fail-fast all inbound requests.
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	// Replica read batch evaluation
+	metaReplicaReadBatchEvaluationLatency = metric.Metadata{
+		Name:        "kv.replica_read_batch_evaluate.latency",
+		Help:        "Execution duration for read batch evaluation.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	// Replica write batch evaluation
+	metaReplicaWriteBatchEvaluationLatency = metric.Metadata{
+		Name:        "kv.replica_write_batch_evaluate.latency",
+		Help:        "Execution duration for read batch evaluation.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1700,6 +1714,10 @@ type StoreMetrics struct {
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
 	ReplicaCircuitBreakerCumTripped *metric.Counter
+
+	// Replica batch evaluation metrics
+	ReplicaReadBatchEvaluationLatency  *metric.Histogram
+	ReplicaWriteBatchEvaluationLatency *metric.Histogram
 }
 
 type tenantMetricsRef struct {
@@ -2170,6 +2188,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Replica circuit breaker.
 		ReplicaCircuitBreakerCurTripped: metric.NewGauge(metaReplicaCircuitBreakerCurTripped),
 		ReplicaCircuitBreakerCumTripped: metric.NewCounter(metaReplicaCircuitBreakerCumTripped),
+
+		// Replica batch evaluation
+		ReplicaReadBatchEvaluationLatency:  metric.NewLatency(metaReplicaReadBatchEvaluationLatency, histogramWindow),
+		ReplicaWriteBatchEvaluationLatency: metric.NewLatency(metaReplicaWriteBatchEvaluationLatency, histogramWindow),
 	}
 
 	{

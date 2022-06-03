@@ -181,8 +181,9 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
-	br, result, pErr :=
+	br, result, evalStats, pErr :=
 		evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* st */, uncertainty.Interval{}, true /* readOnly */)
+	r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(evalStats.duration.Nanoseconds())
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
@@ -227,9 +228,10 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
-	br, result, pErr := evaluateBatch(
+	br, result, evalStats, pErr := evaluateBatch(
 		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* st */, uncertainty.Interval{}, true, /* readOnly */
 	)
+	r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(evalStats.duration.Nanoseconds())
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}

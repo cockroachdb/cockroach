@@ -674,7 +674,7 @@ func TestEvaluateBatch(t *testing.T) {
 
 			var r resp
 			r.d = d
-			r.br, r.res, r.pErr = evaluateBatch(
+			r.br, r.res, _, r.pErr = evaluateBatch(
 				ctx,
 				d.idKey,
 				d.eng,

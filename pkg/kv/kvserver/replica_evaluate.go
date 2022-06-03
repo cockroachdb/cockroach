@@ -13,6 +13,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
@@ -139,6 +141,11 @@ func optimizePuts(
 	return reqs
 }
 
+type evalBatchStats struct {
+	// execution duration of evaluateBatch function
+	duration time.Duration
+}
+
 // evaluateBatch evaluates a batch request by splitting it up into its
 // individual commands, passing them to evaluateCommand, and combining
 // the results.
@@ -152,8 +159,7 @@ func evaluateBatch(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	readOnly bool,
-) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
-
+) (_ *roachpb.BatchResponse, _ result.Result, stats evalBatchStats, retErr *roachpb.Error) {
 	defer func() {
 		// Ensure that errors don't carry the WriteTooOld flag set. The client
 		// handles non-error responses with the WriteTooOld flag set, and errors
@@ -162,6 +168,10 @@ func evaluateBatch(
 			retErr.GetTxn().WriteTooOld = false
 		}
 	}()
+
+	defer func(start time.Time) {
+		stats.duration = timeutil.Since(start)
+	}(timeutil.Now())
 
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
@@ -201,7 +211,7 @@ func evaluateBatch(
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
 			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
-					return nil, result.Result{}, pErr
+					return nil, result.Result{}, stats, pErr
 				}
 			}
 		}
@@ -260,7 +270,7 @@ func evaluateBatch(
 					pErr.SetTxn(baHeader.Txn)
 				}
 				log.Infof(ctx, "test injecting error: %s", pErr)
-				return nil, result.Result{}, pErr
+				return nil, result.Result{}, stats, pErr
 			}
 		}
 
@@ -287,7 +297,7 @@ func evaluateBatch(
 					pErr.SetTxn(baHeader.Txn)
 				}
 				log.Infof(ctx, "test injecting error: %s", pErr)
-				return nil, result.Result{}, pErr
+				return nil, result.Result{}, stats, pErr
 			}
 		}
 
@@ -391,7 +401,7 @@ func evaluateBatch(
 			// Initialize the error index.
 			pErr.SetErrorIndex(int32(index))
 
-			return nil, mergedResult, pErr
+			return nil, mergedResult, stats, pErr
 		}
 
 		// If the last request was carried out with a limit, subtract the number
@@ -402,7 +412,7 @@ func evaluateBatch(
 		if limit, retResults := baHeader.MaxSpanRequestKeys, h.NumKeys; limit != 0 && retResults > 0 {
 			if retResults > limit {
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
-				return nil, mergedResult, roachpb.NewError(errors.AssertionFailedf(
+				return nil, mergedResult, stats, roachpb.NewError(errors.AssertionFailedf(
 					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
 					retResults, limit, ba.Header.MaxSpanRequestKeys,
 					redact.Safe(ba.Summary()), index))
@@ -438,7 +448,7 @@ func evaluateBatch(
 	if writeTooOldState.cantDeferWTOE {
 		// NB: we can't do any error wrapping here yet due to compatibility with 20.2 nodes;
 		// there needs to be an ErrorDetail here.
-		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
+		return nil, mergedResult, stats, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
 
 	// The batch evaluation will not return an error (i.e. either everything went
@@ -462,7 +472,7 @@ func evaluateBatch(
 		br.Timestamp = baHeader.Timestamp
 	}
 
-	return br, mergedResult, nil
+	return br, mergedResult, stats, nil
 }
 
 // evaluateCommand delegates to the eval method for the given

@@ -289,6 +289,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		defer evalCtx.close(ctx)
 		rec = evalCtx
 	}
+	var stats evalBatchStats
 
 	for retries := 0; ; retries++ {
 		if retries > 0 {
@@ -296,7 +297,8 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			boundAccount.Clear(ctx)
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, st, ui, true /* readOnly */)
+		br, res, stats, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, st, ui, true /* readOnly */)
+		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(stats.duration.Nanoseconds())
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, g, nil /* deadline */) {
