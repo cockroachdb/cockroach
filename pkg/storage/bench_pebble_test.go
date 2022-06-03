@@ -155,14 +155,18 @@ func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
 
 func BenchmarkMVCCGet_Pebble(b *testing.B) {
 	ctx := context.Background()
-	for _, numVersions := range []int{1, 10, 100} {
-		b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
-			for _, valueSize := range []int{8} {
-				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-					runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
-						numVersions: numVersions,
-						valueBytes:  valueSize,
-					})
+	for _, batch := range []bool{false, true} {
+		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
+			for _, numVersions := range []int{1, 10, 100} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, valueSize := range []int{8} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
+								numVersions: numVersions,
+								valueBytes:  valueSize,
+							}, batch)
+						})
+					}
 				})
 			}
 		})
@@ -191,13 +195,17 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 func BenchmarkMVCCPut_Pebble(b *testing.B) {
 	ctx := context.Background()
 	for _, batch := range []bool{false, true} {
-		for _, valueSize := range []int{10, 100, 1000, 10000} {
-			for _, versions := range []int{1, 10} {
-				b.Run(fmt.Sprintf("batch=%t,valueSize=%d,versions=%d", batch, valueSize, versions), func(b *testing.B) {
-					runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize, versions, batch)
+		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
+			for _, valueSize := range []int{10, 100, 1000, 10000} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					for _, versions := range []int{1, 10} {
+						b.Run(fmt.Sprintf("versions=%d", versions), func(b *testing.B) {
+							runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize, versions, batch)
+						})
+					}
 				})
 			}
-		}
+		})
 	}
 }
 
