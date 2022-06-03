@@ -11,6 +11,7 @@ go_test(
     name = "compose_test",
     srcs = ["compose_test.go"],
     data = [
+        "//c-deps:libgeos",
         "//pkg/compose:compare/docker-compose.yml",
     ],
     embed = [":compose"],
