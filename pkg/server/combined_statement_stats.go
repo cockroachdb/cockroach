@@ -729,8 +729,11 @@ func getStatementDetailsPerPlanHash(
 		if planHash, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
 			return nil, serverError(ctx, err)
 		}
-		planGist := string(tree.MustBeDString(row[1]))
-		explainPlan := getExplainPlanFromGist(ctx, ie, planGist)
+		planGist := string(tree.MustBeDStringOrDNull(row[1]))
+		var explainPlan string
+		if planGist != "" {
+			explainPlan = getExplainPlanFromGist(ctx, ie, planGist)
+		}
 
 		var metadata roachpb.CollectedStatementStatistics
 		var aggregatedMetadata roachpb.AggregatedStatementMetadata
