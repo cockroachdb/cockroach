@@ -19,13 +19,13 @@ import (
 // constant operator. Note importantly that this will return true for all
 // expr types other than FuncExpr, CastExpr, UnaryExpr, BinaryExpr, and
 // ComparisonExpr. It does not do any recursive searching.
-func OperatorIsImmutable(expr Expr, opts cast.SessionOptions) bool {
+func OperatorIsImmutable(expr Expr) bool {
 	switch t := expr.(type) {
 	case *FuncExpr:
 		return t.fnProps.Class == NormalClass && t.fn.Volatility <= volatility.Immutable
 
 	case *CastExpr:
-		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ, opts)
+		v, ok := cast.LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ)
 		return ok && v <= volatility.Immutable
 
 	case *UnaryExpr:

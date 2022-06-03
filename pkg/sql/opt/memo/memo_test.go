@@ -219,18 +219,6 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().SafeUpdates = false
 	notStale()
 
-	// Stale intervalStyleEnabled.
-	evalCtx.SessionData().IntervalStyleEnabled = true
-	stale()
-	evalCtx.SessionData().IntervalStyleEnabled = false
-	notStale()
-
-	// Stale dateStyleEnabled.
-	evalCtx.SessionData().DateStyleEnabled = true
-	stale()
-	evalCtx.SessionData().DateStyleEnabled = false
-	notStale()
-
 	// Stale DateStyle.
 	evalCtx.SessionData().DataConversionConfig.DateStyle = pgdate.DateStyle{Order: pgdate.Order_YMD}
 	stale()

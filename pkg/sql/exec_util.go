@@ -638,28 +638,6 @@ var dateStyle = settings.RegisterEnumSetting(
 	dateStyleEnumMap,
 ).WithPublic()
 
-const intervalStyleEnabledClusterSetting = "sql.defaults.intervalstyle.enabled"
-
-// intervalStyleEnabled controls intervals representation.
-// TODO(sql-exp): retire this setting in 22.2.
-var intervalStyleEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	intervalStyleEnabledClusterSetting,
-	"default value for intervalstyle_enabled session setting",
-	false,
-)
-
-const dateStyleEnabledClusterSetting = "sql.defaults.datestyle.enabled"
-
-// dateStyleEnabled controls dates representation.
-// TODO(sql-exp): retire this setting in 22.2.
-var dateStyleEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	dateStyleEnabledClusterSetting,
-	"default value for datestyle_enabled session setting",
-	false,
-)
-
 var txnRowsWrittenLog = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.defaults.transaction_rows_written_log",
@@ -3171,16 +3149,6 @@ func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
 	m.data.DataConversionConfig.DateStyle = style
 	m.bufferParamStatusUpdate("DateStyle", style.SQLString())
-}
-
-// SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
-func (m *sessionDataMutator) SetIntervalStyleEnabled(enabled bool) {
-	m.data.IntervalStyleEnabled = enabled
-}
-
-// SetDateStyleEnabled sets the DateStyleEnabled for the given session.
-func (m *sessionDataMutator) SetDateStyleEnabled(enabled bool) {
-	m.data.DateStyleEnabled = enabled
 }
 
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.

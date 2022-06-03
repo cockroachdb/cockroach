@@ -1620,7 +1620,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 	case *CastExpr, *AssignmentCastExpr:
 		from := e.Child(0).(opt.ScalarExpr).DataType()
 		to := e.Private().(*types.T)
-		volatility, ok := cast.LookupCastVolatility(from, to, evalCtx.CastSessionOptions())
+		volatility, ok := cast.LookupCastVolatility(from, to)
 		if !ok {
 			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
 		}

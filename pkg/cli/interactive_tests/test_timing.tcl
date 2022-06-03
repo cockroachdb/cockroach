@@ -35,9 +35,6 @@ end_test
 
 start_test "Check that server times also work if IntervalStyle is different"
 # regression test for issue #67618.
-send "set intervalstyle_enabled = 'on';\r"
-eexpect "SET"
-eexpect root@
 send "set IntervalStyle = 'iso_8601';\r"
 eexpect "SET"
 eexpect root@

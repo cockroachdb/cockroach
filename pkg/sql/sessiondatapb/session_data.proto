@@ -63,12 +63,8 @@ message SessionData {
   // WorkMemLimit determines how much RAM (in bytes) a single operation of a
   // single query can use before it has to spill to disk.
   int64 WorkMemLimit = 12;
-  // IntervalStyleEnabled allows the setting of IntervalStyle to different
-  // values.
-  bool interval_style_enabled = 13;
-  // DateStyleEnabled allows the setting of DateStyle to different
-  // values.
-  bool date_style_enabled = 14;
+  reserved 13;
+  reserved 14;
   // LockTimeout is the maximum amount of time that a query will wait while
   // attempting to acquire a lock on a key or while blocking on an existing
   // lock in order to perform a non-locking read on a key.

@@ -400,11 +400,6 @@ SELECT i / 2 FROM ( VALUES
 
 subtest interval_session
 
-query T noticetrace
-SET intervalstyle_enabled = 'off'
-----
-NOTICE: ignoring intervalstyle_enabled setting; it is always true
-
 statement ok
 SET intervalstyle = 'iso_8601'
 
