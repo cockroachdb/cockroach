@@ -119,6 +119,7 @@ var retiredSettings = map[string]struct{}{
 	"trace.datadog.project":                                            {},
 	"sql.defaults.interleaved_tables.enabled":                          {},
 	"sql.defaults.copy_partitioning_when_deinterleaving_table.enabled": {},
+	"sql.ttl.range_batch_size":                                         {},
 	"server.declined_reservation_timeout":                              {},
 	"bulkio.backup.resolve_destination_in_job.enabled":                 {},
 	"sql.defaults.experimental_hash_sharded_indexes.enabled":           {},
