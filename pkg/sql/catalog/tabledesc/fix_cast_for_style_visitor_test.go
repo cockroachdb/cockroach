@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -118,10 +117,6 @@ CREATE TABLE t.ds (it INTERVAL, s STRING, vc VARCHAR, c CHAR, t TIMESTAMP, n NAM
 
 	for _, test := range tests {
 		t.Run(test.expr, func(t *testing.T) {
-			semaCtx.CastSessionOptions = cast.SessionOptions{
-				IntervalStyleEnabled: true,
-				DateStyleEnabled:     true,
-			}
 			expr, err := parser.ParseExpr(test.expr)
 			require.NoError(t, err)
 			newExpr, _, err := tabledesc.ResolveCastForStyleUsingVisitor(

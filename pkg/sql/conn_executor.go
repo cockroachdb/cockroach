@@ -21,7 +21,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -43,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2793,17 +2791,6 @@ func (ex *connExecutor) resetPlanner(
 	p.cancelChecker.Reset(ctx)
 
 	p.semaCtx = tree.MakeSemaContext()
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-		p.semaCtx.CastSessionOptions = cast.SessionOptions{
-			IntervalStyleEnabled: true,
-			DateStyleEnabled:     true,
-		}
-	} else {
-		p.semaCtx.CastSessionOptions = cast.SessionOptions{
-			IntervalStyleEnabled: ex.sessionData().IntervalStyleEnabled,
-			DateStyleEnabled:     ex.sessionData().DateStyleEnabled,
-		}
-	}
 	p.semaCtx.SearchPath = &ex.sessionData().SearchPath
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p

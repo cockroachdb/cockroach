@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -275,10 +274,6 @@ func maybeRewriteCast(desc *descpb.TableDescriptor) (hasChanged bool, err error)
 
 	ctx := context.Background()
 	var semaCtx tree.SemaContext
-	semaCtx.CastSessionOptions = cast.SessionOptions{
-		IntervalStyleEnabled: true,
-		DateStyleEnabled:     true,
-	}
 	hasChanged = false
 
 	for i, col := range desc.Columns {

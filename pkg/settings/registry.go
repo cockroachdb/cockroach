@@ -126,6 +126,10 @@ var retiredSettings = map[string]struct{}{
 	"kv.bulk_ingest.buffer_increment":                                  {},
 	"schemachanger.backfiller.buffer_increment":                        {},
 	"kv.rangefeed.separated_intent_scan.enabled":                       {},
+
+	// removed as of 22.2.
+	"sql.defaults.datestyle.enabled":     {},
+	"sql.defaults.intervalstyle.enabled": {},
 }
 
 var sqlDefaultSettings = map[string]struct{}{

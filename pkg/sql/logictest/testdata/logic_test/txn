@@ -1119,7 +1119,6 @@ SET SESSION CHARACTERISTICS AS TRANSACTION DEFERRABLE
 # Test retry rewinds correctly.
 
 statement ok
-SET intervalstyle_enabled = on;
 SET intervalstyle = 'postgres';
 CREATE TABLE rewind_session_test (s string primary key);
 

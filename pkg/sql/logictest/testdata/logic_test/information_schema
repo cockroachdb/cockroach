@@ -4726,7 +4726,6 @@ client_min_messages                                   notice
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
-datestyle_enabled                                     on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -4768,7 +4767,6 @@ index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
-intervalstyle_enabled                                 on
 is_superuser                                          on
 join_reader_ordering_strategy_batch_size              10 KiB
 large_full_scan_rows                                  1000

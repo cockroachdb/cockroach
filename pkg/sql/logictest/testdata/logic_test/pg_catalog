@@ -4118,7 +4118,6 @@ client_min_messages                                   notice              NULL  
 cost_scans_with_default_col_size                      off                 NULL      NULL        NULL        string
 database                                              test                NULL      NULL        NULL        string
 datestyle                                             ISO, MDY            NULL      NULL        NULL        string
-datestyle_enabled                                     on                  NULL      NULL        NULL        string
 default_int_size                                      8                   NULL      NULL        NULL        string
 default_table_access_method                           heap                NULL      NULL        NULL        string
 default_tablespace                                    ·                   NULL      NULL        NULL        string
@@ -4159,7 +4158,6 @@ index_recommendations_enabled                         off                 NULL  
 inject_retry_errors_enabled                           off                 NULL      NULL        NULL        string
 integer_datetimes                                     on                  NULL      NULL        NULL        string
 intervalstyle                                         postgres            NULL      NULL        NULL        string
-intervalstyle_enabled                                 on                  NULL      NULL        NULL        string
 is_superuser                                          on                  NULL      NULL        NULL        string
 join_reader_ordering_strategy_batch_size              10 KiB              NULL      NULL        NULL        string
 large_full_scan_rows                                  1000                NULL      NULL        NULL        string
@@ -4240,7 +4238,6 @@ client_min_messages                                   notice              NULL  
 cost_scans_with_default_col_size                      off                 NULL  user     NULL      off                 off
 database                                              test                NULL  user     NULL      ·                   test
 datestyle                                             ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
-datestyle_enabled                                     on                  NULL  user     NULL      on                  on
 default_int_size                                      8                   NULL  user     NULL      8                   8
 default_table_access_method                           heap                NULL  user     NULL      heap                heap
 default_tablespace                                    ·                   NULL  user     NULL      ·                   ·
@@ -4281,7 +4278,6 @@ index_recommendations_enabled                         off                 NULL  
 inject_retry_errors_enabled                           off                 NULL  user     NULL      off                 off
 integer_datetimes                                     on                  NULL  user     NULL      on                  on
 intervalstyle                                         postgres            NULL  user     NULL      postgres            postgres
-intervalstyle_enabled                                 on                  NULL  user     NULL      on                  on
 is_superuser                                          on                  NULL  user     NULL      on                  on
 join_reader_ordering_strategy_batch_size              10 KiB              NULL  user     NULL      10 KiB              10 KiB
 large_full_scan_rows                                  1000                NULL  user     NULL      1000                1000
@@ -4357,7 +4353,6 @@ cost_scans_with_default_col_size                      NULL    NULL     NULL     
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
 database                                              NULL    NULL     NULL     NULL        NULL
 datestyle                                             NULL    NULL     NULL     NULL        NULL
-datestyle_enabled                                     NULL    NULL     NULL     NULL        NULL
 default_int_size                                      NULL    NULL     NULL     NULL        NULL
 default_table_access_method                           NULL    NULL     NULL     NULL        NULL
 default_tablespace                                    NULL    NULL     NULL     NULL        NULL
@@ -4399,7 +4394,6 @@ index_recommendations_enabled                         NULL    NULL     NULL     
 inject_retry_errors_enabled                           NULL    NULL     NULL     NULL        NULL
 integer_datetimes                                     NULL    NULL     NULL     NULL        NULL
 intervalstyle                                         NULL    NULL     NULL     NULL        NULL
-intervalstyle_enabled                                 NULL    NULL     NULL     NULL        NULL
 is_superuser                                          NULL    NULL     NULL     NULL        NULL
 join_reader_ordering_strategy_batch_size              NULL    NULL     NULL     NULL        NULL
 large_full_scan_rows                                  NULL    NULL     NULL     NULL        NULL

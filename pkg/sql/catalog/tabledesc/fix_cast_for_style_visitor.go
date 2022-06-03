@@ -94,7 +94,7 @@ func (v *fixCastForStyleVisitor) VisitPost(expr tree.Expr) tree.Expr {
 		innerExpr := expr.Expr.(tree.TypedExpr)
 		outerTyp := expr.ResolvedType()
 		innerTyp := innerExpr.ResolvedType()
-		vol, ok := cast.LookupCastVolatility(innerTyp, outerTyp, v.semaCtx.CastSessionOptions)
+		vol, ok := cast.LookupCastVolatility(innerTyp, outerTyp)
 		if !ok {
 			v.err = errors.AssertionFailedf("Not a valid cast %s -> %s", innerTyp.SQLString(), outerTyp.SQLString())
 		}

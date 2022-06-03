@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -317,28 +316,6 @@ var varGen = map[string]sessionVar{
 			if ds.Style != pgdate.Style_ISO {
 				return unimplemented.NewWithIssue(41773, "only ISO style is supported")
 			}
-			allowed := m.data.DateStyleEnabled
-			if m.settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-				allowed = true
-			}
-			if ds.Order != pgdate.Order_MDY && !allowed {
-				return errors.WithDetailf(
-					errors.WithHintf(
-						pgerror.Newf(
-							pgcode.FeatureNotSupported,
-							"setting DateStyle is not enabled",
-						),
-						"You can enable DateStyle customization for all sessions with the cluster setting %s, or per session using SET datestyle_enabled = true.",
-						dateStyleEnabledClusterSetting,
-					),
-					"Setting DateStyle changes the volatility of timestamp/timestamptz/date::string "+
-						"and string::timestamp/timestamptz/date/time/timetz casts from immutable to stable. "+
-						"No computed columns, partial indexes, partitions and check constraints can "+
-						"use these casts. "+
-						"Use to_char_with_style or parse_{timestamp,timestamptz,date,time,timetz} "+
-						"instead if you need these casts to work in the aforementioned cases.",
-				)
-			}
 			m.SetDateStyle(ds)
 			return nil
 		},
@@ -356,38 +333,10 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// TODO(sql-exp): remove this setting in 22.2 by turning it into a no-op.
-	`datestyle_enabled`: {
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			if evalCtx.Settings.Version.IsActive(evalCtx.Ctx(), clusterversion.DateStyleIntervalStyleCastRewrite) {
-				return formatBoolAsPostgresSetting(true), nil
-			}
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().DateStyleEnabled), nil
-		},
-		GetStringVal: makePostgresBoolGetStringValFn("datestyle_enabled"),
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
-			b, err := paramparse.ParseBoolVar(`datestyle_enabled`, s)
-			if err != nil {
-				return err
-			}
-			if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-				p.BufferClientNotice(ctx, pgnotice.Newf("ignoring datestyle_enabled setting; it is always true"))
-				b = true
-			}
-			applyFunc := func(m sessionDataMutator) error {
-				m.SetDateStyleEnabled(b)
-				return nil
-			}
-			if local {
-				return p.sessionDataMutatorIterator.applyOnTopMutator(applyFunc)
-			}
-			return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
-
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(dateStyleEnabled.Get(sv))
-		},
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`datestyle_enabled`: makeBackwardsCompatBoolVar(
+		"datestyle_enabled", true,
+	),
 
 	// Controls the subsequent parsing of a "naked" INT type.
 	// TODO(bob): Remove or no-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
@@ -957,27 +906,6 @@ var varGen = map[string]sessionVar{
 				return newVarValueError(`IntervalStyle`, s, validIntervalStyles...)
 			}
 			style := duration.IntervalStyle(styleVal)
-			allowed := m.data.IntervalStyleEnabled
-			if m.settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-				allowed = true
-			}
-			if style != duration.IntervalStyle_POSTGRES && !allowed {
-				return errors.WithDetailf(
-					errors.WithHintf(
-						pgerror.Newf(
-							pgcode.FeatureNotSupported,
-							"setting IntervalStyle is not enabled",
-						),
-						"You can enable IntervalStyle customization for all sessions with the cluster setting %s, or per session using SET intervalstyle_enabled = true.",
-						intervalStyleEnabledClusterSetting,
-					),
-					"Setting IntervalStyle changes the volatility of string::interval or interval::string "+
-						"casts from immutable to stable. No computed columns, partial indexes, partitions "+
-						"and check constraints can use these casts. "+
-						"Use to_char_with_style or parse_interval instead if you need these casts to work "+
-						"in the aforementioned cases.",
-				)
-			}
 			m.SetIntervalStyle(style)
 			return nil
 		},
@@ -994,37 +922,10 @@ var varGen = map[string]sessionVar{
 			return a.GetIntervalStyle() == b.GetIntervalStyle()
 		},
 	},
-	// TODO(sql-exp): remove this in 22.2, possibly by converting it into a no-op.
-	`intervalstyle_enabled`: {
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			if evalCtx.Settings.Version.IsActive(evalCtx.Ctx(), clusterversion.DateStyleIntervalStyleCastRewrite) {
-				return formatBoolAsPostgresSetting(true), nil
-			}
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().IntervalStyleEnabled), nil
-		},
-		GetStringVal: makePostgresBoolGetStringValFn("intervalstyle_enabled"),
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
-			b, err := paramparse.ParseBoolVar(`intervalstyle_enabled`, s)
-			if err != nil {
-				return err
-			}
-			if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-				p.BufferClientNotice(ctx, pgnotice.Newf("ignoring intervalstyle_enabled setting; it is always true"))
-				b = true
-			}
-			applyFunc := func(m sessionDataMutator) error {
-				m.SetIntervalStyleEnabled(b)
-				return nil
-			}
-			if local {
-				return p.sessionDataMutatorIterator.applyOnTopMutator(applyFunc)
-			}
-			return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(intervalStyleEnabled.Get(sv))
-		},
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`intervalstyle_enabled`: makeBackwardsCompatBoolVar(
+		"intervalstyle_enabled", true,
+	),
 
 	`is_superuser`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
