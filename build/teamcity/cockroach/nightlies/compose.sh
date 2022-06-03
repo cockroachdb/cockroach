@@ -17,8 +17,9 @@ CROSSBIN=$(bazel info bazel-bin --config=ci --config=crosslinux --config=test --
 COCKROACH=$CROSSBIN/pkg/cmd/cockroach/cockroach_/cockroach
 COMPAREBIN=$(bazel run //pkg/compose/compare/compare:compare_test --config=ci --config=crosslinux --config=test --config=with_ui --run_under=realpath | grep '^/' | tail -n1)
 ARTIFACTS_DIR=$PWD/artifacts
+mkdir -p $ARTIFACTS_DIR
+GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 
-GO_TEST_JSON_OUTPUT_FILE=$PWD/artifacts/test.json.txt
 exit_status=0
 $BAZCI run --config=ci --config=test --artifacts_dir=$ARTIFACTS_DIR \
        //pkg/compose:compose_test -- \
