@@ -54,7 +54,7 @@ func TestRandomizedCast(t *testing.T) {
 				// below).
 				continue
 			}
-			if _, ok := cast.LookupCastVolatility(from, to, cast.SessionOptions{}); ok {
+			if _, ok := cast.LookupCastVolatility(from, to); ok {
 				if colexecbase.IsCastSupported(from, to) {
 					return from, to
 				}

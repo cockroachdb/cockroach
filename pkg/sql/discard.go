@@ -47,15 +47,6 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 }
 
 func resetSessionVars(ctx context.Context, m sessionDataMutator) error {
-	// Always do intervalstyle_enabled and datestyle_enabled first so that
-	// IntervalStyle and DateStyle which depend on these flags are correctly
-	// configured.
-	if err := resetSessionVar(ctx, m, "datestyle_enabled"); err != nil {
-		return err
-	}
-	if err := resetSessionVar(ctx, m, "intervalstyle_enabled"); err != nil {
-		return err
-	}
 	for _, varName := range varNames {
 		if err := resetSessionVar(ctx, m, varName); err != nil {
 			return err

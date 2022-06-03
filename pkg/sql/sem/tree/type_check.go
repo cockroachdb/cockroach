@@ -62,10 +62,6 @@ type SemaContext struct {
 	// name of a table given its ID.
 	TableNameResolver QualifiedNameResolver
 
-	// IntervalStyleEnabled determines whether IntervalStyle is enabled.
-	// TODO(sql-exp): remove this field in 22.2, since it will always be true.
-	CastSessionOptions cast.SessionOptions
-
 	Properties SemaProperties
 
 	// DateStyle refers to the DateStyle to parse as.
@@ -432,20 +428,12 @@ func invalidCastError(castFrom, castTo *types.T) error {
 // is false, it also checks that the cast has Immutable.
 //
 // On success, any relevant telemetry counters are incremented.
-func resolveCast(
-	context string, castFrom, castTo *types.T, allowStable bool, opts cast.SessionOptions,
-) error {
+func resolveCast(context string, castFrom, castTo *types.T, allowStable bool) error {
 	toFamily := castTo.Family()
 	fromFamily := castFrom.Family()
 	switch {
 	case toFamily == types.ArrayFamily && fromFamily == types.ArrayFamily:
-		err := resolveCast(
-			context,
-			castFrom.ArrayContents(),
-			castTo.ArrayContents(),
-			allowStable,
-			opts,
-		)
+		err := resolveCast(context, castFrom.ArrayContents(), castTo.ArrayContents(), allowStable)
 		if err != nil {
 			return err
 		}
@@ -476,13 +464,7 @@ func resolveCast(
 		}
 		for i, from := range fromTuple {
 			to := toTuple[i]
-			err := resolveCast(
-				context,
-				from,
-				to,
-				allowStable,
-				opts,
-			)
+			err := resolveCast(context, from, to, allowStable)
 			if err != nil {
 				return err
 			}
@@ -491,7 +473,7 @@ func resolveCast(
 		return nil
 
 	default:
-		cast, ok := cast.LookupCast(castFrom, castTo, opts)
+		cast, ok := cast.LookupCast(castFrom, castTo)
 		if !ok {
 			return invalidCastError(castFrom, castTo)
 		}
@@ -604,17 +586,7 @@ func (expr *CastExpr) TypeCheck(
 		allowStable = false
 		context = semaCtx.Properties.required.context
 	}
-	var castOpts cast.SessionOptions
-	if semaCtx != nil {
-		castOpts = semaCtx.CastSessionOptions
-	}
-	err = resolveCast(
-		context,
-		castFrom,
-		exprType,
-		allowStable,
-		castOpts,
-	)
+	err = resolveCast(context, castFrom, exprType, allowStable)
 	if err != nil {
 		return nil, err
 	}

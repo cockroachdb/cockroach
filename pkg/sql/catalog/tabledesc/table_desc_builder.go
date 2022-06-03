@@ -11,17 +11,12 @@
 package tabledesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -255,79 +250,7 @@ func maybeFillInDescriptor(
 	set(catalog.UpgradedPrivileges, fixedPrivileges || addedGrantOptions)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
-
-	rewrittenCast, err := maybeRewriteCast(desc)
-	if err != nil {
-		return changes, err
-	}
-	set(catalog.FixedDateStyleIntervalStyleCast, rewrittenCast)
 	return changes, nil
-}
-
-// maybeRewriteCast rewrites stable cast in computed columns, indexes and
-// partial indexes that cause issues with DateStyle/IntervalStyle
-func maybeRewriteCast(desc *descpb.TableDescriptor) (hasChanged bool, err error) {
-	// We skip the system tables due to type checking not working properly during
-	// init time.
-	if desc.ParentID == keys.SystemDatabaseID {
-		return false, nil
-	}
-
-	ctx := context.Background()
-	var semaCtx tree.SemaContext
-	semaCtx.CastSessionOptions = cast.SessionOptions{
-		IntervalStyleEnabled: true,
-		DateStyleEnabled:     true,
-	}
-	hasChanged = false
-
-	for i, col := range desc.Columns {
-		if col.IsComputed() {
-			expr, err := parser.ParseExpr(*col.ComputeExpr)
-			if err != nil {
-				return hasChanged, err
-			}
-			newExpr, changed, err := ResolveCastForStyleUsingVisitor(
-				ctx,
-				&semaCtx,
-				desc,
-				expr,
-			)
-			if err != nil {
-				return hasChanged, err
-			}
-			if changed {
-				hasChanged = true
-				s := tree.Serialize(newExpr)
-				desc.Columns[i].ComputeExpr = &s
-			}
-		}
-	}
-
-	for i, idx := range desc.Indexes {
-		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.Predicate)
-
-			if err != nil {
-				return hasChanged, err
-			}
-			newExpr, changed, err := ResolveCastForStyleUsingVisitor(
-				ctx,
-				&semaCtx,
-				desc,
-				expr,
-			)
-			if err != nil {
-				return hasChanged, err
-			}
-			if changed {
-				hasChanged = true
-				s := tree.Serialize(newExpr)
-				desc.Indexes[i].Predicate = s
-			}
-		}
-	}
-	return hasChanged, nil
 }
 
 // maybeRemoveDefaultExprFromComputedColumns removes DEFAULT expressions on
