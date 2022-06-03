@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1800,3 +1801,6 @@ const (
 	// with the SpecificTenantOverrides precedence..
 	AllTenantsOverrides
 )
+
+// RequestUnionSize is the size of the RequestUnion object.
+const RequestUnionSize = int64(unsafe.Sizeof(RequestUnion{}))
