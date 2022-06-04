@@ -1049,13 +1049,6 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, err
 	}
 
-	if def.Name == "udf" {
-		expr.IsUDF = true
-		expr.typ = types.Int
-		expr.fnProps = &FunctionProperties{}
-		return expr, nil
-	}
-
 	if err := semaCtx.checkFunctionUsage(expr, def); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue,
 			"%s()", def.Name)

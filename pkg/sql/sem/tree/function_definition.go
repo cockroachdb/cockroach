@@ -110,6 +110,8 @@ type FunctionProperties struct {
 	//
 	// See memo.CanBeCompositeSensitive.
 	CompositeInsensitive bool
+
+	IsUDF bool
 }
 
 // ShouldDocument returns whether the built-in function should be included in

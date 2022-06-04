@@ -517,25 +517,6 @@ func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 
-	if f.IsUDF {
-		args := make(memo.ScalarListExpr, len(f.Exprs))
-		for i, pexpr := range f.Exprs {
-			args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		}
-		// Hard code the definition of a user-defined function "udf()".
-		stmts := []string{"SELECT 2 + n"}
-		out = b.factory.ConstructRoutine(
-			args,
-			&memo.RoutinePrivate{
-				Name:       "udf",
-				ArgNames:   []string{"n"},
-				Statements: stmts,
-				Typ:        types.Int,
-			},
-		)
-		return b.finishBuildScalar(f, out, inScope, outScope, outCol)
-	}
-
 	if f.WindowDef != nil {
 		if inScope.inAgg {
 			panic(sqlerrors.NewWindowInAggError())
@@ -545,6 +526,30 @@ func (b *Builder) buildFunction(
 	def, err := f.Func.Resolve(b.semaCtx, b.semaCtx.SearchPath, nil)
 	if err != nil {
 		panic(err)
+	}
+
+	if def.IsUDF {
+		args := make(memo.ScalarListExpr, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		}
+		// Hard code the definition of a user-defined function "udf()".
+		overload := f.ResolvedOverload()
+		query, _ := overload.SQLFn.(eval.SQLFnOverload)(nil, nil)
+		var argNames []string
+		for _, arg := range overload.Types.(tree.ArgTypes) {
+			argNames = append(argNames, arg.Name)
+		}
+		out = b.factory.ConstructRoutine(
+			args,
+			&memo.RoutinePrivate{
+				Name:       def.Name,
+				ArgNames:   argNames,
+				Statements: []string{query},
+				Typ:        overload.ReturnType(nil),
+			},
+		)
+		return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 	}
 
 	if isAggregate(def) {
