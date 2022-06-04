@@ -298,6 +298,9 @@ func makeIndexDescriptor(
 		if indexDesc.GeoConfig.IsGeography() {
 			telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
 		}
+		if len(indexDesc.InvertedColumnKinds) > 0 && indexDesc.InvertedColumnKinds[0] == catpb.InvertedIndexColumnKind_TRIGRAM {
+			telemetry.Inc(sqltelemetry.TrigramInvertedIndexCounter)
+		}
 		if indexDesc.IsPartial() {
 			telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
 		}
