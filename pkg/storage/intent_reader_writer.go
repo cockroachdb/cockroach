@@ -158,7 +158,7 @@ func (imr *intentInterleavingReader) NewMVCCIterator(
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")
 	}
-	if iterKind == MVCCKeyIterKind {
+	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
 		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
 	return newIntentInterleavingIterator(imr.wrappableReader, opts)
