@@ -64,10 +64,26 @@ type resultsBuffer interface {
 	//                                                                       //
 	///////////////////////////////////////////////////////////////////////////
 
-	// add adds the provided Results into the buffer. If any Results are
-	// available to be returned to the client and there is a goroutine blocked
-	// in wait(), the goroutine is woken up.
-	add([]Result)
+	// Lock and Unlock expose methods on the mutex of the resultsBuffer. If the
+	// Streamer's mutex needs to be locked, then the Streamer's mutex must be
+	// acquired first.
+	Lock()
+	Unlock()
+
+	// addLocked adds the provided Result into the buffer. Note that if the
+	// Result is available to be returned to the client and there is a goroutine
+	// blocked in wait(), the goroutine is **not** woken up - doneAddingLocked()
+	// has to be called.
+	//
+	// The combination of multiple addLocked() calls followed by a single
+	// doneAddingLocked() call allows us to simulate adding many Results at
+	// once, without having to allocate a slice for that.
+	addLocked(Result)
+	// doneAddingLocked notifies the resultsBuffer that the worker goroutine
+	// added all Results it could, and the resultsBuffer checks whether any
+	// Results are available to be returned to the client. If there is a
+	// goroutine blocked in wait(), the goroutine is woken up.
+	doneAddingLocked()
 
 	///////////////////////////////////////////////////////////////////////////
 	//                                                                       //
@@ -155,11 +171,10 @@ func (b *resultsBufferBase) initLocked(isEmpty bool, numExpectedResponses int) e
 	return nil
 }
 
-func (b *resultsBufferBase) findCompleteResponses(results []Result) {
-	for i := range results {
-		if results[i].GetResp != nil || results[i].scanComplete {
-			b.numCompleteResponses++
-		}
+func (b *resultsBufferBase) checkIfCompleteLocked(r Result) {
+	b.Mutex.AssertHeld()
+	if r.GetResp != nil || r.scanComplete {
+		b.numCompleteResponses++
 	}
 }
 
@@ -244,12 +259,15 @@ func (b *outOfOrderResultsBuffer) init(_ context.Context, numExpectedResponses i
 	return nil
 }
 
-func (b *outOfOrderResultsBuffer) add(results []Result) {
-	b.Lock()
-	defer b.Unlock()
-	b.results = append(b.results, results...)
-	b.findCompleteResponses(results)
-	b.numUnreleasedResults += len(results)
+func (b *outOfOrderResultsBuffer) addLocked(r Result) {
+	b.Mutex.AssertHeld()
+	b.results = append(b.results, r)
+	b.checkIfCompleteLocked(r)
+	b.numUnreleasedResults++
+}
+
+func (b *outOfOrderResultsBuffer) doneAddingLocked() {
+	b.Mutex.AssertHeld()
 	b.signal()
 }
 
@@ -397,35 +415,32 @@ func (b *inOrderResultsBuffer) init(ctx context.Context, numExpectedResponses in
 	return nil
 }
 
-func (b *inOrderResultsBuffer) add(results []Result) {
-	b.Lock()
-	defer b.Unlock()
+func (b *inOrderResultsBuffer) addLocked(r Result) {
+	b.Mutex.AssertHeld()
 	// Note that we don't increase b.numUnreleasedResults because all these
 	// results are "buffered".
-	b.findCompleteResponses(results)
-	foundHeadOfLine := false
-	for _, r := range results {
-		if debug {
-			subRequestIdx := ""
-			if !b.singleRowLookup {
-				subRequestIdx = fmt.Sprintf(" (%d)", r.subRequestIdx)
-			}
-			fmt.Printf("adding a result for position %d%s of size %d\n", r.Position, subRequestIdx, r.memoryTok.toRelease)
+	b.checkIfCompleteLocked(r)
+	if debug {
+		subRequestIdx := ""
+		if !b.singleRowLookup {
+			subRequestIdx = fmt.Sprintf(" (%d)", r.subRequestIdx)
 		}
-		// All the Results have already been registered with the budget, so
-		// we're keeping them in-memory.
-		heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false, addEpoch: b.addCounter})
-		if r.Position == b.headOfLinePosition && r.subRequestIdx == b.headOfLineSubRequestIdx {
-			foundHeadOfLine = true
-		}
+		fmt.Printf("adding a result for position %d%s of size %d\n", r.Position, subRequestIdx, r.memoryTok.toRelease)
 	}
-	if foundHeadOfLine {
+	// All the Results have already been registered with the budget, so we're
+	// keeping them in-memory.
+	heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false, addEpoch: b.addCounter})
+	b.addCounter++
+}
+
+func (b *inOrderResultsBuffer) doneAddingLocked() {
+	b.Mutex.AssertHeld()
+	if len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition && b.buffered[0].subRequestIdx == b.headOfLineSubRequestIdx {
 		if debug {
 			fmt.Println("found head-of-the-line")
 		}
 		b.signal()
 	}
-	b.addCounter++
 }
 
 func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) {
