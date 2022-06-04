@@ -1560,8 +1560,10 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		// Nothing to show; flags are shown separately.
 
 	case *ExplainPrivate, *opt.ColSet, *types.T, *ExportPrivate:
-		// Don't show anything, because it's mostly redundant.
+	// Don't show anything, because it's mostly redundant.
 
+	case *RoutinePrivate:
+		fmt.Fprintf(f.Buffer, " name=%s,type=%s", t.Name, t.Typ)
 	default:
 		fmt.Fprintf(f.Buffer, " %v", private)
 	}

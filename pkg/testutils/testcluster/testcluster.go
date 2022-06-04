@@ -144,6 +144,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 				sps = append(sps, span)
 				return nil
 			})
+			return nil
 			if len(sps) == 0 {
 				return nil
 			}

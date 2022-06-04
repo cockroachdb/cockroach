@@ -516,6 +516,26 @@ func (b *Builder) buildAnyScalar(
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
+
+	if f.IsUDF {
+		args := make(memo.ScalarListExpr, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		}
+		// Hard code the definition of a user-defined function "udf()".
+		stmts := []string{"SELECT 2 + n"}
+		out = b.factory.ConstructRoutine(
+			args,
+			&memo.RoutinePrivate{
+				Name:       "udf",
+				ArgNames:   []string{"n"},
+				Statements: stmts,
+				Typ:        types.Int,
+			},
+		)
+		return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+	}
+
 	if f.WindowDef != nil {
 		if inScope.inAgg {
 			panic(sqlerrors.NewWindowInAggError())

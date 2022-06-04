@@ -201,6 +201,12 @@ func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefini
 		}
 	}
 
+	if function == "udf" {
+		return &FunctionDefinition{
+			Name: "udf",
+		}, nil
+	}
+
 	if prefix != "" {
 		fullName = prefix + "." + function
 	}

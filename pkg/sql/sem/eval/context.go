@@ -116,6 +116,8 @@ type Context struct {
 	// underlying datum, if available.
 	Placeholders *tree.PlaceholderInfo
 
+	RoutineArgs tree.RoutineArgs
+
 	// Annotations augments the AST with extra information. This pointer should
 	// always be set to the location of the Annotations in the corresponding
 	// SemaContext.

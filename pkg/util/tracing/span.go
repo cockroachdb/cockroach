@@ -175,16 +175,16 @@ func (sp *Span) detectUseAfterFinish() bool {
 	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
 	// In test builds, we panic on span use after Finish. This is in preparation
 	// of span pooling, at which point use-after-Finish would become corruption.
-	if alreadyFinished && sp.i.tracer.PanicOnUseAfterFinish() {
-		var finishStack string
-		if sp.finishStack == "" {
-			finishStack = "<stack not captured. Set debugUseAfterFinish>"
-		} else {
-			finishStack = sp.finishStack
-		}
-		panic(fmt.Sprintf("use of Span after Finish. Span: %s. Finish previously called at: %s",
-			sp.i.OperationName(), finishStack))
-	}
+	//if alreadyFinished && sp.i.tracer.PanicOnUseAfterFinish() {
+	//	var finishStack string
+	//	if sp.finishStack == "" {
+	//		finishStack = "<stack not captured. Set debugUseAfterFinish>"
+	//	} else {
+	//		finishStack = sp.finishStack
+	//	}
+	//	panic(fmt.Sprintf("use of Span after Finish. Span: %s. Finish previously called at: %s",
+	//		sp.i.OperationName(), finishStack))
+	//}
 
 	return alreadyFinished
 }

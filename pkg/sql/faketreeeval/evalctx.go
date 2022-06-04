@@ -378,6 +378,12 @@ func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(sql string) (*types.T, err
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+func (ep *DummyEvalPlanner) EvalRoutine(
+	expr *tree.Routine, args tree.RoutineArgs,
+) (tree.Datum, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // EvalSubquery is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
 	return nil, errors.WithStack(errEvalPlanner)

@@ -1215,6 +1215,8 @@ type FuncExpr struct {
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload
+
+	IsUDF bool
 }
 
 // NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
