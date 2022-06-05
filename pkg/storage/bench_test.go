@@ -112,7 +112,6 @@ func BenchmarkExportToSst(b *testing.B) {
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
 	exportAllRevisions := []bool{false, true}
-	useTBI := []bool{false, true}
 	engineMakers := []struct {
 		name   string
 		create engineMaker
@@ -128,12 +127,7 @@ func BenchmarkExportToSst(b *testing.B) {
 						b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
 							for _, exportAllRevisionsVal := range exportAllRevisions {
 								b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-									for _, useTBIVal := range useTBI {
-										b.Run(fmt.Sprintf("useTBI=%t", useTBIVal), func(b *testing.B) {
-											runExportToSst(b, engineImpl.create, numKey, numRevision,
-												exportAllRevisionsVal, useTBIVal)
-										})
-									}
+									runExportToSst(b, engineImpl.create, numKey, numRevision, exportAllRevisionsVal)
 								})
 							}
 						})
@@ -1504,12 +1498,7 @@ func runBatchApplyBatchRepr(
 }
 
 func runExportToSst(
-	b *testing.B,
-	emk engineMaker,
-	numKeys int,
-	numRevisions int,
-	exportAllRevisions bool,
-	useTBI bool,
+	b *testing.B, emk engineMaker, numKeys int, numRevisions int, exportAllRevisions bool,
 ) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -1552,7 +1541,6 @@ func runExportToSst(
 			TargetSize:         0,
 			MaxSize:            0,
 			StopMidKey:         false,
-			UseTBI:             useTBI,
 		}, noopWriter{})
 		if err != nil {
 			b.Fatal(err)
