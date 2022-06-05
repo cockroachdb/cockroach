@@ -99,8 +99,12 @@ func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIter
 	if iter == nil {
 		return nil
 	}
-	return func() *CatchUpIterator {
-		return &CatchUpIterator{simpleCatchupIter: simpleCatchupIterAdapter{iter}}
+	return func(span roachpb.Span, startTime hlc.Timestamp) *CatchUpIterator {
+		return &CatchUpIterator{
+			simpleCatchupIter: simpleCatchupIterAdapter{iter},
+			span:              span,
+			startTime:         startTime,
+		}
 	}
 }
 
