@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -90,19 +89,6 @@ type cdcTestArgs struct {
 func cdcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	db.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
-	randomlyRun(t, db, "SET CLUSTER SETTING kv.rangefeed.catchup_scan_iterator_optimization.enabled = false")
-}
-
-const randomSettingPercent = 0.50
-
-var rng, _ = randutil.NewTestRand()
-
-func randomlyRun(t test.Test, db *sqlutils.SQLRunner, query string) {
-	if rng.Float64() < randomSettingPercent {
-		db.Exec(t, query)
-		t.L().Printf("setting non-default cluster setting: %s", query)
-	}
-
 }
 
 func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {

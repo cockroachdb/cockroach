@@ -231,8 +231,7 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(),
-				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
+			return rangefeed.NewCatchUpIterator(r.Engine(), args, iterSemRelease)
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(

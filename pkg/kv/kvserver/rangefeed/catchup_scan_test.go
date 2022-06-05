@@ -91,46 +91,44 @@ func TestCatchupScan(t *testing.T) {
 	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn); err != nil {
 		t.Fatal(err)
 	}
-	testutils.RunTrueAndFalse(t, "useTBI", func(t *testing.T, useTBI bool) {
-		testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
-			iter := NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
-				Header: roachpb.Header{
-					// Inclusive, so want everything >= ts2
-					Timestamp: ts2,
-				},
-				Span: roachpb.Span{
-					EndKey: roachpb.KeyMax,
-				},
-				WithDiff: withDiff,
-			}, useTBI, nil)
-			defer iter.Close()
-			var events []roachpb.RangeFeedValue
-			// ts1 here is exclusive, so we do not want the versions at ts1.
-			require.NoError(t, iter.CatchUpScan(storage.MakeMVCCMetadataKey(testKey1),
-				storage.MakeMVCCMetadataKey(roachpb.KeyMax), ts1, withDiff,
-				func(e *roachpb.RangeFeedEvent) error {
-					events = append(events, *e.Val)
-					return nil
-				}))
-			require.Equal(t, 4, len(events))
-			checkEquality := func(
-				kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event roachpb.RangeFeedValue) {
-				require.Equal(t, string(kv.Key.Key), string(event.Key))
-				require.Equal(t, kv.Key.Timestamp, event.Value.Timestamp)
-				require.Equal(t, string(kv.Value), string(event.Value.RawBytes))
-				if withDiff {
-					// TODO(sumeer): uncomment after clarifying CatchUpScan behavior.
-					// require.Equal(t, prevKV.Key.Timestamp, event.PrevValue.Timestamp)
-					require.Equal(t, string(prevKV.Value), string(event.PrevValue.RawBytes))
-				} else {
-					require.Equal(t, hlc.Timestamp{}, event.PrevValue.Timestamp)
-					require.Equal(t, 0, len(event.PrevValue.RawBytes))
-				}
+	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
+		iter := NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
+			Header: roachpb.Header{
+				// Inclusive, so want everything >= ts2
+				Timestamp: ts2,
+			},
+			Span: roachpb.Span{
+				EndKey: roachpb.KeyMax,
+			},
+			WithDiff: withDiff,
+		}, nil)
+		defer iter.Close()
+		var events []roachpb.RangeFeedValue
+		// ts1 here is exclusive, so we do not want the versions at ts1.
+		require.NoError(t, iter.CatchUpScan(storage.MakeMVCCMetadataKey(testKey1),
+			storage.MakeMVCCMetadataKey(roachpb.KeyMax), ts1, withDiff,
+			func(e *roachpb.RangeFeedEvent) error {
+				events = append(events, *e.Val)
+				return nil
+			}))
+		require.Equal(t, 4, len(events))
+		checkEquality := func(
+			kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event roachpb.RangeFeedValue) {
+			require.Equal(t, string(kv.Key.Key), string(event.Key))
+			require.Equal(t, kv.Key.Timestamp, event.Value.Timestamp)
+			require.Equal(t, string(kv.Value), string(event.Value.RawBytes))
+			if withDiff {
+				// TODO(sumeer): uncomment after clarifying CatchUpScan behavior.
+				// require.Equal(t, prevKV.Key.Timestamp, event.PrevValue.Timestamp)
+				require.Equal(t, string(prevKV.Value), string(event.PrevValue.RawBytes))
+			} else {
+				require.Equal(t, hlc.Timestamp{}, event.PrevValue.Timestamp)
+				require.Equal(t, 0, len(event.PrevValue.RawBytes))
 			}
-			checkEquality(kv1_2_2, kv1_1_1, events[0])
-			checkEquality(kv1_3_3, kv1_2_2, events[1])
-			checkEquality(kv2_2_2, kv2_1_1, events[2])
-			checkEquality(kv2_5_3, kv2_2_2, events[3])
-		})
+		}
+		checkEquality(kv1_2_2, kv1_1_1, events[0])
+		checkEquality(kv1_3_3, kv1_2_2, events[1])
+		checkEquality(kv2_2_2, kv2_1_1, events[2])
+		checkEquality(kv2_5_3, kv2_2_2, events[3])
 	})
 }
