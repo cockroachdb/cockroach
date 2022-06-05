@@ -436,7 +436,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // provided an error when the registration closes.
 //
 // The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp.
+// engine which occurred after the provided start timestamp (exclusive).
 //
 // If the method returns false, the processor will have been stopped, so calling
 // Stop is not necessary. If the method returns true, it will also return an

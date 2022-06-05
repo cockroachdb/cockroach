@@ -2681,7 +2681,8 @@ message RangeLookupResponse {
 }
 
 // RangeFeedRequest is a request that expresses the intention to establish a
-// RangeFeed stream over the provided span, starting at the specified timestamp.
+// RangeFeed stream over the provided span, starting at the specified timestamp
+// (exclusive).
 message RangeFeedRequest {
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Span   span   = 2 [(gogoproto.nullable) = false];
