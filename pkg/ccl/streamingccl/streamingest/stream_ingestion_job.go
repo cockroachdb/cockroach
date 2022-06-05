@@ -219,7 +219,7 @@ func revertToCutoverTimestamp(
 					EndKey: span.EndKey,
 				},
 				TargetTime:                          sp.StreamIngest.CutoverTime,
-				EnableTimeBoundIteratorOptimization: true,
+				EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize

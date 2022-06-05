@@ -59,8 +59,7 @@ func NewCatchUpIterator(
 	return &CatchUpIterator{
 		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
 			storage.MVCCIncrementalIterOptions{
-				EnableTimeBoundIteratorOptimization: true,
-				EndKey:                              args.Span.EndKey,
+				EndKey: args.Span.EndKey,
 				// StartTime is exclusive but args.Timestamp
 				// is inclusive.
 				StartTime: args.Timestamp.Prev(),
