@@ -2420,11 +2420,10 @@ func pebbleExportToSst(
 	iter := NewMVCCIncrementalIterator(
 		reader,
 		MVCCIncrementalIterOptions{
-			EndKey:                              options.EndKey,
-			EnableTimeBoundIteratorOptimization: options.UseTBI,
-			StartTime:                           options.StartTS,
-			EndTime:                             options.EndTS,
-			IntentPolicy:                        MVCCIncrementalIterIntentPolicyAggregate,
+			EndKey:       options.EndKey,
+			StartTime:    options.StartTS,
+			EndTime:      options.EndTS,
+			IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions

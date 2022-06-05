@@ -13,6 +13,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -139,10 +140,11 @@ const (
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
-	EnableTimeBoundIteratorOptimization bool
-	EndKey                              roachpb.Key
-	// Keys visible by the MVCCIncrementalIterator must be within (StartTime,
-	// EndTime].
+	EndKey roachpb.Key
+
+	// Only keys within (StartTime,EndTime] will be emitted. EndTime defaults to
+	// hlc.MaxTimestamp. The time-bound iterator optimization will only be used if
+	// StartTime is set, since we assume EndTime will be near the current time.
 	StartTime hlc.Timestamp
 	EndTime   hlc.Timestamp
 
@@ -156,9 +158,22 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
+	// Default to MaxTimestamp for EndTime, since the code assumes it is set.
+	if opts.EndTime.IsEmpty() {
+		opts.EndTime = hlc.MaxTimestamp
+	}
+
+	// We assume EndTime is near the current time, so there is little to gain from
+	// using a TBI unless StartTime is set. However, we always vary it in
+	// metamorphic test builds, for better test coverage of both paths.
+	useTBI := opts.StartTime.IsSet()
+	if util.IsMetamorphicBuild() {
+		useTBI = util.ConstantWithMetamorphicTestBool("mvcc-incremental-iter-tbi", true)
+	}
+
 	var iter MVCCIterator
 	var timeBoundIter MVCCIterator
-	if opts.EnableTimeBoundIteratorOptimization {
+	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
 		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{

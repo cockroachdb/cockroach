@@ -314,7 +314,7 @@ func (m mvccClearTimeRangeOp) run(ctx context.Context) string {
 		return "no-op due to no non-conflicting key range"
 	}
 	span, err := storage.MVCCClearTimeRange(ctx, m.m.engine, &enginepb.MVCCStats{}, m.key, m.endKey,
-		m.startTime, m.endTime, math.MaxInt64, math.MaxInt64, true /* useTBI */)
+		m.startTime, m.endTime, math.MaxInt64, math.MaxInt64)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
