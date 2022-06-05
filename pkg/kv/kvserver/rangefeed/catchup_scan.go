@@ -61,10 +61,8 @@ func NewCatchUpIterator(
 			storage.MVCCIncrementalIterOptions{
 				EnableTimeBoundIteratorOptimization: true,
 				EndKey:                              args.Span.EndKey,
-				// StartTime is exclusive but args.Timestamp
-				// is inclusive.
-				StartTime: args.Timestamp.Prev(),
-				EndTime:   hlc.MaxTimestamp,
+				StartTime:                           args.Timestamp,
+				EndTime:                             hlc.MaxTimestamp,
 				// We want to emit intents rather than error
 				// (the default behavior) so that we can skip
 				// over the provisional values during
