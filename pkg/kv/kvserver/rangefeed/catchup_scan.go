@@ -22,12 +22,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// A CatchUpIterator is an iterator for catchUp-scans.
-type CatchUpIterator struct {
-	simpleCatchupIter
-	close func()
-}
-
 // simpleCatchupIter is an extension of SimpleMVCCIterator that allows for the
 // primary iterator to be implemented using a regular MVCCIterator or a
 // (often) more efficient MVCCIncrementalIterator. When the caller wants to
@@ -52,16 +46,25 @@ func (i simpleCatchupIterAdapter) NextIgnoringTime() {
 
 var _ simpleCatchupIter = simpleCatchupIterAdapter{}
 
-// NewCatchUpIterator returns a CatchUpIterator for the given Reader.
+// CatchUpIterator is an iterator for catchup-scans.
+type CatchUpIterator struct {
+	simpleCatchupIter
+	close     func()
+	span      roachpb.Span
+	startTime hlc.Timestamp // exclusive
+}
+
+// NewCatchUpIterator returns a CatchUpIterator for the given Reader over the
+// given key/time span. startTime is exclusive.
 func NewCatchUpIterator(
-	reader storage.Reader, args *roachpb.RangeFeedRequest, closer func(),
+	reader storage.Reader, span roachpb.Span, startTime hlc.Timestamp, closer func(),
 ) *CatchUpIterator {
 	return &CatchUpIterator{
 		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
 			storage.MVCCIncrementalIterOptions{
 				EnableTimeBoundIteratorOptimization: true,
-				EndKey:                              args.Span.EndKey,
-				StartTime:                           args.Timestamp,
+				EndKey:                              span.EndKey,
+				StartTime:                           startTime,
 				EndTime:                             hlc.MaxTimestamp,
 				// We want to emit intents rather than error
 				// (the default behavior) so that we can skip
@@ -75,7 +78,9 @@ func NewCatchUpIterator(
 				// still needed (#69357).
 				InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
 			}),
-		close: closer,
+		close:     closer,
+		span:      span,
+		startTime: startTime,
 	}
 }
 
@@ -93,15 +98,9 @@ func (i *CatchUpIterator) Close() {
 // returns. However, we may revist this in #69596.
 type outputEventFn func(e *roachpb.RangeFeedEvent) error
 
-// CatchUpScan iterates over all changes for the given span of keys,
-// starting at catchUpTimestamp. Keys and Values are emitted as
-// RangeFeedEvents passed to the given outputFn. catchUpTimestamp is exclusive.
-func (i *CatchUpIterator) CatchUpScan(
-	startKey, endKey storage.MVCCKey,
-	catchUpTimestamp hlc.Timestamp,
-	withDiff bool,
-	outputFn outputEventFn,
-) error {
+// CatchUpScan iterates over all changes in the configured key/time span, and
+// emits them as RangeFeedEvents via outputFn in chronological order.
+func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store
@@ -136,7 +135,7 @@ func (i *CatchUpIterator) CatchUpScan(
 	// versions of each key that are after the registration's startTS, so we
 	// can't use NextKey.
 	var meta enginepb.MVCCMetadata
-	i.SeekGE(startKey)
+	i.SeekGE(storage.MVCCKey{Key: i.span.Key})
 	for {
 		if ok, err := i.Valid(); err != nil {
 			return err
@@ -195,7 +194,7 @@ func (i *CatchUpIterator) CatchUpScan(
 		// Ignore the version if it's not inline and its timestamp is at
 		// or before the registration's (exclusive) starting timestamp.
 		ts := unsafeKey.Timestamp
-		ignore := !(ts.IsEmpty() || catchUpTimestamp.Less(ts))
+		ignore := !(ts.IsEmpty() || i.startTime.Less(ts))
 		if ignore && !withDiff {
 			// Skip all the way to the next key.
 			// NB: fast-path to avoid value copy when !r.withDiff.

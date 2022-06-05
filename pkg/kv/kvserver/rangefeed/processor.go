@@ -200,12 +200,11 @@ func NewProcessor(cfg Config) *Processor {
 // engine has not been closed.
 type IntentScannerConstructor func() IntentScanner
 
-// CatchUpIteratorConstructor is used to construct an iterator that
-// can be used for catchup-scans. It should be called from underneath
-// a stopper task to ensure that the engine has not been closed.
-//
-// The constructed iterator must have an UpperBound set.
-type CatchUpIteratorConstructor func() *CatchUpIterator
+// CatchUpIteratorConstructor is used to construct an iterator that can be used
+// for catchup-scans. Takes the key span and exclusive start time to run the
+// catchup scan for. It should be called from underneath a stopper task to
+// ensure that the engine has not been closed.
+type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) *CatchUpIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
