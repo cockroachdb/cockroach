@@ -99,8 +99,7 @@ func RevertRange(
 
 	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
 		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
-		maxRevertRangeBatchBytes,
-		args.EnableTimeBoundIteratorOptimization)
+		maxRevertRangeBatchBytes)
 	if err != nil {
 		return result.Result{}, err
 	}

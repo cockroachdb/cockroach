@@ -153,9 +153,8 @@ func TestCmdRevertRange(t *testing.T) {
 					defer batch.Close()
 
 					req := roachpb.RevertRangeRequest{
-						RequestHeader:                       roachpb.RequestHeader{Key: startKey, EndKey: endKey},
-						TargetTime:                          tc.ts,
-						EnableTimeBoundIteratorOptimization: true,
+						RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+						TargetTime:    tc.ts,
 					}
 					cArgs.Stats = &enginepb.MVCCStats{}
 					cArgs.Args = &req
@@ -233,9 +232,8 @@ func TestCmdRevertRange(t *testing.T) {
 					defer batch.Close()
 					cArgs.Stats = &enginepb.MVCCStats{}
 					req := roachpb.RevertRangeRequest{
-						RequestHeader:                       roachpb.RequestHeader{Key: startKey, EndKey: endKey},
-						TargetTime:                          tc.ts,
-						EnableTimeBoundIteratorOptimization: true,
+						RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+						TargetTime:    tc.ts,
 					}
 					cArgs.Args = &req
 					var resumes int
