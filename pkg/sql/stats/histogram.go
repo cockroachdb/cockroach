@@ -169,10 +169,18 @@ type histogram struct {
 }
 
 // adjustCounts adjusts the row count and number of distinct values per bucket
-// based on the total row count and estimated distinct count.
+// to equal the total row count and estimated distinct count. The total row
+// count and estimated distinct count should not include NULL values, and the
+// histogram should not contain any buckets for NULL values.
 func (h *histogram) adjustCounts(
 	evalCtx *tree.EvalContext, rowCountTotal, distinctCountTotal float64,
 ) {
+	// Empty table cases.
+	if rowCountTotal <= 0 || distinctCountTotal <= 0 {
+		h.buckets = make([]cat.HistogramBucket, 0)
+		return
+	}
+
 	// Calculate the current state of the histogram so we can adjust it as needed.
 	// The number of rows and distinct values represented by the histogram should
 	// be adjusted so they equal rowCountTotal and distinctCountTotal.
@@ -190,13 +198,16 @@ func (h *histogram) adjustCounts(
 		}
 	}
 
-	if rowCountEq <= 0 {
-		panic(errors.AssertionFailedf("expected a positive value for rowCountEq"))
+	// If the histogram only had empty buckets, we can't adjust it.
+	if rowCountRange+rowCountEq <= 0 || distinctCountRange+distinctCountEq <= 0 {
+		h.buckets = make([]cat.HistogramBucket, 0)
+		return
 	}
 
 	// If the upper bounds account for all distinct values (as estimated by the
 	// sketch), make the histogram consistent by clearing the ranges and adjusting
-	// the NumEq values to add up to the row count.
+	// the NumEq values to add up to the row count. This might be the case for
+	// low-cardinality types like BOOL and ENUM or other low-cardinality data.
 	if distinctCountEq >= distinctCountTotal {
 		adjustmentFactorNumEq := rowCountTotal / rowCountEq
 		for i := range h.buckets {
@@ -210,7 +221,7 @@ func (h *histogram) adjustCounts(
 	// The upper bounds do not account for all distinct values, so adjust the
 	// NumEq values if needed so they add up to less than the row count.
 	remDistinctCount := distinctCountTotal - distinctCountEq
-	if rowCountEq+remDistinctCount >= rowCountTotal {
+	if rowCountEq > 0 && rowCountEq+remDistinctCount > rowCountTotal {
 		targetRowCountEq := rowCountTotal - remDistinctCount
 		adjustmentFactorNumEq := targetRowCountEq / rowCountEq
 		for i := range h.buckets {
@@ -230,10 +241,10 @@ func (h *histogram) adjustCounts(
 		lowerBound := h.buckets[0].UpperBound
 		upperBound := h.buckets[len(h.buckets)-1].UpperBound
 		if maxDistinct, ok := tree.MaxDistinctCount(evalCtx, lowerBound, upperBound); ok {
-			// Subtract distinctCountEq to account for the upper bounds of the
+			// Subtract number of buckets to account for the upper bounds of the
 			// buckets, along with the current range distinct count which has already
 			// been accounted for.
-			maxDistinctCountRange = float64(maxDistinct) - distinctCountEq - distinctCountRange
+			maxDistinctCountRange = float64(maxDistinct) - float64(len(h.buckets)) - distinctCountRange
 		}
 
 		// Add distinct values into the histogram if there is space. Increment the
@@ -278,7 +289,10 @@ func (h *histogram) adjustCounts(
 		)
 	}
 
-	// Adjust the values so the row counts and distinct counts add up correctly.
+	// At this point rowCountRange + rowCountEq >= distinctCountTotal but not
+	// necessarily rowCountTotal, so we've accounted for all distinct values, and
+	// any additional rows we add will be duplicate values. We can spread the
+	// final adjustment proportionately across both NumRange and NumEq.
 	adjustmentFactorDistinctRange := float64(1)
 	if distinctCountRange > 0 {
 		adjustmentFactorDistinctRange = (distinctCountTotal - distinctCountEq) / distinctCountRange
