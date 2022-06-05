@@ -84,10 +84,7 @@ func iterateExpectErr(
 			assertExpectErr(t, e, startKey, endKey, startTime, endTime, revisions, intents[0])
 		})
 		t.Run("export-intents", func(t *testing.T) {
-			assertExportedErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents, false)
-		})
-		t.Run("export-intents-tbi", func(t *testing.T) {
-			assertExportedErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents, true)
+			assertExportedErrs(t, e, startKey, endKey, startTime, endTime, revisions, intents)
 		})
 	}
 }
@@ -182,7 +179,6 @@ func assertExportedErrs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expectedIntents []roachpb.Intent,
-	useTBI bool,
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
@@ -196,7 +192,6 @@ func assertExportedErrs(
 		MaxSize:            big,
 		MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 		StopMidKey:         false,
-		UseTBI:             useTBI,
 	}, sstFile)
 	require.Error(t, err)
 
@@ -221,7 +216,6 @@ func assertExportedKVs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expected []MVCCKeyValue,
-	useTBI bool,
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
@@ -234,7 +228,6 @@ func assertExportedKVs(
 		TargetSize:         big,
 		MaxSize:            big,
 		StopMidKey:         false,
-		UseTBI:             useTBI,
 	}, sstFile)
 	require.NoError(t, err)
 	data := sstFile.Data()
@@ -271,27 +264,20 @@ func nextIgnoreTimeExpectErr(
 	startTime, endTime hlc.Timestamp,
 	errString string,
 ) {
-	// The semantics of the methods NextIgnoringTime() should not change whether
-	// or not we enable the TBI optimization.
-	for _, useTBI := range []bool{true, false} {
-		t.Run(fmt.Sprintf("useTBI-%t", useTBI), func(t *testing.T) {
-			iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-				EndKey:                              endKey,
-				EnableTimeBoundIteratorOptimization: useTBI,
-				StartTime:                           startTime,
-				EndTime:                             endTime,
-			})
-			defer iter.Close()
-			for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
-				if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-					break
-				}
-				// pass
-			}
-			if _, err := iter.Valid(); !testutils.IsError(err, errString) {
-				t.Fatalf("expected error %q but got %v", errString, err)
-			}
-		})
+	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
+	})
+	defer iter.Close()
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
+		if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+			break
+		}
+		// pass
+	}
+	if _, err := iter.Valid(); !testutils.IsError(err, errString) {
+		t.Fatalf("expected error %q but got %v", errString, err)
 	}
 }
 
@@ -302,27 +288,20 @@ func nextKeyIgnoreTimeExpectErr(
 	startTime, endTime hlc.Timestamp,
 	errString string,
 ) {
-	// The semantics of the methods NextIgnoringTime() should not change whether
-	// or not we enable the TBI optimization.
-	for _, useTBI := range []bool{true, false} {
-		t.Run(fmt.Sprintf("useTBI-%t", useTBI), func(t *testing.T) {
-			iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-				EndKey:                              endKey,
-				EnableTimeBoundIteratorOptimization: useTBI,
-				StartTime:                           startTime,
-				EndTime:                             endTime,
-			})
-			defer iter.Close()
-			for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextKeyIgnoringTime() {
-				if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-					break
-				}
-				// pass
-			}
-			if _, err := iter.Valid(); !testutils.IsError(err, errString) {
-				t.Fatalf("expected error %q but got %v", errString, err)
-			}
-		})
+	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
+	})
+	defer iter.Close()
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextKeyIgnoringTime() {
+		if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+			break
+		}
+		// pass
+	}
+	if _, err := iter.Valid(); !testutils.IsError(err, errString) {
+		t.Fatalf("expected error %q but got %v", errString, err)
 	}
 }
 
@@ -333,39 +312,32 @@ func assertNextIgnoreTimeIteratedKVs(
 	startTime, endTime hlc.Timestamp,
 	expected []MVCCKeyValue,
 ) {
-	// The semantics of the methods NextIgnoringTime() should not change whether
-	// or not we enable the TBI optimization.
-	for _, useTBI := range []bool{true, false} {
-		t.Run(fmt.Sprintf("useTBI-%t", useTBI), func(t *testing.T) {
-			iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-				EndKey:                              endKey,
-				EnableTimeBoundIteratorOptimization: useTBI,
-				StartTime:                           startTime,
-				EndTime:                             endTime,
-			})
-			defer iter.Close()
-			var kvs []MVCCKeyValue
-			for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
-				if ok, err := iter.Valid(); err != nil {
-					t.Fatalf("unexpected error: %+v", err)
-				} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-					break
-				}
-				kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
-			}
+	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
+	})
+	defer iter.Close()
+	var kvs []MVCCKeyValue
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+			break
+		}
+		kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+	}
 
-			if len(kvs) != len(expected) {
-				t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
-			}
-			for i := range kvs {
-				if !kvs[i].Key.Equal(expected[i].Key) {
-					t.Fatalf("%d key: got %v but expected %v", i, kvs[i].Key, expected[i].Key)
-				}
-				if !bytes.Equal(kvs[i].Value, expected[i].Value) {
-					t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
-				}
-			}
-		})
+	if len(kvs) != len(expected) {
+		t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
+	}
+	for i := range kvs {
+		if !kvs[i].Key.Equal(expected[i].Key) {
+			t.Fatalf("%d key: got %v but expected %v", i, kvs[i].Key, expected[i].Key)
+		}
+		if !bytes.Equal(kvs[i].Value, expected[i].Value) {
+			t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
+		}
 	}
 }
 
@@ -376,39 +348,32 @@ func assertNextKeyIgnoreTimeIteratedKVs(
 	startTime, endTime hlc.Timestamp,
 	expected []MVCCKeyValue,
 ) {
-	// The semantics of the methods NextKeyIgnoringTime() should not change whether
-	// or not we enable the TBI optimization.
-	for _, useTBI := range []bool{true, false} {
-		t.Run(fmt.Sprintf("useTBI-%t", useTBI), func(t *testing.T) {
-			iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-				EndKey:                              endKey,
-				EnableTimeBoundIteratorOptimization: useTBI,
-				StartTime:                           startTime,
-				EndTime:                             endTime,
-			})
-			defer iter.Close()
-			var kvs []MVCCKeyValue
-			for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextKeyIgnoringTime() {
-				if ok, err := iter.Valid(); err != nil {
-					t.Fatalf("unexpected error: %+v", err)
-				} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
-					break
-				}
-				kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
-			}
+	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
+	})
+	defer iter.Close()
+	var kvs []MVCCKeyValue
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextKeyIgnoringTime() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
+			break
+		}
+		kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+	}
 
-			if len(kvs) != len(expected) {
-				t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
-			}
-			for i := range kvs {
-				if !kvs[i].Key.Equal(expected[i].Key) {
-					t.Fatalf("%d key: got %v but expected %v", i, kvs[i].Key, expected[i].Key)
-				}
-				if !bytes.Equal(kvs[i].Value, expected[i].Value) {
-					t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
-				}
-			}
-		})
+	if len(kvs) != len(expected) {
+		t.Fatalf("got %d kvs but expected %d: %v", len(kvs), len(expected), kvs)
+	}
+	for i := range kvs {
+		if !kvs[i].Key.Equal(expected[i].Key) {
+			t.Fatalf("%d key: got %v but expected %v", i, kvs[i].Key, expected[i].Key)
+		}
+		if !bytes.Equal(kvs[i].Value, expected[i].Value) {
+			t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
+		}
 	}
 }
 
@@ -419,14 +384,12 @@ func assertIteratedKVs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expected []MVCCKeyValue,
-	useTBI bool,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-		EndKey:                              endKey,
-		EnableTimeBoundIteratorOptimization: useTBI,
-		StartTime:                           startTime,
-		EndTime:                             endTime,
-		IntentPolicy:                        MVCCIncrementalIterIntentPolicyAggregate,
+		EndKey:       endKey,
+		StartTime:    startTime,
+		EndTime:      endTime,
+		IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
 	})
 	defer iter.Close()
 	var iterFn func()
@@ -471,21 +434,10 @@ func assertEqualKVs(
 	return func(t *testing.T) {
 		t.Helper()
 		t.Run("iterate", func(t *testing.T) {
-			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
-				false /* useTBI */)
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected)
 		})
-		t.Run("iterate-tbi", func(t *testing.T) {
-			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
-				true /* useTBI */)
-		})
-
 		t.Run("export", func(t *testing.T) {
-			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
-				false /* useTBI */)
-		})
-		t.Run("export-tbi", func(t *testing.T) {
-			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
-				true /* useTBI */)
+			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected)
 		})
 	}
 }
@@ -1574,7 +1526,7 @@ func collectMatchingWithMVCCIterator(
 }
 
 func runIncrementalBenchmark(
-	b *testing.B, emk engineMaker, useTBI bool, ts hlc.Timestamp, opts benchDataOptions,
+	b *testing.B, emk engineMaker, ts hlc.Timestamp, opts benchDataOptions,
 ) {
 	eng, _ := setupMVCCData(context.Background(), b, emk, opts)
 	{
@@ -1592,10 +1544,9 @@ func runIncrementalBenchmark(
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
-			EnableTimeBoundIteratorOptimization: useTBI,
-			EndKey:                              endKey,
-			StartTime:                           ts,
-			EndTime:                             hlc.MaxTimestamp,
+			EndKey:    endKey,
+			StartTime: ts,
+			EndTime:   hlc.MaxTimestamp,
 		})
 		defer it.Close()
 		it.SeekGE(MVCCKey{Key: startKey})
@@ -1614,9 +1565,6 @@ func BenchmarkMVCCIncrementalIterator(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	numVersions := 100
 	numKeys := 1000
-	// Mean of 50 versions * 1000 bytes results in more than one block per
-	// versioned key, so there is some chance of
-	// EnableTimeBoundIteratorOptimization=true being useful.
 	valueBytes := 1000
 
 	setupMVCCPebbleWithBlockProperties := func(b testing.TB, dir string) Engine {
@@ -1634,19 +1582,15 @@ func BenchmarkMVCCIncrementalIterator(b *testing.B) {
 		}
 		return peb
 	}
-	for _, useTBI := range []bool{true, false} {
-		b.Run(fmt.Sprintf("useTBI=%v", useTBI), func(b *testing.B) {
-			for _, tsExcludePercent := range []float64{0, 0.95} {
-				wallTime := int64((5 * (float64(numVersions)*tsExcludePercent + 1)))
-				ts := hlc.Timestamp{WallTime: wallTime}
-				b.Run(fmt.Sprintf("ts=%d", ts.WallTime), func(b *testing.B) {
-					runIncrementalBenchmark(b, setupMVCCPebbleWithBlockProperties, useTBI, ts, benchDataOptions{
-						numVersions: numVersions,
-						numKeys:     numKeys,
-						valueBytes:  valueBytes,
-					})
-				})
-			}
+	for _, tsExcludePercent := range []float64{0, 0.95} {
+		wallTime := int64((5 * (float64(numVersions)*tsExcludePercent + 1)))
+		ts := hlc.Timestamp{WallTime: wallTime}
+		b.Run(fmt.Sprintf("ts=%d", ts.WallTime), func(b *testing.B) {
+			runIncrementalBenchmark(b, setupMVCCPebbleWithBlockProperties, ts, benchDataOptions{
+				numVersions: numVersions,
+				numKeys:     numKeys,
+				valueBytes:  valueBytes,
+			})
 		})
 	}
 }
@@ -1717,30 +1661,25 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 		eng := setupMVCCPebbleWithBlockProperties(b)
 		setupData(b, eng, valueSize)
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			for _, useTBI := range []bool{true, false} {
-				b.Run(fmt.Sprintf("useTBI=%t", useTBI), func(b *testing.B) {
-					startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
-					endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(numKeys)))
-					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
-						it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
-							EnableTimeBoundIteratorOptimization: useTBI,
-							EndKey:                              endKey,
-							StartTime:                           hlc.Timestamp{},
-							EndTime:                             hlc.Timestamp{WallTime: baseTimestamp},
-						})
-						it.SeekGE(MVCCKey{Key: startKey})
-						for {
-							if ok, err := it.Valid(); err != nil {
-								b.Fatalf("failed incremental iteration: %+v", err)
-							} else if !ok {
-								break
-							}
-							it.Next()
-						}
-						it.Close()
-					}
+			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
+			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(numKeys)))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+					EndKey:    endKey,
+					StartTime: hlc.Timestamp{},
+					EndTime:   hlc.Timestamp{WallTime: baseTimestamp},
 				})
+				it.SeekGE(MVCCKey{Key: startKey})
+				for {
+					if ok, err := it.Valid(); err != nil {
+						b.Fatalf("failed incremental iteration: %+v", err)
+					} else if !ok {
+						break
+					}
+					it.Next()
+				}
+				it.Close()
 			}
 		})
 		eng.Close()

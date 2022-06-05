@@ -173,8 +173,6 @@ func evalExport(
 		maxIntents = uint64(m)
 	}
 
-	// Time-bound iterators only make sense to use if the start time is set.
-	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	// Only use resume timestamp if splitting mid key is enabled.
 	resumeKeyTS := hlc.Timestamp{}
 	if args.SplitMidKey {
@@ -194,7 +192,6 @@ func evalExport(
 			MaxSize:            maxSize,
 			MaxIntents:         maxIntents,
 			StopMidKey:         args.SplitMidKey,
-			UseTBI:             useTBI,
 			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
 		}, destFile)
 		if err != nil {
