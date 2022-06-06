@@ -329,6 +329,7 @@ go_library(
         "//pkg/sql/delegate",
         "//pkg/sql/distsql",
         "//pkg/sql/enum",
+        "//pkg/sql/evalcatalog",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfra/execopnode",

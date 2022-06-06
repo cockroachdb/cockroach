@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
+
+go_library(
+    name = "evalcatalog",
+    srcs = [
+        "encode_table_index_key.go",
+        "eval_catalog.go",
+        "geo_inverted_index_entries.go",
+        "pg_updatable.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/evalcatalog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+disallowed_imports_test(
+    src = "evalcatalog",
+    disallowed_list = ["//pkg/sql/sem/builtins"],
+)
