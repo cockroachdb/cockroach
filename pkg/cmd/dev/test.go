@@ -52,12 +52,29 @@ This command takes a list of packages and tests all of them. It's also
 permissive enough to accept bazel build targets (like
 pkg/kv/kvserver:kvserver_test) instead.`,
 		Example: `
-	dev test
-	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
-	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
-	dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
-	dev test pkg/... -v
-	dev test --stress --race ...`,
+    dev test pkg/kv/kvserver --filter=TestReplicaGC*
+        run the tests that match with 'TestReplicaGC*' in the kvserver package.
+
+    dev test pkg/... -v
+        increase test verbosity. Shows bazel and go test process output.
+
+    dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
+        test multiple packages recursively
+
+    dev test --race --stress ...
+        run a test under race and stress
+
+    dev test pkg/spanconfig/... --test-args '-test.trace=trace.out'
+        pass arguments to go test (see 'go help testflag'; prefix args with '-test.{arg}')
+
+    dev test pkg/spanconfig --stress --stress-args '-maxruns 1000 -p 4'
+        pass arguments to github.com/cockroachdb/stress
+
+    dev test --stress --timeout=1m --test-args='-test.timeout 5s'
+        stress for 1m until a test runs longer than 5s
+
+    dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
@@ -82,7 +99,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
-	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
+	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	return testCmd
 }
