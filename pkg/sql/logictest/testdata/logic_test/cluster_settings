@@ -148,41 +148,41 @@ SHOW CLUSTER SETTING sql.defaults.stub_catalog_tables.enabled
 ----
 true
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement ok
 SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query T
 SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
 ----
 10 MiB
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query T
 SELECT crdb_internal.cluster_setting_encoded_default('kv.snapshot_rebalance.max_rate')
 ----
 33554432
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query T
 SELECT crdb_internal.decode_cluster_setting('kv.snapshot_rebalance.max_rate', '33554432')
 ----
 32 MiB
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query error unknown cluster setting
 SELECT crdb_internal.cluster_setting_encoded_default('kv.snapshot_rebalance.max_rate')
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query error unknown cluster setting
 SELECT crdb_internal.decode_cluster_setting('kv.snapshot_rebalance.max_rate', '33554432')
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 statement error unknown cluster setting
 SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '10Mib'
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 statement error unknown setting
 SHOW CLUSTER SETTING kv.snapshot_rebalance.max_rate
 
@@ -191,85 +191,85 @@ subtest tenant-cluster-settings
 
 # Skip this test when inside a tenant, as this setting won't be visible in
 # there.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error admission.kv.enabled is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING
 ALTER TENANT 10 SET CLUSTER SETTING admission.kv.enabled=true
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 statement error ALTER TENANT can only be called by system operators
 ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error cannot use this statement to access cluster settings in system tenant
 ALTER TENANT 1 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement ok
 SELECT crdb_internal.create_tenant(10)
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement ok
 ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement ok
 ALTER TENANT ALL SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement ok
 ALTER TENANT 10 RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement ok
 ALTER TENANT ALL RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 statement error SHOW CLUSTER SETTING FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query error tenant ID must be non-zero
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 0
 
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query error use SHOW CLUSTER SETTING to display a setting for the system tenant
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 1
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query error no tenant found with ID 1111
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 1111
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query T
 SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
 ----
 NULL
 
-onlyif config 3node-tenant
+onlyif config 3snode-tenant-default-config
 query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTINGS FOR TENANT 10
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query error tenant ID must be non-zero
 SHOW CLUSTER SETTINGS FOR TENANT 0
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query error use SHOW CLUSTER SETTINGS to display settings for the system tenant
 SHOW CLUSTER SETTINGS FOR TENANT 1
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query error no tenant found with ID 1111
 SHOW CLUSTER SETTINGS FOR TENANT 1111
 
 # The IN clause should contain one public and one hidden cluster setting.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query TTT
 SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----
 jobs.retention_time  d  no-override
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query TTBT
 SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT 10] WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----

@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant-default-configs
 
 query error tenant "13" does not exist
 SELECT crdb_internal.update_tenant_resource_limits(13, 1000, 100, 0, now(), 0)
