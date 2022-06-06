@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -207,6 +208,15 @@ func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
 // GeoConfig is part of the cat.Index interface.
 // TODO(nehageorge): Add support for spatial index recommendations.
 func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
+	if hi.IsInverted() {
+		colType := hi.InvertedColumn().DatumType().Family()
+		switch colType {
+		case types.GeometryFamily:
+			return *geoindex.DefaultGeometryIndexConfig()
+		case types.GeographyFamily:
+			return *geoindex.DefaultGeographyIndexConfig()
+		}
+	}
 	return geoindex.Config{}
 }
 
