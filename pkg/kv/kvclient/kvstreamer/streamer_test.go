@@ -70,16 +70,6 @@ func TestStreamerLimitations(t *testing.T) {
 		})
 	})
 
-	t.Run("invalid enqueueKeys", func(t *testing.T) {
-		streamer := getStreamer()
-		defer streamer.Close(ctx)
-		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
-		// Use a single request but two keys which is invalid.
-		reqs := []roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{}}}
-		enqueueKeys := []int{0, 1}
-		require.Error(t, streamer.Enqueue(ctx, reqs, enqueueKeys))
-	})
-
 	t.Run("pipelining unsupported", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
@@ -90,10 +80,10 @@ func TestStreamerLimitations(t *testing.T) {
 				Get: get.(*roachpb.GetRequest),
 			},
 		}}
-		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		// It is invalid to enqueue more requests before the previous have been
 		// responded to.
-		require.Error(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.Error(t, streamer.Enqueue(ctx, reqs))
 	})
 
 	t.Run("unexpected RootTxn", func(t *testing.T) {
@@ -195,7 +185,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		// A single request that exceeds the limit should be allowed.
 		reqs := make([]roachpb.RequestUnion, 1)
 		reqs[0] = makeGetRequest(limitBytes + 1)
-		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
 	})
 
 	t.Run("single key exceeds root pool size", func(t *testing.T) {
@@ -207,7 +197,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		// should be denied.
 		reqs := make([]roachpb.RequestUnion, 1)
 		reqs[0] = makeGetRequest(rootPoolSize + 1)
-		require.Error(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.Error(t, streamer.Enqueue(ctx, reqs))
 	})
 
 	t.Run("multiple keys exceed limit", func(t *testing.T) {
@@ -219,7 +209,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		reqs := make([]roachpb.RequestUnion, 2)
 		reqs[0] = makeGetRequest(limitBytes/2 + 1)
 		reqs[1] = makeGetRequest(limitBytes/2 + 1)
-		require.Error(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.Error(t, streamer.Enqueue(ctx, reqs))
 	})
 }
 
@@ -434,7 +424,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 		// Scan the row with pk=0.
 		reqs := make([]roachpb.RequestUnion, 1)
 		reqs[0] = makeScanRequest(0, 1)
-		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		results, err := streamer.GetResults(ctx)
 		require.NoError(t, err)
 		// We expect a single empty Scan response.
@@ -448,7 +438,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 		// Scan the rows with pk in range [1, 4).
 		reqs := make([]roachpb.RequestUnion, 1)
 		reqs[0] = makeScanRequest(1, 4)
-		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		// We expect an empty response for each range.
 		var numResults int
 		for {

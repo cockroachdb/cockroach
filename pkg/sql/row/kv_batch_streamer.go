@@ -41,6 +41,7 @@ var useStreamerEnabled = settings.RegisterBoolSetting(
 type TxnKVStreamer struct {
 	streamer *kvstreamer.Streamer
 	spans    roachpb.Spans
+	spanIDs  []int
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
@@ -48,9 +49,6 @@ type TxnKVStreamer struct {
 	results         []kvstreamer.Result
 	lastResultState struct {
 		kvstreamer.Result
-		// numEmitted tracks the number of times this result has been fully
-		// emitted.
-		numEmitted int
 		// Used only for ScanResponses.
 		remainingBatches [][]byte
 	}
@@ -71,13 +69,21 @@ func NewTxnKVStreamer(
 	}
 	keyLocking := getKeyLockingStrength(lockStrength)
 	reqs := spansToRequests(spans, false /* reverse */, keyLocking)
-	if err := streamer.Enqueue(ctx, reqs, spanIDs); err != nil {
+	if err := streamer.Enqueue(ctx, reqs); err != nil {
 		return nil, err
 	}
 	return &TxnKVStreamer{
 		streamer: streamer,
 		spans:    spans,
+		spanIDs:  spanIDs,
 	}, nil
+}
+
+func (f *TxnKVStreamer) getSpanID(resultPosition int) int {
+	if f.spanIDs == nil {
+		return resultPosition
+	}
+	return f.spanIDs[resultPosition]
 }
 
 // proceedWithLastResult processes the result which must be already set on the
@@ -89,7 +95,7 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 	result := f.lastResultState.Result
 	ret := kvBatchFetcherResponse{
 		moreKVs: true,
-		spanID:  result.EnqueueKeysSatisfied[f.lastResultState.numEmitted],
+		spanID:  f.getSpanID(result.Position),
 	}
 	if get := result.GetResp; get != nil {
 		// No need to check get.IntentValue since the Streamer guarantees that
@@ -100,7 +106,6 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 			return true, kvBatchFetcherResponse{}, nil
 		}
 		origSpan := f.spans[result.Position]
-		f.lastResultState.numEmitted++
 		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
 		ret.kvs = f.getResponseScratch[:]
 		return false, ret, nil
@@ -108,9 +113,6 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 	scan := result.ScanResp
 	if len(scan.BatchResponses) > 0 {
 		ret.batchResponse, f.lastResultState.remainingBatches = scan.BatchResponses[0], scan.BatchResponses[1:]
-	}
-	if len(f.lastResultState.remainingBatches) == 0 {
-		f.lastResultState.numEmitted++
 	}
 	// We're consciously ignoring scan.Rows argument since the Streamer
 	// guarantees to always produce Scan responses using BATCH_RESPONSE format.
@@ -131,34 +133,19 @@ func (f *TxnKVStreamer) nextBatch(ctx context.Context) (kvBatchFetcherResponse, 
 	if len(f.lastResultState.remainingBatches) > 0 {
 		ret := kvBatchFetcherResponse{
 			moreKVs: true,
-			spanID:  f.lastResultState.Result.EnqueueKeysSatisfied[f.lastResultState.numEmitted],
+			spanID:  f.getSpanID(f.lastResultState.Result.Position),
 		}
 		ret.batchResponse, f.lastResultState.remainingBatches = f.lastResultState.remainingBatches[0], f.lastResultState.remainingBatches[1:]
-		if len(f.lastResultState.remainingBatches) == 0 {
-			f.lastResultState.numEmitted++
-		}
 		return ret, nil
 	}
 
-	// Check whether the current result satisfies multiple requests.
-	if f.lastResultState.numEmitted < len(f.lastResultState.EnqueueKeysSatisfied) {
-		// Note that we should never get an error here since we're processing
-		// the same result again.
-		var err error
-		_, ret, err := f.proceedWithLastResult(ctx)
-		return ret, err
-	}
-
 	// Release the current result.
-	if f.lastResultState.numEmitted == len(f.lastResultState.EnqueueKeysSatisfied) && f.lastResultState.numEmitted > 0 {
-		f.releaseLastResult(ctx)
-	}
+	f.releaseLastResult(ctx)
 
 	// Process the next result we have already received from the streamer.
 	for len(f.results) > 0 {
 		// Peel off the next result and set it into lastResultState.
 		f.lastResultState.Result = f.results[0]
-		f.lastResultState.numEmitted = 0
 		f.lastResultState.remainingBatches = nil
 		// Lose the reference to that result and advance the results slice for
 		// the next iteration.
