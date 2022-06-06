@@ -248,6 +248,11 @@ SELECT * FROM information_schema.table_privileges WHERE grantee = 'mix_u';
 ----
 NULL  mix_u  test  public  mix_seq  USAGE  YES  NO
 
+query B
+SELECT has_sequence_privilege('mix_u', 'mix_seq', 'USAGE WITH GRANT OPTION')
+----
+true
+
 statement ok
 GRANT SELECT, UPDATE ON mix_seq, mix_tab TO mix_u WITH GRANT OPTION
 
