@@ -115,6 +115,7 @@ eexpect "(sql)"
 eexpect "demo:"
 eexpect ":26258"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "(sql/unix)"
 eexpect "demo:"
 eexpect "=26258"
@@ -123,6 +124,7 @@ eexpect "(sql)"
 eexpect "demo:"
 eexpect ":26257"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "defaultdb>"
 
 send_eof
@@ -142,6 +144,7 @@ eexpect "http://"
 eexpect "(sql)"
 eexpect "demo:"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "(sql/unix)"
 eexpect "demo:"
 eexpect "defaultdb>"
@@ -190,6 +193,7 @@ spawn $argv demo --insecure=false --no-example-database
 # Expect that security related tags are part of the connection URL.
 eexpect "(sql)"
 eexpect "sslmode=require"
+eexpect "sslrootcert="
 eexpect "defaultdb>"
 
 send_eof
