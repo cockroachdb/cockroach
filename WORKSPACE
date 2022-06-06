@@ -16,12 +16,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "8a993815a6a7cfe47e46238383f0e36a80b9ce0ac482f855c7288a31565b5661",
-    strip_prefix = "cockroachdb-rules_go-58cb947",
+    sha256 = "8b4ac0c07e95679766c55dba4b83df3f466fe9e383ae06177bc0e00198ffb907",
+    strip_prefix = "cockroachdb-rules_go-3fc3373",
     urls = [
-        # cockroachdb/rules_go as of 58cb94707783f529462d4c6d3c698933a1022942
-        # (upstream release-0.29 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-56-g58cb947.tar.gz",
+        # cockroachdb/rules_go as of 3fc33735d71366159674389f49a9f9141060a614
+        # (upstream release-0.32 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-117-g3fc3373.tar.gz",
     ],
 )
 
@@ -42,11 +42,9 @@ http_archive(
 # repo.
 http_archive(
     name = "bazel_gazelle",
-    sha256 = "9fba095e4bebd8c6748154ca53c365862af47fa1651f7c0d25459e6ca5bb208f",
-    strip_prefix = "bazelbuild-bazel-gazelle-3ea1d64",
+    sha256 = "5982e5463f171da99e3bdaeff8c0f48283a7a5f396ec5282910b9e8a49c0dd7e",
     urls = [
-        # v0.24.0
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazelbuild-bazel-gazelle-v0.24.0-0-g3ea1d64.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-gazelle-v0.25.0.tar.gz",
     ],
 )
 
@@ -104,6 +102,7 @@ http_archive(
     ],
 )
 
+# org_golang_x_sys handled in DEPS.bzl.
 # org_golang_x_tools handled in DEPS.bzl.
 # org_golang_x_xerrors handled in DEPS.bzl.
 
@@ -134,13 +133,15 @@ http_archive(
         "@io_bazel_rules_go//third_party:go_googleapis-gazelle.patch",
         "@com_github_cockroachdb_cockroach//build/patches:go_googleapis.patch",
     ],
-    sha256 = "a85c6a00e9cf0f004992ebea1d10688e3beea9f8e1a5a04ee53f367e72ee85af",
-    strip_prefix = "googleapis-409e134ffaacc243052b08e6fb8e2d458014ed37",
-    # master, as of 2021-10-06
+    sha256 = "e8b434794608a9af0c0721cfaeedebe37d3676a4ee9dbeed868e5e2982b5abcc",
+    strip_prefix = "googleapis-10c88bb5c489c8ad1edb0e7f6a17cdd07147966e",
+    # master, as of 2022-05-09
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/409e134ffaacc243052b08e6fb8e2d458014ed37.zip",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/10c88bb5c489c8ad1edb0e7f6a17cdd07147966e.zip",
     ],
 )
+
+# com_github_golang_mock handled in DEPS.bzl.
 
 # Load the go dependencies and invoke them.
 load(
@@ -321,6 +322,7 @@ load(
 # Ref: https://github.com/bazelbuild/bazel-gazelle/blob/master/deps.bzl
 
 # bazel_skylib handled above.
+# co_honnef_go_tools handled in DEPS.bzl.
 
 # keep
 go_repository(
@@ -337,29 +339,57 @@ go_repository(
 
 # keep
 go_repository(
-    name = "com_github_bmatcuk_doublestar",
-    importpath = "github.com/bmatcuk/doublestar",
-    sha256 = "50b02a6a30e186ba189c037901719248667b595b3131a4f6b29aebe3c874e83b",
-    strip_prefix = "doublestar",
+    name = "com_github_bmatcuk_doublestar_v4",
+    importpath = "github.com/bmatcuk/doublestar/v4",
+    sha256 = "d11c3b3a45574f89d6a6b2f50e53feea50df60407b35f36193bf5815d32c79d1",
+    strip_prefix = "bmatcuk-doublestar-f7a8118",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bmatcuk/doublestar/v1.2.2/doublestar-1.2.2.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bmatcuk-doublestar-v4.0.1-0-gf7a8118.tar.gz",
     ],
 )
 
 # com_github_burntsushi_toml handled in DEPS.bzl.
+# com_github_census_instrumentation_opencensus_proto handled in DEPS.bzl.
+# com_github_chzyer_logex handled in DEPS.bzl.
+# com_github_chzyer_readline handled in DEPS.bzl.
+# com_github_chzyer_test handled in DEPS.bzl.
+# com_github_client9_misspell handled in DEPS.bzl.
 # com_github_davecgh_go_spew handled in DEPS.bzl.
+# com_github_envoyproxy_go_control_plane handled in DEPS.bzl.
+# com_github_envoyproxy_protoc_gen_validate handled in DEPS.bzl.
 # com_github_fsnotify_fsnotify handled in DEPS.bzl.
+# com_github_golang_glog handled in DEPS.bzl.
+# com_github_golang_mock handled in DEPS.bzl.
+# com_github_golang_protobuf handled in DEPS.bzl.
 # com_github_google_go_cmp handled in DEPS.bzl.
-# com_github_kr_pretty handled in DEPS.bzl.
-# com_github_kr_pty handled in DEPS.bzl.
-# com_github_kr_text handled in DEPS.bzl.
 # com_github_pelletier_go_toml handled in DEPS.bzl.
 # com_github_pmezard_go_difflib handled in DEPS.bzl.
+# com_github_prometheus_client_model handled in DEPS.bzl.
+# com_github_yuin_goldmark handled in DEPS.bzl.
+# com_google_cloud_go handled in DEPS.bzl.
 # in_gopkg_check_v1 handled in DEPS.bzl.
 # in_gopkg_yaml_v2 handled in DEPS.bzl.
+
+# keep
+go_repository(
+    name = "net_starlark_go",
+    importpath = "go.starlark.net",
+    sha256 = "a35c6468e0e0921833a63290161ff903295eaaf5915200bbce272cbc8dfd1c1c",
+    strip_prefix = "google-starlark-go-e043a3d",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/google-starlark-go-e043a3d.tar.gz",
+    ],
+)
+
+# org_golang_google_genproto handled in DEPS.bzl.
+# org_golang_google_grpc handled in DEPS.bzl.
+# org_golang_google_protobuf handled in DEPS.bzl.
 # org_golang_x_crypto handled in DEPS.bzl.
+# org_golang_x_exp handled in DEPS.bzl.
+# org_golang_x_lint handled in DEPS.bzl.
 # org_golang_x_mod handled in DEPS.bzl.
 # org_golang_x_net handled in DEPS.bzl.
+# org_golang_x_oauth2 handled in DEPS.bzl.
 # org_golang_x_sync handled in DEPS.bzl.
 # org_golang_x_sys handled in DEPS.bzl.
 # org_golang_x_text handled in DEPS.bzl.
