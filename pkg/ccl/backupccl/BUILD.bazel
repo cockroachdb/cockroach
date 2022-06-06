@@ -155,6 +155,7 @@ go_test(
         "backup_destination_test.go",
         "backup_intents_test.go",
         "backup_metadata_test.go",
+        "backup_planning_test.go",
         "backup_rand_test.go",
         "backup_tenant_test.go",
         "backup_test.go",
