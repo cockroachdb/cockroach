@@ -337,6 +337,13 @@ func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex uint64) roachpb.Key {
 	return encoding.EncodeUint64Ascending(raftLogPrefix, logIndex)
 }
 
+// DecodeRaftLogKeyFromSuffix parses the suffix of a system-local key for a Raft
+// log entry and returns the entry's log index.
+func DecodeRaftLogKeyFromSuffix(raftLogSuffix []byte) (uint64, error) {
+	_, logIndex, err := encoding.DecodeUint64Ascending(raftLogSuffix)
+	return logIndex, err
+}
+
 // RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
 func RaftReplicaIDKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftReplicaIDKey()
@@ -453,7 +460,7 @@ func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
 }
 
 // DecodeLockTableSingleKey decodes the single-key lock table key to return the key
-// that was locked..
+// that was locked.
 func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error) {
 	if !bytes.HasPrefix(key, LocalRangeLockTablePrefix) {
 		return nil, errors.Errorf("key %q does not have %q prefix",
