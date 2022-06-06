@@ -407,6 +407,9 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
+	watchDog := newSchemaChangeWatchDog(w.pool.Get())
+	watchDog.Start(ctx, tx)
+	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
 	err = w.runInTxn(ctx, tx)
