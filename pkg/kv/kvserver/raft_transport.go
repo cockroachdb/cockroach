@@ -430,98 +430,61 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // the request to pass off to the sender store. Errors during the snapshots
 // process are sent back as a response.
 func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
-	errCh := make(chan error, 1)
-	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
-	if err := t.stopper.RunAsyncTaskEx(
-		taskCtx,
-		stop.TaskOpts{
-			TaskName: "storage.RaftTransport: processing snapshot delegation",
-			SpanOpt:  stop.ChildSpan,
-		}, func(ctx context.Context) {
-			errCh <- func() error {
-				req, err := stream.Recv()
-				if err != nil {
-					return err
-				}
-				// Check to ensure the header is valid.
-				if req == nil {
-					return stream.Send(
-						&kvserverpb.DelegateSnapshotResponse{
-							SnapResponse: &kvserverpb.SnapshotResponse{
-								Status:  kvserverpb.SnapshotResponse_ERROR,
-								Message: "client error: no message in first delegated snapshot request",
-							},
-						},
-					)
-				}
-				// Get the handler of the sender store.
-				handler, ok := t.getHandler(req.DelegatedSender.StoreID)
-				if !ok {
-					log.Warningf(
-						ctx,
-						"unable to accept Raft message: %+v: no handler registered for"+
-							" the sender store"+" %+v",
-						req.CoordinatorReplica.StoreID,
-						req.DelegatedSender.StoreID,
-					)
-					return roachpb.NewStoreNotFoundError(req.DelegatedSender.StoreID)
-				}
+	req, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	// Check to ensure the header is valid.
+	if req == nil {
+		return stream.Send(
+			&kvserverpb.DelegateSnapshotResponse{
+				SnapResponse: &kvserverpb.SnapshotResponse{
+					Status:  kvserverpb.SnapshotResponse_ERROR,
+					Message: "client error: no message in first delegated snapshot request",
+				},
+			},
+		)
+	}
+	// Get the handler of the sender store.
+	handler, ok := t.getHandler(req.DelegatedSender.StoreID)
+	if !ok {
+		log.Warningf(
+			ctx,
+			"unable to accept Raft message: %+v: no handler registered for"+
+				" the sender store"+" %+v",
+			req.CoordinatorReplica.StoreID,
+			req.DelegatedSender.StoreID,
+		)
+		return roachpb.NewStoreNotFoundError(req.DelegatedSender.StoreID)
+	}
 
-				// Pass off the snapshot request to the sender store.
-				return handler.HandleDelegatedSnapshot(ctx, req, stream)
-			}()
-		},
-	); err != nil {
-		return err
-	}
-	select {
-	case <-t.stopper.ShouldQuiesce():
-		return nil
-	case err := <-errCh:
-		return err
-	}
+	// Pass off the snapshot request to the sender store.
+	return handler.HandleDelegatedSnapshot(ctx, req, stream)
 }
 
 // RaftSnapshot handles incoming streaming snapshot requests.
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
-	errCh := make(chan error, 1)
-	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
-	if err := t.stopper.RunAsyncTaskEx(
-		taskCtx,
-		stop.TaskOpts{
-			TaskName: "storage.RaftTransport: processing snapshot reception",
-			SpanOpt:  stop.ChildSpan,
-		}, func(ctx context.Context) {
-			errCh <- func() error {
-				req, err := stream.Recv()
-				if err != nil {
-					return err
-				}
-				if req.Header == nil {
-					return stream.Send(&kvserverpb.SnapshotResponse{
-						Status:  kvserverpb.SnapshotResponse_ERROR,
-						Message: "client error: no header in first snapshot request message"})
-				}
-				rmr := req.Header.RaftMessageRequest
-				handler, ok := t.getHandler(rmr.ToReplica.StoreID)
-				if !ok {
-					log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
-						rmr.FromReplica, rmr.ToReplica)
-					return roachpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
-				}
-				return handler.HandleSnapshot(ctx, req.Header, stream)
-			}()
-		}); err != nil {
+	req, err := stream.Recv()
+	if err != nil {
 		return err
 	}
-	select {
-	case <-t.stopper.ShouldQuiesce():
-		return nil
-	case err := <-errCh:
-		return err
+	if req.Header == nil {
+		return stream.Send(&kvserverpb.SnapshotResponse{
+			Status:  kvserverpb.SnapshotResponse_ERROR,
+			Message: "client error: no header in first snapshot request message"})
 	}
+	rmr := req.Header.RaftMessageRequest
+	handler, ok := t.getHandler(rmr.ToReplica.StoreID)
+	if !ok {
+		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
+			rmr.FromReplica, rmr.ToReplica)
+		return roachpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
+	}
+	return handler.HandleSnapshot(ctx, req.Header, stream)
 }
 
 // Listen registers a raftMessageHandler to receive proxied messages.
