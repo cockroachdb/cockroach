@@ -11,7 +11,6 @@
 package kvstreamer
 
 import (
-	"container/heap"
 	"context"
 	"fmt"
 
@@ -328,6 +327,10 @@ var TestResultDiskBufferConstructor func(diskmap.Factory, *mon.BytesMonitor) Res
 // considered "unreleased" - we think of them as "buffered". This matters so
 // that the Streamer could issue the head-of-the-line request with
 // headOfLine=true even if there are some buffered results.
+//
+// Note that the heap methods were copied (with minor adjustments) from the
+// standard library as we chose not to make the struct implement the
+// heap.Interface interface in order to avoid allocations.
 type inOrderResultsBuffer struct {
 	*resultsBufferBase
 	// headOfLinePosition is the Position value of the next Result to be
@@ -356,7 +359,6 @@ type inOrderResultsBuffer struct {
 }
 
 var _ resultsBuffer = &inOrderResultsBuffer{}
-var _ heap.Interface = &inOrderResultsBuffer{}
 
 func newInOrderResultsBuffer(
 	budget *budget, diskBuffer ResultDiskBuffer, singleRowLookup bool,
@@ -371,11 +373,7 @@ func newInOrderResultsBuffer(
 	}
 }
 
-func (b *inOrderResultsBuffer) Len() int {
-	return len(b.buffered)
-}
-
-func (b *inOrderResultsBuffer) Less(i, j int) bool {
+func (b *inOrderResultsBuffer) less(i, j int) bool {
 	posI, posJ := b.buffered[i].Position, b.buffered[j].Position
 	subI, subJ := b.buffered[i].subRequestIdx, b.buffered[j].subRequestIdx
 	epochI, epochJ := b.buffered[i].addEpoch, b.buffered[j].addEpoch
@@ -384,18 +382,52 @@ func (b *inOrderResultsBuffer) Less(i, j int) bool {
 		(posI == posJ && subI == subJ && epochI < epochJ) // results for the same Scan request, for the same range
 }
 
-func (b *inOrderResultsBuffer) Swap(i, j int) {
+func (b *inOrderResultsBuffer) swap(i, j int) {
 	b.buffered[i], b.buffered[j] = b.buffered[j], b.buffered[i]
 }
 
-func (b *inOrderResultsBuffer) Push(x interface{}) {
-	b.buffered = append(b.buffered, x.(inOrderBufferedResult))
+// heapPush pushes r onto the heap of the results.
+func (b *inOrderResultsBuffer) heapPush(r inOrderBufferedResult) {
+	b.buffered = append(b.buffered, r)
+	b.heapUp(len(b.buffered) - 1)
 }
 
-func (b *inOrderResultsBuffer) Pop() interface{} {
-	x := b.buffered[len(b.buffered)-1]
-	b.buffered = b.buffered[:len(b.buffered)-1]
-	return x
+// heapRemoveFirst removes the 0th result from the heap. It assumes that the
+// heap is not empty.
+func (b *inOrderResultsBuffer) heapRemoveFirst() {
+	n := len(b.buffered) - 1
+	b.swap(0, n)
+	b.heapDown(0, n)
+	b.buffered = b.buffered[:n]
+}
+
+func (b *inOrderResultsBuffer) heapUp(j int) {
+	for {
+		i := (j - 1) / 2 // parent
+		if i == j || !b.less(j, i) {
+			break
+		}
+		b.swap(i, j)
+		j = i
+	}
+}
+
+func (b *inOrderResultsBuffer) heapDown(i, n int) {
+	for {
+		j1 := 2*i + 1
+		if j1 >= n {
+			return
+		}
+		j := j1 // left child
+		if j2 := j1 + 1; j2 < n && b.less(j2, j1) {
+			j = j2 // = 2*i + 2  // right child
+		}
+		if !b.less(j, i) {
+			return
+		}
+		b.swap(i, j)
+		i = j
+	}
 }
 
 func (b *inOrderResultsBuffer) init(ctx context.Context, numExpectedResponses int) error {
@@ -429,7 +461,7 @@ func (b *inOrderResultsBuffer) addLocked(r Result) {
 	}
 	// All the Results have already been registered with the budget, so we're
 	// keeping them in-memory.
-	heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false, addEpoch: b.addCounter})
+	b.heapPush(inOrderBufferedResult{Result: r, onDisk: false, addEpoch: b.addCounter})
 	b.addCounter++
 }
 
@@ -484,7 +516,7 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 			}
 		}
 		res = append(res, result)
-		heap.Remove(b, 0)
+		b.heapRemoveFirst()
 		if result.subRequestDone {
 			// Only advance the sub-request index if we're done with all parts
 			// of the sub-request.

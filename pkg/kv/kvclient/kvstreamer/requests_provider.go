@@ -11,7 +11,6 @@
 package kvstreamer
 
 import (
-	"container/heap"
 	"fmt"
 	"sort"
 	"sync"
@@ -294,12 +293,15 @@ func (p *outOfOrderRequestsProvider) removeFirstLocked() {
 // inOrderRequestsProvider is a requestProvider that maintains a min heap of all
 // requests according to the priority values (the smaller the priority value is,
 // the higher actual priority of fulfilling the corresponding request).
+//
+// Note that the heap methods were copied (with minor adjustments) from the
+// standard library as we chose not to make the struct implement the
+// heap.Interface interface in order to avoid allocations.
 type inOrderRequestsProvider struct {
 	*requestsProviderBase
 }
 
 var _ requestsProvider = &inOrderRequestsProvider{}
-var _ heap.Interface = &inOrderRequestsProvider{}
 
 func newInOrderRequestsProvider() requestsProvider {
 	p := inOrderRequestsProvider{requestsProviderBase: &requestsProviderBase{}}
@@ -307,11 +309,7 @@ func newInOrderRequestsProvider() requestsProvider {
 	return &p
 }
 
-func (p *inOrderRequestsProvider) Len() int {
-	return len(p.requests)
-}
-
-func (p *inOrderRequestsProvider) Less(i, j int) bool {
+func (p *inOrderRequestsProvider) less(i, j int) bool {
 	rI, rJ := p.requests[i], p.requests[j]
 	if buildutil.CrdbTestBuild {
 		if rI.priority() == rJ.priority() {
@@ -327,18 +325,60 @@ func (p *inOrderRequestsProvider) Less(i, j int) bool {
 		(rI.priority() == rJ.priority() && rI.subPriority() < rJ.subPriority())
 }
 
-func (p *inOrderRequestsProvider) Swap(i, j int) {
+func (p *inOrderRequestsProvider) swap(i, j int) {
 	p.requests[i], p.requests[j] = p.requests[j], p.requests[i]
 }
 
-func (p *inOrderRequestsProvider) Push(x interface{}) {
-	p.requests = append(p.requests, x.(singleRangeBatch))
+// heapInit establishes the heap invariants.
+func (p *inOrderRequestsProvider) heapInit() {
+	n := len(p.requests)
+	for i := n/2 - 1; i >= 0; i-- {
+		p.heapDown(i, n)
+	}
 }
 
-func (p *inOrderRequestsProvider) Pop() interface{} {
-	x := p.requests[len(p.requests)-1]
-	p.requests = p.requests[:len(p.requests)-1]
-	return x
+// heapPush pushes r onto the heap of the requests.
+func (p *inOrderRequestsProvider) heapPush(r singleRangeBatch) {
+	p.requests = append(p.requests, r)
+	p.heapUp(len(p.requests) - 1)
+}
+
+// heapRemoveFirst removes the 0th request from the heap. It assumes that the
+// heap is not empty.
+func (p *inOrderRequestsProvider) heapRemoveFirst() {
+	n := len(p.requests) - 1
+	p.swap(0, n)
+	p.heapDown(0, n)
+	p.requests = p.requests[:n]
+}
+
+func (p *inOrderRequestsProvider) heapUp(j int) {
+	for {
+		i := (j - 1) / 2 // parent
+		if i == j || !p.less(j, i) {
+			break
+		}
+		p.swap(i, j)
+		j = i
+	}
+}
+
+func (p *inOrderRequestsProvider) heapDown(i, n int) {
+	for {
+		j1 := 2*i + 1
+		if j1 >= n {
+			return
+		}
+		j := j1 // left child
+		if j2 := j1 + 1; j2 < n && p.less(j2, j1) {
+			j = j2 // = 2*i + 2  // right child
+		}
+		if !p.less(j, i) {
+			return
+		}
+		p.swap(i, j)
+		i = j
+	}
 }
 
 func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
@@ -348,7 +388,7 @@ func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 		panic(errors.AssertionFailedf("inOrderRequestsProvider has old requests in enqueue"))
 	}
 	p.requests = requests
-	heap.Init(p)
+	p.heapInit()
 	p.hasWork.Signal()
 }
 
@@ -358,7 +398,7 @@ func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
 	if debug {
 		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", request.positions, request.minTargetBytes)
 	}
-	heap.Push(p, request)
+	p.heapPush(request)
 	p.hasWork.Signal()
 }
 
@@ -375,5 +415,5 @@ func (p *inOrderRequestsProvider) removeFirstLocked() {
 	if len(p.requests) == 0 {
 		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
 	}
-	heap.Remove(p, 0)
+	p.heapRemoveFirst()
 }
