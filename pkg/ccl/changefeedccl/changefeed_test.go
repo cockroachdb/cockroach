@@ -33,10 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	// Imported to allow multi-tenant tests
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	// Imported to allow locality-related table mutations
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"    // locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
@@ -1292,16 +1290,16 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		setErr := func(stp kvcoord.SpanTimePair, expectedTS hlc.Timestamp) {
 			incorrectCheckpointErr = errors.Newf(
 				"rangefeed for span %s expected to start @%s, started @%s instead",
-				stp.Span, expectedTS, stp.TS)
+				stp.Span, expectedTS, stp.StartAfter)
 		}
 
 		for _, sp := range spans {
 			if laggingSpans.Encloses(sp.Span) {
-				if !sp.TS.Equal(cursor) {
+				if !sp.StartAfter.Equal(cursor) {
 					setErr(sp, cursor)
 				}
 			} else {
-				if !sp.TS.Equal(checkpointTS) {
+				if !sp.StartAfter.Equal(checkpointTS) {
 					setErr(sp, checkpointTS)
 				}
 			}
