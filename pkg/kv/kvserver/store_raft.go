@@ -158,44 +158,39 @@ func (s *Store) HandleDelegatedSnapshot(
 	stream DelegateSnapshotResponseStream,
 ) error {
 	ctx = s.AnnotateCtx(ctx)
-	const name = "storage.Store: handle snapshot delegation"
 
 	if fn := s.cfg.TestingKnobs.SendSnapshot; fn != nil {
 		fn()
 	}
 
-	return s.stopper.RunTaskWithErr(
-		ctx, name, func(ctx context.Context) error {
-			sender, err := s.GetReplica(req.RangeID)
-			if err != nil {
-				return err
-			}
+	sender, err := s.GetReplica(req.RangeID)
+	if err != nil {
+		return err
+	}
 
-			sp := tracing.SpanFromContext(ctx)
-			// Pass the request to the sender replica.
-			if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
-				return stream.Send(
-					&kvserverpb.DelegateSnapshotResponse{
-						SnapResponse: &kvserverpb.SnapshotResponse{
-							Status:  kvserverpb.SnapshotResponse_ERROR,
-							Message: err.Error(),
-						},
-						CollectedSpans: sp.GetConfiguredRecording(),
-					},
-				)
-			}
-
-			resp := &kvserverpb.DelegateSnapshotResponse{
+	sp := tracing.SpanFromContext(ctx)
+	// Pass the request to the sender replica.
+	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
+		return stream.Send(
+			&kvserverpb.DelegateSnapshotResponse{
 				SnapResponse: &kvserverpb.SnapshotResponse{
-					Status:  kvserverpb.SnapshotResponse_APPLIED,
-					Message: "Snapshot successfully applied by recipient",
+					Status:  kvserverpb.SnapshotResponse_ERROR,
+					Message: err.Error(),
 				},
 				CollectedSpans: sp.GetConfiguredRecording(),
-			}
-			// Send a final response that snapshot sending is completed.
-			return stream.Send(resp)
+			},
+		)
+	}
+
+	resp := &kvserverpb.DelegateSnapshotResponse{
+		SnapResponse: &kvserverpb.SnapshotResponse{
+			Status:  kvserverpb.SnapshotResponse_APPLIED,
+			Message: "Snapshot successfully applied by recipient",
 		},
-	)
+		CollectedSpans: sp.GetConfiguredRecording(),
+	}
+	// Send a final response that snapshot sending is completed.
+	return stream.Send(resp)
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
