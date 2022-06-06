@@ -31,7 +31,7 @@ go_test(
     srcs = [
         "exporter_test.go",
         "streamer_test.go",
-        ":clusterstats_mock", # keep
+        ":clusterstats_mock",  # keep
     ],
     embed = [":clusterstats"],
     deps = [
