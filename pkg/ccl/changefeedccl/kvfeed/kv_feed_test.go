@@ -393,10 +393,10 @@ func (f rawEventFeed) run(
 	withDiff bool,
 	eventC chan<- *roachpb.RangeFeedEvent,
 ) error {
-	var startFrom hlc.Timestamp
+	var startAfter hlc.Timestamp
 	for _, s := range spans {
-		if startFrom.IsEmpty() || s.TS.Less(startFrom) {
-			startFrom = s.TS
+		if startAfter.IsEmpty() || s.StartAfter.Less(startAfter) {
+			startAfter = s.StartAfter
 		}
 	}
 
@@ -405,8 +405,8 @@ func (f rawEventFeed) run(
 	var i int
 	for i = range f {
 		ev := f[i]
-		if ev.Val != nil && startFrom.LessEq(ev.Val.Value.Timestamp) ||
-			ev.Checkpoint != nil && startFrom.LessEq(ev.Checkpoint.ResolvedTS) {
+		if ev.Val != nil && startAfter.LessEq(ev.Val.Value.Timestamp) ||
+			ev.Checkpoint != nil && startAfter.LessEq(ev.Checkpoint.ResolvedTS) {
 			break
 		}
 
