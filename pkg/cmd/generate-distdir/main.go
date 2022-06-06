@@ -238,6 +238,13 @@ func getShasFromWorkspace(workspace string, shas map[string]string) error {
 					}
 					shas[artifact.URL] = artifact.Sha256
 				}
+				if fun == "go_repository" {
+					artifact, err := starlarkutil.GetArtifactFromGoRepository(x)
+					if err != nil {
+						return err
+					}
+					shas[artifact.URL] = artifact.Sha256
+				}
 				if fun == "go_download_sdk" {
 					if err := getShasFromGoDownloadSdkCall(x, shas); err != nil {
 						return err

@@ -984,6 +984,8 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/go/go1.17.10.windows-386.zip": "60840a079a04c838dc44b7d48f74ac37506298d34d2a002ced48831ccce6bdae",
     "https://storage.googleapis.com/public-bazel-artifacts/go/go1.17.10.windows-amd64.zip": "ba9198a29fa5c4f322212d21569e8507165c3b34e1ed1f1f9cf6dfb71ddcdeb2",
     "https://storage.googleapis.com/public-bazel-artifacts/go/go1.17.10.windows-arm64.zip": "9d06da8d3e9c3f4a5905c4ea9cb271294e2ff956926380322feb2561e84b4d68",
+    "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bazelbuild/buildtools/v0.0.0-20200718160251-b1667ff58f71/buildtools-v0.0.0-20200718160251-b1667ff58f71.tar.gz": "a9ef5103739dfb5ed2a5b47ab1654842a89695812e4af09e57d7015a5caf97e0",
+    "https://storage.googleapis.com/public-bazel-artifacts/gomod/github.com/bmatcuk/doublestar/v1.2.2/doublestar-1.2.2.tar.gz": "50b02a6a30e186ba189c037901719248667b595b3131a4f6b29aebe3c874e83b",
     "https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip": "d2791cd7a44ea5be862f33f5a9b3d40aaad9858455828ebade7007ad7113fb41",
     "https://storage.googleapis.com/public-bazel-artifacts/js/node/v16.13.0/node-v16.13.0-darwin-arm64.tar.gz": "46d83fc0bd971db5050ef1b15afc44a6665dee40bd6c1cbaec23e1b40fa49e6d",
     "https://storage.googleapis.com/public-bazel-artifacts/js/node/v16.13.0/node-v16.13.0-darwin-x64.tar.gz": "37e09a8cf2352f340d1204c6154058d81362fef4ec488b0197b2ce36b3f0367a",
