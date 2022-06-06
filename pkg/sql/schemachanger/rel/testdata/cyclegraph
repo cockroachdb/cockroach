@@ -24,6 +24,7 @@ queries:
             results:
                 - [container1, message1]
                 - [container2, message2]
+            unsatisfiableIndexes: [1]
         oneOf member:
             query:
                 - $c[s] = struct1(message1)
