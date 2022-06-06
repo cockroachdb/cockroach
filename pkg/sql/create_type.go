@@ -347,7 +347,7 @@ func CreateEnumTypeDesc(
 		schema.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
 		params.SessionData().User(),
-		tree.Types,
+		privilege.Types,
 		dbDesc.GetPrivileges(),
 	)
 

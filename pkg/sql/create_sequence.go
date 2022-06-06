@@ -115,7 +115,7 @@ func doCreateSequence(
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		dbDesc.GetID(),
 		sessionData.User(),
-		tree.Sequences,
+		privilege.Sequences,
 		dbDesc.GetPrivileges(),
 	)
 

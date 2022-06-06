@@ -118,10 +118,10 @@ func getIngestingPrivilegesForTableOrSchema(
 		dbDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
 
 		var schemaDefaultPrivileges catalog.DefaultPrivilegeDescriptor
-		targetObject := tree.Schemas
+		targetObject := privilege.Schemas
 		switch privilegeType {
 		case privilege.Table:
-			targetObject = tree.Tables
+			targetObject = privilege.Tables
 			schemaID := desc.GetParentSchemaID()
 
 			// TODO(adityamaru): Remove in 22.2 once we are sure not to see synthentic public schema descriptors
