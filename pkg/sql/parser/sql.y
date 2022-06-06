@@ -3560,9 +3560,9 @@ copy_options:
   {
     return unimplementedWithIssueDetail(sqllex, 41608, "freeze")
   }
-| HEADER error
+| HEADER
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "header")
+    $$.val = &tree.CopyOptions{Header: true}
   }
 | QUOTE SCONST
   {

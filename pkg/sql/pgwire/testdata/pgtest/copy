@@ -212,6 +212,18 @@ ReadyForQuery
 {"Type":"ErrorResponse","Code":"0A000"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Header without CSV.
+send
+Query {"String": "COPY t FROM STDIN HEADER"}
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Wrong number of columns.
 send
 Query {"String": "COPY t FROM STDIN"}
@@ -324,6 +336,45 @@ ReadyForQuery
 
 send
 Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN HEADER CSV"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "COPY t FROM STDIN HEADER CSV"}
+CopyData {"Data": "justonelinewithheader\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "COPY t FROM STDIN HEADER CSV"}
+CopyData {"Data": "ignore,this,entire,line\n"}
+CopyData {"Data": "1,blah\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"blah"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DELETE FROM t"}
 Query {"String": "COPY t FROM STDIN NULL 'NS'"}
 CopyData {"Data": "1\tblah\n"}
 CopyData {"Data": "2\t\\N\n"}
@@ -338,7 +389,7 @@ ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"DELETE 2"}
+{"Type":"CommandComplete","CommandTag":"DELETE 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"CommandComplete","CommandTag":"COPY 3"}
