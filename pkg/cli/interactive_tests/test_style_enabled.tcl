@@ -27,13 +27,12 @@ eexpect root@
 send_eof
 eexpect eof
 
-# TODO(#72065): uncomment
-#spawn $argv sql --url "postgresql://root@localhost:26257?options=-cdatestyle%3Dymd"
-#eexpect root@
-#send "SHOW datestyle;\r"
-#eexpect "ISO, YMD"
-#eexpect root@
-#interrupt
-#eexpect eof
+spawn $argv sql --url "postgresql://root@localhost:26257?options=-cdatestyle%3Dymd"
+eexpect root@
+send "SHOW datestyle;\r"
+eexpect "ISO, YMD"
+eexpect root@
+send_eof
+eexpect eof
 
 stop_server $argv

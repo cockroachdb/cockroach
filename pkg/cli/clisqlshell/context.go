@@ -11,6 +11,7 @@
 package clisqlshell
 
 import (
+	"context"
 	"os"
 	"time"
 
@@ -76,7 +77,7 @@ type internalContext struct {
 	// state about the current query.
 	mu struct {
 		syncutil.Mutex
-		cancelFn func()
+		cancelFn func(ctx context.Context) error
 		doneCh   chan struct{}
 	}
 }

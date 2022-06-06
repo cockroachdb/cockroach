@@ -13,7 +13,6 @@ package clisqlclient
 import (
 	"database/sql/driver"
 	"io"
-	"reflect"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -97,7 +96,7 @@ func (r *sqlRowsMultiResultSet) Next(values []driver.Value) error {
 	for i := range values {
 		rowVal := rd.Values()[i]
 		if rowVal == nil {
-			values[i] = "NULL"
+			values[i] = nil
 			continue
 		}
 		fieldOID := rd.FieldDescriptions()[i].DataTypeOID
@@ -135,23 +134,8 @@ func (r *sqlRowsMultiResultSet) NextResultSet() (bool, error) {
 	return next, nil
 }
 
-func (r *sqlRowsMultiResultSet) ColumnTypeScanType(index int) reflect.Type {
-	rd := r.rows.ResultReader()
-	o := rd.FieldDescriptions()[index].DataTypeOID
-	n := r.ColumnTypeDatabaseTypeName(index)
-	return scanType(o, n)
-}
-
 func (r *sqlRowsMultiResultSet) ColumnTypeDatabaseTypeName(index int) string {
 	rd := r.rows.ResultReader()
 	fieldOID := rd.FieldDescriptions()[index].DataTypeOID
 	return databaseTypeName(r.connInfo, fieldOID)
-}
-
-func (r *sqlRowsMultiResultSet) ColumnTypeNames() []string {
-	colTypes := make([]string, len(r.Columns()))
-	for i := range colTypes {
-		colTypes[i] = r.ColumnTypeDatabaseTypeName(i)
-	}
-	return colTypes
 }

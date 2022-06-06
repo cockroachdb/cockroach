@@ -17,13 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 )
 
-func getAllRowStrings(
-	rows clisqlclient.Rows, colTypes []string, showMoreChars bool,
-) ([][]string, error) {
+func getAllRowStrings(rows clisqlclient.Rows, showMoreChars bool) ([][]string, error) {
 	var allRows [][]string
 
 	for {
-		rowStrings, err := getNextRowStrings(rows, colTypes, showMoreChars)
+		rowStrings, err := getNextRowStrings(rows, showMoreChars)
 		if err != nil {
 			return nil, err
 		}
@@ -36,9 +34,7 @@ func getAllRowStrings(
 	return allRows, nil
 }
 
-func getNextRowStrings(
-	rows clisqlclient.Rows, colTypes []string, showMoreChars bool,
-) ([]string, error) {
+func getNextRowStrings(rows clisqlclient.Rows, showMoreChars bool) ([]string, error) {
 	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {
@@ -53,9 +49,11 @@ func getNextRowStrings(
 		return nil, err
 	}
 
+	// These are expected to already be formatted strings, but if not, try to
+	// print them anyway.
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
-		rowStrings[i] = FormatVal(v, colTypes[i], showMoreChars, showMoreChars)
+		rowStrings[i] = FormatVal(v, showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil
 }
