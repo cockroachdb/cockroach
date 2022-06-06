@@ -194,15 +194,15 @@ type requestsProvider interface {
 	// emptyLocked returns true if there are no requests to serve at the moment.
 	// The lock of the provider must be already held.
 	emptyLocked() bool
-	// firstLocked returns the next request to serve. In OutOfOrder mode, the
+	// nextLocked returns the next request to serve. In OutOfOrder mode, the
 	// request is arbitrary, in InOrder mode, the request is the current
 	// head-of-the-line. The lock of the provider must be already held. Panics
 	// if there are no requests.
-	firstLocked() singleRangeBatch
-	// removeFirstLocked removes the next request to serve (returned by
-	// firstLocked) from the provider. The lock of the provider must be already
+	nextLocked() singleRangeBatch
+	// removeNextLocked removes the next request to serve (returned by
+	// nextLocked) from the provider. The lock of the provider must be already
 	// held. Panics if there are no requests.
-	removeFirstLocked()
+	removeNextLocked()
 }
 
 type requestsProviderBase struct {
@@ -274,20 +274,20 @@ func (p *outOfOrderRequestsProvider) add(request singleRangeBatch) {
 	p.hasWork.Signal()
 }
 
-func (p *outOfOrderRequestsProvider) firstLocked() singleRangeBatch {
+func (p *outOfOrderRequestsProvider) nextLocked() singleRangeBatch {
 	p.Mutex.AssertHeld()
 	if len(p.requests) == 0 {
-		panic(errors.AssertionFailedf("firstLocked called when requestsProvider is empty"))
+		panic(errors.AssertionFailedf("nextLocked called when requestsProvider is empty"))
 	}
-	return p.requests[0]
+	return p.requests[len(p.requests)-1]
 }
 
-func (p *outOfOrderRequestsProvider) removeFirstLocked() {
+func (p *outOfOrderRequestsProvider) removeNextLocked() {
 	p.Mutex.AssertHeld()
 	if len(p.requests) == 0 {
-		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
+		panic(errors.AssertionFailedf("removeNextLocked called when requestsProvider is empty"))
 	}
-	p.requests = p.requests[1:]
+	p.requests = p.requests[:len(p.requests)-1]
 }
 
 // inOrderRequestsProvider is a requestProvider that maintains a min heap of all
@@ -402,18 +402,18 @@ func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
 	p.hasWork.Signal()
 }
 
-func (p *inOrderRequestsProvider) firstLocked() singleRangeBatch {
+func (p *inOrderRequestsProvider) nextLocked() singleRangeBatch {
 	p.Mutex.AssertHeld()
 	if len(p.requests) == 0 {
-		panic(errors.AssertionFailedf("firstLocked called when requestsProvider is empty"))
+		panic(errors.AssertionFailedf("nextLocked called when requestsProvider is empty"))
 	}
 	return p.requests[0]
 }
 
-func (p *inOrderRequestsProvider) removeFirstLocked() {
+func (p *inOrderRequestsProvider) removeNextLocked() {
 	p.Mutex.AssertHeld()
 	if len(p.requests) == 0 {
-		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
+		panic(errors.AssertionFailedf("removeNextLocked called when requestsProvider is empty"))
 	}
 	p.heapRemoveFirst()
 }
