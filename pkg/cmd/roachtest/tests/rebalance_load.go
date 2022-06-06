@@ -20,7 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -92,6 +94,29 @@ func registerRebalanceLoad(r registry.Registry) {
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		}
 
+		// Setup the prometheus instance and client.
+		clusNodes := c.Range(1, c.Spec().NodeCount-1)
+		promNode := c.Node(c.Spec().NodeCount)
+		cfg := (&prometheus.Config{}).
+			WithCluster(clusNodes).
+			WithPrometheusNode(promNode)
+
+		promCfg, saveSnap, err := prometheus.Init(
+			ctx,
+			*cfg,
+			c,
+			t.L(),
+			repeatRunner{C: c, T: t}.repeatRunE,
+		)
+		require.NoError(t, err)
+		defer saveSnap(t.ArtifactsDir())
+
+		promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), &promCfg.Config)
+		require.NoError(t, err)
+
+		// Setup the stats collector for the prometheus client.
+		statCollector := clusterstats.NewStatsCollector(ctx, promClient)
+
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
 
@@ -136,13 +161,30 @@ func registerRebalanceLoad(r registry.Registry) {
 				return err
 			}
 
+			startTime := timeutil.Now()
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
 				if done, err := isLoadEvenlyDistributed(t.L(), db, numStores); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")
+					// TODO(kvoli): Support mixed version testing, currently it
+					// will attempt to init and fail.
+					if !mixedVersion {
+						endTime := timeutil.Now()
+						err = statCollector.Exporter().Export(
+							ctx,
+							c,
+							t,
+							startTime, endTime,
+							joinSummaryQueries(actionsSummary, rangeBalanceSummary, requestBalanceSummary, resourceBalanceSummary),
+							// NB: We record the time taken to reach balance.
+							func(stats map[string]clusterstats.StatSummary) (string, float64) {
+								return "t-balance", endTime.Sub(startTime).Seconds()
+							},
+						)
+					}
 					cancel()
-					return nil
+					return err
 				}
 
 				select {
