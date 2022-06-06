@@ -44,10 +44,10 @@ func TestInOrderRequestsProvider(t *testing.T) {
 	for len(priorities) > 0 {
 		// Simulate issuing a request.
 		p.Lock()
-		first := p.firstLocked()
-		p.removeFirstLocked()
+		next := p.nextLocked()
+		p.removeNextLocked()
 		p.Unlock()
-		require.Equal(t, priorities[0], first.priority())
+		require.Equal(t, priorities[0], next.priority())
 		priorities = priorities[1:]
 		// With 50% probability simulate that a resume request with random
 		// priority is added.
@@ -55,9 +55,9 @@ func TestInOrderRequestsProvider(t *testing.T) {
 			// Note that in reality the position of the resume request cannot
 			// have lower value than of the original request, but it's ok for
 			// the test.
-			first.positions[0] = rng.Intn(maxNumRequests)
-			p.add(first)
-			priorities = append(priorities, first.priority())
+			next.positions[0] = rng.Intn(maxNumRequests)
+			p.add(next)
+			priorities = append(priorities, next.priority())
 			sort.Ints(priorities)
 		}
 	}
