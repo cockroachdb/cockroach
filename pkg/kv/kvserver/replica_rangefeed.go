@@ -323,7 +323,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
-	startTS hlc.Timestamp,
+	startTS hlc.Timestamp, // exclusive
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
