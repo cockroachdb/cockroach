@@ -2031,9 +2031,9 @@ oid         typname                                typcategory  typispreferred  
 4090        _regnamespace                          A            false           true          ,         0           4089     0
 4096        regrole                                N            false           true          ,         0           0        4097
 4097        _regrole                               A            false           true          ,         0           4096     0
-90000       geometry                               U            false           true          ,         0           0        90001
+90000       geometry                               U            false           true          :         0           0        90001
 90001       _geometry                              A            false           true          ,         0           90000    0
-90002       geography                              U            false           true          ,         0           0        90003
+90002       geography                              U            false           true          :         0           0        90003
 90003       _geography                             A            false           true          ,         0           90002    0
 90004       box2d                                  U            false           true          ,         0           0        90005
 90005       _box2d                                 A            false           true          ,         0           90004    0
