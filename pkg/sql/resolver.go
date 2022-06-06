@@ -392,10 +392,19 @@ func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLo
 	return tree.ObjectLookupFlags{CommonLookupFlags: flags}
 }
 
-// getDescriptorsFromTargetListForPrivilegeChange fetches the descriptors for the targets.
+// DescriptorWithType wraps a descriptor with the corresponding
+// privilege object type.
+type DescriptorWithType struct {
+	descriptor catalog.Descriptor
+	objectType privilege.ObjectType
+}
+
+// getDescriptorsFromTargetListForPrivilegeChange fetches the descriptors
+// for the targets. Each descriptor is marked along with the corresponding
+// privilege type.
 func getDescriptorsFromTargetListForPrivilegeChange(
 	ctx context.Context, p *planner, targets tree.TargetList,
-) ([]catalog.Descriptor, error) {
+) ([]DescriptorWithType, error) {
 	const required = true
 	flags := tree.CommonLookupFlags{
 		Required:       required,
@@ -406,14 +415,17 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
 		}
-		descs := make([]catalog.Descriptor, 0, len(targets.Databases))
+		descs := make([]DescriptorWithType, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
 			descriptor, err := p.Descriptors().
 				GetMutableDatabaseByName(ctx, p.txn, string(database), flags)
 			if err != nil {
 				return nil, err
 			}
-			descs = append(descs, descriptor)
+			descs = append(descs, DescriptorWithType{
+				descriptor: descriptor,
+				objectType: privilege.Database,
+			})
 		}
 		if len(descs) == 0 {
 			return nil, errNoMatch
@@ -425,14 +437,17 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if len(targets.Types) == 0 {
 			return nil, errNoType
 		}
-		descs := make([]catalog.Descriptor, 0, len(targets.Types))
+		descs := make([]DescriptorWithType, 0, len(targets.Types))
 		for _, typ := range targets.Types {
 			_, descriptor, err := p.ResolveMutableTypeDescriptor(ctx, typ, required)
 			if err != nil {
 				return nil, err
 			}
 
-			descs = append(descs, descriptor)
+			descs = append(descs, DescriptorWithType{
+				descriptor: descriptor,
+				objectType: privilege.Type,
+			})
 		}
 
 		if len(descs) == 0 {
@@ -447,7 +462,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		if targets.AllTablesInSchema || targets.AllSequencesInSchema {
 			// Get all the descriptors for the tables in the specified schemas.
-			var descs []catalog.Descriptor
+			var descs []DescriptorWithType
 			for _, sc := range targets.Schemas {
 				dbName := p.CurrentDatabase()
 				if sc.ExplicitCatalog {
@@ -471,7 +486,12 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 					if targets.AllTablesInSchema {
 						if mut != nil {
 							if mut.DescriptorType() == catalog.Table {
-								descs = append(descs, mut)
+								descs = append(
+									descs,
+									DescriptorWithType{
+										descriptor: mut,
+										objectType: privilege.Table,
+									})
 							}
 						}
 					} else if targets.AllSequencesInSchema {
@@ -481,7 +501,13 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 								return nil, err
 							}
 							if tableDesc.IsSequence() {
-								descs = append(descs, mut)
+								descs = append(
+									descs,
+									DescriptorWithType{
+										descriptor: mut,
+										objectType: privilege.Sequence,
+									},
+								)
 							}
 						}
 					}
@@ -491,7 +517,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			return descs, nil
 		}
 
-		descs := make([]catalog.Descriptor, 0, len(targets.Schemas))
+		descs := make([]DescriptorWithType, 0, len(targets.Schemas))
 
 		// Resolve the databases being changed
 		type schemaWithDBDesc struct {
@@ -508,7 +534,10 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if err != nil {
 				return nil, err
 			}
-			targetSchemas = append(targetSchemas, schemaWithDBDesc{schema: sc.Schema(), dbDesc: db})
+			targetSchemas = append(
+				targetSchemas,
+				schemaWithDBDesc{schema: sc.Schema(), dbDesc: db},
+			)
 		}
 
 		for _, sc := range targetSchemas {
@@ -519,7 +548,12 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			}
 			switch resSchema.SchemaKind() {
 			case catalog.SchemaUserDefined:
-				descs = append(descs, resSchema)
+				descs = append(
+					descs,
+					DescriptorWithType{
+						descriptor: resSchema,
+						objectType: privilege.Schema,
+					})
 			default:
 				return nil, pgerror.Newf(pgcode.InvalidSchemaName,
 					"cannot change privileges on schema %q", resSchema.GetName())
@@ -531,7 +565,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 	if len(targets.Tables.TablePatterns) == 0 {
 		return nil, errNoTable
 	}
-	descs := make([]catalog.Descriptor, 0, len(targets.Tables.TablePatterns))
+	descs := make([]DescriptorWithType, 0, len(targets.Tables.TablePatterns))
 	for _, tableTarget := range targets.Tables.TablePatterns {
 		tableGlob, err := tableTarget.NormalizeTablePattern()
 		if err != nil {
@@ -547,16 +581,26 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		for _, mut := range muts {
 			if mut != nil && mut.DescriptorType() == catalog.Table {
-				if targets.Tables.IsSequence {
-					tableDesc, err := catalog.AsTableDescriptor(mut)
-					if err != nil {
-						return nil, err
-					}
-					if tableDesc.IsSequence() {
-						descs = append(descs, mut)
-					}
+				tableDesc, err := catalog.AsTableDescriptor(mut)
+				if err != nil {
+					return nil, err
+				}
+				if tableDesc.IsSequence() {
+					descs = append(
+						descs,
+						DescriptorWithType{
+							descriptor: mut,
+							objectType: privilege.Sequence,
+						},
+					)
 				} else {
-					descs = append(descs, mut)
+					descs = append(
+						descs,
+						DescriptorWithType{
+							descriptor: mut,
+							objectType: privilege.Table,
+						},
+					)
 				}
 			}
 		}

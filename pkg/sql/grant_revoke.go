@@ -42,8 +42,10 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
-	grantOn := getGrantOnObject(n.Targets, sqltelemetry.IncIAMGrantPrivilegesCounter)
-
+	grantOn, err := getGrantOnObject(ctx, p, n.Targets, sqltelemetry.IncIAMGrantPrivilegesCounter)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get the privileges on the grant targets")
+	}
 	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
 		return nil, err
 	}
@@ -71,7 +73,6 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 			granteePrivsAfterGrant := *(privDesc.FindOrCreateUser(grantee))
 			return granteePrivsBeforeGrant != granteePrivsAfterGrant
 		},
-		grantOn: grantOn,
 	}, nil
 }
 
@@ -82,7 +83,10 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
-	grantOn := getGrantOnObject(n.Targets, sqltelemetry.IncIAMRevokePrivilegesCounter)
+	grantOn, err := getGrantOnObject(ctx, p, n.Targets, sqltelemetry.IncIAMRevokePrivilegesCounter)
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get the privileges on the grant targets")
+	}
 
 	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
 		return nil, err
@@ -116,7 +120,6 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 			privsChanges := !ok || granteePrivsBeforeGrant != *granteePrivs
 			return privsChanges
 		},
-		grantOn: grantOn,
 	}, nil
 }
 
@@ -127,7 +130,6 @@ type changePrivilegesNode struct {
 	grantees        []username.SQLUsername
 	desiredprivs    privilege.List
 	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool)
-	grantOn         privilege.ObjectType
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -162,17 +164,17 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	}
 
 	var err error
-	var descriptors []catalog.Descriptor
+	var descriptorsWithTypes []DescriptorWithType
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptors, err = getDescriptorsFromTargetListForPrivilegeChange(ctx, p, n.targets)
+		descriptorsWithTypes, err = getDescriptorsFromTargetListForPrivilegeChange(ctx, p, n.targets)
 	})
 	if err != nil {
 		return err
 	}
 
-	if len(descriptors) == 0 {
+	if len(descriptorsWithTypes) == 0 {
 		return nil
 	}
 
@@ -181,8 +183,11 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// First, update the descriptors. We want to catch all errors before
 	// we update them in KV below.
 	b := p.txn.NewBatch()
-	for _, descriptor := range descriptors {
+	for _, descriptorWithTypes := range descriptorsWithTypes {
 		// Disallow privilege changes on system objects. For more context, see #43842.
+		descriptor := descriptorWithTypes.descriptor
+		objType := descriptorWithTypes.objectType
+
 		op := "REVOKE"
 		if n.isGrant {
 			op = "GRANT"
@@ -216,7 +221,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				grantPresent = grantPresent || priv == privilege.GRANT
 				allPresent = allPresent || priv == privilege.ALL
 
-				if n.grantOn == privilege.Sequence {
+				if objType == privilege.Sequence {
 					switch priv {
 					case privilege.ALL,
 						privilege.USAGE,
@@ -292,14 +297,14 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			// Postgres does not actually enforce this, instead of checking that
 			// superusers have all the privileges, Postgres allows superusers to
 			// bypass privilege checks.
-			err = catprivilege.ValidateSuperuserPrivileges(*privileges, descriptor, n.grantOn)
+			err = catprivilege.ValidateSuperuserPrivileges(*privileges, descriptor, objType)
 			if err != nil {
 				return err
 			}
 
 			// Validate privilege descriptors directly as the db/table level Validate
 			// may fix up the descriptor.
-			err = catprivilege.Validate(*privileges, descriptor, n.grantOn)
+			err = catprivilege.Validate(*privileges, descriptor, objType)
 			if err != nil {
 				return err
 			}
@@ -420,31 +425,92 @@ func (*changePrivilegesNode) Close(context.Context)        {}
 
 // getGrantOnObject returns the type of object being granted on based on the TargetList.
 // getGrantOnObject also calls incIAMFunc with the object type name.
-func getGrantOnObject(targets tree.TargetList, incIAMFunc func(on string)) privilege.ObjectType {
+// Note that the "GRANT ... ON obj_names" syntax supports both sequence name
+// and table name in the "obj_names" field.
+// If the target list contains a table, this function always returns
+// privilege.Table. Only when all objects in the target list are sequence, it
+// returns the privilege.Sequence.
+func getGrantOnObject(
+	ctx context.Context, p *planner, targets tree.TargetList, incIAMFunc func(on string),
+) (privilege.ObjectType, error) {
 	switch {
 	case targets.Databases != nil:
 		incIAMFunc(sqltelemetry.OnDatabase)
-		return privilege.Database
+		return privilege.Database, nil
 	case targets.AllSequencesInSchema:
 		incIAMFunc(sqltelemetry.OnAllSequencesInSchema)
-		return privilege.Sequence
+		return privilege.Sequence, nil
 	case targets.AllTablesInSchema:
 		incIAMFunc(sqltelemetry.OnAllTablesInSchema)
-		return privilege.Table
+		return privilege.Table, nil
 	case targets.Schemas != nil:
 		incIAMFunc(sqltelemetry.OnSchema)
-		return privilege.Schema
+		return privilege.Schema, nil
 	case targets.Types != nil:
 		incIAMFunc(sqltelemetry.OnType)
-		return privilege.Type
+		return privilege.Type, nil
 	default:
-		if targets.Tables.IsSequence {
-			incIAMFunc(sqltelemetry.OnSequence)
-			return privilege.Sequence
+		composition, err := checkTablePatternsComposition(ctx, p, targets)
+		if err != nil {
+			return privilege.Any, errors.Wrap(
+				err,
+				"cannot check the composition of the grant target's table patterns",
+			)
 		}
-		incIAMFunc(sqltelemetry.OnTable)
-		return privilege.Table
+		if composition == containsTable {
+			incIAMFunc(sqltelemetry.OnTable)
+			return privilege.Table, nil
+		}
+		incIAMFunc(sqltelemetry.OnSequence)
+		return privilege.Sequence, nil
 	}
+}
+
+type tableAttrsComposition int8
+
+const (
+	unknownComposition tableAttrsComposition = iota
+	containsTable
+	sequenceOnly
+)
+
+// checkTablePatternsComposition checks if the given grant target list's
+// composition. This is used to determine the privilege list for the targets.
+// If all targets are of type sequence, then we should use the sequence privilege
+// list; if any target is of type table, we should use the table privilege.
+// This is because the table privilege is the subset of sequence privilege.
+func checkTablePatternsComposition(
+	ctx context.Context, p *planner, targets tree.TargetList,
+) (tableAttrsComposition, error) {
+	if targets.Tables.SequenceOnly {
+		return sequenceOnly, nil
+	}
+	for _, tableTarget := range targets.Tables.TablePatterns {
+		tableGlob, err := tableTarget.NormalizeTablePattern()
+		if err != nil {
+			return unknownComposition, err
+		}
+		_, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
+		if err != nil {
+			return unknownComposition, err
+		}
+		muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, objectIDs...)
+		if err != nil {
+			return unknownComposition, err
+		}
+		for _, mut := range muts {
+			if mut != nil && mut.DescriptorType() == catalog.Table {
+				tableDesc, err := catalog.AsTableDescriptor(mut)
+				if err != nil {
+					return unknownComposition, err
+				}
+				if !tableDesc.IsSequence() {
+					return containsTable, nil
+				}
+			}
+		}
+	}
+	return sequenceOnly, nil
 }
 
 // validateRoles checks that all the roles are valid users.
