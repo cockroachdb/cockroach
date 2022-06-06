@@ -142,7 +142,6 @@ type RaftMessageHandler interface {
 		ctx context.Context,
 		req *kvserverpb.DelegateSnapshotRequest,
 		stream DelegateSnapshotResponseStream,
-		span *tracing.Span,
 	) error
 }
 
@@ -434,16 +433,17 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
 	errCh := make(chan error, 1)
 	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	defer cancel()
 	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(taskCtx, t.Tracer)
 	if err != nil {
 		log.Warningf(taskCtx, "error extracting tracing info from gRPC: %s", err)
 	}
 	taskCtx, span := t.Tracer.StartSpanCtx(
-		taskCtx, grpcinterceptor.BatchMethodName,
+		taskCtx, "delegate Raft snapshot",
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),
 		tracing.WithServerSpanKind,
 	)
-	defer cancel()
+	defer span.Finish()
 	if err := t.stopper.RunAsyncTaskEx(
 		taskCtx,
 		stop.TaskOpts{
@@ -480,7 +480,7 @@ func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapsh
 				}
 
 				// Pass off the snapshot request to the sender store.
-				return handler.HandleDelegatedSnapshot(ctx, req, stream, span)
+				return handler.HandleDelegatedSnapshot(ctx, req, stream)
 			}()
 		},
 	); err != nil {
