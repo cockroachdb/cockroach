@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var emptySpan = roachpb.Span{}
+var emptyHeader = roachpb.RequestHeader{}
 
 // Truncate restricts all requests to the given key range and returns new,
 // truncated, requests. All returned requests are "truncated" to the given span,
@@ -31,41 +31,42 @@ var emptySpan = roachpb.Span{}
 func Truncate(
 	reqs []roachpb.RequestUnion, rs roachpb.RSpan,
 ) ([]roachpb.RequestUnion, []int, error) {
-	truncateOne := func(args roachpb.Request) (bool, roachpb.Span, error) {
-		header := args.Header().Span()
+	truncateOne := func(args roachpb.Request) (hasRequest bool, changed bool, _ roachpb.RequestHeader, _ error) {
+		header := args.Header()
 		if !roachpb.IsRange(args) {
 			// This is a point request.
 			if len(header.EndKey) > 0 {
-				return false, emptySpan, errors.Errorf("%T is not a range command, but EndKey is set", args)
+				return false, false, emptyHeader, errors.Errorf("%T is not a range command, but EndKey is set", args)
 			}
 			keyAddr, err := keys.Addr(header.Key)
 			if err != nil {
-				return false, emptySpan, err
+				return false, false, emptyHeader, err
 			}
 			if !rs.ContainsKey(keyAddr) {
-				return false, emptySpan, nil
+				return false, false, emptyHeader, nil
 			}
-			return true, header, nil
+			return true, false, header, nil
 		}
 		// We're dealing with a range-spanning request.
 		local := false
 		keyAddr, err := keys.Addr(header.Key)
 		if err != nil {
-			return false, emptySpan, err
+			return false, false, emptyHeader, err
 		}
 		endKeyAddr, err := keys.Addr(header.EndKey)
 		if err != nil {
-			return false, emptySpan, err
+			return false, false, emptyHeader, err
 		}
 		if l, r := keys.IsLocal(header.Key), keys.IsLocal(header.EndKey); l || r {
 			if !l || !r {
-				return false, emptySpan, errors.Errorf("local key mixed with global key in range")
+				return false, false, emptyHeader, errors.Errorf("local key mixed with global key in range")
 			}
 			local = true
 		}
 		if keyAddr.Less(rs.Key) {
 			// rs.Key can't be local because it contains range split points, which
 			// are never local.
+			changed = true
 			if !local {
 				header.Key = rs.Key.AsRawKey()
 			} else {
@@ -77,6 +78,7 @@ func Truncate(
 		if !endKeyAddr.Less(rs.EndKey) {
 			// rs.EndKey can't be local because it contains range split points, which
 			// are never local.
+			changed = true
 			if !local {
 				header.EndKey = rs.EndKey.AsRawKey()
 			} else {
@@ -87,10 +89,10 @@ func Truncate(
 		}
 		// Check whether the truncation has left any keys in the range. If not,
 		// we need to cut it out of the request.
-		if header.Key.Compare(header.EndKey) >= 0 {
-			return false, emptySpan, nil
+		if changed && header.Key.Compare(header.EndKey) >= 0 {
+			return false, false, emptyHeader, nil
 		}
-		return true, header, nil
+		return true, changed, header, nil
 	}
 
 	// TODO(tschottdorf): optimize so that we don't always make a new request
@@ -99,19 +101,17 @@ func Truncate(
 	var positions []int
 	var truncReqs []roachpb.RequestUnion
 	for pos, arg := range reqs {
-		hasRequest, newSpan, err := truncateOne(arg.GetInner())
+		inner := arg.GetInner()
+		hasRequest, changed, newHeader, err := truncateOne(inner)
 		if hasRequest {
 			// Keep the old one. If we must adjust the header, must copy.
-			inner := reqs[pos].GetInner()
-			oldHeader := inner.Header()
-			if newSpan.EqualValue(oldHeader.Span()) {
-				truncReqs = append(truncReqs, reqs[pos])
-			} else {
-				oldHeader.SetSpan(newSpan)
+			if changed {
 				shallowCopy := inner.ShallowCopy()
-				shallowCopy.SetHeader(oldHeader)
+				shallowCopy.SetHeader(newHeader)
 				truncReqs = append(truncReqs, roachpb.RequestUnion{})
 				truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
+			} else {
+				truncReqs = append(truncReqs, arg)
 			}
 			positions = append(positions, pos)
 		}
