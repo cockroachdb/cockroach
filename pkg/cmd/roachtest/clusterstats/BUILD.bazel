@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@bazel_gomock//:gomock.bzl", "gomock")
+
+go_library(
+    name = "clusterstats",
+    srcs = [
+        "collector.go",
+        "exporter.go",
+        "helpers.go",
+        "streamer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/prometheus",
+        "//pkg/cmd/roachtest/test",
+        "//pkg/roachprod/logger",
+        "//pkg/util/search",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_golang//api",
+        "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
+        "@com_github_prometheus_common//model",
+    ],
+)
+
+go_test(
+    name = "clusterstats_test",
+    srcs = [
+        "exporter_test.go",
+        "streamer_test.go",
+    ],
+    embed = [":clusterstats"],
+    deps = [
+        "//pkg/cmd/roachtest/prometheus",
+        "//pkg/roachprod/logger",
+        "@com_github_golang_mock//gomock",
+        "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
+        "@com_github_prometheus_common//model",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+gomock(
+    name = "clusterstats_mock",
+    out = "mocks_generated_test.go",
+    interfaces = ["Client"],
+    library = "//pkg/cmd/roachtest/prometheus",
+    package = "clusterstats",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

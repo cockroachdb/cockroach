@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1947,6 +1948,41 @@ func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args
 	}
 	err = errors.Wrapf(err, "output in %s", logFile)
 	return err
+}
+
+// The following functions are augmented basic cluster functions but there tends
+// to be common networking issues that cause test failures and require putting
+// a retry block around them.
+
+var canaryRetryOptions = retry.Options{
+	InitialBackoff: 10 * time.Second,
+	Multiplier:     2,
+	MaxBackoff:     5 * time.Minute,
+	MaxRetries:     10,
+}
+
+// RepeatRunE is the same function as c.RunE but with an automatic retry loop.
+func (c *clusterImpl) RepeatRunE(
+	ctx context.Context, t test.Test, node option.NodeListOption, operation string, args ...string,
+) error {
+	var lastError error
+	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if t.Failed() {
+			return fmt.Errorf("test has failed")
+		}
+		attempt++
+		t.L().Printf("attempt %d - %s", attempt, operation)
+		lastError = c.RunE(ctx, node, args...)
+		if lastError != nil {
+			t.L().Printf("error - retrying: %s", lastError)
+			continue
+		}
+		return nil
+	}
+	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
 // RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
