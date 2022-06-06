@@ -105,7 +105,7 @@ require (
 	github.com/kr/text v0.2.0
 	github.com/kylelemons/godebug v1.1.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
-	github.com/lib/pq v1.10.6-0.20220412200556-b3b833258663
+	github.com/lib/pq v1.10.6
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/lufia/iostat v1.2.1
