@@ -112,6 +112,7 @@ func RegisterTests(r registry.Registry) {
 	registerSSTableCorruption(r)
 	registerSyncTest(r)
 	registerSysbench(r)
+	registerTenantStreaming(r)
 	registerTLP(r)
 	registerTPCC(r)
 	registerTPCDSVec(r)

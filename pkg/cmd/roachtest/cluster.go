@@ -188,7 +188,7 @@ func initBinariesAndLibraries() {
 	// If we're running against an existing "local" cluster, force the local flag
 	// to true in order to get the "local" test configurations.
 	if clusterName == "local" {
-		local = true
+		 local = true
 	}
 	if local {
 		cloud = spec.Local

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -129,6 +130,14 @@ func (tn *tenantNode) secureURL() string {
 	return tn.relativeSecureURL
 }
 
+func (tn *tenantNode) sqlRunner() (*sqlutils.SQLRunner, error) {
+	db, err := gosql.Open("postgres", tn.pgURL)
+	if err != nil {
+		return nil, err
+	}
+	return sqlutils.MakeSQLRunner(db), nil
+}
+
 func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster, binary string) {
 	require.True(t, c.IsSecure())
 
@@ -158,7 +167,8 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// pgURL has full paths to local certs embedded, i.e.
 	// /tmp/roachtest-certs3630333874/certs, on the cluster we want just certs
 	// (i.e. to run workload on the tenant).
-	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), "certs", false /*external*/, true /* secure */)
+	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)),
+		"certs", false /*external*/, true /* secure */)
 	require.NoError(t, err)
 	u, err = url.Parse(strings.Trim(secureUrls[0], "'"))
 	require.NoError(t, err)

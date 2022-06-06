@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
+	"github.com/stretchr/testify/require"
 )
 
 type workloadType string
@@ -164,10 +165,11 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 	m := c.NewMonitor(ctx, crdbNodes)
 	workloadCompleteCh := make(chan struct{}, 1)
 
+	var wl cdcWorkload
 	workloadStart := timeutil.Now()
+	t.Status(fmt.Sprintf("installing workload: %s", args.workloadType))
 	if args.workloadType == tpccWorkloadType {
-		t.Status("installing TPCC")
-		tpcc := tpccWorkload{
+		wl = &tpccWorkload{
 			sqlNodes:           crdbNodes,
 			workloadNodes:      workloadNode,
 			tpccWarehouseCount: args.tpccWarehouseCount,
@@ -175,32 +177,26 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			// if it attempts to use the node which was brought down by chaos.
 			tolerateErrors: args.crdbChaos,
 		}
-
-		tpcc.install(ctx, c)
-		// TODO(dan,ajwerner): sleeping momentarily before running the workload
-		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
-		time.Sleep(2 * time.Second)
-		t.Status("initiating workload")
-		m.Go(func(ctx context.Context) error {
-			defer func() { close(workloadCompleteCh) }()
-			tpcc.run(ctx, c, args.workloadDuration)
-			return nil
-		})
-	} else {
-		t.Status("installing Ledger Workload")
-		lw := ledgerWorkload{
-			sqlNodes:      crdbNodes,
+	} else if args.workloadType == ledgerWorkloadType {
+		wl = &ledgerWorkload{
+			sqlNodes:      c.Node(1),
 			workloadNodes: workloadNode,
 		}
-		lw.install(ctx, c)
-
-		t.Status("initiating workload")
-		m.Go(func(ctx context.Context) error {
-			defer func() { close(workloadCompleteCh) }()
-			lw.run(ctx, c, args.workloadDuration)
-			return nil
-		})
 	}
+
+	wl.install(ctx, c)
+
+	// TODO(dan,ajwerner): sleeping momentarily before running the workload
+	// mitigates errors like "error in newOrder: missing stock row" from tpcc.
+	if args.workloadType == tpccWorkloadType {
+		time.Sleep(2 * time.Second)
+	}
+	t.Status("initiating workload")
+	m.Go(func(ctx context.Context) error {
+		defer func() { close(workloadCompleteCh) }()
+		wl.run(ctx, c, args.workloadDuration)
+		return nil
+	})
 
 	changefeedLogger, err := t.L().ChildLogger("changefeed")
 	if err != nil {
@@ -1555,17 +1551,30 @@ func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsume
 type tpccWorkload struct {
 	workloadNodes      option.NodeListOption
 	sqlNodes           option.NodeListOption
+	sqlPgUrl           string
 	tpccWarehouseCount int
 	tolerateErrors     bool
+	t                  test.Test
 }
 
+type cdcWorkload interface {
+	install(ctx context.Context, c cluster.Cluster)
+	run(ctx context.Context, c cluster.Cluster, workloadDuration string)
+}
+
+func pgUrl(sqlPgUrl string, sqlNodes option.NodeListOption) string {
+	if len(sqlPgUrl) == 0 {
+		return fmt.Sprintf("{pgurl%s}", sqlNodes.RandNode())
+	}
+	return sqlPgUrl
+}
 func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 	// For fixtures import, use the version built into the cockroach binary so
 	// the tpcc workload-versions match on release branches.
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl%s}`,
+		`./cockroach workload fixtures import tpcc --warehouses=%d --checks=false %s`,
 		tw.tpccWarehouseCount,
-		tw.sqlNodes.RandNode(),
+		pgUrl(tw.sqlPgUrl, tw.sqlNodes),
 	))
 }
 
@@ -1574,10 +1583,16 @@ func (tw *tpccWorkload) run(ctx context.Context, c cluster.Cluster, workloadDura
 	if tw.tolerateErrors {
 		tolerateErrors = "--tolerate-errors"
 	}
-	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d --duration=%s %s {pgurl%s} `,
-		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, tw.sqlNodes,
+	fmt.Printf("run a tpcc workload with pgurl: %s\n", fmt.Sprintf(
+		`./workload run tpcc --warehouses=%d --duration=%s %s %s `,
+		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, pgUrl(tw.sqlPgUrl, tw.sqlNodes),
 	))
+	res, err := c.RunWithDetailsSingleNode(ctx, tw.t.L(), tw.workloadNodes, fmt.Sprintf(
+		`./workload run tpcc --warehouses=%d --duration=%s %s %s `,
+		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, pgUrl(tw.sqlPgUrl, tw.sqlNodes),
+	))
+	require.NoError(tw.t, err)
+	log.Infof(ctx, "workload run res: %s\n", res.Stdout)
 }
 
 type ledgerWorkload struct {
