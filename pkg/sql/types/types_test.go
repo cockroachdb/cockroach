@@ -1035,3 +1035,45 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		})
 	}
 }
+
+func TestDelimiter(t *testing.T) {
+	testCases := []struct {
+		t        *T
+		expected string
+	}{
+		{Unknown, ","},
+		{Bool, ","},
+		{VarBit, ","},
+		{Int, ","},
+		{Int4, ","},
+		{Int2, ","},
+		{Float, ","},
+		{Float4, ","},
+		{Decimal, ","},
+		{String, ","},
+		{VarChar, ","},
+		{QChar, ","},
+		{Name, ","},
+		{Bytes, ","},
+		{Date, ","},
+		{Time, ","},
+		{TimeTZ, ","},
+		{Timestamp, ","},
+		{TimestampTZ, ","},
+		{Interval, ","},
+		{Jsonb, ","},
+		{Uuid, ","},
+		{INet, ","},
+		{Geometry, ":"},
+		{Geography, ":"},
+		{Box2D, ","},
+		{Void, ","},
+		{EncodedKey, ","},
+	}
+
+	for _, tc := range testCases {
+		if actual := tc.t.Delimiter(); actual != tc.expected {
+			t.Errorf("%v: expected <%v>, got <%v>", tc.t.Family(), tc.expected, actual)
+		}
+	}
+}
