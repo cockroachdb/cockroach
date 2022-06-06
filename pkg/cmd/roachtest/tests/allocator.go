@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -28,10 +29,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// The duration of no rebalancing actions taken before we assume the
+// configuration is in a steady state and assess balance.
+const allocatorStableSeconds = 3 * 60
+
 func registerAllocator(r registry.Registry) {
 	runAllocator := func(ctx context.Context, t test.Test, c cluster.Cluster, start int, maxStdDev float64) {
 		c.Put(ctx, t.Cockroach(), "./cockroach")
 
+		// Put away one node to be the stats collector.
+		nodes := c.Spec().NodeCount - 1
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5"}
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, start))
@@ -50,11 +57,18 @@ func registerAllocator(r registry.Registry) {
 		})
 		m.Wait()
 
+		statCollector, err := clusterstats.NewStatsCollector(ctx, t, c)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer statCollector.CleanUp()
+
 		// Start the remaining nodes to kick off upreplication/rebalancing.
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(start+1, c.Spec().NodeCount))
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(start+1, nodes))
 
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv --drop`)
-		for node := 1; node <= c.Spec().NodeCount; node++ {
+		for node := 1; node <= nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
@@ -69,10 +83,44 @@ func registerAllocator(r registry.Registry) {
 			}()
 		}
 
+		// Wait for 3x replication, we record the time taken to achieve this.
+		var replicateTime time.Time
+		m = c.NewMonitor(ctx, c.All())
+		m.Go(func(ctx context.Context) error {
+			err := WaitFor3XReplication(ctx, t, db)
+			replicateTime = timeutil.Now()
+			return err
+		})
+		m.Wait()
+
+		// Wait for replica count balance, this occurs only following
+		// up-replication finishing.
 		m = c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
-			return waitForRebalance(ctx, t.L(), db, maxStdDev)
+			startTime := timeutil.Now()
+			err := waitForRebalance(ctx, t.L(), db, maxStdDev)
+			if err != nil {
+				return err
+			}
+			endTime := timeutil.Now()
+			err = statCollector.Exporter().Export(
+				ctx,
+				c,
+				t,
+				startTime, endTime,
+				joinSummaryQueries(actionsSummary, underReplicatedSummary, requestBalanceSummary, resourceBalanceSummary),
+				// NB: We record the time taken to reach balance, from when
+				// up-replication began, until the last rebalance action
+				// taken.
+				func(stats map[string]clusterstats.StatSummary) (string, float64) {
+					return "t-balance", endTime.Sub(startTime).Seconds() - allocatorStableSeconds
+				},
+				func(stats map[string]clusterstats.StatSummary) (string, float64) {
+					return "t-uprepl", replicateTime.Sub(startTime).Seconds() - allocatorStableSeconds
+				},
+			)
+			return err
 		})
 		m.Wait()
 	}
@@ -80,7 +128,7 @@ func registerAllocator(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    `replicate/up/1to3`,
 		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(3),
+		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
@@ -88,7 +136,7 @@ func registerAllocator(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(5),
+		Cluster: r.MakeClusterSpec(6),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
@@ -223,9 +271,7 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 func waitForRebalance(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, maxStdDev float64,
 ) error {
-	// const statsInterval = 20 * time.Second
 	const statsInterval = 2 * time.Second
-	const stableSeconds = 3 * 60
 
 	var statsTimer timeutil.Timer
 	defer statsTimer.Stop()
@@ -242,7 +288,7 @@ func waitForRebalance(
 			}
 
 			l.Printf("%v\n", stats)
-			if stableSeconds <= stats.SecondsSinceLastEvent {
+			if allocatorStableSeconds <= stats.SecondsSinceLastEvent {
 				l.Printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
 				if stats.ReplicaCountStdDev > maxStdDev {
 					_ = printRebalanceStats(l, db)
