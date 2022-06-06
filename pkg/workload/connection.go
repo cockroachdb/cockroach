@@ -51,6 +51,7 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 // SQL database set, rewriting them in place if necessary. This database name is
 // returned.
 func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, error) {
+	fmt.Printf("SanitizeUrls %s\n", urls)
 	dbName := gen.Meta().Name
 	if dbOverride != `` {
 		dbName = dbOverride
