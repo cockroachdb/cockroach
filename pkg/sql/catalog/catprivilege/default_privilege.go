@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var _ catalog.DefaultPrivilegeDescriptor = &immutable{}
@@ -78,7 +77,7 @@ func NewMutableDefaultPrivileges(
 func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	role catpb.DefaultPrivilegesRole,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 	grantee username.SQLUsername,
 	privList privilege.List,
 	withGrantOption bool,
@@ -97,7 +96,7 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 	if isGrant {
 		defaultPrivileges.Grant(grantee, privList, withGrantOption)
 	} else {
-		defaultPrivileges.Revoke(grantee, privList, targetObject.ToPrivilegeObjectType(), withGrantOption)
+		defaultPrivileges.Revoke(grantee, privList, targetObject.ToObjectType(), withGrantOption)
 	}
 
 	if deprecateGrant {
@@ -115,7 +114,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees []username.SQLUsername,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 	withGrantOption bool,
 	deprecateGrant bool,
 ) {
@@ -130,7 +129,7 @@ func (d *Mutable) RevokeDefaultPrivileges(
 	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees []username.SQLUsername,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 	grantOptionFor bool,
 	deprecateGrant bool,
 ) {
@@ -152,10 +151,10 @@ func (d *Mutable) RevokeDefaultPrivileges(
 	// If the DefaultPrivilegeDescriptor is defined on a schema, the flags are
 	// not used and have no meaning.
 	if defaultPrivilegesForRole.IsExplicitRole() && d.IsDatabaseDefaultPrivilege() &&
-		(!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Tables) ||
-			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Sequences) ||
-			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Types) ||
-			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, tree.Schemas)) ||
+		(!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Tables) ||
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Sequences) ||
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Types) ||
+			!GetRoleHasAllPrivilegesOnTargetObject(defaultPrivilegesForRole, privilege.Schemas)) ||
 		!GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
 		return
 	}
@@ -174,7 +173,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 	schemaDefaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor,
 	dbID descpb.ID,
 	user username.SQLUsername,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 	databasePrivileges *catpb.PrivilegeDescriptor,
 ) *catpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
@@ -202,8 +201,8 @@ func CreatePrivilegesFromDefaultPrivileges(
 				applyDefaultPrivileges(
 					newPrivs,
 					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToPrivilegeObjectType()),
+					privilege.ListFromBitField(user.Privileges, targetObject.ToObjectType()),
+					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToObjectType()),
 				)
 			}
 		} else {
@@ -213,8 +212,8 @@ func CreatePrivilegesFromDefaultPrivileges(
 				applyDefaultPrivileges(
 					newPrivs,
 					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToPrivilegeObjectType()),
+					privilege.ListFromBitField(user.Privileges, targetObject.ToObjectType()),
+					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToObjectType()),
 				)
 			}
 		}
@@ -228,8 +227,8 @@ func CreatePrivilegesFromDefaultPrivileges(
 				applyDefaultPrivileges(
 					newPrivs,
 					user.UserProto.Decode(),
-					privilege.ListFromBitField(user.Privileges, targetObject.ToPrivilegeObjectType()),
-					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToPrivilegeObjectType()),
+					privilege.ListFromBitField(user.Privileges, targetObject.ToObjectType()),
+					privilege.ListFromBitField(user.WithGrantOption, targetObject.ToObjectType()),
 				)
 			}
 		}
@@ -293,9 +292,9 @@ func foldPrivileges(
 	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	role catpb.DefaultPrivilegesRole,
 	privileges *catpb.PrivilegeDescriptor,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 ) {
-	if targetObject == tree.Types &&
+	if targetObject == privilege.Types &&
 		privileges.CheckPrivilege(username.PublicRoleName(), privilege.USAGE) {
 		publicUser, ok := privileges.FindUser(username.PublicRoleName())
 		if ok {
@@ -314,7 +313,7 @@ func foldPrivileges(
 	if role.ForAllRoles {
 		return
 	}
-	if privileges.HasAllPrivileges(role.Role, targetObject.ToPrivilegeObjectType()) {
+	if privileges.HasAllPrivileges(role.Role, targetObject.ToObjectType()) {
 		user := privileges.FindOrCreateUser(role.Role)
 		if user.WithGrantOption == 0 {
 			setRoleHasAllOnTargetObject(defaultPrivilegesForRole, true, targetObject)
@@ -332,9 +331,9 @@ func expandPrivileges(
 	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	role catpb.DefaultPrivilegesRole,
 	privileges *catpb.PrivilegeDescriptor,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 ) {
-	if targetObject == tree.Types && GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
+	if targetObject == privilege.Types && GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
 		privileges.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false /* withGrantOption */)
 		setPublicHasUsageOnTypes(defaultPrivilegesForRole, false)
 	}
@@ -351,13 +350,13 @@ func expandPrivileges(
 // GetUserPrivilegesForObject returns the set of []UserPrivileges constructed
 // from the DefaultPrivilegesForRole.
 func GetUserPrivilegesForObject(
-	p catpb.DefaultPrivilegesForRole, targetObject tree.AlterDefaultPrivilegesTargetObject,
+	p catpb.DefaultPrivilegesForRole, targetObject privilege.TargetObjectType,
 ) []catpb.UserPrivileges {
 	var userPrivileges []catpb.UserPrivileges
 	if privileges, ok := p.DefaultPrivilegesPerObject[targetObject]; ok {
 		userPrivileges = privileges.Users
 	}
-	if GetPublicHasUsageOnTypes(&p) && targetObject == tree.Types {
+	if GetPublicHasUsageOnTypes(&p) && targetObject == privilege.Types {
 		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  username.PublicRoleName().EncodeProto(),
 			Privileges: privilege.USAGE.Mask(),
@@ -390,21 +389,20 @@ func GetPublicHasUsageOnTypes(defaultPrivilegesForRole *catpb.DefaultPrivilegesF
 // GetRoleHasAllPrivilegesOnTargetObject returns whether the creator role
 // has all privileges on the default privileges target object.
 func GetRoleHasAllPrivilegesOnTargetObject(
-	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole, targetObject privilege.TargetObjectType,
 ) bool {
 	if !defaultPrivilegesForRole.IsExplicitRole() {
 		// ForAllRoles is a pseudo role and does not actually have privileges on it.
 		return false
 	}
 	switch targetObject {
-	case tree.Tables:
+	case privilege.Tables:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTables
-	case tree.Sequences:
+	case privilege.Sequences:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSequences
-	case tree.Types:
+	case privilege.Types:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes
-	case tree.Schemas:
+	case privilege.Schemas:
 		return defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas
 	default:
 		panic(fmt.Sprintf("unknown target object %s", targetObject))
@@ -471,20 +469,20 @@ func applyDefaultPrivileges(
 func setRoleHasAllOnTargetObject(
 	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	roleHasAll bool,
-	targetObject tree.AlterDefaultPrivilegesTargetObject,
+	targetObject privilege.TargetObjectType,
 ) {
 	if !defaultPrivilegesForRole.IsExplicitRole() {
 		// ForAllRoles is a pseudo role and does not actually have privileges on it.
 		panic("DefaultPrivilegesForRole must be for an explicit role")
 	}
 	switch targetObject {
-	case tree.Tables:
+	case privilege.Tables:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTables = roleHasAll
-	case tree.Sequences:
+	case privilege.Sequences:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSequences = roleHasAll
-	case tree.Types:
+	case privilege.Types:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnTypes = roleHasAll
-	case tree.Schemas:
+	case privilege.Schemas:
 		defaultPrivilegesForRole.GetExplicitRole().RoleHasAllPrivilegesOnSchemas = roleHasAll
 	default:
 		panic(fmt.Sprintf("unknown target object %s", targetObject))

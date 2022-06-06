@@ -29,11 +29,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var targetObjectToPrivilegeObject = map[tree.AlterDefaultPrivilegesTargetObject]privilege.ObjectType{
-	tree.Tables:    privilege.Table,
-	tree.Sequences: privilege.Table,
-	tree.Types:     privilege.Type,
-	tree.Schemas:   privilege.Schema,
+var targetObjectToPrivilegeObject = map[privilege.TargetObjectType]privilege.ObjectType{
+	privilege.Tables:    privilege.Table,
+	privilege.Sequences: privilege.Table,
+	privilege.Types:     privilege.Type,
+	privilege.Schemas:   privilege.Schema,
 }
 
 type alterDefaultPrivilegesNode struct {
@@ -67,7 +67,7 @@ func (p *planner) alterDefaultPrivileges(
 		objectType = n.Revoke.Target
 	}
 
-	if len(n.Schemas) > 0 && objectType == tree.Schemas {
+	if len(n.Schemas) > 0 && objectType == privilege.Schemas {
 		return nil, pgerror.WithCandidateCode(errors.New(
 			"cannot use IN SCHEMA clause when using GRANT/REVOKE ON SCHEMAS"),
 			pgcode.InvalidGrantOperation,
@@ -176,7 +176,7 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 	params runParams,
 	targetRoles []username.SQLUsername,
-	objectType tree.AlterDefaultPrivilegesTargetObject,
+	objectType privilege.TargetObjectType,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
 	grantOption bool,
@@ -281,7 +281,7 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	params runParams,
 	targetRoles []username.SQLUsername,
-	objectType tree.AlterDefaultPrivilegesTargetObject,
+	objectType privilege.TargetObjectType,
 	grantees tree.RoleSpecList,
 	privileges privilege.List,
 	grantOption bool,

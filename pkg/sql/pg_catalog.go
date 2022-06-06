@@ -1225,7 +1225,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		f := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
-			objectTypes := tree.GetAlterDefaultPrivilegesTargetObjects()
+			objectTypes := privilege.GetTargetObjectTypes()
 			for _, objectType := range objectTypes {
 				privs, ok := defaultPrivilegesForRole.DefaultPrivilegesPerObject[objectType]
 				if !ok || len(privs.Users) == 0 {
@@ -1237,13 +1237,13 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					// since ForAllRoles cannot be a grantee - therefore we can ignore
 					// the RoleHasAllPrivilegesOnX flag and skip. We still have to take
 					// into consideration the PublicHasUsageOnTypes flag.
-					if objectType == tree.Types {
+					if objectType == privilege.Types {
 						// if the objectType is tree.Types, we only omit the entry
 						// if both the role has ALL privileges AND public has USAGE.
 						// This is the "default" state for default privileges on types
 						// in Postgres.
 						if (!defaultPrivilegesForRole.IsExplicitRole() ||
-							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, tree.Types)) &&
+							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types)) &&
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
 							continue
 						}
@@ -1257,13 +1257,13 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				// r = relation (table, view), S = sequence, f = function, T = type, n = schema.
 				var c string
 				switch objectType {
-				case tree.Tables:
+				case privilege.Tables:
 					c = "r"
-				case tree.Sequences:
+				case privilege.Sequences:
 					c = "S"
-				case tree.Types:
+				case privilege.Types:
 					c = "T"
-				case tree.Schemas:
+				case privilege.Schemas:
 					c = "n"
 				}
 				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
@@ -1296,8 +1296,8 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				// state has changed. We have to produce an entry by expanding the
 				// privileges.
 				if defaultPrivilegesForRole.IsExplicitRole() {
-					if objectType == tree.Types {
-						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, tree.Types) &&
+					if objectType == privilege.Types {
+						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Types) &&
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
 							defaclItem := createDefACLItem(
 								"" /* public role */, privilege.List{privilege.USAGE}, privilege.List{}, privilegeObjectType,
