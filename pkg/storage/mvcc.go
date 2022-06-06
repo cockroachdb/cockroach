@@ -1453,7 +1453,7 @@ func mvccPutInternal(
 					iter.SeekGE(oldVersionKey)
 					if valid, err := iter.Valid(); err != nil {
 						return err
-					} else if !valid && !iter.UnsafeKey().Equal(oldVersionKey) {
+					} else if !valid || !iter.UnsafeKey().Equal(oldVersionKey) {
 						return errors.Errorf("existing intent value missing: %s", oldVersionKey)
 					}
 

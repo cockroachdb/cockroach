@@ -100,6 +100,7 @@ var (
 				{
 					Name: "a fields",
 					Query: rel.Clauses{
+						v("a").Type((*entity)(nil)),
 						v("a").AttrEq(i16, int16(1)),
 						v("a").AttrEqVar(i8, "ai8"),
 						v("a").AttrEqVar(pi8, "api8"),
@@ -109,7 +110,7 @@ var (
 					Results: [][]interface{}{
 						{a, int8(1), int8(1)},
 					},
-					UnsatisfiableIndexes: []int{2},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "a-c-b join",
@@ -125,7 +126,7 @@ var (
 					Results: [][]interface{}{
 						{a, b, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "nil values don't show up",
@@ -137,7 +138,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2},
+					UnsatisfiableIndexes: []int{2, 4, 5, 6},
 				},
 				{
 					Name: "nil values don't show up, scalar pointers same as pointers",
@@ -149,7 +150,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2},
+					UnsatisfiableIndexes: []int{2, 4, 5, 6},
 				},
 				{
 					Name: "list all the values",
@@ -163,7 +164,7 @@ var (
 						{b, int8(2)},
 						{c, int8(2)},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "list all the values with type constraint",
@@ -178,6 +179,7 @@ var (
 						{b, int8(2)},
 						{c, int8(2)},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "nodes with elements where i8=2",
@@ -192,7 +194,7 @@ var (
 						{nb, b},
 						{nc, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "list all the i8 values",
@@ -209,6 +211,7 @@ var (
 						{int8(2)},
 						{int8(2)},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "use a filter",
@@ -223,7 +226,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "types of all the entities",
@@ -240,7 +243,7 @@ var (
 						{nb, reflect.TypeOf((*node)(nil))},
 						{nc, reflect.TypeOf((*node)(nil))},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "nodes by type",
@@ -255,7 +258,7 @@ var (
 					Results: [][]interface{}{
 						{na, nb, nc, a},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "list nodes",
@@ -269,6 +272,7 @@ var (
 						{nb},
 						{nc},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "basic any",
@@ -285,6 +289,7 @@ var (
 						{nb},
 						{nc},
 					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "self eq value",
@@ -296,7 +301,7 @@ var (
 					Results: [][]interface{}{
 						{c},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3},
 				},
 				{
 					Name: "contradiction due to missing attribute",
@@ -307,7 +312,7 @@ var (
 					Entities:             []v{"entity"},
 					ResVars:              []v{"entity", "pi8"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{2},
+					UnsatisfiableIndexes: []int{1, 2, 3},
 				},
 				{
 					Name: "self eq self",
@@ -319,7 +324,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c}, {na}, {nb}, {nc},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "variable type mismatch",
@@ -345,7 +350,7 @@ var (
 						{na, a, na, a},
 						{na, a, nc, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "entity bound via variable with ne filter",
@@ -365,7 +370,7 @@ var (
 					Results: [][]interface{}{
 						{na, a, nc, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "any value type mismatch",
@@ -385,7 +390,7 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e", "i8"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 				{
 					Name: "pointer scalar values any",
@@ -397,7 +402,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "pointer scalar values",
@@ -409,7 +414,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "nil pointer scalar values any",
@@ -433,7 +438,7 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
 					Name: "any clause no match on variable eq",
@@ -444,7 +449,7 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e", "i8"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{2, 3},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 			},
 		},

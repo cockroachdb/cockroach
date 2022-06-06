@@ -104,16 +104,34 @@ type registeredOpRule struct {
 }
 
 // registerDepRule registers a rule from which a set of dependency edges will
-// be derived in a graph.
+// be derived in a graph. The edge will be formed from the node containing
+// the fromEl entity to the node containing the toEl entity.
 func registerDepRule(
-	rn scgraph.RuleName, edgeKind scgraph.DepEdgeKind, from, to rel.Var, query *rel.Query,
+	ruleName scgraph.RuleName,
+	kind scgraph.DepEdgeKind,
+	fromEl, toEl string,
+	def func(
+		from, fromTarget, fromNode,
+		to, toTarget, toNode rel.Var,
+	) rel.Clauses,
 ) {
+	var (
+		from, fromTarget, fromNode = targetNodeVars(rel.Var(fromEl))
+		to, toTarget, toNode       = targetNodeVars(rel.Var(toEl))
+	)
+	c := def(from, fromTarget, fromNode, to, toTarget, toNode)
+	c = append(c,
+		screl.JoinTargetNode(from, fromTarget, fromNode),
+		screl.JoinTargetNode(to, toTarget, toNode),
+		from.AttrEqVar(screl.DescID, "var-to-tell-rel-from-is-an-element"),
+		to.AttrEqVar(screl.DescID, "var-to-tell-rel-to-is-an-element"),
+	)
 	registry.depRules = append(registry.depRules, registeredDepRule{
-		name: rn,
-		kind: edgeKind,
-		from: from,
-		to:   to,
-		q:    query,
+		name: ruleName,
+		kind: kind,
+		from: fromNode,
+		to:   toNode,
+		q:    screl.MustQuery(c...),
 	})
 }
 

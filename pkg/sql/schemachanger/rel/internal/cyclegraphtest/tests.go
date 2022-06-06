@@ -66,6 +66,7 @@ var (
 						{container1, message1},
 						{container2, message2},
 					},
+					UnsatisfiableIndexes: []int{1},
 				},
 				{
 					Name: "oneOf member",
