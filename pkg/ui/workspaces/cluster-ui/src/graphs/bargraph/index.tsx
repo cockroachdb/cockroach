@@ -44,9 +44,8 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
   yAxisUnits,
 }) => {
   const graphRef = useRef<HTMLDivElement>(null);
-  const samplingIntervalMillis = alignedData[0].length
-    ? alignedData[0][1] - alignedData[0][0]
-    : 0;
+  const samplingIntervalMillis =
+    alignedData[0].length > 1 ? alignedData[0][1] - alignedData[0][0] : 1e3;
 
   useEffect(() => {
     if (!alignedData) return;
@@ -68,6 +67,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
       uPlotOptions,
       xAxisDomain,
       yAxisDomain,
+      yAxisUnits,
       colourPalette,
     );
 
