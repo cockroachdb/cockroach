@@ -55,9 +55,10 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	dev test
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
 	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
-	dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
 	dev test pkg/... -v
-	dev test --stress --race ...`,
+  dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/... // run tests from multiple pkgs
+	dev test --stress --race ... // run go race under stress
+  dev test --stress --test-args='-test.timeout 30s' // stress until a test runs longer than 30s`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
@@ -73,16 +74,21 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	// or only on failures. `--show-logs` by contrast is a flag for the process
 	// under test, controlling whether the process-internal logs are made
 	// visible.
-	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output")
+	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output ("+
+		"equivalent to passing '--testargs='test.v')")
 	testCmd.Flags().Int(countFlag, 1, "run test the given number of times")
 	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
-	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
+	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress.\n"+
+		"Prefix each arg with '-'; e.g. '--stress-args='-maxtime=30s'.\n"+
+		"See all stress args at https://github.com/cockroachdb/stress/blob/master/main.go")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
-	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
+	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary.\n"+
+		"Pass each arg with '-test.{arg}'; for example: --test-args='-test.timeout 1s'.\n"+
+		"Learn about go test args by running 'go help test'.")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	return testCmd
 }
