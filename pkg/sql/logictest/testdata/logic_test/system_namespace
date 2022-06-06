@@ -1,4 +1,4 @@
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query IITI rowsort
 SELECT * FROM system.namespace
 ----

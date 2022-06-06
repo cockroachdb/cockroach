@@ -1,6 +1,6 @@
 # 3node-tenant is blocked from running this file because the config runs with
 # a CCL binary, so the expected failures from using a non-CCL binary don't occur.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant-default-configs
 
 # CCL-only statements error out trying to handle the parsed statements.
 
