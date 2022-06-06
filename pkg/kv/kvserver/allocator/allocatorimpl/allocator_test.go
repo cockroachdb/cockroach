@@ -1664,6 +1664,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 	raftStatus := &raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
+	raftStatus.RaftState = raft.StateLeader
 	for i := int32(1); i <= r.replicationFactor; i++ {
 		state := tracker.StateReplicate
 		if _, ok := r.replsInNeedOfSnapshot[roachpb.ReplicaID(i)]; ok {
@@ -1672,6 +1673,10 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 		raftStatus.Progress[uint64(i)] = tracker.Progress{State: state}
 	}
 	return raftStatus
+}
+
+func (r *mockRepl) GetFirstIndex() uint64 {
+	return 0
 }
 
 func (r *mockRepl) StoreID() roachpb.StoreID {
@@ -7138,6 +7143,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 				Progress: make(map[uint64]tracker.Progress),
 			}
 			status.Lead = c.leader
+			status.RaftState = raft.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
@@ -7210,6 +7216,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
 			status.Lead = 99
+			status.RaftState = raft.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
@@ -7267,6 +7274,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
 			status.Lead = 99
+			status.RaftState = raft.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {

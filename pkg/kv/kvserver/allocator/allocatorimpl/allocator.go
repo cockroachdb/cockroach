@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1468,8 +1469,9 @@ func (a *Allocator) ValidLeaseTargets(
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
+		RaftStatus() *raft.Status
+		GetFirstIndex() uint64
 	},
 	// excludeLeaseRepl dictates whether the result set can include the source
 	// replica.
@@ -1510,7 +1512,8 @@ func (a *Allocator) ValidLeaseTargets(
 		// potentially transferring the lease to a replica that may be waiting for a
 		// snapshot (which will wedge the range until the replica applies that
 		// snapshot).
-		candidates = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), candidates)
+		candidates = excludeReplicasInNeedOfSnapshots(
+			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), candidates)
 	}
 
 	// Determine which store(s) is preferred based on user-specified preferences.
@@ -1532,8 +1535,9 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	leaseRepl interface {
-		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
+		RaftStatus() *raft.Status
+		GetFirstIndex() uint64
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 ) bool {
@@ -1557,7 +1561,8 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	// If there are any replicas that do match lease preferences, then we check if
 	// the existing leaseholder is one of them.
 	preferred := a.PreferredLeaseholders(conf, candidates)
-	preferred = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), preferred)
+	preferred = excludeReplicasInNeedOfSnapshots(
+		ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
 	if len(preferred) == 0 {
 		return false
 	}
@@ -1606,9 +1611,10 @@ func (a *Allocator) TransferLeaseTarget(
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
+		RaftStatus() *raft.Status
+		GetFirstIndex() uint64
 	},
 	stats *replicastats.ReplicaStats,
 	forceDecisionWithoutStats bool,
@@ -1854,8 +1860,9 @@ func (a *Allocator) ShouldTransferLease(
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
-		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
+		RaftStatus() *raft.Status
+		GetFirstIndex() uint64
 	},
 	stats *replicastats.ReplicaStats,
 ) bool {
@@ -2193,61 +2200,15 @@ func computeQuorum(nodes int) int {
 // slice. A "behind" replica is one which is not at or past the quorum commit
 // index.
 func FilterBehindReplicas(
-	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, st *raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		// raftStatus.Progress is only populated on the Raft leader which means we
-		// won't be able to rebalance a lease away if the lease holder is not the
-		// Raft leader. This is rare enough not to matter.
-		return nil
-	}
-	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
+	var candidates []roachpb.ReplicaDescriptor
 	for _, r := range replicas {
-		if !ReplicaIsBehind(raftStatus, r.ReplicaID) {
+		if !raftutil.ReplicaIsBehind(st, r.ReplicaID) {
 			candidates = append(candidates, r)
 		}
 	}
 	return candidates
-}
-
-// ReplicaIsBehind returns whether the given replica ID is considered behind
-// according to the raft log.
-func ReplicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		return true
-	}
-	// NB: We use raftStatus.Commit instead of getQuorumIndex() because the
-	// latter can return a value that is less than the commit index. This is
-	// useful for Raft log truncation which sometimes wishes to keep those
-	// earlier indexes, but not appropriate for determining which nodes are
-	// behind the actual commit index of the range.
-	if progress, ok := raftStatus.Progress[uint64(replicaID)]; ok {
-		if uint64(replicaID) == raftStatus.Lead ||
-			(progress.State == tracker.StateReplicate &&
-				progress.Match >= raftStatus.Commit) {
-			return false
-		}
-	}
-	return true
-}
-
-// replicaMayNeedSnapshot determines whether the replica referred to by
-// `replicaID` may be in need of a raft snapshot. If this function is called
-// with an empty or nil `raftStatus` (as will be the case when its called by a
-// replica that is not the raft leader), we pessimistically assume that
-// `replicaID` may need a snapshot.
-func replicaMayNeedSnapshot(raftStatus *raft.Status, replica roachpb.ReplicaDescriptor) bool {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		return true
-	}
-	if progress, ok := raftStatus.Progress[uint64(replica.ReplicaID)]; ok {
-		// We can only reasonably assume that the follower replica is not in need of
-		// a snapshot iff it is in `StateReplicate`. However, even this is racey
-		// because we can still possibly have an ill-timed log truncation between
-		// when we make this determination and when we act on it.
-		return progress.State != tracker.StateReplicate
-	}
-	return true
 }
 
 // excludeReplicasInNeedOfSnapshots filters out the `replicas` that may be in
@@ -2255,11 +2216,11 @@ func replicaMayNeedSnapshot(raftStatus *raft.Status, replica roachpb.ReplicaDesc
 // Other replicas may be filtered out if this function is called with the
 // `raftStatus` of a non-raft leader replica.
 func excludeReplicasInNeedOfSnapshots(
-	ctx context.Context, raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, st *raft.Status, firstIndex uint64, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {
-		if replicaMayNeedSnapshot(raftStatus, repl) {
+		if raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID) != raftutil.NoSnapshotNeeded {
 			log.VEventf(
 				ctx,
 				5,

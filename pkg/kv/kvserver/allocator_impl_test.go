@@ -171,6 +171,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	status := &raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
+	status.Lead = 1
+	status.RaftState = raft.StateLeader
 	status.Commit = 10
 	for _, replica := range replicas {
 		status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
