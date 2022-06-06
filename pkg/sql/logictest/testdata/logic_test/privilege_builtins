@@ -776,10 +776,7 @@ false  false  false
 
 user root
 
-# incorrectly unable to grant USAGE on sequence
-# should be statement ok
-# see https://github.com/cockroachdb/cockroach/issues/82414
-statement error pgcode 0LP01 invalid privilege type USAGE for table
+statement ok
 GRANT USAGE, SELECT, UPDATE ON seq TO testuser WITH GRANT OPTION
 
 # should be "true  true  true"
@@ -788,7 +785,7 @@ SELECT has_sequence_privilege('testuser', 'seq', 'USAGE WITH GRANT OPTION'),
        has_sequence_privilege('testuser', 'seq', 'SELECT WITH GRANT OPTION'),
        has_sequence_privilege('testuser', 'seq', 'UPDATE WITH GRANT OPTION')
 ----
-false  false  false
+true  true  true
 
 # incorrectly grants USAGE (should only have SELECT AND UPDATE)
 # see https://github.com/cockroachdb/cockroach/issues/82414
@@ -811,7 +808,7 @@ SELECT has_sequence_privilege('bar', 'seq', 'USAGE'),
        has_sequence_privilege('bar', 'seq', 'SELECT'),
        has_sequence_privilege('bar', 'seq', 'UPDATE')
 ----
-true  true  false
+false  true  false
 
 query BBB
 SELECT has_sequence_privilege('bar', 'seq', 'USAGE WITH GRANT OPTION'),
