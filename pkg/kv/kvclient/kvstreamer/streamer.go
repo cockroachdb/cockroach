@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -233,6 +234,14 @@ type Streamer struct {
 	// been returned by GetResults() yet.
 	results resultsBuffer
 
+	// numRangesPerScanRequestAccountedFor tracks how much space has been
+	// consumed from the budget in order to account for the
+	// numRangesPerScanRequest slice.
+	//
+	// It is only accessed from the Streamer's user goroutine, so it doesn't
+	// need the mutex protection.
+	numRangesPerScanRequestAccountedFor int64
+
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first. If the results' mutex needs to be locked,
@@ -251,7 +260,6 @@ type Streamer struct {
 		//
 		// It is allocated lazily if Hints.SingleRowLookup is false when the
 		// first ScanRequest is encountered in Enqueue.
-		// TODO(yuzefovich): perform memory accounting for this.
 		numRangesPerScanRequest []int32
 
 		// numRequestsInFlight tracks the number of single-range batches that
@@ -363,6 +371,14 @@ func (s *Streamer) Init(
 	s.maxKeysPerRow = int32(maxKeysPerRow)
 }
 
+const (
+	requestUnionSliceOverhead = int64(unsafe.Sizeof([]roachpb.RequestUnion{}))
+	intSliceOverhead          = int64(unsafe.Sizeof([]int{}))
+	intSize                   = int64(unsafe.Sizeof(int(0)))
+	int32SliceOverhead        = int64(unsafe.Sizeof([]int32{}))
+	int32Size                 = int64(unsafe.Sizeof(int32(0)))
+)
+
 // Enqueue dispatches multiple requests for execution. Results are delivered
 // through the GetResults call.
 //
@@ -430,6 +446,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	// requestsProvider right away. This is needed in order for the worker
 	// coordinator to not pick up any work until we account for
 	// totalReqsMemUsage.
+	// TODO(yuzefovich): this memory is not accounted for. However, the number
+	// of singleRangeBatch objects in flight is limited by the number of ranges
+	// of a single table, so it doesn't seem urgent to fix the accounting here.
 	var requestsToServe []singleRangeBatch
 	seekKey := rs.Key
 	const scanDir = kvcoord.Ascending
@@ -446,6 +465,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		}
 	}()
 	var reqsKeysScratch []roachpb.Key
+	var newNumRangesPerScanRequestMemoryUsage int64
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Truncate the request span to the current range.
 		singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
@@ -458,6 +478,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			return err
 		}
 		var subRequestIdx []int32
+		var subRequestIdxOverhead int64
 		if !s.hints.SingleRowLookup {
 			for i, pos := range positions {
 				if _, isScan := reqs[pos].GetInner().(*roachpb.ScanRequest); isScan {
@@ -469,6 +490,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 						s.mu.Lock()
 						if cap(s.mu.numRangesPerScanRequest) < len(reqs) {
 							s.mu.numRangesPerScanRequest = make([]int32, len(reqs))
+							newNumRangesPerScanRequestMemoryUsage = int64(cap(s.mu.numRangesPerScanRequest)) * int32Size
 						} else {
 							// We can reuse numRangesPerScanRequest allocated on
 							// the previous call to Enqueue after we zero it
@@ -482,6 +504,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 					if s.mode == InOrder {
 						if subRequestIdx == nil {
 							subRequestIdx = make([]int32, len(singleRangeReqs))
+							subRequestIdxOverhead = int32SliceOverhead + int32Size*int64(cap(subRequestIdx))
 						}
 						subRequestIdx[i] = s.mu.numRangesPerScanRequest[pos]
 					}
@@ -495,12 +518,15 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		//if !s.hints.UniqueRequests {
 		//}
 
+		overheadAccountedFor := requestUnionSliceOverhead + roachpb.RequestUnionSize*int64(cap(singleRangeReqs)) + // reqs
+			intSliceOverhead + intSize*int64(cap(positions)) + // positions
+			subRequestIdxOverhead // subRequestIdx
 		r := singleRangeBatch{
 			reqs:                 singleRangeReqs,
 			positions:            positions,
 			subRequestIdx:        subRequestIdx,
 			reqsReservedBytes:    requestsMemUsage(singleRangeReqs),
-			overheadAccountedFor: roachpb.RequestUnionSize * int64(cap(singleRangeReqs)),
+			overheadAccountedFor: overheadAccountedFor,
 		}
 		totalReqsMemUsage += r.reqsReservedBytes + r.overheadAccountedFor
 
@@ -553,11 +579,16 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		streamerLocked = false
 	}
 
+	toConsume := totalReqsMemUsage
+	if newNumRangesPerScanRequestMemoryUsage != 0 && newNumRangesPerScanRequestMemoryUsage != s.numRangesPerScanRequestAccountedFor {
+		toConsume += newNumRangesPerScanRequestMemoryUsage - s.numRangesPerScanRequestAccountedFor
+		s.numRangesPerScanRequestAccountedFor = newNumRangesPerScanRequestMemoryUsage
+	}
 	// We allow the budget to go into debt iff a single request was enqueued.
 	// This is needed to support the case of arbitrarily large keys - the caller
 	// is expected to produce requests with such cases one at a time.
 	allowDebt := len(reqs) == 1
-	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
+	if err = s.budget.consume(ctx, toConsume, allowDebt); err != nil {
 		return err
 	}
 
@@ -1095,7 +1126,7 @@ func (w *workerCoordinator) performRequestAsync(
 			reqOveraccounted := req.reqsReservedBytes - resumeReqsMemUsage
 			if resumeReqsMemUsage == 0 {
 				// There will be no resume request, so we will lose the
-				// reference to the req.reqs slice and can release its memory
+				// reference to the slices in req and can release its memory
 				// reservation.
 				reqOveraccounted += req.overheadAccountedFor
 			}
@@ -1159,7 +1190,7 @@ func (w *workerCoordinator) performRequestAsync(
 			// Finally, process the results and add the ResumeSpans to be
 			// processed as well.
 			if err := processSingleRangeResults(
-				w.s, req, br, memoryFootprintBytes, resumeReqsMemUsage,
+				ctx, w.s, req, br, memoryFootprintBytes, resumeReqsMemUsage,
 				numIncompleteGets, numIncompleteScans, numGetResults, numScanResults,
 			); err != nil {
 				w.s.results.setError(err)
@@ -1241,6 +1272,7 @@ func calculateFootprint(
 // It also assumes that the budget has already been reconciled with the
 // reservations for Results that will be created.
 func processSingleRangeResults(
+	ctx context.Context,
 	s *Streamer,
 	req singleRangeBatch,
 	br *roachpb.BatchResponse,
@@ -1252,7 +1284,7 @@ func processSingleRangeResults(
 	numIncompleteRequests := numIncompleteGets + numIncompleteScans
 	var resumeReq singleRangeBatch
 	// We have to allocate the new Get and Scan requests, but we can reuse the
-	// reqs and the positions slices.
+	// reqs, the positions, and the subRequestIdx slices.
 	resumeReq.reqs = req.reqs[:numIncompleteRequests]
 	resumeReq.positions = req.positions[:0]
 	resumeReq.subRequestIdx = req.subRequestIdx[:0]
@@ -1296,6 +1328,15 @@ func processSingleRangeResults(
 		}()
 	}
 	if numGetResults > 0 || numScanResults > 0 {
+		// We will add some Results into the results buffer, and
+		// doneAddingLocked() call below requires that the budget's mutex is
+		// held. It also must be acquired before the streamer's mutex is locked,
+		// so we have to do this right away.
+		// TODO(yuzefovich): check whether the lock contention on this mutex is
+		// noticeable and possibly refactor the code so that the budget's mutex
+		// is only acquired for the duration of doneAddingLocked().
+		s.budget.mu.Lock()
+		defer s.budget.mu.Unlock()
 		// We will create some Result objects, so we at least will need to
 		// update the average response size estimate, guarded by the streamer's
 		// lock.
@@ -1320,7 +1361,7 @@ func processSingleRangeResults(
 		// the Streamer's one.
 		s.results.Lock()
 		defer s.results.Unlock()
-		defer s.results.doneAddingLocked()
+		defer s.results.doneAddingLocked(ctx)
 	}
 	for i, resp := range br.Responses {
 		position := req.positions[i]

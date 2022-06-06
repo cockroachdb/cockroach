@@ -24,8 +24,6 @@ import (
 // singleRangeBatch contains parts of the originally enqueued requests that have
 // been truncated to be within a single range. All requests within the
 // singleRangeBatch will be issued as a single BatchRequest.
-// TODO(yuzefovich): perform memory accounting for slices other than reqs in
-// singleRangeBatch.
 type singleRangeBatch struct {
 	reqs []roachpb.RequestUnion
 	// reqsKeys stores the start key of the corresponding request in reqs. It is
@@ -81,9 +79,10 @@ type singleRangeBatch struct {
 	// the memory usage of reqs, excluding the overhead.
 	reqsReservedBytes int64
 	// overheadAccountedFor tracks the memory reservation against the budget for
-	// the overhead of the reqs slice (i.e. of roachpb.RequestUnion objects).
-	// Since we reuse the same reqs slice for resume requests, this can be
-	// released only when the BatchResponse doesn't have any resume spans.
+	// the overhead of the reqs slice (i.e. of roachpb.RequestUnion objects) as
+	// well as the positions and the subRequestIdx slices. Since we reuse these
+	// slices for the resume requests, this can be released only when the
+	// BatchResponse doesn't have any resume spans.
 	//
 	// RequestUnion.Size() ignores the overhead of RequestUnion object, so we
 	// need to account for it separately.
@@ -212,6 +211,9 @@ type requestsProviderBase struct {
 	hasWork *sync.Cond
 	// requests contains all single-range sub-requests that have yet to be
 	// served.
+	// TODO(yuzefovich): this memory is not accounted for. However, the number
+	// of singleRangeBatch objects in flight is limited by the number of ranges
+	// of a single table, so it doesn't seem urgent to fix the accounting here.
 	requests []singleRangeBatch
 	// done is set to true once the Streamer is Close()'d.
 	done bool
