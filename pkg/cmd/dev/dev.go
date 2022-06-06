@@ -132,7 +132,12 @@ Typical usage:
 
 	// Add all the shared flags.
 	var debugVar bool
+	var bazelcmd string
 	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
+	ret.cli.PersistentFlags().StringVar(&bazelcmd, "", "", "pass additional arguments to bazel. "+
+		"Prefix each arg with '--', e.g. -- --sandbox_debug.\n"+
+		"Note: the dev maintainers would like all commonly used bazel args to get passed directly to"+
+		" dev.\nPlease file an issue if you're commonly reaching for the bazel flag!")
 	ret.cli.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		skipDoctorCheck := cmd.Name() == "doctor" || cmd.Name() == "merge-test-xmls"
 		if !skipDoctorCheck {
