@@ -5204,7 +5204,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					}
 
 					if schema == tree.DNull {
-						for _, objectType := range tree.GetAlterDefaultPrivilegesTargetObjects() {
+						for _, objectType := range privilege.GetTargetObjectTypes() {
 							if catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
 								if err := addRow(
 									tree.NewDString(descriptor.GetName()), // database_name
@@ -5225,7 +5225,7 @@ CREATE TABLE crdb_internal.default_privileges (
 								tree.DNull,                            // schema_name
 								role,                                  // role
 								forAllRoles,                           // for_all_roles
-								tree.NewDString(tree.Types.String()),  // object_type
+								tree.NewDString(privilege.Types.String()),               // object_type
 								tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 								tree.NewDString(privilege.USAGE.String()),               // privilege_type
 							); err != nil {
