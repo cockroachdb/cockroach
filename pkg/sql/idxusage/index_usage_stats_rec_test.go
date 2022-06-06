@@ -11,15 +11,152 @@
 package idxusage
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetRecommendationsFromIndexStats(t *testing.T) {
+
+	var currentTime = timeutil.Now()
+	var anHourBefore = currentTime.Add(-time.Hour)
+	var aMinuteBefore = currentTime.Add(-time.Minute)
+
+	/*
+		Test cases:
+			- system db name
+			- index type primary
+			- drop unused rec
+			- drop never used rec
+			- recently used index
+	*/
+
+	testData := []struct {
+		idxStats            IndexStatsRow
+		dbName              string
+		unusedIndexDuration time.Duration
+		expectedReturn      []*serverpb.IndexRecommendation
+	}{
+		// Database name "system", expect no index recommendation.
+		{
+			idxStats:            IndexStatsRow{},
+			dbName:              "system",
+			unusedIndexDuration: defaultUnusedIndexDuration,
+			expectedReturn:      []*serverpb.IndexRecommendation{},
+		},
+		// Index is primary index, expect no index recommendation.
+		{
+			idxStats: IndexStatsRow{
+				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
+					IndexType: "primary",
+				},
+			},
+			dbName:              "testdb",
+			unusedIndexDuration: defaultUnusedIndexDuration,
+			expectedReturn:      []*serverpb.IndexRecommendation{},
+		},
+		// Index exceeds the unused index duration, expect index recommendation.
+		{
+			idxStats: IndexStatsRow{
+				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
+					Statistics: &roachpb.CollectedIndexUsageStatistics{
+						Key: roachpb.IndexUsageKey{
+							TableID: 1,
+							IndexID: 2,
+						},
+						Stats: roachpb.IndexUsageStatistics{
+							LastRead: anHourBefore,
+						},
+					},
+					IndexName:       "test_idx",
+					IndexType:       "secondary",
+					CreatedAt:       nil,
+					CreateStatement: "",
+				},
+				UnusedIndexKnobs: nil,
+			},
+			dbName:              "testdb",
+			unusedIndexDuration: time.Hour,
+			expectedReturn: []*serverpb.IndexRecommendation{
+				{
+					TableID: 1,
+					IndexID: 2,
+					Type:    serverpb.IndexRecommendation_DROP_UNUSED,
+					Reason:  "This index has not been used in over 0d1h0m and can be removed for better write performance.",
+				},
+			},
+		},
+		// Index has never been used and has no creation time, expect never used index recommendation.
+		{
+			idxStats: IndexStatsRow{
+				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
+					Statistics: &roachpb.CollectedIndexUsageStatistics{
+						Key: roachpb.IndexUsageKey{
+							TableID: 1,
+							IndexID: 3,
+						},
+						Stats: roachpb.IndexUsageStatistics{
+							LastRead: time.Time{},
+						},
+					},
+					IndexName:       "test_idx",
+					IndexType:       "secondary",
+					CreatedAt:       nil,
+					CreateStatement: "",
+				},
+				UnusedIndexKnobs: nil,
+			},
+			dbName:              "testdb",
+			unusedIndexDuration: defaultUnusedIndexDuration,
+			expectedReturn: []*serverpb.IndexRecommendation{
+				{
+					TableID: 1,
+					IndexID: 3,
+					Type:    serverpb.IndexRecommendation_DROP_UNUSED,
+					Reason:  indexNeverUsedReason,
+				},
+			},
+		},
+		// Index has been used recently, expect no index recommendations.
+		{
+			idxStats: IndexStatsRow{
+				Row: &serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics{
+					Statistics: &roachpb.CollectedIndexUsageStatistics{
+						Key: roachpb.IndexUsageKey{
+							TableID: 1,
+							IndexID: 4,
+						},
+						Stats: roachpb.IndexUsageStatistics{
+							LastRead: aMinuteBefore,
+						},
+					},
+					IndexName:       "test_idx",
+					IndexType:       "secondary",
+					CreatedAt:       nil,
+					CreateStatement: "",
+				},
+				UnusedIndexKnobs: nil,
+			},
+			dbName:              "testdb",
+			unusedIndexDuration: defaultUnusedIndexDuration,
+			expectedReturn:      []*serverpb.IndexRecommendation{},
+		},
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	for _, tc := range testData {
+		DropUnusedIndexDuration.Override(context.Background(), &st.SV, tc.unusedIndexDuration)
+		actualReturn := tc.idxStats.GetRecommendationsFromIndexStats(tc.dbName, st)
+		require.Equal(t, tc.expectedReturn, actualReturn)
+	}
+}
 
 func TestRecommendDropUnusedIndex(t *testing.T) {
 

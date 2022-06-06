@@ -314,7 +314,7 @@ func getTableIndexUsageStats(
 			Row:              idxStatsRow,
 			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
 		}
-		recommendations := statsRow.GetRecommendationsFromIndexStats(st)
+		recommendations := statsRow.GetRecommendationsFromIndexStats(req.Database, st)
 		idxRecommendations = append(idxRecommendations, recommendations...)
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
 	}

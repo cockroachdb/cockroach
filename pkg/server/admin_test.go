@@ -2657,8 +2657,9 @@ func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, "CREATE DATABASE test")
 	db.Exec(t, "USE test")
-	// Create a table, the statistics on its primary index will be fetched.
+	// Create a table and secondary index.
 	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
+	db.Exec(t, "CREATE INDEX test_idx ON test.test_table (letter)")
 
 	// Test when last read does not exist and there is no creation time. Expect
 	// an index recommendation (index never used).
@@ -2674,6 +2675,7 @@ func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	// Expect 1 index recommendation (no index recommendation on primary index).
 	require.Equal(t, int32(1), dbDetails.Stats.NumIndexRecommendations)
 
 	// Test table details endpoint.
