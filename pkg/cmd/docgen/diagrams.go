@@ -402,7 +402,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_default_privileges_stmt",
-		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "alter_default_privileges_target_object", "abbreviated_revoke_stmt", "opt_drop_behavior"},
+		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "target_object_type", "abbreviated_revoke_stmt", "opt_drop_behavior"},
 		nosplit: true,
 	},
 	{

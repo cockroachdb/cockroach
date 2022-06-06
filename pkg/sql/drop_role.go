@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -464,7 +465,7 @@ func accumulateDependentDefaultPrivileges(
 }
 
 func addDependentPrivileges(
-	object tree.AlterDefaultPrivilegesTargetObject,
+	object privilege.TargetObjectType,
 	defaultPrivs catpb.PrivilegeDescriptor,
 	role catpb.DefaultPrivilegesRole,
 	userNames map[username.SQLUsername][]objectAndType,
@@ -473,13 +474,13 @@ func addDependentPrivileges(
 ) {
 	var objectType string
 	switch object {
-	case tree.Tables:
+	case privilege.Tables:
 		objectType = "relations"
-	case tree.Sequences:
+	case privilege.Sequences:
 		objectType = "sequences"
-	case tree.Types:
+	case privilege.Types:
 		objectType = "types"
-	case tree.Schemas:
+	case privilege.Schemas:
 		objectType = "schemas"
 	}
 
