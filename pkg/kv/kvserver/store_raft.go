@@ -156,7 +156,6 @@ func (s *Store) HandleDelegatedSnapshot(
 	ctx context.Context,
 	req *kvserverpb.DelegateSnapshotRequest,
 	stream DelegateSnapshotResponseStream,
-	span *tracing.Span,
 ) error {
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot delegation"
@@ -171,31 +170,27 @@ func (s *Store) HandleDelegatedSnapshot(
 			if err != nil {
 				return err
 			}
-			// Pass the request to the sender replica.
-			err = sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream)
 
-			// Get the recording of the child RPC and serialize it in the response.
-			recording := span.FinishAndGetConfiguredRecording()
-			resp := &kvserverpb.DelegateSnapshotResponse{
-				SnapResponse: &kvserverpb.SnapshotResponse{
-					Status:  kvserverpb.SnapshotResponse_APPLIED,
-					Message: "Snapshot successfully applied by recipient",
-				},
-			}
-			if recording != nil {
-				resp.CollectedSpans = recording
-			}
-			// If an error occurred during snapshot sending, send an error response.
-			if err != nil {
+			sp := tracing.SpanFromContext(ctx)
+			// Pass the request to the sender replica.
+			if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
 				return stream.Send(
 					&kvserverpb.DelegateSnapshotResponse{
 						SnapResponse: &kvserverpb.SnapshotResponse{
 							Status:  kvserverpb.SnapshotResponse_ERROR,
 							Message: err.Error(),
 						},
-						CollectedSpans: resp.CollectedSpans,
+						CollectedSpans: sp.GetConfiguredRecording(),
 					},
 				)
+			}
+
+			resp := &kvserverpb.DelegateSnapshotResponse{
+				SnapResponse: &kvserverpb.SnapshotResponse{
+					Status:  kvserverpb.SnapshotResponse_APPLIED,
+					Message: "Snapshot successfully applied by recipient",
+				},
+				CollectedSpans: sp.GetConfiguredRecording(),
 			}
 			// Send a final response that snapshot sending is completed.
 			return stream.Send(resp)
