@@ -433,16 +433,6 @@ func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapsh
 	errCh := make(chan error, 1)
 	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
 	defer cancel()
-	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(taskCtx, t.Tracer)
-	if err != nil {
-		log.Warningf(taskCtx, "error extracting tracing info from gRPC: %s", err)
-	}
-	taskCtx, span := t.Tracer.StartSpanCtx(
-		taskCtx, "delegate Raft snapshot",
-		tracing.WithRemoteParentFromSpanMeta(remoteParent),
-		tracing.WithServerSpanKind,
-	)
-	defer span.Finish()
 	if err := t.stopper.RunAsyncTaskEx(
 		taskCtx,
 		stop.TaskOpts{
