@@ -167,6 +167,7 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_test",
     "//pkg/kv/kvserver/protectedts:protectedts_test",
     "//pkg/kv/kvserver/raftentry:raftentry_test",
+    "//pkg/kv/kvserver/raftutil:raftutil_test",
     "//pkg/kv/kvserver/rangefeed:rangefeed_test",
     "//pkg/kv/kvserver/rditer:rditer_test",
     "//pkg/kv/kvserver/replicastats:replicastats_test",

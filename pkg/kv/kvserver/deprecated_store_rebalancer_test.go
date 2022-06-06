@@ -105,6 +105,7 @@ func TestDeprecatedChooseLeaseToTransfer(t *testing.T) {
 			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
+		status.RaftState = raft.StateLeader
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
 			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -219,6 +220,7 @@ func TestDeprecatedChooseRangeToRebalanceBalanceScore(t *testing.T) {
 			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
+		status.RaftState = raft.StateLeader
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
 			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -290,6 +292,7 @@ func TestDeprecatedChooseRangeToRebalance(t *testing.T) {
 			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
+		status.RaftState = raft.StateLeader
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
 			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -652,6 +655,7 @@ func TestDeprecatedNoLeaseTransferToBehindReplicas(t *testing.T) {
 			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
+		status.RaftState = raft.StateLeader
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
 			match := uint64(1)
