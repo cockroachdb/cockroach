@@ -14,7 +14,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
-	"reflect"
 	"time"
 )
 
@@ -89,11 +88,14 @@ type Conn interface {
 	// The what argument is a descriptive label for the value being
 	// retrieved, for inclusion inside warning or error message.
 	// The sql argument is the SQL query to use to retrieve the value.
-	GetServerValue(ctx context.Context, what, sql string) (driver.Value, string, bool)
+	GetServerValue(ctx context.Context, what, sql string) (driver.Value, bool)
 
 	// GetDriverConn exposes the underlying driver connection object
 	// for use by the cli package.
 	GetDriverConn() DriverConn
+
+	// Cancel sends a query cancellation request to the server.
+	Cancel(ctx context.Context) error
 }
 
 // Rows describes a result set.
@@ -109,17 +111,9 @@ type Rows interface {
 	// result does not need to be constructed on each invocation.
 	Columns() []string
 
-	// ColumnTypeScanType returns the natural Go type of values at the
-	// given column index.
-	ColumnTypeScanType(index int) reflect.Type
-
 	// ColumnTypeDatabaseTypeName returns the database type name
 	// of the column at the given column index.
 	ColumnTypeDatabaseTypeName(index int) string
-
-	// ColumnTypeNames returns the database type names for all
-	// columns.
-	ColumnTypeNames() []string
 
 	// Tag retrieves the statement tag for the current result set.
 	Tag() (CommandTag, error)

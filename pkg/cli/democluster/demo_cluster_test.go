@@ -238,7 +238,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 				context.Background(),
 				conn,
 				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
-				false,
+				false, /* showMoreChars */
 			)
 			totalDuration := timeutil.Since(startTime)
 			require.NoError(t, err)
