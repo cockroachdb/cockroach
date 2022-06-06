@@ -354,6 +354,9 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 		} else if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
 			// Error was already marked for us.
 			return err
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			// Deadline was encountered while generating the operation, so bail out.
+			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
 				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s\nStmts: \n%s\n",
@@ -368,7 +371,6 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 		w.logger.writeLog(op.String())
 		if !w.dryRun {
 			start := timeutil.Now()
-
 			err := op.executeStmt(ctx, tx, w.opGen)
 			if err != nil {
 				// If the error not an instance of pgconn.PgError, then it is unexpected.
@@ -404,6 +406,11 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
+	watchDog := newSchemaChangeWatchDog(w.pool.Get())
+	if err := watchDog.Start(ctx, tx); err != nil {
+		return errors.Wrapf(err, "unable to start watch dog")
+	}
+	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
 	err = w.runInTxn(ctx, tx)
@@ -481,7 +488,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		w.logger.flushLog(tx, "COMMIT; Successfully got expected commit error")
 		return nil
 	}
-
 	if !w.opGen.expectedCommitErrors.empty() {
 		err := errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected %s", w.getErrorState())
 		w.logger.flushLog(tx, err.Error())
