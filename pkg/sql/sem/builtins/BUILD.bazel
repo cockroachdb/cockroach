@@ -56,7 +56,6 @@ go_library(
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
-        "//pkg/sql/paramparse",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -78,6 +77,8 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/storageparam",
+        "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
         "//pkg/streaming",
         "//pkg/util",
@@ -174,5 +175,9 @@ disallowed_imports_test(
     src = "builtins",
     disallowed_list = [
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/typedesc",
     ],
 )
