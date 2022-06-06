@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,14 +57,6 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
 	0,
 	settings.NonNegativeDuration,
-)
-
-// RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
-var RangefeedTBIEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
-	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
-	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", true),
 )
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
@@ -231,8 +222,7 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(),
-				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
+			return rangefeed.NewCatchUpIterator(r.Engine(), args, iterSemRelease)
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
