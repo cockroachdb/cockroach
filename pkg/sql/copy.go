@@ -67,6 +67,8 @@ type copyMachine struct {
 	textDelim   []byte
 	null        string
 	binaryState binaryState
+	// csvExpectHeader is true if we are expecting a header for the CSV input.
+	csvExpectHeader bool
 	// forceNotNull disables converting values matching the null string to
 	// NULL. The spec says this is only supported for CSV, and also must specify
 	// which columns it applies to.
@@ -121,10 +123,11 @@ func newCopyMachine(
 		conn: conn,
 		// TODO(georgiah): Currently, insertRows depends on Table and Columns,
 		//  but that dependency can be removed by refactoring it.
-		table:   &n.Table,
-		columns: n.Columns,
-		format:  n.Options.CopyFormat,
-		txnOpt:  txnOpt,
+		table:           &n.Table,
+		columns:         n.Columns,
+		format:          n.Options.CopyFormat,
+		txnOpt:          txnOpt,
+		csvExpectHeader: n.Options.Header,
 		// The planner will be prepared before use.
 		p:              planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
 		execInsertPlan: execInsertPlan,
@@ -145,6 +148,10 @@ func newCopyMachine(
 	case tree.CopyFormatCSV:
 		c.null = ""
 		c.delimiter = ','
+	}
+
+	if n.Options.Header && c.format != tree.CopyFormatCSV {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
 	}
 
 	if n.Options.Delimiter != nil {
@@ -469,6 +476,13 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 		if quoteCharsSeen%2 == 0 {
 			break
 		}
+	}
+
+	// If we are using COPY FROM and expecting a header, PostgreSQL ignores
+	// the header row in all circumstances. Do the same.
+	if c.csvExpectHeader {
+		c.csvExpectHeader = false
+		return false, nil
 	}
 
 	c.csvInput.Write(fullLine)
