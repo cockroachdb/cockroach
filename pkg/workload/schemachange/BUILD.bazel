@@ -11,6 +11,7 @@ go_library(
         "operation_generator.go",
         "schemachange.go",
         "type_resolver.go",
+        "watch_dog.go",
         ":gen-optype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
@@ -36,6 +37,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgconn//:pgconn",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v4//pgxpool",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
     ],
