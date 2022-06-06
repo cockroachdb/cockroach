@@ -696,11 +696,11 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		if !w.s.requestsToServe.emptyLocked() {
 			// If we already have minTargetBytes set on the first request to be
 			// issued, then use that.
-			atLeastBytes = w.s.requestsToServe.firstLocked().minTargetBytes
+			atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
 			// The first request has the highest urgency among all current
 			// requests to serve, so we use its priority to spill everything
 			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.firstLocked().priority()
+			spillingPriority = w.s.requestsToServe.nextLocked().priority()
 		}
 		w.s.requestsToServe.Unlock()
 
@@ -871,7 +871,7 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
-		singleRangeReqs := w.s.requestsToServe.firstLocked()
+		singleRangeReqs := w.s.requestsToServe.nextLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minAcceptableBudget is the minimum TargetBytes limit with which it
 		// makes sense to issue this request (if we issue the request with
@@ -963,7 +963,7 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			)
 		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
-		w.s.requestsToServe.removeFirstLocked()
+		w.s.requestsToServe.removeNextLocked()
 		maxNumRequestsToIssue--
 		headOfLine = false
 	}
