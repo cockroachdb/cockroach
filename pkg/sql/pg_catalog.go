@@ -2902,7 +2902,7 @@ func addPGTypeRow(
 		typType = typTypePseudo
 	}
 	typname := typ.PGName()
-
+	typDelim = tree.NewDString(typ.Delimiter())
 	return addRow(
 		tree.NewDOid(tree.DInt(typ.Oid())), // oid
 		tree.NewDName(typname),             // typname
