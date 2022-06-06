@@ -2049,11 +2049,11 @@ opt_in_schemas ::=
 	| 
 
 abbreviated_grant_stmt ::=
-	'GRANT' privileges 'ON' alter_default_privileges_target_object 'TO' role_spec_list opt_with_grant_option
+	'GRANT' privileges 'ON' target_object_type 'TO' role_spec_list opt_with_grant_option
 
 abbreviated_revoke_stmt ::=
-	'REVOKE' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
-	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
+	'REVOKE' privileges 'ON' target_object_type 'FROM' role_spec_list opt_drop_behavior
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' target_object_type 'FROM' role_spec_list opt_drop_behavior
 
 alter_changefeed_cmds ::=
 	( alter_changefeed_cmd ) ( ( alter_changefeed_cmd ) )*
@@ -2570,7 +2570,7 @@ relocate_subject_nonlease ::=
 	| 
 	| 'NONVOTERS'
 
-alter_default_privileges_target_object ::=
+target_object_type ::=
 	'TABLES'
 	| 'SEQUENCES'
 	| 'TYPES'

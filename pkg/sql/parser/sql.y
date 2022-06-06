@@ -763,8 +763,8 @@ func (u *sqlSymUnion) abbreviatedGrant() tree.AbbreviatedGrant {
 func (u *sqlSymUnion) abbreviatedRevoke() tree.AbbreviatedRevoke {
   return u.val.(tree.AbbreviatedRevoke)
 }
-func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPrivilegesTargetObject {
-  return u.val.(tree.AlterDefaultPrivilegesTargetObject)
+func (u *sqlSymUnion) targetObjectType() privilege.TargetObjectType {
+  return u.val.(privilege.TargetObjectType)
 }
 func (u *sqlSymUnion) setVar() *tree.SetVar {
     return u.val.(*tree.SetVar)
@@ -1490,7 +1490,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <bool> opt_with_grant_option
 %type <tree.NameList> opt_for_roles
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
-%type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
+%type <privilege.TargetObjectType> target_object_type
 %type <tree.TenantID> opt_as_tenant_clause
 
 
@@ -9124,11 +9124,11 @@ alter_default_privileges_stmt:
 | ALTER DEFAULT PRIVILEGES error // SHOW HELP: ALTER DEFAULT PRIVILEGES
 
 abbreviated_grant_stmt:
-  GRANT privileges ON alter_default_privileges_target_object TO role_spec_list opt_with_grant_option
+  GRANT privileges ON target_object_type TO role_spec_list opt_with_grant_option
   {
     $$.val = tree.AbbreviatedGrant{
       Privileges: $2.privilegeList(),
-      Target: $4.alterDefaultPrivilegesTargetObject(),
+      Target: $4.targetObjectType(),
       Grantees: $6.roleSpecList(),
       WithGrantOption: $7.bool(),
     }
@@ -9145,40 +9145,40 @@ opt_with_grant_option:
   }
 
 abbreviated_revoke_stmt:
-  REVOKE privileges ON alter_default_privileges_target_object FROM role_spec_list opt_drop_behavior
+  REVOKE privileges ON target_object_type FROM role_spec_list opt_drop_behavior
   {
     $$.val = tree.AbbreviatedRevoke{
       Privileges: $2.privilegeList(),
-      Target: $4.alterDefaultPrivilegesTargetObject(),
+      Target: $4.targetObjectType(),
       Grantees: $6.roleSpecList(),
     }
   }
-| REVOKE GRANT OPTION FOR privileges ON alter_default_privileges_target_object FROM role_spec_list opt_drop_behavior
+| REVOKE GRANT OPTION FOR privileges ON target_object_type FROM role_spec_list opt_drop_behavior
   {
     $$.val = tree.AbbreviatedRevoke{
       Privileges: $5.privilegeList(),
-      Target: $7.alterDefaultPrivilegesTargetObject(),
+      Target: $7.targetObjectType(),
       Grantees: $9.roleSpecList(),
       GrantOptionFor: true,
     }
   }
 
-alter_default_privileges_target_object:
+target_object_type:
   TABLES
   {
-    $$.val = tree.Tables
+    $$.val = privilege.Tables
   }
 | SEQUENCES
   {
-    $$.val = tree.Sequences
+    $$.val = privilege.Sequences
   }
 | TYPES
   {
-    $$.val = tree.Types
+    $$.val = privilege.Types
   }
 | SCHEMAS
   {
-    $$.val = tree.Schemas
+    $$.val = privilege.Schemas
   }
 | FUNCTIONS error
   {
@@ -9186,7 +9186,7 @@ alter_default_privileges_target_object:
   }
 | ROUTINES error
   {
-    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON FUNCTIONS ...")
+    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON ROUTINES ...")
   }
 
 opt_for_roles:

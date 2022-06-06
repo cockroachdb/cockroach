@@ -175,7 +175,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		schema.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
-		tree.Tables,
+		privilege.Tables,
 		n.dbDesc.GetPrivileges(),
 	)
 
