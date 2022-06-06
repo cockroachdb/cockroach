@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -648,7 +649,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				if raftStatus == nil {
 					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
 				}
-				if allocatorimpl.ReplicaIsBehind(raftStatus, replica.ReplicaID) {
+				if raftutil.ReplicaIsBehind(raftStatus, replica.ReplicaID) {
 					continue
 				}
 			}
