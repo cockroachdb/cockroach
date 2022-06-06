@@ -1032,8 +1032,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		tree.Overload{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Oid),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDOid(*args[0].(*tree.DInt)), nil
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.PerformCast(evalCtx, args[0], types.Oid)
 			},
 			Info:       "Converts an integer to an OID.",
 			Volatility: volatility.Immutable,
