@@ -27,11 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/twkb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -7491,12 +7492,12 @@ func applyGeoindexConfigStorageParams(
 		return geoindex.Config{}, errors.Newf("invalid storage parameters specified: %s", params)
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := paramparse.SetStorageParameters(
+	if err := storageparam.Set(
 		evalCtx.Context,
 		&semaCtx,
 		evalCtx,
 		stmt.AST.(*tree.CreateIndex).StorageParams,
-		&paramparse.IndexStorageParamObserver{IndexDesc: indexDesc},
+		&indexstorageparam.Setter{IndexDesc: indexDesc},
 	); err != nil {
 		return geoindex.Config{}, err
 	}
