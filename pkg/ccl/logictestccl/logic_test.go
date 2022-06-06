@@ -28,9 +28,10 @@ func TestCCLLogic(t *testing.T) {
 }
 
 // TestTenantLogic runs all non-CCL logic test files under the 3node-tenant
-// configuration, which constructs a secondary tenant and runs the test within
+// configurations, which constructs a secondary tenant and runs the test within
 // that secondary tenant's sandbox. Test files that blocklist the 3node-tenant
-// configuration (i.e. "# LogicTest: !3node-tenant") are not run.
+// configuration (i.e. "# LogicTest: !3node-tenant-default-configs") are not
+// run.
 func TestTenantLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -44,10 +45,12 @@ func TestTenantLogic(t *testing.T) {
 	}
 
 	logictest.RunLogicTestWithDefaultConfig(
-		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
+		t, logictest.TestServerArgs{}, "3node-tenant,3node-tenant-multiregion",
+		true, /* runCCLConfigs */
 		filepath.Join(testdataDir, logictestGlob))
 	logictest.RunLogicTestWithDefaultConfig(
-		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
+		t, logictest.TestServerArgs{}, "3node-tenant,3node-tenant-multiregion",
+		true, /* runCCLConfigs */
 		testutils.TestDataPath(t, logictestGlob))
 }
 
@@ -73,6 +76,7 @@ func TestTenantExecBuild(t *testing.T) {
 	}
 
 	logictest.RunLogicTestWithDefaultConfig(
-		t, logictest.TestServerArgs{DisableWorkmemRandomization: true}, "3node-tenant", true, /* runCCLConfigs */
+		t, logictest.TestServerArgs{DisableWorkmemRandomization: true},
+		"3node-tenant,3node-tenant-multiregion", true, /* runCCLConfigs */
 		filepath.Join(testdataDir, "[^.]*"))
 }

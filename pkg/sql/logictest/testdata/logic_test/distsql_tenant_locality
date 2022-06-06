@@ -1,0 +1,52 @@
+# LogicTest: 3node-tenant-multiregion
+
+# Create a table on the secondary tenant.
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT)
+
+# Split the ranges in the table.
+statement ok
+ALTER TABLE t SPLIT AT VALUES (1), (2), (3)
+
+# Relocate ranges in the admin tenant based on node locality.
+user host-cluster-root
+
+statement ok
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%1'
+
+statement ok
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%2'
+
+statement ok
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%3'
+
+# Check range lease holders in the admin tenant.
+query TI
+SELECT start_pretty, lease_holder FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%'
+----
+/Tenant/10                1
+/Tenant/10/Table/106/1/1  1
+/Tenant/10/Table/106/1/2  2
+/Tenant/10/Table/106/1/3  3
+
+# Run a query in the secondary tenant.
+user root
+
+# TODO(harding): Once locality-aware distribution is implemented, this should
+# test a distributed query. For now, this query is a single span, so it will
+# only utilize the gateway instance.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE v = 1 OR v = 2 OR v = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: ((v = 1) OR (v = 2)) OR (v = 3)
+│
+└── • scan
+      missing stats
+      table: t@t_pkey
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkdFLwzAQxt_9K8I9tRJp04FIQJjMDgtzm21BQYrU9hhlXVOTdCij_7s0YWwTJvrU-37X7-7jsgP1UQOH8GU5u4vmxLmPkjR5mrkkCWfhJCWXZBovHokmzw9hHBLH2ZJbwlyyiIkpA_dQj1yg0IgS5_kGFfBXYJBRaKUoUCkhB7QzP0TlJ3CfQtW0nR5wRqEQEoHvQFe6RuCQ5u81xpiXKD0fKJSo86o2Y_VYv7Vr_AIKE1F3m0ZxsqZkCxSSNh-Ux_xrj12ZTwBZT0F0-rBL6XyFwFlP_55nWtUaJUqPnYaxnBPHGQfDbTjn0Ty9sWcxKNijIzbas7Phgv-Ei1G1olF4Eu3cZL_PKGC5QvsgSnSywKUUhVlj5cL4DChRadtlVkSNbQ0Bj83sV3Pww5z1F98BAAD__y3iw0Q=
