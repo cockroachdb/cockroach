@@ -53,12 +53,21 @@ permissive enough to accept bazel build targets (like
 pkg/kv/kvserver:kvserver_test) instead.`,
 		Example: `
 	dev test
+
 	dev test pkg/kv/kvserver --filter=TestReplicaGC* -v --timeout=1m
+
 	dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+
 	dev test pkg/... -v
-  dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/... // run tests from multiple pkgs
-	dev test --stress --race ... // run go race under stress
-  dev test --stress --test-args='-test.timeout 30s' // stress until a test runs longer than 30s`,
+
+	// run tests from multiple pkgs
+	dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
+	
+	// run go race under stress
+	dev test --stress --race ...
+
+	// stress until a test runs longer than 30s
+	dev test --stress --test-args='-test.timeout 30s'`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
@@ -75,12 +84,12 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	// under test, controlling whether the process-internal logs are made
 	// visible.
 	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output ("+
-		"equivalent to passing '--testargs='test.v')")
+		"equivalent to passing '--testargs=test.v -- --test_output all')")
 	testCmd.Flags().Int(countFlag, 1, "run test the given number of times")
 	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress.\n"+
-		"Prefix each arg with '-'; e.g. '--stress-args='-maxtime=30s'.\n"+
+		"Prefix each arg with '-'; e.g. '--stress-args='-maxtime=30s -maxruns=100'.\n"+
 		"See all stress args at https://github.com/cockroachdb/stress/blob/master/main.go")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
