@@ -53,42 +53,32 @@ func (i simpleCatchupIterAdapter) NextIgnoringTime() {
 var _ simpleCatchupIter = simpleCatchupIterAdapter{}
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader.
-// If useTBI is true, a time-bound iterator will be used if possible,
-// configured with a start time taken from the RangeFeedRequest.
 func NewCatchUpIterator(
-	reader storage.Reader, args *roachpb.RangeFeedRequest, useTBI bool, closer func(),
+	reader storage.Reader, args *roachpb.RangeFeedRequest, closer func(),
 ) *CatchUpIterator {
-	ret := &CatchUpIterator{
+	return &CatchUpIterator{
+		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
+			storage.MVCCIncrementalIterOptions{
+				EnableTimeBoundIteratorOptimization: true,
+				EndKey:                              args.Span.EndKey,
+				// StartTime is exclusive but args.Timestamp
+				// is inclusive.
+				StartTime: args.Timestamp.Prev(),
+				EndTime:   hlc.MaxTimestamp,
+				// We want to emit intents rather than error
+				// (the default behavior) so that we can skip
+				// over the provisional values during
+				// iteration.
+				IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+				// CatchUpScan currently emits all inline
+				// values it encounters.
+				//
+				// TODO(ssd): Re-evalutate if this behavior is
+				// still needed (#69357).
+				InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
+			}),
 		close: closer,
 	}
-	if useTBI {
-		ret.simpleCatchupIter = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
-			EnableTimeBoundIteratorOptimization: true,
-			EndKey:                              args.Span.EndKey,
-			// StartTime is exclusive but args.Timestamp
-			// is inclusive.
-			StartTime: args.Timestamp.Prev(),
-			EndTime:   hlc.MaxTimestamp,
-			// We want to emit intents rather than error
-			// (the default behavior) so that we can skip
-			// over the provisional values during
-			// iteration.
-			IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-			// CatchUpScan currently emits all inline
-			// values it encounters.
-			//
-			// TODO(ssd): Re-evalutate if this behavior is
-			// still needed (#69357).
-			InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
-		})
-	} else {
-		iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-			UpperBound: args.Span.EndKey,
-		})
-		ret.simpleCatchupIter = simpleCatchupIterAdapter{SimpleMVCCIterator: iter}
-	}
-
-	return ret
 }
 
 // Close closes the iterator and calls the instantiator-supplied close
