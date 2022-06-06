@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tablestorageparam",
+    srcs = ["table_storage_param_observer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/paramparse",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/storageparam",
+        "//pkg/util/duration",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

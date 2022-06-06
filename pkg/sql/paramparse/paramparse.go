@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package paramparse parses parameters that are set in param lists
-// or session vars.
+// Package paramparseurl provides utilities for parsing storage paramaters.
 package paramparse
 
 import (
@@ -24,16 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
-
-// UnresolvedNameToStrVal converts an unresolved name to a string value.
-// Special rule for SET: because SET doesn't apply in the context
-// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-func UnresolvedNameToStrVal(expr tree.Expr) tree.Expr {
-	if s, ok := expr.(*tree.UnresolvedName); ok {
-		return tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
-	}
-	return expr
-}
 
 // DatumAsFloat transforms a tree.TypedExpr containing a Datum into a float.
 func DatumAsFloat(evalCtx *eval.Context, name string, value tree.TypedExpr) (float64, error) {
@@ -162,4 +151,14 @@ func ParseBoolVar(varName, val string) (bool, error) {
 			"parameter \"%s\" requires a Boolean value", varName)
 	}
 	return b, nil
+}
+
+// UnresolvedNameToStrVal converts an unresolved name to a string value.
+// Special rule for SET: because SET doesn't apply in the context
+// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
+func UnresolvedNameToStrVal(expr tree.Expr) tree.Expr {
+	if s, ok := expr.(*tree.UnresolvedName); ok {
+		return tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
+	}
+	return expr
 }

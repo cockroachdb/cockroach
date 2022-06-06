@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -43,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -727,12 +728,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
-			if err := paramparse.SetStorageParameters(
+			if err := storageparam.Set(
 				params.ctx,
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
-				paramparse.NewTableStorageParamObserver(n.tableDesc),
+				tablestorageparam.NewSetter(n.tableDesc),
 			); err != nil {
 				return err
 			}
@@ -761,11 +762,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
-			if err := paramparse.ResetStorageParameters(
+			if err := storageparam.Reset(
 				params.ctx,
 				params.EvalContext(),
 				t.Params,
-				paramparse.NewTableStorageParamObserver(n.tableDesc),
+				tablestorageparam.NewSetter(n.tableDesc),
 			); err != nil {
 				return err
 			}
