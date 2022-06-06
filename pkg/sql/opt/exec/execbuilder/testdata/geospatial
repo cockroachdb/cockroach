@@ -1,7 +1,7 @@
 # This logic test fails in the 3node-tenant configuration because the keys are
 # prefixed with the tenant ID if run by a tenant:
 # https://github.com/cockroachdb/cockroach/issues/49582
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant-default-configs
 
 statement ok
 CREATE TABLE b(
