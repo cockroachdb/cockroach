@@ -331,6 +331,12 @@ func RaftLogKey(rangeID roachpb.RangeID, logIndex uint64) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftLogKey(logIndex)
 }
 
+// RaftLogKeyFromPrefix returns a system-local key for a Raft log entry, using
+// the provided Raft log prefix.
+func RaftLogKeyFromPrefix(raftLogPrefix []byte, logIndex uint64) roachpb.Key {
+	return encoding.EncodeUint64Ascending(raftLogPrefix, logIndex)
+}
+
 // RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
 func RaftReplicaIDKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RaftReplicaIDKey()
@@ -1029,7 +1035,7 @@ func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
 
 // RaftLogKey returns a system-local key for a Raft log entry.
 func (b RangeIDPrefixBuf) RaftLogKey(logIndex uint64) roachpb.Key {
-	return encoding.EncodeUint64Ascending(b.RaftLogPrefix(), logIndex)
+	return RaftLogKeyFromPrefix(b.RaftLogPrefix(), logIndex)
 }
 
 // RaftReplicaIDKey returns a system-local key for a RaftReplicaID.

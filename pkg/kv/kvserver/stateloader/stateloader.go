@@ -300,7 +300,7 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader)
 	defer iter.Close()
 
 	var lastIndex uint64
-	iter.SeekLT(storage.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
+	iter.SeekLT(storage.MakeMVCCMetadataKey(keys.RaftLogKeyFromPrefix(prefix, math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
 		key := iter.Key()
 		var err error
