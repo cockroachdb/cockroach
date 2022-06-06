@@ -156,7 +156,10 @@ func newCopyMachine(
 
 	if n.Options.Delimiter != nil {
 		if c.format == tree.CopyFormatBinary {
-			return nil, errors.Newf("DELIMITER unsupported in BINARY format")
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"DELIMITER unsupported in BINARY format",
+			)
 		}
 		fn, err := c.p.TypeAsString(ctx, n.Options.Delimiter, "COPY")
 		if err != nil {
@@ -167,13 +170,19 @@ func newCopyMachine(
 			return nil, err
 		}
 		if len(delim) != 1 || !utf8.ValidString(delim) {
-			return nil, errors.Newf("delimiter must be a single-byte character")
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"delimiter must be a single-byte character",
+			)
 		}
 		c.delimiter = delim[0]
 	}
 	if n.Options.Null != nil {
 		if c.format == tree.CopyFormatBinary {
-			return nil, errors.Newf("NULL unsupported in BINARY format")
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"NULL unsupported in BINARY format",
+			)
 		}
 		fn, err := c.p.TypeAsString(ctx, n.Options.Null, "COPY")
 		if err != nil {
