@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -92,6 +93,12 @@ func registerRebalanceLoad(r registry.Registry) {
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		}
 
+		statCollector, err := clusterstats.NewStatsCollector(ctx, t, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer statCollector.CleanUp()
+
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", appNode)
 		c.Run(ctx, appNode, fmt.Sprintf("./workload init kv --drop --splits=%d {pgurl:1}", splits))
 
@@ -136,13 +143,29 @@ func registerRebalanceLoad(r registry.Registry) {
 				return err
 			}
 
+			startTime := timeutil.Now()
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
 				if done, err := isLoadEvenlyDistributed(t.L(), db, numStores); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")
+					// TODO(kvoli): Support mixed version testing, currently it will attempt to init
+					if !mixedVersion {
+						endTime := timeutil.Now()
+						err = statCollector.Exporter().Export(
+							ctx,
+							c,
+							t,
+							startTime, endTime,
+							joinSummaryQueries(actionsSummary, rangeBalanceSummary, requestBalanceSummary, resourceBalanceSummary),
+							// NB: We record the time taken to reach balance.
+							func(stats map[string]clusterstats.StatSummary) (string, float64) {
+								return "t-balance", endTime.Sub(startTime).Seconds()
+							},
+						)
+					}
 					cancel()
-					return nil
+					return err
 				}
 
 				select {
