@@ -105,7 +105,20 @@ func downloadableArtifactsFromGoDeps(def *syntax.DefStmt) (map[string]Downloadab
 	return ret, nil
 }
 
-// maybeGetDownloadableArtifact returns the artifact pointed to by the given
+// GetArtifactFromGoRepository returns the DownloadableArtifact pointed to by the given
+// go_repository.
+func GetArtifactFromGoRepository(call *syntax.CallExpr) (DownloadableArtifact, error) {
+	name, art, err := maybeGetDownloadableArtifact(call)
+	if err != nil {
+		return art, err
+	}
+	if name == "" {
+		return DownloadableArtifact{}, fmt.Errorf("could not parse downloadable artifact from given go_repository call")
+	}
+	return art, err
+}
+
+// maybeGetDownloadableArtifact returns the DownloadableArtifact pointed to by the given
 // go_repository or http_repository expression, returning the name of the repo
 // and the location of the mirror if one can be found, or the empty string/an
 // empty existingMirror if not. Returns an error iff an unrecoverable problem
