@@ -876,3 +876,59 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 	defer allLabelsCorrect.Unlock()
 	require.True(t, allLabelsCorrect.correct)
 }
+
+// TestRangeFeedStartTimeExclusive tests that the start timestamp of the
+// rangefeed is in fact exclusive, as specified.
+func TestRangeFeedStartTimeExclusive(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	srv0 := tc.Server(0)
+	db := srv0.DB()
+	scratchKey := tc.ScratchRange(t)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	mkKey := func(k string) roachpb.Key {
+		return encoding.EncodeStringAscending(scratchKey, k)
+	}
+	span := roachpb.Span{Key: scratchKey, EndKey: scratchKey.PrefixEnd()}
+
+	// Write three versions of "foo". Get the timestamp of the second version.
+	require.NoError(t, db.Put(ctx, mkKey("foo"), 1))
+	require.NoError(t, db.Put(ctx, mkKey("foo"), 2))
+	kv, err := db.Get(ctx, mkKey("foo"))
+	require.NoError(t, err)
+	ts2 := kv.Value.Timestamp
+	require.NoError(t, db.Put(ctx, mkKey("foo"), 3))
+
+	// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+
+	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	require.NoError(t, err)
+	rows := make(chan *roachpb.RangeFeedValue)
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{span}, ts2,
+		func(ctx context.Context, value *roachpb.RangeFeedValue) {
+			select {
+			case rows <- value:
+			case <-ctx.Done():
+			}
+		},
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// The first emitted version should be 3.
+	select {
+	case row := <-rows:
+		require.Equal(t, mkKey("foo"), row.Key)
+		v, err := row.Value.GetInt()
+		require.NoError(t, err)
+		require.EqualValues(t, 3, v)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+}
