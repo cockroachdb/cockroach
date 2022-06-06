@@ -13,6 +13,7 @@ package kvstreamer
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -82,7 +83,9 @@ type resultsBuffer interface {
 	// added all Results it could, and the resultsBuffer checks whether any
 	// Results are available to be returned to the client. If there is a
 	// goroutine blocked in wait(), the goroutine is woken up.
-	doneAddingLocked()
+	//
+	// It is assumed that the budget's mutex is already being held.
+	doneAddingLocked(context.Context)
 
 	///////////////////////////////////////////////////////////////////////////
 	//                                                                       //
@@ -141,7 +144,11 @@ type resultsBufferBase struct {
 	// hasResults is used in wait() to block until there are some results to be
 	// picked up.
 	hasResults chan struct{}
-	err        error
+	// overheadAccountedFor tracks how much overhead space for the Results in
+	// this results buffer has been consumed from the budget. Note that this
+	// does not include the footprint of Get and Scan responses.
+	overheadAccountedFor int64
+	err                  error
 }
 
 func newResultsBufferBase(budget *budget) *resultsBufferBase {
@@ -175,6 +182,23 @@ func (b *resultsBufferBase) checkIfCompleteLocked(r Result) {
 	if r.GetResp != nil || r.scanComplete {
 		b.numCompleteResponses++
 	}
+}
+
+func (b *resultsBufferBase) accountForOverheadLocked(ctx context.Context, overheadMemUsage int64) {
+	b.budget.mu.AssertHeld()
+	b.Mutex.AssertHeld()
+	if overheadMemUsage > b.overheadAccountedFor {
+		// We're allowing the budget to go into debt here since the results
+		// buffer doesn't have a way to push back on the Results. It would also
+		// be unfortunate to discard these Results - instead, we rely on the
+		// worker coordinator to make sure the budget gets out of debt.
+		if err := b.budget.consumeLocked(ctx, overheadMemUsage-b.overheadAccountedFor, true /* allowDebt */); err != nil {
+			b.setErrorLocked(err)
+		}
+	} else {
+		b.budget.releaseLocked(ctx, b.overheadAccountedFor-overheadMemUsage)
+	}
+	b.overheadAccountedFor = overheadMemUsage
 }
 
 // signal non-blockingly sends on hasResults channel.
@@ -265,8 +289,10 @@ func (b *outOfOrderResultsBuffer) addLocked(r Result) {
 	b.numUnreleasedResults++
 }
 
-func (b *outOfOrderResultsBuffer) doneAddingLocked() {
-	b.Mutex.AssertHeld()
+const resultSize = int64(unsafe.Sizeof(Result{}))
+
+func (b *outOfOrderResultsBuffer) doneAddingLocked(ctx context.Context) {
+	b.accountForOverheadLocked(ctx, int64(cap(b.results))*resultSize)
 	b.signal()
 }
 
@@ -274,6 +300,9 @@ func (b *outOfOrderResultsBuffer) get(context.Context) ([]Result, bool, error) {
 	b.Lock()
 	defer b.Unlock()
 	results := b.results
+	// Note that although we're losing the reference to the Results slice, we
+	// still keep the overhead of the slice accounted for with the budget. This
+	// is done as a way of "amortizing" the reservation.
 	b.results = nil
 	allComplete := b.numCompleteResponses == b.numExpectedResponses
 	return results, allComplete, b.err
@@ -465,8 +494,10 @@ func (b *inOrderResultsBuffer) addLocked(r Result) {
 	b.addCounter++
 }
 
-func (b *inOrderResultsBuffer) doneAddingLocked() {
-	b.Mutex.AssertHeld()
+const inOrderBufferedResultSize = int64(unsafe.Sizeof(inOrderBufferedResult{}))
+
+func (b *inOrderResultsBuffer) doneAddingLocked(ctx context.Context) {
+	b.accountForOverheadLocked(ctx, int64(cap(b.buffered))*inOrderBufferedResultSize)
 	if len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition && b.buffered[0].subRequestIdx == b.headOfLineSubRequestIdx {
 		if debug {
 			fmt.Println("found head-of-the-line")
