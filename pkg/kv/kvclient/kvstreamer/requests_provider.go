@@ -71,7 +71,7 @@ type singleRangeBatch struct {
 	//
 	// subRequestIdx is only allocated in InOrder mode when
 	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
-	subRequestIdx []int
+	subRequestIdx []int32
 	// reqsReservedBytes tracks the memory reservation against the budget for
 	// the memory usage of reqs.
 	reqsReservedBytes int64
@@ -114,7 +114,7 @@ func (r singleRangeBatch) priority() int {
 // compared when two batches have the same priority value.
 //
 // It is invalid to call this method on a batch with no requests.
-func (r singleRangeBatch) subPriority() int {
+func (r singleRangeBatch) subPriority() int32 {
 	if r.subRequestIdx == nil {
 		return 0
 	}
