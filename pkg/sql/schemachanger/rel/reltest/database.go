@@ -64,7 +64,7 @@ type QueryTest struct {
 
 func (tc DatabaseTest) run(t *testing.T, s Suite) {
 	for i, databaseIndexes := range tc.databaseIndexes() {
-		t.Run(fmt.Sprintf("%v", databaseIndexes), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
 			db, err := rel.NewDatabase(s.Schema, databaseIndexes...)
 			require.NoError(t, err)
 			for _, k := range tc.Data {
