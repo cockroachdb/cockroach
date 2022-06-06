@@ -123,7 +123,7 @@ SHOW CLUSTER SETTING debug.panic_on_failed_assertions
 statement ok
 SET application_name = ''; RESET distsql
 
-skipif config 3node-tenant #52763
+skipif config 3node-tenant-default-configs #52763
 query TT colnames
 SELECT key,flags
   FROM test.crdb_internal.node_statement_statistics

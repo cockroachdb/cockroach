@@ -18,6 +18,8 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/errors/oserror"
 	gobuild "go/build"
 	"io"
 	"math"
@@ -40,7 +42,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -73,7 +74,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
@@ -534,6 +534,8 @@ type testClusterConfig struct {
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
+	// allowSplitAndScatter enables the AllowSplitAndScatter tenant testing knob.
+	allowSplitAndScatter bool
 	// if non-empty, overrides the default vectorize mode.
 	overrideVectorize string
 	// if non-empty, overrides the default experimental DistSQL planning mode.
@@ -831,12 +833,43 @@ var logicTestConfigs = []testClusterConfig{
 		// can only be run with a CCL binary, so is a noop if run through the normal
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
-		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
+		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic/^3node-tenant$$/<test_name>
 		name:                threeNodeTenantConfigName,
 		numNodes:            3,
 		useTenant:           true,
 		isCCLConfig:         true,
 		overrideDistSQLMode: "on",
+	},
+	{
+		// 3node-tenant-multiregion is a config that runs the test as a SQL tenant
+		// with SQL instances and KV nodes in multiple regions. This config can only
+		// be run with a CCL binary, so is a noop if run through the normal
+		// logictest command.
+		// To run a logic test with this config as a directive, run:
+		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic/3node-tenant-multiregion/<test_name>
+		name:                 "3node-tenant-multiregion",
+		numNodes:             3,
+		useTenant:            true,
+		isCCLConfig:          true,
+		overrideDistSQLMode:  "on",
+		allowSplitAndScatter: true,
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test1"},
+				},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test2"},
+				},
+			},
+		},
 	},
 	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
 	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
@@ -982,8 +1015,16 @@ var (
 		"5node-disk",
 		"5node-spec-planning",
 	}
-	defaultConfig         = parseTestConfig(defaultConfigNames)
-	fiveNodeDefaultConfig = parseTestConfig(fiveNodeDefaultConfigNames)
+	// threeNodeTenantDefaultConfigName is a special alias for all 3-node tenant
+	// configs.
+	threeNodeTenantDefaultConfigName  = "3node-tenant-default-configs"
+	threeNodeTenantDefaultConfigNames = []string{
+		"3node-tenant",
+		"3node-tenant-multiregion",
+	}
+	defaultConfig                = parseTestConfig(defaultConfigNames)
+	fiveNodeDefaultConfig        = parseTestConfig(fiveNodeDefaultConfigNames)
+	threeNodeTenantDefaultConfig = parseTestConfig(threeNodeTenantDefaultConfigNames)
 )
 
 func findLogicTestConfig(name string) (logicTestConfigIdx, bool) {
@@ -1708,6 +1749,11 @@ func (t *logicTest) newCluster(
 	}
 
 	cfg := t.cfg
+	if cfg.useTenant {
+		// In the tenant case we need to enable replication in order to split and
+		// relocate ranges correctly.
+		params.ReplicationMode = base.ReplicationAuto
+	}
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off,
 	}
@@ -1811,6 +1857,9 @@ func (t *logicTest) newCluster(
 					},
 					SQLStatsKnobs: &sqlstats.TestingKnobs{
 						AOSTClause: "AS OF SYSTEM TIME '-1us'",
+					},
+					TenantTestingKnobs: &sql.TenantTestingKnobs{
+						AllowSplitAndScatter: cfg.allowSplitAndScatter,
 					},
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
@@ -2203,7 +2252,16 @@ func processConfigs(
 		if *printBlocklistIssues && issueNo != 0 {
 			t.Logf("will skip %s config in test %s due to issue: %s", blockedConfig, path, build.MakeIssueURL(issueNo))
 		}
-		blocklist[blockedConfig] = issueNo
+		// Enumerate all the blocked configs if the blocked config is a default
+		// config list.
+		names := getDefaultConfigListNames(blockedConfig)
+		if len(names) == 0 {
+			blocklist[blockedConfig] = issueNo
+		} else {
+			for _, name := range names {
+				blocklist[name] = issueNo
+			}
+		}
 	}
 
 	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
@@ -2230,6 +2288,8 @@ func processConfigs(
 				configs = append(configs, applyBlocklistToConfigs(defaults, blocklist)...)
 			case fiveNodeDefaultConfigName:
 				configs = append(configs, applyBlocklistToConfigs(fiveNodeDefaultConfig, blocklist)...)
+			case threeNodeTenantDefaultConfigName:
+				configs = append(configs, applyBlocklistToConfigs(threeNodeTenantDefaultConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
@@ -3298,7 +3358,7 @@ func (t *logicTest) processSubtest(
 					return errors.New("skipif config CONFIG [ISSUE] command requires configuration parameter")
 				}
 				configName := fields[2]
-				if t.cfg.name == configName {
+				if t.cfg.name == configName || configIsInDefaultList(t.cfg.name, configName) {
 					issue := "no issue given"
 					if len(fields) > 3 {
 						issue = fields[3]
@@ -3326,7 +3386,7 @@ func (t *logicTest) processSubtest(
 					return errors.New("onlyif config CONFIG [ISSUE] command requires configuration parameter")
 				}
 				configName := fields[2]
-				if t.cfg.name != configName {
+				if t.cfg.name != configName && !configIsInDefaultList(t.cfg.name, configName) {
 					issue := "no issue given"
 					if len(fields) > 3 {
 						issue = fields[3]
@@ -4255,19 +4315,22 @@ type TestServerArgs struct {
 // RunLogicTest is the main entry point for the logic test. The globs parameter
 // specifies the default sets of files to run.
 func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
-	RunLogicTestWithDefaultConfig(t, serverArgs, *overrideConfig, false /* runCCLConfigs */, globs...)
+	RunLogicTestWithDefaultConfig(t, serverArgs, *overrideConfig, "", false /* runCCLConfigs */, globs...)
 }
 
-// RunLogicTestWithDefaultConfig is the main entry point for the logic test.
-// The globs parameter specifies the default sets of files to run. The config
+// RunLogicTestWithDefaultConfig is the main entry point for the logic test. The
+// globs parameter specifies the default sets of files to run. The config
 // override parameter, if not empty, specifies the set of configurations to run
-// those files in. If empty, the default set of configurations is used.
-// runCCLConfigs specifies whether the test runner should skip configs that can
-// only be run with a CCL binary.
+// those files in. If empty, the default set of configurations is used. The
+// config filter override specifies a set of configurations to run the files in
+// if there are explicit directives for those configurations. runCCLConfigs
+// specifies whether the test runner should skip configs that can only be run
+// with a CCL binary.
 func RunLogicTestWithDefaultConfig(
 	t *testing.T,
 	serverArgs TestServerArgs,
 	configOverride string,
+	configFilterOverride string,
 	runCCLConfigs bool,
 	globs ...string,
 ) {
@@ -4330,6 +4393,15 @@ func RunLogicTestWithDefaultConfig(
 		names := strings.Split(configOverride, ",")
 		configDefaults = parseTestConfig(names)
 		configFilter = make(map[string]struct{})
+		for _, name := range names {
+			configFilter[name] = struct{}{}
+		}
+	}
+	if configFilterOverride != "" {
+		// If a config filter override is provided, add them to the filter to
+		// also run tests with them as a config directive. This is in addition to
+		// any configs added via the config override.
+		names := strings.Split(configFilterOverride, ",")
 		for _, name := range names {
 			configFilter[name] = struct{}{}
 		}
@@ -4543,7 +4615,7 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 	serverArgs := TestServerArgs{
 		maxSQLMemoryLimit: 512 << 20, // 512 MiB
 	}
-	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, true /* runCCLConfigs */, prefixedGlobs...)
+	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, "", true /* runCCLConfigs */, prefixedGlobs...)
 }
 
 type errorSummaryEntry struct {
@@ -4736,4 +4808,27 @@ func roundFloatsInString(s string) string {
 		}
 		return []byte(fmt.Sprintf("%.6g", f))
 	}))
+}
+
+// configIsInDefaultList returns true if defaultName is one of the default
+// config lists and configName is a config included in that list.
+func configIsInDefaultList(configName, defaultName string) bool {
+	for _, name := range getDefaultConfigListNames(defaultName) {
+		if name == configName {
+			return true
+		}
+	}
+	return false
+}
+
+func getDefaultConfigListNames(name string) []string {
+	switch name {
+	case defaultConfigName:
+		return defaultConfigNames
+	case fiveNodeDefaultConfigName:
+		return fiveNodeDefaultConfigNames
+	case threeNodeTenantDefaultConfigName:
+		return threeNodeTenantDefaultConfigNames
+	}
+	return []string{}
 }
