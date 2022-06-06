@@ -525,3 +525,40 @@ regression_62205
 # Check we error as appropriate if the OID type is not legit.
 statement error pgcode 22P02 invalid input syntax for type oid: "regression_69907"
 SELECT 'regression_69907'::oid
+
+# 4294967295 is MaxUint32.
+# -2147483648 is MinInt32.
+query OIBB
+SELECT o, i, o > i, i > o FROM (VALUES
+  (1::oid, 4294967295::int8),
+  (1::oid, -2147483648::int8),
+  ((-1)::oid, 4294967295::int8),
+  ((-1)::oid, -2147483648::int8),
+  ((-2147483648)::oid, 4294967295::int8),
+  ((-2147483648)::oid, -2147483648::int8),
+  (4294967295::oid, 4294967295::int8),
+  (4294967295::oid, -2147483648::int8)
+) tbl(o, i)
+----
+1           4294967295   false  true
+1           -2147483648  false  true
+4294967295  4294967295   false  false
+4294967295  -2147483648  true   false
+2147483648  4294967295   false  true
+2147483648  -2147483648  false  false
+4294967295  4294967295   false  false
+4294967295  -2147483648  true   false
+
+# 4294967296 is (MaxUint32 + 1).
+query error OID out of range: 4294967296
+SELECT 1:::OID >= 4294967296:::INT8
+
+query error OID out of range: 4294967296
+SELECT 4294967296:::INT8 >= 1:::OID
+
+# -2147483649 is (MinInt32 - 1).
+query error OID out of range: -2147483649
+SELECT 1:::OID >= -2147483649:::INT8
+
+query error OID out of range: -2147483649
+SELECT -2147483649:::INT8 >= 1:::OID
