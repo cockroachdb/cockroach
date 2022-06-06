@@ -759,6 +759,9 @@ func (d *DInt) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
+		if thisInt > math.MaxUint32 || thisInt < math.MinInt32 {
+			return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", thisInt)
+		}
 		thisInt = DInt(uint32(thisInt))
 		v = DInt(t.Oid)
 	default:
@@ -4963,6 +4966,9 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
+		if *t > math.MaxUint32 || *t < math.MinInt32 {
+			return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", *t)
+		}
 		v = oid.Oid(*t)
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)

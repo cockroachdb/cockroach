@@ -140,7 +140,10 @@ func (e *evaluator) EvalCompareScalarOp(
 			return tree.DNull, nil
 		}
 	}
-	cmp := left.Compare(e.ctx(), right)
+	cmp, err := left.CompareError(e.ctx(), right)
+	if err != nil {
+		return nil, err
+	}
 	return boolFromCmp(cmp, op.ComparisonOperator), nil
 }
 
