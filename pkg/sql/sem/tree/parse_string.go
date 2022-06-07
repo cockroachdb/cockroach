@@ -11,8 +11,11 @@
 package tree
 
 import (
+	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -72,7 +75,10 @@ func ParseAndRequireString(
 			if err != nil {
 				return nil, false, err
 			}
-			d = NewDOid(*i)
+			if *i > math.MaxUint32 || *i < math.MinInt32 {
+				return nil, false, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", *i)
+			}
+			d = NewDOid(oid.Oid(*i))
 		}
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:

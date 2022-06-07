@@ -369,7 +369,11 @@ func (expr *NumVal) ResolveAsType(
 		if err != nil {
 			return nil, err
 		}
-		oid := NewDOid(*d.(*DInt))
+		dInt := MustBeDInt(d)
+		if dInt > math.MaxUint32 || dInt < math.MinInt32 {
+			return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", dInt)
+		}
+		oid := NewDOid(oid.Oid(dInt))
 		return oid, nil
 	default:
 		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)

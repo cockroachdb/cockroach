@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 type cTableInfo struct {
@@ -1307,7 +1308,8 @@ func (cf *cFetcher) finalizeBatch() {
 			// Note that we don't need to update the memory accounting because
 			// oids are fixed length values and have already been accounted for
 			// when finalizing each row.
-			cf.machine.tableoidCol.Set(i, cf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id), types.Oid)))
+			// descpb.ID is a uint32, so the Oid type conversion is safe.
+			cf.machine.tableoidCol.Set(i, cf.table.da.NewDOid(tree.MakeDOid(oid.Oid(id), types.Oid)))
 		}
 	}
 	cf.machine.batch.SetLength(cf.machine.rowIdx)

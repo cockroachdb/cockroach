@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // DebugRowFetch can be used to turn on some low-level debugging logs. We use
@@ -285,7 +286,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
-				table.tableOid = tree.NewDOid(tree.DInt(args.Spec.TableID))
+				table.tableOid = tree.NewDOid(oid.Oid(args.Spec.TableID))
 			}
 		}
 	}
