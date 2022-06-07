@@ -25,16 +25,15 @@ const goPath = `/mnt/data1/go`
 func installGolang(
 	ctx context.Context, t test.Test, c cluster.Cluster, node option.NodeListOption,
 ) {
-	if err := repeatRunE(
-		ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
+	if err := c.RepeatRunE(
+		ctx, t, node, "update apt-get", `sudo apt-get -qq update`,
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(
+	if err := c.RepeatRunE(
 		ctx,
 		t,
-		c,
 		node,
 		"install dependencies (go uses C bindings)",
 		`sudo apt-get -qq install build-essential`,
@@ -42,25 +41,25 @@ func installGolang(
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(
-		ctx, t, c, node, "download go", `curl -fsSL https://dl.google.com/go/go1.17.10.linux-amd64.tar.gz > /tmp/go.tgz`,
+	if err := c.RepeatRunE(
+		ctx, t, node, "download go", `curl -fsSL https://dl.google.com/go/go1.17.10.linux-amd64.tar.gz > /tmp/go.tgz`,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := repeatRunE(
-		ctx, t, c, node, "verify tarball", `sha256sum -c - <<EOF
+	if err := c.RepeatRunE(
+		ctx, t, node, "verify tarball", `sha256sum -c - <<EOF
 87fc728c9c731e2f74e4a999ef53cf07302d7ed3504b0839027bd9c10edaa3fd /tmp/go.tgz
 EOF`,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := repeatRunE(
-		ctx, t, c, node, "extract go", `sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz`,
+	if err := c.RepeatRunE(
+		ctx, t, node, "extract go", `sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz`,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := repeatRunE(
-		ctx, t, c, node, "force symlink go", "sudo ln -sf /usr/local/go/bin/go /usr/bin",
+	if err := c.RepeatRunE(
+		ctx, t, node, "force symlink go", "sudo ln -sf /usr/local/go/bin/go /usr/bin",
 	); err != nil {
 		t.Fatal(err)
 	}

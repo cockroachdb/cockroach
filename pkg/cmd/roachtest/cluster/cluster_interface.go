@@ -95,6 +95,9 @@ type Cluster interface {
 	// Use it when you need to run a command and only care if it ran successfully or not.
 	RunE(ctx context.Context, node option.NodeListOption, args ...string) error
 
+	// RepeatRunE is the same function as c.RunE but with an automatic retry loop.
+	RepeatRunE(ctx context.Context, t test.Test, node option.NodeListOption, operation string, args ...string) error
+
 	// RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
 	// on a single node AND 2) an error from roachprod itself would be treated the same way
 	// you treat an error from the command. This makes error checking easier / friendlier

@@ -108,17 +108,16 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		t.L().Printf("Latest Hibernate release is %s.", latestTag)
 		t.L().Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install dependencies",
 			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
@@ -126,8 +125,8 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old Hibernate", `rm -rf /mnt/data1/hibernate`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old Hibernate", `rm -rf /mnt/data1/hibernate`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -149,10 +148,9 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		// downloading, so it needs a retry loop as well. Just building was not
 		// enough as the test libraries are not downloaded unless at least a
 		// single test is invoked.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"building hibernate (without tests)",
 			opt.buildCmd,
@@ -161,10 +159,9 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		}
 
 		// Delete the test result; the test will be executed again later.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"delete test result from build output",
 			fmt.Sprintf(`rm -rf /mnt/data1/hibernate/%s/target/test-results/test`, opt.testDir),
@@ -189,10 +186,9 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		// copied to the artifacts.
 
 		// Copy the html report for the test.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"copy html report",
 			fmt.Sprintf(`cp /mnt/data1/hibernate/%s/target/reports/tests/test ~/logs/report -a`, opt.testDir),
@@ -201,10 +197,9 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		}
 
 		// Copy the individual test result files.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"copy test result files",
 			fmt.Sprintf(`cp /mnt/data1/hibernate/%s/target/test-results/test ~/logs/report/results -a`, opt.testDir),

@@ -63,16 +63,16 @@ func registerGORM(r registry.Registry) {
 		)
 
 		// Remove any old gorm installations
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old gorm", fmt.Sprintf("rm -rf %s", gormPath),
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old gorm", fmt.Sprintf("rm -rf %s", gormPath),
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		// Install go-junit-report to convert test results to .xml format we know
 		// how to work with.
-		if err := repeatRunE(
-			ctx, t, c, node, "install go-junit-report", fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
+		if err := c.RepeatRunE(
+			ctx, t, node, "install go-junit-report", fmt.Sprintf("GOPATH=%s go get -u github.com/jstemmer/go-junit-report", goPath),
 		); err != nil {
 			t.Fatal(err)
 		}

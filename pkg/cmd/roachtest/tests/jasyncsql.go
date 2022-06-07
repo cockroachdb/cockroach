@@ -45,10 +45,9 @@ func registerJasyncSQL(r registry.Registry) {
 		t.Status("cloning jasync-sql and installing prerequisites")
 
 		// Remove old jasync folder
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"remove old jasync-sql",
 			`rm -rf /mnt/data1/jasyncsql`,
@@ -70,10 +69,9 @@ func registerJasyncSQL(r registry.Registry) {
 			supportedJasyncCommit)); err != nil {
 			t.Fatal(err)
 		}
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install java and gradle",
 			`sudo apt-get -qq install default-jre openjdk-11-jdk-headless gradle`,
@@ -114,10 +112,9 @@ func registerJasyncSQL(r registry.Registry) {
 
 		t.Status("collecting the test results")
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"copy test result files",
 			`cp /mnt/data1/jasync-sql/postgresql-async/build/test-results/test/*.xml ~/logs/report/jasyncsql-results -a`,

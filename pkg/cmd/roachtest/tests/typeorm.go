@@ -58,23 +58,22 @@ func registerTypeORM(r registry.Registry) {
 		t.L().Printf("Latest TypeORM release is %s.", latestTag)
 		t.L().Printf("Supported TypeORM release is %s.", supportedTypeORMRelease)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "purge apt-get",
+		if err := c.RepeatRunE(
+			ctx, t, node, "purge apt-get",
 			`sudo apt-get purge -y command-not-found`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get update`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "update apt-get", `sudo apt-get update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install dependencies",
 			`sudo apt-get install -y make python3 libpq-dev python-dev gcc g++ `+
@@ -83,10 +82,9 @@ func registerTypeORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"add nodesource repository",
 			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -`,
@@ -94,20 +92,20 @@ func registerTypeORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "install nodejs and npm", `sudo apt-get install -y nodejs`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "install nodejs and npm", `sudo apt-get install -y nodejs`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "update npm", `sudo npm i -g npm`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old TypeORM", `sudo rm -rf /mnt/data1/typeorm`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old TypeORM", `sudo rm -rf /mnt/data1/typeorm`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -126,10 +124,9 @@ func registerTypeORM(r registry.Registry) {
 
 		// TypeORM is super picky about this file format and if it cannot be parsed
 		// it will return a file not found error.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"configuring tests for cockroach only",
 			fmt.Sprintf("echo '%s' > /mnt/data1/typeorm/ormconfig.json", typeORMConfigJSON),
@@ -137,10 +134,9 @@ func registerTypeORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"patch TypeORM test script to run all tests even on failure",
 			`sed -i 's/--bail //' /mnt/data1/typeorm/package.json`,
@@ -148,10 +144,9 @@ func registerTypeORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"building TypeORM",
 			`cd /mnt/data1/typeorm/ && npm install`,

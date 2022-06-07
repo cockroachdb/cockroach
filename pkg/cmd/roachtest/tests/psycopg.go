@@ -58,22 +58,22 @@ func registerPsycopg(r registry.Registry) {
 		t.L().Printf("Latest Psycopg release is %s.", latestTag)
 		t.L().Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node,
+		if err := c.RepeatRunE(
+			ctx, t, node,
 			"install dependencies",
 			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-setuptools python-setuptools`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old Psycopg", `sudo rm -rf /mnt/data1/psycopg`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old Psycopg", `sudo rm -rf /mnt/data1/psycopg`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -97,8 +97,8 @@ func registerPsycopg(r registry.Registry) {
 		}
 
 		t.Status("building Psycopg")
-		if err := repeatRunE(
-			ctx, t, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make PYTHON_VERSION=3`,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -63,20 +63,20 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.L().Printf("Latest sqlalchemy release is %s.", latestTag)
 	t.L().Printf("Supported sqlalchemy release is %s.", supportedSQLAlchemyTag)
 
-	if err := repeatRunE(ctx, t, c, node, "update apt-get", `
+	if err := c.RepeatRunE(ctx, t, node, "update apt-get", `
 		sudo add-apt-repository ppa:deadsnakes/ppa &&
 		sudo apt-get -qq update
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
+	if err := c.RepeatRunE(ctx, t, node, "install dependencies", `
 		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "set python3.7 as default", `
+	if err := c.RepeatRunE(ctx, t, node, "set python3.7 as default", `
 		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
 		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
 		sudo update-alternatives --config python3
@@ -84,19 +84,19 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install pip", `
+	if err := c.RepeatRunE(ctx, t, node, "install pip", `
 		curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.7
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "install pytest", `
+	if err := c.RepeatRunE(ctx, t, node, "install pytest", `
 		sudo pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy-cockroachdb", `
+	if err := c.RepeatRunE(ctx, t, node, "remove old sqlalchemy-cockroachdb", `
 		sudo rm -rf /mnt/data1/sqlalchemy-cockroachdb
 	`); err != nil {
 		t.Fatal(err)
@@ -109,13 +109,13 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	t.Status("installing sqlalchemy-cockroachdb")
-	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
+	if err := c.RepeatRunE(ctx, t, node, "installing sqlalchemy=cockroachdb", `
 		cd /mnt/data1/sqlalchemy-cockroachdb && sudo pip3 install .
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := repeatRunE(ctx, t, c, node, "remove old sqlalchemy", `
+	if err := c.RepeatRunE(ctx, t, node, "remove old sqlalchemy", `
 		sudo rm -rf /mnt/data1/sqlalchemy
 	`); err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	t.Status("building sqlalchemy")
-	if err := repeatRunE(ctx, t, c, node, "building sqlalchemy", `
+	if err := c.RepeatRunE(ctx, t, node, "building sqlalchemy", `
 		cd /mnt/data1/sqlalchemy && python3 setup.py build
 	`); err != nil {
 		t.Fatal(err)

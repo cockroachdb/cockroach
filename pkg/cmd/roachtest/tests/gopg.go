@@ -70,8 +70,8 @@ func registerGopg(r registry.Registry) {
 
 		installGolang(ctx, t, c, node)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old gopg",
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old gopg",
 			fmt.Sprintf(`sudo rm -rf %s`, destPath),
 		); err != nil {
 			t.Fatal(err)

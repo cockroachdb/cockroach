@@ -78,10 +78,9 @@ func registerAsyncpg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install python and pip",
 			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev`,
@@ -89,10 +88,9 @@ func registerAsyncpg(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install asyncpg's dependencies",
 			"cd /mnt/data1/asyncpg && sudo pip3 install django && pip3 install -e ."); err != nil {
