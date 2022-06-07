@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -70,7 +71,7 @@ func (m *mockStreamClient) Create(
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
 	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
-) error {
+) (streampb.StreamReplicationStatus, error) {
 	panic("unimplemented")
 }
 
@@ -387,13 +388,17 @@ func assertEqualKVs(
 }
 
 func makeTestStreamURI(
-	valueRange, kvsPerResolved, numPartitions int, kvFrequency time.Duration, dupProbability float64,
+	valueRange, kvsPerResolved, numPartitions int,
+	kvFrequency time.Duration,
+	dupProbability float64,
+	tenantID int,
 ) string {
 	return streamclient.RandomGenScheme + ":///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
 		"&EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
 		"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
 		"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +
-		"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32)
+		"&DUP_PROBABILITY=" + strconv.FormatFloat(dupProbability, 'f', -1, 32) +
+		"&TENANT_ID=" + strconv.Itoa(tenantID)
 }
 
 // TestRandomClientGeneration tests the ingestion processor against a random
@@ -413,12 +418,12 @@ func TestRandomClientGeneration(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// TODO: Consider testing variations on these parameters.
-	streamAddr := getTestRandomClientURI()
+	const tenantID = 20
+	streamAddr := getTestRandomClientURI(tenantID)
 
 	// The random client returns system and table data partitions.
 	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(streamAddr))
 	require.NoError(t, err)
-	const tenantID = 20
 	id, err := streamClient.Create(ctx, roachpb.MakeTenantID(tenantID))
 	require.NoError(t, err)
 
@@ -611,19 +616,18 @@ func registerValidatorWithClient(
 				panic(err.Error())
 			}
 		case streamingccl.KVEvent:
-			kv := *event.GetKV()
-
+			keyVal := *event.GetKV()
 			if validator.rekeyer != nil {
-				rekey, _, err := validator.rekeyer.RewriteKey(kv.Key)
+				rekey, _, err := validator.rekeyer.RewriteKey(keyVal.Key)
 				if err != nil {
 					panic(err.Error())
 				}
-				kv.Key = rekey
-				kv.Value.ClearChecksum()
-				kv.Value.InitChecksum(kv.Key)
+				keyVal.Key = rekey
+				keyVal.Value.ClearChecksum()
+				keyVal.Value.InitChecksum(keyVal.Key)
 			}
-			err := validator.noteRow(string(spec), string(kv.Key), string(kv.Value.RawBytes),
-				kv.Value.Timestamp)
+			err := validator.noteRow(string(spec), string(keyVal.Key), string(keyVal.Value.RawBytes),
+				keyVal.Value.Timestamp)
 			if err != nil {
 				panic(err.Error())
 			}

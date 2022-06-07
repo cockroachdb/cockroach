@@ -15,7 +15,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",

@@ -82,6 +82,7 @@ import (
 //
 // clear				  k=<key> [ts=<int>[,<int>]]
 // clear_range    k=<key> end=<key>
+// clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
 //
 // Where `<key>` can be a simple string, or a string
 // prefixed by the following characters:
@@ -477,17 +478,18 @@ var commands = map[string]cmd{
 	// TODO(nvanbenschoten): test "resolve_intent_range".
 	"check_intent": {typReadOnly, cmdCheckIntent},
 
-	"clear":        {typDataUpdate, cmdClear},
-	"clear_range":  {typDataUpdate, cmdClearRange},
-	"cput":         {typDataUpdate, cmdCPut},
-	"del":          {typDataUpdate, cmdDelete},
-	"del_range":    {typDataUpdate, cmdDeleteRange},
-	"get":          {typReadOnly, cmdGet},
-	"increment":    {typDataUpdate, cmdIncrement},
-	"merge":        {typDataUpdate, cmdMerge},
-	"put":          {typDataUpdate, cmdPut},
-	"put_rangekey": {typDataUpdate, cmdPutRangeKey},
-	"scan":         {typReadOnly, cmdScan},
+	"clear":          {typDataUpdate, cmdClear},
+	"clear_range":    {typDataUpdate, cmdClearRange},
+	"clear_rangekey": {typDataUpdate, cmdClearRangeKey},
+	"cput":           {typDataUpdate, cmdCPut},
+	"del":            {typDataUpdate, cmdDelete},
+	"del_range":      {typDataUpdate, cmdDeleteRange},
+	"get":            {typReadOnly, cmdGet},
+	"increment":      {typDataUpdate, cmdIncrement},
+	"merge":          {typDataUpdate, cmdMerge},
+	"put":            {typDataUpdate, cmdPut},
+	"put_rangekey":   {typDataUpdate, cmdPutRangeKey},
+	"scan":           {typReadOnly, cmdScan},
 
 	"iter_new":            {typReadOnly, cmdIterNew},
 	"iter_seek_ge":        {typReadOnly, cmdIterSeekGE},
@@ -685,7 +687,19 @@ func cmdClear(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
+	// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
+	// it does not handle separated intents.
+	if util.ConstantWithMetamorphicTestBool("clear-range-using-iterator", false) {
+		return e.engine.ClearMVCCIteratorRange(key, endKey)
+	}
 	return e.engine.ClearMVCCRange(key, endKey)
+}
+
+func cmdClearRangeKey(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+	return e.engine.ExperimentalClearMVCCRangeKey(
+		MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
 }
 
 func cmdCPut(e *evalCtx) error {

@@ -407,6 +407,30 @@ deprules
     - $new-index-node[Target] = $new-index-target
     - $old-index[DescID] = $var-to-tell-rel-from-is-an-element
     - $new-index[DescID] = $var-to-tell-rel-to-is-an-element
+- name: reverting primary index swap
+  from: new-index-node
+  kind: SameStagePrecedence
+  to: old-index-node
+  query:
+    - $new-index[Type] = '*scpb.PrimaryIndex'
+    - $old-index[Type] = '*scpb.PrimaryIndex'
+    - $new-index[DescID] = $table-id
+    - $old-index[DescID] = $table-id
+    - $new-index-target[TargetStatus] = ABSENT
+    - $old-index-target[TargetStatus] = PUBLIC
+    - $new-index-node[CurrentStatus] = VALIDATED
+    - $old-index-node[CurrentStatus] = PUBLIC
+    - new-primary-index-depends-on-old(*scpb.PrimaryIndex, *scpb.PrimaryIndex)($new-index, $old-index)
+    - $new-index-target[Type] = '*scpb.Target'
+    - $new-index-target[Element] = $new-index
+    - $new-index-node[Type] = '*screl.Node'
+    - $new-index-node[Target] = $new-index-target
+    - $old-index-target[Type] = '*scpb.Target'
+    - $old-index-target[Element] = $old-index
+    - $old-index-node[Type] = '*screl.Node'
+    - $old-index-node[Target] = $old-index-target
+    - $new-index[DescID] = $var-to-tell-rel-from-is-an-element
+    - $old-index[DescID] = $var-to-tell-rel-to-is-an-element
 - name: index existence precedes index dependents
   from: index-node
   kind: Precedence
@@ -537,30 +561,30 @@ deprules
     - $index-name[DescID] = $var-to-tell-rel-from-is-an-element
     - $index[DescID] = $var-to-tell-rel-to-is-an-element
 - name: dependents removed after index no longer public
-  from: index-node
-  kind: Precedence
-  to: child-node
+  from: child-node
+  kind: SameStagePrecedence
+  to: index-node
   query:
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $child[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
-    - $index[DescID] = $desc-id
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $child[DescID] = $desc-id
-    - $index[IndexID] = $index-id
+    - $index[DescID] = $desc-id
     - $child[IndexID] = $index-id
-    - $index-target[TargetStatus] = ABSENT
+    - $index[IndexID] = $index-id
     - $child-target[TargetStatus] = ABSENT
-    - $index-node[CurrentStatus] = VALIDATED
+    - $index-target[TargetStatus] = ABSENT
     - $child-node[CurrentStatus] = ABSENT
-    - $index-target[Type] = '*scpb.Target'
-    - $index-target[Element] = $index
-    - $index-node[Type] = '*screl.Node'
-    - $index-node[Target] = $index-target
+    - $index-node[CurrentStatus] = VALIDATED
     - $child-target[Type] = '*scpb.Target'
     - $child-target[Element] = $child
     - $child-node[Type] = '*screl.Node'
     - $child-node[Target] = $child-target
-    - $index[DescID] = $var-to-tell-rel-from-is-an-element
-    - $child[DescID] = $var-to-tell-rel-to-is-an-element
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*screl.Node'
+    - $index-node[Target] = $index-target
+    - $child[DescID] = $var-to-tell-rel-from-is-an-element
+    - $index[DescID] = $var-to-tell-rel-to-is-an-element
 - name: dependents removed before index
   from: dependent-node
   kind: Precedence
@@ -888,6 +912,31 @@ deprules
     - $column-node[Target] = $column-target
     - $index[DescID] = $var-to-tell-rel-from-is-an-element
     - $column[DescID] = $var-to-tell-rel-to-is-an-element
+- name: primary index should be cleaned up before newly added column when reverting
+  from: index-node
+  kind: Precedence
+  to: column-node
+  query:
+    - $index[Type] = '*scpb.PrimaryIndex'
+    - $column[Type] = '*scpb.Column'
+    - $index-target[TargetStatus] = ABSENT
+    - $column-target[TargetStatus] = ABSENT
+    - $index[DescID] = $table-id
+    - $column[DescID] = $table-id
+    - columnFeaturedInIndex(*scpb.Column, *scpb.PrimaryIndex)($column, $index)
+    - $status = WRITE_ONLY
+    - $index-node[CurrentStatus] = $status
+    - $column-node[CurrentStatus] = $status
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*screl.Node'
+    - $index-node[Target] = $index-target
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*screl.Node'
+    - $column-node[Target] = $column-target
+    - $index[DescID] = $var-to-tell-rel-from-is-an-element
+    - $column[DescID] = $var-to-tell-rel-to-is-an-element
 - name: column existence precedes index existence
   from: column-node
   kind: Precedence
@@ -936,6 +985,54 @@ deprules
     - $temp-index-node[Target] = $temp-index-target
     - $column[DescID] = $var-to-tell-rel-from-is-an-element
     - $temp-index[DescID] = $var-to-tell-rel-to-is-an-element
+- name: primary index with new columns should exist before secondary/temp indexes
+  from: primary-index-node
+  kind: Precedence
+  to: second-index-node
+  query:
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $second-index[Type] IN ['*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - $primary-index[DescID] = $table-id
+    - $second-index[DescID] = $table-id
+    - $primary-index-target[TargetStatus] = PUBLIC
+    - $second-index-target[TargetStatus] = PUBLIC
+    - $primary-index-node[CurrentStatus] = VALIDATED
+    - $second-index-node[CurrentStatus] = BACKFILL_ONLY
+    - newColumnFeaturedInIndex(*scpb.PrimaryIndex, scpb.Element)($primary-index, $second-index)
+    - $primary-index-target[Type] = '*scpb.Target'
+    - $primary-index-target[Element] = $primary-index
+    - $primary-index-node[Type] = '*screl.Node'
+    - $primary-index-node[Target] = $primary-index-target
+    - $second-index-target[Type] = '*scpb.Target'
+    - $second-index-target[Element] = $second-index
+    - $second-index-node[Type] = '*screl.Node'
+    - $second-index-node[Target] = $second-index-target
+    - $primary-index[DescID] = $var-to-tell-rel-from-is-an-element
+    - $second-index[DescID] = $var-to-tell-rel-to-is-an-element
+- name: secondary indexes should be cleaned up before any primary index with columns when reverting
+  from: second-index-node
+  kind: Precedence
+  to: primary-index-node
+  query:
+    - $second-index[Type] IN ['*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - $primary-index[Type] = '*scpb.PrimaryIndex'
+    - $second-index[DescID] = $table-id
+    - $primary-index[DescID] = $table-id
+    - $second-index-target[TargetStatus] = ABSENT
+    - $primary-index-target[TargetStatus] = ABSENT
+    - $second-index-node[CurrentStatus] = ABSENT
+    - $primary-index-node[CurrentStatus] = VALIDATED
+    - newColumnFeaturedInIndex(scpb.Element, *scpb.PrimaryIndex)($second-index, $primary-index)
+    - $second-index-target[Type] = '*scpb.Target'
+    - $second-index-target[Element] = $second-index
+    - $second-index-node[Type] = '*screl.Node'
+    - $second-index-node[Target] = $second-index-target
+    - $primary-index-target[Type] = '*scpb.Target'
+    - $primary-index-target[Element] = $primary-index
+    - $primary-index-node[Type] = '*screl.Node'
+    - $primary-index-node[Target] = $primary-index-target
+    - $second-index[DescID] = $var-to-tell-rel-from-is-an-element
+    - $primary-index[DescID] = $var-to-tell-rel-to-is-an-element
 - name: ensure columns are in increasing order
   from: later-column-node
   kind: SameStagePrecedence

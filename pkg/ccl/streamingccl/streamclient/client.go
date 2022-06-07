@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -55,7 +56,11 @@ type Client interface {
 	// that source cluster protected timestamp _may_ be advanced up to the passed ts
 	// (which may be zero if no progress has been made e.g. during backfill).
 	// TODO(dt): ts -> checkpointToken.
-	Heartbeat(ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp) error
+	Heartbeat(
+		ctx context.Context,
+		streamID streaming.StreamID,
+		consumed hlc.Timestamp,
+	) (streampb.StreamReplicationStatus, error)
 
 	// Plan returns a Topology for this stream.
 	// TODO(dt): separate target argument from address argument.

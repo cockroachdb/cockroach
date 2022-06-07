@@ -2991,7 +2991,10 @@ func (ex *connExecutor) initStatementResult(
 			return err
 		}
 	}
-	if ast.StatementReturnType() == tree.Rows {
+	// If the output mode has been modified by instrumentation (e.g. EXPLAIN
+	// ANALYZE), then the columns will be set later.
+	if ex.planner.instrumentation.outputMode == unmodifiedOutput &&
+		ast.StatementReturnType() == tree.Rows {
 		// Note that this call is necessary even if cols is nil.
 		res.SetColumns(ctx, cols)
 	}

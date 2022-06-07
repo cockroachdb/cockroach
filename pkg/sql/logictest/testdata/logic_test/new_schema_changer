@@ -257,13 +257,13 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       ├── • 2 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │   │     PUBLIC → VALIDATED
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from ABSENT IndexName:{DescID: 106, Name: foo_pkey, IndexID: 1}
+│       │   │         rule: "dependents removed after index no longer public"
 │       │   │
 │       │   └── • IndexName:{DescID: 106, Name: foo_pkey, IndexID: 1}
-│       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-│       │             rule: "dependents removed after index no longer public"
+│       │         PUBLIC → ABSENT
 │       │
 │       ├── • 3 elements transitioning toward PUBLIC
 │       │   │
@@ -290,10 +290,6 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │       │
 │       └── • 8 Mutation operations
 │           │
-│           ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
-│           │     IndexID: 1
-│           │     TableID: 106
-│           │
 │           ├── • SetIndexName
 │           │     IndexID: 1
 │           │     Name: crdb_internal_index_1_name_placeholder
@@ -302,6 +298,10 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
 │           ├── • SetIndexName
 │           │     IndexID: 2
 │           │     Name: foo_pkey
+│           │     TableID: 106
+│           │
+│           ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+│           │     IndexID: 1
 │           │     TableID: 106
 │           │
 │           ├── • MakeAddedPrimaryIndexPublic
@@ -422,6 +422,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
+
 
 
 

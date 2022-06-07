@@ -5,7 +5,7 @@ go_library(
     name = "log",
     srcs = [
         "ambient_context.go",
-        "buffer_sink.go",
+        "buffered_sink.go",
         "channels.go",
         "clog.go",
         "doc.go",
@@ -131,7 +131,7 @@ go_test(
     size = "small",
     srcs = [
         "ambient_context_test.go",
-        "buffer_sink_test.go",
+        "buffered_sink_test.go",
         "clog_test.go",
         "file_log_gc_test.go",
         "file_names_test.go",

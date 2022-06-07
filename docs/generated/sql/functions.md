@@ -2619,6 +2619,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="crdb_internal.start_replication_stream"></a><code>crdb_internal.start_replication_stream(tenant_id: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used on the producer side to start a replication stream for the specified tenant. The returned stream ID uniquely identifies created stream. The caller must periodically invoke crdb_internal.heartbeat_stream() function to notify that the replication is still ongoing.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.stream_ingestion_stats"></a><code>crdb_internal.stream_ingestion_stats(job_id: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function can be used on the ingestion side to get a statistics summary of a stream ingestion job in json format.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.stream_partition"></a><code>crdb_internal.stream_partition(stream_id: <a href="int.html">int</a>, partition_spec: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS stream_event}</code></td><td><span class="funcdesc"><p>Stream partition data</p>
 </span></td></tr></tbody>
 </table>

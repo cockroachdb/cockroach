@@ -11,6 +11,9 @@
 package builtins
 
 import (
+	gojson "encoding/json"
+
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -34,6 +37,7 @@ func initReplicationBuiltins() {
 //
 // For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
 var replicationBuiltins = map[string]builtinDefinition{
+	// Stream ingestion functions starts here.
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categoryStreamIngestion,
@@ -51,14 +55,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 
-				streamID := streaming.StreamID(*args[0].(*tree.DInt))
+				ingestionJobID := jobspb.JobID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, streamID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(evalCtx, evalCtx.Txn, ingestionJobID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(streamID)), err
+				return tree.NewDInt(tree.DInt(ingestionJobID)), err
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
 				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
@@ -72,6 +76,44 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"crdb_internal.stream_ingestion_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"job_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+				ingestionJobID := int64(tree.MustBeDInt(args[0]))
+				stats, err := mgr.GetStreamIngestionStats(evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				if err != nil {
+					return nil, err
+				}
+				jsonStats, err := gojson.Marshal(stats)
+				if err != nil {
+					return nil, err
+				}
+				jsonDatum, err := tree.ParseDJSON(string(jsonStats))
+				if err != nil {
+					return nil, err
+				}
+				return jsonDatum, nil
+			},
+			Info: "This function can be used on the ingestion side to get a statistics summary " +
+				"of a stream ingestion job in json format.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	// Stream production functions starts here.
 	"crdb_internal.start_replication_stream": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categoryStreamIngestion,
