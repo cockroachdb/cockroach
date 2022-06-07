@@ -2515,13 +2515,6 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 		shouldCopyColumnDefaultSet := make(map[string]struct{})
 		if opts.Has(tree.LikeTableOptIndexes) {
 			for _, idx := range td.NonDropIndexes() {
-				// Copy the rowid default if it was created implicitly by not specifying
-				// PRIMARY KEY.
-				if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
-					for i := 0; i < idx.NumKeyColumns(); i++ {
-						shouldCopyColumnDefaultSet[idx.GetKeyColumnName(i)] = struct{}{}
-					}
-				}
 				// Copy any implicitly created columns (e.g. hash-sharded indexes,
 				// REGIONAL BY ROW).
 				for i := 0; i < idx.ExplicitColumnStartIdx(); i++ {
@@ -2536,6 +2529,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 		// Add all columns. Columns are always added.
 		for i := range td.Columns {
 			c := &td.Columns[i]
+			if td.IsPrimaryIndexDefaultRowID() && c.ID == td.GetPrimaryIndex().GetKeyColumnID(0) {
+				continue
+			}
 			if c.Inaccessible {
 				// Inaccessible columns automatically get added by
 				// the system; we don't need to add them ourselves here.

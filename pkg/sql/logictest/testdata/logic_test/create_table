@@ -987,3 +987,22 @@ tbl  CREATE TABLE public.tbl (
      CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
      FAMILY f1 (i, j)
 )
+
+subtest regression_82401
+statement ok
+CREATE TABLE t82401(x INT)
+
+statement ok
+CREATE TABLE u82401(LIKE t82401)
+
+statement ok
+INSERT INTO u82401(x) VALUES(1)
+
+query TT
+SHOW CREATE TABLE u82401
+----
+u82401  CREATE TABLE public.u82401 (
+        x INT8 NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT u82401_pkey PRIMARY KEY (rowid ASC)
+)
