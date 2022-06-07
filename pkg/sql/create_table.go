@@ -55,6 +55,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1313,12 +1316,12 @@ func NewTableDesc(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
 
-	if err := paramparse.SetStorageParameters(
+	if err := storageparam.Set(
 		ctx,
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
-		paramparse.NewTableStorageParamObserver(&desc),
+		tablestorageparam.NewSetter(&desc),
 	); err != nil {
 		return nil, err
 	}
@@ -1848,12 +1851,12 @@ func NewTableDesc(
 				}
 				idx.Predicate = expr
 			}
-			if err := paramparse.SetStorageParameters(
+			if err := storageparam.Set(
 				ctx,
 				semaCtx,
 				evalCtx,
 				d.StorageParams,
-				&paramparse.IndexStorageParamObserver{IndexDesc: &idx},
+				&indexstorageparam.Setter{IndexDesc: &idx},
 			); err != nil {
 				return nil, err
 			}
