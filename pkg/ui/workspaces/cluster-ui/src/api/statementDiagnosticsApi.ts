@@ -16,14 +16,16 @@ const CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH = "/_status/stmtdiagreports";
 const CANCEL_STATEMENT_DIAGNOSTICS_REPORT_PATH =
   "/_status/stmtdiagreports/cancel";
 
-type CreateStatementDiagnosticsReportRequestMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-type CreateStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
-type CancelStatementDiagnosticsReportRequestMessage = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
-type CancelStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
+type CreateStatementDiagnosticsReportRequestMessage =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+type CreateStatementDiagnosticsReportResponseMessage =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
+type CancelStatementDiagnosticsReportRequestMessage =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+type CancelStatementDiagnosticsReportResponseMessage =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
 
-export function getStatementDiagnosticsReports(): Promise<
-  cockroach.server.serverpb.StatementDiagnosticsReportsResponse
-> {
+export function getStatementDiagnosticsReports(): Promise<cockroach.server.serverpb.StatementDiagnosticsReportsResponse> {
   return fetchData(
     cockroach.server.serverpb.StatementDiagnosticsReportsResponse,
     STATEMENT_DIAGNOSTICS_PATH,

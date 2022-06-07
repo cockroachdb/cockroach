@@ -33,7 +33,7 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
   height: max-content;
   background-color: $colors--neutral-0;
   margin-top: 6px;
-  border: 0.5px solid #E5E5E5;
+  border: 0.5px solid #e5e5e5;
   box-shadow: 0px 0px 4px rgba(154, 161, 171, 0.33);
   border-radius: 4px;
   z-index: 2;
@@ -64,7 +64,7 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
       display: flex;
       justify-content: space-evenly;
       gap: 11px;
-      
+
       .time-number {
         width: 96px;
         height: 40px;
@@ -104,8 +104,8 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
 
     .apply-btn {
       &__wrapper {
-      text-align: end;
-      margin-top: 30px;
+        text-align: end;
+        margin-top: 30px;
       }
 
       &__btn {

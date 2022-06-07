@@ -103,13 +103,15 @@ export function Bytes(bytes: number): string {
  * Cast bytes to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const BytesFitScale = (scale: string) => (bytes: number): string => {
-  if (!bytes) {
-    return `0.00 ${scale}`;
-  }
-  const n = byteUnits.indexOf(scale);
-  return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
-};
+export const BytesFitScale =
+  (scale: string) =>
+  (bytes: number): string => {
+    if (!bytes) {
+      return `0.00 ${scale}`;
+    }
+    const n = byteUnits.indexOf(scale);
+    return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
+  };
 
 /**
  * Percentage creates a string representation of a fraction as a percentage.
@@ -157,15 +159,15 @@ export function Duration(nanoseconds: number): string {
  * Cast nanoseconds to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const DurationFitScale = (scale: string) => (
-  nanoseconds: number,
-): string => {
-  if (!nanoseconds) {
-    return `0.00 ${scale}`;
-  }
-  const n = durationUnits.indexOf(scale);
-  return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
-};
+export const DurationFitScale =
+  (scale: string) =>
+  (nanoseconds: number): string => {
+    if (!nanoseconds) {
+      return `0.00 ${scale}`;
+    }
+    const n = durationUnits.indexOf(scale);
+    return `${(nanoseconds / Math.pow(1000, n)).toFixed(2)} ${scale}`;
+  };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 

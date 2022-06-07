@@ -61,7 +61,8 @@
         position: relative;
         padding: 11px;
 
-        &:after, &:before {
+        &:after,
+        &:before {
           content: "";
           position: absolute;
           right: 5px;
@@ -94,11 +95,10 @@
       }
     }
   }
-
 }
 
 .break-line {
-    white-space:pre-wrap !important;
+  white-space: pre-wrap !important;
 }
 
 .cl-table-container {
@@ -116,7 +116,8 @@
   align-items: center;
   flex-direction: column;
   padding: 50px 0;
-  &--title, &--description {
+  &--title,
+  &--description {
     font-family: $font-family--base;
     margin: 0;
   }

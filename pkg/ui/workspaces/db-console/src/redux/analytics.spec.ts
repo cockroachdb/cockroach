@@ -25,7 +25,7 @@ import * as protos from "src/js/protos";
 
 const sandbox = sinon.createSandbox();
 
-describe("analytics listener", function() {
+describe("analytics listener", function () {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
   const setClusterData = (
     store: Store<AdminUIState>,
@@ -43,12 +43,12 @@ describe("analytics listener", function() {
     );
   };
 
-  describe("page method", function() {
+  describe("page method", function () {
     let store: Store<AdminUIState>;
     let analytics: Analytics;
     let pageSpy: sinon.SinonSpy;
 
-    beforeEach(function() {
+    beforeEach(function () {
       store = createAdminUIStore(createHashHistory());
       pageSpy = sandbox.spy();
 
@@ -63,7 +63,7 @@ describe("analytics listener", function() {
       sandbox.reset();
     });
 
-    it("does nothing if cluster info is not available", function() {
+    it("does nothing if cluster info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
 
       sync.page({
@@ -73,7 +73,7 @@ describe("analytics listener", function() {
       assert.isTrue(pageSpy.notCalled);
     });
 
-    it("does nothing if reporting is not explicitly enabled", function() {
+    it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store, false);
 
@@ -84,7 +84,7 @@ describe("analytics listener", function() {
       assert.isTrue(pageSpy.notCalled);
     });
 
-    it("correctly calls segment on a page call", function() {
+    it("correctly calls segment on a page call", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store);
 
@@ -103,7 +103,7 @@ describe("analytics listener", function() {
       });
     });
 
-    it("correctly queues calls before cluster ID is available", function() {
+    it("correctly queues calls before cluster ID is available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
 
       sync.page({
@@ -136,7 +136,7 @@ describe("analytics listener", function() {
       });
     });
 
-    it("correctly applies redaction to matched paths", function() {
+    it("correctly applies redaction to matched paths", function () {
       setClusterData(store);
       const sync = new AnalyticsSync(analytics, store, [
         {
@@ -216,8 +216,8 @@ describe("analytics listener", function() {
         "/statement/SELECT * FROM database.table",
         "/statement/[statement]",
       ),
-    ].map(function({ title, input, expected }) {
-      it(`applies a redaction for ${title}`, function() {
+    ].map(function ({ title, input, expected }) {
+      it(`applies a redaction for ${title}`, function () {
         setClusterData(store);
         const sync = new AnalyticsSync(analytics, store, defaultRedactions);
         const expectedLocation = createLocation(expected);
@@ -248,12 +248,12 @@ describe("analytics listener", function() {
     });
   });
 
-  describe("identify method", function() {
+  describe("identify method", function () {
     let store: Store<AdminUIState>;
     let analytics: Analytics;
     let identifySpy: sinon.SinonSpy;
 
-    beforeEach(function() {
+    beforeEach(function () {
       store = createAdminUIStore(createHashHistory());
       identifySpy = sandbox.spy();
 
@@ -268,7 +268,7 @@ describe("analytics listener", function() {
       sandbox.reset();
     });
 
-    const setVersionData = function() {
+    const setVersionData = function () {
       store.dispatch(
         nodesReducerObj.receiveData([
           {
@@ -280,7 +280,7 @@ describe("analytics listener", function() {
       );
     };
 
-    it("does nothing if cluster info is not available", function() {
+    it("does nothing if cluster info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setVersionData();
 
@@ -289,7 +289,7 @@ describe("analytics listener", function() {
       assert.isTrue(identifySpy.notCalled);
     });
 
-    it("does nothing if version info is not available", function() {
+    it("does nothing if version info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store, true, true);
 
@@ -298,7 +298,7 @@ describe("analytics listener", function() {
       assert.isTrue(identifySpy.notCalled);
     });
 
-    it("does nothing if reporting is not explicitly enabled", function() {
+    it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store, false, true);
       setVersionData();
@@ -308,7 +308,7 @@ describe("analytics listener", function() {
       assert.isTrue(identifySpy.notCalled);
     });
 
-    it("sends the correct value of clusterID, version and enterprise", function() {
+    it("sends the correct value of clusterID, version and enterprise", function () {
       setVersionData();
 
       _.each([false, true], enterpriseSetting => {
@@ -329,7 +329,7 @@ describe("analytics listener", function() {
       });
     });
 
-    it("only reports once", function() {
+    it("only reports once", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store, true, true);
       setVersionData();
@@ -341,7 +341,7 @@ describe("analytics listener", function() {
     });
   });
 
-  describe("track method", function() {
+  describe("track method", function () {
     const store: Store<AdminUIState> = createAdminUIStore(createHashHistory());
     let analytics: Analytics;
     let trackSpy: sinon.SinonSpy;

@@ -94,10 +94,7 @@ const TimeScaleDropdownWithSearchParams = (
     const urlParams = new URLSearchParams(search);
     const seconds = duration.clone().asSeconds();
     const end = dateEnd.clone();
-    const start = moment
-      .utc(end)
-      .subtract(seconds, "seconds")
-      .format("X");
+    const start = moment.utc(end).subtract(seconds, "seconds").format("X");
 
     urlParams.set("start", start);
     urlParams.set("end", moment.utc(dateEnd).format("X"));

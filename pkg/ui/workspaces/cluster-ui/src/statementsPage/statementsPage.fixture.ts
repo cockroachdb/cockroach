@@ -18,7 +18,8 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "src/util";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
 
@@ -270,7 +271,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   },
   sortSetting: {
     ascending: false,
-    columnTitle: "executionCount"
+    columnTitle: "executionCount",
   },
   search: "",
   filters: {
@@ -414,7 +415,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '49958554803360403681',
+      aggregatedFingerprintID: "49958554803360403681",
       label: "INSERT INTO promo_codes VALUES ($1, $2, __more3__)",
       summary: "INSERT INTO promo_codes",
       aggregatedTs,
@@ -425,7 +426,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '9233296116064220812',
+      aggregatedFingerprintID: "9233296116064220812",
       label: "ALTER TABLE users SCATTER FROM (_, _) TO (_, _)",
       summary: "ALTER TABLE users SCATTER FROM (_, _) TO (_, _)",
       aggregatedTs,
@@ -436,7 +437,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '6117473345491440803',
+      aggregatedFingerprintID: "6117473345491440803",
       label:
         "ALTER TABLE rides ADD FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES vehicles (city, id)",
       summary:
@@ -449,7 +450,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '1301242584620444873',
+      aggregatedFingerprintID: "1301242584620444873",
       label: "SHOW database",
       summary: "SHOW database",
       aggregatedTs,
@@ -461,7 +462,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       diagnosticsReports,
     },
     {
-      aggregatedFingerprintID: '11195381626529102926',
+      aggregatedFingerprintID: "11195381626529102926",
       label:
         "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
       summary:
@@ -474,7 +475,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '18127289707013477303',
+      aggregatedFingerprintID: "18127289707013477303",
       label: "ALTER TABLE users SPLIT AT VALUES (_, _)",
       summary: "ALTER TABLE users SPLIT AT VALUES (_, _)",
       aggregatedTs,
@@ -485,7 +486,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '2499764450427976233',
+      aggregatedFingerprintID: "2499764450427976233",
       label: "ALTER TABLE vehicles SCATTER FROM (_, _) TO (_, _)",
       summary: "ALTER TABLE vehicles SCATTER FROM (_, _) TO (_, _)",
       aggregatedTs,
@@ -496,7 +497,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '818321793552651414',
+      aggregatedFingerprintID: "818321793552651414",
       label:
         "ALTER TABLE vehicle_location_histories ADD FOREIGN KEY (city, ride_id) REFERENCES rides (city, id)",
       summary:
@@ -509,7 +510,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '13217779306501326587',
+      aggregatedFingerprintID: "13217779306501326587",
       label:
         'CREATE TABLE IF NOT EXISTS user_promo_codes (city VARCHAR NOT NULL, user_id UUID NOT NULL, code VARCHAR NOT NULL, "timestamp" TIMESTAMP NULL, usage_count INT8 NULL, PRIMARY KEY (city ASC, user_id ASC, code ASC))',
       summary:
@@ -522,7 +523,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '6325213731862855938',
+      aggregatedFingerprintID: "6325213731862855938",
       label: "INSERT INTO users VALUES ($1, $2, __more3__), (__more40__)",
       summary: "INSERT INTO users VALUES",
       aggregatedTs,
@@ -533,7 +534,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '17372586739449521577',
+      aggregatedFingerprintID: "17372586739449521577",
       label: "ALTER TABLE rides SCATTER FROM (_, _) TO (_, _)",
       summary: "ALTER TABLE rides SCATTER FROM (_, _) TO (_, _)",
       aggregatedTs,
@@ -544,7 +545,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '17098541896015126122',
+      aggregatedFingerprintID: "17098541896015126122",
       label: 'SET CLUSTER SETTING "cluster.organization" = $1',
       summary: 'SET CLUSTER SETTING "cluster.organization" = $1',
       aggregatedTs,
@@ -555,7 +556,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '13350023170184726428',
+      aggregatedFingerprintID: "13350023170184726428",
       label:
         "ALTER TABLE vehicles ADD FOREIGN KEY (city, owner_id) REFERENCES users (city, id)",
       summary:
@@ -568,7 +569,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '2695725667586429780',
+      aggregatedFingerprintID: "2695725667586429780",
       label:
         "CREATE TABLE IF NOT EXISTS rides (id UUID NOT NULL, city VARCHAR NOT NULL, vehicle_city VARCHAR NULL, rider_id UUID NULL, vehicle_id UUID NULL, start_address VARCHAR NULL, end_address VARCHAR NULL, start_time TIMESTAMP NULL, end_time TIMESTAMP NULL, revenue DECIMAL(10,2) NULL, PRIMARY KEY (city ASC, id ASC), INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC), INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC), CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city))",
       summary:
@@ -581,7 +582,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '6754865160812330169',
+      aggregatedFingerprintID: "6754865160812330169",
       label:
         "CREATE TABLE IF NOT EXISTS vehicles (id UUID NOT NULL, city VARCHAR NOT NULL, type VARCHAR NULL, owner_id UUID NULL, creation_time TIMESTAMP NULL, status VARCHAR NULL, current_location VARCHAR NULL, ext JSONB NULL, PRIMARY KEY (city ASC, id ASC), INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC))",
       summary:
@@ -594,7 +595,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '6810471486115018510',
+      aggregatedFingerprintID: "6810471486115018510",
       label: "INSERT INTO rides VALUES ($1, $2, __more8__), (__more400__)",
       summary: "INSERT INTO rides",
       aggregatedTs,
@@ -605,7 +606,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '13265908854908549668',
+      aggregatedFingerprintID: "13265908854908549668",
       label: "ALTER TABLE vehicles SPLIT AT VALUES (_, _)",
       summary: "ALTER TABLE vehicles SPLIT AT VALUES (_, _)",
       aggregatedTs,
@@ -616,7 +617,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '18377382163116490400',
+      aggregatedFingerprintID: "18377382163116490400",
       label: "SET sql_safe_updates = _",
       summary: "SET sql_safe_updates = _",
       aggregatedTs,
@@ -627,7 +628,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '8695470234690735168',
+      aggregatedFingerprintID: "8695470234690735168",
       label:
         "CREATE TABLE IF NOT EXISTS users (id UUID NOT NULL, city VARCHAR NOT NULL, name VARCHAR NULL, address VARCHAR NULL, credit_card VARCHAR NULL, PRIMARY KEY (city ASC, id ASC))",
       summary:
@@ -640,7 +641,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '9261848985398568228',
+      aggregatedFingerprintID: "9261848985398568228",
       label:
         'CREATE TABLE IF NOT EXISTS vehicle_location_histories (city VARCHAR NOT NULL, ride_id UUID NOT NULL, "timestamp" TIMESTAMP NOT NULL, lat FLOAT8 NULL, long FLOAT8 NULL, PRIMARY KEY (city ASC, ride_id ASC, "timestamp" ASC))',
       summary:
@@ -653,7 +654,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       stats: statementStats,
     },
     {
-      aggregatedFingerprintID: '4176684928840388768',
+      aggregatedFingerprintID: "4176684928840388768",
       label: "SELECT * FROM crdb_internal.node_build_info",
       summary: "SELECT * FROM crdb_internal.node_build_info",
       aggregatedTs,
@@ -787,7 +788,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
     fixedWindowEnd: moment.utc("2021.12.12"),
-    key: "Custom"
+    key: "Custom",
   },
   apps: ["$ internal", "movr", "$ cockroach demo"],
   totalFingerprints: 95,

@@ -34,7 +34,8 @@ const { generateStmtDetailsToID, longToInt } = util;
 type CollectedStatementStatistics = util.CollectedStatementStatistics;
 type ExecStats = util.ExecStats;
 type StatementStatistics = util.StatementStatistics;
-type StatementDetails = protos.cockroach.server.serverpb.StatementDetailsResponse;
+type StatementDetails =
+  protos.cockroach.server.serverpb.StatementDetailsResponse;
 
 interface StatementDetailsWithID {
   details: StatementDetails;

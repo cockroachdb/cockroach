@@ -267,13 +267,7 @@ describe("Nodes Overview page", () => {
       assert.equal(columnCells.length, expectedColumns.length);
 
       expectedColumns.forEach((columnName, idx) =>
-        assert.equal(
-          columnCells
-            .at(idx)
-            .text()
-            .toLowerCase(),
-          columnName,
-        ),
+        assert.equal(columnCells.at(idx).text().toLowerCase(), columnName),
       );
     });
 
@@ -305,13 +299,7 @@ describe("Nodes Overview page", () => {
       );
       assert.equal(columnCells.length, expectedColumns.length);
       expectedColumns.forEach((columnName, idx) =>
-        assert.equal(
-          columnCells
-            .at(idx)
-            .text()
-            .toLowerCase(),
-          columnName,
-        ),
+        assert.equal(columnCells.at(idx).text().toLowerCase(), columnName),
       );
     });
 
@@ -423,9 +411,8 @@ describe("Nodes Overview page", () => {
     describe("decommissionedNodesTableDataSelector", () => {
       it("returns node records with 'decommissioned' status only", () => {
         const expectedDecommissionedNodeIds = [2, 7];
-        const records = decommissionedNodesTableDataSelector.resultFunc(
-          nodeSummary,
-        );
+        const records =
+          decommissionedNodesTableDataSelector.resultFunc(nodeSummary);
 
         assert.lengthOf(records, expectedDecommissionedNodeIds.length);
         records.forEach(record => {
@@ -438,9 +425,8 @@ describe("Nodes Overview page", () => {
       });
 
       it("returns correct node name", () => {
-        const recordsGroupedByRegion = decommissionedNodesTableDataSelector.resultFunc(
-          nodeSummary,
-        );
+        const recordsGroupedByRegion =
+          decommissionedNodesTableDataSelector.resultFunc(nodeSummary);
         recordsGroupedByRegion.forEach(record => {
           assert.equal(record.nodeName, record.nodeId.toString());
         });

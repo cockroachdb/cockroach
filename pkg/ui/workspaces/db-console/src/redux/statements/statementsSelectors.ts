@@ -33,10 +33,11 @@ export const selectDiagnosticsReportsByStatementFingerprint = createSelector(
     ),
 );
 
-export const selectDiagnosticsReportsCountByStatementFingerprint = createSelector(
-  selectDiagnosticsReportsByStatementFingerprint,
-  requests => requests.length,
-);
+export const selectDiagnosticsReportsCountByStatementFingerprint =
+  createSelector(
+    selectDiagnosticsReportsByStatementFingerprint,
+    requests => requests.length,
+  );
 
 export const selectStatementDiagnosticsReports = createSelector(
   (state: AdminUIState) =>

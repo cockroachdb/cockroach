@@ -240,7 +240,9 @@ eslint_test(
     name = "eslint",
     data = [
         ".eslintrc.json",
+        ".prettierignore",
         "ccl",
+        "prettier.config.js",
         "src",
         "@npm_db_console//@cockroachlabs/eslint-config",
         "@npm_db_console//@typescript-eslint/eslint-plugin",

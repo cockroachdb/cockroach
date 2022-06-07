@@ -1,16 +1,16 @@
 @import "../core/index.module";
 
 .checkbox {
-    &__input {
-        margin-right: 5px;
-    }
-    &__label {
-        cursor: pointer;
-        display: initial;
-        font-family: $font-family--lato-regular;
-        font-size: $font-size--medium;
-        font-weight: normal;
-        -webkit-font-smoothing: initial;
-        -moz-osx-font-smoothing: initial;
-    }
+  &__input {
+    margin-right: 5px;
+  }
+  &__label {
+    cursor: pointer;
+    display: initial;
+    font-family: $font-family--lato-regular;
+    font-size: $font-size--medium;
+    font-weight: normal;
+    -webkit-font-smoothing: initial;
+    -moz-osx-font-smoothing: initial;
+  }
 }

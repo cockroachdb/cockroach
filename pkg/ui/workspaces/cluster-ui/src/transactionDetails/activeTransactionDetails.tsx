@@ -42,11 +42,9 @@ export type ActiveTransactionDetailsDispatchProps = {
 export type ActiveTransactionDetailsProps = ActiveTransactionDetailsStateProps &
   ActiveTransactionDetailsDispatchProps;
 
-export const ActiveTransactionDetails: React.FC<ActiveTransactionDetailsProps> = ({
-  transaction,
-  match,
-  refreshSessions,
-}) => {
+export const ActiveTransactionDetails: React.FC<
+  ActiveTransactionDetailsProps
+> = ({ transaction, match, refreshSessions }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
 

@@ -15,7 +15,7 @@ import { getBasePath } from "./basePath";
 interface ProtoBuilder<
   P extends ConstructorType,
   Prop = FirstConstructorParameter<P>,
-  R = InstanceType<P>
+  R = InstanceType<P>,
 > {
   new (properties?: Prop): R;
   encode(message: Prop, writer?: protobuf.Writer): protobuf.Writer;

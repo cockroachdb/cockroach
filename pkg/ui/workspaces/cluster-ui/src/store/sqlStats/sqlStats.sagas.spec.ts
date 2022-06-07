@@ -110,7 +110,8 @@ describe("SQLStats sagas", () => {
   });
 
   describe("resetSQLStatsSaga", () => {
-    const resetSQLStatsResponse = new cockroach.server.serverpb.ResetSQLStatsResponse();
+    const resetSQLStatsResponse =
+      new cockroach.server.serverpb.ResetSQLStatsResponse();
 
     it("successfully resets SQL stats", () => {
       return expectSaga(resetSQLStatsSaga, payload)

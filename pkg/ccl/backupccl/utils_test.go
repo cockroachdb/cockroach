@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -109,12 +110,6 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	return tc, sqlDB, dir, cleanupFn
-}
-
-func backupDestinationTestSetup(
-	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
-) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
-	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
 }
 
 func backupRestoreTestSetup(
@@ -367,7 +362,7 @@ func makeThresholdBlocker(threshold int) thresholdBlocker {
 // getSpansFromManifest returns the spans that describe the data included in a
 // given backup.
 func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) roachpb.Spans {
-	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupManifestName)
+	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupbase.BackupManifestName)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
 	decompressedBytes, err := decompressData(ctx, nil, backupManifestBytes)

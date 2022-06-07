@@ -35,12 +35,12 @@
   }
 }
 
-.statements-table__col-rows-read, .statements-table__col-latency {
+.statements-table__col-rows-read,
+.statements-table__col-latency {
   .statements-table__col--bar-chart {
     min-width: 150px;
   }
 }
-
 
 .cl-table__col-query-text a {
   font-family: $font-family--monospace;

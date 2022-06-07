@@ -18,9 +18,7 @@ import Print from "src/views/reports/containers/range/print";
 import { Loading } from "@cockroachlabs/cluster-ui";
 
 interface AllocatorOutputProps {
-  allocator: CachedDataReducerState<
-    protos.cockroach.server.serverpb.AllocatorRangeResponse
-  >;
+  allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
 }
 
 export default class AllocatorOutput extends React.Component<

@@ -44,8 +44,10 @@ import {
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
+type ICollectedStatementStatistics =
+  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 const cx = classNames.bind(styles);
 

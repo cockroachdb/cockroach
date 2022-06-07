@@ -19,9 +19,11 @@ import {
 } from "src/util/docs";
 import { TooltipProps } from "src/components/tooltip/tooltip";
 
-export const LiveBytesTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const LiveBytesTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -42,9 +44,11 @@ export const LiveBytesTooltip: React.FC<TooltipProps & {
   </Tooltip>
 );
 
-export const KeyBytesTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const KeyBytesTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -60,9 +64,11 @@ export const KeyBytesTooltip: React.FC<TooltipProps & {
   </Tooltip>
 );
 
-export const ValueBytesTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const ValueBytesTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -99,9 +105,11 @@ export const IntentBytesTooltip: React.FC<TooltipProps> = props => (
   </Tooltip>
 );
 
-export const SystemBytesTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const SystemBytesTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -121,9 +129,11 @@ export const SystemBytesTooltip: React.FC<TooltipProps & {
   </Tooltip>
 );
 
-export const NodeUsedCapacityTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const NodeUsedCapacityTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -144,9 +154,11 @@ export const NodeUsedCapacityTooltip: React.FC<TooltipProps & {
   </Tooltip>
 );
 
-export const NodeAvailableCapacityTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const NodeAvailableCapacityTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"
@@ -163,9 +175,11 @@ export const NodeAvailableCapacityTooltip: React.FC<TooltipProps & {
   </Tooltip>
 );
 
-export const NodeMaximumCapacityTooltip: React.FC<TooltipProps & {
-  nodeName: string;
-}> = props => (
+export const NodeMaximumCapacityTooltip: React.FC<
+  TooltipProps & {
+    nodeName: string;
+  }
+> = props => (
   <Tooltip
     {...props}
     placement="bottom"

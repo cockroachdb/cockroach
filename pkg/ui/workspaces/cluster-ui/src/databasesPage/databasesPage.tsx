@@ -323,9 +323,8 @@ export class DatabasesPage extends React.Component<
   ];
 
   render(): React.ReactElement {
-    this.columns.find(
-      c => c.name === "nodeRegions",
-    ).showByDefault = this.props.showNodeRegionsColumn;
+    this.columns.find(c => c.name === "nodeRegions").showByDefault =
+      this.props.showNodeRegionsColumn;
     const displayColumns = this.columns.filter(
       col => col.showByDefault !== false,
     );

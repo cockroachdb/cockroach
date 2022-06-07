@@ -22,7 +22,8 @@ import {
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
-type StatementDetailsResponseMessage = cockroach.server.serverpb.StatementDetailsResponse;
+type StatementDetailsResponseMessage =
+  cockroach.server.serverpb.StatementDetailsResponse;
 
 export const selectStatementDetails = createSelector(
   (_state: AppState, props: RouteComponentProps): string =>

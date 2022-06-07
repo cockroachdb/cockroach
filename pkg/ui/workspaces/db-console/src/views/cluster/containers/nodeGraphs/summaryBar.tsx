@@ -113,7 +113,7 @@ export interface ClusterSummaryProps {
   nodesSummary: NodesSummary;
 }
 
-export default function(props: ClusterSummaryProps) {
+export default function (props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
   const { capacityUsed, capacityUsable } = props.nodesSummary.nodeSums;
   const capacityPercent =

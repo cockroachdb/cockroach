@@ -57,7 +57,7 @@ export const throttleWithReset = <A extends Action>(
   resetPattern: ActionPattern,
   task: (action: A) => any,
 ): ForkEffect<never> =>
-  fork(function*() {
+  fork(function* () {
     // `actionChannel` creates a queue of the actions to process them sequentially.
     // Using `buffers.none()` allows to handle only single action and discard any actions
     // that arrive while current action is processed.

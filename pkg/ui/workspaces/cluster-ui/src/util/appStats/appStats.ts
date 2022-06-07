@@ -21,7 +21,8 @@ import Long from "long";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
-export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export type CollectedStatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
 export interface NumericStat {
   mean?: number;
@@ -301,9 +302,7 @@ export const generateStmtDetailsToID = (
         apps[i] = "";
       }
     }
-    appNames = unique(apps)
-      .sort()
-      .toString();
+    appNames = unique(apps).sort().toString();
   }
   let generatedID = fingerprintID;
   if (appNames) {

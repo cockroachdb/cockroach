@@ -35,9 +35,7 @@ interface ActiveTransactionsTable {
   selectedColumns: string[];
 }
 
-export function makeActiveTransactionsColumns(): ColumnDescriptor<
-  ActiveTransaction
->[] {
+export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransaction>[] {
   const execType: ExecutionType = "transaction";
   const columns: ColumnDescriptor<ActiveTransaction>[] = [
     {
@@ -121,7 +119,9 @@ export function getColumnOptions(
     }));
 }
 
-export const ActiveTransactionsTable: React.FC<ActiveTransactionsTable> = props => {
+export const ActiveTransactionsTable: React.FC<
+  ActiveTransactionsTable
+> = props => {
   const { selectedColumns, ...rest } = props;
   const columns = makeActiveTransactionsColumns().filter(col =>
     isSelectedColumn(selectedColumns, col),

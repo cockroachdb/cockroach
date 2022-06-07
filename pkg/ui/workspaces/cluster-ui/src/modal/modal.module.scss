@@ -1,4 +1,4 @@
-@import '../core/index.module';
+@import "../core/index.module";
 
 .crl-modal {
   @include base;
@@ -24,7 +24,8 @@
 
   &__close-icon {
     color: $colors--neutral-7;
-    margin: $spacing-medium $spacing-medium $spacing-medium-small $spacing-medium-small;
+    margin: $spacing-medium $spacing-medium $spacing-medium-small
+      $spacing-medium-small;
     font-size: $font-size--large;
     line-height: $spacing-smaller;
     font-weight: $font-weight--extra-bold;

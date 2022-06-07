@@ -251,9 +251,7 @@ const CurrentSnapshot = ({
   return (
     <SnapshotSortedTable
       data={snapshot.rows.filter(r => {
-        return JSON.stringify(r)
-          .toLowerCase()
-          .includes(search.toLowerCase());
+        return JSON.stringify(r).toLowerCase().includes(search.toLowerCase());
       })}
       columns={snapshotColumns(
         setRecording,
@@ -283,9 +281,8 @@ export const Tracez = () => {
   // In the UI when you click on an operation we set the requestedSpan. Then
   // the effect is triggered to retrieve the trace for that span, once that's
   // updated the UI is changed.
-  const [requestedSpan, setRequestedSpan] = useState<
-    cockroach.server.serverpb.ITracingSpan
-  >(null);
+  const [requestedSpan, setRequestedSpan] =
+    useState<cockroach.server.serverpb.ITracingSpan>(null);
   const [currentTrace, setCurrentTrace] = useState<IGetTraceResponse>(null);
   const [showTrace, setShowTrace] = useState<boolean>(false);
   const [showLiveTrace, setShowLiveTrace] = useState<boolean>(false);

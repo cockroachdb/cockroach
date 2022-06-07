@@ -79,7 +79,7 @@ export class PaginatedCachedDataReducerState<TResponseMessage> {
 export class CachedDataReducer<
   TRequest,
   TResponseMessage,
-  TActionNamespace extends string = string
+  TActionNamespace extends string = string,
 > {
   // Track all the currently seen namespaces, to ensure there isn't a conflict
   private static namespaces: { [actionNamespace: string]: boolean } = {};
@@ -320,7 +320,7 @@ export class CachedDataReducer<
 export class KeyedCachedDataReducer<
   TRequest,
   TResponseMessage,
-  TActionNamespace extends string = string
+  TActionNamespace extends string = string,
 > {
   cachedDataReducer: CachedDataReducer<
     TRequest,
@@ -391,9 +391,11 @@ export class KeyedCachedDataReducer<
       case this.cachedDataReducer.RECEIVE:
       case this.cachedDataReducer.ERROR:
       case this.cachedDataReducer.INVALIDATE: {
-        const { request } = (action as PayloadAction<
-          WithRequest<TResponseMessage | Error | void, TRequest>
-        >).payload;
+        const { request } = (
+          action as PayloadAction<
+            WithRequest<TResponseMessage | Error | void, TRequest>
+          >
+        ).payload;
         const id = this.requestToID(request);
         state = _.clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
@@ -416,7 +418,7 @@ export class KeyedCachedDataReducer<
 export class PaginatedCachedDataReducer<
   TRequest extends WithPaginationRequest,
   TResponseMessage extends WithPaginationResponse,
-  TActionNamespace extends string = string
+  TActionNamespace extends string = string,
 > {
   cachedDataReducer: CachedDataReducer<
     TRequest,
@@ -482,9 +484,9 @@ export class PaginatedCachedDataReducer<
         return state;
       case this.cachedDataReducer.RECEIVE: {
         // The results of a request have been received.
-        const { request, data } = (action as PayloadAction<
-          WithRequest<TResponseMessage, TRequest>
-        >).payload;
+        const { request, data } = (
+          action as PayloadAction<WithRequest<TResponseMessage, TRequest>>
+        ).payload;
         const id = this.requestToID(request);
         state = _.clone(state);
         state.inFlight = true;
@@ -548,10 +550,8 @@ export class PaginatedCachedDataReducer<
       req.page_token = "";
       req.page_size = this.pageLimit;
 
-      const state: PaginatedCachedDataReducerState<TResponseMessage> = stateAccessor(
-        getState(),
-        req,
-      );
+      const state: PaginatedCachedDataReducerState<TResponseMessage> =
+        stateAccessor(getState(), req);
       if (
         state &&
         (state.inFlight || (this.invalidationPeriod && state.valid))

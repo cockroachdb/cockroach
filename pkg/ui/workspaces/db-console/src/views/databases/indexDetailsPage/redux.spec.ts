@@ -113,10 +113,10 @@ class TestDriver {
   }
 }
 
-describe("Index Details Page", function() {
+describe("Index Details Page", function () {
   let driver: TestDriver;
 
-  beforeEach(function() {
+  beforeEach(function () {
     driver = new TestDriver(
       createAdminUIStore(createMemoryHistory()),
       "DATABASE",
@@ -125,11 +125,11 @@ describe("Index Details Page", function() {
     );
   });
 
-  afterEach(function() {
+  afterEach(function () {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", function() {
+  it("starts in a pre-loading state", function () {
     driver.assertProperties(
       {
         databaseName: "DATABASE",
@@ -149,7 +149,7 @@ describe("Index Details Page", function() {
     );
   });
 
-  it("loads index stats", async function() {
+  it("loads index stats", async function () {
     fakeApi.stubIndexStats("DATABASE", "TABLE", {
       statistics: [
         {

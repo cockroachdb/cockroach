@@ -23,15 +23,8 @@ export interface ModalProps {
 }
 
 export const Modal: React.FC<ModalProps> = props => {
-  const {
-    children,
-    onOk,
-    onCancel,
-    okText,
-    cancelText,
-    visible,
-    title,
-  } = props;
+  const { children, onOk, onCancel, okText, cancelText, visible, title } =
+    props;
   return (
     <AntModal
       title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}

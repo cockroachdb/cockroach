@@ -45,7 +45,9 @@ type ActiveStatementsSectionProps = {
   onColumnsSelect: (columns: string[]) => void;
 };
 
-export const ActiveStatementsSection: React.FC<ActiveStatementsSectionProps> = ({
+export const ActiveStatementsSection: React.FC<
+  ActiveStatementsSectionProps
+> = ({
   filters,
   pagination,
   search,

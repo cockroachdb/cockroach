@@ -12,9 +12,12 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 
-type CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-type CancelStatementDiagnosticsReportRequest = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
-type StatementDiagnosticsReportsResponse = cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
+type CreateStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+type CancelStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+type StatementDiagnosticsReportsResponse =
+  cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
 
 export type StatementDiagnosticsState = {
   data: StatementDiagnosticsReportsResponse;

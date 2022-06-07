@@ -59,7 +59,8 @@ import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IDuration = google.protobuf.IDuration;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
@@ -425,7 +426,7 @@ export class StatementsPage extends React.Component<
     const timeValue = getTimeValueInSeconds(filters);
     const sqlTypes =
       filters.sqlType.length > 0
-        ? filters.sqlType.split(",").map(function(sqlType: string) {
+        ? filters.sqlType.split(",").map(function (sqlType: string) {
             // Adding "Type" to match the value on the Statement
             // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
             return "Type" + sqlType;

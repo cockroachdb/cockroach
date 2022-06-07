@@ -61,9 +61,12 @@ func (*UnusedIndexRecommendationTestingKnobs) ModuleTestingKnobs() {}
 // GetRecommendationsFromIndexStats gets index recommendations from the given index
 // if applicable.
 func (i IndexStatsRow) GetRecommendationsFromIndexStats(
-	st *cluster.Settings,
+	dbName string, st *cluster.Settings,
 ) []*serverpb.IndexRecommendation {
-	var recommendations []*serverpb.IndexRecommendation
+	var recommendations = []*serverpb.IndexRecommendation{}
+	if dbName == "system" || i.Row.IndexType == "primary" {
+		return recommendations
+	}
 	rec := i.maybeAddUnusedIndexRecommendation(DropUnusedIndexDuration.Get(&st.SV))
 	if rec != nil {
 		recommendations = append(recommendations, rec)

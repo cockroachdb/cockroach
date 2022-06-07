@@ -143,10 +143,10 @@ class TestDriver {
   }
 }
 
-describe("Database Table Page", function() {
+describe("Database Table Page", function () {
   let driver: TestDriver;
 
-  beforeEach(function() {
+  beforeEach(function () {
     driver = new TestDriver(
       createAdminUIStore(createMemoryHistory()),
       "DATABASE",
@@ -154,11 +154,11 @@ describe("Database Table Page", function() {
     );
   });
 
-  afterEach(function() {
+  afterEach(function () {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", async function() {
+  it("starts in a pre-loading state", async function () {
     fakeApi.stubClusterSettings({
       key_values: {
         "sql.stats.automatic_collection.enabled": { value: "true" },
@@ -200,7 +200,7 @@ describe("Database Table Page", function() {
     );
   });
 
-  it("loads table details", async function() {
+  it("loads table details", async function () {
     fakeApi.stubTableDetails("DATABASE", "TABLE", {
       grants: [
         { user: "admin", privileges: ["CREATE", "DROP"] },
@@ -237,7 +237,7 @@ describe("Database Table Page", function() {
     });
   });
 
-  it("loads table stats", async function() {
+  it("loads table stats", async function () {
     fakeApi.stubTableStats("DATABASE", "TABLE", {
       range_count: new Long(4200),
       approximate_disk_bytes: new Long(44040192),
@@ -254,7 +254,7 @@ describe("Database Table Page", function() {
     });
   });
 
-  it("loads index stats", async function() {
+  it("loads index stats", async function () {
     fakeApi.stubIndexStats("DATABASE", "TABLE", {
       statistics: [
         {
