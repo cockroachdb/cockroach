@@ -2800,7 +2800,7 @@ var (
 	_ = typCategoryRange
 	_ = typCategoryBitString
 
-	typDelim = tree.NewDString(",")
+	commaTypDelim = tree.NewDString(",")
 )
 
 func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
@@ -2833,7 +2833,7 @@ func addPGTypeRowForTable(
 		typCategoryComposite,           // typcategory
 		tree.DBoolFalse,                // typispreferred
 		tree.DBoolTrue,                 // typisdefined
-		typDelim,                       // typdelim
+		commaTypDelim,                  // typdelim
 		tableOid(table.GetID()),        // typrelid
 		oidZero,                        // typelem
 		// NOTE: we do not add the array type or OID here.
@@ -2902,7 +2902,7 @@ func addPGTypeRow(
 		typType = typTypePseudo
 	}
 	typname := typ.PGName()
-	typDelim = tree.NewDString(typ.Delimiter())
+	typDelim := tree.NewDString(typ.Delimiter())
 	return addRow(
 		tree.NewDOid(tree.DInt(typ.Oid())), // oid
 		tree.NewDName(typname),             // typname
