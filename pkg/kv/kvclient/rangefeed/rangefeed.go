@@ -110,10 +110,12 @@ func newFactory(stopper *stop.Stopper, client DB, knobs *TestingKnobs) *Factory 
 // RangeFeed constructs a new rangefeed and runs it in an async task.
 //
 // The rangefeed can be stopped via Close(); otherwise, it will stop when the
-// server shuts down.
+// server shuts down. The only error which can be returned will indicate that
+// the server is being shut down.
 //
-// The only error which can be returned will indicate that the server is being
-// shut down.
+// Rangefeeds do not support inline (unversioned) values, and may omit them or
+// error on them. Similarly, rangefeeds will error if MVCC history is mutated
+// via e.g. ClearRange. Do not use rangefeeds across such key spans.
 //
 // NB: for the rangefeed itself, initialTimestamp is exclusive, i.e. the first
 // possible event emitted by the server (including the catchup scan) is at

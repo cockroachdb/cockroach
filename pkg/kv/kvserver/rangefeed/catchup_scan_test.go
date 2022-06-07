@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -121,4 +122,25 @@ func TestCatchupScan(t *testing.T) {
 		checkEquality(kv2_2_2, kv2_1_1, events[2])
 		checkEquality(kv2_5_3, kv2_2_2, events[3])
 	})
+}
+
+func TestCatchupScanInlineError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Write an inline value.
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("inline"), hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
+
+	// Run a catchup scan across the span and watch it error.
+	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
+	iter := NewCatchUpIterator(eng, span, hlc.Timestamp{}, nil)
+	defer iter.Close()
+
+	err := iter.CatchUpScan(nil, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unexpected inline value")
 }
