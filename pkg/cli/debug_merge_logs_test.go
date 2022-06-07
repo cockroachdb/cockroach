@@ -244,7 +244,7 @@ func Example_format_error() {
 
 	resetDebugMergeLogFlags(func(s string) { fmt.Fprintf(stderr, "ERROR: %v", s) })
 
-	c.RunWithArgs([]string{"debug", "merge-logs", "testdata/merge_logs_crdb-v1/missing_format/*"})
+	c.RunWithArgs([]string{"debug", " ", "testdata/merge_logs_crdb-v1/missing_format/*"})
 
 	// Output:
 	// debug merge-logs testdata/merge_logs_crdb-v1/missing_format/*
