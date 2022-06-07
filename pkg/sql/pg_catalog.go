@@ -1096,7 +1096,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					var id descpb.ID
 					switch t := unwrappedConstraint.(type) {
 					case *tree.DOid:
-						id = descpb.ID(t.DInt)
+						id = descpb.ID(t.Oid)
 					case *tree.DInt:
 						id = descpb.ID(*t)
 					default:
@@ -3021,7 +3021,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				h := makeOidHasher()
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
 				coid := tree.MustBeDOid(unwrappedConstraint)
-				ooid := oid.Oid(int(coid.DInt))
+				ooid := coid.Oid
 
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
@@ -4167,7 +4167,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 								}
 							}
 						}
-						regprocForZeroOid := tree.NewDOidWithName(tree.DInt(0), types.RegProc, "-")
+						regprocForZeroOid := tree.NewDOidWithName(0, types.RegProc, "-")
 						err := addRow(
 							h.BuiltinOid(name, &overload).AsRegProc(name), // aggfnoid
 							aggregateKind,     // aggkind
@@ -4213,7 +4213,7 @@ func init() {
 		for _, o := range def.Definition {
 			if overload, ok := o.(*tree.Overload); ok {
 				builtinOid := h.BuiltinOid(name, overload)
-				id := oid.Oid(builtinOid.DInt)
+				id := builtinOid.Oid
 				tree.OidToBuiltinName[id] = name
 				overload.Oid = id
 			}
@@ -4283,7 +4283,7 @@ func (h oidHasher) writeUInt64(i uint64) {
 }
 
 func (h oidHasher) writeOID(oid *tree.DOid) {
-	h.writeUInt64(uint64(oid.DInt))
+	h.writeUInt64(uint64(oid.Oid))
 }
 
 type oidTypeTag uint8

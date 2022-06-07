@@ -744,7 +744,7 @@ func writeBinaryDatumNotNull(
 
 	case *tree.DOid:
 		b.putInt32(4)
-		b.putInt32(int32(v.DInt))
+		b.putInt32(int32(v.Oid))
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}

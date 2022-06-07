@@ -379,7 +379,7 @@ func GetSeqIDFromExpr(expr tree.Expr) (int64, bool) {
 		}
 		return id, true
 	case *tree.DOid:
-		return int64(n.DInt), true
+		return int64(n.Oid), true
 	default:
 		return 0, false
 	}

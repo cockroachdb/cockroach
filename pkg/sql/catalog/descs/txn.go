@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -82,15 +81,6 @@ func (cf *CollectionFactory) Txn(
 			deletedDescs = catalog.DescriptorIDSet{}
 			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
 			defer descsCol.ReleaseAll(ctx)
-			if !cf.settings.Version.IsActive(
-				ctx, clusterversion.DisableSystemConfigGossipTrigger,
-			) {
-				if err := txn.DeprecatedSetSystemConfigTrigger(
-					cf.leaseMgr.Codec().ForSystemTenant(),
-				); err != nil {
-					return err
-				}
-			}
 			if err := f(ctx, txn, &descsCol); err != nil {
 				return err
 			}

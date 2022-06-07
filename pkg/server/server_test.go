@@ -11,7 +11,6 @@
 package server
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -32,22 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -394,109 +386,6 @@ func TestAcceptEncoding(t *testing.T) {
 			}
 		}()
 	}
-}
-
-// TestSystemConfigGossip tests that system config gossip works in the mixed
-// version state. After the 22.1 release is finalized, system config gossip
-// will no longer occur.
-//
-// TODO(ajwerner): Delete this test in 22.2.
-func TestSystemConfigGossip(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryMinSupportedVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
-		false,
-	)
-	serverArgs := base.TestServerArgs{
-		Settings: settings,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-			},
-			Server: &TestingKnobs{
-				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-			},
-		},
-	}
-	s, _, kvDB := serverutils.StartServer(t, serverArgs)
-	defer s.Stopper().Stop(ctx)
-	ts := s.(*TestServer)
-
-	key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MaxSystemConfigDescID+1))
-	valAt := func(i int) *descpb.Descriptor {
-		return dbdesc.NewInitial(
-			descpb.ID(i), "foo", username.AdminRoleName(),
-		).DescriptorProto()
-	}
-
-	// Register a callback for gossip updates.
-	resultChan := ts.Gossip().DeprecatedRegisterSystemConfigChannel()
-
-	// The span gets gossiped when it first shows up.
-	select {
-	case <-resultChan:
-
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("did not receive gossip message")
-	}
-
-	// Write a system key with the transaction marked as having a Gossip trigger.
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
-		return txn.Put(ctx, key, valAt(2))
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// This has to be wrapped in a SucceedSoon because system upgrades on the
-	// testserver's startup can trigger system config updates without the key we
-	// wrote.
-	testutils.SucceedsSoon(t, func() error {
-		// New system config received.
-		var systemConfig *config.SystemConfig
-		select {
-		case <-resultChan:
-			systemConfig = ts.gossip.DeprecatedGetSystemConfig()
-
-		case <-time.After(500 * time.Millisecond):
-			return errors.Errorf("did not receive gossip message")
-		}
-
-		// Now check the new config.
-		var val *roachpb.Value
-		for _, kv := range systemConfig.Values {
-			if bytes.Equal(key, kv.Key) {
-				val = &kv.Value
-				break
-			}
-		}
-		if val == nil {
-			return errors.Errorf("key not found in gossiped info")
-		}
-
-		// Make sure the returned value is valAt(2).
-		var got descpb.Descriptor
-		if err := val.GetProto(&got); err != nil {
-			return err
-		}
-
-		_, expected, _, _ := descpb.FromDescriptor(valAt(2))
-		_, db, _, _ := descpb.FromDescriptor(&got)
-		if db == nil {
-			panic(errors.Errorf("found nil database: %v", got))
-		}
-		if !reflect.DeepEqual(*db, *expected) {
-			panic(errors.Errorf("mismatch: expected %+v, got %+v", *expected, *db))
-		}
-		return nil
-	})
 }
 
 func TestListenerFileCreation(t *testing.T) {

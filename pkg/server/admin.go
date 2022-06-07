@@ -3326,7 +3326,7 @@ func (s *adminServer) queryTableID(
 	if row == nil {
 		return descpb.InvalidID, errors.Newf("failed to resolve %q as a table name", tableName)
 	}
-	return descpb.ID(tree.MustBeDOid(row[0]).DInt), nil
+	return descpb.ID(tree.MustBeDOid(row[0]).Oid), nil
 }
 
 // Note that the function returns plain errors, and it is the caller's

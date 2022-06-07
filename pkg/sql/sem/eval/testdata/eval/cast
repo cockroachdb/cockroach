@@ -1376,3 +1376,32 @@ eval
 '2'::BIT
 ----
 could not parse string as bit array: "2" is not a valid binary digit
+
+eval
+(-1)::oid
+----
+4294967295
+
+# -2147483648 is MinInt32.
+eval
+(-2147483648)::oid
+----
+2147483648
+
+# -2147483649 is (MinInt32 - 1).
+eval
+(-2147483649)::oid
+----
+OID out of range: -2147483649
+
+# 4294967295 is MaxUint32.
+eval
+(4294967295)::oid
+----
+4294967295
+
+# 4294967296 is (MaxUint32 + 1).
+eval
+(4294967296)::oid
+----
+OID out of range: 4294967296

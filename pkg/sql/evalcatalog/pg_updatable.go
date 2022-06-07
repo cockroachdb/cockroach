@@ -34,9 +34,11 @@ var (
 )
 
 // PGRelationIsUpdatable is part of the eval.CatalogBuiltins interface.
-func (b *Builtins) PGRelationIsUpdatable(ctx context.Context, oid *tree.DOid) (*tree.DInt, error) {
+func (b *Builtins) PGRelationIsUpdatable(
+	ctx context.Context, oidArg *tree.DOid,
+) (*tree.DInt, error) {
 	tableDesc, err := b.dc.GetImmutableTableByID(
-		ctx, b.txn, descpb.ID(oid.DInt), tree.ObjectLookupFlagsWithRequired(),
+		ctx, b.txn, descpb.ID(oidArg.Oid), tree.ObjectLookupFlagsWithRequired(),
 	)
 	if err != nil {
 		// For postgres compatibility, it is expected that rather returning
@@ -62,13 +64,12 @@ func (b *Builtins) PGRelationIsUpdatable(ctx context.Context, oid *tree.DOid) (*
 func (b *Builtins) PGColumnIsUpdatable(
 	ctx context.Context, oidArg *tree.DOid, attNumArg tree.DInt,
 ) (*tree.DBool, error) {
-	oid := descpb.ID(oidArg.DInt)
 	if attNumArg < 0 {
 		// System columns are not updatable.
 		return tree.DBoolFalse, nil
 	}
 	attNum := descpb.PGAttributeNum(attNumArg)
-	tableDesc, err := b.dc.GetImmutableTableByID(ctx, b.txn, oid, tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := b.dc.GetImmutableTableByID(ctx, b.txn, descpb.ID(oidArg.Oid), tree.ObjectLookupFlagsWithRequired())
 	if err != nil {
 		if sqlerrors.IsUndefinedRelationError(err) {
 			// For postgres compatibility, it is expected that rather returning

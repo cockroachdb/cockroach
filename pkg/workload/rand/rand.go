@@ -334,7 +334,7 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DInt:
 		return int64(*d), nil
 	case *tree.DOid:
-		return int(d.DInt), nil
+		return uint32(d.Oid), nil
 	case *tree.DFloat:
 		return float64(*d), nil
 	case *tree.DDecimal:

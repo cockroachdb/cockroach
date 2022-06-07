@@ -2365,10 +2365,20 @@ SELECT pg_catalog.length('hello')
 ----
 5
 
-query OOO
-SELECT oid(3), oid(0), oid(12023948723)
+# -2147483648 is MinInt32.
+# 4294967295 is MaxUint32.
+query OOOOO
+SELECT oid(3), oid(0), (-1)::oid, (-2147483648)::oid, (4294967295)::oid
 ----
-3  0  12023948723
+3  0  4294967295  2147483648  4294967295
+
+# -2147483649 is (MinInt32 - 1).
+query error OID out of range: -2147483649
+SELECT oid(-2147483649)
+
+# 4294967296 is (MaxUint32 + 1).
+query error OID out of range: 4294967296
+SELECT oid(4294967296)
 
 query T
 SELECT to_english(i) FROM (VALUES (1), (13), (617), (-2), (-9223372036854775808)) AS a(i)
