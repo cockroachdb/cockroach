@@ -12,6 +12,7 @@ package tree
 
 import (
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -71,14 +72,7 @@ func ParseAndRequireString(
 		if t.Oid() != oid.T_oid && s == ZeroOidValue {
 			d = WrapAsZeroOid(t)
 		} else {
-			i, err := ParseDInt(s)
-			if err != nil {
-				return nil, false, err
-			}
-			if *i > math.MaxUint32 || *i < math.MinInt32 {
-				return nil, false, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", *i)
-			}
-			d = NewDOid(oid.Oid(*i))
+			d, err = ParseDOidAsInt(s)
 		}
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
@@ -112,6 +106,19 @@ func ParseAndRequireString(
 	}
 	d, err = AdjustValueToType(t, d)
 	return d, dependsOnContext, err
+}
+
+// ParseDOidAsInt parses the input and returns it as an OID. If the input
+// is not formatted as an int, an error is returned.
+func ParseDOidAsInt(s string) (*DOid, error) {
+	i, err := strconv.ParseInt(strings.TrimSpace(s), 0, 64)
+	if err != nil {
+		return nil, MakeParseError(s, types.Oid, err)
+	}
+	if i > math.MaxUint32 || i < math.MinInt32 {
+		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", i)
+	}
+	return NewDOid(oid.Oid(i)), nil
 }
 
 // FormatBitArrayToType formats bit arrays such that they fill the total width
