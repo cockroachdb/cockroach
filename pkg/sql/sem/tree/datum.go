@@ -4889,14 +4889,14 @@ func MakeDOid(d DInt, semanticType *types.T) DOid {
 }
 
 // NewDOidWithType constructs a DOid with the given type and no name.
-func NewDOidWithType(d DInt, semanticType *types.T) *DOid {
-	oid := DOid{Oid: oid.Oid(d), semanticType: semanticType}
+func NewDOidWithType(d oid.Oid, semanticType *types.T) *DOid {
+	oid := DOid{Oid: d, semanticType: semanticType}
 	return &oid
 }
 
 // NewDOidWithTypeAndName constructs a DOid with the given type and name.
-func NewDOidWithTypeAndName(d DInt, semanticType *types.T, name string) *DOid {
-	oid := DOid{Oid: oid.Oid(d), semanticType: semanticType, name: name}
+func NewDOidWithTypeAndName(d oid.Oid, semanticType *types.T, name string) *DOid {
+	oid := DOid{Oid: d, semanticType: semanticType, name: name}
 	return &oid
 }
 
