@@ -10,6 +10,7 @@ pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
+pkg/cmd/roachtest/clusterstats/collector.go://go:generate mockgen -package=clusterstats -destination mocks_generated_test.go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus Client
 pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mocks_generated_test.go . Cluster
 pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus Client
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
