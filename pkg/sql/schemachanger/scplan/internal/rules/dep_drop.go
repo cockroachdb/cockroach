@@ -36,8 +36,7 @@ func init() {
 					(*scpb.View)(nil),
 					(*scpb.Table)(nil),
 				),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
-				currentStatusEq(fromNode, toNode, scpb.Status_DROPPED),
+				toAbsentInDropped(fromTarget, fromNode, toTarget, toNode),
 				rel.Filter("ViewDependsOn", from, to)(func(
 					view *scpb.View, dep scpb.Element,
 				) bool {
@@ -54,10 +53,14 @@ func init() {
 		"alias", "alias-dep",
 		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.AliasType)(nil)),
-				to.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
-				currentStatusEq(fromNode, toNode, scpb.Status_DROPPED),
+				from.Type(
+					(*scpb.AliasType)(nil),
+				),
+				to.Type(
+					(*scpb.AliasType)(nil),
+					(*scpb.EnumType)(nil),
+				),
+				toAbsentInDropped(fromTarget, fromNode, toTarget, toNode),
 				rel.Filter("aliasTypeDependsOn", from, to)(func(
 					alias *scpb.AliasType, dep scpb.Element,
 				) bool {
@@ -76,8 +79,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.AliasType)(nil)),
 				to.Type((*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
-				currentStatusEq(fromNode, toNode, scpb.Status_DROPPED),
+				toAbsentInDropped(fromTarget, fromNode, toTarget, toNode),
 				rel.Filter("joinArrayTypeWithEnumType", from, to)(func(
 					arrayType *scpb.AliasType, enumType *scpb.EnumType,
 				) bool {
@@ -103,7 +105,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.SchemaParent)(nil)),
 				to.Type((*scpb.Database)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
 				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
@@ -121,10 +123,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.ObjectParent)(nil)),
 				to.Type((*scpb.Schema)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				joinReferencedDescID(from, to, "desc-id"),
 			}
 		},
 	)
@@ -137,10 +139,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.TableLocalitySecondaryRegion)(nil)),
 				to.Type((*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				joinReferencedDescID(from, to, "desc-id"),
 			}
 		},
 	)
@@ -157,7 +159,7 @@ func init() {
 					(*scpb.EnumType)(nil),
 					(*scpb.Sequence)(nil),
 				),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
 				rel.Filter("checkConstraintDependsOn", from, to)(func(
@@ -178,10 +180,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.ForeignKeyConstraint)(nil)),
 				to.Type((*scpb.Table)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				joinReferencedDescID(from, to, "desc-id"),
 			}
 		},
 	)
@@ -194,7 +196,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndexPartial)(nil)),
 				to.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
 				rel.Filter("indexPartialDependsOn", from, to)(func(
@@ -214,7 +216,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnType)(nil)),
 				to.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
 				rel.Filter("columnTypeDependsOn", from, to)(func(
@@ -242,7 +244,7 @@ func init() {
 					(*scpb.EnumType)(nil),
 					(*scpb.Sequence)(nil),
 				),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
 				rel.Filter("columnDefaultDependsOn", from, to)(func(
@@ -267,7 +269,7 @@ func init() {
 					(*scpb.EnumType)(nil),
 					(*scpb.Sequence)(nil),
 				),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
 				rel.Filter("columnOnUpdateDependsOn", from, to)(func(
@@ -288,10 +290,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.SequenceOwner)(nil)),
 				to.Type((*scpb.Sequence)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				joinReferencedDescID(from, to, "desc-id"),
 			}
 
 		},
@@ -305,10 +307,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.DatabaseRegionConfig)(nil)),
 				to.Type((*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				joinReferencedDescID(from, to, "desc-id"),
 			}
 		},
 	)
@@ -321,10 +323,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.DatabaseRegionConfig)(nil)),
 				to.Type((*scpb.EnumType)(nil)),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				joinReferencedDescID(from, to, "desc-id"),
 			}
 		})
 
@@ -393,10 +395,10 @@ func init() {
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 				),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
+				toAbsent(fromTarget, toTarget),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_DROPPED),
-				join(from, to, screl.DescID, "desc-id"),
+				joinOnDescID(from, to, "desc-id"),
 			}
 		})
 
@@ -416,9 +418,8 @@ func init() {
 					(*scpb.SecondaryIndex)(nil),
 					(*scpb.RowLevelTTL)(nil),
 				),
-				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
-				currentStatusEq(fromNode, toNode, scpb.Status_ABSENT),
-				join(from, to, screl.DescID, "desc-id"),
+				toAbsentInAbsent(fromTarget, fromNode, toTarget, toNode),
+				joinOnDescID(from, to, "desc-id"),
 			}
 		},
 	)

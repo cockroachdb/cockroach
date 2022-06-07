@@ -29,6 +29,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":rules"],
     deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/screl",
         "//pkg/testutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@in_gopkg_yaml_v3//:yaml_v3",

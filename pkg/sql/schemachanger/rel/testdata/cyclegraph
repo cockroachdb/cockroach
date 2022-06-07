@@ -5,6 +5,7 @@ data:
     container1: {s1: message1}
     container2: {s2: message2}
 attributes: {}
+rules: []
 queries:
     - indexes:
         0:

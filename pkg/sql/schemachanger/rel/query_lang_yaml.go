@@ -43,7 +43,7 @@ func (v Var) encoded() interface{} {
 	return "$" + string(v)
 }
 
-func (e *eqDecl) MarshalYAML() (interface{}, error) {
+func (e eqDecl) MarshalYAML() (interface{}, error) {
 	return clauseStr("$"+string(e.v), e.expr)
 }
 
@@ -60,8 +60,34 @@ func exprToString(e expr) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-func (f *tripleDecl) MarshalYAML() (interface{}, error) {
+func (f tripleDecl) MarshalYAML() (interface{}, error) {
 	return clauseStr(fmt.Sprintf("$%s[%s]", f.entity, f.attribute), f.value)
+}
+
+func (r ruleInvocation) MarshalYAML() (interface{}, error) {
+	return ruleInvocationStr(r.rule.Name, r.args), nil
+}
+
+func ruleInvocationStr(name string, args []Var) string {
+	var buf strings.Builder
+	buf.WriteString(name)
+	writeArgsList(&buf, args)
+	return buf.String()
+}
+
+// MarshalYAML marshals a rule to YAML.
+func (r RuleDef) MarshalYAML() (interface{}, error) {
+	var cl yaml.Node
+	if err := cl.Encode(r.Clauses); err != nil {
+		return nil, err
+	}
+	return &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Value: ruleInvocationStr(r.Name, r.Params)},
+			&cl,
+		},
+	}, nil
 }
 
 func clauseStr(lhs string, rhs expr) (string, error) {
@@ -87,8 +113,14 @@ func (f filterDecl) MarshalYAML() (interface{}, error) {
 		}
 		buf.WriteString(ft.In(i).String())
 	}
-	buf.WriteString(")(")
-	for i, v := range f.vars {
+	buf.WriteString(")")
+	writeArgsList(&buf, f.vars)
+	return buf.String(), nil
+}
+
+func writeArgsList(buf *strings.Builder, vars []Var) {
+	buf.WriteString("(")
+	for i, v := range vars {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -96,5 +128,4 @@ func (f filterDecl) MarshalYAML() (interface{}, error) {
 		buf.WriteString(string(v))
 	}
 	buf.WriteString(")")
-	return buf.String(), nil
 }

@@ -25,6 +25,16 @@ type expr interface {
 // your variable names.
 type Var string
 
+// Blank is a special variable which, when used, means that the value should
+// be bound to something. Different occurrences of Blank in different parts
+// of the query are not related to each other. It's as though each occurrence
+// is its own variable, but that variable is not named and its binding cannot
+// be retrieved.
+//
+// At the time when this was created, blank is not allowed to be used as an
+// entity binding.
+const Blank Var = "_"
+
 // Var is an expr.
 func (Var) expr() {}
 
