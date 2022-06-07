@@ -892,10 +892,8 @@ func newOptTable(
 
 			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(invertedColumnID)
 
-			// Add a inverted column that refers to the inverted index key.
+			// Add an inverted column that refers to the inverted index key.
 			invertedCol, invertedColOrd := newColumn()
-
-			// All inverted columns have type bytes.
 			invertedCol.InitInverted(
 				invertedColOrd,
 				tree.Name(invertedColumnName+"_inverted_key"),

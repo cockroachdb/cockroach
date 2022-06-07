@@ -1028,18 +1028,15 @@ func (ti *Index) addColumn(
 	}
 
 	if ti.Inverted && isLastIndexCol {
-		// The last column of an inverted index is special: the index key does not
-		// contain values from the column itself, but contains inverted index
-		// entries derived from that column. Create a virtual column to be able to
-		// refer to it separately.
+		// The last column of an inverted index is special: the index key does
+		// not contain values from the column itself, but contains inverted
+		// index entries derived from that column. Create a virtual column to be
+		// able to refer to it separately with the special type EncodedKey.
 		var col cat.Column
-		// TODO(radu,mjibson): update this when the corresponding type in the real
-		// catalog is fixed (see sql.newOptTable).
-		typ := tt.Columns[ordinal].DatumType()
 		col.InitInverted(
 			len(tt.Columns),
 			colName+"_inverted_key",
-			typ,
+			types.EncodedKey,
 			false,   /* nullable */
 			ordinal, /* invertedSourceColumnOrdinal */
 		)
@@ -1104,10 +1101,12 @@ func (ti *Index) addColumnByOrdinal(
 	if colType == keyCol || colType == strictKeyCol {
 		typ := col.DatumType()
 		if col.Kind() == cat.Inverted {
-			if !colinfo.ColumnTypeIsInvertedIndexable(typ) {
+			srcCol := tt.Column(col.InvertedSourceColumnOrdinal())
+			srcColType := srcCol.DatumType()
+			if !colinfo.ColumnTypeIsInvertedIndexable(srcColType) {
 				panic(fmt.Errorf(
 					"column %s of type %s is not allowed as the last column of an inverted index",
-					col.ColName(), typ,
+					col.ColName(), srcColType,
 				))
 			}
 		} else if !colinfo.ColumnTypeIsIndexable(typ) {

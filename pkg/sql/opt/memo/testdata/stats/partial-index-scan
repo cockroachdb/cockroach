@@ -1245,7 +1245,7 @@ project
       │         ├── stats: [rows=16.66667]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1291,7 +1291,7 @@ project
       │         ├── stats: [rows=16.66667]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1358,7 +1358,7 @@ project
       │         ├── stats: [rows=8.547009]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1402,7 +1402,7 @@ project
       │         ├── stats: [rows=8.547009]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1492,7 +1492,7 @@ project
       │         ├── stats: [rows=118.7568]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1544,7 +1544,7 @@ project
       │         ├── stats: [rows=118.7568]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1632,7 +1632,7 @@ project
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1682,7 +1682,7 @@ project
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
       │         └── scan spatial@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]

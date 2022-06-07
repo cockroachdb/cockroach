@@ -204,15 +204,15 @@ TABLE inv
  ├── g geometry
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key jsonb not null [inverted]
- ├── g_inverted_key geometry not null [inverted]
+ ├── j_inverted_key encodedkey not null [inverted]
+ ├── g_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX inv_pkey
  │    └── k int not null
  ├── INVERTED INDEX inv_j_idx
- │    ├── j_inverted_key jsonb not null [inverted]
+ │    ├── j_inverted_key encodedkey not null [inverted]
  │    └── k int not null
  └── INVERTED INDEX inv_g_idx
-      ├── g_inverted_key geometry not null [inverted]
+      ├── g_inverted_key encodedkey not null [inverted]
       └── k int not null
 
 # Table with inverted indexes and implicit primary index.
@@ -236,15 +236,15 @@ TABLE inv2
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key jsonb not null [inverted]
- ├── g_inverted_key geometry not null [inverted]
+ ├── j_inverted_key encodedkey not null [inverted]
+ ├── g_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX inv2_pkey
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INVERTED INDEX inv2_j_idx
- │    ├── j_inverted_key jsonb not null [inverted]
+ │    ├── j_inverted_key encodedkey not null [inverted]
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── INVERTED INDEX inv2_g_idx
-      ├── g_inverted_key geometry not null [inverted]
+      ├── g_inverted_key encodedkey not null [inverted]
       └── rowid int not null default (unique_rowid()) [hidden]
 
 # Table with unique constraints.
