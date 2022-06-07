@@ -377,11 +377,11 @@ func runSplitAndScatter(
 				// to the node currently running the split and scatter processor.
 				if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok {
 					chunkDestination = nodeID
-					log.Warningf(ctx, "Scatter returned node 0. "+
+					log.Warningf(ctx, "scatter returned node 0. "+
 						"Route span starting at %s to current node %v", scatterKey, nodeID)
 				} else {
-					log.Warningf(ctx, "Scatter returned node 0. "+
-						"Route span starting at %s default stream", scatterKey)
+					log.Warningf(ctx, "scatter returned node 0. "+
+						"Route span starting at %s to default stream", scatterKey)
 				}
 			}
 
