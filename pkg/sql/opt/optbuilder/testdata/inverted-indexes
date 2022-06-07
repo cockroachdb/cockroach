@@ -26,11 +26,11 @@ TABLE kj
  ├── j jsonb
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
- ├── j_inverted_key jsonb not null [inverted]
+ ├── j_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX kj_pkey
  │    └── k int not null
  └── INVERTED INDEX kj_j_idx
-      ├── j_inverted_key jsonb not null [inverted]
+      ├── j_inverted_key encodedkey not null [inverted]
       └── k int not null
 
 build

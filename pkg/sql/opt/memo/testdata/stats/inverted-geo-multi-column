@@ -99,7 +99,7 @@ project
       │         ├── stats: [rows=60.78475]
       │         ├── key: (1)
       │         └── scan t@m
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── constraint: /3: [/'banana' - /'banana']
       │              ├── inverted constraint: /7/1
       │              │    └── spans
@@ -151,7 +151,7 @@ project
       │         ├── stats: [rows=60.78475]
       │         ├── key: (1)
       │         └── scan t@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:8(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:8(encodedkey!null)
       │              ├── inverted constraint: /8/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -214,7 +214,7 @@ project
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
       │         └── scan t@m
-      │              ├── columns: k:1(int!null) g_inverted_key:7(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:7(encodedkey!null)
       │              ├── constraint: /3
       │              │    ├── [/'apple' - /'apple']
       │              │    ├── [/'banana' - /'banana']
@@ -269,7 +269,7 @@ project
       │         ├── stats: [rows=121.5695]
       │         ├── key: (1)
       │         └── scan t@p,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:9(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:9(encodedkey!null)
       │              ├── inverted constraint: /9/1
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -332,7 +332,7 @@ project
       │         ├── stats: [rows=5.512417]
       │         ├── key: (1)
       │         └── scan t@mp,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:10(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
       │              ├── constraint: /4: [/400 - /400]
       │              ├── inverted constraint: /10/1
       │              │    └── spans
@@ -388,7 +388,7 @@ project
       │         ├── stats: [rows=14.82863]
       │         ├── key: (1)
       │         └── scan t@mp,partial
-      │              ├── columns: k:1(int!null) g_inverted_key:10(geometry!null)
+      │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
       │              ├── constraint: /4
       │              │    ├── [/200 - /200]
       │              │    ├── [/300 - /300]
