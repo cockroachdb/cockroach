@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // FoldingControl is used to control whether normalization rules allow constant
@@ -339,7 +340,7 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 
 	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
 
-	regclassOid := tree.NewDOidWithName(tree.DInt(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
+	regclassOid := tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
 	return c.f.ConstructConstVal(regclassOid, typ), nil
 
 }

@@ -88,7 +88,7 @@ func resolveOID(
 			"%s %s does not exist", info.objName, toResolve)
 	}
 	return tree.NewDOidWithName(
-		tree.DInt(results[0].(*tree.DOid).Oid),
+		results[0].(*tree.DOid).Oid,
 		resultType,
 		tree.AsStringWithFlags(results[1], tree.FmtBareStrings),
 	), nil

@@ -2210,7 +2210,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 
 			for i, placeholderType := range placeholderTypes {
 				paramTypes.Array[i] = tree.NewDOidWithName(
-					tree.DInt(placeholderType.Oid()),
+					placeholderType.Oid(),
 					placeholderType,
 					placeholderType.SQLStandardName(),
 				)
