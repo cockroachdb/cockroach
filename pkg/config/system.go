@@ -81,6 +81,9 @@ type zoneEntry struct {
 // saying whether or not it should be considered for splitting at all.
 // A database descriptor or a table view descriptor are examples of IDs
 // that should not be considered for splits.
+// NB: SystemConfig can be updated to only contain system.descriptor and
+// system.zones. We still need SystemConfig for SystemConfigProvider which is
+// used in replication reports and the opt catalog.
 type SystemConfig struct {
 	SystemConfigEntries
 	DefaultZoneConfig *zonepb.ZoneConfig

@@ -82,3 +82,47 @@ eval
 1:::OID <= -3:::INT
 ----
 true
+
+# 4294967295 is MaxUint32.
+eval
+1:::OID >= 4294967295:::INT8
+----
+false
+
+eval
+4294967295:::INT8 >= 1:::OID
+----
+true
+
+# 4294967296 is (MaxUint32 + 1).
+eval
+1:::OID >= 4294967296:::INT8
+----
+OID out of range: 4294967296
+
+eval
+4294967296:::INT8 >= 1:::OID
+----
+OID out of range: 4294967296
+
+# -2147483648 is MinInt32.
+eval
+1:::OID >= -2147483648:::INT8
+----
+false
+
+eval
+-2147483648:::INT8 >= 1:::OID
+----
+true
+
+# -2147483649 is (MinInt32 - 1).
+eval
+1:::OID >= -2147483649:::INT8
+----
+OID out of range: -2147483649
+
+eval
+-2147483649:::INT8 >= 1:::OID
+----
+OID out of range: -2147483649

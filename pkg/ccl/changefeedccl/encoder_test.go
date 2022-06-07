@@ -256,10 +256,10 @@ func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
 
-		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		var ts1 string
 		sqlDB.QueryRow(t,
@@ -288,7 +288,7 @@ func TestAvroEncoder(t *testing.T) {
 		require.NoError(t, err)
 
 		var ts2 string
-		require.NoError(t, crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+		require.NoError(t, crdb.ExecuteTx(ctx, s.DB, nil /* txopts */, func(tx *gosql.Tx) error {
 			return tx.QueryRow(
 				`INSERT INTO foo VALUES (3, 'baz') RETURNING cluster_logical_timestamp()`,
 			).Scan(&ts2)
@@ -300,7 +300,7 @@ func TestAvroEncoder(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroEncoderWithTLS(t *testing.T) {
@@ -421,8 +421,8 @@ func TestAvroArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
 		sqlDB.Exec(t,
 			`INSERT INTO foo VALUES
@@ -458,15 +458,15 @@ func TestAvroArray(t *testing.T) {
 
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroArrayCap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, ARRAY[])`)
 
@@ -497,15 +497,15 @@ func TestAvroArrayCap(t *testing.T) {
 
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroCollatedString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
 
@@ -518,15 +518,15 @@ func TestAvroCollatedString(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroEnum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b status, c int default 0)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'open')`)
@@ -577,15 +577,15 @@ func TestAvroEnum(t *testing.T) {
 
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroSchemaNaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t,
@@ -678,15 +678,15 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t,
@@ -720,15 +720,15 @@ func TestAvroSchemaNamespace(t *testing.T) {
 		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestTableNameCollision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE DATABASE printr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
@@ -770,15 +770,15 @@ func TestTableNameCollision(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
@@ -796,18 +796,18 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 		}
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroLedger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
 		gen := ledger.FromFlags(`--customers=1`)
 		var l workloadsql.InsertsDataLoader
-		_, err := workloadsql.Setup(ctx, db, gen, l)
+		_, err := workloadsql.Setup(ctx, s.DB, gen, l)
 		require.NoError(t, err)
 
 		ledger := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR customer, transaction, entry, session
@@ -830,5 +830,5 @@ func TestAvroLedger(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }

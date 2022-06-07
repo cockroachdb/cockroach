@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -63,91 +62,6 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 // ensure that only one node gossips at a time.
 func (r *Replica) shouldGossip(ctx context.Context) bool {
 	return r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp())
-}
-
-// MaybeGossipSystemConfigRaftMuLocked scans the entire SystemConfig span and
-// gossips it. Further calls come from the trigger on EndTxn or range lease
-// acquisition.
-//
-// Note that MaybeGossipSystemConfigRaftMuLocked gossips information only when
-// the lease is actually held. The method does not request a range lease here
-// since RequestLease and applyRaftCommand call the method and we need to avoid
-// deadlocking in redirectOnOrAcquireLease.
-//
-// MaybeGossipSystemConfigRaftMuLocked must only be called from Raft commands
-// while holding the raftMu (which provide the necessary serialization to avoid
-// data races).
-//
-// TODO(nvanbenschoten,bdarnell): even though this is best effort, we should log
-// louder when we continually fail to gossip system config.
-//
-// TODO(ajwerner): Remove this in 22.2.
-func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error {
-	if r.ClusterSettings().Version.IsActive(
-		ctx, clusterversion.DisableSystemConfigGossipTrigger,
-	) {
-		return nil
-	}
-	r.raftMu.AssertHeld()
-	if r.store.Gossip() == nil {
-		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
-		return nil
-	}
-	if !r.IsInitialized() {
-		log.VEventf(ctx, 2, "not gossiping system config because the replica isn't initialized")
-		return nil
-	}
-	if !r.ContainsKey(keys.SystemConfigSpan.Key) {
-		log.VEventf(ctx, 3,
-			"not gossiping system config because the replica doesn't contain the system config's start key")
-		return nil
-	}
-	if !r.shouldGossip(ctx) {
-		log.VEventf(ctx, 2, "not gossiping system config because the replica doesn't hold the lease")
-		return nil
-	}
-
-	// TODO(marc): check for bad split in the middle of the SystemConfig span.
-	loadedCfg, err := r.loadSystemConfig(ctx)
-	if err != nil {
-		if errors.Is(err, errSystemConfigIntent) {
-			log.VEventf(ctx, 2, "not gossiping system config because intents were found on SystemConfigSpan")
-			r.markSystemConfigGossipFailed()
-			return nil
-		}
-		return errors.Wrap(err, "could not load SystemConfig span")
-	}
-
-	if gossipedCfg := r.store.Gossip().DeprecatedGetSystemConfig(); gossipedCfg != nil &&
-		gossipedCfg.Equal(loadedCfg) &&
-		r.store.Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
-		log.VEventf(ctx, 2, "not gossiping unchanged system config")
-		// Clear the failure bit if all intents have been resolved but there's
-		// nothing new to gossip.
-		r.markSystemConfigGossipSuccess()
-		return nil
-	}
-
-	log.VEventf(ctx, 2, "gossiping system config")
-	if err := r.store.Gossip().AddInfoProto(gossip.KeyDeprecatedSystemConfig, loadedCfg, 0); err != nil {
-		return errors.Wrap(err, "failed to gossip system config")
-	}
-	r.markSystemConfigGossipSuccess()
-	return nil
-}
-
-// MaybeGossipSystemConfigIfHaveFailureRaftMuLocked is a trigger to gossip the
-// system config due to an abort of a transaction keyed in the system config
-// span. It will call MaybeGossipSystemConfigRaftMuLocked if
-// failureToGossipSystemConfig is true.
-func (r *Replica) MaybeGossipSystemConfigIfHaveFailureRaftMuLocked(ctx context.Context) error {
-	r.mu.RLock()
-	failed := r.mu.failureToGossipSystemConfig
-	r.mu.RUnlock()
-	if !failed {
-		return nil
-	}
-	return r.MaybeGossipSystemConfigRaftMuLocked(ctx)
 }
 
 // MaybeGossipNodeLivenessRaftMuLocked gossips information for all node liveness

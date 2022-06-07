@@ -18,7 +18,7 @@ export COCKROACH_BAZEL_FORCE_GENERATE=1
 crdb-checkout/build/bazelutil/bazel-generate.sh
 
 exec
-dev generate go
+dev generate go_nocgo
 ----
 bazel run //pkg/gen:code
 
@@ -31,7 +31,7 @@ crdb-checkout/build/bazelutil/generate_redact_safe.sh
 echo "" > crdb-checkout/docs/generated/redact_safe.md
 
 exec
-dev gen go docs
+dev gen go_nocgo docs
 ----
 bazel run //pkg/gen
 bazel info workspace --color=no

@@ -463,7 +463,10 @@ config_setting(
     flag_values = {
         ":force_build_cdeps_flag": "true",
     },
-    visibility = ["//c-deps:__pkg__"],
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
 )
 
 bool_flag(

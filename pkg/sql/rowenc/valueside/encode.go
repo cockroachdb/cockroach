@@ -92,7 +92,7 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 	case *tree.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *tree.DOid:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.Oid)), nil
 	case *tree.DEnum:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), nil
 	case *tree.DVoid:

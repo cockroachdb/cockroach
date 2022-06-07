@@ -498,7 +498,7 @@ func importNextVal(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) 
 func importNextValByID(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	oid := tree.MustBeDOid(args[0])
-	seqMetadata, ok := c.seqIDToMetadata[descpb.ID(oid.DInt)]
+	seqMetadata, ok := c.seqIDToMetadata[descpb.ID(oid.Oid)]
 	if !ok {
 		return nil, errors.Newf("sequence with ID %v not found in annotation", oid)
 	}
