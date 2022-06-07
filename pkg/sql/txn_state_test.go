@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 var noRewindExpected = CmdPos(-1)
@@ -279,6 +280,12 @@ func TestTransitions(t *testing.T) {
 		// If nil, the kv txn is expected to be nil. Otherwise, the txn's fields are
 		// compared.
 		expTxn *expKVTxn
+
+		// The expected value of AutoRetryError after fsm transition.
+		expAutoRetryError string
+
+		// The expected value of AutoRetryCounter after fsm transition.
+		expAutoRetryCounter int32
 	}
 	tests := []test{
 		//
@@ -397,7 +404,9 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
-			expTxn: &expKVTxn{},
+			expTxn:              &expKVTxn{},
+			expAutoRetryCounter: 1,
+			expAutoRetryError:   "test retriable err",
 		},
 		{
 			// Like the above test - get a retriable error while we can auto-retry,
@@ -421,7 +430,8 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
-			expTxn: &expKVTxn{},
+			expTxn:              &expKVTxn{},
+			expAutoRetryCounter: 1,
 		},
 		{
 			// Get a retriable error when we can no longer auto-retry, but the client
@@ -719,6 +729,12 @@ func TestTransitions(t *testing.T) {
 				if err := checkTxn(ts.mu.txn, *tc.expTxn); err != nil {
 					t.Fatal(err)
 				}
+			}
+
+			// Check that AutoRetry information is in the expected state.
+			require.Equal(t, tc.expAutoRetryCounter, ts.mu.autoRetryCounter)
+			if tc.expAutoRetryError != "" {
+				strings.Contains(ts.mu.autoRetryReason.Error(), tc.expAutoRetryError)
 			}
 		})
 	}

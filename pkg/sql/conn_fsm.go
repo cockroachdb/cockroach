@@ -530,14 +530,17 @@ func prepareTxnForRetry(args fsm.Args) error {
 }
 
 func prepareTxnForRetryWithRewind(args fsm.Args) error {
+	pl := args.Payload.(eventRetriableErrPayload)
 	ts := args.Extended.(*txnState)
 	ts.mu.Lock()
 	ts.mu.txn.PrepareForRetry(ts.Ctx)
+	ts.mu.autoRetryReason = pl.err
+	ts.mu.autoRetryCounter++
 	ts.mu.Unlock()
 	// The caller will call rewCap.rewindAndUnlock().
 	ts.setAdvanceInfo(
 		rewind,
-		args.Payload.(eventRetriableErrPayload).rewCap,
+		pl.rewCap,
 		txnEvent{eventType: txnRestart},
 	)
 	return nil
