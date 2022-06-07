@@ -72,7 +72,7 @@ index-join t
       ├── stats: [rows=1020]
       ├── key: (1)
       └── scan t@a_idx
-           ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+           ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans: ["", ""]
            ├── flags: force-index=a_idx
@@ -120,7 +120,7 @@ index-join t
       ├── stats: [rows=20]
       ├── key: (1)
       └── scan t@a_idx
-           ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+           ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans: ["\x8a", "\x8c")
            ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, avgsize(1)=4, distinct(5)=2, null(5)=0, avgsize(5)=4]
@@ -183,7 +183,7 @@ select
  │         ├── stats: [rows=20]
  │         ├── key: (1)
  │         └── scan t@a_idx
- │              ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+ │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["C", "C"]
@@ -222,7 +222,7 @@ select
  │         ├── stats: [rows=30]
  │         ├── key: (1)
  │         └── scan t@a_idx
- │              ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+ │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["C", "C"]
@@ -267,7 +267,7 @@ select
  │         ├── stats: [rows=30]
  │         ├── key: (1)
  │         └── scan t@a_idx
- │              ├── columns: k:1(int!null) a_inverted_key:5(int[]!null)
+ │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["C", "C"]

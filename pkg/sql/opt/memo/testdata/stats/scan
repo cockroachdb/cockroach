@@ -2235,7 +2235,7 @@ select
  │         ├── stats: [rows=1]
  │         ├── key: (2)
  │         └── scan tab@tab_geom_idx
- │              ├── columns: rowid:2(int!null) geom_inverted_key:5(geometry!null)
+ │              ├── columns: rowid:2(int!null) geom_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
