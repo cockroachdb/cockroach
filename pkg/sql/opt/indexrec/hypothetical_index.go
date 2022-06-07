@@ -206,7 +206,6 @@ func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-// TODO(nehageorge): Add support for spatial index recommendations.
 func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
 	if hi.IsInverted() {
 		colType := hi.InvertedColumn().DatumType().Family()
