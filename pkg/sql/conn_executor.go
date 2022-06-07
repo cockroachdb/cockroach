@@ -933,7 +933,7 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
-	ex.extraTxnState.atomicAutoRetryCounter = new(int32)
+	ex.extraTxnState.mu.atomicAutoRetryCounter = 0
 
 	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
@@ -1240,16 +1240,6 @@ type connExecutor struct {
 		// transaction and it is cleared after the transaction is committed.
 		schemaChangeJobRecords map[descpb.ID]*jobs.Record
 
-		// atomicAutoRetryCounter keeps track of the which iteration of a transaction
-		// auto-retry we're currently in. It's 0 whenever the transaction state is not
-		// stateOpen.
-		atomicAutoRetryCounter *int32
-
-		// autoRetryReason records the error causing an auto-retryable error event if
-		// the current transaction is being automatically retried. This is used in
-		// statement traces to give more information in statement diagnostic bundles.
-		autoRetryReason error
-
 		// firstStmtExecuted indicates that the first statement inside this
 		// transaction has been executed.
 		firstStmtExecuted bool
@@ -1390,6 +1380,22 @@ type connExecutor struct {
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
 		createdSequences map[descpb.ID]struct{}
+
+		// Fields that can be accessed outside connExecutors goroutine must
+		// be behind a mutex.
+		mu struct {
+			syncutil.RWMutex
+
+			// autoRetryReason records the error causing an auto-retryable error event if
+			// the current transaction is being automatically retried. This is used in
+			// statement traces to give more information in statement diagnostic bundles.
+			autoRetryReason error
+
+			// atomicAutoRetryCounter keeps track of the which iteration of a transaction
+			// auto-retry we're currently in. It's 0 whenever the transaction state is not
+			// stateOpen.
+			atomicAutoRetryCounter int32
+		}
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -2538,7 +2544,9 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 			rc, canAutoRetry = ex.getRewindTxnCapability()
 		}
 		if canAutoRetry {
-			ex.extraTxnState.autoRetryReason = err
+			ex.mu.Lock()
+			defer ex.mu.Unlock()
+			ex.extraTxnState.mu.autoRetryReason = err
 		}
 
 		ev := eventRetriableErr{
@@ -2735,7 +2743,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	// to the point just before our failed read to ensure we don't try to read
 	// data which may be after the schema change when we retry.
 	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
-	if err := ex.extraTxnState.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
+	if err := ex.extraTxnState.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		nextMax := minTSErr.MinTimestampBound
 		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
 		evalCtx.AsOfSystemTime.MaxTimestampBound = nextMax
@@ -2843,7 +2851,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 	advInfo := ex.state.consumeAdvanceInfo()
 	if advInfo.code == rewind {
-		atomic.AddInt32(ex.extraTxnState.atomicAutoRetryCounter, 1)
+		ex.extraTxnState.mu.Lock()
+		defer ex.extraTxnState.mu.Unlock()
+		ex.extraTxnState.mu.atomicAutoRetryCounter += 1
 	}
 
 	// If we had an error from DDL statement execution due to the presence of
@@ -2872,8 +2882,10 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 	case txnStart:
-		atomic.StoreInt32(ex.extraTxnState.atomicAutoRetryCounter, 0)
-		ex.extraTxnState.autoRetryReason = nil
+		ex.mu.Lock()
+		defer ex.mu.Unlock()
+		ex.extraTxnState.mu.atomicAutoRetryCounter = 0
+		ex.extraTxnState.mu.autoRetryReason = nil
 		ex.extraTxnState.firstStmtExecuted = false
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
 		// Start of the transaction, so no statements were executed earlier.
@@ -3041,14 +3053,16 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	defer ex.mu.RUnlock()
 	ex.state.mu.RLock()
 	defer ex.state.mu.RUnlock()
+	ex.extraTxnState.mu.RLock()
+	defer ex.extraTxnState.mu.RUnlock()
 
 	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
 
 	var autoRetryReasonStr string
 
-	if ex.extraTxnState.autoRetryReason != nil {
-		autoRetryReasonStr = ex.extraTxnState.autoRetryReason.Error()
+	if ex.extraTxnState.mu.autoRetryReason != nil {
+		autoRetryReasonStr = ex.extraTxnState.mu.autoRetryReason.Error()
 	}
 
 	if txn != nil {
@@ -3058,7 +3072,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Start:                 ex.state.mu.txnStart,
 			NumStatementsExecuted: int32(ex.state.mu.stmtCount),
 			NumRetries:            int32(txn.Epoch()),
-			NumAutoRetries:        atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter),
+			NumAutoRetries:        ex.extraTxnState.mu.atomicAutoRetryCounter,
 			TxnDescription:        txn.String(),
 			Implicit:              ex.implicitTxn(),
 			AllocBytes:            ex.state.mon.AllocBytes(),
