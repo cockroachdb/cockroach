@@ -2338,6 +2338,9 @@ func (ex *connExecutor) setTransactionModes(
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if !asOfTs.IsEmpty() {
+		if err := ex.state.checkReadsAndWrites(); err != nil {
+			return err
+		}
 		if err := ex.state.setHistoricalTimestamp(ex.Ctx(), asOfTs); err != nil {
 			return err
 		}

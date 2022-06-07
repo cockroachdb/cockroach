@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -269,6 +271,7 @@ func (ts *txnState) setHistoricalTimestamp(
 ) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
+
 	if err := ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp); err != nil {
 		return err
 	}
@@ -434,4 +437,26 @@ func (ts *txnState) consumeAdvanceInfo() advanceInfo {
 	adv := ts.adv
 	ts.adv = advanceInfo{}
 	return adv
+}
+
+// checkReadsAndWrites returns an error if the transaction has performed reads
+// or writes.
+func (ts *txnState) checkReadsAndWrites() error {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	if ts.mu.txn.Sender().HasPerformedReads() {
+		return pgerror.Newf(
+			pgcode.InvalidTransactionState,
+			"cannot set fixed timestamp, txn %s already performed reads",
+			ts.mu.txn)
+	}
+
+	if ts.mu.txn.Sender().HasPerformedWrites() {
+		return pgerror.Newf(
+			pgcode.InvalidTransactionState,
+			"cannot set fixed timestamp, txn %s already performed writes",
+			ts.mu.txn)
+	}
+	return nil
 }
