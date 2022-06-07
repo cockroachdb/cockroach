@@ -11,6 +11,7 @@
 package eval
 
 import (
+	"math"
 	"regexp"
 	"strings"
 
@@ -31,13 +32,17 @@ var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s
 func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 	// If it is an integer in string form, convert it as an int.
 	if val, err := tree.ParseDInt(strings.TrimSpace(s)); err == nil {
-		tmpOid := tree.NewDOid(*val)
-		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
-		if err != nil {
-			oid = tmpOid
-			*oid = tree.MakeDOid(*val, t)
+		v := *val
+		if v > math.MaxUint32 || v < math.MinInt32 {
+			return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", v)
 		}
-		return oid, nil
+		tmpOid := tree.NewDOid(oid.Oid(v))
+		oidRes, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
+		if err != nil {
+			oidRes = tmpOid
+			*oidRes = tree.MakeDOid(oid.Oid(v), t)
+		}
+		return oidRes, nil
 	}
 
 	switch t.Oid() {

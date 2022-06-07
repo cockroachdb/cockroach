@@ -29,11 +29,11 @@ func TestDefaultOid(t *testing.T) {
 	}{
 		{
 			1,
-			tree.NewDOid(tree.DInt(1)),
+			tree.NewDOid(1),
 		},
 		{
 			2,
-			tree.NewDOid(tree.DInt(2)),
+			tree.NewDOid(2),
 		},
 	}
 

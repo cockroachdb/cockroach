@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // MakeSchemaName creates a CreateSchema definition.
@@ -230,7 +231,7 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 		if colTypes[j] == types.RegType {
 			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
 			// at least before linking and user defined types are added.
-			d = tree.NewDOid(tree.DInt(rand.Intn(len(types.OidToType))))
+			d = tree.NewDOid(oid.Oid(rand.Intn(len(types.OidToType))))
 		}
 		if d == nil {
 			d = RandDatum(rng, colTypes[j], nullable[j])
