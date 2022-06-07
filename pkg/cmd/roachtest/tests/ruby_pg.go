@@ -63,16 +63,15 @@ func registerRubyPG(r registry.Registry) {
 
 		t.L().Printf("Supported ruby-pg version is %s.", rubyPGVersion)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install dependencies",
 			`sudo apt-get -qq install ruby-full ruby-dev rubygems build-essential zlib1g-dev libpq-dev libsqlite3-dev`,
@@ -80,10 +79,9 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install ruby 3.1.2",
 			`mkdir -p ruby-install && \
@@ -95,8 +93,8 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old ruby-pg", `sudo rm -rf /mnt/data1/ruby-pg`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old ruby-pg", `sudo rm -rf /mnt/data1/ruby-pg`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -114,10 +112,9 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		t.Status("installing bundler")
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"installing bundler",
 			`cd /mnt/data1/ruby-pg/ && sudo gem install bundler:2.1.4`,
@@ -126,10 +123,9 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		t.Status("installing gems")
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"installing gems",
 			`cd /mnt/data1/ruby-pg/ && bundle install`,
@@ -137,8 +133,8 @@ func registerRubyPG(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old ruby-pg helpers.rb", `sudo rm /mnt/data1/ruby-pg/spec/helpers.rb`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old ruby-pg helpers.rb", `sudo rm /mnt/data1/ruby-pg/spec/helpers.rb`,
 		); err != nil {
 			t.Fatal(err)
 		}

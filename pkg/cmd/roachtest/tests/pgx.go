@@ -75,8 +75,8 @@ func registerPgx(r registry.Registry) {
 		t.L().Printf("Supported release is %s.", supportedPGXTag)
 
 		t.Status("installing go-junit-report")
-		if err := repeatRunE(
-			ctx, t, c, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
+		if err := c.RepeatRunE(
+			ctx, t, node, "install go-junit-report", "go get -u github.com/jstemmer/go-junit-report",
 		); err != nil {
 			t.Fatal(err)
 		}

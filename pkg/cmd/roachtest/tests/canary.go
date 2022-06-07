@@ -101,41 +101,11 @@ func maybeAddGithubLink(issue string) string {
 // The following functions are augmented basic cluster functions but there tends
 // to be common networking issues that cause test failures and require putting
 // a retry block around them.
-
 var canaryRetryOptions = retry.Options{
 	InitialBackoff: 10 * time.Second,
 	Multiplier:     2,
 	MaxBackoff:     5 * time.Minute,
 	MaxRetries:     10,
-}
-
-// repeatRunE is the same function as c.RunE but with an automatic retry loop.
-func repeatRunE(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	node option.NodeListOption,
-	operation string,
-	args ...string,
-) error {
-	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if t.Failed() {
-			return fmt.Errorf("test has failed")
-		}
-		attempt++
-		t.L().Printf("attempt %d - %s", attempt, operation)
-		lastError = c.RunE(ctx, node, args...)
-		if lastError != nil {
-			t.L().Printf("error - retrying: %s", lastError)
-			continue
-		}
-		return nil
-	}
-	return errors.Wrapf(lastError, "all attempts failed for %s", operation)
 }
 
 // repeatRunWithDetailsSingleNode is the same function as c.RunWithDetailsSingleNode but with an

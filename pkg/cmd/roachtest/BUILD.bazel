@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

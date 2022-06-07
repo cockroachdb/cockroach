@@ -1461,10 +1461,9 @@ func setupPrometheus(
 		c,
 		t.L(),
 		func(ctx context.Context, nodes option.NodeListOption, operation string, args ...string) error {
-			return repeatRunE(
+			return c.RepeatRunE(
 				ctx,
 				t,
-				c,
 				nodes,
 				operation,
 				args...,

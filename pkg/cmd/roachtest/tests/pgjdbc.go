@@ -81,17 +81,16 @@ func registerPgjdbc(r registry.Registry) {
 		t.L().Printf("Latest pgjdbc release is %s.", latestTag)
 		t.L().Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
-		if err := repeatRunE(
-			ctx, t, c, node, "update apt-get", `sudo apt-get -qq update`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "update apt-get", `sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"install dependencies",
 			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
@@ -99,8 +98,8 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		if err := repeatRunE(
-			ctx, t, c, node, "remove old pgjdbc", `rm -rf /mnt/data1/pgjdbc`,
+		if err := c.RepeatRunE(
+			ctx, t, node, "remove old pgjdbc", `rm -rf /mnt/data1/pgjdbc`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -119,10 +118,9 @@ func registerPgjdbc(r registry.Registry) {
 
 		// In order to get pgjdbc's test suite to connect to cockroach, we have
 		// to override settings in build.local.properties
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"configuring tests for cockroach only",
 			fmt.Sprintf(
@@ -137,10 +135,9 @@ func registerPgjdbc(r registry.Registry) {
 		// downloading, so it needs a retry loop as well. Just building was not
 		// enough as the test libraries are not downloaded unless at least a
 		// single test is invoked.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"building pgjdbc (without tests)",
 			`cd /mnt/data1/pgjdbc/pgjdbc/ && ../gradlew test --tests OidToStringTest`,
@@ -175,10 +172,9 @@ func registerPgjdbc(r registry.Registry) {
 		// copied to the artifacts.
 
 		// Copy the individual test result files.
-		if err := repeatRunE(
+		if err := c.RepeatRunE(
 			ctx,
 			t,
-			c,
 			node,
 			"copy test result files",
 			`cp /mnt/data1/pgjdbc/pgjdbc/build/test-results/test/ ~/logs/report/pgjdbc-results -a`,
