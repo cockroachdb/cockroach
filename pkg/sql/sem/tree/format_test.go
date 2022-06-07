@@ -293,17 +293,17 @@ func TestFormatExpr2(t *testing.T) {
 		f        tree.FmtFlags
 		expected string
 	}{
-		{tree.NewDOidWithName(tree.DInt(10), types.RegClass, "foo"),
+		{tree.NewDOidWithName(10, types.RegClass, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regclass(10,'foo'):::REGCLASS`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegNamespace, "foo"),
+		{tree.NewDOidWithName(10, types.RegNamespace, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regnamespace(10,'foo'):::REGNAMESPACE`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegProc, "foo"),
+		{tree.NewDOidWithName(10, types.RegProc, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regproc(10,'foo'):::REGPROC`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegProcedure, "foo"),
+		{tree.NewDOidWithName(10, types.RegProcedure, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regprocedure(10,'foo'):::REGPROCEDURE`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegRole, "foo"),
+		{tree.NewDOidWithName(10, types.RegRole, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regrole(10,'foo'):::REGROLE`},
-		{tree.NewDOidWithName(tree.DInt(10), types.RegType, "foo"),
+		{tree.NewDOidWithName(10, types.RegType, "foo"),
 			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
 
 		// Ensure that nulls get properly type annotated when printed in an
