@@ -169,7 +169,6 @@ func TestRegistrationBasic(t *testing.T) {
 	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1},
 		newTestIterator([]storage.MVCCKeyValue{
 			makeKV("b", "val1", 10),
-			makeInline("ba", "val2"),
 			makeKV("bc", "val3", 11),
 			makeKV("bd", "val4", 9),
 		}, nil), false)
@@ -179,8 +178,8 @@ func TestRegistrationBasic(t *testing.T) {
 	go catchupReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, catchupReg.waitForCaughtUp())
 	events := catchupReg.stream.Events()
-	require.Equal(t, 6, len(events))
-	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev2}, events[4:])
+	require.Equal(t, 5, len(events))
+	require.Equal(t, []*roachpb.RangeFeedEvent{ev1, ev2}, events[3:])
 	catchupReg.disconnect(nil)
 	<-catchupReg.errC
 
@@ -243,7 +242,6 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
 	iter := newTestIterator([]storage.MVCCKeyValue{
 		makeKV("a", "valA1", 10),
-		makeInline("b", "valB1"),
 		makeIntent("c", txn1, "txnKeyC", 15),
 		makeProvisionalKV("c", "txnKeyC", 15),
 		makeKV("c", "valC2", 11),
@@ -261,7 +259,6 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		makeKV("f", "valF3", 7),
 		makeKV("f", "valF2", 6),
 		makeKV("f", "valF1", 5),
-		makeInline("g", "valG1"),
 		makeKV("h", "valH1", 15),
 		makeKV("m", "valM1", 1),
 		makeIntent("n", txn1, "txnKeyN", 12),
@@ -271,7 +268,6 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		makeKV("r", "valR1", 4),
 		makeIntent("w", txn1, "txnKeyW", 3),
 		makeProvisionalKV("w", "txnKeyW", 3),
-		makeInline("x", "valX1"),
 		makeIntent("z", txn2, "txnKeyZ", 21),
 		makeProvisionalKV("z", "txnKeyZ", 21),
 		makeKV("z", "valZ1", 4),
@@ -326,10 +322,6 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 			roachpb.Key("f"),
 			makeValWithTs("valF3", 7),
 			makeVal("valF2"),
-		),
-		rangeFeedValue(
-			roachpb.Key("g"),
-			makeVal("valG1"),
 		),
 		rangeFeedValue(
 			roachpb.Key("h"),
