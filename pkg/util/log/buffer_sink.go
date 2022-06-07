@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/errors"
 )
 
 // bufferSink wraps a child logSink to add buffering and asynchronous behavior.
@@ -63,6 +64,9 @@ type bufferSink struct {
 
 	// inErrorState is used internally to temporarily disable the sink during error handling.
 	inErrorState bool
+
+	// onMsgDrop is a hook that's called, if set, before dropping messages.
+	onMsgDrop func()
 }
 
 const bufferSinkDefaultMaxInFlight = 4
@@ -119,11 +123,16 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 			b.byteLen += len(m.b.Bytes()) + 1 // account for the final newline.
 			if m.flush || m.errorCh != nil || (bs.triggerSize > 0 && b.byteLen > bs.triggerSize) {
 				flush = true
-				// TODO(knz): This seems incorrect. If there is a non-empty
-				// bufferSinkBundle already; with errorCh already set
-				// (ie. synchronous previous log entry) and then an entry
-				// is emitted with *another* errorCh, the first one gets lost.
-				// See: https://github.com/cockroachdb/cockroach/issues/72454
+				// Assert that b.errorCh is not already set. It shouldn't be set
+				// because, if there was a previous message with errorCh set, that
+				// message must have had the forceSink flag set and thus acts as a barrier:
+				// no more messages are sent until the flush of that message completes.
+				//
+				// If b.errorCh were to be set, we wouldn't know what to do about it
+				// since we can't overwrite it in case m.errorCh is also set.
+				if b.errorCh != nil {
+					panic(errors.AssertionFailedf("unexpected errorCh already set"))
+				}
 				b.errorCh = m.errorCh
 			} else if timer == nil && bs.maxStaleness != 0 {
 				timer = time.After(bs.maxStaleness)
@@ -153,16 +162,27 @@ func (bs *bufferSink) accumulator(ctx context.Context) {
 
 		done := b.done
 		if flush {
+			// Drop if we have too many pending flushes. But don't drop a batch with
+			// the done flag set, since that's responsible for stopping the flusher.
+			//
 			// TODO(knz): This logic seems to contain a race condition (with
 			// the flusher). Also it's not clear why this is using a custom
 			// atomic counter? Why not using a buffered channel and check
 			// via `select` that the write is possible?
 			// See: https://github.com/cockroachdb/cockroach/issues/72460
-			if atomic.LoadInt32(&bs.nInFlight) < bs.maxInFlight {
+			if done || atomic.LoadInt32(&bs.nInFlight) < bs.maxInFlight {
+				// bs.flushCh has a buffer of capacity maxInFlight, so this write is
+				// generally non-blocking. There is one case where it might block: if
+				// done is set, then the buffer might be full and we're sending anyway.
+				// In that case, it doesn't matter whether we block or not since we're
+				// about to return anyway.
 				bs.flushCh <- b
 				atomic.AddInt32(&bs.nInFlight, 1)
 				reset()
 			} else {
+				if bs.onMsgDrop != nil {
+					bs.onMsgDrop()
+				}
 				b.compact()
 			}
 		}
@@ -262,6 +282,10 @@ type bufferSinkBundle struct {
 // important messages if there's room. Maybe the timestamp
 // range too.
 func (b *bufferSinkBundle) compact() {
+	if b.errorCh != nil {
+		b.errorCh <- errSyncMsgDropped
+		b.errorCh = nil
+	}
 	b.droppedCount += len(b.messages)
 	for _, m := range b.messages {
 		putBuffer(m.b)
@@ -280,6 +304,10 @@ func (bs *bufferSink) attachHints(b []byte) []byte {
 	return bs.child.attachHints(b)
 }
 
+// errSyncMsgDropped is returned by bufferSink.output() whenever a message sent
+// with with the forceSync option is dropped.
+var errSyncMsgDropped = errors.New("sync log message dropped")
+
 // output emits some formatted bytes to this sink.
 // the sink is invited to perform an extra flush if indicated
 // by the argument. This is set to true for e.g. Fatal
@@ -289,8 +317,10 @@ func (bs *bufferSink) attachHints(b []byte) []byte {
 // sinks must not recursively call into logging when implementing
 // this method.
 //
-// If forceSync is set, returns the child sink's error (which is otherwise
-// handled via the bufferSink's errCallback.)
+// If forceSync is set, the output() call blocks on the child sink flush and
+// returns the child sink's error (which is otherwise handled via the
+// bufferSink's errCallback). If the bufferSink drops this message instead of
+// passing it to the child sink, errSyncMsgDropped is returned.
 func (bs *bufferSink) output(b []byte, opts sinkOutputOptions) error {
 	// Make a copy to live in the async buffer.
 	// We can't take ownership of the slice we're passed --
@@ -302,10 +332,10 @@ func (bs *bufferSink) output(b []byte, opts sinkOutputOptions) error {
 	}
 	if opts.forceSync {
 		errorCh := make(chan error)
-		bs.messageCh <- bufferSinkMessage{buf, opts.extraFlush, errorCh}
+		bs.messageCh <- bufferSinkMessage{b: buf, flush: opts.extraFlush, errorCh: errorCh}
 		return <-errorCh
 	}
-	bs.messageCh <- bufferSinkMessage{buf, opts.extraFlush, nil}
+	bs.messageCh <- bufferSinkMessage{b: buf, flush: opts.extraFlush, errorCh: nil}
 	return nil
 }
 

@@ -192,6 +192,68 @@ func TestBufferForceSync(t *testing.T) {
 	atomic.StoreInt32(&marker, 1)
 }
 
+// Test that a forceSync message that is dropped by the bufferSink does not lead
+// to the respective output() call deadlocking.
+func TestForceSyncDropNoDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mock := NewMockLogSink(ctrl)
+	sink := newBufferSink(ctx, mock, 0 /*maxStaleness*/, 1 /*triggerSize*/, 1 /* maxInFlight */, nil /*errCallback*/)
+
+	// firstFlushC will be signaled when the bufferSink flushes for the first
+	// time. That flush will be blocked until the channel is written to again.
+	firstFlushSem := make(chan struct{})
+
+	// We'll write a message. This message will trigger a flush based on the byte
+	// limit. We'll block that flush and write a second message.
+	m1 := []byte("some message")
+	mock.EXPECT().
+		output(gomock.Any(), gomock.Any()).
+		Do(func([]byte, sinkOutputOptions) {
+			firstFlushSem <- struct{}{}
+			<-firstFlushSem
+		})
+	require.NoError(t, sink.output(m1, sinkOutputOptions{}))
+	select {
+	case <-firstFlushSem:
+	case <-time.After(10 * time.Second):
+		t.Fatal("expected flush didn't happen")
+	}
+	// Unblock the flush when the test is done.
+	defer func() {
+		firstFlushSem <- struct{}{}
+	}()
+
+	// With the flush blocked, we now send a second message with the forceSync
+	// option. This message is expected to be dropped because of the maxInFlight
+	// limit. We install an onCompact hook to intercept the message drop so we can
+	// synchronize with it.
+	compactCh := make(chan struct{}, 1)
+	sink.onMsgDrop = func() {
+		select {
+		case compactCh <- struct{}{}:
+		default:
+		}
+	}
+	m2 := []byte("a sync message")
+	logCh := make(chan error)
+	go func() {
+		logCh <- sink.output(m2, sinkOutputOptions{forceSync: true})
+	}()
+	// Wait to be notified that the message was dropped.
+	<-compactCh
+
+	select {
+	case err := <-logCh:
+		require.ErrorIs(t, err, errSyncMsgDropped)
+	case <-time.After(10 * time.Second):
+		t.Fatal("sink.Output call never returned. Deadlock?")
+	}
+}
+
 func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx, cancel := context.WithCancel(context.Background())
