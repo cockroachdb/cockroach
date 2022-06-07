@@ -28,8 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -37,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // HealthChecker runs a regular check that verifies that a specified subset
@@ -326,6 +330,9 @@ type testDataSet interface {
 	// the given cluster. Any setup shouldn't take a long amount of time since
 	// perf artifacts are based on how long this takes.
 	runRestore(ctx context.Context, c cluster.Cluster)
+	// runRestoreDetached is like runRestore but runs the RESTORE WITH detahced,
+	// and returns the job ID.
+	runRestoreDetached(ctx context.Context, t test.Test, c cluster.Cluster) (jobspb.JobID, error)
 }
 
 type dataBank2TB struct{}
@@ -341,6 +348,29 @@ func (dataBank2TB) runRestore(ctx context.Context, c cluster.Cluster) {
 				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
 				WITH into_db = 'restore2tb'"`)
 }
+
+func (dataBank2TB) runRestoreDetached(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) (jobspb.JobID, error) {
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE csv.bank FROM
+				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
+				WITH into_db = 'restore2tb', detached"`)
+	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
+	}
+
+	var jobID jobspb.JobID
+	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
+var _ testDataSet = dataBank2TB{}
 
 type tpccIncData struct{}
 
@@ -358,6 +388,32 @@ func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
 				'gs://cockroach-fixtures/tpcc-incrementals?AUTH=implicit'
 				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
 }
+
+func (tpccIncData) runRestoreDetached(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) (jobspb.JobID, error) {
+	// This data set restores a 1.80TB (replicated) backup consisting of 50
+	// incremental backup layers taken every 15 minutes. 8000 warehouses
+	// were imported and then a workload of 1000 warehouses was run against
+	// the cluster while the incremental backups were being taken.
+	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
+				RESTORE FROM '2021/05/21-020411.00' IN
+				'gs://cockroach-fixtures/tpcc-incrementals?AUTH=implicit'
+				AS OF SYSTEM TIME '2021-05-21 14:40:22' WITH detached"`)
+	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
+	}
+
+	var jobID jobspb.JobID
+	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
+var _ testDataSet = tpccIncData{}
 
 func registerRestore(r registry.Registry) {
 	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
@@ -454,6 +510,142 @@ func registerRestore(r registry.Registry) {
 			},
 		})
 	}
+
+	withPauseDataset := dataBank2TB{}
+	withPauseTestName := fmt.Sprintf("restore%s/nodes=%d/with-pause", withPauseDataset.name(), 10)
+	withPauseTimeout := 3 * time.Hour
+	r.Add(registry.TestSpec{
+		Name:    withPauseTestName,
+		Owner:   registry.OwnerBulkIO,
+		Cluster: r.MakeClusterSpec(10),
+		Timeout: withPauseTimeout,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Put(ctx, t.Cockroach(), "./cockroach")
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			m := c.NewMonitor(ctx)
+
+			// Run the disk usage logger in the monitor to guarantee its
+			// having terminated when the test ends.
+			dul := NewDiskUsageLogger(t, c)
+			m.Go(dul.Runner)
+			hc := NewHealthChecker(t, c, c.All())
+			m.Go(hc.Runner)
+
+			jobIDCh := make(chan jobspb.JobID)
+			jobCompleteCh := make(chan struct{}, 1)
+			m.Go(func(ctx context.Context) error {
+				// Wait until the restore job has been created.
+				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+				require.NoError(t, err)
+
+				// The job should be created fairly quickly once the roachtest starts.
+				done := ctx.Done()
+				jobID := <-jobIDCh
+
+				// The test has historically taken ~30 minutes to complete, if we pause
+				// every 15 minutes we're likely to get at least one pause during the
+				// duration of the test. We'll likely get more because the restore after
+				// resume slows down due to compaction debt.
+				//
+				// Limit the number of pauses to 3 to ensure that the test doesn't get
+				// into a pause-resume-slowdown spiral that eventually times out.
+				maxPauses := 3
+				pauseJobTick := time.NewTicker(time.Minute * 15)
+				defer pauseJobTick.Stop()
+				for {
+					if maxPauses == 0 {
+						t.L().Printf("RESTORE job was paused a maximum number of times; allowing the job to complete")
+						return nil
+					}
+
+					select {
+					case <-done:
+						return ctx.Err()
+					case <-jobCompleteCh:
+						return nil
+					case <-pauseJobTick.C:
+						t.L().Printf("pausing RESTORE job")
+						// Pause the job and wait for it to transition to a paused state.
+						_, err = conn.ExecContext(ctx, `PAUSE JOB $1`, jobID)
+						require.NoError(t, err)
+						testutils.SucceedsSoon(t, func() error {
+							var status string
+							err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
+							require.NoError(t, err)
+							if status != "paused" {
+								return errors.Newf("expected status `paused` but found %s", status)
+							}
+							t.L().Printf("paused RESTORE job")
+							maxPauses--
+							return nil
+						})
+
+						t.L().Printf("resuming RESTORE job")
+						// Resume the job.
+						_, err = conn.ExecContext(ctx, `RESUME JOB $1`, jobID)
+						require.NoError(t, err)
+					}
+				}
+			})
+
+			tick, perfBuf := initBulkJobPerfArtifacts(withPauseTestName, withPauseTimeout)
+			m.Go(func(ctx context.Context) error {
+				defer dul.Done()
+				defer hc.Done()
+				defer close(jobCompleteCh)
+				defer close(jobIDCh)
+				t.Status(`running restore`)
+				tick()
+				jobID, err := withPauseDataset.runRestoreDetached(ctx, t, c)
+				require.NoError(t, err)
+				jobIDCh <- jobID
+
+				// Wait for the job to succeed.
+				succeededJobTick := time.NewTicker(time.Minute * 1)
+				defer succeededJobTick.Stop()
+				done := ctx.Done()
+				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+				require.NoError(t, err)
+				var isJobComplete bool
+				for {
+					if isJobComplete {
+						succeededJobTick.Stop()
+						jobCompleteCh <- struct{}{}
+						tick()
+						break
+					}
+
+					select {
+					case <-done:
+						return ctx.Err()
+					case <-jobCompleteCh:
+						return nil
+					case <-succeededJobTick.C:
+						var status string
+						err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
+						require.NoError(t, err)
+						if status == string(jobs.StatusSucceeded) {
+							isJobComplete = true
+						} else if status == string(jobs.StatusFailed) || status == string(jobs.StatusCanceled) {
+							t.Fatalf("job unexpectedly found in %s state", status)
+						}
+					}
+				}
+
+				// Upload the perf artifacts to any one of the nodes so that the test
+				// runner copies it into an appropriate directory path.
+				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+				if err := c.RunE(ctx, c.Node(1), "mkdir -p "+filepath.Dir(dest)); err != nil {
+					log.Errorf(ctx, "failed to create perf dir: %+v", err)
+				}
+				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
+					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				}
+				return nil
+			})
+			m.Wait()
+		},
+	})
 }
 
 // verifyMetrics loops, retrieving the timeseries metrics specified in m every
