@@ -37,6 +37,41 @@ var (
 	nb = r.Register("nb", &node{Value: b, Left: na}).(*node)
 	nc = r.Register("nc", &node{Value: c, Right: nb}).(*node)
 
+	nodeEntity = schema.Def2("nodeEntity", "node", "entity", func(
+		node, entity rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			node.AttrEqVar(value, entity),
+		}
+	})
+
+	// passThrough is used to check rewriting of variables in rule invocations
+	// works.
+	passThrough = schema.Def4("passThrough", "a", "b", "c", "d", func(
+		a, b, c, d rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			rightLeft(a, b, c, d),
+		}
+	})
+	rightLeft = schema.Def4("rightLeft", "root", "right", "right-left", "v", func(
+		root, rightN, rightLeft, rightLeftV rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			rel.And(
+				root.Type((*node)(nil)),
+				root.AttrEqVar(right, rightN),
+			),
+			rightN.AttrEqVar(left, rightLeft),
+			rightN.Type((*node)(nil)),
+			rightLeft.AttrEqVar(value, rightLeftV),
+			rightLeftV.Eq(a),
+			rel.Filter("noop", rightLeft)(func(n *node) bool {
+				return true
+			}),
+		}
+	})
+
 	databaseTests = []reltest.DatabaseTest{
 		{
 			Data: []string{"a", "b", "c", "na", "nb", "nc"},
@@ -197,6 +232,21 @@ var (
 					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
 				},
 				{
+					Name: "nodes with elements where i8=2 (rule)",
+					Query: rel.Clauses{
+						v("i8").Eq(int8(2)),
+						v("i8").Entities(i8, "value"), // using this notation just to exercise it
+						nodeEntity("n", "value"),
+					},
+					Entities: []v{"value", "n"},
+					ResVars:  []v{"n", "value"},
+					Results: [][]interface{}{
+						{nb, b},
+						{nc, c},
+					},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+				},
+				{
 					Name: "list all the i8 values",
 					Query: rel.Clauses{
 						v("value").AttrEqVar(i8, "i8"),
@@ -259,6 +309,18 @@ var (
 						{na, nb, nc, a},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "nodes with rule",
+					Query: rel.Clauses{
+						passThrough("nc", "nb", "na", "a"),
+					},
+					Entities: []v{"nc", "nb", "na"},
+					ResVars:  []v{"nc", "nb", "na", "a"},
+					Results: [][]interface{}{
+						{nc, nb, na, a},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 				{
 					Name: "list nodes",
@@ -449,6 +511,30 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e", "i8"},
 					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "using blank, bind all",
+					Query: rel.Clauses{
+						v("e").AttrEqVar(i8, "_"),
+					},
+					Entities: []v{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{a}, {b}, {c},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "using blank, bind non-nil pointer",
+					Query: rel.Clauses{
+						v("e").AttrEqVar(pi8, "_"),
+					},
+					Entities: []v{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{a},
+					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
 			},

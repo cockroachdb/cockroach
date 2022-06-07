@@ -123,8 +123,6 @@ func registerDepRule(
 	c = append(c,
 		screl.JoinTargetNode(from, fromTarget, fromNode),
 		screl.JoinTargetNode(to, toTarget, toNode),
-		from.AttrEqVar(screl.DescID, "var-to-tell-rel-from-is-an-element"),
-		to.AttrEqVar(screl.DescID, "var-to-tell-rel-to-is-an-element"),
 	)
 	registry.depRules = append(registry.depRules, registeredDepRule{
 		name: ruleName,

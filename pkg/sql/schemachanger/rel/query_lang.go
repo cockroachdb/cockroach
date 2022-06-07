@@ -20,11 +20,11 @@ type Clause interface {
 	clause()
 }
 
-// newTriple declares that an attribute of the entity represented by this var
+// makeTriple declares that an attribute of the entity represented by this var
 // should have the provided value. Note that this introduces the var as an
 // entity into the query if it is not already one.
-func newTriple(entity Var, a Attr, value expr) Clause {
-	return &tripleDecl{
+func makeTriple(entity Var, a Attr, value expr) Clause {
+	return tripleDecl{
 		entity:    entity,
 		attribute: a,
 		value:     value,
@@ -34,29 +34,29 @@ func newTriple(entity Var, a Attr, value expr) Clause {
 // AttrEq constrains the entity bound to v to have the provided value for
 // the specified attr.
 func (v Var) AttrEq(a Attr, value interface{}) Clause {
-	return newTriple(v, a, valueExpr{value: value})
+	return makeTriple(v, a, valueExpr{value: value})
 }
 
 // AttrIn constrains the entity bound to v to have a value for
 // the specified attr in the set of provided values.
 func (v Var) AttrIn(a Attr, values ...interface{}) Clause {
-	return newTriple(v, a, (anyExpr)(values))
+	return makeTriple(v, a, (anyExpr)(values))
 }
 
 // AttrEqVar constrains the entity bound to v to have a value for
 // the specified attr equal to the variable value.
 func (v Var) AttrEqVar(a Attr, value Var) Clause {
-	return newTriple(v, a, value)
+	return makeTriple(v, a, value)
 }
 
 // Eq returns a clause enforcing that the var is the value provided.
 func (v Var) Eq(value interface{}) Clause {
-	return &eqDecl{v, valueExpr{value: value}}
+	return eqDecl{v, valueExpr{value: value}}
 }
 
 // In returns a clause enforcing that the var is one of the value provided.
 func (v Var) In(disjuncts ...interface{}) Clause {
-	return &eqDecl{v, (anyExpr)(disjuncts)}
+	return eqDecl{v, (anyExpr)(disjuncts)}
 }
 
 // Type returns a clause enforcing that the variable has one of the types
@@ -100,7 +100,7 @@ func And(terms ...Clause) Clause {
 // over variables.
 func Filter(name string, vars ...Var) func(predicateFunc interface{}) Clause {
 	return func(predicateFunc interface{}) Clause {
-		return &filterDecl{
+		return filterDecl{
 			name:          name,
 			vars:          vars,
 			predicateFunc: predicateFunc,

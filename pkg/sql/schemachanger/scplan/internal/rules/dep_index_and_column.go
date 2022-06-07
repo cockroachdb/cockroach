@@ -30,7 +30,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
-				join(from, to, screl.DescID, "table-id"),
+				joinOnDescID(from, to, "table-id"),
 				targetStatus(fromTarget, scpb.ToAbsent),
 				targetStatus(toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_VALIDATED),
@@ -86,7 +86,7 @@ func init() {
 					(*scpb.IndexPartitioning)(nil),
 					(*scpb.IndexComment)(nil),
 				),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_BACKFILL_ONLY),
 				currentStatus(toNode, scpb.Status_PUBLIC),
@@ -101,7 +101,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.TemporaryIndex)(nil)),
 				to.Type((*scpb.IndexPartitioning)(nil)),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatus(fromTarget, scpb.Transient),
 				targetStatus(toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_DELETE_ONLY),
@@ -117,12 +117,10 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndex)(nil)),
 				to.Type((*scpb.SecondaryIndexPartial)(nil)),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_BACKFILL_ONLY),
 				currentStatus(to, scpb.Status_PUBLIC),
-				join(from, to, screl.DescID, "desc-id"),
-				join(from, to, screl.IndexID, "index-id"),
 			}
 		})
 
@@ -140,7 +138,7 @@ func init() {
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_PUBLIC),
 				currentStatus(toNode, scpb.Status_WRITE_ONLY),
@@ -160,7 +158,7 @@ func init() {
 				),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatusEq(fromNode, toNode, scpb.Status_PUBLIC),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -181,8 +179,7 @@ func init() {
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatus(fromNode, scpb.Status_ABSENT),
 				currentStatus(toNode, scpb.Status_VALIDATED),
@@ -206,7 +203,7 @@ func init() {
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatusEq(fromNode, toNode, scpb.Status_ABSENT),
 			}
@@ -225,7 +222,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.TemporaryIndex)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				join(from, to, screl.DescID, "desc-id"),
+				joinOnDescID(from, to, "desc-id"),
 				joinOn(from, screl.IndexID, to, screl.TemporaryIndexID, "temp-index-id"),
 				targetStatus(fromTarget, scpb.Transient),
 				targetStatus(toTarget, scpb.ToPublic),
@@ -251,7 +248,7 @@ func init() {
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_DELETE_ONLY),
 				currentStatus(toNode, scpb.Status_PUBLIC),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 			}
 		},
 	)
@@ -268,7 +265,7 @@ func init() {
 					(*scpb.ColumnOnUpdateExpression)(nil),
 					(*scpb.ColumnComment)(nil),
 				),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_DELETE_ONLY),
 				currentStatus(toNode, scpb.Status_PUBLIC),
@@ -287,7 +284,7 @@ func init() {
 					(*scpb.ColumnOnUpdateExpression)(nil),
 				),
 				to.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatus(fromNode, scpb.Status_PUBLIC),
 				currentStatus(toNode, scpb.Status_WRITE_ONLY),
@@ -303,7 +300,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnName)(nil)),
 				to.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatusEq(fromNode, toNode, scpb.Status_PUBLIC),
 			}
@@ -320,7 +317,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnComment)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToPublic),
 				currentStatusEq(fromNode, toNode, scpb.Status_PUBLIC),
 			}
@@ -339,7 +336,7 @@ func init() {
 					(*scpb.ColumnName)(nil),
 					(*scpb.ColumnComment)(nil),
 				),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatus(fromNode, scpb.Status_WRITE_ONLY),
 				currentStatus(toNode, scpb.Status_ABSENT),
@@ -359,7 +356,7 @@ func init() {
 					(*scpb.ColumnOnUpdateExpression)(nil),
 				),
 				to.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatusEq(fromNode, toNode, scpb.Status_ABSENT),
 			}
@@ -378,7 +375,7 @@ func init() {
 					(*scpb.ColumnComment)(nil),
 				),
 				to.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatusEq(fromNode, toNode, scpb.Status_ABSENT),
 			}
@@ -416,7 +413,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnType)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from, to),
+				joinOnColumnID(from, to, "table-id", "col-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatusEq(fromNode, toNode, scpb.Status_ABSENT),
 				rel.Filter("columnTypeIsNotBeingDropped", from)(func(
@@ -436,7 +433,7 @@ func init() {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndexPartial)(nil)),
 				to.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from, to),
+				joinOnIndexID(from, to, "table-id", "index-id"),
 				targetStatusEq(fromTarget, toTarget, scpb.ToAbsent),
 				currentStatusEq(fromNode, toNode, scpb.Status_ABSENT),
 				rel.Filter("secondaryIndexPartialIsNotBeingDropped", from)(func(

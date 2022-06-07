@@ -52,7 +52,6 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 	var element, target, node, targetStatus rel.Var = "element", "target", "node", "target-status"
 	q, err := rel.NewQuery(screl.Schema,
 		element.Type(e),
-		element.AttrEqVar(screl.DescID, "descID"), // this is to allow the index on elements to work
 		targetStatus.Eq(spec.to),
 		screl.JoinTargetNode(element, target, node),
 		target.AttrEqVar(screl.TargetStatus, targetStatus),

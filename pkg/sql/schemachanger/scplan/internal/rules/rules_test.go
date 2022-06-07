@@ -11,8 +11,12 @@
 package rules
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
 	"gopkg.in/yaml.v3"
@@ -23,6 +27,26 @@ func TestRulesYAML(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "rules":
+				var m yaml.Node
+				m.Kind = yaml.MappingNode
+				screl.Schema.ForEachRule(func(def rel.RuleDef) {
+					var clauses yaml.Node
+					if err := clauses.Encode(def.Clauses); err != nil {
+						panic(err)
+					}
+					m.Content = append(m.Content, &yaml.Node{
+						Kind: yaml.ScalarNode,
+						Value: fmt.Sprintf(
+							"%s(%v)", def.Name, strings.Join(toStrings(def.Params), ", "),
+						),
+					}, &clauses)
+				})
+				out, err := yaml.Marshal(m)
+				if err != nil {
+					d.Fatalf(t, "failed to marshal rules: %v", err)
+				}
+				return string(out)
 			case "deprules":
 				out, err := yaml.Marshal(registry.depRules)
 				if err != nil {
@@ -40,6 +64,14 @@ func TestRulesYAML(t *testing.T) {
 			return ""
 		})
 	})
+}
+
+func toStrings(params []rel.Var) []string {
+	ret := make([]string, 0, len(params))
+	for _, p := range params {
+		ret = append(ret, string(p))
+	}
+	return ret
 }
 
 func (r registeredDepRule) MarshalYAML() (interface{}, error) {
