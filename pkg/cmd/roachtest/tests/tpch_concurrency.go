@@ -100,7 +100,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 				// diagram of the query.
 				rows, err := conn.Query("EXPLAIN (DISTSQL) " + tpch.QueriesByNumber[queryNum])
 				if err != nil {
-					t.Fatal(err)
+					return err
 				}
 				defer rows.Close()
 				for rows.Next() {
