@@ -25,7 +25,7 @@ INSERT INTO a VALUES (1, 'foozoopa'),
                      (2, 'Foo'),
                      (3, 'blah')
 
-query IT
+query IT rowsort
 SELECT * FROM a@a_t_idx WHERE t ILIKE '%Foo%'
 ----
 1  foozoopa
