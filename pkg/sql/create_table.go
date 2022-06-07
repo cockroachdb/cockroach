@@ -2508,39 +2508,20 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 		}
 
-		// Copy defaults of implicitly created columns if they are needed by indexes.
-		// This is required to ensure the newly created table still works as expected
-		// as these columns are required for certain features to work when used
-		// as an index.
-		shouldCopyColumnDefaultSet := make(map[string]struct{})
-		if opts.Has(tree.LikeTableOptIndexes) {
-			for _, idx := range td.NonDropIndexes() {
-				// Copy the rowid default if it was created implicitly by not specifying
-				// PRIMARY KEY.
-				if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
-					for i := 0; i < idx.NumKeyColumns(); i++ {
-						shouldCopyColumnDefaultSet[idx.GetKeyColumnName(i)] = struct{}{}
-					}
-				}
-				// Copy any implicitly created columns (e.g. hash-sharded indexes,
-				// REGIONAL BY ROW).
-				for i := 0; i < idx.ExplicitColumnStartIdx(); i++ {
-					for i := 0; i < idx.NumKeyColumns(); i++ {
-						shouldCopyColumnDefaultSet[idx.GetKeyColumnName(i)] = struct{}{}
-					}
-				}
-			}
-		}
-
 		defs := make(tree.TableDefs, 0)
 		// Add all columns. Columns are always added.
 		for i := range td.Columns {
 			c := &td.Columns[i]
-			if c.Inaccessible {
-				// Inaccessible columns automatically get added by
-				// the system; we don't need to add them ourselves here.
+
+			// Don't add system-created implicit columns.
+			implicit, err := isImplicitlyCreatedBySystem(td, c)
+			if err != nil {
+				return nil, err
+			}
+			if implicit {
 				continue
 			}
+
 			def := tree.ColumnTableDef{
 				Name:   tree.Name(c.Name),
 				Type:   c.Type,
@@ -2552,8 +2533,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				def.Nullable.Nullability = tree.NotNull
 			}
 			if c.DefaultExpr != nil {
-				_, shouldCopyColumnDefault := shouldCopyColumnDefaultSet[c.Name]
-				if opts.Has(tree.LikeTableOptDefaults) || shouldCopyColumnDefault {
+				if opts.Has(tree.LikeTableOptDefaults) {
 					def.DefaultExpr.Expr, err = parser.ParseExpr(*c.DefaultExpr)
 					if err != nil {
 						return nil, err
@@ -2618,6 +2598,11 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 		}
 		if opts.Has(tree.LikeTableOptIndexes) {
 			for _, idx := range td.NonDropIndexes() {
+				if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
+					// We won't copy over the default rowid primary index; instead
+					// we'll just generate a new one.
+					continue
+				}
 				indexDef := tree.IndexTableDef{
 					Name:     tree.Name(idx.GetName()),
 					Inverted: idx.GetType() == descpb.IndexDescriptor_INVERTED,
@@ -2885,4 +2870,32 @@ func validateUniqueConstraintParamsForCreateTableAs(n *tree.CreateTable) error {
 		}
 	}
 	return nil
+}
+
+// Checks if the column was automatically added by the system (e.g. for a rowid
+// primary key, REGIONAL BY ROW, or hash sharded index).
+func isImplicitlyCreatedBySystem(td *tabledesc.Mutable, c *descpb.ColumnDescriptor) (bool, error) {
+	if td.IsPrimaryIndexDefaultRowID() && c.ID == td.GetPrimaryIndex().GetKeyColumnID(0) {
+		return true, nil
+	}
+	if td.IsLocalityRegionalByRow() {
+		name, err := td.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return false, err
+		}
+		if name == c.ColName() {
+			return true, nil
+		}
+	}
+	col, err := td.FindColumnWithID(c.ID)
+	if err != nil {
+		return false, err
+	}
+	if td.IsShardColumn(col) {
+		return true, nil
+	}
+	if c.Inaccessible {
+		return true, nil
+	}
+	return false, nil
 }

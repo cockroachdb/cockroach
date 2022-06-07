@@ -1252,7 +1252,6 @@ SHOW CREATE TABLE regional_by_row_like
 regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
                                                 pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                                 CONSTRAINT regional_by_row_like_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
