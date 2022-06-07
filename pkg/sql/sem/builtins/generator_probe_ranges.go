@@ -122,9 +122,9 @@ type probeRangeGenerator struct {
 	ranges []kv.KeyValue
 }
 
-func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeProbeRangeGenerator(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -139,14 +139,13 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 	// to be available, unless meta2 is down.
 	var ranges []kv.KeyValue
 	{
-		txn := ctx.Txn
 		ctx, sp := tracing.EnsureChildSpan(
-			ctx.Context, ctx.Tracer, "meta2scan",
+			evalCtx.Context, evalCtx.Tracer, "meta2scan",
 			tracing.WithRecording(tracing.RecordingVerbose),
 		)
 		defer sp.Finish()
 		// Handle args passed in.
-		ranges, err = kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
+		ranges, err = kvclient.ScanMetaKVs(ctx, evalCtx.Txn, roachpb.Span{
 			Key:    keys.MinKey,
 			EndKey: keys.MaxKey,
 		})
@@ -159,10 +158,10 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
 	isWrite := args[1].(*tree.DEnum).LogicalRep
 	return &probeRangeGenerator{
-		rangeProber: ctx.RangeProber,
+		rangeProber: evalCtx.RangeProber,
 		timeout:     timeout,
 		isWrite:     isWrite == "write",
-		tracer:      ctx.Tracer,
+		tracer:      evalCtx.Tracer,
 		ranges:      ranges,
 	}, nil
 }
