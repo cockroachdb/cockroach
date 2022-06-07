@@ -803,47 +803,21 @@ func TestMVCCIncrementalIteratorInlinePolicy(t *testing.T) {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			t.Run("PolicyError returns error if inline value is found", func(t *testing.T) {
 				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-					EndKey:       keyMax,
-					StartTime:    tsMin,
-					EndTime:      tsMax,
-					InlinePolicy: MVCCIncrementalIterInlinePolicyError,
+					EndKey:    keyMax,
+					StartTime: tsMin,
+					EndTime:   tsMax,
 				})
 				defer iter.Close()
 				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 				_, err := iter.Valid()
 				assert.EqualError(t, err, "unexpected inline value found: \"/db1\"")
 			})
-			t.Run("PolicyEmit returns inline values to caller", func(t *testing.T) {
-				iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-					EndKey:       keyMax,
-					StartTime:    tsMin,
-					EndTime:      tsMax,
-					InlinePolicy: MVCCIncrementalIterInlinePolicyEmit,
-				})
-				defer iter.Close()
-				iter.SeekGE(MakeMVCCMetadataKey(testKey1))
-				expectInlineKeyValue(t, iter, inline1_1_1)
-				iter.Next()
-				expectKeyValue(t, iter, kv2_2_2)
-				iter.Next()
-				expectKeyValue(t, iter, kv2_1_1)
-				iter.Next()
-				expectInlineKeyValue(t, iter, inline3_2_1)
-
-				iter.SeekGE(MakeMVCCMetadataKey(testKey2))
-				expectKeyValue(t, iter, kv2_2_2)
-				iter.NextIgnoringTime()
-				expectKeyValue(t, iter, kv2_1_1)
-				iter.NextIgnoringTime()
-				expectInlineKeyValue(t, iter, inline3_2_1)
-			})
 			t.Run("PolicyError returns error on NextIgnoringTime if inline value is found",
 				func(t *testing.T) {
 					iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-						EndKey:       keyMax,
-						StartTime:    tsMin,
-						EndTime:      tsMax,
-						InlinePolicy: MVCCIncrementalIterInlinePolicyError,
+						EndKey:    keyMax,
+						StartTime: tsMin,
+						EndTime:   tsMax,
 					})
 					defer iter.Close()
 					iter.SeekGE(MakeMVCCMetadataKey(testKey2))
@@ -1000,24 +974,6 @@ func expectKeyValue(t *testing.T, iter SimpleMVCCIterator, kv MVCCKeyValue) {
 	assert.Equal(t, kv.Key.Timestamp, unsafeKey.Timestamp)
 	assert.Equal(t, kv.Value, unsafeVal)
 
-}
-
-func expectInlineKeyValue(t *testing.T, iter SimpleMVCCIterator, kv MVCCKeyValue) {
-	valid, err := iter.Valid()
-	assert.True(t, valid)
-	assert.NoError(t, err)
-
-	unsafeKey := iter.UnsafeKey()
-	unsafeVal := iter.UnsafeValue()
-
-	var meta enginepb.MVCCMetadata
-	err = protoutil.Unmarshal(unsafeVal, &meta)
-	require.NoError(t, err)
-
-	assert.True(t, meta.IsInline())
-	assert.False(t, unsafeKey.IsValue())
-	assert.True(t, unsafeKey.Key.Equal(kv.Key.Key))
-	assert.Equal(t, kv.Value, meta.RawBytes)
 }
 
 func expectIntent(t *testing.T, iter SimpleMVCCIterator, intent roachpb.Intent) {
