@@ -23,17 +23,3 @@ unimplemented.#41285.set_limit
 exec
 CREATE TABLE a(a text)
 ----
-
-feature-usage
-CREATE INDEX ON a USING GIST(a gin_trgm_ops)
-----
-error: pq: at or near ")": syntax error: unimplemented: this syntax
-unimplemented.#41285.index using gin_trgm_ops
-unimplemented.syntax.#41285.index using gin_trgm_ops
-
-feature-usage
-CREATE INDEX ON a USING GIST(a gist_trgm_ops)
-----
-error: pq: at or near ")": syntax error: unimplemented: this syntax
-unimplemented.#41285.index using gist_trgm_ops
-unimplemented.syntax.#41285.index using gist_trgm_ops

@@ -1085,16 +1085,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 				// The last column indexed by an inverted index must be
 				// inverted indexable.
 				if i == lastCol && !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()) {
-					return errors.WithHint(
-						pgerror.Newf(
-							pgcode.FeatureNotSupported,
-							"column %s of type %s is not allowed as the last column in an inverted index",
-							col.GetName(),
-							col.GetType().Name(),
-						),
-						"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
-					)
-
+					return NewInvalidInvertedColumnError(col.GetName(), col.GetType().String())
 				}
 				// Any preceding columns must not be inverted indexable.
 				if i < lastCol && !colinfo.ColumnTypeIsIndexable(col.GetType()) {
@@ -1112,6 +1103,19 @@ func checkColumnsValidForInvertedIndex(tableDesc *Mutable, indexColNames []strin
 		}
 	}
 	return nil
+}
+
+// NewInvalidInvertedColumnError returns an error for a column that's not
+// inverted indexable.
+func NewInvalidInvertedColumnError(colName, colType string) error {
+	return errors.WithHint(
+		pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"column %s of type %s is not allowed as the last column in an inverted index",
+			colName, colType,
+		),
+		"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+	)
 }
 
 // AddColumn adds a column to the table.

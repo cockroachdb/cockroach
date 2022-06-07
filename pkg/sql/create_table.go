@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1804,15 +1803,9 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				switch column.GetType().Family() {
-				case types.GeometryFamily:
-					config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
-					if err != nil {
-						return nil, err
-					}
-					idx.GeoConfig = *config
-				case types.GeographyFamily:
-					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+				if err := populateInvertedIndexDescriptor(
+					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
+					return nil, err
 				}
 			}
 

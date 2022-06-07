@@ -109,13 +109,21 @@ func TryFilterInvertedIndex(
 		}
 		typ = types.Geometry
 	} else {
-		filterPlanner = &jsonOrArrayFilterPlanner{
-			tabID:           tabID,
-			index:           index,
-			computedColumns: computedColumns,
-		}
 		col := index.InvertedColumn().InvertedSourceColumnOrdinal()
 		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
+		if typ.Family() == types.StringFamily {
+			filterPlanner = &trigramFilterPlanner{
+				tabID:           tabID,
+				index:           index,
+				computedColumns: computedColumns,
+			}
+		} else {
+			filterPlanner = &jsonOrArrayFilterPlanner{
+				tabID:           tabID,
+				index:           index,
+				computedColumns: computedColumns,
+			}
+		}
 	}
 
 	var invertedExpr inverted.Expression

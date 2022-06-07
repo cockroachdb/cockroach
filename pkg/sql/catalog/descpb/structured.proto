@@ -362,6 +362,11 @@ message IndexDescriptor {
   // columns which are explicitly part of the index (STORING clause).
   repeated string store_column_names = 5;
 
+  // An ordered list of opclasses that parallels each of the inverted columns
+  // in the index. n.b.: currently, there can only be a single inverted column
+  // in an index, so this list will always be of size 0 or 1.
+  repeated cockroach.sql.catalog.catpb.InvertedIndexColumnKind inverted_column_kinds = 27;
+
   // An ordered list of column IDs of which the index key is comprised. This
   // list parallels the key_column_names list and does not include any
   // additional stored columns. If the index is an inverted index, the last
@@ -490,7 +495,7 @@ message IndexDescriptor {
   optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
     (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 
-  // Next ID: 27
+  // Next ID: 28
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

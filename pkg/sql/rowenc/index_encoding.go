@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
@@ -578,6 +579,13 @@ func EncodeInvertedIndexTableKeys(
 		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
 		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version, false /* excludeNulls */)
+	case types.StringFamily:
+		// TODO(jordan): Right now, this is just trigram inverted indexes. If we
+		// want to support different types of inverted indexes on strings, we'll
+		// need to pass in the inverted index column kind to this function.
+		// We pad the keys when writing them to the index.
+		// TODO(jordan): why are we doing this padding at all? Postgres does it.
+		return encodeTrigramInvertedIndexTableKeys(string(*val.(*tree.DString)), inKey, version, true /* pad */)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
@@ -881,6 +889,59 @@ func encodeOverlapsArrayInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
+// EncodeTrigramSpans returns the spans that must be scanned to look up trigrams
+// present in the input string. If allMustMatch is true, the resultant inverted
+// expression must match every trigram in the input. Otherwise, it will match
+// any trigram in the input.
+func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error) {
+	// We do not pad the trigrams when searching the index. To see why, observe
+	// the keys that we insert for a string "zfooz":
+	//
+	// "  z", " zf", "zfo", "foo", "foz", "oz "
+	//
+	// If we were then searching for the string %foo%, and we padded the output
+	// keys as well, we'd be searching for the key "  f", which doesn't exist
+	// in the index for zfooz, even though zfooz is like %foo%.
+	keys, err := encodeTrigramInvertedIndexTableKeys(s, nil, /* inKey */
+		descpb.LatestIndexDescriptorVersion, false /* pad */)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, errors.New("no trigrams available to search with")
+	}
+
+	var ret inverted.Expression
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(inverted.MakeSingleValSpan(key), false /* tight */)
+		if ret == nil {
+			// The first trigram (and only the first trigram) is unique.
+			// TODO(jordan): we *could* make this first expression tight if we knew
+			// for sure that the expression is something like `LIKE '%foo%'`. In this
+			// case, we're sure that the returned row will pass the predicate because
+			// the LIKE operator has wildcards on either side of the trigram. But
+			// this is such a marginal case that it doesn't seem worth it to plumb
+			// in this special case. For all other single-trigram cases, such as
+			// `LIKE '%foo'` or `= 'foo'`, we don't have a tight span.
+			spanExpr.Unique = true
+			ret = spanExpr
+		} else {
+			// As soon as we have more than one trigram to search for, we no longer
+			// have a unique expression, since two separate trigrams could both
+			// point at a single row. We also no longer have a tight expression,
+			// because the trigrams that we're checking don't necessarily have to
+			// be in the right order within the string to guarantee that just because
+			// both trigrams match, the strings pass the LIKE or % test.
+			if allMustMatch {
+				ret = inverted.And(ret, spanExpr)
+			} else {
+				ret = inverted.Or(ret, spanExpr)
+			}
+		}
+	}
+	return ret, nil
+}
+
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
 // for Geography and Geometry.
 func EncodeGeoInvertedIndexTableKeys(
@@ -927,6 +988,28 @@ func encodeGeoKeys(
 		keys[i] = newKey
 	}
 	return keys, nil
+}
+
+// encodeTrigramInvertedIndexTableKeys produces the trigram index table keys for
+// an input string. If pad is true, the returned table keys will include 3 extra
+// trigrams produced by padding the string with 2 spaces at the front and 1 at
+// the end.
+func encodeTrigramInvertedIndexTableKeys(
+	val string, inKey []byte, _ descpb.IndexDescriptorVersion, pad bool,
+) ([][]byte, error) {
+	trigrams := trigram.MakeTrigrams(val, pad)
+	outKeys := make([][]byte, len(trigrams))
+	for i := range trigrams {
+		// Make sure to copy inKey into a new byte slice to avoid aliasing.
+		inKeyLen := len(inKey)
+		// Pre-size the outkey - we know we're going to encode the trigram plus 2
+		// extra bytes for the prefix and terminator.
+		outKey := make([]byte, inKeyLen, inKeyLen+len(trigrams[i])+2)
+		copy(outKey, inKey)
+		newKey := encoding.EncodeStringAscending(outKey, trigrams[i])
+		outKeys[i] = newKey
+	}
+	return outKeys, nil
 }
 
 // EncodePrimaryIndex constructs a list of k/v pairs for a
