@@ -2595,6 +2595,113 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
+	// https://www.postgresql.org/docs/14/functions-datetime.html#FUNCTIONS-DATETIME-TABLE
+	//
+	// PostgreSQL documents date_trunc for text and double precision.
+	// It will also handle smallint, integer, bigint, decimal,
+	// numeric, real, and numeri like text inputs by casting them,
+	// so we support those for compatibility. This gives us the following
+	// function signatures:
+	//
+	//  to_timestamp(text, text)       -> TimestampTZ
+	//  to_timestamp(text)             -> TimestampTZ
+	//  to_timestamp(INT)              -> TimestampTZ
+	//  to_timestamp(INT2)             -> TimestampTZ
+	//  to_timestamp(INT4)             -> TimestampTZ
+	//  to_timestamp(INT8)             -> TimestampTZ
+	//  to_timestamp(FLOAT)            -> TimestampTZ
+	//  to_timestamp(REAL)             -> TimestampTZ
+	//  to_timestamp(DOUBLE PRECISION) -> TimestampTZ
+	//  to_timestamp(DECIMAL)          -> TimestampTZ
+	//
+	// See the following snippet from running the functions in PostgreSQL:
+	//
+	//               postgres=# select to_timestamp(32767::smallint);
+	//               to_timestamp
+	//               ------------------------
+	//               1970-01-01 09:06:07+00
+	//
+	//               postgres=# select to_timestamp(1646906263::integer);
+	//               to_timestamp
+	//               ------------------------
+	//               2022-03-10 09:57:43+00
+	//
+	//               postgres=# select to_timestamp(1646906263::bigint);
+	//               to_timestamp
+	//               ------------------------
+	//               2022-03-10 09:57:43+00
+	//
+	//               postgres=# select to_timestamp(1646906263.123456::decimal);
+	//               to_timestamp
+	//               -------------------------------
+	//               2022-03-10 09:57:43.123456+00
+	//
+	//               postgres=# select to_timestamp(1646906263.123456::numeric);
+	//               to_timestamp
+	//               -------------------------------
+	//               2022-03-10 09:57:43.123456+00
+	//
+	//               postgres=# select to_timestamp(1646906263.123456::real);
+	//               to_timestamp
+	//               ------------------------
+	//               2022-03-10 09:57:20+00
+	//
+	//               postgres=# select to_timestamp('1646906263.123456');
+	//               to_timestamp
+	//               -------------------------------
+	//               2022-03-10 09:57:43.123456+00
+	//
+	"to_timestamp": makeBuiltin(
+		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.String}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ts, err := strconv.ParseFloat(string(tree.MustBeDString(args[0])), 64)
+				if err != nil {
+					return nil, pgerror.New(pgcode.AmbiguousFunction, "invalid input for type text")
+				}
+				return floatToTimestampTZ(ts)
+			},
+			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Int}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ts := float64(tree.MustBeDInt(args[0]))
+				return floatToTimestampTZ(ts)
+			},
+			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Float}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ts := float64(tree.MustBeDFloat(args[0]))
+				return floatToTimestampTZ(ts)
+			},
+			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				decimal := tree.MustBeDDecimal(args[0]).Decimal
+				ts, err := decimal.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return floatToTimestampTZ(ts)
+			},
+			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html
 	"age": makeBuiltin(
 		tree.FunctionProperties{},
@@ -9628,4 +9735,17 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 		formattedStmt.WriteString("\n")
 	}
 	return formattedStmt.String(), nil
+}
+
+func floatToTimestampTZ(ts float64) (tree.Datum, error) {
+	if math.IsNaN(ts) {
+		return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "timestamp cannot be NaN")
+	}
+	if ts == math.Inf(1) {
+		return tree.MakeDTimestampTZ(pgdate.TimeInfinity, time.Microsecond)
+	}
+	if ts == math.Inf(-1) {
+		return tree.MakeDTimestampTZ(pgdate.TimeNegativeInfinity, time.Microsecond)
+	}
+	return tree.MakeDTimestampTZ(timeutil.Unix(0, int64(ts*float64(time.Second))), time.Microsecond)
 }
