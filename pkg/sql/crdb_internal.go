@@ -5502,6 +5502,7 @@ GROUP BY
 
 var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running range feeds`,
+	// NB: startTS is exclusive; consider renaming to startAfter.
 	schema: `
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
@@ -5529,7 +5530,7 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				return addRow(
 					tree.NewDInt(tree.DInt(rfCtx.ID)),
 					tree.NewDString(rfCtx.CtxTags),
-					tree.NewDString(rf.StartTS.AsOfSystemTime()),
+					tree.NewDString(rf.StartAfter.AsOfSystemTime()),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
 					tree.NewDInt(tree.DInt(rf.NodeID)),
 					tree.NewDInt(tree.DInt(rf.RangeID)),

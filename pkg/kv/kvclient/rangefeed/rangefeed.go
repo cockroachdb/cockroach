@@ -114,6 +114,11 @@ func newFactory(stopper *stop.Stopper, client DB, knobs *TestingKnobs) *Factory 
 //
 // The only error which can be returned will indicate that the server is being
 // shut down.
+//
+// NB: for the rangefeed itself, initialTimestamp is exclusive, i.e. the first
+// possible event emitted by the server (including the catchup scan) is at
+// initialTimestamp.Next(). This follows from the gRPC API semantics. However,
+// the initial scan (if any) is run at initialTimestamp.
 func (f *Factory) RangeFeed(
 	ctx context.Context,
 	name string,

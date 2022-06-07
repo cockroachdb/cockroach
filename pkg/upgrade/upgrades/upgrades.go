@@ -126,12 +126,6 @@ var upgrades = []upgrade.Upgrade{
 		tenantSettingsTableMigration,
 	),
 	upgrade.NewTenantUpgrade(
-		"Rewrites cast that are negatively affected by DateStyle/IntervalStyle",
-		toCV(clusterversion.DateStyleIntervalStyleCastRewrite),
-		NoPrecondition,
-		fixCastForStyleMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"add the system.span_count table",
 		toCV(clusterversion.SpanCountTable),
 		NoPrecondition,

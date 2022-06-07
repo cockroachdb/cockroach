@@ -129,6 +129,8 @@ var retiredSettings = map[string]struct{}{
 
 	// removed as of 22.2.
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled": {},
+	"sql.defaults.datestyle.enabled":                          {},
+	"sql.defaults.intervalstyle.enabled":                      {},
 }
 
 var sqlDefaultSettings = map[string]struct{}{

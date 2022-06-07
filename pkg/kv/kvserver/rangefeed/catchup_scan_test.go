@@ -94,8 +94,7 @@ func TestCatchupScan(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
 		iter := NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
 			Header: roachpb.Header{
-				// Inclusive, so want everything >= ts2
-				Timestamp: ts2,
+				Timestamp: ts1, // exclusive
 			},
 			Span: roachpb.Span{
 				EndKey: roachpb.KeyMax,

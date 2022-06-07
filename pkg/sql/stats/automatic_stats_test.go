@@ -681,7 +681,8 @@ func TestDefaultColumns(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;
-		CREATE TABLE t.a (c0 INT PRIMARY KEY);`)
+		CREATE TABLE t.a (c0 INT PRIMARY KEY)
+		WITH (sql_stats_automatic_collection_enabled = false);`)
 
 	for i := 1; i < 110; i++ {
 		// Add more columns than we will collect stats on.
@@ -690,17 +691,6 @@ func TestDefaultColumns(t *testing.T) {
 	}
 
 	sqlRun.Exec(t, `CREATE STATISTICS s FROM t.a`)
-
-	// TODO(rytaft): this extra logging was added to help debug issue #81513.
-	// Remove it once that issue is resolved.
-	// === BEGINNING OF EXTRA LOGGING ===
-	res := sqlRun.QueryStr(t, `SHOW CREATE TABLE t.a`)
-	t.Log(sqlutils.MatrixToStr(res))
-	res = sqlRun.QueryStr(t, `EXPLAIN (DISTSQL) CREATE STATISTICS s FROM t.a`)
-	t.Log(sqlutils.MatrixToStr(res))
-	res = sqlRun.QueryStr(t, `SHOW STATISTICS FOR TABLE t.a`)
-	t.Log(sqlutils.MatrixToStr(res))
-	// === END OF EXTRA LOGGING ===
 
 	// There should be 101 stats. One for the primary index, plus 100 other
 	// columns.

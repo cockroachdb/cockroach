@@ -53,6 +53,9 @@ func (i simpleCatchupIterAdapter) NextIgnoringTime() {
 var _ simpleCatchupIter = simpleCatchupIterAdapter{}
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader.
+//
+// NB: The start timestamp given in args.Header.Timestamp is exclusive, i.e. the
+// first possible event will be emitted at Timestamp.Next().
 func NewCatchUpIterator(
 	reader storage.Reader, args *roachpb.RangeFeedRequest, closer func(),
 ) *CatchUpIterator {
@@ -61,10 +64,8 @@ func NewCatchUpIterator(
 			storage.MVCCIncrementalIterOptions{
 				EnableTimeBoundIteratorOptimization: true,
 				EndKey:                              args.Span.EndKey,
-				// StartTime is exclusive but args.Timestamp
-				// is inclusive.
-				StartTime: args.Timestamp.Prev(),
-				EndTime:   hlc.MaxTimestamp,
+				StartTime:                           args.Timestamp,
+				EndTime:                             hlc.MaxTimestamp,
 				// We want to emit intents rather than error
 				// (the default behavior) so that we can skip
 				// over the provisional values during

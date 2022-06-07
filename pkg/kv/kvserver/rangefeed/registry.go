@@ -76,7 +76,7 @@ func putPooledSharedEvent(e *sharedEvent) {
 type registration struct {
 	// Input.
 	span             roachpb.Span
-	catchUpTimestamp hlc.Timestamp
+	catchUpTimestamp hlc.Timestamp // exclusive
 	withDiff         bool
 	metrics          *Metrics
 

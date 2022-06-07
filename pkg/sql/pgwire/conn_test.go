@@ -1549,11 +1549,6 @@ func TestSetSessionArguments(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
-	_, err := db.Exec("SET CLUSTER SETTING sql.defaults.datestyle.enabled = true")
-	require.NoError(t, err)
-	_, err = db.Exec("SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true")
-	require.NoError(t, err)
-
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)

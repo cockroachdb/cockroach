@@ -143,8 +143,6 @@ type Memo struct {
 	safeUpdates                 bool
 	preferLookupJoinsForFKs     bool
 	saveTablesPrefix            string
-	dateStyleEnabled            bool
-	intervalStyleEnabled        bool
 	dateStyle                   pgdate.DateStyle
 	intervalStyle               duration.IntervalStyle
 	propagateInputOrdering      bool
@@ -190,8 +188,6 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		safeUpdates:                 evalCtx.SessionData().SafeUpdates,
 		preferLookupJoinsForFKs:     evalCtx.SessionData().PreferLookupJoinsForFKs,
 		saveTablesPrefix:            evalCtx.SessionData().SaveTablesPrefix,
-		intervalStyleEnabled:        evalCtx.SessionData().IntervalStyleEnabled,
-		dateStyleEnabled:            evalCtx.SessionData().DateStyleEnabled,
 		dateStyle:                   evalCtx.SessionData().GetDateStyle(),
 		intervalStyle:               evalCtx.SessionData().GetIntervalStyle(),
 		propagateInputOrdering:      evalCtx.SessionData().PropagateInputOrdering,
@@ -315,8 +311,6 @@ func (m *Memo) IsStale(
 		m.safeUpdates != evalCtx.SessionData().SafeUpdates ||
 		m.preferLookupJoinsForFKs != evalCtx.SessionData().PreferLookupJoinsForFKs ||
 		m.saveTablesPrefix != evalCtx.SessionData().SaveTablesPrefix ||
-		m.intervalStyleEnabled != evalCtx.SessionData().IntervalStyleEnabled ||
-		m.dateStyleEnabled != evalCtx.SessionData().DateStyleEnabled ||
 		m.dateStyle != evalCtx.SessionData().GetDateStyle() ||
 		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
 		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||

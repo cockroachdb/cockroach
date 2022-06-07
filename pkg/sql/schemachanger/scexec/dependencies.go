@@ -42,6 +42,7 @@ type Dependencies interface {
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
+	Telemetry() Telemetry
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -81,6 +82,13 @@ type EventLogger interface {
 	LogEventForSchemaChange(
 		ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 	) error
+}
+
+// Telemetry encapsulates metrics gather for the declarative schema changer.
+type Telemetry interface {
+	// IncrementSchemaChangeErrorType increments the number of errors of a given
+	// type observed by the schema changer.
+	IncrementSchemaChangeErrorType(typ string)
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
