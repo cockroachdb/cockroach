@@ -91,6 +91,7 @@ func TestWorkload(t *testing.T) {
 	const N = 300
 	workerFn := func(ctx context.Context, fn func(ctx context.Context) error) func() error {
 		return func() error {
+			defer fmt.Printf("FINISHED WORKER %p\n", fn)
 			for i := 0; i < N; i++ {
 				if err := fn(ctx); err != nil || ctx.Err() != nil {
 					return err
@@ -103,6 +104,7 @@ func TestWorkload(t *testing.T) {
 	for i := 0; i < concurrency; i++ {
 		g.Go(workerFn(gCtx, ql.WorkerFns[i]))
 	}
+	defer fmt.Printf("FINISHED WORKLOAD\n")
 	require.NoError(t, g.Wait())
 	ql.Close(ctx)
 }

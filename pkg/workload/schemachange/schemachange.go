@@ -333,7 +333,6 @@ func (w *schemaChangeWorker) getErrorState() string {
 func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 	w.logger.startLog()
 	w.logger.writeLog("BEGIN")
-	fmt.Printf("starting TXN (%d)\n", w.id)
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
 
 	for i := 0; i < opsNum; i++ {
@@ -368,10 +367,7 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 		w.logger.writeLog(op.String())
 		if !w.dryRun {
 			start := timeutil.Now()
-
-			fmt.Printf("starting (%d) %s\n", w.id, op.sql)
 			err := op.executeStmt(ctx, tx, w.opGen)
-			fmt.Printf("completed (%d) %s\n", w.id, op.sql)
 			if err != nil {
 				// If the error not an instance of pgconn.PgError, then it is unexpected.
 				pgErr := new(pgconn.PgError)
@@ -393,7 +389,6 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
 	}
-	fmt.Printf("built TXN (%d)\n", w.id)
 	return nil
 }
 
@@ -408,14 +403,15 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	watchDog := newSchemaChangeWatchDog(w.pool.Get())
-	watchDog.Start(ctx, tx)
+	if err := watchDog.Start(ctx, tx); err != nil {
+		return errors.Wrapf(err, "unable to start watch dog")
+	}
 	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
 	err = w.runInTxn(ctx, tx)
 
 	if err != nil {
-		fmt.Printf("FINISH TXN (%d)\n", w.id)
 		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
 		// error with a rollback error if necessary.
 		if rbkErr := tx.Rollback(ctx); rbkErr != nil {
@@ -439,10 +435,8 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return errors.Wrapf(err, "***UNEXPECTED ERROR")
 		}
 	}
-	fmt.Printf("COMMIT TXN START (%d)\n", w.id)
 	w.logger.writeLog("COMMIT")
 	if err = tx.Commit(ctx); err != nil {
-		fmt.Printf("FINISH TXN (%d)", w.id)
 		// If the error not an instance of pgconn.PgError, then it is unexpected.
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
@@ -490,8 +484,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		w.logger.flushLog(tx, "COMMIT; Successfully got expected commit error")
 		return nil
 	}
-	fmt.Printf("FINISH TXN (%d)\n", w.id)
-
 	if !w.opGen.expectedCommitErrors.empty() {
 		err := errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected %s", w.getErrorState())
 		w.logger.flushLog(tx, err.Error())
