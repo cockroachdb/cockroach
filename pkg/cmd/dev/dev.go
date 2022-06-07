@@ -134,7 +134,16 @@ Typical usage:
 	var debugVar bool
 	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
 	ret.cli.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		skipDoctorCheck := cmd.Name() == "doctor" || cmd.Name() == "merge-test-xmls"
+		skipDoctorCheckCommands := []string{
+			"builder",
+			"doctor",
+			"help",
+			"merge-test-xmls",
+		}
+		var skipDoctorCheck bool
+		for _, skipDoctorCheckCommand := range skipDoctorCheckCommands {
+			skipDoctorCheck = skipDoctorCheck || cmd.Name() == skipDoctorCheckCommand
+		}
 		if !skipDoctorCheck {
 			if err := ret.checkDoctorStatus(cmd.Context()); err != nil {
 				return err
