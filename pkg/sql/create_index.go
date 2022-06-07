@@ -14,9 +14,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -197,7 +200,9 @@ func makeIndexDescriptor(
 		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 
+	columnsToCheckForOpclass := columns
 	if n.Inverted {
+		columnsToCheckForOpclass = columns[:len(columns)-1]
 		if n.Sharded != nil {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding")
 		}
@@ -211,19 +216,21 @@ func makeIndexDescriptor(
 		}
 
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
-		column, err := tableDesc.FindColumnWithName(columns[len(columns)-1].Column)
+		invCol := columns[len(columns)-1]
+		column, err := tableDesc.FindColumnWithName(invCol.Column)
 		if err != nil {
 			return nil, err
 		}
-		switch column.GetType().Family() {
-		case types.GeometryFamily:
-			config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
-			if err != nil {
-				return nil, err
-			}
-			indexDesc.GeoConfig = *config
-		case types.GeographyFamily:
-			indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+		if err := populateInvertedIndexDescriptor(
+			params.ctx, params.ExecCfg().Settings, column, &indexDesc, invCol); err != nil {
+			return nil, err
+		}
+	}
+
+	for i := range columnsToCheckForOpclass {
+		col := &columns[i]
+		if col.OpClass != "" {
+			return nil, newUndefinedOpclassError(col.OpClass)
 		}
 	}
 
@@ -301,6 +308,75 @@ func makeIndexDescriptor(
 	}
 
 	return &indexDesc, nil
+}
+
+// populateInvertedIndexDescriptor adds information to the input index descriptor
+// for the inverted index given by the input column and invCol, which should
+// match (column is the catalog column, and invCol is the grammar node of
+// the column in the index creation statement).
+func populateInvertedIndexDescriptor(
+	ctx context.Context,
+	cs *cluster.Settings,
+	column catalog.Column,
+	indexDesc *descpb.IndexDescriptor,
+	invCol tree.IndexElem,
+) error {
+	indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT}
+	switch column.GetType().Family() {
+	case types.ArrayFamily:
+		switch invCol.OpClass {
+		case "array_ops", "":
+		default:
+			return newUndefinedOpclassError(invCol.OpClass)
+		}
+	case types.JsonFamily:
+		switch invCol.OpClass {
+		case "jsonb_ops", "":
+		case "jsonb_path_ops":
+			return unimplemented.NewWithIssue(81115, "operator class \"jsonb_path_ops\" is not supported")
+		default:
+			return newUndefinedOpclassError(invCol.OpClass)
+		}
+	case types.GeometryFamily:
+		if invCol.OpClass != "" {
+			return newUndefinedOpclassError(invCol.OpClass)
+		}
+		config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
+		if err != nil {
+			return err
+		}
+		indexDesc.GeoConfig = *config
+	case types.GeographyFamily:
+		if invCol.OpClass != "" {
+			return newUndefinedOpclassError(invCol.OpClass)
+		}
+		indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+	case types.StringFamily:
+		// Check the opclass of the last column in the list, which is the column
+		// we're going to inverted index.
+		switch invCol.OpClass {
+		case "gin_trgm_ops", "gist_trgm_ops":
+			if !cs.Version.IsActive(ctx, clusterversion.TrigramInvertedIndexes) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"version %v must be finalized to create trigram inverted indexes",
+					clusterversion.ByKey(clusterversion.TrigramInvertedIndexes))
+			}
+		case "":
+			return errors.WithHint(
+				pgerror.New(pgcode.UndefinedObject, "data type text has no default operator class for access method \"gin\""),
+				"You must specify an operator class for the index (did you mean gin_trgm_ops?)")
+		default:
+			return newUndefinedOpclassError(invCol.OpClass)
+		}
+		indexDesc.InvertedColumnKinds[0] = catpb.InvertedIndexColumnKind_TRIGRAM
+	default:
+		return tabledesc.NewInvalidInvertedColumnError(column.GetName(), column.GetType().Name())
+	}
+	return nil
+}
+
+func newUndefinedOpclassError(opclass tree.Name) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "operator class %q does not exist", opclass)
 }
 
 // validateColumnsAreAccessible validates that the columns for an index are

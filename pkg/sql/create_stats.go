@@ -287,7 +287,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		if err != nil {
 			return nil, err
 		}
-		isInvIndex := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
+		isInvIndex := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
 		colStats = []jobspb.CreateStatsDetails_ColStat{{
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
@@ -524,7 +524,7 @@ func createStatsDefaultColumns(
 				if err != nil {
 					return nil, err
 				}
-				isInverted := colinfo.ColumnTypeIsInvertedIndexable(col.GetType())
+				isInverted := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
 				if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
 					return nil, err
 				}
@@ -558,7 +558,7 @@ func createStatsDefaultColumns(
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colList,
-			HasHistogram:        !colinfo.ColumnTypeIsInvertedIndexable(col.GetType()),
+			HasHistogram:        !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()),
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++
