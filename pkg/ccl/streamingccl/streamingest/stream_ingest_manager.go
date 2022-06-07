@@ -9,7 +9,9 @@
 package streamingest
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -23,9 +25,16 @@ type streamIngestManagerImpl struct{}
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
-	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID, cutoverTimestamp hlc.Timestamp,
+	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(evalCtx, txn, streamID, cutoverTimestamp)
+	return completeStreamIngestion(evalCtx, txn, ingestionJobID, cutoverTimestamp)
+}
+
+// GetStreamIngestionStats implements streaming.StreamIngestManager interface.
+func (r *streamIngestManagerImpl) GetStreamIngestionStats(
+	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
+	return getStreamIngestionStats(evalCtx, txn, ingestionJobID)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(

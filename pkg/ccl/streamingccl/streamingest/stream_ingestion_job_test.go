@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -34,12 +36,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	json2 "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func verifyIngestionStats(t *testing.T, streamID int64, cutoverTime time.Time, stats string) {
+	fetchValueKey := func(j json2.JSON, key string) json2.JSON {
+		val, err := j.FetchValKey(key)
+		require.NoError(t, err)
+		return val
+	}
+
+	parseInt64 := func(s string) int64 {
+		res, err := strconv.Atoi(s)
+		require.NoError(t, err)
+		return int64(res)
+	}
+
+	statsJSON, err := json2.ParseJSON(stats)
+	require.NoError(t, err)
+
+	ingestionProgress := fetchValueKey(statsJSON, "ingestion_progress")
+	require.Equal(t, cutoverTime.UnixNano(),
+		parseInt64(fetchValueKey(fetchValueKey(ingestionProgress, "cutover_time"), "wall_time").String()))
+
+	partitionProgressIter, err := fetchValueKey(ingestionProgress, "partition_progress").ObjectIter()
+	require.NoError(t, err)
+	for partitionProgressIter.Next() {
+		require.Less(t, cutoverTime.UnixNano(), parseInt64(fetchValueKey(fetchValueKey(
+			partitionProgressIter.Value(), "ingested_timestamp"), "wall_time").String()))
+	}
+
+	require.Equal(t, streamID, parseInt64(fetchValueKey(statsJSON, "stream_id").String()))
+	require.Equal(t, strconv.Itoa(int(streampb.StreamReplicationStatus_STREAM_INACTIVE)),
+		fetchValueKey(fetchValueKey(statsJSON, "stream_replication_status"), "stream_status").String())
+}
 
 // TestTenantStreaming tests that tenants can stream changes end-to-end.
 func TestTenantStreaming(t *testing.T) {
@@ -61,7 +96,9 @@ func TestTenantStreaming(t *testing.T) {
 	// Start tenant server in the source cluster.
 	tenantID := serverutils.TestTenantID()
 	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{TenantID: tenantID})
-	defer tenantConn.Close()
+	defer func() {
+		require.NoError(t, tenantConn.Close())
+	}()
 	// sourceSQL refers to the tenant generating the data.
 	sourceSQL := sqlutils.MakeSQLRunner(tenantConn)
 
@@ -86,8 +123,9 @@ SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
 	destSQL := hDest.SysDB
 	destSQL.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '2s';
-SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '5us';
+SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
+SET CLUSTER SETTING streaming.partition_progress_frequency = '100ms';
 SET enable_experimental_stream_replication = true;
 `,
 		";")...)
@@ -96,7 +134,7 @@ SET enable_experimental_stream_replication = true;
 	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
-	var ingestionJobID int
+	var ingestionJobID, streamProducerJobID int64
 	var startTime string
 	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 
@@ -107,6 +145,11 @@ SET enable_experimental_stream_replication = true;
 		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT 20`,
 		pgURL.String(),
 	).Scan(&ingestionJobID)
+
+	sourceDBRunner.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'STREAM REPLICATION'", [][]string{{"1"}})
+	sourceDBRunner.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'STREAM REPLICATION'").
+		Scan(&streamProducerJobID)
 
 	sourceSQL.Exec(t, `
 CREATE DATABASE d;
@@ -138,6 +181,10 @@ INSERT INTO d.t2 VALUES (2);
 		ingestionJobID, cutoverTime)
 
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
+	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
+
+	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
+		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats($1)", ingestionJobID)[0][0])
 
 	query := "SELECT * FROM d.t1"
 	sourceData := sourceSQL.QueryStr(t, query)
