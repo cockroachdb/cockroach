@@ -19,7 +19,7 @@ import (
 
 // Trigrams are calculated per word. Words are made up of alphanumeric
 // characters. Note that this doesn't include _, so we can't just use \w.
-var alphaNumRe = regexp.MustCompile("[a-zA-Z0-9]+")
+var alphaNumRe = regexp.MustCompile("[a-z0-9]+")
 
 // MakeTrigrams returns the downcased, sorted and de-duplicated trigrams for an
 // input string. Non-alphanumeric characters are treated as word boundaries.
@@ -53,7 +53,7 @@ func MakeTrigrams(s string, pad bool) []string {
 	}
 
 	if len(output) == 0 {
-		return output
+		return nil
 	}
 
 	// Sort the array and deduplicate.
@@ -79,6 +79,10 @@ func MakeTrigrams(s string, pad bool) []string {
 // means the trigrams are identical, 0.0 means no trigrams were shared.
 func Similarity(l string, r string) float64 {
 	lTrigrams, rTrigrams := MakeTrigrams(l, true /* pad */), MakeTrigrams(r, true /* pad */)
+
+	if len(lTrigrams) == 0 || len(rTrigrams) == 0 {
+		return 0
+	}
 
 	// To calculate the similarity, we count the number of shared trigrams
 	// in the strings, and divide by the number of non-shared trigrams.

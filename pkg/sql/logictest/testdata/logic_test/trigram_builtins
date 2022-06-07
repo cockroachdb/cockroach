@@ -42,12 +42,24 @@ SELECT show_trgm('a b,c|d_e3 bl  ')
 # Test the similarity builtin.
 query F
 SELECT similarity(a, b) FROM (VALUES
+    ('', ''),
+    ('foo', ''),
+    ('', 'foo'),
+    ('foo', NULL),
+    (NULL, 'foo'),
+    (NULL, NULL),
     ('foo', 'bar'),
     ('foo', 'far'),
     ('foo', 'for'),
     ('foo', 'foo')
   ) tbl(a, b)
 ----
+0
+0
+0
+NULL
+NULL
+NULL
 0
 0.142857142857143
 0.333333333333333
