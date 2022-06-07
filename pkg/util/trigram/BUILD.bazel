@@ -1,8 +1,15 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "trigram",
     srcs = ["trigram.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/trigram",
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "trigram_test",
+    srcs = ["trigram_test.go"],
+    embed = [":trigram"],
+    deps = ["@com_github_stretchr_testify//assert"],
 )
