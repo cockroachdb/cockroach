@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -798,7 +799,7 @@ func BenchmarkEventf_WithVerboseTraceSpan(b *testing.B) {
 			tracer.SetRedactable(redactable)
 			ctx, sp := tracer.StartSpanCtx(ctx, "benchspan", tracing.WithForceRealSpan())
 			defer sp.Finish()
-			sp.SetRecordingType(tracing.RecordingVerbose)
+			sp.SetRecordingType(tracingpb.RecordingVerbose)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				Eventf(ctx, "%s %s %s", "foo", "bar", "baz")

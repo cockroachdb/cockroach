@@ -23,7 +23,6 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/system",
-        "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

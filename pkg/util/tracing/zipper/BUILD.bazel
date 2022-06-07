@@ -10,7 +10,7 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "//pkg/util/memzipper",
-        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

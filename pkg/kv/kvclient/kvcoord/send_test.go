@@ -166,7 +166,7 @@ func (f *firstNErrorTransport) SendNext(
 
 func (f *firstNErrorTransport) NextInternalClient(
 	ctx context.Context,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	panic("unimplemented")
 }
 

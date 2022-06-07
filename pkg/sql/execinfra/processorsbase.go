@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
@@ -366,7 +367,7 @@ type ProcessorBaseNoHelper struct {
 	// been called. This is needed in order to provide the access to the
 	// recording after the span has been finished in InternalClose. Only set if
 	// storeExecStatsTrace is true.
-	ExecStatsTrace tracing.Recording
+	ExecStatsTrace tracingpb.Recording
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling InternalClose()) and generate the trailing meta that

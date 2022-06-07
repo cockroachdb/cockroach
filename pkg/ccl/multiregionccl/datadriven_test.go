@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 )
@@ -118,7 +119,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex
 		var traceStmt string
-		var recCh chan tracing.Recording
+		var recCh chan tracingpb.Recording
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "sleep-for-follower-read":
@@ -135,7 +136,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				}
 				serverArgs := make(map[int]base.TestServerArgs)
 				localityNames := strings.Split(localities, ",")
-				recCh = make(chan tracing.Recording, 1)
+				recCh = make(chan tracingpb.Recording, 1)
 				for i, localityName := range localityNames {
 					localityCfg := roachpb.Locality{
 						Tiers: []roachpb.Tier{
@@ -147,7 +148,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						Locality: localityCfg,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
-								WithStatementTrace: func(trace tracing.Recording, stmt string) {
+								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 									mu.Lock()
 									defer mu.Unlock()
 									if stmt == traceStmt {
@@ -475,7 +476,7 @@ func nodeIdToIdx(t *testing.T, tc serverutils.TestClusterInterface, id roachpb.N
 // message. An error is returned if more than one (or no) "dist sender send"
 // messages are found in the recording.
 func checkReadServedLocallyInSimpleRecording(
-	rec tracing.Recording,
+	rec tracingpb.Recording,
 ) (servedLocally bool, servedUsingFollowerReads bool, err error) {
 	foundDistSenderSend := false
 	for _, sp := range rec {

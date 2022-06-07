@@ -12,7 +12,6 @@ package server
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -27,7 +26,7 @@ const TraceRedactedMarker = redact.RedactableString("verbose trace message redac
 // The recording is modified in place.
 //
 // tenID is the tenant that will receive this recording.
-func redactRecordingForTenant(tenID roachpb.TenantID, rec tracing.Recording) error {
+func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) error {
 	if tenID == roachpb.SystemTenantID {
 		return nil
 	}

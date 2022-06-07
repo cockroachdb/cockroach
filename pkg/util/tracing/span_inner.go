@@ -65,11 +65,11 @@ func (s *spanInner) isSterile() bool {
 	return s.sterile
 }
 
-func (s *spanInner) RecordingType() RecordingType {
+func (s *spanInner) RecordingType() tracingpb.RecordingType {
 	return s.crdb.recordingType()
 }
 
-func (s *spanInner) SetRecordingType(to RecordingType) {
+func (s *spanInner) SetRecordingType(to tracingpb.RecordingType) {
 	if s.isNoop() {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
@@ -80,7 +80,9 @@ func (s *spanInner) SetRecordingType(to RecordingType) {
 //
 // finishing indicates whether s is in the process of finishing. If it isn't,
 // the recording will include an "_unfinished" tag.
-func (s *spanInner) GetRecording(recType RecordingType, finishing bool) Recording {
+func (s *spanInner) GetRecording(
+	recType tracingpb.RecordingType, finishing bool,
+) tracingpb.Recording {
 	if s.isNoop() {
 		return nil
 	}
@@ -112,7 +114,7 @@ func (s *spanInner) Finish() {
 func (s *spanInner) Meta() SpanMeta {
 	var traceID tracingpb.TraceID
 	var spanID tracingpb.SpanID
-	var recordingType RecordingType
+	var recordingType tracingpb.RecordingType
 	var sterile bool
 
 	if s.crdb != nil {
@@ -237,7 +239,7 @@ func (s *spanInner) Recordf(format string, args ...interface{}) {
 // hasVerboseSink returns false if there is no reason to even evaluate Record
 // because the result wouldn't be used for anything.
 func (s *spanInner) hasVerboseSink() bool {
-	if s.netTr == nil && s.otelSpan == nil && s.RecordingType() != RecordingVerbose {
+	if s.netTr == nil && s.otelSpan == nil && s.RecordingType() != tracingpb.RecordingVerbose {
 		return false
 	}
 	return true

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -989,7 +990,7 @@ type monitoredGoroutine struct {
 	finished int32
 
 	ctx        context.Context
-	collect    func() tracing.Recording
+	collect    func() tracingpb.Recording
 	cancel     func()
 	prevEvents int
 }
@@ -1002,12 +1003,12 @@ func newMonitor() *monitor {
 }
 
 func (m *monitor) runSync(opName string, fn func(context.Context)) {
-	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracing.RecordingVerbose))
+	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracingpb.RecordingVerbose))
 	g := &monitoredGoroutine{
 		opSeq:  0, // synchronous
 		opName: opName,
 		ctx:    ctx,
-		collect: func() tracing.Recording {
+		collect: func() tracingpb.Recording {
 			return sp.GetConfiguredRecording()
 		},
 		cancel: sp.Finish,
@@ -1019,12 +1020,12 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 
 func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
 	m.seq++
-	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracing.RecordingVerbose))
+	ctx, sp := m.tr.StartSpanCtx(context.Background(), opName, tracing.WithRecording(tracingpb.RecordingVerbose))
 	g := &monitoredGoroutine{
 		opSeq:  m.seq,
 		opName: opName,
 		ctx:    ctx,
-		collect: func() tracing.Recording {
+		collect: func() tracingpb.Recording {
 			return sp.GetConfiguredRecording()
 		},
 		cancel: sp.Finish,

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -317,7 +318,7 @@ func TestTableReaderDrain(t *testing.T) {
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
 	tracer := s.TracerI().(*tracing.Tracer)
-	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracing.RecordingVerbose))
+	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	st := s.ClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
@@ -394,7 +395,7 @@ func TestLimitScans(t *testing.T) {
 
 	// Now we're going to run the tableReader and trace it.
 	tracer := s.TracerI().(*tracing.Tracer)
-	sp := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
+	sp := tracer.StartSpan("root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.EvalCtx.Context = ctx
 	flowCtx.CollectStats = true

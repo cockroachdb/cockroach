@@ -26,17 +26,13 @@ import (
 // knob functions are called at various points in the Context life cycle if they
 // are non-nil.
 type ContextTestingKnobs struct {
-
-	// UnaryClientInterceptor if non-nil will be called at dial time to provide
-	// the base unary interceptor for client connections.
-	// This function may return a nil interceptor to avoid injecting behavior
-	// for a given target and class.
-	UnaryClientInterceptor func(target string, class ConnectionClass) grpc.UnaryClientInterceptor
-
 	// StreamClient if non-nil will be called at dial time to provide
 	// the base stream interceptor for client connections.
 	// This function may return a nil interceptor to avoid injecting behavior
 	// for a given target and class.
+	//
+	// Note that this is not called for streaming RPCs using the
+	// internalClientAdapter - i.e. KV RPCs done against the local server.
 	StreamClientInterceptor func(target string, class ConnectionClass) grpc.StreamClientInterceptor
 
 	// ArtificialLatencyMap if non-nil contains a map from target address

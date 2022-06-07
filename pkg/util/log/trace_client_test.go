@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -31,12 +32,12 @@ func TestTrace(t *testing.T) {
 			name: "verbose",
 			init: func(ctx context.Context) (context.Context, *tracing.Span) {
 				tracer := tracing.NewTracer()
-				sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
+				sp := tracer.StartSpan("s", tracing.WithRecording(tracingpb.RecordingVerbose))
 				ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 				return ctxWithSpan, sp
 			},
 			check: func(t *testing.T, _ context.Context, sp *tracing.Span, _ *tracing.Tracer) {
-				rec := sp.FinishAndGetRecording(tracing.RecordingVerbose)
+				rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
 				if err := tracing.CheckRecordedSpans(rec, `
 		span: s
 			tags: _verbose=1
@@ -95,7 +96,7 @@ func TestTraceWithTags(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "tag", 1)
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
+	sp := tracer.StartSpan("s", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 
 	log.Event(ctxWithSpan, "test1")
@@ -103,7 +104,7 @@ func TestTraceWithTags(t *testing.T) {
 	log.VErrEvent(ctxWithSpan, log.NoLogV(), "testerr")
 	log.Info(ctxWithSpan, "log")
 
-	if err := tracing.CheckRecordedSpans(sp.FinishAndGetRecording(tracing.RecordingVerbose), `
+	if err := tracing.CheckRecordedSpans(sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
 		span: s
 			tags: _verbose=1
 			event: [tag=1] test1

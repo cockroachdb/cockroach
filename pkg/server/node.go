@@ -55,6 +55,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -986,37 +988,33 @@ func (n *Node) batchInternal(
 	}
 
 	var br *roachpb.BatchResponse
-	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
-		var reqSp spanForRequest
-		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
-		// NB: wrapped to delay br evaluation to its value when returning.
-		defer func() { reqSp.finish(ctx, br) }()
-		if log.HasSpanOrEvent(ctx) {
-			log.Eventf(ctx, "node received request: %s", args.Summary())
-		}
+	var reqSp spanForRequest
+	// Shadow ctx from the outer function. Written like this to pass the linter.
+	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
+	// NB: wrapped to delay br evaluation to its value when returning.
+	defer func() { reqSp.finish(ctx, br) }()
+	if log.HasSpanOrEvent(ctx) {
+		log.Eventf(ctx, "node received request: %s", args.Summary())
+	}
 
-		tStart := timeutil.Now()
-		handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
-		defer n.admissionController.AdmittedKVWorkDone(handle)
-		if err != nil {
-			return err
-		}
-		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *args)
-		if pErr != nil {
-			br = &roachpb.BatchResponse{}
-			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
-		}
-		n.metrics.callComplete(timeutil.Since(tStart), pErr)
-		br.Error = pErr
-		return nil
-	}); err != nil {
+	tStart := timeutil.Now()
+	handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
+	defer n.admissionController.AdmittedKVWorkDone(handle)
+	if err != nil {
 		return nil, err
 	}
+	var pErr *roachpb.Error
+	br, pErr = n.stores.Send(ctx, *args)
+	if pErr != nil {
+		br = &roachpb.BatchResponse{}
+		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
+	}
+	if br.Error != nil {
+		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
+	}
+	n.metrics.callComplete(timeutil.Since(tStart), pErr)
+	br.Error = pErr
+
 	return br, nil
 }
 
@@ -1090,7 +1088,7 @@ type spanForRequest struct {
 // finish finishes the span. If the span was recording and br is not nil, the
 // recording is written to br.CollectedSpans.
 func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse) {
-	var rec tracing.Recording
+	var rec tracingpb.Recording
 	// If we don't have a response, there's nothing to attach a trace to.
 	// Nothing more for us to do.
 	sp.needRecording = sp.needRecording && br != nil
@@ -1154,30 +1152,30 @@ func setupSpanForIncomingRPC(
 	needRecordingCollection := !localRequest
 	if localRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, tracing.BatchMethodName, tracing.WithServerSpanKind)
+		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else if parentSpan == nil {
 		// Non-local call. Tracing information comes from the request proto.
 		var remoteParent tracing.SpanMeta
 		if !ba.TraceInfo.Empty() {
-			ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
 				tracing.WithRemoteParentFromTraceInfo(&ba.TraceInfo),
 				tracing.WithServerSpanKind)
 		} else {
 			// For backwards compatibility with 21.2, if tracing info was passed as
 			// gRPC metadata, we use it.
 			var err error
-			remoteParent, err = tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+			remoteParent, err = grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
 			if err != nil {
 				log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 			}
-			ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
 				tracing.WithRemoteParentFromSpanMeta(remoteParent),
 				tracing.WithServerSpanKind)
 		}
 	} else {
 		// It's unexpected to find a span in the context for a non-local request.
 		// Let's create a span for the RPC anyway.
-		ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+		ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
 			tracing.WithParent(parentSpan),
 			tracing.WithServerSpanKind)
 	}

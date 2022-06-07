@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -384,7 +385,7 @@ func (r *Registry) runJob(
 	// A new root span will be created on every resumption of the job.
 	var spanOptions []tracing.SpanOption
 	if tj, ok := resumer.(TraceableJob); ok && tj.ForceRealSpan() {
-		spanOptions = append(spanOptions, tracing.WithRecording(tracing.RecordingStructured))
+		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingStructured))
 	}
 	// TODO(ajwerner): Move this writing up the trace ID down into
 	// stepThroughStateMachine where we're already often (and soon with

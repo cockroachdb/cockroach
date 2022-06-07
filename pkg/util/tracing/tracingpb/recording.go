@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tracing
+package tracingpb
 
 import (
 	"encoding/json"
@@ -19,8 +19,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	jaegerjson "github.com/jaegertracing/jaeger/model/json"
 )
@@ -57,27 +60,27 @@ func (t RecordingType) ToCarrierValue() string {
 }
 
 // ToProto converts t to the corresponding proto enum.
-func (t RecordingType) ToProto() tracingpb.RecordingMode {
+func (t RecordingType) ToProto() RecordingMode {
 	switch t {
 	case RecordingOff:
-		return tracingpb.RecordingMode_OFF
+		return RecordingMode_OFF
 	case RecordingStructured:
-		return tracingpb.RecordingMode_STRUCTURED
+		return RecordingMode_STRUCTURED
 	case RecordingVerbose:
-		return tracingpb.RecordingMode_VERBOSE
+		return RecordingMode_VERBOSE
 	default:
 		panic(fmt.Sprintf("invalid RecordingType: %d", t))
 	}
 }
 
 // RecordingTypeFromProto converts from the proto values to the corresponding enum.
-func RecordingTypeFromProto(val tracingpb.RecordingMode) RecordingType {
+func RecordingTypeFromProto(val RecordingMode) RecordingType {
 	switch val {
-	case tracingpb.RecordingMode_OFF:
+	case RecordingMode_OFF:
 		return RecordingOff
-	case tracingpb.RecordingMode_STRUCTURED:
+	case RecordingMode_STRUCTURED:
 		return RecordingStructured
-	case tracingpb.RecordingMode_VERBOSE:
+	case RecordingMode_VERBOSE:
 		return RecordingVerbose
 	default:
 		panic(fmt.Sprintf("invalid RecordingType: %d", val))
@@ -174,13 +177,13 @@ func (r Recording) String() string {
 }
 
 // OrphanSpans returns the spans with parents missing from the recording.
-func (r Recording) OrphanSpans() []tracingpb.RecordedSpan {
-	spanIDs := make(map[tracingpb.SpanID]struct{})
+func (r Recording) OrphanSpans() []RecordedSpan {
+	spanIDs := make(map[SpanID]struct{})
 	for _, sp := range r {
 		spanIDs[sp.SpanID] = struct{}{}
 	}
 
-	var orphans []tracingpb.RecordedSpan
+	var orphans []RecordedSpan
 	for i, sp := range r {
 		if i == 0 {
 			// The first Span can be a root Span. Note that any other root Span will
@@ -214,20 +217,20 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 
 // FindSpan returns the Span with the given operation. The bool retval is false
 // if the Span is not found.
-func (r Recording) FindSpan(operation string) (tracingpb.RecordedSpan, bool) {
+func (r Recording) FindSpan(operation string) (RecordedSpan, bool) {
 	for _, sp := range r {
 		if sp.Operation == operation {
 			return sp, true
 		}
 	}
-	return tracingpb.RecordedSpan{}, false
+	return RecordedSpan{}, false
 }
 
 // visitSpan returns the log messages for sp, and all of sp's children.
 //
 // All messages from a Span are kept together. Sibling spans are ordered within
 // the parent in their start order.
-func (r Recording) visitSpan(sp tracingpb.RecordedSpan, depth int) []traceLogData {
+func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	ownLogs := make([]traceLogData, 0, len(sp.Logs)+1)
 
 	conv := func(msg redact.RedactableString, timestamp time.Time, ref time.Time) traceLogData {
@@ -354,7 +357,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	tagsCopy["statement"] = stmt
 	r[0].Tags = tagsCopy
 
-	toJaegerSpanID := func(spanID tracingpb.SpanID) jaegerjson.SpanID {
+	toJaegerSpanID := func(spanID SpanID) jaegerjson.SpanID {
 		return jaegerjson.SpanID(strconv.FormatUint(uint64(spanID), 10))
 	}
 
@@ -365,7 +368,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	// getProcessID figures out what "process" a Span belongs to. It looks for an
 	// "node: <node id>" tag. The processes map is populated with an entry for every
 	// node present in the trace.
-	getProcessID := func(sp tracingpb.RecordedSpan) jaegerjson.ProcessID {
+	getProcessID := func(sp RecordedSpan) jaegerjson.ProcessID {
 		node := "unknown node"
 		for k, v := range sp.Tags {
 			if k == "node" {
@@ -435,7 +438,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 		// or not at the time each event was recorded, so we make a guess based on
 		// whether the span was verbose at the moment when the Recording was
 		// produced.
-		if !(sp.Verbose || sp.RecordingMode == tracingpb.RecordingMode_VERBOSE) {
+		if !(sp.Verbose || sp.RecordingMode == RecordingMode_VERBOSE) {
 			sp.Structured(func(sr *types.Any, t time.Time) {
 				jl := jaegerjson.Log{Timestamp: uint64(t.UnixNano() / 1000)}
 				jsonStr, err := MessageToJSONString(sr, true /* emitDefaults */)
@@ -474,4 +477,21 @@ type TraceCollection struct {
 	// Comment is a dummy field we use to put instructions on how to load the trace.
 	Comment string             `json:"_comment"`
 	Data    []jaegerjson.Trace `json:"data"`
+}
+
+// MessageToJSONString converts a protocol message into a JSON string. The
+// emitDefaults flag dictates whether fields with zero values are rendered or
+// not.
+//
+// TODO(andrei): It'd be nice if this function dealt with redactable vs safe
+// fields, like EventPayload.AppendJSONFields does.
+func MessageToJSONString(msg protoutil.Message, emitDefaults bool) (string, error) {
+	// Convert to json.
+	jsonEncoder := jsonpb.Marshaler{EmitDefaults: emitDefaults}
+	msgJSON, err := jsonEncoder.MarshalToString(msg)
+	if err != nil {
+		return "", errors.Newf("error when converting %s to JSON string", proto.MessageName(msg))
+	}
+
+	return msgJSON, nil
 }

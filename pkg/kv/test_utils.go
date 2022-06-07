@@ -16,11 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // OnlyFollowerReads looks through all the RPCs and asserts that every single
 // one resulted in a follower read. Returns false if no RPCs are found.
-func OnlyFollowerReads(rec tracing.Recording) bool {
+func OnlyFollowerReads(rec tracingpb.Recording) bool {
 	foundFollowerRead := false
 	for _, sp := range rec {
 		if sp.Operation == "/cockroach.roachpb.Internal/Batch" &&

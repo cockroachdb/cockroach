@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/trace"
 )
@@ -274,9 +275,9 @@ func (sp *Span) finishInternal() {
 //
 // Returns nil if the span is not currently recording (even if it had been
 // recording in the past).
-func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
-	rec := Recording(nil)
-	if sp.RecordingType() != RecordingOff {
+func (sp *Span) FinishAndGetRecording(recType tracingpb.RecordingType) tracingpb.Recording {
+	rec := tracingpb.Recording(nil)
+	if sp.RecordingType() != tracingpb.RecordingOff {
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
 	// Reach directly into sp.i to pass the finishing argument.
@@ -290,10 +291,10 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 //
 // Returns nil if the span is not currently recording (even if it had been
 // recording in the past).
-func (sp *Span) FinishAndGetConfiguredRecording() Recording {
-	rec := Recording(nil)
+func (sp *Span) FinishAndGetConfiguredRecording() tracingpb.Recording {
+	rec := tracingpb.Recording(nil)
 	recType := sp.RecordingType()
-	if recType != RecordingOff {
+	if recType != tracingpb.RecordingOff {
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
 	// Reach directly into sp.i to pass the finishing argument.
@@ -326,11 +327,11 @@ func (sp *Span) FinishAndGetConfiguredRecording() Recording {
 //
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
-func (sp *Span) GetRecording(recType RecordingType) Recording {
+func (sp *Span) GetRecording(recType tracingpb.RecordingType) tracingpb.Recording {
 	if sp.detectUseAfterFinish() {
 		return nil
 	}
-	if sp.RecordingType() == RecordingOff {
+	if sp.RecordingType() == tracingpb.RecordingOff {
 		return nil
 	}
 	return sp.i.GetRecording(recType, false /* finishing */)
@@ -341,12 +342,12 @@ func (sp *Span) GetRecording(recType RecordingType) Recording {
 //
 // Returns nil if the span is not currently recording (even if it had been
 // recording in the past).
-func (sp *Span) GetConfiguredRecording() Recording {
+func (sp *Span) GetConfiguredRecording() tracingpb.Recording {
 	if sp.detectUseAfterFinish() {
 		return nil
 	}
 	recType := sp.RecordingType()
-	if recType == RecordingOff {
+	if recType == tracingpb.RecordingOff {
 		return nil
 	}
 	return sp.i.GetRecording(recType, false /* finishing */)
@@ -357,7 +358,7 @@ func (sp *Span) GetConfiguredRecording() Recording {
 // GetRecording() output for the receiver.
 //
 // This function is used to import a recording from another node.
-func (sp *Span) ImportRemoteRecording(remoteRecording Recording) {
+func (sp *Span) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
 	if !sp.detectUseAfterFinish() {
 		sp.i.ImportRemoteRecording(remoteRecording)
 	}
@@ -377,7 +378,7 @@ func (sp *Span) Meta() SpanMeta {
 // SetRecordingType sets the recording mode of the span and its children,
 // recursively. Setting it to RecordingOff disables further recording.
 // Everything recorded so far remains in memory.
-func (sp *Span) SetRecordingType(to RecordingType) {
+func (sp *Span) SetRecordingType(to tracingpb.RecordingType) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
@@ -385,16 +386,16 @@ func (sp *Span) SetRecordingType(to RecordingType) {
 }
 
 // RecordingType returns the range's current recording mode.
-func (sp *Span) RecordingType() RecordingType {
+func (sp *Span) RecordingType() tracingpb.RecordingType {
 	if sp.detectUseAfterFinish() {
-		return RecordingOff
+		return tracingpb.RecordingOff
 	}
 	return sp.i.RecordingType()
 }
 
 // IsVerbose returns true if the Span is verbose. See SetVerbose for details.
 func (sp *Span) IsVerbose() bool {
-	return sp.RecordingType() == RecordingVerbose
+	return sp.RecordingType() == tracingpb.RecordingVerbose
 }
 
 // Record provides a way to record free-form text into verbose spans. Recordings
@@ -677,6 +678,14 @@ func (sp *Span) visitOpenChildren(visitor func(sp *Span)) {
 	sp.i.crdb.visitOpenChildren(visitor)
 }
 
+// SetOtelStatus sets the status of the OpenTelemetry span (if any).
+func (sp *Span) SetOtelStatus(code codes.Code, msg string) {
+	if sp.i.otelSpan == nil {
+		return
+	}
+	sp.i.otelSpan.SetStatus(codes.Error, msg)
+}
+
 // spanRef represents a reference to a span. In addition to a simple *Span, a
 // spanRef prevents the referenced span from being reallocated in between the
 // time when this spanRef was created and the time when release() is called. It
@@ -812,7 +821,7 @@ type SpanMeta struct {
 	otelCtx oteltrace.SpanContext
 
 	// If set, all spans derived from this context are being recorded.
-	recordingType RecordingType
+	recordingType tracingpb.RecordingType
 
 	// sterile is set if this span does not want to have children spans. In that
 	// case, trying to create a child span will result in the would-be child being
@@ -882,13 +891,13 @@ func SpanMetaFromProto(info tracingpb.TraceInfo) SpanMeta {
 	}
 	switch info.RecordingMode {
 	case tracingpb.RecordingMode_OFF:
-		sm.recordingType = RecordingOff
+		sm.recordingType = tracingpb.RecordingOff
 	case tracingpb.RecordingMode_STRUCTURED:
-		sm.recordingType = RecordingStructured
+		sm.recordingType = tracingpb.RecordingStructured
 	case tracingpb.RecordingMode_VERBOSE:
-		sm.recordingType = RecordingVerbose
+		sm.recordingType = tracingpb.RecordingVerbose
 	default:
-		sm.recordingType = RecordingOff
+		sm.recordingType = tracingpb.RecordingOff
 	}
 	return sm
 }

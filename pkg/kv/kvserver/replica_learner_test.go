@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -1285,7 +1286,7 @@ func TestDemotedLearnerRemovalHandlesRace(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, makeReplicationTargets(2)...)
 	atomic.StoreInt64(&activateTestingKnob, 1)
 	rebalanceCh := make(chan error)
-	var finishAndGetRecording func() tracing.Recording
+	var finishAndGetRecording func() tracingpb.Recording
 	err := tc.Stopper().RunAsyncTask(ctx, "test", func(ctx context.Context) {
 		ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(
 			ctx, tc.Servers[0].Tracer(), "rebalance",

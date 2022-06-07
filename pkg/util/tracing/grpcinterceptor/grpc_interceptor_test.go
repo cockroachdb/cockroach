@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tracing_test
+package grpcinterceptor_test
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -63,7 +64,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			return nil, errors.New("no span in ctx")
 		}
 		sp.RecordStructured(newTestStructured(magicValue))
-		recs := sp.GetRecording(tracing.RecordingVerbose)
+		recs := sp.GetRecording(tracingpb.RecordingVerbose)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)
 		}
@@ -218,8 +219,8 @@ func TestGRPCInterceptors(t *testing.T) {
 			defer s.Stop(bgCtx)
 			tr := tracing.NewTracer()
 			srv := grpc.NewServer(
-				grpc.UnaryInterceptor(tracing.ServerInterceptor(tr)),
-				grpc.StreamInterceptor(tracing.StreamServerInterceptor(tr)),
+				grpc.UnaryInterceptor(grpcinterceptor.ServerInterceptor(tr)),
+				grpc.StreamInterceptor(grpcinterceptor.StreamServerInterceptor(tr)),
 			)
 			grpcutils.RegisterGRPCTestServer(srv, impl)
 			defer srv.GracefulStop()
@@ -233,10 +234,10 @@ func TestGRPCInterceptors(t *testing.T) {
 			conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
 				//lint:ignore SA1019 grpc.WithInsecure is deprecated
 				grpc.WithInsecure(),
-				grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
+				grpc.WithUnaryInterceptor(grpcinterceptor.ClientInterceptor(tr, nil, /* init */
 					func(_ context.Context) bool { return false }, /* compatibilityMode */
 				)),
-				grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
+				grpc.WithStreamInterceptor(grpcinterceptor.StreamClientInterceptor(tr, nil /* init */)),
 			)
 			require.NoError(t, err)
 			defer func() {
@@ -246,7 +247,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			c := grpcutils.NewGRPCTestClient(conn)
 			require.NoError(t, err)
 
-			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracing.RecordingVerbose))
+			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 			recAny, err := tc.do(ctx, c)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
@@ -254,7 +255,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.Len(t, rec.StructuredRecords, 1)
 			sp.ImportRemoteRecording([]tracingpb.RecordedSpan{rec})
 			var n int
-			finalRecs := sp.FinishAndGetRecording(tracing.RecordingVerbose)
+			finalRecs := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			for _, rec := range finalRecs {
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
@@ -286,7 +287,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			// immediate) in the ctx cancellation subtest.
 			testutils.SucceedsSoon(t, func() error {
 				return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
-					rec := sp.GetFullRecording(tracing.RecordingVerbose)[0]
+					rec := sp.GetFullRecording(tracingpb.RecordingVerbose)[0]
 					return errors.Newf("leaked span: %s %s", rec.Operation, rec.Tags)
 				})
 			})
