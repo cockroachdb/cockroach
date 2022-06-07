@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -166,7 +166,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	}
 
 	thresholdRE := regexp.MustCompile(`(?s).*Threshold:(?P<threshold>[^\s]*)`)
-	thresholdFromTrace := func(trace tracing.Recording) hlc.Timestamp {
+	thresholdFromTrace := func(trace tracingpb.Recording) hlc.Timestamp {
 		threshStr := string(thresholdRE.ExpandString(nil, "$threshold",
 			trace.String(), thresholdRE.FindStringSubmatchIndex(trace.String())))
 		thresh, err := hlc.ParseTimestamp(threshStr)

@@ -140,18 +140,16 @@ func (n *Dialer) DialNoBreaker(
 
 // DialInternalClient is a specialization of DialClass for callers that
 // want a roachpb.InternalClient. This supports an optimization to bypass the
-// network for the local node. Returns a context.Context which should be used
-// when making RPC calls on the returned server. (This context is annotated to
-// mark this request as in-process and bypass ctx.Peer checks).
+// network for the local node.
 func (n *Dialer) DialInternalClient(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	if n == nil || n.resolver == nil {
-		return nil, nil, errors.New("no node dialer configured")
+		return nil, errors.New("no node dialer configured")
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	{
@@ -159,20 +157,15 @@ func (n *Dialer) DialInternalClient(
 		localClient := n.rpcContext.GetLocalInternalClientForAddr(addr.String(), nodeID)
 		if localClient != nil && !n.testingKnobs.TestingNoLocalClientOptimization {
 			log.VEvent(ctx, 2, kvbase.RoutingRequestLocallyMsg)
-
-			// Create a new context from the existing one with the "local request" field set.
-			// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
-			localCtx := grpcutil.NewLocalRequestContext(ctx)
-
-			return localCtx, localClient, nil
+			return localClient, nil
 		}
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
 	conn, err := n.dial(ctx, nodeID, addr, n.getBreaker(nodeID, class), true /* checkBreaker */, class)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return ctx, TracingInternalClient{InternalClient: roachpb.NewInternalClient(conn)}, err
+	return TracingInternalClient{InternalClient: roachpb.NewInternalClient(conn)}, err
 }
 
 // dial performs the dialing of the remote connection. If breaker is nil,
