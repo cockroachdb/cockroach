@@ -733,6 +733,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -740,6 +744,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
 - from: [IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT]
   to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
@@ -780,14 +788,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [View:{DescID: 109}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  to:   [IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT]
-  kind: Precedence
-  rule: dependents removed after index no longer public
-- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  to:   [IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed after index no longer public
 - from: [SequenceOwner:{DescID: 107, ColumnID: 2, ReferencedDescID: 108}, ABSENT]
   to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
@@ -965,6 +965,14 @@ PreCommitPhase stage 1 of 1 with 20 MutationType ops
     *scop.RemoveDroppedColumnType
       ColumnID: 4294967294
       TableID: 112
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 112
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 112
+      TypeIDs:
+      - 110
+      - 111
     *scop.RemoveCheckConstraint
       ConstraintID: 2
       TableID: 112
@@ -983,14 +991,6 @@ PreCommitPhase stage 1 of 1 with 20 MutationType ops
     *scop.RemoveDroppedColumnType
       ColumnID: 3
       TableID: 112
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 112
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 112
-      TypeIDs:
-      - 110
-      - 111
     *scop.SetJobStateOnDescriptor
       DescriptorID: 110
       Initialize: true

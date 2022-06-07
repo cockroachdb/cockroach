@@ -540,6 +540,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   to:   [Table:{DescID: 106}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
@@ -695,10 +699,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, DROPPED]
   kind: Precedence
   rule: dependent element removal before descriptor drop
-- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  to:   [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed after index no longer public
 - from: [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence

@@ -156,7 +156,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 
 		var target string
-		if strings.Contains(pkg, ":") {
+		if strings.Contains(pkg, ":") || strings.HasSuffix(pkg, "/...") {
 			// For parity with bazel, we allow specifying named build targets.
 			target = pkg
 		} else {
@@ -336,6 +336,9 @@ func (d *dev) getStressArgs(stressCmdArg string, timeout time.Duration) []string
 
 func getDirectoryFromTarget(target string) string {
 	target = strings.TrimPrefix(target, "//")
+	if strings.HasSuffix(target, "/...") {
+		return strings.TrimSuffix(target, "/...")
+	}
 	colon := strings.LastIndex(target, ":")
 	if colon < 0 {
 		return target

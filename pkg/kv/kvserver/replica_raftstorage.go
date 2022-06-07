@@ -649,11 +649,12 @@ func (r *Replica) append(
 	if len(entries) == 0 {
 		return prevLastIndex, prevLastTerm, prevRaftLogSize, nil
 	}
+	prefix := r.raftMu.stateLoader.RaftLogPrefix()
 	var diff enginepb.MVCCStats
 	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
-		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)
+		key := keys.RaftLogKeyFromPrefix(prefix, ent.Index)
 
 		if err := value.SetProto(ent); err != nil {
 			return 0, 0, 0, err
@@ -689,7 +690,7 @@ func (r *Replica) append(
 		for i := lastIndex + 1; i <= prevLastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			err := storage.MVCCDelete(ctx, eng, &diff, r.raftMu.stateLoader.RaftLogKey(i),
+			err := storage.MVCCDelete(ctx, eng, &diff, keys.RaftLogKeyFromPrefix(prefix, i),
 				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
 				return 0, 0, 0, err

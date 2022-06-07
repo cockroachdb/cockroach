@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -45,7 +44,7 @@ type StateLoader struct {
 	keys.RangeIDPrefixBuf
 }
 
-// Make creates a a StateLoader.
+// Make creates a StateLoader.
 func Make(rangeID roachpb.RangeID) StateLoader {
 	rsl := StateLoader{
 		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
@@ -300,13 +299,17 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader)
 	defer iter.Close()
 
 	var lastIndex uint64
-	iter.SeekLT(storage.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
+	iter.SeekLT(storage.MakeMVCCMetadataKey(keys.RaftLogKeyFromPrefix(prefix, math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
-		key := iter.Key()
+		key := iter.UnsafeKey().Key
+		if len(key) < len(prefix) {
+			log.Fatalf(ctx, "unable to decode Raft log index key: len(%s) < len(%s)", key.String(), prefix.String())
+		}
+		suffix := key[len(prefix):]
 		var err error
-		_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
+		lastIndex, err = keys.DecodeRaftLogKeyFromSuffix(suffix)
 		if err != nil {
-			log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
+			log.Fatalf(ctx, "unable to decode Raft log index key: %s; %v", key.String(), err)
 		}
 	}
 

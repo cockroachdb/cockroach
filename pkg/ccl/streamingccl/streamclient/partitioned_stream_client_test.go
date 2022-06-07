@@ -101,27 +101,29 @@ INSERT INTO d.t2 VALUES (2);
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
 
 	expectStreamState(streamID, jobs.StatusRunning)
-	require.NoError(t, client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}))
+	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
+	require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, status.StreamStatus)
 
 	// Pause the underlying producer job of the replication stream
 	h.SysDB.Exec(t, `PAUSE JOB $1`, streamID)
 	expectStreamState(streamID, jobs.StatusPaused)
-	err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.True(t, testutils.IsError(err,
-		fmt.Sprintf("replication stream %d is not running, status is STREAM_PAUSED", streamID)), err)
+	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
+	require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
 
 	// Cancel the underlying producer job of the replication stream
 	h.SysDB.Exec(t, `CANCEL JOB $1`, streamID)
 	expectStreamState(streamID, jobs.StatusCanceled)
 
-	err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.True(t, testutils.IsError(err,
-		fmt.Sprintf("replication stream %d is not running, status is STREAM_INACTIVE", streamID)), err)
+	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
+	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 
 	// Non-existent stream is not active in the source cluster.
-	err = client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.True(t, testutils.IsError(err,
-		fmt.Sprintf("replication stream %d is not running, status is STREAM_INACTIVE", 999)), err)
+	status, err = client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
+	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 
 	// Testing client.Subscribe()
 	makePartitionSpec := func(tables ...string) *streampb.StreamPartitionSpec {

@@ -25,6 +25,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log/logpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",
