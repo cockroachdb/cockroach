@@ -13,6 +13,7 @@ option go_package = "streampb";
 
 
 import "roachpb/data.proto";
+import "jobs/jobspb/jobs.proto";
 import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
@@ -106,4 +107,14 @@ message StreamReplicationStatus {
   // Current protected timestamp for spans being replicated. It is absent
   // when the replication stream is 'STOPPED'.
   util.hlc.Timestamp protected_timestamp = 2;
+}
+
+message StreamIngestionStats {
+  uint64 stream_id = 1;
+
+  // Stream production status.
+  StreamReplicationStatus stream_replication_status = 2;
+
+  // Stream ingestion progress.
+  cockroach.sql.jobs.jobspb.StreamIngestionProgress ingestion_progress = 3;
 }
