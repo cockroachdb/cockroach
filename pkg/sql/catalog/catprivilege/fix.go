@@ -139,36 +139,3 @@ func MaybeFixPrivileges(
 	}
 	return changed
 }
-
-// MaybeUpdateGrantOptions iterates over the users of the descriptor and checks
-// if they have the GRANT privilege - if so, then set the user's grant option
-// bits equal to the privilege bits.
-func MaybeUpdateGrantOptions(p *catpb.PrivilegeDescriptor) bool {
-	// If admin has grant option bits set, then we know the descriptor was
-	// created by a new binary, so all the other grant options are already
-	// correct. Note that admin always has SELECT on *every* table including
-	// system tables.
-	if p.CheckGrantOptions(username.AdminRoleName(), privilege.List{privilege.SELECT}) {
-		return false
-	}
-
-	changed := false
-	for i := range p.Users {
-		u := &p.Users[i]
-		if privilege.ALL.IsSetIn(u.Privileges) {
-			if !privilege.ALL.IsSetIn(u.WithGrantOption) {
-				changed = true
-			}
-			u.WithGrantOption = privilege.ALL.Mask()
-			continue
-		}
-		if privilege.GRANT.IsSetIn(u.Privileges) {
-			if u.Privileges != u.WithGrantOption {
-				changed = true
-			}
-			u.WithGrantOption |= u.Privileges
-		}
-	}
-
-	return changed
-}

@@ -71,8 +71,7 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() error {
 		privilege.Schema,
 		sdb.maybeModified.GetName(),
 	)
-	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(sdb.maybeModified.Privileges)
-	if privsChanged || addedGrantOptions {
+	if privsChanged {
 		sdb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	return nil

@@ -110,15 +110,15 @@ func TestFixPrivileges(t *testing.T) {
 			userPrivileges{
 				username.RootUserName():  userPrivs,
 				username.AdminRoleName(): userPrivs,
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.GRANT},
+				barUser:                  privilege.List{},
+				bazUser:                  privilege.List{},
 			},
 			false,
 			userPrivileges{
 				username.RootUserName():  userPrivs,
 				username.AdminRoleName(): userPrivs,
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.GRANT},
+				barUser:                  privilege.List{},
+				bazUser:                  privilege.List{},
 			},
 		},
 		{
@@ -323,12 +323,12 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		{
 			userPrivileges{
 				fooUser: privilege.List{privilege.USAGE},
-				barUser: privilege.List{privilege.USAGE, privilege.CREATE, privilege.GRANT},
+				barUser: privilege.List{privilege.USAGE, privilege.CREATE},
 			},
 			true,
 			userPrivileges{
 				fooUser: privilege.List{privilege.ZONECONFIG},
-				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.GRANT},
+				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
 			},
 			privilege.Database,
 			catpb.InitialVersion,
@@ -422,7 +422,6 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 					privilege.CONNECT,
 					privilege.CREATE,
 					privilege.DROP,
-					privilege.GRANT,
 					privilege.SELECT,
 					privilege.INSERT,
 					privilege.DELETE,
@@ -434,7 +433,6 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 					privilege.CONNECT,
 					privilege.CREATE,
 					privilege.DROP,
-					privilege.GRANT,
 					privilege.SELECT,
 					privilege.INSERT,
 					privilege.DELETE,
@@ -446,18 +444,9 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 			userPrivileges{
 				fooUser: privilege.List{privilege.ALL},
 				barUser: privilege.List{
-					privilege.GRANT,
 					privilege.CREATE,
 					privilege.USAGE,
 				},
-			},
-		},
-		{
-			userPrivileges{
-				fooUser: privilege.List{privilege.GRANT},
-			},
-			userPrivileges{
-				fooUser: privilege.List{privilege.GRANT},
 			},
 		},
 		{

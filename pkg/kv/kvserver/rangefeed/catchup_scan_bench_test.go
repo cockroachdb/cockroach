@@ -46,19 +46,13 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			iter := rangefeed.NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
-				Header: roachpb.Header{
-					Timestamp: opts.ts,
-				},
-				WithDiff: opts.withDiff,
-				Span:     span,
-			}, func() {})
+			iter := rangefeed.NewCatchUpIterator(eng, span, opts.ts, nil)
 			defer iter.Close()
 			counter := 0
-			err := iter.CatchUpScan(storage.MakeMVCCMetadataKey(startKey), storage.MakeMVCCMetadataKey(endKey), opts.ts, opts.withDiff, func(*roachpb.RangeFeedEvent) error {
+			err := iter.CatchUpScan(func(*roachpb.RangeFeedEvent) error {
 				counter++
 				return nil
-			})
+			}, opts.withDiff)
 			if err != nil {
 				b.Fatalf("failed catchUp scan: %+v", err)
 			}

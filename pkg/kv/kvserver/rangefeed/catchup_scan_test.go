@@ -92,24 +92,15 @@ func TestCatchupScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
-		iter := NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
-			Header: roachpb.Header{
-				Timestamp: ts1, // exclusive
-			},
-			Span: roachpb.Span{
-				EndKey: roachpb.KeyMax,
-			},
-			WithDiff: withDiff,
-		}, nil)
+		span := roachpb.Span{Key: testKey1, EndKey: roachpb.KeyMax}
+		iter := NewCatchUpIterator(eng, span, ts1, nil)
 		defer iter.Close()
 		var events []roachpb.RangeFeedValue
 		// ts1 here is exclusive, so we do not want the versions at ts1.
-		require.NoError(t, iter.CatchUpScan(storage.MakeMVCCMetadataKey(testKey1),
-			storage.MakeMVCCMetadataKey(roachpb.KeyMax), ts1, withDiff,
-			func(e *roachpb.RangeFeedEvent) error {
-				events = append(events, *e.Val)
-				return nil
-			}))
+		require.NoError(t, iter.CatchUpScan(func(e *roachpb.RangeFeedEvent) error {
+			events = append(events, *e.Val)
+			return nil
+		}, withDiff))
 		require.Equal(t, 4, len(events))
 		checkEquality := func(
 			kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event roachpb.RangeFeedValue) {

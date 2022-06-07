@@ -410,14 +410,12 @@ test           NULL         bar       false          types        public    USAG
 test           NULL         foo       false          types        public    USAGE
 test           NULL         root      false          tables       bar       CREATE
 test           NULL         root      false          tables       bar       DROP
-test           NULL         root      false          tables       bar       GRANT
 test           NULL         root      false          tables       bar       INSERT
 test           NULL         root      false          tables       bar       DELETE
 test           NULL         root      false          tables       bar       UPDATE
 test           NULL         root      false          tables       bar       ZONECONFIG
 test           NULL         root      false          tables       foo       CREATE
 test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       GRANT
 test           NULL         root      false          tables       foo       INSERT
 test           NULL         root      false          tables       foo       DELETE
 test           NULL         root      false          tables       foo       UPDATE
@@ -435,7 +433,7 @@ test           NULL         NULL      true           types        public    USAG
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM foo, bar, public;
-ALTER DEFAULT PRIVILEGES GRANT GRANT, DROP, ZONECONFIG ON TABLES TO foo;
+ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
 query TTTBTTT colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
@@ -527,7 +525,6 @@ test           NULL         admin     false          types        public    USAG
 test           NULL         bar       false          types        public    USAGE
 test           NULL         foo       false          types        public    USAGE
 test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       GRANT
 test           NULL         root      false          tables       foo       ZONECONFIG
 test           NULL         root      false          tables       root      ALL
 test           NULL         root      false          sequences    root      ALL
@@ -546,7 +543,7 @@ CREATE DATABASE test2;
 use test2;
 
 statement ok
-ALTER DEFAULT PRIVILEGES GRANT GRANT, DROP, ZONECONFIG ON TABLES TO foo;
+ALTER DEFAULT PRIVILEGES GRANT DROP, ZONECONFIG ON TABLES TO foo WITH GRANT OPTION;
 
 query TTTBTTT colnames,rowsort
 SELECT * FROM crdb_internal.default_privileges
@@ -638,7 +635,6 @@ test           NULL         admin     false          types        public    USAG
 test           NULL         bar       false          types        public    USAGE
 test           NULL         foo       false          types        public    USAGE
 test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       GRANT
 test           NULL         root      false          tables       foo       ZONECONFIG
 test           NULL         root      false          tables       root      ALL
 test           NULL         root      false          sequences    root      ALL
@@ -666,7 +662,6 @@ test2          NULL         foo       false          types        foo       ALL
 test2          NULL         foo       false          schemas      foo       ALL
 test2          NULL         foo       false          types        public    USAGE
 test2          NULL         root      false          tables       foo       DROP
-test2          NULL         root      false          tables       foo       GRANT
 test2          NULL         root      false          tables       foo       ZONECONFIG
 test2          NULL         root      false          tables       root      ALL
 test2          NULL         root      false          sequences    root      ALL
@@ -773,7 +768,6 @@ test           NULL         admin     false          types        public    USAG
 test           NULL         bar       false          types        public    USAGE
 test           NULL         foo       false          types        public    USAGE
 test           NULL         root      false          tables       foo       DROP
-test           NULL         root      false          tables       foo       GRANT
 test           NULL         root      false          tables       foo       ZONECONFIG
 test           NULL         root      false          tables       root      ALL
 test           NULL         root      false          sequences    root      ALL
@@ -801,7 +795,6 @@ test2          NULL         foo       false          types        foo       ALL
 test2          NULL         foo       false          schemas      foo       ALL
 test2          NULL         foo       false          types        public    USAGE
 test2          NULL         root      false          tables       foo       DROP
-test2          NULL         root      false          tables       foo       GRANT
 test2          NULL         root      false          tables       foo       ZONECONFIG
 test2          NULL         root      false          tables       root      ALL
 test2          NULL         root      false          sequences    root      ALL

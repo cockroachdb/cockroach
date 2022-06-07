@@ -4877,21 +4877,14 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				dbNameStr := tree.NewDString(db.GetName())
 				// TODO(knz): This should filter for the current user, see
 				// https://github.com/cockroachdb/cockroach/issues/35572
-				populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 				for _, u := range privs {
 					userNameStr := tree.NewDString(u.User.Normalized())
 					for _, priv := range u.Privileges {
-						var isGrantable tree.Datum
-						if populateGrantOption {
-							isGrantable = yesOrNoDatum(priv.GrantOption)
-						} else {
-							isGrantable = tree.DNull
-						}
 						if err := addRow(
 							dbNameStr,                           // database_name
 							userNameStr,                         // grantee
 							tree.NewDString(priv.Kind.String()), // privilege_type
-							isGrantable,                         // is_grantable
+							yesOrNoDatum(priv.GrantOption),      // is_grantable
 						); err != nil {
 							return err
 						}

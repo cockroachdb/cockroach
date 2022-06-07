@@ -67,8 +67,8 @@ SHOW GRANTS ON SCHEMA s
 database_name  schema_name  grantee    privilege_type  is_grantable
 test           s            admin      ALL             true
 test           s            root       ALL             true
-test           s            testuser   ALL             true
-test           s            testuser2  ALL             true
+test           s            testuser   ALL             false
+test           s            testuser2  ALL             false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE USAGE ON SCHEMAS FROM testuser, testuser2
@@ -82,10 +82,8 @@ SHOW GRANTS ON SCHEMA s2
 database_name  schema_name  grantee    privilege_type  is_grantable
 test           s2           admin      ALL             true
 test           s2           root       ALL             true
-test           s2           testuser   CREATE          true
-test           s2           testuser   GRANT           true
-test           s2           testuser2  CREATE          true
-test           s2           testuser2  GRANT           true
+test           s2           testuser   CREATE          false
+test           s2           testuser2  CREATE          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser, testuser2

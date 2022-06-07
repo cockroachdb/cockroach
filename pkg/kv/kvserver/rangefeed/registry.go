@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -371,10 +370,7 @@ func (r *registration) maybeRunCatchUpScan() error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	startKey := storage.MakeMVCCMetadataKey(r.span.Key)
-	endKey := storage.MakeMVCCMetadataKey(r.span.EndKey)
-
-	return catchUpIter.CatchUpScan(startKey, endKey, r.catchUpTimestamp, r.withDiff, r.stream.Send)
+	return catchUpIter.CatchUpScan(r.stream.Send, r.withDiff)
 }
 
 // ID implements interval.Interface.
@@ -560,7 +556,7 @@ func (r *registration) maybeConstructCatchUpIter() {
 		return
 	}
 
-	catchUpIter := r.catchUpIterConstructor()
+	catchUpIter := r.catchUpIterConstructor(r.span, r.catchUpTimestamp)
 	r.catchUpIterConstructor = nil
 
 	r.mu.Lock()

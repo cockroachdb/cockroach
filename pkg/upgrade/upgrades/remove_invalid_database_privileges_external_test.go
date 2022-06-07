@@ -120,8 +120,8 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 		[][]string{{clusterversion.ByKey(clusterversion.RemoveIncompatibleDatabasePrivileges).String()}})
 
 	tdb.CheckQueryResults(t, "SHOW GRANTS ON DATABASE test", [][]string{
-		{"test", "admin", "ALL", "true"},
-		{"test", "root", "ALL", "true"},
+		{"test", "admin", "ALL", "false"},
+		{"test", "root", "ALL", "false"},
 		{"test", "testuser2", "CREATE", "false"},
 	})
 

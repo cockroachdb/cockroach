@@ -135,12 +135,12 @@ GRANT USAGE ON TYPE foo TO root -- literals removed
 GRANT USAGE ON TYPE _ TO _ -- identifiers removed
 
 parse
-GRANT USAGE, GRANT ON TYPE foo TO root
+GRANT USAGE ON TYPE foo TO root
 ----
-GRANT USAGE, GRANT ON TYPE foo TO root
-GRANT USAGE, GRANT ON TYPE foo TO root -- fully parenthesized
-GRANT USAGE, GRANT ON TYPE foo TO root -- literals removed
-GRANT USAGE, GRANT ON TYPE _ TO _ -- identifiers removed
+GRANT USAGE ON TYPE foo TO root
+GRANT USAGE ON TYPE foo TO root -- fully parenthesized
+GRANT USAGE ON TYPE foo TO root -- literals removed
+GRANT USAGE ON TYPE _ TO _ -- identifiers removed
 
 parse
 GRANT ALL ON TYPE foo TO root
@@ -169,20 +169,20 @@ GRANT USAGE ON SCHEMA foo.bar TO root -- literals removed
 GRANT USAGE ON SCHEMA _._ TO _ -- identifiers removed
 
 parse
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root
+GRANT USAGE, CREATE ON SCHEMA foo TO root
 ----
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root -- fully parenthesized
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root -- literals removed
-GRANT USAGE, GRANT, CREATE ON SCHEMA _ TO _ -- identifiers removed
+GRANT USAGE, CREATE ON SCHEMA foo TO root
+GRANT USAGE, CREATE ON SCHEMA foo TO root -- fully parenthesized
+GRANT USAGE, CREATE ON SCHEMA foo TO root -- literals removed
+GRANT USAGE, CREATE ON SCHEMA _ TO _ -- identifiers removed
 
 parse
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root
+GRANT USAGE, CREATE ON SCHEMA foo.bar TO root
 ----
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root -- fully parenthesized
-GRANT USAGE, GRANT, CREATE ON SCHEMA foo.bar TO root -- literals removed
-GRANT USAGE, GRANT, CREATE ON SCHEMA _._ TO _ -- identifiers removed
+GRANT USAGE, CREATE ON SCHEMA foo.bar TO root
+GRANT USAGE, CREATE ON SCHEMA foo.bar TO root -- fully parenthesized
+GRANT USAGE, CREATE ON SCHEMA foo.bar TO root -- literals removed
+GRANT USAGE, CREATE ON SCHEMA _._ TO _ -- identifiers removed
 
 parse
 GRANT ALL ON SCHEMA foo, bar, baz TO root
@@ -408,12 +408,12 @@ REVOKE USAGE ON TYPE foo FROM root -- literals removed
 REVOKE USAGE ON TYPE _ FROM _ -- identifiers removed
 
 parse
-REVOKE USAGE, GRANT ON TYPE foo FROM root
+REVOKE USAGE ON TYPE foo FROM root
 ----
-REVOKE USAGE, GRANT ON TYPE foo FROM root
-REVOKE USAGE, GRANT ON TYPE foo FROM root -- fully parenthesized
-REVOKE USAGE, GRANT ON TYPE foo FROM root -- literals removed
-REVOKE USAGE, GRANT ON TYPE _ FROM _ -- identifiers removed
+REVOKE USAGE ON TYPE foo FROM root
+REVOKE USAGE ON TYPE foo FROM root -- fully parenthesized
+REVOKE USAGE ON TYPE foo FROM root -- literals removed
+REVOKE USAGE ON TYPE _ FROM _ -- identifiers removed
 
 parse
 REVOKE ALL ON TYPE foo FROM root
@@ -442,20 +442,20 @@ REVOKE USAGE ON SCHEMA foo.bar FROM root -- literals removed
 REVOKE USAGE ON SCHEMA _._ FROM _ -- identifiers removed
 
 parse
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root
+REVOKE USAGE, CREATE ON SCHEMA foo FROM root
 ----
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root -- fully parenthesized
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root -- literals removed
-REVOKE USAGE, GRANT, CREATE ON SCHEMA _ FROM _ -- identifiers removed
+REVOKE USAGE, CREATE ON SCHEMA foo FROM root
+REVOKE USAGE, CREATE ON SCHEMA foo FROM root -- fully parenthesized
+REVOKE USAGE, CREATE ON SCHEMA foo FROM root -- literals removed
+REVOKE USAGE, CREATE ON SCHEMA _ FROM _ -- identifiers removed
 
 parse
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root
+REVOKE USAGE, CREATE ON SCHEMA foo.bar FROM root
 ----
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root -- fully parenthesized
-REVOKE USAGE, GRANT, CREATE ON SCHEMA foo.bar FROM root -- literals removed
-REVOKE USAGE, GRANT, CREATE ON SCHEMA _._ FROM _ -- identifiers removed
+REVOKE USAGE, CREATE ON SCHEMA foo.bar FROM root
+REVOKE USAGE, CREATE ON SCHEMA foo.bar FROM root -- fully parenthesized
+REVOKE USAGE, CREATE ON SCHEMA foo.bar FROM root -- literals removed
+REVOKE USAGE, CREATE ON SCHEMA _._ FROM _ -- identifiers removed
 
 parse
 REVOKE ALL ON SCHEMA foo, bar, baz FROM root
