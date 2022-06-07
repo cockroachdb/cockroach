@@ -142,9 +142,8 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 		txn := ctx.Txn
 		ctx, sp := tracing.EnsureChildSpan(
 			ctx.Context, ctx.Tracer, "meta2scan",
-			tracing.WithForceRealSpan(),
+			tracing.WithRecording(tracing.RecordingVerbose),
 		)
-		sp.SetRecordingType(tracing.RecordingVerbose)
 		defer sp.Finish()
 		// Handle args passed in.
 		ranges, err = kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
@@ -195,9 +194,8 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	}
 	ctx, sp := tracing.EnsureChildSpan(
 		ctx, p.tracer, opName,
-		tracing.WithForceRealSpan(),
+		tracing.WithRecording(tracing.RecordingVerbose),
 	)
-	sp.SetRecordingType(tracing.RecordingVerbose)
 	defer func() {
 		p.curr.verboseTrace = sp.FinishAndGetConfiguredRecording().String()
 	}()
