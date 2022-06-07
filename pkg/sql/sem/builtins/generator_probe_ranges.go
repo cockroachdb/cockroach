@@ -153,7 +153,9 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return nil, errors.Wrapf(err, "%s", sp.GetConfiguredRecording().String())
+			return nil, errors.WithDetailf(
+				errors.Wrapf(err, "error scanning meta ranges"),
+				"trace:\n%s", sp.GetConfiguredRecording())
 		}
 	}
 	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
