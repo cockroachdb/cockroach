@@ -44,6 +44,8 @@ type resultsBuffer interface {
 	// get returns all the Results that the buffer can send to the client at the
 	// moment. The boolean indicates whether all expected Results have been
 	// returned. Must be called without holding the budget's mutex.
+	//
+	// Calling get() invalidates the results returned on the previous call.
 	// TODO(yuzefovich): consider changing the interface to return a single
 	// Result object in order to avoid some allocations.
 	get(context.Context) (_ []Result, allComplete bool, _ error)
@@ -361,9 +363,12 @@ type inOrderResultsBuffer struct {
 	// numSpilled tracks how many Results have been spilled to disk so far.
 	numSpilled int
 
+	// resultScratch is a scratch space reused by get() calls.
+	resultScratch []Result
+
 	// addCounter tracks the number of times add() has been called. See
 	// inOrderBufferedResult.addEpoch for why this is needed.
-	addCounter int
+	addCounter int32
 
 	// singleRowLookup is the value of Hints.SingleRowLookup. Only used for
 	// debug messages.
@@ -495,7 +500,7 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	defer b.budget.mu.Unlock()
 	b.Lock()
 	defer b.Unlock()
-	var res []Result
+	res := b.resultScratch[:0]
 	if debug {
 		fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
 	}
@@ -554,6 +559,7 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	// All requests are complete IFF we have received the complete responses for
 	// all requests and there no buffered Results.
 	allComplete := b.numCompleteResponses == b.numExpectedResponses && len(b.buffered) == 0
+	b.resultScratch = res
 	return res, allComplete, b.err
 }
 
@@ -681,7 +687,7 @@ type inOrderBufferedResult struct {
 	// is 0 whereas the second response is added during "epoch" 1 - thus, we
 	// can correctly return 'a' before 'b' although the priority and
 	// subRequestIdx of two Results are the same.
-	addEpoch int
+	addEpoch int32
 	// If onDisk is true, then the serialized Result is stored on disk in the
 	// ResultDiskBuffer, identified by diskResultID.
 	onDisk       bool
