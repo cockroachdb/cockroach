@@ -60,6 +60,16 @@ type txnState struct {
 		// stmtCount keeps track of the number of statements that the transaction
 		// has executed.
 		stmtCount int
+
+		// autoRetryReason records the error causing an auto-retryable error event if
+		// the current transaction is being automatically retried. This is used in
+		// statement traces to give more information in statement diagnostic bundles.
+		autoRetryReason error
+
+		// autoRetryCounter keeps track of the which iteration of a transaction
+		// auto-retry we're currently in. It's 0 whenever the transaction state is not
+		// stateOpen.
+		autoRetryCounter int32
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.

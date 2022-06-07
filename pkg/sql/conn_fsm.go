@@ -465,6 +465,11 @@ func noTxnToOpen(args fsm.Args) error {
 	payload := args.Payload.(eventTxnStartPayload)
 	ts := args.Extended.(*txnState)
 
+	ts.mu.Lock()
+	ts.mu.autoRetryCounter = 0
+	ts.mu.autoRetryReason = nil
+	ts.mu.Unlock()
+
 	txnTyp := explicitTxn
 	advCode := advanceOne
 	if ev.ImplicitTxn.Get() {
@@ -530,9 +535,12 @@ func prepareTxnForRetry(args fsm.Args) error {
 }
 
 func prepareTxnForRetryWithRewind(args fsm.Args) error {
+	pl := args.Payload.(eventRetriableErrPayload)
 	ts := args.Extended.(*txnState)
 	ts.mu.Lock()
 	ts.mu.txn.PrepareForRetry(ts.Ctx)
+	ts.mu.autoRetryReason = pl.err
+	ts.mu.autoRetryCounter += 1
 	ts.mu.Unlock()
 	// The caller will call rewCap.rewindAndUnlock().
 	ts.setAdvanceInfo(
