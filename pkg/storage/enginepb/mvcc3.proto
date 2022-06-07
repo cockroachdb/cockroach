@@ -268,7 +268,7 @@ message RangeAppliedState {
 }
 
 // MVCCWriteValueOp corresponds to a value being written outside of a
-// transaction.
+// transaction. Inline values (without timestamp) are not logged.
 message MVCCWriteValueOp {
   bytes key = 1;
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
