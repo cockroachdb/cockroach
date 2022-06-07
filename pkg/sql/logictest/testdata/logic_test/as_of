@@ -18,7 +18,7 @@ SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1us'
 
 # Verify that we can use computed expressions.
 query I
-SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'us')::INTERVAL )
+SELECT * FROM t AS OF SYSTEM TIME -( parse_interval('1000' || 'us') )
 ----
 2
 

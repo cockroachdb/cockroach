@@ -329,6 +329,8 @@ func runBackfiller(
 		return im.MergeIndexes(ctx, *p, tracker, tables[p.TableID])
 	}
 	if err := forEachProgressConcurrently(ctx, op, backfillProgresses, mergeProgresses, bf, mf); err != nil {
+		// We ran into an  uncategorized schema change error.
+		deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
 		return scerrors.SchemaChangerUserError(err)
 	}
 	if err := stop(); err != nil {

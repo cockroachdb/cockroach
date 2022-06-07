@@ -432,7 +432,7 @@ func (f *kvFeed) runUntilTableEvent(
 
 	var stps []kvcoord.SpanTimePair
 	resumeFrontier.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-		stps = append(stps, kvcoord.SpanTimePair{Span: s, TS: ts})
+		stps = append(stps, kvcoord.SpanTimePair{Span: s, StartAfter: ts})
 		return span.ContinueMatch
 	})
 

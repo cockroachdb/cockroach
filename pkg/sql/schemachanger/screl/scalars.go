@@ -63,6 +63,8 @@ func AllDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
 	if e == nil {
 		return ids
 	}
+	// For certain elements the references needed will not be attributes, so manually
+	// include these.
 	_ = WalkDescIDs(e, func(id *catid.DescID) error {
 		ids.Add(*id)
 		return nil

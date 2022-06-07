@@ -3,4 +3,5 @@ bin
 build/builder_home
 lib
 pkg/ui/node_modules
+tmp
 vendor
