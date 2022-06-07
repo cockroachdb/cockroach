@@ -2254,7 +2254,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 			// always fail validation. So, for OIDs we will select a random known type
 			// instead.
 			if col.typ.Family() == types.Oid.Family() {
-				d = tree.NewDOid(tree.DInt(randgen.RandColumnType(og.params.rng).Oid()))
+				d = tree.NewDOid(randgen.RandColumnType(og.params.rng).Oid())
 			}
 			str := tree.AsStringWithFlags(d, tree.FmtParsable)
 			row = append(row, str)

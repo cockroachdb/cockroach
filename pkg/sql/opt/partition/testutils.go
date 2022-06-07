@@ -11,12 +11,14 @@
 package partition
 
 import (
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // ParseDatumPath parses a span key string like "/1/2/3".
@@ -54,9 +56,14 @@ func ParseDatumPath(evalCtx *eval.Context, str string, typs []types.Family) []tr
 		case types.BytesFamily:
 			val = tree.NewDBytes(tree.DBytes(valStr))
 		case types.OidFamily:
-			dInt, err := tree.ParseDInt(valStr)
+			var dInt *tree.DInt
+			dInt, err = tree.ParseDInt(valStr)
 			if err == nil {
-				val = tree.NewDOid(*dInt)
+				if *dInt > math.MaxUint32 || *dInt < math.MinInt32 {
+					err = errors.Newf("OID out of range: %d", *dInt)
+					break
+				}
+				val = tree.NewDOid(oid.Oid(*dInt))
 			}
 		case types.UuidFamily:
 			val, err = tree.ParseDUuidFromString(valStr)

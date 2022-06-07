@@ -546,7 +546,7 @@ func DecodeDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "oid requires 4 bytes for binary format")
 			}
 			u := binary.BigEndian.Uint32(b)
-			return tree.NewDOid(tree.DInt(u)), nil
+			return tree.NewDOid(oid.Oid(u)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")

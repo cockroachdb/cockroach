@@ -4884,8 +4884,8 @@ type DOid struct {
 }
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
-func MakeDOid(d DInt, semanticType *types.T) DOid {
-	return DOid{Oid: oid.Oid(d), semanticType: semanticType, name: ""}
+func MakeDOid(d oid.Oid, semanticType *types.T) DOid {
+	return DOid{Oid: d, semanticType: semanticType, name: ""}
 }
 
 // NewDOidWithType constructs a DOid with the given type and no name.
@@ -4901,7 +4901,7 @@ func NewDOidWithTypeAndName(d oid.Oid, semanticType *types.T, name string) *DOid
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
-func NewDOid(d DInt) *DOid {
+func NewDOid(d oid.Oid) *DOid {
 	// TODO(yuzefovich): audit the callers of NewDOid to see whether any want to
 	// create a DOid with a semantic type different from types.Oid.
 	oid := MakeDOid(d, types.Oid)
