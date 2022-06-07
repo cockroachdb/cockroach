@@ -59,6 +59,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/buildutil",
+        "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",

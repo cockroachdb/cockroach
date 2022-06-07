@@ -587,6 +587,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	clusterIDForSQL := cfg.rpcContext.LogicalClusterID
 
+	bulkSenderLimiter := bulk.MakeAndRegisterConcurrencyLimiter(&cfg.Settings.SV)
+
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
 		AmbientContext:   cfg.AmbientCtx,
@@ -613,6 +615,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
 		BackupMonitor:     backupMemoryMonitor,
+		BulkSenderLimiter: bulkSenderLimiter,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
 		BulkAdder: func(
@@ -621,7 +624,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			// Attach a child memory monitor to enable control over the BulkAdder's
 			// memory usage.
 			bulkMon := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "bulk-adder-monitor")
-			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon)
+			return bulk.MakeBulkAdder(ctx, db, cfg.distSender.RangeDescriptorCache(), cfg.Settings, ts, opts, bulkMon, bulkSenderLimiter)
 		},
 
 		Metrics:            &distSQLMetrics,

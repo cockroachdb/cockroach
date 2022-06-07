@@ -698,7 +698,7 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 //
 // If Mu is set, it is safe for use by concurrent goroutines.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
-	if b == nil {
+	if b == nil || delta == 0 {
 		return
 	}
 	if b.Mu != nil {
