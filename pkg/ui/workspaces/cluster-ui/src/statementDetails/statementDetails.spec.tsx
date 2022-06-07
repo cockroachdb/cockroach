@@ -40,10 +40,7 @@ describe("StatementDetails page", () => {
     );
     assert.isTrue(wrapper.find(Loading).prop("loading"));
     assert.isFalse(
-      wrapper
-        .find(StatementDetails)
-        .find("div.ant-tabs-tab")
-        .exists(),
+      wrapper.find(StatementDetails).find("div.ant-tabs-tab").exists(),
     );
   });
 
@@ -57,10 +54,7 @@ describe("StatementDetails page", () => {
     );
     assert.isNotNull(wrapper.find(Loading).prop("error"));
     assert.isFalse(
-      wrapper
-        .find(StatementDetails)
-        .find("div.ant-tabs-tab")
-        .exists(),
+      wrapper.find(StatementDetails).find("div.ant-tabs-tab").exists(),
     );
   });
 

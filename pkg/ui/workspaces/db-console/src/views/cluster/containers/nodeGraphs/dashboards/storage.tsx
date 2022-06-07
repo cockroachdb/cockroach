@@ -25,14 +25,9 @@ import {
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
-export default function(props: GraphDashboardProps) {
-  const {
-    nodeIDs,
-    nodesSummary,
-    nodeSources,
-    storeSources,
-    tooltipSelection,
-  } = props;
+export default function (props: GraphDashboardProps) {
+  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } =
+    props;
 
   return [
     <LineGraph

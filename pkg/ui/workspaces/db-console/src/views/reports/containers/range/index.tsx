@@ -44,12 +44,8 @@ interface RangeDispatchProps {
 
 interface RangeStateProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
-  allocator: CachedDataReducerState<
-    protos.cockroach.server.serverpb.AllocatorRangeResponse
-  >;
-  rangeLog: CachedDataReducerState<
-    protos.cockroach.server.serverpb.RangeLogResponse
-  >;
+  allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
+  rangeLog: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
 }
 
 type RangeOwnProps = RangeDispatchProps & RangeStateProps;
@@ -59,9 +55,7 @@ type RangeProps = RangeOwnProps & RouteComponentProps;
 function ErrorPage(props: {
   rangeID: string;
   errorText: string;
-  range?: CachedDataReducerState<
-    protos.cockroach.server.serverpb.RangeResponse
-  >;
+  range?: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
 }) {
   return (
     <div className="section">

@@ -23,14 +23,9 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 // TODO(vilterp): tooltips
 
-export default function(props: GraphDashboardProps) {
-  const {
-    nodeIDs,
-    nodesSummary,
-    nodeSources,
-    storeSources,
-    tooltipSelection,
-  } = props;
+export default function (props: GraphDashboardProps) {
+  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } =
+    props;
 
   return [
     <LineGraph title="CPU Percent" sources={nodeSources}>

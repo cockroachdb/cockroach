@@ -69,8 +69,10 @@ import {
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
 type IDuration = google.protobuf.IDuration;
-type StatementDetailsResponse = cockroach.server.serverpb.StatementDetailsResponse;
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type StatementDetailsResponse =
+  cockroach.server.serverpb.StatementDetailsResponse;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const { TabPane } = Tabs;
 
@@ -112,12 +114,8 @@ export type NodesSummary = {
   nodeStatusByID: Dictionary<cockroach.server.status.statuspb.INodeStatus>;
   nodeSums: NodeSummaryStats;
   nodeDisplayNameByID: Dictionary<string>;
-  livenessStatusByNodeID: Dictionary<
-    cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-  >;
-  livenessByNodeID: Dictionary<
-    cockroach.kv.kvserver.liveness.livenesspb.ILiveness
-  >;
+  livenessStatusByNodeID: Dictionary<cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus>;
+  livenessByNodeID: Dictionary<cockroach.kv.kvserver.liveness.livenesspb.ILiveness>;
   storeIDsByNodeID: Dictionary<string[]>;
 };
 
@@ -1016,7 +1014,7 @@ export class StatementDetails extends React.Component<
                 ),
                 format: Bytes,
               },
-            ].filter(function(r) {
+            ].filter(function (r) {
               if (
                 r.name === "Network Bytes Sent" &&
                 r.value &&

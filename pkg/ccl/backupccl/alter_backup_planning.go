@@ -14,6 +14,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -84,7 +85,7 @@ func alterBackupPlanHook(
 		if subdir != "" {
 			if strings.EqualFold(subdir, "LATEST") {
 				// set subdir to content of latest file
-				latest, err := readLatestFile(ctx, backup, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+				latest, err := backupdest.ReadLatestFile(ctx, backup, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 				if err != nil {
 					return err
 				}

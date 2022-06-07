@@ -12,8 +12,10 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { Moment } from "moment";
 import { Filters } from "src/queryFilter";
 
-export type SessionsResponse = protos.cockroach.server.serverpb.ListSessionsResponse;
-export type ActiveStatementResponse = protos.cockroach.server.serverpb.ActiveQuery;
+export type SessionsResponse =
+  protos.cockroach.server.serverpb.ListSessionsResponse;
+export type ActiveStatementResponse =
+  protos.cockroach.server.serverpb.ActiveQuery;
 export type ExecutionStatus = "Waiting" | "Executing" | "Preparing";
 export const ActiveStatementPhase =
   protos.cockroach.server.serverpb.ActiveQuery.Phase;

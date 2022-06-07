@@ -24,7 +24,7 @@ const location: Location = {
 };
 
 describe("Query utils", () => {
-  describe("propsToQueryString", function() {
+  describe("propsToQueryString", function () {
     interface PropBag {
       [k: string]: string;
     }
@@ -41,7 +41,7 @@ describe("Query utils", () => {
       }, {});
     }
 
-    it("creates an appropriate querystring", function() {
+    it("creates an appropriate querystring", function () {
       const testValues: { [k: string]: any } = {
         a: "testa",
         b: "testb",
@@ -56,7 +56,7 @@ describe("Query utils", () => {
       assert.deepEqual(testValues, decodeQueryString(querystring));
     });
 
-    it("handles falsy values correctly", function() {
+    it("handles falsy values correctly", function () {
       const testValues: { [k: string]: any } = {
         // null and undefined should be ignored
         undefined: undefined,
@@ -82,12 +82,9 @@ describe("Query utils", () => {
       );
     });
 
-    it("handles special characters", function() {
+    it("handles special characters", function () {
       const key = "!@#$%^&*()=+-_\\|\"`'?/<>";
-      const value = key
-        .split("")
-        .reverse()
-        .join(""); // key reversed
+      const value = key.split("").reverse().join(""); // key reversed
       const testValues: { [k: string]: any } = {
         [key]: value,
       };
@@ -98,7 +95,7 @@ describe("Query utils", () => {
       assert.deepEqual(testValues, decodeQueryString(querystring));
     });
 
-    it("handles non-string values", function() {
+    it("handles non-string values", function () {
       const testValues: { [k: string]: any } = {
         boolean: true,
         number: 1,

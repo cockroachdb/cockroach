@@ -49,13 +49,12 @@ export function* createDiagnosticsReportSaga(
   action: PayloadAction<CreateStatementDiagnosticsReportPayload>,
 ) {
   const { statementFingerprint, minExecLatency, expiresAfter } = action.payload;
-  const createDiagnosticsReportRequest = new CreateStatementDiagnosticsReportRequest(
-    {
+  const createDiagnosticsReportRequest =
+    new CreateStatementDiagnosticsReportRequest({
       statement_fingerprint: statementFingerprint,
       min_execution_latency: minExecLatency,
       expires_after: expiresAfter,
-    },
-  );
+    });
   try {
     yield call(
       createStatementDiagnosticsReport,
@@ -100,16 +99,16 @@ export function* cancelDiagnosticsReportSaga(
   action: PayloadAction<CancelStatementDiagnosticsReportPayload>,
 ) {
   const { requestID } = action.payload;
-  const cancelDiagnosticsReportRequest = new CancelStatementDiagnosticsReportRequest(
-    {
+  const cancelDiagnosticsReportRequest =
+    new CancelStatementDiagnosticsReportRequest({
       request_id: requestID,
-    },
-  );
+    });
   try {
-    const response: CancelStatementDiagnosticsReportResponseMessage = yield call(
-      cancelStatementDiagnosticsReport,
-      cancelDiagnosticsReportRequest,
-    );
+    const response: CancelStatementDiagnosticsReportResponseMessage =
+      yield call(
+        cancelStatementDiagnosticsReport,
+        cancelDiagnosticsReportRequest,
+      );
 
     if (response.error !== "") {
       throw response.error;

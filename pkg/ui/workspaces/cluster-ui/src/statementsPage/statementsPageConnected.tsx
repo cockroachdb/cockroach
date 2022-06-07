@@ -55,7 +55,8 @@ import {
   mapStateToActiveStatementsPageProps,
 } from "./activeStatementsPage.selectors";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IDuration = google.protobuf.IDuration;
 
 const CreateStatementDiagnosticsReportRequest =

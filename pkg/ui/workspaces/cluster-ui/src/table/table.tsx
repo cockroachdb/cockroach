@@ -28,9 +28,8 @@ export interface TableProps<T> {
 
 const cx = classnames.bind(styles);
 
-const customizeRenderEmpty = (node: React.ReactNode) => () => (
-  <div className={cx("empty-table__message")}>{node}</div>
-);
+const customizeRenderEmpty = (node: React.ReactNode) => () =>
+  <div className={cx("empty-table__message")}>{node}</div>;
 
 export function Table<T>(props: TableProps<T>) {
   const {

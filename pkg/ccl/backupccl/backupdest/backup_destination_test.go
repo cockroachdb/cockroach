@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupdest_test
 
 import (
 	"bytes"
@@ -16,7 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,8 +39,8 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, _, _, cleanupFn := backupDestinationTestSetup(t, multiNode, 1,
-		InitManualReplication)
+	tc, _, _, cleanupFn := backuputils.BackupDestinationTestSetup(t, backuputils.MultiNode, 1,
+		backuputils.InitManualReplication)
 	defer cleanupFn()
 
 	ctx := context.Background()
@@ -50,7 +54,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, uri, username.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, cloud.WriteFile(ctx, storage, backupManifestName, emptyReader))
+		require.NoError(t, cloud.WriteFile(ctx, storage, backupbase.BackupManifestName, emptyReader))
 	}
 
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
@@ -59,7 +63,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, collectionURI, username.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, writeNewLatestFile(ctx, storage.Settings(), storage, latestBackupSuffix))
+		require.NoError(t, backupdest.WriteNewLatestFile(ctx, storage.Settings(), storage, latestBackupSuffix))
 	}
 
 	// localizeURI returns a slice of just the base URI if localities is nil.
@@ -72,16 +76,16 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		if localities == nil {
 			return []string{baseURI}
 		}
-		allLocalities := append([]string{defaultLocalityValue}, localities...)
+		allLocalities := append([]string{backupdest.DefaultLocalityValue}, localities...)
 		localizedURIs := make([]string, len(allLocalities))
 		for i, locality := range allLocalities {
 			parsedURI, err := url.Parse(baseURI)
 			require.NoError(t, err)
-			if locality != defaultLocalityValue {
-				parsedURI.Path = JoinURLPath(parsedURI.Path, locality)
+			if locality != backupdest.DefaultLocalityValue {
+				parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, locality)
 			}
 			q := parsedURI.Query()
-			q.Add(localityURLParam, locality)
+			q.Add(backupdest.LocalityURLParam, locality)
 			parsedURI.RawQuery = q.Encode()
 			localizedURIs[i] = parsedURI.String()
 		}
@@ -118,10 +122,10 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					for i, incrementalLoc := range incrementalFrom {
 						expectedPrevBackups[i] = localizeURI(t, incrementalLoc, localities)[0]
 					}
-					defaultDest, localitiesDest, err := getURIsByLocalityKV(to, "")
+					defaultDest, localitiesDest, err := backupdest.GetURIsByLocalityKV(to, "")
 					require.NoError(t, err)
 
-					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
+					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := backupdest.ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
 						endTime,
@@ -188,7 +192,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				) {
 					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
 
-					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
+					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := backupdest.ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
 						endTime,
@@ -320,16 +324,16 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					incrementalFrom := []string(nil)
 
 					if appendToLatest {
-						subdir = latestFileName
+						subdir = backupbase.LatestFileName
 					} else if subdir == "" {
-						subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
+						subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)
 					}
 
-					_, localityCollections, err := getURIsByLocalityKV(collectionTo, "")
+					_, localityCollections, err := backupdest.GetURIsByLocalityKV(collectionTo, "")
 					require.NoError(t, err)
 
 					if len(incrementalTo) > 0 {
-						_, localityCollections, err = getURIsByLocalityKV(incrementalTo, "")
+						_, localityCollections, err = backupdest.GetURIsByLocalityKV(incrementalTo, "")
 						require.NoError(t, err)
 					}
 					currentVersion := execCfg.Settings.Version.ActiveVersion(ctx)
@@ -348,7 +352,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					if expectedIncDir != "" {
 						fullBackupExists = true
 					}
-					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
+					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := backupdest.ResolveDest(
 						ctx, username.RootUserName(),
 						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir,
 							IncrementalStorage: incrementalTo, Exists: fullBackupExists},

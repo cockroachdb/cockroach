@@ -345,10 +345,8 @@ export class SessionsPage extends React.Component<
     const { pagination, filters } = this.state;
     const { columns: userSelectedColumnsToShow, onColumnsChange } = this.props;
 
-    const {
-      sessions: sessionsToDisplay,
-      activeFilters,
-    } = this.getFilteredSessionsData();
+    const { sessions: sessionsToDisplay, activeFilters } =
+      this.getFilteredSessionsData();
 
     const appNames = getSessionAppFilterOptions(sessionsData);
     const usernames = getSessionUsernameFilterOptions(sessionsData);
