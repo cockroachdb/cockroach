@@ -213,20 +213,20 @@ func TestReadOnlyBasics(t *testing.T) {
 					}).Close()
 				},
 			}
-			defer func() {
+			defer func(engineName string) {
 				ro.Close()
 				if !ro.Closed() {
 					t.Fatal("even after calling Close, a read-only should not be closed")
 				}
 				name := "rocksDBReadOnly"
-				if engineImpl.name == "pebble" {
+				if engineName == "pebble" {
 					name = "pebbleReadOnly"
 				}
 				shouldPanic(t, func() { ro.Close() }, "Close", "closing an already-closed "+name)
 				for i, f := range successTestCases {
 					shouldPanic(t, f, strconv.Itoa(i), "using a closed "+name)
 				}
-			}()
+			}(engineImpl.name)
 
 			for i, f := range successTestCases {
 				shouldNotPanic(t, f, strconv.Itoa(i))
@@ -922,13 +922,13 @@ func TestUnindexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 			}
 			for i, f := range testCases {
 				func() {
-					defer func() {
+					defer func(i int) {
 						if r := recover(); r == nil {
 							t.Fatalf("%d: test did not panic", i)
 						} else if r != "write-only batch" {
 							t.Fatalf("%d: unexpected panic: %v", i, r)
 						}
-					}()
+					}(i)
 					f()
 				}()
 			}
