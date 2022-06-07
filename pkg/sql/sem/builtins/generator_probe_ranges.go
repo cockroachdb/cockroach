@@ -146,16 +146,14 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 			tracing.WithForceRealSpan(),
 		)
 		sp.SetRecordingType(tracingpb.RecordingVerbose)
-		defer func() {
-			sp.Finish()
-		}()
+		defer sp.Finish()
 		// Handle args passed in.
 		ranges, err = kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    keys.MinKey,
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return nil, errors.Wrapf(err, "%s", sp.FinishAndGetConfiguredRecording().String())
+			return nil, errors.Wrapf(err, "%s", sp.GetConfiguredRecording().String())
 		}
 	}
 	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
