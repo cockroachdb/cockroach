@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -544,8 +545,8 @@ func (s *Schema) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (s *Schema) PostgresDescriptorID() cat.StableID {
-	return s.SchemaID
+func (s *Schema) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(s.SchemaID)
 }
 
 // Equals is part of the cat.Object interface.
@@ -601,8 +602,8 @@ func (tv *View) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (tv *View) PostgresDescriptorID() cat.StableID {
-	return tv.ViewID
+func (tv *View) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(tv.ViewID)
 }
 
 // Equals is part of the cat.Object interface.
@@ -693,8 +694,8 @@ func (tt *Table) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (tt *Table) PostgresDescriptorID() cat.StableID {
-	return tt.TabID
+func (tt *Table) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(tt.TabID)
 }
 
 // Equals is part of the cat.Object interface.
@@ -1371,8 +1372,8 @@ func (ts *Sequence) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (ts *Sequence) PostgresDescriptorID() cat.StableID {
-	return ts.SeqID
+func (ts *Sequence) PostgresDescriptorID() catid.DescID {
+	return catid.DescID(ts.SeqID)
 }
 
 // Equals is part of the cat.Object interface.
