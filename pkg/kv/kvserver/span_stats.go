@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-
-
 func (s *Store) SetBucketBoundaries() error {
 
 	hist := newSpanStatsHistogram()
@@ -36,10 +34,9 @@ func (s *Store) SetBucketBoundaries() error {
 			return false
 		}
 
-		log.Infof(context.Background(), "Add Bucket: %s",  desc.KeySpan().String())
+		log.Infof(context.Background(), "Add Bucket: %s", desc.KeySpan().String())
 		return true
 	})
-
 
 	// TODO: acquire lock
 	if err != nil {
@@ -50,7 +47,6 @@ func (s *Store) SetBucketBoundaries() error {
 	return nil
 }
 
-
 // TODO: get rid of dependency on serverpb
 // use go types instead.
 
@@ -58,7 +54,7 @@ func (s *Store) GetSpanStats(
 	ctx context.Context,
 	start hlc.Timestamp,
 	end hlc.Timestamp,
- ) ([]*serverpb.SpanStatistics, error) {
+) ([]*serverpb.SpanStatistics, error) {
 
 	// for now, assume that the requested time window
 	// corresponds to the current s.spanStatsHistogram
@@ -77,9 +73,12 @@ func (s *Store) GetSpanStats(
 		}
 
 		bucket := i.(*spanStatsHistogramBucket)
-		sample = append(sample, &serverpb.SpanStatistics{Span: &bucket.sp, Qps: bucket.counter})
+		sample = append(sample, &serverpb.SpanStatistics{
+			Sp: &roachpb.Span{Key: bucket.sp.Key, EndKey: bucket.sp.EndKey},
+			Span: &serverpb.SpanStatistics_Span{StartKey: bucket.sp.Key.String(), EndKey: bucket.sp.EndKey.String()},
+			Qps: bucket.counter,
+		})
 	}
-
 
 	// clone for llrb trees is not implemented.
 	//copy := s.spanStatsHistogram.tree.Clone()
@@ -98,7 +97,7 @@ type spanStatsHistogram struct {
 	// XXX: span oriented data structure, queryable by a span, values are counters.
 	// Scan[a,d) --> a list of counters of increment
 	// GetAllCountersBetween(a, d) -> inc each one.
-	tree interval.Tree // tree of spans -> counters,
+	tree         interval.Tree // tree of spans -> counters,
 	lastBucketId uint64
 }
 

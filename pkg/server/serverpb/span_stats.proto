@@ -28,8 +28,15 @@ message Sample {
 }
 
 message SpanStatistics {
-  roachpb.Span span = 1;
-  uint64 qps = 2;
+
+  message Span {
+    string startKey = 1;
+    string endKey = 2;
+  }
+
+  Span span = 1;
+  roachpb.Span sp = 2;
+  uint64 qps = 3;
 }
 
 message GetSpanStatisticsResponse {
