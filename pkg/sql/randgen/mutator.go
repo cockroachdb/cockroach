@@ -663,6 +663,7 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
 		case *tree.SetClusterSetting, *tree.SetVar, *tree.AlterTenantSetClusterSetting:
+			changed = true
 			continue
 		case *tree.CreateTable:
 			if stmt.PartitionByTable != nil {
