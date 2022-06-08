@@ -9,4 +9,4 @@
 // licenses/APL.txt.
 /* globals module */
 
-module.exports = {};
+module.exports = "";
