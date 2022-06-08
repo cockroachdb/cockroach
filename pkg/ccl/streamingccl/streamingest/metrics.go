@@ -15,6 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
+const (
+	streamingFlushHistMaxLatency   = 1 * time.Minute
+	streamingAdmitLatencyMaxValue  = 3 * time.Minute
+	streamingCommitLatencyMaxValue = 10 * time.Minute
+)
+
 var (
 	metaStreamingEventsIngested = metric.Metadata{
 		Name:        "streaming.events_ingested",
@@ -40,6 +46,34 @@ var (
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaStreamingFlushHistNanos = metric.Metadata{
+		Name:        "streaming.flush_hist_nanos",
+		Help:        "Time spent flushing messages across all replication streams",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStreamingCommitLatency = metric.Metadata{
+		Name: "streaming.commit_latency",
+		Help: "Event commit latency: a difference between event MVCC timestamp " +
+			"and the time it was flushed into disk. If we batch events, then the difference " +
+			"between the oldest event in the batch and flush is recorded",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStreamingAdmitLatency = metric.Metadata{
+		Name: "streaming.admit_latency",
+		Help: "Event admission latency: a difference between event MVCC timestamp " +
+			"and the time it was admitted into ingestion processor",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStreamsRunning = metric.Metadata{
+		Name:        "streaming.running",
+		Help:        "Number of currently running replication streams",
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
@@ -48,6 +82,10 @@ type Metrics struct {
 	IngestedBytes  *metric.Counter
 	Flushes        *metric.Counter
 	ResolvedEvents *metric.Counter
+	FlushHistNanos *metric.Histogram
+	CommitLatency  *metric.Histogram
+	AdmitLatency   *metric.Histogram
+	RunningCount   *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -60,6 +98,13 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		IngestedBytes:  metric.NewCounter(metaStreamingIngestedBytes),
 		Flushes:        metric.NewCounter(metaStreamingFlushes),
 		ResolvedEvents: metric.NewCounter(metaStreamingResolvedEventsIngested),
+		FlushHistNanos: metric.NewHistogram(metaStreamingFlushHistNanos,
+			histogramWindow, streamingFlushHistMaxLatency.Nanoseconds(), 1),
+		CommitLatency: metric.NewHistogram(metaStreamingCommitLatency,
+			histogramWindow, streamingCommitLatencyMaxValue.Nanoseconds(), 1),
+		AdmitLatency: metric.NewHistogram(metaStreamingAdmitLatency,
+			histogramWindow, streamingAdmitLatencyMaxValue.Nanoseconds(), 1),
+		RunningCount: metric.NewGauge(metaStreamsRunning),
 	}
 	return m
 }
