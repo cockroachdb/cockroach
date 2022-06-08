@@ -581,8 +581,16 @@ func (ex *connExecutor) execDescribe(
 	case pgwirebase.PreparePortal:
 		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
-			return retErr(pgerror.Newf(
-				pgcode.InvalidCursorName, "unknown portal %q", descCmd.Name))
+			// Check SQL-level cursors.
+			cursor := ex.getCursorAccessor().getCursor(descCmd.Name)
+			if cursor == nil {
+				return retErr(pgerror.Newf(
+					pgcode.InvalidCursorName, "unknown portal %q", descCmd.Name))
+			}
+			// Sending a nil formatCodes is equivalent to sending all text format
+			// codes.
+			res.SetPortalOutput(ctx, cursor.InternalRows.Types(), nil /* formatCodes */)
+			return nil, nil
 		}
 
 		if stmtHasNoData(portal.Stmt.AST) {
