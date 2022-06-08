@@ -491,6 +491,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
+		Stopper:                 stopper,
 		Clock:                   clock,
 		DB:                      db,
 		Gossip:                  g,
@@ -1728,7 +1729,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
 	s.nodeLiveness.Start(ctx, liveness.NodeLivenessStartOptions{
-		Stopper: s.stopper,
 		Engines: s.engines,
 		OnSelfLive: func(ctx context.Context) {
 			now := s.clock.Now()
