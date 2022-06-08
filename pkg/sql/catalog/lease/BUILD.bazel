@@ -56,7 +56,7 @@ go_library(
 
 go_test(
     name = "lease_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "helpers_test.go",
         "lease_internal_test.go",
