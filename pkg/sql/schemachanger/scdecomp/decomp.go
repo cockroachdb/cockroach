@@ -31,6 +31,7 @@ type walkCtx struct {
 	cachedTypeIDClosures map[catid.DescID]map[catid.DescID]struct{}
 	backRefs             catalog.DescriptorIDSet
 	commentCache         CommentGetter
+	zoneConfigReader     ZoneConfigReader
 }
 
 // WalkDescriptor walks through the elements which are implicitly defined in
@@ -57,6 +58,7 @@ func WalkDescriptor(
 	lookupFn func(id catid.DescID) catalog.Descriptor,
 	ev ElementVisitor,
 	commentCache CommentGetter,
+	zoneConfigReader ZoneConfigReader,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
 		ctx:                  ctx,
@@ -65,6 +67,7 @@ func WalkDescriptor(
 		lookupFn:             lookupFn,
 		cachedTypeIDClosures: make(map[catid.DescID]map[catid.DescID]struct{}),
 		commentCache:         commentCache,
+		zoneConfigReader:     zoneConfigReader,
 	}
 	w.walkRoot()
 	w.backRefs.Remove(catid.InvalidDescID)
@@ -126,6 +129,9 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseRegionConfig{
 			DatabaseID:       db.GetID(),
 			RegionEnumTypeID: db.GetRegionConfig().RegionEnumID,
+			PrimaryRegion:    db.GetRegionConfig().PrimaryRegion,
+			SurvivalGoal:     int32(db.GetRegionConfig().SurvivalGoal),
+			Placement:        int32(db.GetRegionConfig().Placement),
 		})
 	}
 	_ = db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
@@ -173,6 +179,12 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 			ArrayTypeID:   typ.GetArrayTypeID(),
 			IsMultiRegion: typ.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM,
 		})
+		for ord := 0; ord < typ.NumEnumMembers(); ord++ {
+			w.ev(descriptorStatus(typ), &scpb.EnumTypeValue{
+				PhysicalRepresentation: typ.GetMemberPhysicalRepresentation(ord),
+				LogicalRepresentation:  typ.GetMemberLogicalRepresentation(ord),
+			})
+		}
 	default:
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}
@@ -269,6 +281,13 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.backRefs.Add(fk.OriginTableID)
 		return nil
 	})
+	zc := w.zoneConfigReader.GetZoneConfigRaw(w.ctx, tbl.GetID())
+	if zc != nil {
+		w.ev(descriptorStatus(tbl), &scpb.ZoneConfig{
+			TableID:    tbl.GetID(),
+			ZoneConfig: zc,
+		})
+	}
 }
 
 func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {

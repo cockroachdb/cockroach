@@ -13,6 +13,7 @@ package cockroach.sql.schemachanger.scpb;
 option go_package = "scpb";
 
 import "sql/catalog/catpb/catalog.proto";
+import "config/zonepb/zone.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 
@@ -69,6 +70,7 @@ message ElementProto {
   ForeignKeyConstraint foreign_key_constraint = 27 [(gogoproto.moretags) = "parent:\"Table\""];
   TableComment table_comment = 28 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
+  ZoneConfig zone_config = 121 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
 
   // Multi-region elements.
   TableLocalityGlobal locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -110,6 +112,9 @@ message ElementProto {
 
   // Object elements.
   ObjectParent object_parent = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
+
+  // Enum type elements
+  EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -446,9 +451,24 @@ message ConstraintComment {
 message DatabaseRegionConfig {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 region_enum_type_id = 2 [(gogoproto.customname) = "RegionEnumTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string primary_region = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  int32 survival_goal = 4;
+  int32 placement = 5;
+
 }
 
 message DatabaseRoleSetting {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string role_name = 2;
+}
+
+message EnumTypeValue {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  bytes physical_representation = 2;
+  string logical_representation = 3;
+}
+
+message ZoneConfig {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/config/zonepb.ZoneConfig"];
 }

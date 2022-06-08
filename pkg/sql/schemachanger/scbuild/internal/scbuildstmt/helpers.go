@@ -12,11 +12,15 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/errors"
 )
 
 func qualifiedName(b BuildCtx, id catid.DescID) string {
@@ -162,4 +166,35 @@ func descIDs(input ElementResultSet) (ids catalog.DescriptorIDSet) {
 		ids.Add(screl.GetDescID(e))
 	})
 	return ids
+}
+
+func synthesizeMultiRegionConfig(b BuildCtx, dbID descpb.ID) multiregion.RegionConfig {
+	regionConfig := multiregion.RegionConfig{}
+
+	dbElts := b.QueryByID(dbID)
+	_, _, dbMRConfig := scpb.FindDatabaseRegionConfig(dbElts)
+	if dbMRConfig == nil {
+		panic(errors.AssertionFailedf("multi-region config is missing from database"))
+	}
+
+	typeElts := b.QueryByID(dbMRConfig.RegionEnumTypeID)
+	var regionNames catpb.RegionNames
+	scpb.ForEachEnumTypeValue(typeElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+		regionNames = append(regionNames, catpb.RegionName(e.LogicalRepresentation))
+	})
+	regionConfig = multiregion.MakeRegionConfig(
+		regionNames,
+		dbMRConfig.PrimaryRegion,
+		descpb.SurvivalGoal(dbMRConfig.SurvivalGoal),
+		dbMRConfig.RegionEnumTypeID,
+		descpb.DataPlacement(dbMRConfig.Placement),
+		nil,
+		descpb.ZoneConfigExtensions{},
+	)
+
+	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+		panic(err)
+	}
+
+	return regionConfig
 }

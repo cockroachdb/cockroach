@@ -108,6 +108,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.EnumType)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
 	),
+	rel.EntityMapping(t((*scpb.EnumTypeValue)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+	),
 	rel.EntityMapping(t((*scpb.View)(nil)),
 		rel.EntityAttr(DescID, "ViewID"),
 	),
@@ -275,6 +278,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(Comment, "Comment"),
+	),
+	rel.EntityMapping(t((*scpb.ZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
 	),
 }
 

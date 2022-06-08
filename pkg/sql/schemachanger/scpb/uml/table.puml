@@ -100,6 +100,11 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 
+object ZoneConfig
+
+ZoneConfig :  TableID
+ZoneConfig :  ZoneConfig
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -220,6 +225,9 @@ object DatabaseRegionConfig
 
 DatabaseRegionConfig :  DatabaseID
 DatabaseRegionConfig :  RegionEnumTypeID
+DatabaseRegionConfig :  PrimaryRegion
+DatabaseRegionConfig :  SurvivalGoal
+DatabaseRegionConfig :  Placement
 
 object DatabaseRoleSetting
 
@@ -246,6 +254,12 @@ object ObjectParent
 ObjectParent :  ObjectID
 ObjectParent :  ParentSchemaID
 
+object EnumTypeValue
+
+EnumTypeValue :  TypeID
+EnumTypeValue : []PhysicalRepresentation
+EnumTypeValue :  LogicalRepresentation
+
 Table <|-- ColumnFamily
 Table <|-- Column
 View <|-- Column
@@ -262,6 +276,9 @@ Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
 Table <|-- RowLevelTTL
+Table <|-- ZoneConfig
+View <|-- ZoneConfig
+Sequence <|-- ZoneConfig
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion
@@ -318,4 +335,5 @@ EnumType <|-- ObjectParent
 Table <|-- ObjectParent
 View <|-- ObjectParent
 Sequence <|-- ObjectParent
+EnumType <|-- EnumTypeValue
 @enduml

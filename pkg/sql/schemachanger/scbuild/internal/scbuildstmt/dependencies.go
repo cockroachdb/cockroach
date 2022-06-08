@@ -13,8 +13,10 @@ package scbuildstmt
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -288,4 +290,8 @@ type NameResolver interface {
 
 	// ResolveConstraint retrieves a constraint by name and returns its elements.
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+}
+
+type ZoneConfigReader interface {
+	GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig
 }

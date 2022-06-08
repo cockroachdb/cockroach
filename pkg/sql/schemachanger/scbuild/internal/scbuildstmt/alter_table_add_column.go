@@ -97,6 +97,8 @@ func alterTableAddColumn(
 	{
 		tableElts := b.QueryByID(tbl.TableID)
 		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+			_, _, namespace := scpb.FindNamespace(tableElts)
+			synthesizeMultiRegionConfig(b, namespace.DatabaseID)
 			panic(scerrors.NotImplementedErrorf(d,
 				"regional by row partitioning is not supported"))
 		}
