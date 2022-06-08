@@ -170,7 +170,7 @@ func (w index) InvertedColumnName() string {
 }
 
 // InvertedColumnKeyType returns the type of the data element that is encoded
-// as the inverted index key. This is currently always Bytes.
+// as the inverted index key. This is currently always EncodedKey.
 //
 // Panics if the index is not inverted.
 func (w index) InvertedColumnKeyType() *types.T {
