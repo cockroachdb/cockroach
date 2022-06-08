@@ -64,12 +64,6 @@ func makeMetaKV(key string, meta enginepb.MVCCMetadata) storage.MVCCKeyValue {
 	}
 }
 
-func makeInline(key, val string) storage.MVCCKeyValue {
-	return makeMetaKV(key, enginepb.MVCCMetadata{
-		RawBytes: makeVal(val).RawBytes,
-	})
-}
-
 func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) storage.MVCCKeyValue {
 	return makeMetaKV(key, enginepb.MVCCMetadata{
 		Txn: &enginepb.TxnMeta{
@@ -254,7 +248,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 		engine := storage.NewDefaultInMemForTesting()
 		testData := []op{
 			{kv: makeKV("a", "val1", 10)},
-			{kv: makeInline("b", "val2")},
 			{kv: makeKV("c", "val4", 9)},
 			{kv: makeKV("c", "val3", 11)},
 			{
@@ -267,7 +260,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 				txn: &txn2,
 				kv:  makeProvisionalKV("d", "txnKey2", 21),
 			},
-			{kv: makeInline("g", "val7")},
 			{kv: makeKV("m", "val8", 1)},
 			{
 				txn: &txn1,
@@ -282,7 +274,6 @@ func TestInitResolvedTSScan(t *testing.T) {
 				txn: &txn1,
 				kv:  makeProvisionalKV("w", "txnKey1", 15),
 			},
-			{kv: makeInline("x", "val10")},
 			{kv: makeKV("z", "val11", 4)},
 			{
 				txn: &txn2,

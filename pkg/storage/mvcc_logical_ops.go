@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // MVCCLogicalOpType is an enum with values corresponding to each of the
@@ -95,6 +96,14 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 
 	switch op {
 	case MVCCWriteValueOpType:
+		// Disallow inline values. Emitting these across rangefeeds doesn't make
+		// sense, since they can't be ordered and won't be handled by time-bound
+		// iterators in catchup scans. We could include them in the log and ignore
+		// them (or error) in rangefeeds, but the cost doesn't seem worth it.
+		if details.Timestamp.IsEmpty() {
+			panic(errors.AssertionFailedf("received inline key %s in MVCC logical op log", details.Key))
+		}
+
 		if !details.Safe {
 			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
 		}

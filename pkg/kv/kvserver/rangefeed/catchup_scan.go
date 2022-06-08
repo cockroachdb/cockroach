@@ -74,12 +74,6 @@ func NewCatchUpIterator(
 				// over the provisional values during
 				// iteration.
 				IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-				// CatchUpScan currently emits all inline
-				// values it encounters.
-				//
-				// TODO(ssd): Re-evalutate if this behavior is
-				// still needed (#69357).
-				InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
 			}),
 		close:     closer,
 		span:      span,
@@ -148,56 +142,48 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 
 		unsafeKey := i.UnsafeKey()
 		unsafeValRaw := i.UnsafeValue()
-		var unsafeVal []byte
 		if !unsafeKey.IsValue() {
 			// Found a metadata key.
 			if err := protoutil.Unmarshal(unsafeValRaw, &meta); err != nil {
 				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
 			}
-			if !meta.IsInline() {
-				// This is an MVCCMetadata key for an intent. The catchUp scan
-				// only cares about committed values, so ignore this and skip past
-				// the corresponding provisional key-value. To do this, iterate to
-				// the provisional key-value, validate its timestamp, then iterate
-				// again. When using MVCCIncrementalIterator we know that the
-				// provisional value will also be within the time bounds so we use
-				// Next.
-				i.Next()
-				if ok, err := i.Valid(); err != nil {
-					return errors.Wrap(err, "iterating to provisional value for intent")
-				} else if !ok {
-					return errors.Errorf("expected provisional value for intent")
-				}
-				if !meta.Timestamp.ToTimestamp().EqOrdering(i.UnsafeKey().Timestamp) {
-					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
-						meta.Timestamp, i.UnsafeKey().Timestamp)
-				}
-				i.Next()
-				continue
+
+			// Inline values are unsupported by rangefeeds. MVCCIncrementalIterator
+			// should have errored on them already.
+			if meta.IsInline() {
+				return errors.AssertionFailedf("unexpected inline key %s", unsafeKey)
 			}
 
-			// If write is inline, it doesn't have a timestamp so we don't
-			// filter on the registration's starting timestamp. Instead, we
-			// return all inline writes.
-			//
-			// TODO(ssd): Do we want to continue to
-			// support inline values here at all? TBI may
-			// miss inline values completely and normal
-			// iterators may result in the rangefeed not
-			// seeing some intermediate values.
-			unsafeVal = meta.RawBytes
-		} else {
-			mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
-			if err != nil {
-				return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
+			// This is an MVCCMetadata key for an intent. The catchUp scan only cares
+			// about committed values, so ignore this and skip past the corresponding
+			// provisional key-value. To do this, iterate to the provisional
+			// key-value, validate its timestamp, then iterate again. When using
+			// MVCCIncrementalIterator we know that the provisional value will also be
+			// within the time bounds so we use Next.
+			i.Next()
+			if ok, err := i.Valid(); err != nil {
+				return errors.Wrap(err, "iterating to provisional value for intent")
+			} else if !ok {
+				return errors.Errorf("expected provisional value for intent")
 			}
-			unsafeVal = mvccVal.Value.RawBytes
+			if !meta.Timestamp.ToTimestamp().EqOrdering(i.UnsafeKey().Timestamp) {
+				return errors.Errorf("expected provisional value for intent with ts %s, found %s",
+					meta.Timestamp, i.UnsafeKey().Timestamp)
+			}
+			i.Next()
+			continue
 		}
 
-		// Ignore the version if it's not inline and its timestamp is at
-		// or before the registration's (exclusive) starting timestamp.
+		mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
+		if err != nil {
+			return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
+		}
+		unsafeVal := mvccVal.Value.RawBytes
+
+		// Ignore the version if its timestamp is at or before the registration's
+		// (exclusive) starting timestamp.
 		ts := unsafeKey.Timestamp
-		ignore := !(ts.IsEmpty() || i.startTime.Less(ts))
+		ignore := ts.LessEq(i.startTime)
 		if ignore && !withDiff {
 			// Skip all the way to the next key.
 			// NB: fast-path to avoid value copy when !r.withDiff.

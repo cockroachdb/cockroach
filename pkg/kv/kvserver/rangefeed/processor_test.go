@@ -671,7 +671,6 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
 	rtsIter := newTestIterator([]storage.MVCCKeyValue{
 		makeKV("a", "val1", 10),
-		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),
 		makeProvisionalKV("c", "txnKey1", 15),
 		makeKV("c", "val3", 11),
@@ -680,7 +679,6 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		makeProvisionalKV("d", "txnKey2", 21),
 		makeKV("d", "val5", 20),
 		makeKV("d", "val6", 19),
-		makeInline("g", "val7"),
 		makeKV("m", "val8", 1),
 		makeIntent("n", txn1, "txnKey1", 12),
 		makeProvisionalKV("n", "txnKey1", 12),
@@ -689,7 +687,6 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		makeKV("r", "val9", 4),
 		makeIntent("w", txn1, "txnKey1", 3),
 		makeProvisionalKV("w", "txnKey1", 3),
-		makeInline("x", "val10"),
 		makeIntent("z", txn2, "txnKey2", 21),
 		makeProvisionalKV("z", "txnKey2", 21),
 		makeKV("z", "val11", 4),
