@@ -60,7 +60,7 @@ func TestRulesYAML(t *testing.T) {
 				}
 				return string(out)
 			}
-			d.Fatalf(t, "deprules and oprules are the only commands")
+			d.Fatalf(t, "deprules, oprules, and rules are the only commands, got %s", d.Cmd)
 			return ""
 		})
 	})

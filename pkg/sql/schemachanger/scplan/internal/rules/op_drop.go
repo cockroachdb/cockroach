@@ -30,30 +30,27 @@ import (
 // We also can't skip ops for column-dependent elements which don't like in the
 // descriptor, like column comments (which live in a dedicated system table).
 func init() {
-	relation, relationTarget, _ := targetNodeVars("relation")
-	column, columnTarget, columnNode := targetNodeVars("column")
-	dep, depTarget, depNode := targetNodeVars("column-dep")
-	relationID, columnID := rel.Var("relation-id"), rel.Var("column-id")
 
+	relation := mkNodeVars("relation")
+	column := mkNodeVars("column")
+	dep := mkNodeVars("column-dep")
+	relationID, columnID := rel.Var("relation-id"), rel.Var("column-id")
 	registerOpRule(
 		"skip column removal ops on relation drop",
-		columnNode,
+		column.node,
 		screl.MustQuery(
-			relation.Type(
+			relation.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			column.Type(
+			column.el.Type(
 				(*scpb.Column)(nil),
 			),
-
-			relationID.Entities(screl.DescID, relation, column),
-
-			screl.JoinTarget(relation, relationTarget),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(column, columnTarget, columnNode),
-			columnTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			columnNode.AttrIn(screl.CurrentStatus,
+			joinOnDescID(relation.el, column.el, relationID),
+			relation.joinTarget(),
+			toAbsent(relation.target, column.target),
+			column.joinTargetNode(),
+			column.node.AttrIn(screl.CurrentStatus,
 				// All but DELETE_ONLY which is the status leading to ABSENT.
 				scpb.Status_PUBLIC,
 				scpb.Status_WRITE_ONLY,
@@ -63,28 +60,26 @@ func init() {
 
 	registerOpRule(
 		"skip column dependents removal ops on relation drop",
-		depNode,
+		dep.node,
 		screl.MustQuery(
-			relation.Type(
+			relation.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			column.Type(
+			column.el.Type(
 				(*scpb.Column)(nil),
 			),
-			dep.Type(
+			dep.el.Type(
 				(*scpb.ColumnName)(nil),
 			),
 
-			relationID.Entities(screl.DescID, relation, column, dep),
-			columnID.Entities(screl.ColumnID, column, dep),
-
-			screl.JoinTarget(relation, relationTarget),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTarget(column, columnTarget),
-			columnTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			joinOnDescID(relation.el, column.el, relationID),
+			joinOnColumnID(column.el, dep.el, relationID, columnID),
+			relation.joinTarget(),
+			toAbsent(relation.target, column.target),
+			column.joinTarget(),
+			dep.joinTargetNode(),
+			dep.target.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -93,59 +88,56 @@ func init() {
 // as well as elements which depend on them, provided there are no
 // back-references that need to be cleaned up. This is similar as for columns.
 func init() {
-	relation, relationTarget, _ := targetNodeVars("relation")
-	index, indexTarget, indexNode := targetNodeVars("index")
-	dep, depTarget, depNode := targetNodeVars("index-dep")
+	relation := mkNodeVars("relation")
+	index := mkNodeVars("index")
+	dep := mkNodeVars("index-dep")
 	relationID, indexID := rel.Var("relation-id"), rel.Var("index-id")
 
 	registerOpRule(
 		"skip index removal ops on relation drop",
-		indexNode,
+		index.node,
 		screl.MustQuery(
-			relation.Type(
+			relation.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			index.Type(
+			index.el.Type(
 				(*scpb.PrimaryIndex)(nil),
 				(*scpb.SecondaryIndex)(nil),
 			),
 
-			relationID.Entities(screl.DescID, relation, index),
-
-			screl.JoinTarget(relation, relationTarget),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(index, indexTarget, indexNode),
-			indexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			joinOnDescID(relation.el, index.el, relationID),
+			relation.joinTarget(),
+			index.joinTargetNode(),
+			toAbsent(relation.target, index.target),
 		),
 	)
 
 	registerOpRule(
 		"skip index dependents removal ops on relation drop",
-		depNode,
+		dep.node,
 		screl.MustQuery(
-			relation.Type(
+			relation.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			index.Type(
+			index.el.Type(
 				(*scpb.PrimaryIndex)(nil),
 				(*scpb.SecondaryIndex)(nil),
 			),
-			dep.Type(
+			dep.el.Type(
 				(*scpb.IndexName)(nil),
 				(*scpb.IndexPartitioning)(nil),
 			),
 
-			relationID.Entities(screl.DescID, relation, index, dep),
-			indexID.Entities(screl.IndexID, index, dep),
+			joinOnDescID(relation.el, index.el, relationID),
+			joinOnIndexID(index.el, dep.el, relationID, indexID),
 
-			screl.JoinTarget(relation, relationTarget),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTarget(index, indexTarget),
-			indexTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			relation.joinTarget(),
+			toAbsent(relation.target, index.target),
+			index.joinTarget(),
+			dep.joinTargetNode(),
+			dep.target.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -155,58 +147,54 @@ func init() {
 // back-references that need to be cleaned up. This is similar as for columns
 // and indexes.
 func init() {
-	relation, relationTarget, _ := targetNodeVars("relation")
-	constraint, constraintTarget, constraintNode := targetNodeVars("constraint")
-	dep, depTarget, depNode := targetNodeVars("constraint-dep")
+	relation := mkNodeVars("relation")
+	constraint := mkNodeVars("constraint")
+	dep := mkNodeVars("constraint-dep")
 	relationID, constraintID := rel.Var("relation-id"), rel.Var("constraint-id")
 
 	registerOpRule(
 		"skip constraint removal ops on relation drop",
-		constraintNode,
+		constraint.node,
 		screl.MustQuery(
-			relation.Type(
+			relation.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			constraint.Type(
+			constraint.el.Type(
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
 			),
 
-			relationID.Entities(screl.DescID, relation, constraint),
-
-			screl.JoinTarget(relation, relationTarget),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(constraint, constraintTarget, constraintNode),
-			constraintTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			joinOnDescID(relation.el, constraint.el, relationID),
+			relation.joinTarget(),
+			toAbsent(relation.target, constraint.target),
+			constraint.joinTargetNode(),
 		),
 	)
 
 	registerOpRule(
 		"skip constraint dependents removal ops on relation drop",
-		depNode,
+		dep.node,
 		screl.MustQuery(
-			relation.Type(
+			relation.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			constraint.Type(
+			constraint.el.Type(
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
 				(*scpb.CheckConstraint)(nil),
 				(*scpb.ForeignKeyConstraint)(nil),
 			),
-			dep.Type(
+			dep.el.Type(
 				(*scpb.ConstraintName)(nil),
 			),
 
-			relationID.Entities(screl.DescID, relation, constraint, dep),
-			constraintID.Entities(screl.ConstraintID, constraint, dep),
-
-			screl.JoinTarget(relation, relationTarget),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTarget(constraint, constraintTarget),
-			constraintTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			joinOnDescID(relation.el, constraint.el, relationID),
+			joinOnConstraintID(constraint.el, dep.el, relationID, constraintID),
+			relation.joinTarget(),
+			constraint.joinTarget(),
+			toAbsent(relation.target, constraint.target),
+			dep.joinTargetNode(),
+			dep.target.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }
@@ -220,15 +208,15 @@ func init() {
 //   - elements which have forward references to other descriptors: back-
 //     references need to be cleaned up.
 func init() {
-	desc, descTarget, _ := targetNodeVars("desc")
-	dep, depTarget, depNode := targetNodeVars("dep")
+	desc := mkNodeVars("desc")
+	dep := mkNodeVars("dep")
 	descID := rel.Var("desc-id")
 
 	registerOpRule(
 		"skip element removal ops on descriptor drop",
-		depNode,
+		dep.node,
 		screl.MustQuery(
-			desc.Type(
+			desc.el.Type(
 				(*scpb.Database)(nil),
 				(*scpb.Schema)(nil),
 				(*scpb.Table)(nil),
@@ -237,18 +225,15 @@ func init() {
 				(*scpb.AliasType)(nil),
 				(*scpb.EnumType)(nil),
 			),
-			dep.Type(
+			dep.el.Type(
 				(*scpb.ColumnFamily)(nil),
 				(*scpb.Owner)(nil),
 				(*scpb.UserPrivileges)(nil),
 			),
-
-			descID.Entities(screl.DescID, desc, dep),
-
-			screl.JoinTarget(desc, descTarget),
-			descTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			joinOnDescID(desc.el, dep.el, descID),
+			desc.joinTarget(),
+			toAbsent(desc.target, dep.target),
+			dep.joinTargetNode(),
 		),
 	)
 }
@@ -256,32 +241,30 @@ func init() {
 // Skip all removal ops for dropping table comments corresponding to elements
 // when dropping the table itself.
 func init() {
-	desc, descTarget, _ := targetNodeVars("desc")
-	dep, depTarget, depNode := targetNodeVars("dep")
+	desc := mkNodeVars("desc")
+	dep := mkNodeVars("dep")
 	descID := rel.Var("desc-id")
 
 	registerOpRule(
 		"skip table comment removal ops on descriptor drop",
-		depNode,
+		dep.node,
 		screl.MustQuery(
-			desc.Type(
+			desc.el.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 				(*scpb.Sequence)(nil),
 			),
-			dep.Type(
+			dep.el.Type(
 				(*scpb.ColumnComment)(nil),
 				(*scpb.IndexComment)(nil),
 				(*scpb.ConstraintComment)(nil),
 				(*scpb.TableComment)(nil),
 			),
 
-			descID.Entities(screl.DescID, desc, dep),
-
-			screl.JoinTarget(desc, descTarget),
-			descTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
-			screl.JoinTargetNode(dep, depTarget, depNode),
-			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			joinOnDescID(desc.el, dep.el, descID),
+			desc.joinTarget(),
+			toAbsent(desc.target, dep.target),
+			dep.joinTargetNode(),
 		),
 	)
 }

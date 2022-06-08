@@ -27,17 +27,17 @@ func init() {
 		"view drops before the types, views and tables it depends on",
 		scgraph.Precedence,
 		"view", "dependents",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.View)(nil)),
-				to.Type(
+				from.el.Type((*scpb.View)(nil)),
+				to.el.Type(
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 					(*scpb.View)(nil),
 					(*scpb.Table)(nil),
 				),
-				toAbsentInDropped(fromTarget, fromNode, toTarget, toNode),
-				rel.Filter("ViewDependsOn", from, to)(func(
+				toAbsentInDropped(from.target, from.node, to.target, to.node),
+				rel.Filter("ViewDependsOn", from.el, to.el)(func(
 					view *scpb.View, dep scpb.Element,
 				) bool {
 					depID := screl.GetDescID(dep)
@@ -51,17 +51,17 @@ func init() {
 		"alias type drops before the types it depends on",
 		scgraph.Precedence,
 		"alias", "alias-dep",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type(
+				from.el.Type(
 					(*scpb.AliasType)(nil),
 				),
-				to.Type(
+				to.el.Type(
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 				),
-				toAbsentInDropped(fromTarget, fromNode, toTarget, toNode),
-				rel.Filter("aliasTypeDependsOn", from, to)(func(
+				toAbsentInDropped(from.target, from.node, to.target, to.node),
+				rel.Filter("aliasTypeDependsOn", from.el, to.el)(func(
 					alias *scpb.AliasType, dep scpb.Element,
 				) bool {
 					depID := screl.GetDescID(dep)
@@ -75,12 +75,12 @@ func init() {
 		"array type drops right before its element enum type",
 		scgraph.SameStagePrecedence,
 		"alias", "enum",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.AliasType)(nil)),
-				to.Type((*scpb.EnumType)(nil)),
-				toAbsentInDropped(fromTarget, fromNode, toTarget, toNode),
-				rel.Filter("joinArrayTypeWithEnumType", from, to)(func(
+				from.el.Type((*scpb.AliasType)(nil)),
+				to.el.Type((*scpb.EnumType)(nil)),
+				toAbsentInDropped(from.target, from.node, to.target, to.node),
+				rel.Filter("joinArrayTypeWithEnumType", from.el, to.el)(func(
 					arrayType *scpb.AliasType, enumType *scpb.EnumType,
 				) bool {
 					return arrayType.TypeID == enumType.ArrayTypeID
@@ -101,14 +101,14 @@ func init() {
 		"schema dropped before parent database",
 		scgraph.Precedence,
 		"schema-parent", "database",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.SchemaParent)(nil)),
-				to.Type((*scpb.Database)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOn(from, screl.ReferencedDescID, to, screl.DescID, "desc-id"),
+				from.el.Type((*scpb.SchemaParent)(nil)),
+				to.el.Type((*scpb.Database)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinOn(from.el, screl.ReferencedDescID, to.el, screl.DescID, "desc-id"),
 			}
 		},
 	)
@@ -119,14 +119,14 @@ func init() {
 		"object dropped before parent schema",
 		scgraph.Precedence,
 		"object-parent", "schema",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ObjectParent)(nil)),
-				to.Type((*scpb.Schema)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinReferencedDescID(from, to, "desc-id"),
+				from.el.Type((*scpb.ObjectParent)(nil)),
+				to.el.Type((*scpb.Schema)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinReferencedDescID(from.el, to.el, "desc-id"),
 			}
 		},
 	)
@@ -135,14 +135,14 @@ func init() {
 		"secondary region locality removed before dropping multi-region enum type",
 		scgraph.Precedence,
 		"secondary-region", "enum-type",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.TableLocalitySecondaryRegion)(nil)),
-				to.Type((*scpb.EnumType)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinReferencedDescID(from, to, "desc-id"),
+				from.el.Type((*scpb.TableLocalitySecondaryRegion)(nil)),
+				to.el.Type((*scpb.EnumType)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinReferencedDescID(from.el, to.el, "desc-id"),
 			}
 		},
 	)
@@ -151,18 +151,18 @@ func init() {
 		"check constraint removed before dropping dependent types and sequences",
 		scgraph.Precedence,
 		"check-constraint", "dependent",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.CheckConstraint)(nil)),
-				to.Type(
+				from.el.Type((*scpb.CheckConstraint)(nil)),
+				to.el.Type(
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 					(*scpb.Sequence)(nil),
 				),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				rel.Filter("checkConstraintDependsOn", from, to)(func(
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				rel.Filter("checkConstraintDependsOn", from.el, to.el)(func(
 					check *scpb.CheckConstraint, dep scpb.Element,
 				) bool {
 					depID := screl.GetDescID(dep)
@@ -176,14 +176,14 @@ func init() {
 		"FK removed before dropping dependent table",
 		scgraph.Precedence,
 		"foreign-key", "table",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ForeignKeyConstraint)(nil)),
-				to.Type((*scpb.Table)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinReferencedDescID(from, to, "desc-id"),
+				from.el.Type((*scpb.ForeignKeyConstraint)(nil)),
+				to.el.Type((*scpb.Table)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinReferencedDescID(from.el, to.el, "desc-id"),
 			}
 		},
 	)
@@ -192,14 +192,14 @@ func init() {
 		"index partial predicate removed before dropping dependent types",
 		scgraph.Precedence,
 		"index-partial", "dependent-type",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.SecondaryIndexPartial)(nil)),
-				to.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				rel.Filter("indexPartialDependsOn", from, to)(func(
+				from.el.Type((*scpb.SecondaryIndexPartial)(nil)),
+				to.el.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				rel.Filter("indexPartialDependsOn", from.el, to.el)(func(
 					ip *scpb.SecondaryIndexPartial, dep scpb.Element,
 				) bool {
 					return idInIDs(ip.UsesTypeIDs, screl.GetDescID(dep))
@@ -212,14 +212,14 @@ func init() {
 		"column type removed before dropping dependent types",
 		scgraph.Precedence,
 		"column-type", "dependent-type",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ColumnType)(nil)),
-				to.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				rel.Filter("columnTypeDependsOn", from, to)(func(
+				from.el.Type((*scpb.ColumnType)(nil)),
+				to.el.Type((*scpb.AliasType)(nil), (*scpb.EnumType)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				rel.Filter("columnTypeDependsOn", from.el, to.el)(func(
 					cd *scpb.ColumnType, dep scpb.Element,
 				) bool {
 					depID := screl.GetDescID(dep)
@@ -236,18 +236,18 @@ func init() {
 		"column DEFAULT removed before dropping dependent types and sequences",
 		scgraph.Precedence,
 		"default-expr", "dependent",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ColumnDefaultExpression)(nil)),
-				to.Type(
+				from.el.Type((*scpb.ColumnDefaultExpression)(nil)),
+				to.el.Type(
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 					(*scpb.Sequence)(nil),
 				),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				rel.Filter("columnDefaultDependsOn", from, to)(func(
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				rel.Filter("columnDefaultDependsOn", from.el, to.el)(func(
 					cd *scpb.ColumnDefaultExpression, dep scpb.Element,
 				) bool {
 					depID := screl.GetDescID(dep)
@@ -261,18 +261,18 @@ func init() {
 		"column ON UPDATE removed before dropping dependent types and sequences",
 		scgraph.Precedence,
 		"on-update-expr", "dependent",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ColumnOnUpdateExpression)(nil)),
-				to.Type(
+				from.el.Type((*scpb.ColumnOnUpdateExpression)(nil)),
+				to.el.Type(
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 					(*scpb.Sequence)(nil),
 				),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				rel.Filter("columnOnUpdateDependsOn", from, to)(func(
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				rel.Filter("columnOnUpdateDependsOn", from.el, to.el)(func(
 					cu *scpb.ColumnOnUpdateExpression, dep scpb.Element,
 				) bool {
 					depID := screl.GetDescID(dep)
@@ -286,14 +286,14 @@ func init() {
 		"sequence ownership removed before dropping sequence",
 		scgraph.Precedence,
 		"sequence-owner", "sequence",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.SequenceOwner)(nil)),
-				to.Type((*scpb.Sequence)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinReferencedDescID(from, to, "desc-id"),
+				from.el.Type((*scpb.SequenceOwner)(nil)),
+				to.el.Type((*scpb.Sequence)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinReferencedDescID(from.el, to.el, "desc-id"),
 			}
 
 		},
@@ -303,14 +303,14 @@ func init() {
 		"database region config removed before dropping multi-region enum type",
 		scgraph.Precedence,
 		"region-config", "enum-type",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.DatabaseRegionConfig)(nil)),
-				to.Type((*scpb.EnumType)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinReferencedDescID(from, to, "desc-id"),
+				from.el.Type((*scpb.DatabaseRegionConfig)(nil)),
+				to.el.Type((*scpb.EnumType)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinReferencedDescID(from.el, to.el, "desc-id"),
 			}
 		},
 	)
@@ -319,14 +319,14 @@ func init() {
 		"database region config removed before dropping multi-region enum type",
 		scgraph.Precedence,
 		"region-config", "enum-type",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.DatabaseRegionConfig)(nil)),
-				to.Type((*scpb.EnumType)(nil)),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinReferencedDescID(from, to, "desc-id"),
+				from.el.Type((*scpb.DatabaseRegionConfig)(nil)),
+				to.el.Type((*scpb.EnumType)(nil)),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinReferencedDescID(from.el, to.el, "desc-id"),
 			}
 		})
 
@@ -346,9 +346,9 @@ func init() {
 		"dependent element removal before descriptor drop",
 		scgraph.Precedence,
 		"element", "relation",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type(
+				from.el.Type(
 					(*scpb.ColumnFamily)(nil),
 					(*scpb.UniqueWithoutIndexConstraint)(nil),
 					(*scpb.CheckConstraint)(nil),
@@ -386,7 +386,7 @@ func init() {
 					// Object elements.
 					(*scpb.ObjectParent)(nil),
 				),
-				to.Type(
+				to.el.Type(
 					(*scpb.Database)(nil),
 					(*scpb.Schema)(nil),
 					(*scpb.Table)(nil),
@@ -395,10 +395,10 @@ func init() {
 					(*scpb.AliasType)(nil),
 					(*scpb.EnumType)(nil),
 				),
-				toAbsent(fromTarget, toTarget),
-				currentStatus(fromNode, scpb.Status_ABSENT),
-				currentStatus(toNode, scpb.Status_DROPPED),
-				joinOnDescID(from, to, "desc-id"),
+				toAbsent(from.target, to.target),
+				currentStatus(from.node, scpb.Status_ABSENT),
+				currentStatus(to.node, scpb.Status_DROPPED),
+				joinOnDescID(from.el, to.el, "desc-id"),
 			}
 		})
 
@@ -406,20 +406,20 @@ func init() {
 		"dependent element removal right after descriptor removal",
 		scgraph.SameStagePrecedence,
 		"relation", "element",
-		func(from, fromTarget, fromNode, to, toTarget, toNode rel.Var) rel.Clauses {
+		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type(
+				from.el.Type(
 					(*scpb.Table)(nil),
 					(*scpb.View)(nil),
 				),
-				to.Type(
+				to.el.Type(
 					(*scpb.Column)(nil),
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 					(*scpb.RowLevelTTL)(nil),
 				),
-				toAbsentInAbsent(fromTarget, fromNode, toTarget, toNode),
-				joinOnDescID(from, to, "desc-id"),
+				toAbsentInAbsent(from.target, from.node, to.target, to.node),
+				joinOnDescID(from.el, to.el, "desc-id"),
 			}
 		},
 	)
