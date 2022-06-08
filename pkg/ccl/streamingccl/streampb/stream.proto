@@ -12,6 +12,7 @@ package cockroach.ccl.streamingccl;
 option go_package = "streampb";
 
 
+import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/metadata.proto";
@@ -69,7 +70,7 @@ message ReplicationStreamSpec {
 message StreamEvent {
   message Batch {
     repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
-    // TODO: Add RangeFeedSStable once that's available.
+    repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
   }
 
   // SpanCheckpoint represents a checkpoint record for completed span.
