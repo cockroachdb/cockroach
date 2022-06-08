@@ -386,7 +386,7 @@ var AlterChangefeedOptionExpectValues = func() map[string]OptionPermittedValues 
 // AlterChangefeedTargetOptions is used to parse target specific alter
 // changefeed options using PlanHookState.TypeAsStringOpts().
 var AlterChangefeedTargetOptions = map[string]OptionPermittedValues{
-	OptInitialScan:   flagOption,
+	OptInitialScan:   enum("yes", "no", "only").orEmptyMeans("yes"),
 	OptNoInitialScan: flagOption,
 }
 
