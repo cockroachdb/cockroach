@@ -110,25 +110,16 @@ func registerDepRule(
 	ruleName scgraph.RuleName,
 	kind scgraph.DepEdgeKind,
 	fromEl, toEl string,
-	def func(
-		from, fromTarget, fromNode,
-		to, toTarget, toNode rel.Var,
-	) rel.Clauses,
+	def func(from, to nodeVars) rel.Clauses,
 ) {
-	var (
-		from, fromTarget, fromNode = targetNodeVars(rel.Var(fromEl))
-		to, toTarget, toNode       = targetNodeVars(rel.Var(toEl))
-	)
-	c := def(from, fromTarget, fromNode, to, toTarget, toNode)
-	c = append(c,
-		screl.JoinTargetNode(from, fromTarget, fromNode),
-		screl.JoinTargetNode(to, toTarget, toNode),
-	)
+	from, to := mkNodeVars(fromEl), mkNodeVars(toEl)
+	c := def(from, to)
+	c = append(c, from.joinTargetNode(), to.joinTargetNode())
 	registry.depRules = append(registry.depRules, registeredDepRule{
 		name: ruleName,
 		kind: kind,
-		from: fromNode,
-		to:   toNode,
+		from: from.node,
+		to:   to.node,
 		q:    screl.MustQuery(c...),
 	})
 }
@@ -142,4 +133,27 @@ func registerOpRule(rn scgraph.RuleName, from rel.Var, q *rel.Query) {
 		from: from,
 		q:    q,
 	})
+}
+
+// nodeVars represents three variables intended to refer to
+// related element, target, and node entities.
+type nodeVars struct {
+	el, target, node rel.Var
+}
+
+func (v nodeVars) joinTargetNode() rel.Clause {
+	return screl.JoinTargetNode(v.el, v.target, v.node)
+}
+
+func (v nodeVars) joinTarget() rel.Clause {
+	return screl.JoinTarget(v.el, v.target)
+}
+
+func mkNodeVars(elStr string) nodeVars {
+	el := rel.Var(elStr)
+	return nodeVars{
+		el:     el,
+		target: el + "-target",
+		node:   el + "-node",
+	}
 }

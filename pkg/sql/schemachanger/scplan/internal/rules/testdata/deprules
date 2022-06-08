@@ -1,3 +1,44 @@
+rules
+----
+joinTarget(element, target):
+    - $target[Type] = '*scpb.Target'
+    - $target[Element] = $element
+    - $element[DescID] = $_
+joinTargetNode(element, target, node):
+    - joinTarget($element, $target)
+    - $node[Type] = '*screl.Node'
+    - $node[Target] = $target
+toAbsent(target1, target2):
+    - $target1[TargetStatus] = ABSENT
+    - $target2[TargetStatus] = ABSENT
+toAbsentInDropped(target1, node1, target2, node2):
+    - toAbsent($target1, $target2)
+    - $node1[CurrentStatus] = DROPPED
+    - $node2[CurrentStatus] = DROPPED
+toAbsentInAbsent(target1, node1, target2, node2):
+    - toAbsent($target1, $target2)
+    - $node1[CurrentStatus] = ABSENT
+    - $node2[CurrentStatus] = ABSENT
+joinReferencedDescID(referrer, referenced, id):
+    - $referrer[ReferencedDescID] = $id
+    - $referenced[DescID] = $id
+joinOnDescID(a, b, id):
+    - $a[DescID] = $id
+    - $b[DescID] = $id
+joinOnIndexID(a, b, desc-id, index-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[IndexID] = $index-id
+    - $b[IndexID] = $index-id
+joinOnColumnID(a, b, desc-id, col-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[ColumnID] = $col-id
+    - $b[ColumnID] = $col-id
+joinOnConstraintID(a, b, desc-id, constraint-id):
+    - joinOnDescID($a, $b, $desc-id)
+    - $a[ConstraintID] = $constraint-id
+    - $b[ConstraintID] = $constraint-id
+
+
 deprules
 ----
 - name: view drops before the types, views and tables it depends on
@@ -236,8 +277,7 @@ deprules
   query:
     - $new-index[Type] = '*scpb.PrimaryIndex'
     - $old-index[Type] = '*scpb.PrimaryIndex'
-    - $new-index[DescID] = $table-id
-    - $old-index[DescID] = $table-id
+    - joinOnDescID($new-index, $old-index, $table-id)
     - $new-index-target[TargetStatus] = ABSENT
     - $old-index-target[TargetStatus] = PUBLIC
     - $new-index-node[CurrentStatus] = VALIDATED
@@ -323,8 +363,7 @@ deprules
     - $child[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - joinOnIndexID($child, $index, $table-id, $index-id)
-    - $child-target[TargetStatus] = ABSENT
-    - $index-target[TargetStatus] = ABSENT
+    - toAbsent($child-target, $index-target)
     - $child-node[CurrentStatus] = ABSENT
     - $index-node[CurrentStatus] = VALIDATED
     - joinTargetNode($child, $child-target, $child-node)
@@ -525,10 +564,8 @@ deprules
   query:
     - $index[Type] = '*scpb.PrimaryIndex'
     - $column[Type] = '*scpb.Column'
-    - $index-target[TargetStatus] = ABSENT
-    - $column-target[TargetStatus] = ABSENT
-    - $index[DescID] = $table-id
-    - $column[DescID] = $table-id
+    - toAbsent($index-target, $column-target)
+    - joinOnDescID($index, $column, $table-id)
     - columnFeaturedInIndex(*scpb.Column, *scpb.PrimaryIndex)($column, $index)
     - $status = WRITE_ONLY
     - $index-node[CurrentStatus] = $status
@@ -574,8 +611,7 @@ deprules
   query:
     - $primary-index[Type] = '*scpb.PrimaryIndex'
     - $second-index[Type] IN ['*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
-    - $primary-index[DescID] = $table-id
-    - $second-index[DescID] = $table-id
+    - joinOnDescID($primary-index, $second-index, $table-id)
     - $primary-index-target[TargetStatus] = PUBLIC
     - $second-index-target[TargetStatus] = PUBLIC
     - $primary-index-node[CurrentStatus] = VALIDATED
@@ -590,10 +626,8 @@ deprules
   query:
     - $second-index[Type] IN ['*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
     - $primary-index[Type] = '*scpb.PrimaryIndex'
-    - $second-index[DescID] = $table-id
-    - $primary-index[DescID] = $table-id
-    - $second-index-target[TargetStatus] = ABSENT
-    - $primary-index-target[TargetStatus] = ABSENT
+    - joinOnDescID($second-index, $primary-index, $table-id)
+    - toAbsent($second-index-target, $primary-index-target)
     - $second-index-node[CurrentStatus] = ABSENT
     - $primary-index-node[CurrentStatus] = VALIDATED
     - newColumnFeaturedInIndex(scpb.Element, *scpb.PrimaryIndex)($second-index, $primary-index)

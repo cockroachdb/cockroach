@@ -29,10 +29,6 @@ func idInIDs(objects []descpb.ID, id descpb.ID) bool {
 	return false
 }
 
-func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
-	return el, el + "-target", el + "-node"
-}
-
 func currentStatus(node rel.Var, status scpb.Status) rel.Clause {
 	return node.AttrEq(screl.CurrentStatus, status)
 }
@@ -119,6 +115,16 @@ var (
 			return rel.Clauses{
 				joinOnDescID(a, b, descID),
 				colID.Entities(screl.ColumnID, a, b),
+			}
+		},
+	)
+	joinOnConstraintID = screl.Schema.Def4(
+		"joinOnConstraintID", "a", "b", "desc-id", "constraint-id", func(
+			a, b, descID, constraintID rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				joinOnDescID(a, b, descID),
+				constraintID.Entities(screl.ConstraintID, a, b),
 			}
 		},
 	)
