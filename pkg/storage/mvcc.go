@@ -1368,12 +1368,6 @@ func mvccPutInternal(
 		if ms != nil {
 			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
 		}
-		if err == nil {
-			writer.LogLogicalOp(MVCCWriteValueOpType, MVCCLogicalOpDetails{
-				Key:  key,
-				Safe: true,
-			})
-		}
 		return err
 	}
 

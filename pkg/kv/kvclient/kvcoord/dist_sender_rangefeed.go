@@ -76,6 +76,10 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 // Note that the timestamps in RangeFeedCheckpoint events that are streamed back
 // may be lower than the timestamp given here.
 //
+// Rangefeeds do not support inline (unversioned) values, and may omit them or
+// error on them. Similarly, rangefeeds will error if MVCC history is mutated
+// via e.g. ClearRange. Do not use rangefeeds across such key spans.
+//
 // NB: the given startAfter timestamp is exclusive, i.e. the first possible
 // emitted event (including catchup scans) will be at startAfter.Next().
 func (ds *DistSender) RangeFeed(
