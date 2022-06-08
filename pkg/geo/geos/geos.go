@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -215,10 +217,13 @@ func wrapGEOSInitError(err error) error {
 	case "windows":
 		page = "windows"
 	}
-	return errors.WithHintf(
-		err,
-		"Ensure you have the spatial libraries installed as per the instructions in %s",
-		docs.URL("install-cockroachdb-"+page),
+	return pgerror.WithCandidateCode(
+		errors.WithHintf(
+			err,
+			"Ensure you have the spatial libraries installed as per the instructions in %s",
+			docs.URL("install-cockroachdb-"+page),
+		),
+		pgcode.ConfigFile,
 	)
 }
 
