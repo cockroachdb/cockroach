@@ -13,10 +13,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -42,6 +46,10 @@ const (
 	// DefaultLocalityValue is the default locality tag used in a locality aware
 	// backup/restore when an explicit COCKROACH_LOCALITY is not specified.
 	DefaultLocalityValue = "default"
+	// includeManifest is a named const that can be passed to FindPriorBackups.
+	includeManifest = true
+	// OmitManifest is a named const that can be passed to FindPriorBackups.
+	OmitManifest = false
 )
 
 // On some cloud storage platforms (i.e. GS, S3), backups in a base bucket may
@@ -205,7 +213,7 @@ func ResolveDest(
 	}
 	defer incrementalStore.Close()
 
-	priors, err := FindPriorBackups(ctx, incrementalStore, backupbase.OmitManifest)
+	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
 	if err != nil {
 		return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -465,4 +473,204 @@ func ListFullBackupsInCollection(
 		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupbase.BackupManifestName)
 	}
 	return backupPaths, nil
+}
+
+// ResolveBackupManifests resolves the URIs that point to the incremental layers
+// (each of which can be partitioned) of backups into the actual backup
+// manifests and metadata required to RESTORE. If only one layer is explicitly
+// provided, it is inspected to see if it contains "appended" layers internally
+// that are then expanded into the result layers returned, similar to if those
+// layers had been specified in `from` explicitly.
+func ResolveBackupManifests(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	baseStores []cloud.ExternalStorage,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	fullyResolvedBaseDirectory []string,
+	fullyResolvedIncrementalsDirectory []string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	user username.SQLUsername,
+) (
+	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
+	mainBackupManifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	var ownedMemSize int64
+	defer func() {
+		if ownedMemSize != 0 {
+			mem.Shrink(ctx, ownedMemSize)
+		}
+	}()
+	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0], encryption)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	ownedMemSize += memSize
+
+	incStores := make([]cloud.ExternalStorage, len(fullyResolvedIncrementalsDirectory))
+	for i := range fullyResolvedIncrementalsDirectory {
+		store, err := mkStore(ctx, fullyResolvedIncrementalsDirectory[i], user)
+		if err != nil {
+			return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
+		}
+		defer store.Close()
+		incStores[i] = store
+	}
+
+	var prev []string
+	if len(incStores) > 0 {
+		prev, err = FindPriorBackups(ctx, incStores[0], includeManifest)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+	}
+	numLayers := len(prev) + 1
+
+	defaultURIs = make([]string, numLayers)
+	mainBackupManifests = make([]backuppb.BackupManifest, numLayers)
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
+
+	// Setup the full backup layer explicitly.
+	defaultURIs[0] = fullyResolvedBaseDirectory[0]
+	mainBackupManifests[0] = baseManifest
+	localityInfo[0], err = backupinfo.GetLocalityInfo(
+		ctx, baseStores, fullyResolvedBaseDirectory, baseManifest, encryption, "", /* prefix */
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	// If we discovered additional layers, handle them too.
+	if numLayers > 1 {
+		numPartitions := len(fullyResolvedIncrementalsDirectory)
+		// We need the parsed base URI (<prefix>/<subdir>) for each partition to calculate the
+		// URI to each layer in that partition below.
+		baseURIs := make([]*url.URL, numPartitions)
+		for i := range fullyResolvedIncrementalsDirectory {
+			baseURIs[i], err = url.Parse(fullyResolvedIncrementalsDirectory[i])
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+
+		// For each layer, we need to load the default manifest then calculate the URI and the
+		// locality info for each partition.
+		for i := range prev {
+			defaultManifestForLayer, memSize, err := backupinfo.ReadBackupManifest(ctx, mem, incStores[0], prev[i], encryption)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			ownedMemSize += memSize
+			mainBackupManifests[i+1] = defaultManifestForLayer
+
+			// prev[i] is the path to the manifest file itself for layer i -- the
+			// dirname piece of that path is the subdirectory in each of the
+			// partitions in which we'll also expect to find a partition manifest.
+			// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
+			incSubDir := path.Dir(prev[i])
+			partitionURIs := make([]string, numPartitions)
+			for j := range baseURIs {
+				u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
+				u.Path = backuputils.JoinURLPath(u.Path, incSubDir)
+				partitionURIs[j] = u.String()
+			}
+			defaultURIs[i+1] = partitionURIs[0]
+			localityInfo[i+1], err = backupinfo.GetLocalityInfo(ctx, incStores, partitionURIs, defaultManifestForLayer, encryption, incSubDir)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+	}
+
+	totalMemSize := ownedMemSize
+	ownedMemSize = 0
+
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := backupinfo.ValidateEndTimeAndTruncate(
+		defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+}
+
+// DeprecatedResolveBackupManifestsExplicitIncrementals reads the
+// BACKUP_MANIFEST files from the incremental backup locations that have been
+// explicitly provided by the user in `from`. The method uses the manifest file
+// to return the defaultURI, backup manifest, and locality info for each
+// incremental layer.
+func DeprecatedResolveBackupManifestsExplicitIncrementals(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	from [][]string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	user username.SQLUsername,
+) (
+	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
+	mainBackupManifests []backuppb.BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	// If explicit incremental backups were are passed, we simply load them one
+	// by one as specified and return the results.
+	var ownedMemSize int64
+	defer func() {
+		if ownedMemSize != 0 {
+			mem.Shrink(ctx, ownedMemSize)
+		}
+	}()
+
+	defaultURIs = make([]string, len(from))
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+	mainBackupManifests = make([]backuppb.BackupManifest, len(from))
+
+	var err error
+	for i, uris := range from {
+		// The first URI in the list must contain the main BACKUP manifest.
+		defaultURIs[i] = uris[0]
+
+		stores := make([]cloud.ExternalStorage, len(uris))
+		for j := range uris {
+			stores[j], err = mkStore(ctx, uris[j], user)
+			if err != nil {
+				return nil, nil, nil, 0, errors.Wrapf(err, "export configuration")
+			}
+			defer stores[j].Close()
+		}
+
+		var memSize int64
+		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem, stores[0], encryption)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		ownedMemSize += memSize
+
+		if len(uris) > 1 {
+			localityInfo[i], err = backupinfo.GetLocalityInfo(
+				ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
+			)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+	}
+
+	totalMemSize := ownedMemSize
+	ownedMemSize = 0
+
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err :=
+		backupinfo.ValidateEndTimeAndTruncate(defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
 }

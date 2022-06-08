@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -340,7 +341,7 @@ func selectTargets(
 	asOf hlc.Timestamp,
 	restoreSystemUsers bool,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
-	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	allDescs, lastBackupManifest := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(allDescs, lastBackupManifest)
@@ -388,7 +389,7 @@ func selectTargets(
 		return nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
-	if lastBackupManifest.FormatVersion >= BackupFormatDescriptorTrackingVersion {
+	if lastBackupManifest.FormatVersion >= backupinfo.BackupFormatDescriptorTrackingVersion {
 		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs); err != nil {
 			return nil, nil, nil, err
 		}
@@ -448,7 +449,7 @@ func MakeBackupTableEntry(
 		backupManifests = backupManifests[:ind+1]
 	}
 
-	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupManifests, endTime)
+	allDescs, _ := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, endTime)
 	resolver, err := backupresolver.NewDescriptorResolver(allDescs)
 	if err != nil {
 		return BackupTableEntry{}, errors.Wrapf(err, "creating a new resolver for all descriptors")

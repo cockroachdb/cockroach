@@ -17,6 +17,7 @@ go_library(
         "//pkg/ccl/backupccl",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupdest",
+        "//pkg/ccl/backupccl/backupinfo",
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backuputils",
         "//pkg/ccl/baseccl",

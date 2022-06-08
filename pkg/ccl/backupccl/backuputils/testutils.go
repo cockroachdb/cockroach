@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	// SingleNode is the size of a single node test cluster.
+	SingleNode = 1
 	// MultiNode is the size of a multi node test cluster.
 	MultiNode = 3
 )
@@ -99,4 +101,12 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	return tc, sqlDB, dir, cleanupFn
+}
+
+// BackupRestoreTestSetup creates and returns a pre-populated testing
+// environment that can be used in backup and restore tests.
+func BackupRestoreTestSetup(
+	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
 }

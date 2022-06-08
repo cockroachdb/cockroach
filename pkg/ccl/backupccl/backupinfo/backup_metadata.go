@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupinfo
 
 import (
 	"bytes"
@@ -35,8 +35,11 @@ import (
 )
 
 const (
-	metadataSSTName  = "metadata.sst"
-	fileInfoPath     = "fileinfo.sst"
+	// MetadataSSTName is the name of the SST file containing the backup metadata.
+	MetadataSSTName = "metadata.sst"
+	// FileInfoPath is the name of the SST file containing the
+	// BackupManifest_Files of the backup.
+	FileInfoPath     = "fileinfo.sst"
 	sstBackupKey     = "backup"
 	sstDescsPrefix   = "desc/"
 	sstFilesPrefix   = "file/"
@@ -46,7 +49,10 @@ const (
 	sstTenantsPrefix = "tenant/"
 )
 
-func writeBackupMetadataSST(
+// WriteBackupMetadataSST is responsible for constructing and writing the
+// `metadata.sst` to dest. This file contains the metadata corresponding to this
+// backup.
+func WriteBackupMetadataSST(
 	ctx context.Context,
 	dest cloud.ExternalStorage,
 	enc *jobspb.BackupEncryptionOptions,
@@ -62,7 +68,7 @@ func writeBackupMetadataSST(
 		}
 	}()
 
-	w, err := makeWriter(ctx, dest, metadataSSTName, enc)
+	w, err := makeWriter(ctx, dest, MetadataSSTName, enc)
 	if err != nil {
 		return err
 	}
@@ -125,7 +131,7 @@ func constructMetadataSST(
 		return err
 	}
 
-	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, fileInfoPath); err != nil {
+	if err := writeFilesToMetadata(ctx, sst, m, dest, enc, FileInfoPath); err != nil {
 		return err
 	}
 
@@ -783,7 +789,8 @@ type BackupMetadata struct {
 	filename string
 }
 
-func newBackupMetadata(
+// NewBackupMetadata returns a new BackupMetadata instance.
+func NewBackupMetadata(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	sstFileName string,

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -163,7 +164,7 @@ func (m metadataSSTInfoReader) showBackup(
 	user username.SQLUsername,
 	resultsCh chan<- tree.Datums,
 ) error {
-	filename := metadataSSTName
+	filename := backupinfo.MetadataSSTName
 	push := func(_, readable string, value json.JSON) error {
 		val := tree.DNull
 		if value != nil {
@@ -182,7 +183,7 @@ func (m metadataSSTInfoReader) showBackup(
 			return errors.Wrapf(err, "creating external store")
 		}
 		defer store.Close()
-		if err := DebugDumpMetadataSST(ctx, store, filename, info.enc, push); err != nil {
+		if err := backupinfo.DebugDumpMetadataSST(ctx, store, filename, info.enc, push); err != nil {
 			return err
 		}
 	}
@@ -216,15 +217,15 @@ func showBackupPlanHook(
 	}
 
 	expected := map[string]sql.KVStringOptValidate{
-		backupOptEncPassphrase:    sql.KVStringOptRequireValue,
-		backupOptEncKMS:           sql.KVStringOptRequireValue,
-		backupOptWithPrivileges:   sql.KVStringOptRequireNoValue,
-		backupOptAsJSON:           sql.KVStringOptRequireNoValue,
-		backupOptWithDebugIDs:     sql.KVStringOptRequireNoValue,
-		backupOptIncStorage:       sql.KVStringOptRequireValue,
-		backupOptDebugMetadataSST: sql.KVStringOptRequireNoValue,
-		backupOptEncDir:           sql.KVStringOptRequireValue,
-		backupOptCheckFiles:       sql.KVStringOptRequireNoValue,
+		backupencryption.BackupOptEncPassphrase: sql.KVStringOptRequireValue,
+		backupencryption.BackupOptEncKMS:        sql.KVStringOptRequireValue,
+		backupOptWithPrivileges:                 sql.KVStringOptRequireNoValue,
+		backupOptAsJSON:                         sql.KVStringOptRequireNoValue,
+		backupOptWithDebugIDs:                   sql.KVStringOptRequireNoValue,
+		backupOptIncStorage:                     sql.KVStringOptRequireValue,
+		backupOptDebugMetadataSST:               sql.KVStringOptRequireNoValue,
+		backupOptEncDir:                         sql.KVStringOptRequireValue,
+		backupOptCheckFiles:                     sql.KVStringOptRequireNoValue,
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
@@ -334,7 +335,7 @@ func showBackupPlanHook(
 		var encryption *jobspb.BackupEncryptionOptions
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
-		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
+		if passphrase, ok := opts[backupencryption.BackupOptEncPassphrase]; ok {
 			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
 			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
@@ -347,7 +348,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				Mode: jobspb.EncryptionMode_Passphrase,
 				Key:  encryptionKey,
 			}
-		} else if kms, ok := opts[backupOptEncKMS]; ok {
+		} else if kms, ok := opts[backupencryption.BackupOptEncKMS]; ok {
 			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
 			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
@@ -418,14 +419,14 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
-			err = resolveBackupManifests(
+			err = backupdest.ResolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedDest,
 			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, p.User())
 		defer func() {
 			mem.Shrink(ctx, memReserved)
 		}()
 		if err != nil {
-			if errors.Is(err, errLocalityDescriptor) && subdir == "" {
+			if errors.Is(err, backupinfo.ErrLocalityDescriptor) && subdir == "" {
 				p.BufferClientNotice(ctx,
 					pgnotice.Newf("`SHOW BACKUP` using the old syntax ("+
 						"without the `IN` keyword) on a locality aware backup does not display or validate"+
@@ -518,9 +519,9 @@ func checkBackupFiles(
 		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
 		// they're validated in resolveBackupManifests.
 		for _, metaFile := range []string{
-			fileInfoPath,
-			metadataSSTName,
-			backupbase.BackupManifestName + backupManifestChecksumSuffix} {
+			backupinfo.FileInfoPath,
+			backupinfo.MetadataSSTName,
+			backupbase.BackupManifestName + backupinfo.BackupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 					info.defaultURIs[layer], metaFile)
