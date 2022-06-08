@@ -35,7 +35,7 @@ enum Status {
   TRANSIENT_ABSENT = 3;
 
   // Intermediate states on the descriptor dropping path.
-  TXN_DROPPED = 4;
+  reserved 4; // Formerly TXN_DROPPED.
   DROPPED = 5;
 
   // Intermediate states on the column and index dropping and adding paths.

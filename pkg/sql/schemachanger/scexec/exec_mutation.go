@@ -37,7 +37,7 @@ import (
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Catalog(), deps.Clock())
+	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
@@ -442,14 +442,6 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 	mut.MaybeIncrementVersion()
 	mvs.modifiedDescriptors.Upsert(mut)
 	return mut, nil
-}
-
-func (mvs *mutationVisitorState) MaybeCheckedOutDescriptor(id descpb.ID) catalog.Descriptor {
-	entry := mvs.modifiedDescriptors.GetByID(id)
-	if entry == nil {
-		return nil
-	}
-	return entry.(catalog.Descriptor)
 }
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {

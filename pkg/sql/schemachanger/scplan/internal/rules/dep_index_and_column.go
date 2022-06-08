@@ -388,7 +388,7 @@ func init() {
 // which hold references to other descriptors.
 //
 // When the whole table is dropped, we can (and in fact, should) remove these
-// right away pre-commit. However, when only the column (or the index) is
+// right away in-txn. However, when only the column (or the index) is
 // dropped but the table remains, we need to wait until the column is
 // DELETE_ONLY, which happens post-commit because of the need to uphold the
 // 2-version invariant.

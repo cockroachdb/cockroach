@@ -30,19 +30,6 @@ type NameResolver interface {
 	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
 }
 
-// SyntheticDescriptors encapsulates synthetic descriptor operations on the
-// catalog.
-type SyntheticDescriptors interface {
-
-	// AddSyntheticDescriptor adds a synthetic descriptor to the reader state.
-	// Subsequent calls to MustReadImmutableDescriptors for this ID will return
-	// this synthetic descriptor instead of what it would have otherwise returned.
-	AddSyntheticDescriptor(desc catalog.Descriptor)
-
-	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
-	RemoveSyntheticDescriptor(id descpb.ID)
-}
-
 // Clock is used to provide a timestamp to track loosely when something
 // happened. It can be used for things like observability and telemetry and
 // not for anything involving correctness.
@@ -62,10 +49,6 @@ type MutationVisitorStateUpdater interface {
 	// CheckOutDescriptor reads a descriptor from the catalog by ID and marks it
 	// as undergoing a change.
 	CheckOutDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
-
-	// MaybeCheckedOutDescriptor returns an already checked-out descriptor.
-	// Returns nil if it hasn't been checked out yet.
-	MaybeCheckedOutDescriptor(id descpb.ID) catalog.Descriptor
 
 	// AddDrainedName marks a namespace entry as being drained.
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)

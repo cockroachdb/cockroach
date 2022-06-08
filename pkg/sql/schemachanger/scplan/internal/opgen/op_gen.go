@@ -12,6 +12,7 @@ package opgen
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -85,4 +86,40 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (_ *scgraph.Graph, err error
 
 	}
 	return g, nil
+}
+
+// InitialStatus returns the status at the source of an op-edge path.
+func InitialStatus(e scpb.Element, target scpb.Status) scpb.Status {
+	if t, found := findTarget(e, target); found {
+		return t.transitions[0].from
+	}
+	return scpb.Status_UNKNOWN
+}
+
+// NextStatus returns the status succeeding the current one for the element
+// and target status, if the corresponding op edge exists.
+func NextStatus(e scpb.Element, target, current scpb.Status) scpb.Status {
+	if t, found := findTarget(e, target); found {
+		for _, tt := range t.transitions {
+			if tt.from == current {
+				return tt.to
+			}
+		}
+	}
+	return scpb.Status_UNKNOWN
+}
+
+func findTarget(e scpb.Element, s scpb.Status) (_ target, found bool) {
+	et := reflect.TypeOf(e)
+	for _, t := range opRegistry.targets {
+		if t.status != s {
+			continue
+		}
+		if reflect.TypeOf(t.e) != et {
+			continue
+		}
+		return t, true /* found */
+
+	}
+	return target{}, false /* found */
 }

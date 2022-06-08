@@ -1,89 +1,26 @@
 setup
-CREATE TABLE t (k INT PRIMARY KEY, v STRING NOT NULL);
+CREATE TYPE e AS ENUM('a', 'b', 'c');
+CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 e} -> 104
++object {100 101 _e} -> 105
++object {100 101 t} -> 106
 
 test
-CREATE INDEX idx1 ON t (v);
+CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 ----
 checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 4 MutationType ops
-upsert descriptor #104
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #106
   ...
-     createAsOfTime:
-       wallTime: "1"
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    currentStatuses:
-  +    - BACKFILL_ONLY
-  +    - ABSENT
-  +    - DELETE_ONLY
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›)
-  +        statement: CREATE INDEX idx1 ON t (v)
-  +        statementTag: CREATE INDEX
-  +    revertible: true
-  +    targetRanks:
-  +    - 0
-  +    - 1
-  +    - 2
-  +    targets:
-  +    - elementProto:
-  +        secondaryIndex:
-  +          embeddedIndex:
-  +            indexId: 2
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
-  +            - 1
-  +            sourceIndexId: 1
-  +            tableId: 104
-  +            temporaryIndexId: 3
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 2
-  +          name: idx1
-  +          tableId: 104
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        temporaryIndex:
-  +          embeddedIndex:
-  +            indexId: 3
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
-  +            - 1
-  +            sourceIndexId: 1
-  +            tableId: 104
-  +          isUsingSecondaryEncoding: true
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: TRANSIENT_ABSENT
-     families:
-     - columnIds:
-  ...
-     id: 104
-     modificationTime: {}
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
   +  mutations:
   +  - direction: ADD
   +    index:
@@ -146,8 +83,89 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v)"
-  descriptor IDs: [104]
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - BACKFILL_ONLY
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
+  +          (‹v› = ‹'a'›)
+  +        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
+  +        statementTag: CREATE INDEX
+  +    revertible: true
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    targets:
+  +    - elementProto:
+  +        secondaryIndex:
+  +          embeddedIndex:
+  +            indexId: 2
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 2
+  +            keySuffixColumnIds:
+  +            - 1
+  +            sourceIndexId: 1
+  +            tableId: 106
+  +            temporaryIndexId: 3
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 2
+  +          name: idx1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        temporaryIndex:
+  +          embeddedIndex:
+  +            indexId: 3
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 2
+  +            keySuffixColumnIds:
+  +            - 1
+  +            sourceIndexId: 1
+  +            tableId: 106
+  +          isUsingSecondaryEncoding: true
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: TRANSIENT_ABSENT
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     mutations:
+     - direction: ADD
+  ...
+create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
+  descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -156,7 +174,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #106
   ...
        - BACKFILL_ONLY
        - ABSENT
@@ -164,6 +182,14 @@ upsert descriptor #104
   +    - WRITE_ONLY
        jobId: "1"
        relevantStatements:
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -180,11 +206,11 @@ update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 Ba
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [2] from index #1 in table #104
+backfill indexes [2] from index #1 in table #106
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #106
   ...
          userName: root
        currentStatuses:
@@ -192,6 +218,14 @@ upsert descriptor #104
   +    - DELETE_ONLY
        - ABSENT
        - WRITE_ONLY
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -208,7 +242,7 @@ update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 Mu
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #106
   ...
          userName: root
        currentStatuses:
@@ -216,6 +250,14 @@ upsert descriptor #104
   +    - MERGE_ONLY
        - ABSENT
        - WRITE_ONLY
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000005"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -232,15 +274,15 @@ update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 Ba
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [3] into backfilled indexes [2] in table #104
+merge temporary indexes [3] into backfilled indexes [2] in table #106
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 1 ValidationType op
-validate forward indexes [2] in table #104
+validate forward indexes [2] in table #106
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #106
   ...
          userName: root
        currentStatuses:
@@ -251,14 +293,16 @@ upsert descriptor #104
        - WRITE_ONLY
        jobId: "1"
   ...
-           statement: CREATE INDEX idx1 ON t (v)
+           statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
            statementTag: CREATE INDEX
   -    revertible: true
        targetRanks:
        - 0
   ...
      formatVersion: 3
-     id: 104
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000006"
   +  indexes:
   +  - constraintId: 2
   +    createdExplicitly: true
@@ -279,7 +323,7 @@ upsert descriptor #104
   +    sharded: {}
   +    storeColumnNames: []
   +    version: 4
-     modificationTime: {}
+  +  modificationTime: {}
      mutations:
      - direction: ADD
        index:
@@ -318,7 +362,7 @@ set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #106
   ...
        - PUBLIC
        - PUBLIC
@@ -326,6 +370,14 @@ upsert descriptor #104
   +    - TRANSIENT_DELETE_ONLY
        jobId: "1"
        relevantStatements:
+  ...
+       storeColumnNames: []
+       version: 4
+  -  modificationTime:
+  -    wallTime: "1640995200000000009"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -342,10 +394,10 @@ update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 o
 commit transaction #10
 begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #106
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -356,8 +408,9 @@ upsert descriptor #104
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›)
-  -        statement: CREATE INDEX idx1 ON t (v)
+  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
+  -          (‹v› = ‹'a'›)
+  -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
   -        statementTag: CREATE INDEX
   -    targetRanks:
   -    - 0
@@ -375,7 +428,7 @@ upsert descriptor #104
   -            keySuffixColumnIds:
   -            - 1
   -            sourceIndexId: 1
-  -            tableId: 104
+  -            tableId: 106
   -            temporaryIndexId: 3
   -      metadata:
   -        sourceElementId: 1
@@ -385,7 +438,7 @@ upsert descriptor #104
   -        indexName:
   -          indexId: 2
   -          name: idx1
-  -          tableId: 104
+  -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -401,7 +454,7 @@ upsert descriptor #104
   -            keySuffixColumnIds:
   -            - 1
   -            sourceIndexId: 1
-  -            tableId: 104
+  -            tableId: 106
   -          isUsingSecondaryEncoding: true
   -      metadata:
   -        sourceElementId: 1
@@ -410,8 +463,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       storeColumnNames: []
        version: 4
-     modificationTime: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000010"
   -  mutations:
   -  - direction: ADD
   -    index:
@@ -437,6 +492,7 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
+  +  modificationTime: {}
   +  mutations: []
      name: t
      nextColumnId: 3
@@ -445,9 +501,9 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.FinishSchemaChange to event log for descriptor 104
+write *eventpb.FinishSchemaChange to event log for descriptor 106
 create job #2 (non-cancelable: true): "GC for "
-  descriptor IDs: [104]
+  descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #11
 notified job registry to adopt jobs: [2]

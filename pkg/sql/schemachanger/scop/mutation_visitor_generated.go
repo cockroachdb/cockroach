@@ -34,7 +34,6 @@ type MutationVisitor interface {
 	CreateGcJobForTable(context.Context, CreateGcJobForTable) error
 	CreateGcJobForDatabase(context.Context, CreateGcJobForDatabase) error
 	CreateGcJobForIndex(context.Context, CreateGcJobForIndex) error
-	MarkDescriptorAsDroppedSynthetically(context.Context, MarkDescriptorAsDroppedSynthetically) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
 	MakeAddedColumnDeleteAndWriteOnly(context.Context, MakeAddedColumnDeleteAndWriteOnly) error
@@ -149,11 +148,6 @@ func (op CreateGcJobForDatabase) Visit(ctx context.Context, v MutationVisitor) e
 // Visit is part of the MutationOp interface.
 func (op CreateGcJobForIndex) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.CreateGcJobForIndex(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op MarkDescriptorAsDroppedSynthetically) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MarkDescriptorAsDroppedSynthetically(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
