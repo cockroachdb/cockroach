@@ -1305,3 +1305,54 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"42P03"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
+
+send
+Parse {"Query": "ROLLBACK"}
+Bind
+Execute
+Parse {"Query": "BEGIN"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Check interop of SQL DECLARE and wire DESCRIBE
+
+send
+Parse {"Query": "DECLARE foo CURSOR FOR SELECT g::INT8 FROM generate_series(1, 10) g(g)"}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Describe {"ObjectType": "P", "Name": "foo"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"g","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"T"}
