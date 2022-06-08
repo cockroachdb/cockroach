@@ -288,7 +288,7 @@ var AlterChangefeedOptionExpectValues = func() map[string]sql.KVStringOptValidat
 // AlterChangefeedTargetOptions is used to parse target specific alter
 // changefeed options using PlanHookState.TypeAsStringOpts().
 var AlterChangefeedTargetOptions = map[string]sql.KVStringOptValidate{
-	OptInitialScan:   sql.KVStringOptRequireNoValue,
+	OptInitialScan: sql.KVStringOptAny,
 	OptNoInitialScan: sql.KVStringOptRequireNoValue,
 }
 

@@ -308,12 +308,20 @@ func generateNewTargets(
 	// name of the target was modified.
 	originalSpecs := make(map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification)
 
+	// We want to store the value of whether or not the original changefeed had 
+	// initial_scan set to only so that we only do an initial scan on an alter 
+	// changefeed with initial_scan = 'only' if the original one also had
+	// initial_scan = 'only'. 
+	_, originalInitialScanOnlyOption := opts[changefeedbase.OptInitialScanOnly]
+
 	// When we add new targets with or without initial scans, indicating
 	// initial_scan or no_initial_scan in the job description would lose its
 	// meaning. Hence, we will omit these details from the changefeed
 	// description. However, to ensure that we do perform the initial scan on
 	// newly added targets, we will introduce the initial_scan opt after the
 	// job record is created.
+	
+	delete(opts, changefeedbase.OptInitialScanOnly)
 	delete(opts, changefeedbase.OptNoInitialScan)
 	delete(opts, changefeedbase.OptInitialScan)
 
@@ -377,12 +385,48 @@ func generateNewTargets(
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 
-			_, withInitialScan := targetOpts[changefeedbase.OptInitialScan]
-			_, noInitialScan := targetOpts[changefeedbase.OptNoInitialScan]
-			if withInitialScan && noInitialScan {
+			var withInitialScan bool
+			initialScanType, initialScanSet := targetOpts[changefeedbase.OptInitialScan]
+			_, noInitialScanSet := targetOpts[changefeedbase.OptNoInitialScan]
+			_, initialScanOnlySet := targetOpts[changefeedbase.OptInitialScanOnly]
+
+			if initialScanSet {
+				if initialScanType == `no` || (initialScanType == `only` && !originalInitialScanOnlyOption) {
+					withInitialScan = false
+				} else {
+					withInitialScan = true
+				}
+			} else {
+				withInitialScan = false
+			}
+
+			if initialScanType != `` && initialScanType != `yes` && initialScanType != `no` && initialScanType != `only` {
+				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`cannot set initial_scan to %q`, changefeedbase.OptInitialScan,
+				)
+			}
+
+			if initialScanSet && noInitialScanSet {
 				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
 					pgcode.InvalidParameterValue,
 					`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
+					changefeedbase.OptNoInitialScan,
+				)
+			}
+		
+			if initialScanSet && initialScanOnlySet {
+				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
+					changefeedbase.OptInitialScanOnly,
+				)
+			}
+		
+			if noInitialScanSet && initialScanOnlySet {
+				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`cannot specify both %q and %q`, changefeedbase.OptInitialScanOnly,
 					changefeedbase.OptNoInitialScan,
 				)
 			}

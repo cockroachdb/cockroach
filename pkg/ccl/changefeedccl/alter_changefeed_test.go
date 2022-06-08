@@ -891,91 +891,6 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
-func TestAlterChangefeedInitialScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
-		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (1), (2), (3)`)
-
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '1s', no_initial_scan`)
-		defer closeFeed(t, testFeed)
-
-		expectResolvedTimestamp(t, testFeed)
-
-		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
-		require.True(t, ok)
-
-		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
-
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, feed.JobID()))
-
-		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
-
-		assertPayloads(t, testFeed, []string{
-			`bar: [1]->{"after": {"a": 1}}`,
-			`bar: [2]->{"after": {"a": 2}}`,
-			`bar: [3]->{"after": {"a": 3}}`,
-		})
-
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (4)`)
-		assertPayloads(t, testFeed, []string{
-			`bar: [4]->{"after": {"a": 4}}`,
-		})
-	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
-}
-
-func TestAlterChangefeedNoInitialScan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
-		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (1), (2), (3)`)
-
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '1s'`)
-		defer closeFeed(t, testFeed)
-
-		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"a": 1}}`,
-			`foo: [2]->{"after": {"a": 2}}`,
-			`foo: [3]->{"after": {"a": 3}}`,
-		})
-		expectResolvedTimestamp(t, testFeed)
-
-		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
-		require.True(t, ok)
-
-		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
-
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH no_initial_scan`, feed.JobID()))
-
-		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
-
-		expectResolvedTimestamp(t, testFeed)
-
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (4)`)
-		assertPayloads(t, testFeed, []string{
-			`bar: [4]->{"after": {"a": 4}}`,
-		})
-	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
-}
-
 func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1343,4 +1258,53 @@ func TestAlterChangefeedUpdateFilter(t *testing.T) {
 	}
 
 	t.Run(`kafka`, kafkaTest(testFn))
+}
+
+func TestAlterChangefeedInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(initialScanOption string) cdcTestFn {
+		return func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (1), (2), (3)`)
+
+			testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '1s', no_initial_scan`)
+			defer closeFeed(t, testFeed)
+
+			expectResolvedTimestamp(t, testFeed)
+
+			feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
+
+			sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+			waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+			sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH %s`, feed.JobID(), initialScanOption))
+
+			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+			waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+
+			expectPayloads := (initialScanOption == "initial_scan = 'yes'" || initialScanOption == "initial_scan")
+			if expectPayloads{
+				assertPayloads(t, testFeed, []string{
+					`bar: [1]->{"after": {"a": 1}}`,
+					`bar: [2]->{"after": {"a": 2}}`,
+					`bar: [3]->{"after": {"a": 3}}`,
+				})
+			}
+
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (4)`)
+			assertPayloads(t, testFeed, []string{
+				`bar: [4]->{"after": {"a": 4}}`,
+			})
+		}
+	}
+
+	for _, initialScanOpt := range []string{"initial_scan = 'yes'", "initial_scan = 'no'", "initial_scan", "no_initial_scan"} {
+		t.Run(`kafka`, kafkaTest(testFn(initialScanOpt)))
+	}
 }
