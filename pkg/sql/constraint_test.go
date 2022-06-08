@@ -82,7 +82,10 @@ func TestSpanConstrainer(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 	for _, tc := range []struct {
 		filter      string
+		req         SpanConstraintRequirement
 		expectErr   string
+		remaining   string
+		alias       *tree.TableName
 		expectSpans []roachpb.Span
 	}{
 		{
@@ -106,6 +109,11 @@ func TestSpanConstrainer(t *testing.T) {
 			expectErr: "is a tautology",
 		},
 		{
+			filter:      "a >=3 or a < 3",
+			req:         BestEffortConstrain,
+			expectSpans: []roachpb.Span{primarySpan},
+		},
+		{
 			filter:    "5",
 			expectErr: "expected boolean expression",
 		},
@@ -124,6 +132,10 @@ func TestSpanConstrainer(t *testing.T) {
 		{
 			filter:      "a > 100",
 			expectSpans: []roachpb.Span{{Key: mkPkKey(t, fooID, 101), EndKey: pkEnd}},
+		},
+		{
+			filter:      "a < 100",
+			expectSpans: []roachpb.Span{{Key: pkStart, EndKey: mkPkKey(t, fooID, 100)}},
 		},
 		{
 			filter:      "a > 10 AND a > 5",
@@ -161,6 +173,44 @@ func TestSpanConstrainer(t *testing.T) {
 			expectErr: "cannot be fully constrained",
 		},
 		{
+			filter:    "a > 100 AND b > 11",
+			remaining: "b > 11",
+			req:       BestEffortConstrain,
+			expectSpans: []roachpb.Span{
+				{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd},
+			},
+		},
+		{
+			// Same as above, but with table alias -- we expect remaining expression to
+			// preserve the alias.
+			filter:    "buz.a > 100 AND b > 11",
+			remaining: "buz.b > 11",
+			req:       BestEffortConstrain,
+			alias:     tree.NewUnqualifiedTableName("buz"),
+			expectSpans: []roachpb.Span{
+				{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd},
+			},
+		},
+		{
+			// Same as above, but w/ silly tautology, which should be removed.
+			filter:    "(a > 3 OR a <= 3) AND a > 100 AND b > 11",
+			alias:     tree.NewTableNameWithSchema("defaultdb", "public", "foo"),
+			remaining: "defaultdb.public.foo.b > 11", // When alias specified, it is preserved.
+			req:       BestEffortConstrain,
+			expectSpans: []roachpb.Span{
+				{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd},
+			},
+		},
+		{
+			filter:    "a < 42 OR (a > 100 AND b > 11)",
+			remaining: "(a < 42) OR ((a > 100) AND (b > 11))",
+			req:       BestEffortConstrain,
+			expectSpans: []roachpb.Span{
+				{Key: pkStart, EndKey: mkPkKey(t, fooID, 42)},
+				{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd},
+			},
+		},
+		{
 			filter:    "a > 2 AND b > 5 AND a > 2",
 			expectErr: "cannot be fully constrained",
 		},
@@ -179,7 +229,15 @@ func TestSpanConstrainer(t *testing.T) {
 			expectSpans: []roachpb.Span{{Key: mkPkKey(t, fooID, 2, 6), EndKey: pkEnd}},
 		},
 		{
-			filter: "a IN (5, 10, 20) AND b < 25",
+			// Test that aliased table names work.
+			filter:      "(buz.a, buz.b) > (2, 5)",
+			expectSpans: []roachpb.Span{{Key: mkPkKey(t, fooID, 2, 6), EndKey: pkEnd}},
+			alias:       tree.NewUnqualifiedTableName("buz"),
+		},
+		{
+			// This test also uses qualified names for some fields.
+			filter: "foo.a IN (5, 10, 20) AND b < 25",
+			alias:  tree.NewUnqualifiedTableName("foo"),
 			expectSpans: []roachpb.Span{
 				{Key: mkPkKey(t, fooID, 5), EndKey: mkPkKey(t, fooID, 5, 25)},
 				{Key: mkPkKey(t, fooID, 10), EndKey: mkPkKey(t, fooID, 10, 25)},
@@ -191,13 +249,27 @@ func TestSpanConstrainer(t *testing.T) {
 			filterExpr, err := parser.ParseExpr(tc.filter)
 			require.NoError(t, err)
 
-			spans, err := sc.ConstrainPrimaryIndexSpanByExpr(ctx, fooDesc, &evalCtx, &semaCtx, filterExpr)
+			alias := tc.alias
+			if alias == nil {
+				var tn tree.TableName
+				alias = &tn
+			}
+
+			spans, remaining, err := sc.ConstrainPrimaryIndexSpanByExpr(
+				ctx, tc.req, alias, fooDesc, &evalCtx, &semaCtx, filterExpr)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err)
 				require.Nil(t, spans)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.expectSpans, spans)
+
+			if tc.remaining == "" {
+				require.Equal(t, tree.DBoolTrue, remaining, tree.AsStringWithFlags(remaining, tree.FmtExport))
 			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.expectSpans, spans)
+				require.Equal(t, tc.remaining, tree.AsStringWithFlags(remaining, tree.FmtExport))
 			}
 		})
 	}
