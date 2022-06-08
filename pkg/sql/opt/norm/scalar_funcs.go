@@ -211,11 +211,29 @@ func (c *CustomFuncs) OpsAreSame(left, right opt.Operator) bool {
 
 // ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
 // homogeneous tuple, so ARRAY[1, 2, 3] becomes (1, 2, 3).
-func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.ScalarExpr {
-	darr := scalar.(*memo.ConstExpr).Value.(*tree.DArray)
+func (c *CustomFuncs) ConvertConstArrayToTuple(arr *memo.ConstExpr) opt.ScalarExpr {
+	darr := arr.Value.(*tree.DArray)
 	elems := make(memo.ScalarListExpr, len(darr.Array))
 	ts := make([]*types.T, len(darr.Array))
 	for i, delem := range darr.Array {
+		// Convert DTuples to TupleExprs with constant elements. This allows
+		// constraints to be built for the resulting IN expression because the
+		// constraint builder requires TupleExprs on the RHS of IN expressions.
+		// TODO(mgartner): Consider updating the constraint builder to build
+		// constraints for IN expression with DTuples, and eliminating this
+		// special case.
+		if t, ok := delem.(*tree.DTuple); ok {
+			typ := t.ResolvedType()
+			typs := typ.TupleContents()
+			exprs := make(memo.ScalarListExpr, len(t.D))
+			for i := range t.D {
+				exprs[i] = c.f.ConstructConstVal(t.D[i], typs[i])
+			}
+			elems[i] = c.f.ConstructTuple(exprs, typ)
+			ts[i] = typ
+			continue
+		}
+
 		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
 		ts[i] = darr.ParamTyp
 	}

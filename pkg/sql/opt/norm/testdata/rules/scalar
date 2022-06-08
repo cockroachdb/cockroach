@@ -1477,6 +1477,28 @@ select
  └── filters
       └── k:1 > ANY () [outer=(1)]
 
+# DTuples should be converted to TupleExprs. This allows constraints to be built
+# for the resulting IN expression because the constraint builder requires
+# TupleExprs on the RHS of IN expressions.
+norm expect=SimplifyAnyScalarArray
+SELECT k FROM a WHERE (k, s) = ANY(ARRAY[(1, 'foo'), (2, 'bar')])
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:4!null
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan a
+      │    ├── columns: k:1!null s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (k:1, s:4) IN ((1, 'foo'), (2, 'bar')) [outer=(1,4), constraints=(/1/4: [/1/'foo' - /1/'foo'] [/2/'bar' - /2/'bar']; /4: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
+
 # --------------------------------------------------
 # SimplifyEqualsAnyTuple + SimplifyAnyScalarArray
 # --------------------------------------------------

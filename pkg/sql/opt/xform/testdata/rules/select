@@ -2117,6 +2117,24 @@ project
       ├── constraint: /6/1: [/'bar' - /'bas')
       └── key: (1)
 
+# Regression test for #77364. Queries with filter in the form
+# <tuple> = ANY(ARRAY[<tuple>, ...]) should be index accelerated.
+opt expect=GenerateConstrainedScans
+SELECT * FROM e WHERE (u, w) = ANY(ARRAY[(1, 10), (2, 20), (3, 30)])
+----
+index-join e
+ ├── columns: k:1!null u:2!null v:3 w:4!null
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan e@uw
+      ├── columns: k:1!null u:2!null w:4!null
+      ├── constraint: /2/4/1
+      │    ├── [/1/10 - /1/10]
+      │    ├── [/2/20 - /2/20]
+      │    └── [/3/30 - /3/30]
+      ├── key: (1)
+      └── fd: (1)-->(2,4)
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
