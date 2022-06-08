@@ -52,6 +52,9 @@ type FlowCtx struct {
 	// higher-level txn (like backfills).
 	Txn *kv.Txn
 
+	// MakeLeafTxn returns a new LeafTxn, different from Txn.
+	MakeLeafTxn func() (*kv.Txn, error)
+
 	// Descriptors is used to look up leased table descriptors and to construct
 	// transaction bound TypeResolvers to resolve type references during flow
 	// setup. It is not safe for concurrent use and is intended to be used only
