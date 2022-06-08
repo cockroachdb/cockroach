@@ -17,19 +17,6 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const StringReplacePlugin = require("string-replace-webpack-plugin");
 const WebpackBar = require("webpackbar");
 
-// Remove a broken dependency that Yarn insists upon installing before every
-// Webpack compile. We also do this when installing dependencies via Make, but
-// it"s common to run e.g. `yarn add` manually without re-running Make, which
-// will reinstall the broken dependency. The error this dependency causes is
-// horribly cryptic, so it"s important to remove it aggressively.
-//
-// See: https://github.com/yarnpkg/yarn/issues/2987
-class RemoveBrokenDependenciesPlugin {
-  apply(compiler) {
-    compiler.plugin("compile", () => rimraf.sync("./node_modules/@types/node"));
-  }
-}
-
 const proxyPrefixes = ["/_admin", "/_status", "/ts", "/login", "/logout"];
 function shouldProxy(reqPath) {
   if (reqPath === "/") {
@@ -50,7 +37,6 @@ module.exports = (env, argv) => {
   }
 
   let plugins = [
-    new RemoveBrokenDependenciesPlugin(),
     new CopyWebpackPlugin([
       { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
     ]),
