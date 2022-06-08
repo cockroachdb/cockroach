@@ -2391,6 +2391,66 @@ func TestDecommissionSelf(t *testing.T) {
 	}
 }
 
+// TestDecommissionEnqueueReplicas tests that a decommissioning node's replicas
+// are proactively enqueued into their replicateQueues by the other nodes in the
+// system.
+func TestDecommissionEnqueueReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // can't handle 7-node clusters
+
+	ctx := context.Background()
+	enqueuedRangeIDs := make(chan roachpb.RangeID)
+	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // allows admin client without setting up certs
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EnqueueReplicaInterceptor: func(
+						queueName string, repl *kvserver.Replica,
+					) {
+						require.Equal(t, queueName, "replicate")
+						enqueuedRangeIDs <- repl.RangeID
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	decommissionAndCheck := func(decommissioningSrvIdx int) {
+		t.Logf("decommissioning n%d", tc.Target(decommissioningSrvIdx).NodeID)
+		// Add a scratch range's replica to a node we will decommission.
+		scratchKey := tc.ScratchRange(t)
+		decommissioningSrv := tc.Server(decommissioningSrvIdx)
+		tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
+
+		conn, err := decommissioningSrv.RPCContext().GRPCDialNode(
+			decommissioningSrv.RPCAddr(), decommissioningSrv.NodeID(), rpc.DefaultClass,
+		).Connect(ctx)
+		require.NoError(t, err)
+		adminClient := serverpb.NewAdminClient(conn)
+		decomNodeIDs := []roachpb.NodeID{tc.Server(decommissioningSrvIdx).NodeID()}
+		_, err = adminClient.Decommission(
+			ctx,
+			&serverpb.DecommissionRequest{
+				NodeIDs:          decomNodeIDs,
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+			},
+		)
+		require.NoError(t, err)
+
+		// Ensure that the scratch range's replica was proactively enqueued.
+		require.Equal(t, <-enqueuedRangeIDs, tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+	}
+
+	decommissionAndCheck(2 /* decommissioningSrvIdx */)
+	decommissionAndCheck(3 /* decommissioningSrvIdx */)
+	decommissionAndCheck(5 /* decommissioningSrvIdx */)
+}
+
 func TestAdminDecommissionedOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

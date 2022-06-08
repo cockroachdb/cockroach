@@ -555,8 +555,12 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		// Manually enqueue the leaseholder replica into its store's raft snapshot
 		// queue. We expect it to pick up on the fact that the non-voter on its range
 		// needs a snapshot.
-		recording, pErr, err := leaseholderStore.ManuallyEnqueue(
-			ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
+		recording, pErr, err := leaseholderStore.Enqueue(
+			ctx,
+			"raftsnapshot",
+			leaseholderRepl,
+			false, /* skipShouldQueue */
+			false, /* async */
 		)
 		if pErr != nil {
 			return pErr
@@ -751,7 +755,9 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		_, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		_, processErr, err := store.Enqueue(
+			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
@@ -769,7 +775,9 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(
+			ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		formattedTrace := trace.String()
@@ -808,7 +816,9 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Run the replicaGC queue.
 	checkNoGC := func() roachpb.RangeDescriptor {
 		store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(
+			ctx, "replicaGC", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
@@ -868,7 +878,9 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	// raft to figure out that the replica needs a snapshot.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	testutils.SucceedsSoon(t, func() error {
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(
+			ctx, "raftsnapshot", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		if err != nil {
 			return err
 		}
@@ -1004,7 +1016,9 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	queue1ErrCh := make(chan error, 1)
 	go func() {
 		queue1ErrCh <- func() error {
-			trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+			trace, processErr, err := store.Enqueue(
+				ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+			)
 			if err != nil {
 				return err
 			}
@@ -1484,7 +1498,9 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 		// ensure that the merge correctly notices that there is a snapshot in
 		// flight and ignores the range.
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchKey)
-		_, processErr, enqueueErr := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		_, processErr, enqueueErr := store.Enqueue(
+			ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, enqueueErr)
 		require.True(t, kvserver.IsReplicationChangeInProgressError(processErr))
 		return nil
@@ -1529,7 +1545,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		})
 
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(
+			ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		formattedTrace := trace.String()
@@ -1564,7 +1582,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		checkTransitioningOut := func() {
 			t.Helper()
 			store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-			trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+			trace, processErr, err := store.Enqueue(
+				ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
+			)
 			require.NoError(t, err)
 			require.NoError(t, processErr)
 			formattedTrace := trace.String()

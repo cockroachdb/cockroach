@@ -67,7 +67,9 @@ func TestBlockedKVSubscriberDisablesMerges(t *testing.T) {
 	})
 
 	{
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(
+			ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		require.NoError(t, testutils.MatchInOrder(trace.String(), `skipping merge: queue has been disabled`))
@@ -82,7 +84,9 @@ func TestBlockedKVSubscriberDisablesMerges(t *testing.T) {
 	})
 
 	{
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(
+			ctx, "merge", repl, true /* skipShouldQueue */, false, /* async */
+		)
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		require.Error(t, testutils.MatchInOrder(trace.String(), `skipping merge: queue has been disabled`))
