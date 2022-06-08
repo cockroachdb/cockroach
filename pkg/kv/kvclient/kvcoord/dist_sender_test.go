@@ -864,6 +864,77 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
 }
 
+// TestNoBackoffOnNotLeaseHolderErrorWithoutLease verifies that the DistSender
+// does not retry a replica using backoff upon receiving a NotLeaseHolderError
+// without lease information. This could e.g. indicate that the replica
+// was unable to acquire an expired lease for itself, because it wasn't
+// able to heartbeat.
+func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	// Lease starts on n1.
+	rangeDesc := testUserRangeDescriptor3Replicas
+	replicas := rangeDesc.InternalReplicas
+	lease := roachpb.Lease{
+		Replica:  replicas[0],
+		Sequence: 1,
+	}
+
+	// n1 and n2 return an NLHE without lease information, n3 returns success.
+	// Record which replicas the request was sent to.
+	var sentTo []roachpb.NodeID
+	sendFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		sentTo = append(sentTo, ba.Replica.NodeID)
+		br := ba.CreateReply()
+		if ba.Replica != replicas[2] {
+			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
+				Replica: ba.Replica,
+			})
+		}
+		return br, nil
+	}
+
+	// Set up a DistSender stack.
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	for _, r := range replicas {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(r.NodeID),
+			newNodeDesc(r.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		NodeDescs:  g,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(sendFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  rangeDesc,
+		Lease: lease,
+	})
+
+	// Send a request. It should try all three replicas once: the first two fail
+	// with NLHE, the third one succeeds. None of them should trigger backoffs.
+	_, pErr := kv.SendWrapped(ctx, ds, roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */))
+	require.NoError(t, pErr.GoError())
+	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
+	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
+}
+
 // Test a scenario where a lease indicates a replica that, when contacted,
 // claims to not have the lease and instead returns an older lease. In this
 // scenario, the DistSender detects the fact that the node returned an old lease
