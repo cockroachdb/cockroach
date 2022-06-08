@@ -227,18 +227,21 @@ SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10
 statement ok
 SET tracing = off
 
-# The span "sending partial batch" means that the scan was parallelized. We're
-# seeing duplicate "querying next range" entries because we first use the range
-# cache to try to partition the spans in order to have parallel TableReaders (we
-# end up with a single partition though), and then we have a single TableReader
-# performing the scan of two spans in parallel.
-query T
-SELECT message FROM [SHOW TRACE FOR SESSION]
+# The span "sending partial batch" means that the scan was parallelized.
+#
+# Most of the time we're seeing duplicate "querying next range" entries because
+# we first use the range cache to try to partition the spans in order to have
+# parallel TableReaders (we end up with a single partition though), and then we
+# have a single TableReader performing the scan of two spans in parallel.
+# However, occasionally the duplicate "querying next range at /Table/109/1/10/0"
+# message is either dropped entirely or replaced with another
+# "querying next range at /Table/109/1/0/0". It's not clear why that happens, so
+# we deduplicate the messages to make the test non-flaky.
+query T rowsort
+SELECT DISTINCT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at %' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
-querying next range at /Table/109/1/0/0
-querying next range at /Table/109/1/10/0
 querying next range at /Table/109/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/109/1/10/0
