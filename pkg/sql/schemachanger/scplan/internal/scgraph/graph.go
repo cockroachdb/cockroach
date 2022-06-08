@@ -13,6 +13,7 @@ package scgraph
 import (
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -311,32 +312,62 @@ func (g *Graph) Order() int {
 
 // Validate returns an error if there's a cycle in the graph.
 func (g *Graph) Validate() (err error) {
-	marks := make(map[*screl.Node]bool, g.Order())
-	var visit func(n *screl.Node)
-	visit = func(n *screl.Node) {
-		if err != nil {
+	order := g.Order()
+	done := make(map[*screl.Node]bool, order)
+	pred := make(map[*screl.Node]Edge, order)
+	var visit func(n *screl.Node, in Edge)
+	visit = func(n *screl.Node, in Edge) {
+		if err != nil || done[n] {
 			return
 		}
-		permanent, marked := marks[n]
-		if marked && !permanent {
-			err = errors.AssertionFailedf("graph is not acyclical")
+		if _, found := pred[n]; found {
+			err = errors.WithDetail(errors.AssertionFailedf("graph is not acyclical"), cycleErrorDetail(n, in, pred))
 			return
 		}
-		if marked && permanent {
-			return
+		pred[n] = in
+		if out, ok := g.GetOpEdgeFrom(n); ok {
+			visit(out.To(), out)
 		}
-		marks[n] = false
-		_ = g.ForEachDepEdgeTo(n, func(de *DepEdge) error {
-			visit(de.From())
+		_ = g.ForEachDepEdgeFrom(n, func(out *DepEdge) error {
+			visit(out.To(), out)
 			return nil
 		})
-		marks[n] = true
+		done[n] = true
 	}
 	_ = g.ForEachNode(func(n *screl.Node) error {
-		visit(n)
+		visit(n, nil /* in */)
 		return nil
 	})
 	return err
+}
+
+func cycleErrorDetail(target *screl.Node, edge Edge, pred map[*screl.Node]Edge) string {
+	var collectCycle func(e Edge) []Edge
+	collectCycle = func(e Edge) (c []Edge) {
+		if e == nil {
+			return nil
+		}
+		current := e.From()
+		if current != target {
+			c = collectCycle(pred[current])
+		}
+		return append(c, e)
+	}
+	var sb strings.Builder
+	sb.WriteString("cycle:\n")
+	for _, e := range collectCycle(edge) {
+		sb.WriteString(screl.NodeString(e.From()))
+		sb.WriteString(" --> ")
+		if de, ok := e.(*DepEdge); ok {
+			sb.WriteString(string(de.rule))
+		} else {
+			sb.WriteString("op edge")
+		}
+		sb.WriteRune('\n')
+	}
+	sb.WriteString(screl.NodeString(target))
+	sb.WriteRune('\n')
+	return sb.String()
 }
 
 // compareNodes compares two nodes in a graph. A nil nodes is the minimum value.

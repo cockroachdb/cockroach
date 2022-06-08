@@ -1,260 +1,68 @@
-rules
-----
-joinTarget(element, target):
-    - $target[Type] = '*scpb.Target'
-    - $target[Element] = $element
-    - $element[DescID] = $_
-joinTargetNode(element, target, node):
-    - joinTarget($element, $target)
-    - $node[Type] = '*screl.Node'
-    - $node[Target] = $target
-toAbsent(target1, target2):
-    - $target1[TargetStatus] = ABSENT
-    - $target2[TargetStatus] = ABSENT
-toAbsentInDropped(target1, node1, target2, node2):
-    - toAbsent($target1, $target2)
-    - $node1[CurrentStatus] = DROPPED
-    - $node2[CurrentStatus] = DROPPED
-toAbsentInAbsent(target1, node1, target2, node2):
-    - toAbsent($target1, $target2)
-    - $node1[CurrentStatus] = ABSENT
-    - $node2[CurrentStatus] = ABSENT
-joinReferencedDescID(referrer, referenced, id):
-    - $referrer[ReferencedDescID] = $id
-    - $referenced[DescID] = $id
-joinOnDescID(a, b, id):
-    - $a[DescID] = $id
-    - $b[DescID] = $id
-joinOnIndexID(a, b, desc-id, index-id):
-    - joinOnDescID($a, $b, $desc-id)
-    - $a[IndexID] = $index-id
-    - $b[IndexID] = $index-id
-joinOnColumnID(a, b, desc-id, col-id):
-    - joinOnDescID($a, $b, $desc-id)
-    - $a[ColumnID] = $col-id
-    - $b[ColumnID] = $col-id
-joinOnConstraintID(a, b, desc-id, constraint-id):
-    - joinOnDescID($a, $b, $desc-id)
-    - $a[ConstraintID] = $constraint-id
-    - $b[ConstraintID] = $constraint-id
-
-
 deprules
 ----
-- name: view drops before the types, views and tables it depends on
-  from: view-node
-  kind: Precedence
-  to: dependents-node
-  query:
-    - $view[Type] = '*scpb.View'
-    - $dependents[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.View', '*scpb.Table']
-    - toAbsentInDropped($view-target, $view-node, $dependents-target, $dependents-node)
-    - ViewDependsOn(*scpb.View, scpb.Element)($view, $dependents)
-    - joinTargetNode($view, $view-target, $view-node)
-    - joinTargetNode($dependents, $dependents-target, $dependents-node)
-- name: alias type drops before the types it depends on
-  from: alias-node
-  kind: Precedence
-  to: alias-dep-node
-  query:
-    - $alias[Type] = '*scpb.AliasType'
-    - $alias-dep[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
-    - toAbsentInDropped($alias-target, $alias-node, $alias-dep-target, $alias-dep-node)
-    - aliasTypeDependsOn(*scpb.AliasType, scpb.Element)($alias, $alias-dep)
-    - joinTargetNode($alias, $alias-target, $alias-node)
-    - joinTargetNode($alias-dep, $alias-dep-target, $alias-dep-node)
-- name: array type drops right before its element enum type
-  from: alias-node
+- name: descriptor drop right before dependent element removal
+  from: descriptor-node
   kind: SameStagePrecedence
-  to: enum-node
-  query:
-    - $alias[Type] = '*scpb.AliasType'
-    - $enum[Type] = '*scpb.EnumType'
-    - toAbsentInDropped($alias-target, $alias-node, $enum-target, $enum-node)
-    - joinArrayTypeWithEnumType(*scpb.AliasType, *scpb.EnumType)($alias, $enum)
-    - joinTargetNode($alias, $alias-target, $alias-node)
-    - joinTargetNode($enum, $enum-target, $enum-node)
-- name: schema dropped before parent database
-  from: schema-parent-node
-  kind: Precedence
-  to: database-node
-  query:
-    - $schema-parent[Type] = '*scpb.SchemaParent'
-    - $database[Type] = '*scpb.Database'
-    - toAbsent($schema-parent-target, $database-target)
-    - $schema-parent-node[CurrentStatus] = ABSENT
-    - $database-node[CurrentStatus] = DROPPED
-    - $schema-parent[ReferencedDescID] = $desc-id
-    - $database[DescID] = $desc-id
-    - joinTargetNode($schema-parent, $schema-parent-target, $schema-parent-node)
-    - joinTargetNode($database, $database-target, $database-node)
-- name: object dropped before parent schema
-  from: object-parent-node
-  kind: Precedence
-  to: schema-node
-  query:
-    - $object-parent[Type] = '*scpb.ObjectParent'
-    - $schema[Type] = '*scpb.Schema'
-    - toAbsent($object-parent-target, $schema-target)
-    - $object-parent-node[CurrentStatus] = ABSENT
-    - $schema-node[CurrentStatus] = DROPPED
-    - joinReferencedDescID($object-parent, $schema, $desc-id)
-    - joinTargetNode($object-parent, $object-parent-target, $object-parent-node)
-    - joinTargetNode($schema, $schema-target, $schema-node)
-- name: secondary region locality removed before dropping multi-region enum type
-  from: secondary-region-node
-  kind: Precedence
-  to: enum-type-node
-  query:
-    - $secondary-region[Type] = '*scpb.TableLocalitySecondaryRegion'
-    - $enum-type[Type] = '*scpb.EnumType'
-    - toAbsent($secondary-region-target, $enum-type-target)
-    - $secondary-region-node[CurrentStatus] = ABSENT
-    - $enum-type-node[CurrentStatus] = DROPPED
-    - joinReferencedDescID($secondary-region, $enum-type, $desc-id)
-    - joinTargetNode($secondary-region, $secondary-region-target, $secondary-region-node)
-    - joinTargetNode($enum-type, $enum-type-target, $enum-type-node)
-- name: check constraint removed before dropping dependent types and sequences
-  from: check-constraint-node
-  kind: Precedence
   to: dependent-node
   query:
-    - $check-constraint[Type] = '*scpb.CheckConstraint'
-    - $dependent[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
-    - toAbsent($check-constraint-target, $dependent-target)
-    - $check-constraint-node[CurrentStatus] = ABSENT
-    - $dependent-node[CurrentStatus] = DROPPED
-    - checkConstraintDependsOn(*scpb.CheckConstraint, scpb.Element)($check-constraint, $dependent)
-    - joinTargetNode($check-constraint, $check-constraint-target, $check-constraint-node)
+    - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $dependent[Type] IN ['*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.RowLevelTTL', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
+    - toAbsent($descriptor-target, $dependent-target)
+    - $descriptor-node[CurrentStatus] = DROPPED
+    - $dependent-node[CurrentStatus] = ABSENT
+    - joinOnDescID($descriptor, $dependent, $desc-id)
+    - joinTargetNode($descriptor, $descriptor-target, $descriptor-node)
     - joinTargetNode($dependent, $dependent-target, $dependent-node)
-- name: FK removed before dropping dependent table
-  from: foreign-key-node
-  kind: Precedence
-  to: table-node
-  query:
-    - $foreign-key[Type] = '*scpb.ForeignKeyConstraint'
-    - $table[Type] = '*scpb.Table'
-    - toAbsent($foreign-key-target, $table-target)
-    - $foreign-key-node[CurrentStatus] = ABSENT
-    - $table-node[CurrentStatus] = DROPPED
-    - joinReferencedDescID($foreign-key, $table, $desc-id)
-    - joinTargetNode($foreign-key, $foreign-key-target, $foreign-key-node)
-    - joinTargetNode($table, $table-target, $table-node)
-- name: index partial predicate removed before dropping dependent types
-  from: index-partial-node
-  kind: Precedence
-  to: dependent-type-node
-  query:
-    - $index-partial[Type] = '*scpb.SecondaryIndexPartial'
-    - $dependent-type[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
-    - toAbsent($index-partial-target, $dependent-type-target)
-    - $index-partial-node[CurrentStatus] = ABSENT
-    - $dependent-type-node[CurrentStatus] = DROPPED
-    - indexPartialDependsOn(*scpb.SecondaryIndexPartial, scpb.Element)($index-partial, $dependent-type)
-    - joinTargetNode($index-partial, $index-partial-target, $index-partial-node)
-    - joinTargetNode($dependent-type, $dependent-type-target, $dependent-type-node)
-- name: column type removed before dropping dependent types
-  from: column-type-node
-  kind: Precedence
-  to: dependent-type-node
-  query:
-    - $column-type[Type] = '*scpb.ColumnType'
-    - $dependent-type[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
-    - toAbsent($column-type-target, $dependent-type-target)
-    - $column-type-node[CurrentStatus] = ABSENT
-    - $dependent-type-node[CurrentStatus] = DROPPED
-    - columnTypeDependsOn(*scpb.ColumnType, scpb.Element)($column-type, $dependent-type)
-    - joinTargetNode($column-type, $column-type-target, $column-type-node)
-    - joinTargetNode($dependent-type, $dependent-type-target, $dependent-type-node)
-- name: column DEFAULT removed before dropping dependent types and sequences
-  from: default-expr-node
-  kind: Precedence
-  to: dependent-node
-  query:
-    - $default-expr[Type] = '*scpb.ColumnDefaultExpression'
-    - $dependent[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
-    - toAbsent($default-expr-target, $dependent-target)
-    - $default-expr-node[CurrentStatus] = ABSENT
-    - $dependent-node[CurrentStatus] = DROPPED
-    - columnDefaultDependsOn(*scpb.ColumnDefaultExpression, scpb.Element)($default-expr, $dependent)
-    - joinTargetNode($default-expr, $default-expr-target, $default-expr-node)
-    - joinTargetNode($dependent, $dependent-target, $dependent-node)
-- name: column ON UPDATE removed before dropping dependent types and sequences
-  from: on-update-expr-node
-  kind: Precedence
-  to: dependent-node
-  query:
-    - $on-update-expr[Type] = '*scpb.ColumnOnUpdateExpression'
-    - $dependent[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
-    - toAbsent($on-update-expr-target, $dependent-target)
-    - $on-update-expr-node[CurrentStatus] = ABSENT
-    - $dependent-node[CurrentStatus] = DROPPED
-    - columnOnUpdateDependsOn(*scpb.ColumnOnUpdateExpression, scpb.Element)($on-update-expr, $dependent)
-    - joinTargetNode($on-update-expr, $on-update-expr-target, $on-update-expr-node)
-    - joinTargetNode($dependent, $dependent-target, $dependent-node)
-- name: sequence ownership removed before dropping sequence
-  from: sequence-owner-node
-  kind: Precedence
-  to: sequence-node
-  query:
-    - $sequence-owner[Type] = '*scpb.SequenceOwner'
-    - $sequence[Type] = '*scpb.Sequence'
-    - toAbsent($sequence-owner-target, $sequence-target)
-    - $sequence-owner-node[CurrentStatus] = ABSENT
-    - $sequence-node[CurrentStatus] = DROPPED
-    - joinReferencedDescID($sequence-owner, $sequence, $desc-id)
-    - joinTargetNode($sequence-owner, $sequence-owner-target, $sequence-owner-node)
-    - joinTargetNode($sequence, $sequence-target, $sequence-node)
-- name: database region config removed before dropping multi-region enum type
-  from: region-config-node
-  kind: Precedence
-  to: enum-type-node
-  query:
-    - $region-config[Type] = '*scpb.DatabaseRegionConfig'
-    - $enum-type[Type] = '*scpb.EnumType'
-    - toAbsent($region-config-target, $enum-type-target)
-    - $region-config-node[CurrentStatus] = ABSENT
-    - $enum-type-node[CurrentStatus] = DROPPED
-    - joinReferencedDescID($region-config, $enum-type, $desc-id)
-    - joinTargetNode($region-config, $region-config-target, $region-config-node)
-    - joinTargetNode($enum-type, $enum-type-target, $enum-type-node)
-- name: database region config removed before dropping multi-region enum type
-  from: region-config-node
-  kind: Precedence
-  to: enum-type-node
-  query:
-    - $region-config[Type] = '*scpb.DatabaseRegionConfig'
-    - $enum-type[Type] = '*scpb.EnumType'
-    - toAbsent($region-config-target, $enum-type-target)
-    - $region-config-node[CurrentStatus] = ABSENT
-    - $enum-type-node[CurrentStatus] = DROPPED
-    - joinReferencedDescID($region-config, $enum-type, $desc-id)
-    - joinTargetNode($region-config, $region-config-target, $region-config-node)
-    - joinTargetNode($enum-type, $enum-type-target, $enum-type-node)
-- name: dependent element removal before descriptor drop
-  from: element-node
-  kind: Precedence
-  to: relation-node
-  query:
-    - $element[Type] IN ['*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment', '*scpb.SequenceOwner', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
-    - $relation[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
-    - toAbsent($element-target, $relation-target)
-    - $element-node[CurrentStatus] = ABSENT
-    - $relation-node[CurrentStatus] = DROPPED
-    - joinOnDescID($element, $relation, $desc-id)
-    - joinTargetNode($element, $element-target, $element-node)
-    - joinTargetNode($relation, $relation-target, $relation-node)
-- name: dependent element removal right after descriptor removal
-  from: relation-node
+- name: descriptor removal right before dependent element removal
+  from: descriptor-node
   kind: SameStagePrecedence
-  to: element-node
+  to: idx-or-col-node
   query:
-    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $element[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.RowLevelTTL']
-    - toAbsentInAbsent($relation-target, $relation-node, $element-target, $element-node)
-    - joinOnDescID($relation, $element, $desc-id)
-    - joinTargetNode($relation, $relation-target, $relation-node)
-    - joinTargetNode($element, $element-target, $element-node)
+    - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $idx-or-col[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - toAbsentInAbsent($descriptor-target, $descriptor-node, $idx-or-col-target, $idx-or-col-node)
+    - joinOnDescID($descriptor, $idx-or-col, $desc-id)
+    - joinTargetNode($descriptor, $descriptor-target, $descriptor-node)
+    - joinTargetNode($idx-or-col, $idx-or-col-target, $idx-or-col-node)
+- name: descriptor drop right before removing dependent with attr ref
+  from: referenced-descriptor-node
+  kind: SameStagePrecedence
+  to: referencing-via-attr-node
+  query:
+    - $referenced-descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $referencing-via-attr[Type] IN ['*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.RowLevelTTL', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
+    - toAbsent($referenced-descriptor-target, $referencing-via-attr-target)
+    - $referenced-descriptor-node[CurrentStatus] = DROPPED
+    - $referencing-via-attr-node[CurrentStatus] = ABSENT
+    - joinReferencedDescID($referencing-via-attr, $referenced-descriptor, $desc-id)
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
+    - joinTargetNode($referencing-via-attr, $referencing-via-attr-target, $referencing-via-attr-node)
+- name: descriptor drop right before removing dependent with type ref
+  from: referenced-descriptor-node
+  kind: SameStagePrecedence
+  to: referencing-via-type-node
+  query:
+    - $referenced-descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $referencing-via-type[Type] = '*scpb.ColumnType'
+    - toAbsent($referenced-descriptor-target, $referencing-via-type-target)
+    - $referenced-descriptor-node[CurrentStatus] = DROPPED
+    - $referencing-via-type-node[CurrentStatus] = ABSENT
+    - RefByTypeT(scpb.Element, scpb.Element)($referenced-descriptor, $referencing-via-type)
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
+    - joinTargetNode($referencing-via-type, $referencing-via-type-target, $referencing-via-type-node)
+- name: descriptor drop right before removing dependent with expr ref
+  from: referenced-descriptor-node
+  kind: SameStagePrecedence
+  to: referencing-via-expr-node
+  query:
+    - $referenced-descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $referencing-via-expr[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SecondaryIndexPartial']
+    - toAbsent($referenced-descriptor-target, $referencing-via-expr-target)
+    - $referenced-descriptor-node[CurrentStatus] = DROPPED
+    - $referencing-via-expr-node[CurrentStatus] = ABSENT
+    - RefByTypeT(scpb.Element, scpb.Element)($referenced-descriptor, $referencing-via-expr)
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
+    - joinTargetNode($referencing-via-expr, $referencing-via-expr-target, $referencing-via-expr-node)
 - name: primary index swap
   from: old-index-node
   kind: SameStagePrecedence

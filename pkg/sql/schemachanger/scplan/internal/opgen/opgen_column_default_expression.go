@@ -21,7 +21,6 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.ColumnDefaultExpression) scop.Op {
 					return &scop.AddColumnDefaultExpression{
 						Default: *protoutil.Clone(this).(*scpb.ColumnDefaultExpression),
@@ -51,7 +50,6 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.ColumnDefaultExpression) scop.Op {
 					return &scop.RemoveColumnDefaultExpression{
 						TableID:  this.TableID,

@@ -12,12 +12,15 @@ package rules
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 func idInIDs(objects []descpb.ID, id descpb.ID) bool {
@@ -129,3 +132,36 @@ var (
 		},
 	)
 )
+
+func forEachElement(fn func(element scpb.Element) error) error {
+	var ep scpb.ElementProto
+	vep := reflect.ValueOf(ep)
+	for i := 0; i < vep.NumField(); i++ {
+		e := vep.Field(i).Interface().(scpb.Element)
+		if err := fn(e); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func elementTypes(nv nodeVars, filter func(element scpb.Element) bool) rel.Clause {
+	var types []interface{}
+	_ = forEachElement(func(e scpb.Element) error {
+		if filter(e) {
+			types = append(types, e)
+		}
+		return nil
+	})
+	if len(types) == 0 {
+		panic(errors.AssertionFailedf("empty type list for var %q", nv))
+	}
+	return nv.el.Type(types[0], types[1:]...)
+}
+
+func nonNilElement(element scpb.Element) scpb.Element {
+	return reflect.New(reflect.ValueOf(element).Type().Elem()).Interface().(scpb.Element)
+}

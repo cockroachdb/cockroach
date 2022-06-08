@@ -39,18 +39,6 @@ func (m *MockCatalog) EXPECT() *MockCatalogMockRecorder {
 	return m.recorder
 }
 
-// AddSyntheticDescriptor mocks base method.
-func (m *MockCatalog) AddSyntheticDescriptor(arg0 catalog.Descriptor) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddSyntheticDescriptor", arg0)
-}
-
-// AddSyntheticDescriptor indicates an expected call of AddSyntheticDescriptor.
-func (mr *MockCatalogMockRecorder) AddSyntheticDescriptor(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSyntheticDescriptor", reflect.TypeOf((*MockCatalog)(nil).AddSyntheticDescriptor), arg0)
-}
-
 // GetFullyQualifiedName mocks base method.
 func (m *MockCatalog) GetFullyQualifiedName(arg0 context.Context, arg1 catid.DescID) (string, error) {
 	m.ctrl.T.Helper()
@@ -113,18 +101,6 @@ func (m *MockCatalog) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 func (mr *MockCatalogMockRecorder) NewCatalogChangeBatcher() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewCatalogChangeBatcher", reflect.TypeOf((*MockCatalog)(nil).NewCatalogChangeBatcher))
-}
-
-// RemoveSyntheticDescriptor mocks base method.
-func (m *MockCatalog) RemoveSyntheticDescriptor(arg0 catid.DescID) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoveSyntheticDescriptor", arg0)
-}
-
-// RemoveSyntheticDescriptor indicates an expected call of RemoveSyntheticDescriptor.
-func (mr *MockCatalogMockRecorder) RemoveSyntheticDescriptor(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSyntheticDescriptor", reflect.TypeOf((*MockCatalog)(nil).RemoveSyntheticDescriptor), arg0)
 }
 
 // MockDependencies is a mock of Dependencies interface.

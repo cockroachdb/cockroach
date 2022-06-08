@@ -21,7 +21,6 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.ColumnFamily) scop.Op {
 					return &scop.AddColumnFamily{
 						TableID:  this.TableID,
@@ -34,7 +33,6 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.ColumnFamily) scop.Op {
 					return notImplemented(this)

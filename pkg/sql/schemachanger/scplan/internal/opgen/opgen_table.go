@@ -19,7 +19,6 @@ func init() {
 	opRegistry.register((*scpb.Table)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			equiv(scpb.Status_TXN_DROPPED),
 			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Table) scop.Op {
@@ -29,15 +28,7 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.Table) scop.Op {
-					return &scop.MarkDescriptorAsDroppedSynthetically{
-						DescID: this.TableID,
-					}
-				}),
-			),
 			to(scpb.Status_DROPPED,
-				minPhase(scop.PreCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.Table) scop.Op {
 					return &scop.MarkDescriptorAsDropped{
@@ -51,7 +42,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.Table, md *targetsWithElementMap) scop.Op {
 					return newLogEventOp(this, md)
 				}),

@@ -70,12 +70,12 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 
 func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err error) {
 	tbs := makeTransitionBuildState(spec.from)
-	for _, s := range spec.transitionSpecs {
+	for i, s := range spec.transitionSpecs {
 		var t transition
 		if s.from == scpb.Status_UNKNOWN {
 			t.from = tbs.from
 			t.to = s.to
-			if err := tbs.withTransition(s); err != nil {
+			if err := tbs.withTransition(s, i == 0); err != nil {
 				return nil, errors.Wrapf(err, "invalid transition %s -> %s", t.from, t.to)
 			}
 			if len(s.emitFns) > 0 {
@@ -124,7 +124,7 @@ func makeTransitionBuildState(from scpb.Status) transitionBuildState {
 	}
 }
 
-func (tbs *transitionBuildState) withTransition(s transitionSpec) error {
+func (tbs *transitionBuildState) withTransition(s transitionSpec, isFirst bool) error {
 	// Check validity of target status.
 	if s.to == scpb.Status_UNKNOWN {
 		return errors.Errorf("invalid 'to' status")
@@ -136,14 +136,9 @@ func (tbs *transitionBuildState) withTransition(s transitionSpec) error {
 	}
 
 	// Check that the minimum phase is monotonically increasing.
-	if s.minPhase > 0 && s.minPhase < tbs.currentMinPhase {
-		return errors.Errorf("minimum phase %s is less than inherited minimum phase %s",
-			s.minPhase.String(), tbs.currentMinPhase.String())
-	}
-
 	tbs.isRevertible = tbs.isRevertible && s.revertible
-	if s.minPhase > tbs.currentMinPhase {
-		tbs.currentMinPhase = s.minPhase
+	if !isFirst && tbs.currentMinPhase < scop.PostCommitPhase {
+		tbs.currentMinPhase = scop.PostCommitPhase
 	}
 	tbs.isEquivMapped[tbs.from] = true
 	tbs.isTo[s.to] = true
@@ -168,9 +163,6 @@ func (tbs *transitionBuildState) withEquivTransition(s transitionSpec) error {
 	// Check for absence of phase and revertibility constraints
 	if !s.revertible {
 		return errors.Errorf("must be revertible")
-	}
-	if s.minPhase > 0 {
-		return errors.Errorf("must not set a minimum phase")
 	}
 
 	tbs.isEquivMapped[s.from] = true

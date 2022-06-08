@@ -13,13 +13,103 @@ CREATE INDEX id1
 checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
+## StatementPhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #104
+  ...
+     formatVersion: 3
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+  +  mutations:
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      - 2
+  +      keyColumnNames:
+  +      - id
+  +      - name
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: p1
+  +          subpartitioning: {}
+  +          values:
+  +          - AwI=
+  +        numColumns: 1
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 3
+  +      storeColumnNames:
+  +      - money
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      - 2
+  +      keyColumnNames:
+  +      - id
+  +      - name
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: p1
+  +          subpartitioning: {}
+  +          values:
+  +          - AwI=
+  +        numColumns: 1
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 3
+  +      storeColumnNames:
+  +      - money
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t1
+     nextColumnId: 4
+  -  nextConstraintId: 2
+  +  nextConstraintId: 4
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 100
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 6 MutationType ops
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -126,95 +216,19 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+     formatVersion: 3
      id: 104
-     modificationTime: {}
-  +  mutations:
-  +  - direction: ADD
-  +    index:
-  +      constraintId: 2
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 2
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      - 2
-  +      keyColumnNames:
-  +      - id
-  +      - name
-  +      name: crdb_internal_index_2_name_placeholder
-  +      partitioning:
-  +        list:
-  +        - name: p1
-  +          subpartitioning: {}
-  +          values:
-  +          - AwI=
-  +        numColumns: 1
-  +      sharded: {}
-  +      storeColumnIds:
-  +      - 3
-  +      storeColumnNames:
-  +      - money
-  +      version: 4
-  +    mutationId: 1
-  +    state: BACKFILLING
-  +  - direction: ADD
-  +    index:
-  +      constraintId: 3
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 3
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      - 2
-  +      keyColumnNames:
-  +      - id
-  +      - name
-  +      name: crdb_internal_index_3_name_placeholder
-  +      partitioning:
-  +        list:
-  +        - name: p1
-  +          subpartitioning: {}
-  +          values:
-  +          - AwI=
-  +        numColumns: 1
-  +      sharded: {}
-  +      storeColumnIds:
-  +      - 3
-  +      storeColumnNames:
-  +      - money
-  +      useDeletePreservingEncoding: true
-  +      version: 4
-  +    mutationId: 1
-  +    state: DELETE_ONLY
-     name: t1
-     nextColumnId: 4
-  -  nextConstraintId: 2
-  +  nextConstraintId: 4
-     nextFamilyId: 1
-  -  nextIndexId: 2
-  +  nextIndexId: 4
-     nextMutationId: 1
-     parentId: 100
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     mutations:
+     - direction: ADD
   ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
 create job #1 (non-cancelable: false): "CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
 # end PreCommitPhase
-commit transaction #1
 notified job registry to adopt jobs: [1]
+commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -228,6 +242,14 @@ upsert descriptor #104
   +    - WRITE_ONLY
        - PUBLIC
        jobId: "1"
+  ...
+     formatVersion: 3
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -257,6 +279,14 @@ upsert descriptor #104
        - ABSENT
        - PUBLIC
   ...
+     formatVersion: 3
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
+  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -280,6 +310,14 @@ upsert descriptor #104
   +    - MERGE_ONLY
        - ABSENT
        - PUBLIC
+  ...
+     formatVersion: 3
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000005"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -324,6 +362,8 @@ upsert descriptor #104
   ...
      formatVersion: 3
      id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000006"
   +  indexes:
   +  - constraintId: 2
   +    createdExplicitly: true
@@ -354,7 +394,7 @@ upsert descriptor #104
   +    storeColumnNames:
   +    - money
   +    version: 4
-     modificationTime: {}
+  +  modificationTime: {}
      mutations:
      - direction: ADD
        index:
@@ -412,6 +452,14 @@ upsert descriptor #104
        - PUBLIC
        jobId: "1"
   ...
+       - money
+       version: 4
+  -  modificationTime:
+  -    wallTime: "1640995200000000009"
+  +  modificationTime: {}
+     mutations:
+     - direction: ADD
+  ...
          version: 4
        mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
@@ -430,7 +478,7 @@ begin transaction #11
 upsert descriptor #104
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -536,8 +584,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       - money
        version: 4
-     modificationTime: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000010"
   -  mutations:
   -  - direction: ADD
   -    index:
@@ -573,6 +623,7 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
+  +  modificationTime: {}
   +  mutations: []
      name: t1
      nextColumnId: 4
@@ -585,6 +636,6 @@ write *eventpb.FinishSchemaChange to event log for descriptor 104
 create job #2 (non-cancelable: true): "GC for "
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
-commit transaction #11
 notified job registry to adopt jobs: [2]
+commit transaction #11
 # end PostCommitPhase

@@ -64,7 +64,7 @@ func (desc *wrapper) GetPostDeserializationChanges() catalog.PostDeserialization
 func (desc *wrapper) HasConcurrentSchemaChanges() bool {
 	return (desc.DeclarativeSchemaChangerState != nil &&
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID) ||
-		len(desc.Mutations) > 0
+		(len(desc.Mutations) > 0 && len(desc.MutationJobs) > 0)
 }
 
 // ActiveChecks implements the TableDescriptor interface.
