@@ -176,12 +176,10 @@ func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) ca
 func (ht *HypotheticalTable) addInvertedCol(invertedSourceCol *cat.Column) *cat.Column {
 	invertedCol := cat.Column{}
 
-	// All inverted columns have type bytes.
-	typ := types.Bytes
 	invertedCol.InitInverted(
 		ht.ColumnCount(),
 		tree.Name(string(invertedSourceCol.ColName())+"_inverted_key"),
-		typ,
+		types.EncodedKey,
 		false, /* nullable */
 		invertedSourceCol.Ordinal(),
 	)

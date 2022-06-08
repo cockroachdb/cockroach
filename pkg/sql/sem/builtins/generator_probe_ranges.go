@@ -123,9 +123,9 @@ type probeRangeGenerator struct {
 	ranges []kv.KeyValue
 }
 
-func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeProbeRangeGenerator(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
 	if err != nil {
 		return nil, err
 	}
@@ -140,31 +140,29 @@ func makeProbeRangeGenerator(ctx *eval.Context, args tree.Datums) (eval.ValueGen
 	// to be available, unless meta2 is down.
 	var ranges []kv.KeyValue
 	{
-		txn := ctx.Txn
 		ctx, sp := tracing.EnsureChildSpan(
-			ctx.Context, ctx.Tracer, "meta2scan",
-			tracing.WithForceRealSpan(),
+			evalCtx.Context, evalCtx.Tracer, "meta2scan",
+			tracing.WithRecording(tracingpb.RecordingVerbose),
 		)
-		sp.SetRecordingType(tracingpb.RecordingVerbose)
-		defer func() {
-			sp.Finish()
-		}()
+		defer sp.Finish()
 		// Handle args passed in.
-		ranges, err = kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
+		ranges, err = kvclient.ScanMetaKVs(ctx, evalCtx.Txn, roachpb.Span{
 			Key:    keys.MinKey,
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return nil, errors.Wrapf(err, "%s", sp.FinishAndGetConfiguredRecording().String())
+			return nil, errors.WithDetailf(
+				errors.Wrapf(err, "error scanning meta ranges"),
+				"trace:\n%s", sp.GetConfiguredRecording())
 		}
 	}
 	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
 	isWrite := args[1].(*tree.DEnum).LogicalRep
 	return &probeRangeGenerator{
-		rangeProber: ctx.RangeProber,
+		rangeProber: evalCtx.RangeProber,
 		timeout:     timeout,
 		isWrite:     isWrite == "write",
-		tracer:      ctx.Tracer,
+		tracer:      evalCtx.Tracer,
 		ranges:      ranges,
 	}, nil
 }
@@ -196,9 +194,8 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	}
 	ctx, sp := tracing.EnsureChildSpan(
 		ctx, p.tracer, opName,
-		tracing.WithForceRealSpan(),
+		tracing.WithRecording(tracingpb.RecordingVerbose),
 	)
-	sp.SetRecordingType(tracingpb.RecordingVerbose)
 	defer func() {
 		p.curr.verboseTrace = sp.FinishAndGetConfiguredRecording().String()
 	}()

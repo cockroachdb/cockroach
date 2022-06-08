@@ -2,7 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_test(
     name = "schemachangerccl_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "main_test.go",
         "schemachanger_ccl_test.go",

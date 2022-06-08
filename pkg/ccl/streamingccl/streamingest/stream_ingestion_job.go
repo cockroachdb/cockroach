@@ -21,11 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,65 +30,23 @@ import (
 func completeStreamIngestion(
 	evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	// Get the job payload for job_id.
-	const jobsQuery = `SELECT progress FROM system.jobs WHERE id=$1 FOR UPDATE`
-	row, err := evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"get-stream-ingestion-job-metadata", sessiondata.NodeUserSessionDataOverride, jobsQuery, ingestionJobID)
-	if err != nil {
-		return err
-	}
-	// If an entry does not exist for the provided job_id we return an
-	// error.
-	if row == nil {
-		return errors.Newf("job %d: not found in system.jobs table", ingestionJobID)
-	}
+	jobRegistry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
+	return jobRegistry.UpdateJobWithTxn(evalCtx.Ctx(), ingestionJobID, txn, false, /* useReadLock */
+		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			// TODO(adityamaru): This should change in the future, a user should be
+			// allowed to correct their cutover time if the process of reverting the job
+			// has not started.
+			if jobCutoverTime := md.Progress.GetStreamIngest().CutoverTime; !jobCutoverTime.IsEmpty() {
+				return errors.Newf("cutover timestamp already set to %s, "+
+					"job %d is in the process of cutting over", jobCutoverTime.String(), ingestionJobID)
+			}
 
-	progress, err := jobs.UnmarshalProgress(row[0])
-	if err != nil {
-		return err
-	}
-	var sp *jobspb.Progress_StreamIngest
-	var ok bool
-	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return errors.Newf("job %d: not of expected type StreamIngest", ingestionJobID)
-	}
-
-	// Check that the supplied cutover time is a valid one.
-	// TODO(adityamaru): This will change once we allow a future cutover time to
-	// be specified.
-	hw := progress.GetHighWater()
-	if hw == nil || hw.Less(cutoverTimestamp) {
-		var highWaterTimestamp hlc.Timestamp
-		if hw != nil {
-			highWaterTimestamp = *hw
-		}
-		return errors.Newf("cannot cutover to a timestamp %s that is after the latest resolved time"+
-			" %s for job %d", cutoverTimestamp.String(), highWaterTimestamp.String(), ingestionJobID)
-	}
-
-	// Reject setting a cutover time, if an earlier request to cutover has already
-	// been set.
-	// TODO(adityamaru): This should change in the future, a user should be
-	// allowed to correct their cutover time if the process of reverting the job
-	// has not started.
-	if !sp.StreamIngest.CutoverTime.IsEmpty() {
-		return errors.Newf("cutover timestamp already set to %s, "+
-			"job %d is in the process of cutting over", sp.StreamIngest.CutoverTime.String(), ingestionJobID)
-	}
-
-	// Update the sentinel being polled by the stream ingestion job to
-	// check if a complete has been signaled.
-	sp.StreamIngest.CutoverTime = cutoverTimestamp
-	progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
-	progressBytes, err := protoutil.Marshal(progress)
-	if err != nil {
-		return err
-	}
-	updateJobQuery := `UPDATE system.jobs SET progress=$1 WHERE id=$2`
-	_, err = evalCtx.Planner.QueryRowEx(evalCtx.Context,
-		"set-stream-ingestion-job-metadata",
-		sessiondata.NodeUserSessionDataOverride, updateJobQuery, progressBytes, ingestionJobID)
-	return err
+			// Update the sentinel being polled by the stream ingestion job to
+			// check if a complete has been signaled.
+			md.Progress.GetStreamIngest().CutoverTime = cutoverTimestamp
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
 }
 
 func getStreamIngestionStats(
