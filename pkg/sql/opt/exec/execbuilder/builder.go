@@ -128,6 +128,10 @@ type Builder struct {
 
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
+
+	// wrapFunction returns resolvable function reference for function with
+	// specified function name.
+	wrapFunction func(fnName string) tree.ResolvableFunctionReference
 }
 
 // New constructs an instance of the execution node builder using the
@@ -158,6 +162,7 @@ func New(
 		evalCtx:                evalCtx,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,
+		wrapFunction:           tree.WrapFunction,
 	}
 	if evalCtx != nil {
 		sd := evalCtx.SessionData()
@@ -191,6 +196,19 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Stats.RowCountIfAvailable())
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
+}
+
+// SetSearchPath configures this builder to use specified search path.
+func (b *Builder) SetSearchPath(sp tree.SearchPath) {
+	if customFnResolver, ok := sp.(tree.CustomFunctionDefinitionResolver); ok {
+		b.wrapFunction = func(fnName string) tree.ResolvableFunctionReference {
+			fd := customFnResolver.Resolve(fnName)
+			if fd == nil {
+				panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(fnName)))
+			}
+			return tree.ResolvableFunctionReference{FunctionReference: fd}
+		}
+	}
 }
 
 func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
