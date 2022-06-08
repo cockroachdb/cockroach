@@ -3569,9 +3569,12 @@ func (s *adminServer) TakeTracingSnapshot(
 }
 
 func getSpanTag(t tracingui.ProcessedTag) *serverpb.SpanTag {
-	processedChildren := make([]*serverpb.SpanTag, 0, len(t.Children))
-	for _, child := range t.Children {
-		processedChildren = append(processedChildren, getSpanTag(child))
+	processedChildren := make([]*serverpb.ChildSpanTag, len(t.Children))
+	for i, child := range t.Children {
+		processedChildren[i] = &serverpb.ChildSpanTag{
+			Key: child.Key,
+			Val: child.Val,
+		}
 	}
 	return &serverpb.SpanTag{
 		Key:             t.Key,

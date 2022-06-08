@@ -7000,31 +7000,21 @@ of the tracing UI.
 | inherited | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
 | propagate_up | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
 | copied_from_child | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| children | [SpanTag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag) | repeated |  | [reserved](#support-status) |
+| children | [ChildSpanTag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.ChildSpanTag) | repeated |  | [reserved](#support-status) |
 
 
 
 
 
-<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag"></a>
-#### SpanTag
+<a name="cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.ChildSpanTag"></a>
+#### ChildSpanTag
 
-SpanTag represents a tag on a tracing span, in a form processed for the use
-of the tracing UI.
+
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | key | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
 | val | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
-| caption | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
-| link | [string](#cockroach.server.serverpb.GetTracingSnapshotResponse-string) |  |  | [reserved](#support-status) |
-| hidden | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| highlight | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| inherit | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| inherited | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| propagate_up | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| copied_from_child | [bool](#cockroach.server.serverpb.GetTracingSnapshotResponse-bool) |  |  | [reserved](#support-status) |
-| children | [SpanTag](#cockroach.server.serverpb.GetTracingSnapshotResponse-cockroach.server.serverpb.SpanTag) | repeated |  | [reserved](#support-status) |
 
 
 

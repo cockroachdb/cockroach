@@ -141,7 +141,11 @@ type ProcessedTag struct {
 	// copiedFromChild is set if this tag did not originate on the owner span, but
 	// instead was propagated upwards from a child span.
 	CopiedFromChild bool
-	Children        []ProcessedTag
+	Children        []ProcessedChildTag
+}
+
+type ProcessedChildTag struct {
+	Key, Val string
 }
 
 // propagateTagUpwards copies tag from sp to all of sp's ancestors.
@@ -217,9 +221,12 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 		value = ""
 
 		processedParentTag := processTag(key, value, snap)
-		processedParentTag.Children = make([]ProcessedTag, len(tagGroup.Tags))
+		processedParentTag.Children = make([]ProcessedChildTag, len(tagGroup.Tags))
 		for i, tag := range tagGroup.Tags {
-			processedParentTag.Children[i] = processTag(tag.Key, tag.Value, snap)
+			processedParentTag.Children[i] = ProcessedChildTag{
+				Key: tag.Key,
+				Val: tag.Value,
+			}
 		}
 
 		p.Tags = append(p.Tags, processedParentTag)

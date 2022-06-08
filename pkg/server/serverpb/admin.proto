@@ -1216,7 +1216,12 @@ message SpanTag {
   bool inherited = 8;
   bool propagate_up = 9;
   bool copied_from_child = 10;
-  repeated SpanTag children = 11;
+  repeated ChildSpanTag children = 11;
+}
+
+message ChildSpanTag {
+  string key = 1;
+  string val = 2;
 }
 
 // SetTraceRecordingTypeRequest is the request for SetTraceRecordingType, which
