@@ -303,7 +303,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 				args.Extended.(*txnState).setAdvanceInfo(
 					advanceOne,
 					noRewind,
-					txnEvent{eventType: noEvent},
+					txnEvent{eventType: txnUpgradeToExplicit},
 				)
 				return nil
 			},

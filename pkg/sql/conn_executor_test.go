@@ -727,6 +727,58 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 	defer func() { _ = stmt.Close() }()
 }
 
+// TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
+// that happens during a transaction that was upgraded from an implicit
+// transaction into an explicit transaction does not cause the BEGIN to be
+// re-executed.
+func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var failed int64
+	const numToFail = 2 // only fail on the first two attempts
+	filter := newDynamicRequestFilter()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: filter.filter,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	conn, err := sqlDB.Conn(context.Background())
+	require.NoError(t, err)
+	testDB := sqlutils.MakeSQLRunner(conn)
+
+	var fooTableId uint32
+	testDB.Exec(t, "SET enable_implicit_transaction_for_batch_statements = true")
+	testDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	testDB.QueryRow(t, "SELECT 'foo'::regclass::oid").Scan(&fooTableId)
+
+	// Inject an error that will happen during execution.
+	filter.setFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.Txn == nil {
+			return nil
+		}
+		if req, ok := ba.GetArg(roachpb.ConditionalPut); ok {
+			put := req.(*roachpb.ConditionalPutRequest)
+			_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(put.Key)
+			if err != nil || tableID != fooTableId {
+				err = nil
+				return nil
+			}
+			if atomic.AddInt64(&failed, 1) <= numToFail {
+				return roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "boom"), ba.Txn,
+				)
+			}
+		}
+		return nil
+	})
+
+	testDB.Exec(t, "SELECT 1; BEGIN; INSERT INTO foo VALUES(1); COMMIT;")
+}
+
 // This test ensures that when in an explicit transaction and statement
 // preparation uses the user's transaction, errors during those planning queries
 // are handled correctly.
