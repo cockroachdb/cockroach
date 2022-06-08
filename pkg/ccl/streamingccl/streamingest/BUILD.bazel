@@ -85,6 +85,7 @@ go_test(
         "//pkg/ccl/streamingccl/streampb",
         "//pkg/ccl/streamingccl/streamproducer",
         "//pkg/ccl/utilccl",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
