@@ -123,8 +123,11 @@ type joinReader struct {
 	keyLocking     descpb.ScanLockingStrength
 	lockWaitPolicy lock.WaitPolicy
 
+	// txn is the transaction used by the join reader.
+	txn *kv.Txn
+
 	// usesStreamer indicates whether the joinReader performs the lookups using
-	// the kvcoord.Streamer API.
+	// the kvstreamer.Streamer API.
 	usesStreamer bool
 	streamerInfo struct {
 		*kvstreamer.Streamer
@@ -308,7 +311,7 @@ func newJoinReader(
 		shouldLimitBatches = false
 	}
 	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
+		flowCtx.MakeLeafTxn != nil && row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
 
 	jr := &joinReader{
 		fetchSpec:                         spec.FetchSpec,
@@ -329,9 +332,19 @@ func newJoinReader(
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
 	}
 
+	if useStreamer {
+		var err error
+		jr.txn, err = flowCtx.MakeLeafTxn()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		jr.txn = flowCtx.Txn
+	}
+
 	// Make sure the key column types are hydrated. The fetched column types will
 	// be hydrated in ProcessorBase.Init (via joinerBase.init).
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	resolver := flowCtx.NewTypeResolver(jr.txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
 			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
@@ -411,7 +424,7 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, leftTypes...)
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
-		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
+		semaCtx := flowCtx.NewSemaContext(jr.txn)
 		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}
@@ -939,7 +952,7 @@ func (jr *joinReader) readInput() (
 			}
 		}
 		err = jr.fetcher.StartScan(
-			jr.Ctx, jr.FlowCtx.Txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+			jr.Ctx, jr.txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	}
@@ -1006,7 +1019,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 				bytesLimit = rowinfra.NoBytesLimit
 			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, jr.FlowCtx.Txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx, jr.txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 			); err != nil {
 				jr.MoveToDraining(err)
@@ -1053,7 +1066,7 @@ func (jr *joinReader) Start(ctx context.Context) {
 		jr.streamerInfo.Streamer = kvstreamer.NewStreamer(
 			jr.FlowCtx.Cfg.DistSender,
 			jr.FlowCtx.Stopper(),
-			jr.FlowCtx.Txn,
+			jr.txn,
 			jr.FlowCtx.EvalCtx.Settings,
 			jr.lockWaitPolicy,
 			jr.streamerInfo.budgetLimit,
@@ -1164,7 +1177,7 @@ func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.rowsRead
 	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
-	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
