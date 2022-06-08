@@ -41,13 +41,13 @@ func TestOutliers(t *testing.T) {
 		registry.ObserveTransaction(sessionID, txnID)
 
 		expected := []*outliers.Outlier{{
-			Session: &outliers.Outlier_Session{
+			Session: &outliers.Session{
 				ID: sessionID.GetBytes(),
 			},
-			Transaction: &outliers.Outlier_Transaction{
+			Transaction: &outliers.Transaction{
 				ID: &txnID,
 			},
-			Statement: &outliers.Outlier_Statement{
+			Statement: &outliers.Statement{
 				ID:               stmtID.GetBytes(),
 				FingerprintID:    stmtFptID,
 				LatencyInSeconds: 2,
@@ -114,25 +114,25 @@ func TestOutliers(t *testing.T) {
 		registry.ObserveTransaction(otherSessionID, otherTxnID)
 
 		expected := []*outliers.Outlier{{
-			Session: &outliers.Outlier_Session{
+			Session: &outliers.Session{
 				ID: sessionID.GetBytes(),
 			},
-			Transaction: &outliers.Outlier_Transaction{
+			Transaction: &outliers.Transaction{
 				ID: &txnID,
 			},
-			Statement: &outliers.Outlier_Statement{
+			Statement: &outliers.Statement{
 				ID:               stmtID.GetBytes(),
 				FingerprintID:    stmtFptID,
 				LatencyInSeconds: 2,
 			},
 		}, {
-			Session: &outliers.Outlier_Session{
+			Session: &outliers.Session{
 				ID: otherSessionID.GetBytes(),
 			},
-			Transaction: &outliers.Outlier_Transaction{
+			Transaction: &outliers.Transaction{
 				ID: &otherTxnID,
 			},
-			Statement: &outliers.Outlier_Statement{
+			Statement: &outliers.Statement{
 				ID:               otherStmtID.GetBytes(),
 				FingerprintID:    otherStmtFptID,
 				LatencyInSeconds: 3,
