@@ -36,8 +36,7 @@ import {
 } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
 import { Anchor } from "src/components";
-import emptyTableResultsIcon from "assets/emptyState/empty-table-results.svg";
-import magnifyingGlassIcon from "assets/emptyState/magnifying-glass.svg";
+import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { HighwaterTimestamp } from "src/views/jobs/highwaterTimestamp";
 
@@ -281,7 +280,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
       return (
         <EmptyTable
           title="No jobs match your search"
-          icon={magnifyingGlassIcon}
+          icon={<MagnifyingGlass />}
           footer={
             <Anchor
               href={jobTable}
@@ -297,7 +296,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
       return (
         <EmptyTable
           title="No jobs to show"
-          icon={emptyTableResultsIcon}
+          icon={<Nodes />}
           message="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
           footer={
             <Anchor

@@ -25,8 +25,6 @@ import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
 
-import { expectPopperTooltipActivated } from "src/test-utils/tooltip";
-
 import Job = cockroach.server.serverpb.IJobResponse;
 
 const getMockJobsTableProps = (jobs: Array<Job>): JobsTableProps => {
@@ -117,7 +115,6 @@ describe("Jobs", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(expectPopperTooltipActivated);
     userEvent.hover(getByText("retrying"));
 
     await waitFor(() =>

@@ -316,7 +316,7 @@ const staticJobProps: Pick<
   refreshJobs: () => null,
 };
 
-const now = moment("Mon Oct 21 2021 14:01:45 GMT-0400 (Eastern Daylight Time)");
+const now = moment("Mon Oct 21 2021 14:01:45 GMT-0400", moment.RFC_2822);
 export const earliestRetainedTime = new protos.google.protobuf.Timestamp({
   seconds: new Long(1633611318),
   nanos: 200459000,
@@ -328,7 +328,10 @@ const getJobsTableProps = (jobs: Array<Job>): JobsTableProps => ({
     inFlight: false,
     valid: false,
     requestedAt: now,
-    setAt: moment("Mon Oct 21 2021 14:01:50 GMT-0400 (Eastern Daylight Time)"),
+    setAt: moment(
+      "Mon Oct 21 2021 14:01:50 GMT-0400 (Eastern Daylight Time)",
+      moment.RFC_2822,
+    ),
     lastError: null,
     data: JobsResponse.create({
       jobs: jobs,
