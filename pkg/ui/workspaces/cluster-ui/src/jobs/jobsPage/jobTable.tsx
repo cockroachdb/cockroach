@@ -10,11 +10,10 @@
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { isEqual, map } from "lodash";
-import React, { MouseEvent } from "react";
+import React from "react";
+import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
 import { Anchor } from "src/anchor";
 import { JobsResponse } from "src/api/jobsApi";
-import emptyTableResultsIcon from "src/assets/emptyState/empty-table-results.svg";
-import magnifyingGlassIcon from "src/assets/emptyState/magnifying-glass.svg";
 import { EmptyTable } from "src/empty";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
@@ -39,7 +38,7 @@ const cx = classNames.bind(styles);
 type ITimestamp = google.protobuf.ITimestamp;
 type Job = cockroach.server.serverpb.IJobResponse;
 
-class JobsSortedTable extends SortedTable<Job> {}
+class JobsSortedTable extends SortedTable<Job> { }
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
@@ -277,7 +276,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
       return (
         <EmptyTable
           title="No jobs match your search"
-          icon={magnifyingGlassIcon}
+          icon={<MagnifyingGlass />}
           footer={
             <Anchor href={jobTable} target="_blank">
               Learn more about jobs
@@ -289,7 +288,7 @@ export class JobTable extends React.Component<JobTableProps, JobTableState> {
       return (
         <EmptyTable
           title="No jobs to show"
-          icon={emptyTableResultsIcon}
+          icon={<Nodes />}
           message="The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds."
           footer={
             <Anchor href={jobTable} target="_blank">
