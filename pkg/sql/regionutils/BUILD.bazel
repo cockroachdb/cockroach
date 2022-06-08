@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "regionutils",
+    srcs = [
+        "partition_utils.go",
+        "region_utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/regionutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/multiregion",
+        "//pkg/sql/covering",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

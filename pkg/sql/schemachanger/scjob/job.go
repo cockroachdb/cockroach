@@ -84,6 +84,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 			return descmetadata.NewMetadataUpdater(ctx,
 				execCfg.InternalExecutorFactory,
 				descriptors,
+				execCfg.Codec,
 				&execCfg.Settings.SV,
 				txn,
 				execCtx.SessionData(),

@@ -11,9 +11,11 @@
 package scbuild
 
 import (
+	"context"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -172,6 +174,18 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 }
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)
+
+// NextZoneConfigID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextZoneConfigID(table *scpb.Table) uint32 {
+	tblElts := b.QueryByID(table.TableID)
+	zoneConfigID := uint32(0)
+	scpb.ForEachTableZoneConfig(tblElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableZoneConfig) {
+		if e.ZoneConfigID > zoneConfigID {
+			zoneConfigID = e.ZoneConfigID
+		}
+	})
+	return zoneConfigID + 1
+}
 
 // NextTableColumnID implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID) {
@@ -900,7 +914,7 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 	if err := b.commentCache.LoadCommentsForObjects(b.ctx, []descpb.ID{c.desc.GetID()}); err != nil {
 		panic(err)
 	}
-	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.commentCache)
+	c.backrefs = scdecomp.WalkDescriptor(b.ctx, c.desc, crossRefLookupFn, visitorFn, b.commentCache, b.zoneConfigReader)
 	// Name prefix and namespace lookups.
 	switch d := c.desc.(type) {
 	case catalog.DatabaseDescriptor:
@@ -954,6 +968,10 @@ func (b *builderState) readDescriptor(id catid.DescID) catalog.Descriptor {
 		return tempSchema
 	}
 	return b.cr.MustReadDescriptor(b.ctx, id)
+}
+
+func (b *builderState) GetZoneConfigRaw(ctx context.Context, id catid.DescID) *zonepb.ZoneConfig {
+	return b.zoneConfigReader.GetZoneConfigRaw(ctx, id)
 }
 
 type elementResultSet struct {

@@ -72,6 +72,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p,                              /* authAccessor */
 		p,                              /* astFormatter */
 		p,                              /* featureChecker */
+		p,                              /* settingsReader*/
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
@@ -197,6 +198,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 			p,
 			p,
 			p,
+			p,
 			p.SessionData(),
 			p.ExecCfg().Settings,
 			scs.stmts,
@@ -247,6 +249,7 @@ func newSchemaChangerTxnRunDependencies(
 		evalContext.Context,
 		execCfg.InternalExecutorFactory,
 		descriptors,
+		execCfg.Codec,
 		&execCfg.Settings.SV,
 		txn,
 		sessionData,

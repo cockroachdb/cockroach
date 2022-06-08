@@ -553,6 +553,7 @@ func (p *planner) dropIndexByName(
 		ctx,
 		p.ExecCfg().InternalExecutorFactory,
 		p.Descriptors(),
+		p.ExecCfg().Codec,
 		&p.ExecCfg().Settings.SV,
 		p.txn,
 		p.SessionData(),

@@ -428,6 +428,11 @@ DROP OWNED BY r
   details:
     arrayTypeId: 112
     typeId: 111
+- [[EnumTypeValue:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 111
 - [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1

@@ -710,6 +710,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   details:
     arrayTypeId: 113
     typeId: 112
+- [[EnumTypeValue:{DescID: 112}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 112
 - [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1
