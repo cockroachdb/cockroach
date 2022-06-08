@@ -118,6 +118,15 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) ([]tree.Datums, error)
 
+	QueryBufferedExWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, colinfo.ResultColumns, error)
+
 	// QueryIterator executes the query, returning an iterator that can be used
 	// to get the results. If the call is successful, the returned iterator
 	// *must* be closed.
