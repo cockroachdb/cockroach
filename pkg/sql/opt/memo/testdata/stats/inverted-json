@@ -100,7 +100,7 @@ index-join t
       ├── stats: [rows=1110]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -172,7 +172,7 @@ index-join t
       ├── stats: [rows=110]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
@@ -203,7 +203,7 @@ index-join t
       ├── stats: [rows=1110]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7\x00\x018", "7\x00\x018"]
@@ -255,7 +255,7 @@ index-join t
       ├── stats: [rows=110]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
@@ -346,7 +346,7 @@ select
  │         ├── stats: [rows=110]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -386,7 +386,7 @@ select
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -431,7 +431,7 @@ select
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -473,7 +473,7 @@ select
  │         ├── stats: [rows=110]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
@@ -516,7 +516,7 @@ select
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
@@ -567,7 +567,7 @@ select
  │         ├── stats: [rows=120]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
@@ -659,7 +659,7 @@ index-join t
       ├── stats: [rows=100]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -691,7 +691,7 @@ index-join t
       ├── stats: [rows=100]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7\x00\x018", "7\x00\x018"]
@@ -786,7 +786,7 @@ select
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
@@ -843,7 +843,7 @@ select
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
@@ -896,7 +896,7 @@ select
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
@@ -935,7 +935,7 @@ select
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
@@ -973,7 +973,7 @@ select
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
@@ -1005,7 +1005,7 @@ index-join t
       ├── stats: [rows=4e-07]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
@@ -1041,7 +1041,7 @@ select
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -1074,7 +1074,7 @@ index-join t
       ├── stats: [rows=4e-07]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
@@ -1111,7 +1111,7 @@ select
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -1171,7 +1171,7 @@ select
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -1216,7 +1216,7 @@ select
  │         ├── stats: [rows=4e-07]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
@@ -1258,7 +1258,7 @@ select
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]
@@ -1296,7 +1296,7 @@ index-join t
       ├── stats: [rows=4e-07]
       ├── key: (1)
       └── scan t@j_idx
-           ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+           ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
            │    └── spans
            │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
@@ -1337,7 +1337,7 @@ select
  │         ├── stats: [rows=100]
  │         ├── key: (1)
  │         └── scan t@j_idx
- │              ├── columns: k:1(int!null) j_inverted_key:5(jsonb!null)
+ │              ├── columns: k:1(int!null) j_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
  │              │         ├── ["7\x00\x019", "7\x00\x019"]

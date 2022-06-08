@@ -68,6 +68,12 @@ func (k MVCCKey) Next() MVCCKey {
 	}
 }
 
+// Clone returns a copy of the key.
+func (k MVCCKey) Clone() MVCCKey {
+	k.Key = k.Key.Clone()
+	return k
+}
+
 // Compare returns -1 if this key is less than the given key, 0 if they're
 // equal, or 1 if this is greater. Comparison is by key,timestamp, where larger
 // timestamps sort before smaller ones except empty ones which sort first (like
