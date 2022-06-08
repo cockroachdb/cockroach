@@ -97,10 +97,21 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			// Build prerequisites for db-console and cluster-ui.
+			// Fetch all node dependencies (through Bazel) to ensure things are up-to-date
+			err = d.exec.CommandContextInheritingStdStreams(
+				ctx,
+				"bazel",
+				"fetch",
+				"//pkg/ui/workspaces/db-console:db-console-ccl",
+			)
+			if err != nil {
+				log.Fatalf("failed to fetch node dependencies: %v", err)
+			}
+
+			// Build prerequisites for db-console
 			args := []string{
 				"build",
-				"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+				"//pkg/ui/workspaces/cluster-ui:cluster-ui",
 			}
 			if !isOss {
 				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl")
@@ -110,6 +121,11 @@ Replaces 'make ui-watch'.`,
 
 			if err != nil {
 				log.Fatalf("failed to build UI watch prerequisites: %v", err)
+				return err
+			}
+
+			if err := arrangeFilesForWatchers(d /* ossOnly */, isOss); err != nil {
+				log.Fatalf("failed to arrange files for watchers: %v", err)
 				return err
 			}
 
@@ -138,7 +154,7 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			// Start the cluster-ui watch task
+			// Steart the cluster-ui watch task
 			nbExec := d.exec.AsNonBlocking()
 			argv := buildBazelYarnArgv(
 				"--silent", "--cwd", dirs.clusterUI, "build:watch",
@@ -302,7 +318,7 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 	return cleanCmd
 }
 
-// arrangeFilesForTestWatchers moves files from Bazel's build output directory
+// arrangeFilesForWatchers moves files from Bazel's build output directory
 // into the locations they'd be found during a non-Bazel build, so that test
 // watchers can successfully operate outside of the Bazel sandbox.
 //
@@ -311,12 +327,13 @@ func makeUICleanCmd(d *dev) *cobra.Command {
 // running between changes, since Jest won't find changes. But having ibazel
 // kill Jest when a file changes defeat the purpose of Jest's watch mode, and
 // makes devs pay the cost of node + jest startup times after every file change.
-// As a workaround, arrangeFilesForTestWatchers copies files out of the Bazel
-// sandbox and allows Jest (in watch mode) to be executed from directly within
-// a pkg/ui/workspaces/... directory.
+// Similar issues apply to webpack's watch-mode, as compiled output doesn't
+// exist outside of the Bazel sandbox. As a workaround, arrangeFilesForWatchers
+// copies files out of the Bazel sandbox and allows Jest or webpack (in watch
+// mode) to be executed from directly within a pkg/ui/workspaces/... directory.
 //
 // See https://github.com/bazelbuild/rules_nodejs/issues/2028
-func arrangeFilesForTestWatchers(d *dev) error {
+func arrangeFilesForWatchers(d *dev, ossOnly bool) error {
 	bazelBin, err := d.getBazelBin(d.cli.Context())
 	if err != nil {
 		return err
@@ -340,10 +357,15 @@ func arrangeFilesForTestWatchers(d *dev) error {
 	// Recreate protobuf client files that were previously copied out of the sandbox
 	for _, relPath := range protoFiles {
 		ossDst := filepath.Join(ossProtobufDst, relPath)
-		cclDst := filepath.Join(cclProtobufDst, relPath)
 		if err := d.os.CopyFile(filepath.Join(ossProtobufSrc, relPath), ossDst); err != nil {
 			return err
 		}
+
+		if ossOnly {
+			continue
+		}
+
+		cclDst := filepath.Join(cclProtobufDst, relPath)
 		if err := d.os.CopyFile(filepath.Join(cclProtobufSrc, relPath), cclDst); err != nil {
 			return err
 		}
@@ -401,6 +423,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				args := []string{
 					"build",
 					"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+					"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
 				}
 				logCommand("bazel", args...)
 				err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
@@ -410,7 +433,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 					return err
 				}
 
-				err = arrangeFilesForTestWatchers(d)
+				err = arrangeFilesForWatchers(d /* ossOnly */, false)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to arrange files properly for watch-mode testing: %+v", err)
