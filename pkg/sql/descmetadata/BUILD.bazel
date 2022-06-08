@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/descmetadata",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/security/username",
@@ -17,6 +18,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/regionutils",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/sem/catid",
@@ -25,6 +27,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
         "//pkg/sql/sqlutil",
+        "//pkg/util/protoutil",
     ],
 )
 

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -63,6 +64,7 @@ type TestState struct {
 	jobCounter              int
 	txnCounter              int
 	sideEffectLogBuffer     strings.Builder
+	zoneConfigs             map[descpb.ID]*zonepb.ZoneConfig
 
 	// The below portions fo the Dependencies are stored as interfaces because
 	// we permit users of this package to override the default implementations.
@@ -88,6 +90,7 @@ func NewTestDependencies(options ...Option) *TestState {
 	for _, o := range options {
 		o.apply(&s)
 	}
+	s.zoneConfigs = make(map[descpb.ID]*zonepb.ZoneConfig)
 	return &s
 }
 

@@ -734,6 +734,11 @@ DROP DATABASE db1 CASCADE
   details:
     arrayTypeId: 116
     typeId: 115
+- [[EnumTypeValue:{DescID: 115}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 115
 - [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   details:
     columnId: 1

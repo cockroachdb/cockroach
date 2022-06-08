@@ -13,6 +13,9 @@ package scdeps
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,6 +52,7 @@ func NewBuilderDependencies(
 	authAccessor scbuild.AuthorizationAccessor,
 	astFormatter scbuild.AstFormatter,
 	featureChecker scbuild.FeatureChecker,
+	settingsReader scbuild.SettingsReader,
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
@@ -65,6 +69,7 @@ func NewBuilderDependencies(
 		statements:       statements,
 		astFormatter:     astFormatter,
 		featureChecker:   featureChecker,
+		settingsReader:   settingsReader,
 		internalExecutor: internalExecutor,
 		schemaResolver: schemaResolverFactory(
 			descsCollection, sessiondata.NewStack(sessionData), txn, authAccessor,
@@ -84,6 +89,7 @@ type buildDeps struct {
 	statements       []string
 	astFormatter     scbuild.AstFormatter
 	featureChecker   scbuild.FeatureChecker
+	settingsReader   scbuild.SettingsReader
 	internalExecutor sqlutil.InternalExecutor
 }
 
@@ -377,4 +383,33 @@ func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+}
+
+func (d *buildDeps) GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig {
+	kv, err := d.txn.Get(ctx, config.MakeZoneKey(d.codec, id))
+	if err != nil {
+		panic(err)
+	}
+	if kv.Value == nil {
+		return nil
+	}
+	var zone zonepb.ZoneConfig
+	if err := kv.ValueProto(&zone); err != nil {
+		panic(err)
+	}
+	return &zone
+}
+
+func (d *buildDeps) CheckEnterpriseEnabled(feature string) error {
+	org := d.settingsReader.GetClusterOrganization()
+	return base.CheckEnterpriseEnabled(d.settings, d.ClusterID(), org,
+		feature)
+}
+
+func (d *buildDeps) ZoneConfigReader() scbuild.ZoneConfigReader {
+	return d
+}
+
+func (d *buildDeps) EnterpriseFeatureChecker() scbuild.EnterpriseFeatureChecker {
+	return d
 }

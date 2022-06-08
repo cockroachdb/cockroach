@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -563,6 +564,13 @@ func (noopMetadataUpdater) SwapDescriptorSubComment(
 
 // DeleteScheduleID implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
+	return nil
+}
+
+// SetZoneConfig implements scexec.DescriptorMetadataUpdater
+func (noopMetadataUpdater) SetZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) error {
 	return nil
 }
 

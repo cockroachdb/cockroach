@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -36,7 +37,7 @@ import (
 // those side effects using the provided deps.
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 
-	mvs := newMutationVisitorState(deps.Catalog())
+	mvs := newMutationVisitorState(deps.Catalog(), deps.ZoneConfigReaderForExec())
 	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
@@ -292,6 +293,11 @@ func updateDescriptorMetadata(
 			return err
 		}
 	}
+	for id, zoneCfg := range mvs.zoneConfigsToUpdate {
+		if err := m.SetZoneConfig(ctx, id, zoneCfg); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -343,6 +349,7 @@ func manageJobs(
 
 type mutationVisitorState struct {
 	c                            Catalog
+	zoneConfigReader             scmutationexec.ZoneConfigReader
 	modifiedDescriptors          nstree.Map
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
@@ -355,7 +362,7 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
-
+	zoneConfigsToUpdate          map[descpb.ID]*zonepb.ZoneConfig
 	gcJobs
 }
 
@@ -404,12 +411,16 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 	return nil
 }
 
-func newMutationVisitorState(c Catalog) *mutationVisitorState {
+func newMutationVisitorState(
+	c Catalog, zoneConfigReader scmutationexec.ZoneConfigReader,
+) *mutationVisitorState {
 	return &mutationVisitorState{
-		c:                 c,
-		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
-		eventsByStatement: make(map[uint32][]eventPayload),
-		statsToRefresh:    make(map[descpb.ID]struct{}),
+		c:                   c,
+		zoneConfigReader:    zoneConfigReader,
+		drainedNames:        make(map[descpb.ID][]descpb.NameInfo),
+		eventsByStatement:   make(map[uint32][]eventPayload),
+		statsToRefresh:      make(map[descpb.ID]struct{}),
+		zoneConfigsToUpdate: make(map[descpb.ID]*zonepb.ZoneConfig),
 	}
 }
 
@@ -590,5 +601,70 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 			details:        details,
 		},
 	)
+	return nil
+}
+
+// getOrAddZoneConfig reads the existing zone config for a given descriptor,
+// ID if one exists, otherwise a nil one is stored.
+func (mvs *mutationVisitorState) getOrAddZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (*zonepb.ZoneConfig, error) {
+	if zc := mvs.zoneConfigsToUpdate[id]; zc != nil {
+		return zc, nil
+	}
+	zoneConfig, err := mvs.zoneConfigReader.GetZoneConfig(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if zoneConfig == nil {
+		zoneConfig = zonepb.NewZoneConfig()
+	}
+	mvs.zoneConfigsToUpdate[id] = zoneConfig
+	return mvs.zoneConfigsToUpdate[id], nil
+}
+
+// AddSubZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+// interface.
+func (mvs *mutationVisitorState) AddSubZoneConfig(
+	ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+) error {
+	zc, err := mvs.getOrAddZoneConfig(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	zc.Subzones = append(zc.Subzones, *config)
+	return nil
+}
+
+// RemoveSubZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+// interface.
+func (mvs *mutationVisitorState) RemoveSubZoneConfig(
+	ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+) error {
+	zc, err := mvs.getOrAddZoneConfig(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	if zc == nil {
+		return nil
+	}
+	for idx, subZone := range zc.Subzones {
+		if config.IndexID == subZone.IndexID &&
+			config.PartitionName == subZone.PartitionName {
+			newSubZoneSpans := make([]zonepb.SubzoneSpan, 0, len(zc.SubzoneSpans))
+			for _, subZoneSpan := range zc.SubzoneSpans {
+				appendSpan := subZoneSpan.SubzoneIndex != int32(idx)
+				if subZoneSpan.SubzoneIndex > int32(idx) {
+					subZoneSpan.SubzoneIndex = subZoneSpan.SubzoneIndex - 1
+				}
+				if appendSpan {
+					newSubZoneSpans = append(newSubZoneSpans, subZoneSpan)
+				}
+			}
+			zc.SubzoneSpans = newSubZoneSpans
+			zc.Subzones = append(zc.Subzones[:idx], zc.Subzones[idx+1:]...)
+			break
+		}
+	}
 	return nil
 }

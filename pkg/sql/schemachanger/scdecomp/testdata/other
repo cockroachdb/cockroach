@@ -176,6 +176,11 @@ ElementState:
     objectId: 110
     parentSchemaId: 106
   Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 110
+  Status: PUBLIC
 
 decompose
 v1

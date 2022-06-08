@@ -937,6 +937,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ieFactory,
 		collectionFactory,
 		&execCfg.Settings.SV,
+		execCfg.Codec,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
 

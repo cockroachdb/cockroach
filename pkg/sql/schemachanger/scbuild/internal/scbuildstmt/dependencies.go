@@ -33,6 +33,7 @@ type BuildCtx interface {
 	context.Context
 	ClusterAndSessionInfo
 	SchemaFeatureChecker
+	EnterpriseFeatureChecker
 	BuilderState
 	EventLogState
 	TreeAnnotator
@@ -171,7 +172,6 @@ type PrivilegeChecker interface {
 
 // TableHelpers has methods useful for creating new table elements.
 type TableHelpers interface {
-
 	// NextTableColumnID returns the ID that should be used for any new column
 	// added to this table.
 	NextTableColumnID(table *scpb.Table) catid.ColumnID
@@ -187,6 +187,11 @@ type TableHelpers interface {
 	// NextViewIndexID returns the ID that should be used for any new index added
 	// to this materialized view.
 	NextViewIndexID(view *scpb.View) catid.IndexID
+
+	// NextZoneConfigID returns the ID that should be assigned to any new zone
+	// config, based on builder state. These versions are synthetic and only
+	// used for building.
+	NextZoneConfigID(table *scpb.Table) uint32
 
 	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.
@@ -288,4 +293,18 @@ type NameResolver interface {
 
 	// ResolveConstraint retrieves a constraint by name and returns its elements.
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+}
+
+// EnterpriseFeatureChecker checks if an enterprise license is
+// setup.
+type EnterpriseFeatureChecker interface {
+	// CheckEnterpriseEnabled checks if an enterprise license is present
+	// for a certain feature.
+	CheckEnterpriseEnabled(feature string) error
+}
+
+// SettingsReader reads cluster settings.
+type SettingsReader interface {
+	// GetClusterOrganization reads the cluster_organization setting.
+	GetClusterOrganization() string
 }
