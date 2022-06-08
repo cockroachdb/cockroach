@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "detector.go",
         "outliers.go",
+        "registry.go",
     ],
     embed = [":outliers_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/outliers",
