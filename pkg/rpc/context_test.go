@@ -225,6 +225,7 @@ var _ roachpb.InternalServer = &internalServer{}
 type internalServer struct {
 	// rangeFeedEvents are returned on RangeFeed() calls.
 	rangeFeedEvents []roachpb.RangeFeedEvent
+	serverStream    roachpb.Internal_RangeFeedServer
 }
 
 func (*internalServer) Batch(
@@ -242,6 +243,7 @@ func (*internalServer) RangeLookup(
 func (s *internalServer) RangeFeed(
 	_ *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
+	s.serverStream = stream
 	for _, ev := range s.rangeFeedEvents {
 		evCpy := ev
 		if err := stream.Send(&evCpy); err != nil {
@@ -475,10 +477,83 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 	require.Equal(t, len(internal.rangeFeedEvents)+1, s.recvCount)
 }
 
+// Test that a server stream interceptor can wrap the ServerStream when the
+// internalClientAdapter is used.
+func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	stopper.SetTracer(tracing.NewTracer())
+
+	// Can't be zero because that'd be an empty offset.  !!!
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), time.Nanosecond)
+
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	serverCtx.Config.Addr = "127.0.0.1:9999"
+	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.NodeID.Set(context.Background(), 1)
+
+	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
+
+	const int1Name = "interceptor 1"
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
+		func(
+			srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			serverStream := &testServerStream{name: "interceptor 1", inner: ss}
+			return handler(srv, serverStream)
+		})
+	var secondInterceptorWrapped grpc.ServerStream
+	const int2Name = "interceptor 2"
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
+		func(
+			srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			secondInterceptorWrapped = ss
+			serverStream := &testServerStream{name: int2Name, inner: ss}
+			return handler(srv, serverStream)
+		})
+
+	internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
+	serverCtx.SetLocalInternalServer(internal, serverInterceptors, ClientInterceptorInfo{})
+	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
+	lic, ok := ic.(internalClientAdapter)
+	require.True(t, ok)
+	require.Equal(t, internal, lic.server)
+
+	stream, err := lic.RangeFeed(ctx, &roachpb.RangeFeedRequest{})
+	require.NoError(t, err)
+
+	// Consume the stream. This will synchronize with the server RPC handler
+	// goroutine, ensuring that the server-side interceptors run.
+	for {
+		_, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+	}
+
+	require.IsType(t, &testServerStream{}, secondInterceptorWrapped)
+	require.Equal(t, int1Name, secondInterceptorWrapped.(*testServerStream).name)
+	require.IsType(t, rangeFeedServerAdapter{}, internal.serverStream)
+	ss := internal.serverStream.(rangeFeedServerAdapter).ServerStream
+	require.IsType(t, &testServerStream{}, ss)
+	topStream := ss.(*testServerStream)
+	require.Equal(t, int2Name, topStream.name)
+	require.IsType(t, &testServerStream{}, topStream.inner)
+	bottomStream := topStream.inner.(*testServerStream)
+	require.Equal(t, int1Name, bottomStream.name)
+}
+
 type testClientStream struct {
 	inner     grpc.ClientStream
 	recvCount int
 }
+
+var _ grpc.ClientStream = &testClientStream{}
 
 func (t *testClientStream) Header() (metadata.MD, error) {
 	return t.inner.Header()
@@ -505,7 +580,36 @@ func (t *testClientStream) RecvMsg(m interface{}) error {
 	return t.inner.RecvMsg(m)
 }
 
-var _ grpc.ClientStream = &testClientStream{}
+type testServerStream struct {
+	name  string
+	inner grpc.ServerStream
+}
+
+var _ grpc.ServerStream = &testServerStream{}
+
+func (t testServerStream) SetHeader(md metadata.MD) error {
+	return t.inner.SetHeader(md)
+}
+
+func (t testServerStream) SendHeader(md metadata.MD) error {
+	return t.inner.SendHeader(md)
+}
+
+func (t testServerStream) SetTrailer(md metadata.MD) {
+	t.inner.SetTrailer(md)
+}
+
+func (t testServerStream) Context() context.Context {
+	return t.inner.Context()
+}
+
+func (t testServerStream) SendMsg(m interface{}) error {
+	return t.inner.SendMsg(m)
+}
+
+func (t testServerStream) RecvMsg(m interface{}) error {
+	return t.inner.RecvMsg(m)
+}
 
 func BenchmarkInternalClientAdapter(b *testing.B) {
 	ctx := context.Background()
