@@ -305,6 +305,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	registry.AddMetricStruct(runtimeSampler)
 
 	registry.AddMetric(base.LicenseTTL)
+
+	clusterVersionMetrics := clusterversion.MakeMetrics()
+	registry.AddMetricStruct(clusterVersionMetrics)
+	clusterversion.RegisterOnVersionChangeCallback(&st.SV)
+
 	err = base.UpdateMetricOnLicenseChange(ctx, cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{}, stopper)
 	if err != nil {
 		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
