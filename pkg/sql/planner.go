@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -855,7 +856,47 @@ func (p *planner) QueryRowEx(
 	qargs ...interface{},
 ) (tree.Datums, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
 	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+}
+
+// Exec executes the supplied SQL statement and returns the number of rows
+// affected.
+func (p *planner) Exec(
+	ctx context.Context,
+	opName string,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.Exec(ctx, opName, p.Txn(), stmt, qargs...)
+}
+
+// ExecEx is like Exec, but allows the caller to override some session data
+// fields (e.g. the user).
+func (p *planner) ExecEx(
+	ctx context.Context,
+	opName string,
+	override sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.ExecEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -869,11 +910,152 @@ func (p *planner) QueryIteratorEx(
 	opName string,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
-	qargs ...interface{},
-) (eval.InternalRows, error) {
+	qargs ...interface{}) (eval.InternalRows, error) {
 	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
+}
+
+// QueryRow is like Query, except it returns a single row, or nil if not row is
+// found, or an error if more that one row is returned.
+//
+// QueryRow is deprecated (like Query). Use QueryRowEx() instead.
+func (p *planner) QueryRow(
+	ctx context.Context,
+	opName string,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.QueryRow(ctx, opName, p.Txn(), stmt, qargs...)
+}
+
+// QueryBuffered executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once). If no user has been
+// previously set through SetSessionData, the statement is executed as the root
+// user.
+// QueryBuffered is deprecated because it may transparently execute a query as
+// root. Use QueryBufferedEx instead.
+func (p *planner) QueryBuffered(
+	ctx context.Context,
+	opName string,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.QueryBuffered(ctx, opName, p.Txn(), stmt, qargs...)
+}
+
+// QueryBufferedEx executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once).
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) QueryBufferedEx(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.QueryBufferedEx(ctx, opName, p.Txn(), session, stmt, qargs...)
+}
+
+// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// ResultColumns of the input query.
+func (p *planner) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.QueryRowExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
+}
+
+// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
+// ResultColumns of the input query.
+func (p *planner) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+
+	return ie.QueryBufferedExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
+}
+
+// QueryIterator executes the query, returning an iterator that can be used
+// to get the results. If the call is successful, the returned iterator
+// *must* be closed.
+//
+// QueryIterator is deprecated because it may transparently execute a query
+// as root. Use QueryIteratorEx instead.
+func (p *planner) QueryIterator(
+	ctx context.Context,
+	opName string,
+	stmt string,
+	qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.QueryIterator(ctx, opName, p.Txn(), stmt, qargs...)
+}
+
+// WithTxn let user to run sql statements with internal executor generated
+// under a planner context.
+func (p *planner) WithTxn(
+	ctx context.Context,
+	syntheticDescs []catalog.Descriptor,
+	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+) error {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.WithSyntheticDescriptors(
+		syntheticDescs,
+		func() error { return run(ctx, p.Txn(), ie) },
+	)
 }
 
 // extraTxnStateUnderPlanner is to store extra transaction state info that
