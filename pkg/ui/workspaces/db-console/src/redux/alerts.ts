@@ -34,6 +34,7 @@ import {
   refreshNodes,
   refreshVersion,
   refreshHealth,
+  refreshSettings,
 } from "./apiReducers";
 import {
   singleVersionSelector,
@@ -42,6 +43,8 @@ import {
 import { AdminUIState, AppDispatch } from "./state";
 import * as docsURL from "src/util/docs";
 import { getDataFromServer } from "../util/dataFromServer";
+import { selectClusterSettings } from "./clusterSettings";
+import { longToInt } from "src/util/fixLong";
 
 export enum AlertLevel {
   NOTIFICATION,
@@ -512,12 +515,59 @@ export const terminateQueryAlertSelector = createSelector(
 );
 
 /**
+ * Notification for when the cluster.preserve_downgrade_option has been set for
+ * too long of a duration (48hrs) as part of a version upgrade.
+ */
+export const clusterPreserveDowngradeOptionDismissedSetting = new LocalSetting(
+  "cluster_preserve_downgrade_option_dismissed",
+  localSettingsSelector,
+  false,
+);
+
+export const clusterPreserveDowngradeOptionOvertimeSelector = createSelector(
+  selectClusterSettings,
+  clusterPreserveDowngradeOptionDismissedSetting.selector,
+  (settings, notificationDismissed): Alert => {
+    if (notificationDismissed || !settings) {
+      return undefined;
+    }
+    const clusterPreserveDowngradeOption =
+      settings["cluster.preserve_downgrade_option"];
+    const value = clusterPreserveDowngradeOption?.value;
+    const lastUpdated = clusterPreserveDowngradeOption?.last_updated;
+    if (!value || !lastUpdated) {
+      return undefined;
+    }
+    const lastUpdatedTime = moment.unix(longToInt(lastUpdated.seconds));
+    const diff = moment.duration(moment().diff(lastUpdatedTime)).asHours();
+    const maximumSetTime = 48;
+    if (diff < maximumSetTime) {
+      return undefined;
+    }
+    return {
+      level: AlertLevel.WARNING,
+      title: `Cluster setting cluster.preserve_downgrade_option has been set for greater than ${maximumSetTime} hours`,
+      text: `You can see a list of all nodes and their versions below.
+        Once all cluster nodes have been upgraded, and you have validated the stability and performance of
+        your workload on the new version, you must reset the cluster.preserve_downgrade_option cluster
+        setting with the following command:
+        RESET CLUSTER SETTING cluster.preserve_downgrade_option;`,
+      dismiss: (dispatch: AppDispatch) => {
+        dispatch(clusterPreserveDowngradeOptionDismissedSetting.set(true));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
+/**
  * Selector which returns an array of all active alerts which should be
  * displayed in the overview list page, these should be non-critical alerts.
  */
 
 export const overviewListAlertsSelector = createSelector(
   staggeredVersionWarningSelector,
+  clusterPreserveDowngradeOptionOvertimeSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
@@ -628,6 +678,12 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const nodes = state.cachedData.nodes;
     if (nodes && !nodes.data && !nodes.inFlight) {
       dispatch(refreshNodes());
+    }
+
+    // Load settings if not loaded
+    const settings = state.cachedData.settings;
+    if (settings && !settings.data && !settings.inFlight) {
+      dispatch(refreshSettings());
     }
 
     // Load potential new versions from CockroachDB cluster. This is the
