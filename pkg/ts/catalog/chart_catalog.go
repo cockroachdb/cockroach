@@ -1344,25 +1344,6 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Ingested Events",
-				Metrics: []string{
-					"streaming.events_ingested",
-					"streaming.resolved_events_ingested",
-				},
-			},
-			{
-				Title: "Flushes",
-				Metrics: []string{
-					"streaming.flushes",
-				},
-			},
-			{
-				Title: "Ingested Bytes",
-				Metrics: []string{
-					"streaming.ingested_bytes",
-				},
-			},
-			{
 				Title: "Flushed Bytes",
 				Metrics: []string{
 					"changefeed.flushed_bytes",
@@ -1414,6 +1395,52 @@ var charts = []sectionDescription{
 					"changefeed.bytes.messages_pushback_nanos",
 					"changefeed.messages.messages_pushback_nanos",
 					"changefeed.flush.messages_pushback_nanos",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Stream Replication"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Currently Running",
+				Metrics: []string{"streaming.running"},
+			},
+			{
+				Title: "Event admission latency",
+				Metrics: []string{
+					"streaming.admit_latency",
+				},
+			},
+			{
+				Title: "Commits Latency",
+				Metrics: []string{
+					"streaming.commit_latency",
+				},
+			},
+			{
+				Title: "Time spent",
+				Metrics: []string{
+					"streaming.flush_hist_nanos",
+				},
+			},
+			{
+				Title: "Ingested Events",
+				Metrics: []string{
+					"streaming.events_ingested",
+					"streaming.resolved_events_ingested",
+				},
+			},
+			{
+				Title: "Flushes",
+				Metrics: []string{
+					"streaming.flushes",
+				},
+			},
+			{
+				Title: "Ingested Bytes",
+				Metrics: []string{
+					"streaming.ingested_bytes",
 				},
 			},
 		},
