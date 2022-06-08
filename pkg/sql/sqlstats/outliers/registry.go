@@ -40,7 +40,7 @@ type registry struct {
 	// before enabling the outliers subsystem by default.
 	mu struct {
 		syncutil.RWMutex
-		statements map[clusterunique.ID][]*Outlier_Statement
+		statements map[clusterunique.ID][]*Statement
 		outliers   *cache.UnorderedCache
 	}
 }
@@ -59,7 +59,7 @@ func newRegistry(st *cluster.Settings, metrics Metrics) Registry {
 			latencyThresholdDetector{st: st},
 			newLatencyQuantileDetector(st, metrics),
 		}}}
-	r.mu.statements = make(map[clusterunique.ID][]*Outlier_Statement)
+	r.mu.statements = make(map[clusterunique.ID][]*Statement)
 	r.mu.outliers = cache.NewUnorderedCache(config)
 	return r
 }
@@ -75,7 +75,7 @@ func (r *registry) ObserveStatement(
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], &Outlier_Statement{
+	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], &Statement{
 		ID:               statementID.GetBytes(),
 		FingerprintID:    statementFingerprintID,
 		LatencyInSeconds: latencyInSeconds,
@@ -101,8 +101,8 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUI
 	if hasOutlier {
 		for _, s := range statements {
 			r.mu.outliers.Add(uint128.FromBytes(s.ID), &Outlier{
-				Session:     &Outlier_Session{ID: sessionID.GetBytes()},
-				Transaction: &Outlier_Transaction{ID: &txnID},
+				Session:     &Session{ID: sessionID.GetBytes()},
+				Transaction: &Transaction{ID: &txnID},
 				Statement:   s,
 			})
 		}
