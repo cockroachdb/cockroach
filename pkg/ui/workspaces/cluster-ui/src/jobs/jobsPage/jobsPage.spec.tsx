@@ -27,10 +27,10 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
     status: "",
     show: "50",
     type: 0,
-    setSort: () => { },
-    setStatus: () => { },
-    setShow: () => { },
-    setType: () => { },
+    setSort: () => {},
+    setStatus: () => {},
+    setShow: () => {},
+    setType: () => {},
     jobs: {
       jobs: jobs,
       earliest_retained_time: earliestRetainedTime,
@@ -38,7 +38,7 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
     },
     jobsLoading: false,
     jobsError: null,
-    refreshJobs: () => { },
+    refreshJobs: () => {},
     location: history.location,
     history,
     match: {

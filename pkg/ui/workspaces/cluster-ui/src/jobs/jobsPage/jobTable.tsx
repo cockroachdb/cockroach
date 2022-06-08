@@ -37,7 +37,7 @@ const cx = classNames.bind(styles);
 type ITimestamp = google.protobuf.ITimestamp;
 type Job = cockroach.server.serverpb.IJobResponse;
 
-class JobsSortedTable extends SortedTable<Job> { }
+class JobsSortedTable extends SortedTable<Job> {}
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
