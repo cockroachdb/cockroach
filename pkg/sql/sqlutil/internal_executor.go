@@ -118,6 +118,15 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) ([]tree.Datums, error)
 
+	QueryBufferedExWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, colinfo.ResultColumns, error)
+
 	// QueryIterator executes the query, returning an iterator that can be used
 	// to get the results. If the call is successful, the returned iterator
 	// *must* be closed.
@@ -158,6 +167,11 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetExtraTxnState is to set the extra txn state for an internal executor.
+	// It should only be called if the internal executor is used to run sql
+	// sql statements under a planner context.
+	SetExtraTxnState(extraTxnState ExtraTxnStateUnderPlanner)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -204,3 +218,5 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+type ExtraTxnStateUnderPlanner interface{}
