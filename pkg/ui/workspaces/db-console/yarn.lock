@@ -1387,10 +1387,10 @@
     "@typescript-eslint/parser" "^2.34.0"
     eslint-config-prettier "^6.11.0"
 
-"@cockroachlabs/icons@0.3.0":
-  version "0.3.0"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.3.0.tgz#160573074396f266e92fcbe5e520c5ba1d8750f9"
-  integrity sha512-GJxhlXy8Z3/PYFb9C3iM1dvU9wajGoaA/+VCj0an2ipfbkI2fhToq+h0b33vu7JuZ3dS4QMRjfVE4uhlyIUH2Q==
+"@cockroachlabs/icons@0.5.2":
+  version "0.5.2"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.5.2.tgz#ddf87eba8e173f7ee6c787e178f460a0a1872b80"
+  integrity sha512-+2JJegu+MPb4S2l7LJwPnbkmZuBlPdMBJNr4vqLdcEePcLAgOpEfGMlF1HV1Mb8YbDEFWUT9E0gZ/PRjjMalog==
 
 "@cockroachlabs/icons@^0.4.3":
   version "0.4.3"
