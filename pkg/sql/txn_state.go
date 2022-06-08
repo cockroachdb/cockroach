@@ -401,6 +401,11 @@ const (
 	// the transaction. This allows such savepoints to reset more state than other
 	// savepoints.
 	txnRestart
+	// txnUpgradeToExplicit means that the current implicit transaction was
+	// upgraded to an explicit one. This happens when BEGIN is executed during the
+	// extended protocol or as part of a batch of statements. It's used to
+	// indicate that the transaction rewind position should be updated.
+	txnUpgradeToExplicit
 )
 
 // advanceInfo represents instructions for the connExecutor about what statement
