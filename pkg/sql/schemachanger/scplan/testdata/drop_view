@@ -82,6 +82,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            toId: 104
           usesRelationIds:
           - 104
           viewId: 105
@@ -568,6 +572,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 39 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            toId: 104
           usesRelationIds:
           - 104
           viewId: 105
@@ -618,6 +626,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 39 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            toId: 105
           usesRelationIds:
           - 105
           viewId: 106
@@ -679,6 +691,14 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 39 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            toId: 105
+          - columnIds:
+            - 1
+            - 2
+            toId: 106
           usesRelationIds:
           - 105
           - 106
@@ -741,6 +761,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 39 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            toId: 106
           usesRelationIds:
           - 106
           viewId: 108
@@ -802,6 +827,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 39 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            toId: 108
           usesRelationIds:
           - 108
           usesTypeIds:

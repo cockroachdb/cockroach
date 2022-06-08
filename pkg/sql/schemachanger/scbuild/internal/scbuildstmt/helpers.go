@@ -163,3 +163,23 @@ func descIDs(input ElementResultSet) (ids catalog.DescriptorIDSet) {
 	})
 	return ids
 }
+
+func columnElements(b BuildCtx, relationID catid.DescID, columnID catid.ColumnID) ElementResultSet {
+	return b.QueryByID(relationID).Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
+		return idI != nil && idI.(catid.ColumnID) == columnID
+	})
+}
+
+func constraintElements(
+	b BuildCtx, relationID catid.DescID, constraintID catid.ConstraintID,
+) ElementResultSet {
+	return b.QueryByID(relationID).Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
+	})
+}

@@ -467,7 +467,7 @@ upsert descriptor #106
          keyColumnNames:
          - i
   -      name: crdb_internal_index_3_name_placeholder
-  +      name: crdb_internal_index_1_name_placeholder
+  +      name: tbl_pkey
          partitioning: {}
          sharded: {}
   -      storeColumnIds:
@@ -744,7 +744,7 @@ upsert descriptor #106
   -      - 1
   -      keyColumnNames:
   -      - i
-  -      name: crdb_internal_index_1_name_placeholder
+  -      name: tbl_pkey
   -      partitioning: {}
   -      sharded: {}
   -      unique: true
@@ -1236,7 +1236,7 @@ upsert descriptor #106
          keyColumnNames:
          - i
   -      name: crdb_internal_index_5_name_placeholder
-  +      name: crdb_internal_index_2_name_placeholder
+  +      name: tbl_pkey
          partitioning: {}
          sharded: {}
          storeColumnIds:
@@ -1523,7 +1523,7 @@ upsert descriptor #106
   -      - 1
   -      keyColumnNames:
   -      - i
-  -      name: crdb_internal_index_2_name_placeholder
+  -      name: tbl_pkey
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnIds:
@@ -2076,7 +2076,7 @@ upsert descriptor #106
          keyColumnNames:
          - i
   -      name: crdb_internal_index_7_name_placeholder
-  +      name: crdb_internal_index_4_name_placeholder
+  +      name: tbl_pkey
          partitioning: {}
          sharded: {}
   ...
@@ -2391,7 +2391,7 @@ upsert descriptor #106
   -      - 1
   -      keyColumnNames:
   -      - i
-  -      name: crdb_internal_index_4_name_placeholder
+  -      name: tbl_pkey
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnIds:
@@ -3115,7 +3115,7 @@ upsert descriptor #106
   +      - 1
   +      keyColumnNames:
   +      - i
-  +      name: crdb_internal_index_6_name_placeholder
+  +      name: tbl_pkey
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
@@ -3688,7 +3688,7 @@ upsert descriptor #106
   -      - 1
   -      keyColumnNames:
   -      - i
-  -      name: crdb_internal_index_6_name_placeholder
+  -      name: tbl_pkey
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnIds:
