@@ -117,6 +117,7 @@ func ValidateStages(ts scpb.TargetState, stages []Stage, g *scgraph.Graph) error
 			return errors.Errorf("%s: preceded by %s stage",
 				stage.String(), currentPhase)
 		}
+		currentPhase = stage.Phase
 	}
 
 	// Check stage internal subgraph consistency.
