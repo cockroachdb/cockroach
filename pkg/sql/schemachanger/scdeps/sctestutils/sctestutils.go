@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -87,6 +88,7 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Settings,
 		nil, /* statements */
 		execCfg.InternalExecutor,
+		&faketreeeval.DummyClientNoticeSender{},
 	))
 }
 

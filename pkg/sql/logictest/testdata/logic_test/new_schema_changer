@@ -429,6 +429,7 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   JobID: 1
                   RunningStatus: all stages completed
 
+
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
 

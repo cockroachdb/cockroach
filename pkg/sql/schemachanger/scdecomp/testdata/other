@@ -184,6 +184,11 @@ BackReferencedIDs:
   - 113
 ElementState:
 - View:
+    forwardReferences:
+    - columnIds:
+      - 1
+      indexId: 0
+      toId: 109
     isMaterialized: false
     isTemporary: false
     usesRelationIds:
@@ -348,6 +353,11 @@ v2
 BackReferencedIDs:
 ElementState:
 - View:
+    forwardReferences:
+    - columnIds:
+      - 1
+      indexId: 0
+      toId: 112
     isMaterialized: false
     isTemporary: false
     usesRelationIds:

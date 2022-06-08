@@ -202,6 +202,42 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			UsesRelationIDs: catalog.MakeDescriptorIDSet(tbl.GetDependsOn()...).Ordered(),
 			IsTemporary:     tbl.IsTemporary(),
 			IsMaterialized:  tbl.MaterializedView(),
+			ForwardReferences: func(tbl catalog.TableDescriptor) []*scpb.View_Reference {
+				result := make([]*scpb.View_Reference, 0)
+
+				// For each `to` relation, find the back reference to `tbl`.
+				for _, toID := range tbl.GetDependsOn() {
+					to := w.lookupFn(toID)
+					toDesc, err := catalog.AsTableDescriptor(to)
+					if err != nil {
+						panic(err)
+					}
+
+					_ = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+						if dep.ID != tbl.GetID() {
+							return nil
+						}
+						ref := &scpb.View_Reference{
+							ToID:    toID,
+							IndexID: dep.IndexID,
+							ColumnIDs: func(colIDs []catid.ColumnID) []catid.ColumnID {
+								// de-duplicate, remove-zeros, and order column IDs from `dep.ColumnIDs`.
+								result := catalog.MakeTableColSet()
+								for _, colID := range colIDs {
+									if colID != 0 && !result.Contains(colID) {
+										result.Add(colID)
+									}
+								}
+								return result.Ordered()
+							}(dep.ColumnIDs),
+						}
+						result = append(result, ref)
+						return nil
+					})
+				}
+
+				return result
+			}(tbl),
 		})
 	default:
 		w.ev(descriptorStatus(tbl), &scpb.Table{
