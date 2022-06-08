@@ -1034,9 +1034,8 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 		for _, i := range []int{2, 3} {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)
-			_, _, enqueueError := tc.GetFirstStoreFromServer(t, i).
-				ManuallyEnqueue(ctx, "replicate", repl, true)
-			require.NoError(t, enqueueError)
+			// We don't know who the leaseholder might be, so ignore errors.
+			_, _, _ = tc.GetFirstStoreFromServer(t, i).ManuallyEnqueue(ctx, "replicate", repl, true)
 		}
 	}
 
