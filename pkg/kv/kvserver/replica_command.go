@@ -1144,7 +1144,8 @@ func (r *Replica) changeReplicasImpl(
 		// If we demoted or swapped any voters with non-voters, we likely are in a
 		// joint config or have learners on the range. Let's exit the joint config
 		// and remove the learners.
-		return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+		desc, _, err = r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+		return desc, err
 	}
 	return desc, nil
 }
@@ -1278,22 +1279,69 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		})
 }
 
+// TestingRemoveLearner is used by tests to manually remove a learner replica.
+func (r *Replica) TestingRemoveLearner(
+	ctx context.Context, beforeDesc *roachpb.RangeDescriptor, target roachpb.ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	desc, err := execChangeReplicasTxn(
+		ctx, beforeDesc, kvserverpb.ReasonAbandonedLearner, "",
+		[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
+		changeReplicasTxnArgs{
+			db:                                   r.store.DB(),
+			liveAndDeadReplicas:                  r.store.cfg.StorePool.liveAndDeadReplicas,
+			logChange:                            r.store.logChange,
+			testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+			testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
+		},
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, `removing learners from %s`, beforeDesc)
+	}
+	return desc, err
+}
+
+// errCannotRemoveLearnerWhileSnapshotInFlight is returned when we cannot remove
+// a learner replica because it is in the process of receiving its initial
+// snapshot.
+var errCannotRemoveLearnerWhileSnapshotInFlight = errors.Mark(
+	errors.New("cannot remove learner while snapshot is in flight"),
+	errMarkReplicationChangeInProgress,
+)
+
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
 // returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
 func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	ctx context.Context, desc *roachpb.RangeDescriptor,
-) (rangeDesc *roachpb.RangeDescriptor, err error) {
+) (rangeDesc *roachpb.RangeDescriptor, learnersRemoved int64, err error) {
 	desc, err = r.maybeLeaveAtomicChangeReplicas(ctx, desc)
 	if err != nil {
-		return nil, err
+		return nil /* desc */, 0 /* learnersRemoved */, err
+	}
+
+	// If we detect that there are learners in the process of receiving their
+	// initial upreplication snapshot, we don't want to remove them and we bail
+	// out.
+	//
+	// Currently, the only callers of this method are the replicateQueue, the
+	// StoreRebalancer, the mergeQueue and SQL (which calls into
+	// `AdminRelocateRange` via the `EXPERIMENTAL_RELOCATE` syntax). All these
+	// callers will fail-fast when they encounter this error and move on to other
+	// ranges. This is intentional and desirable because we want to avoid
+	// head-of-line blocking scenarios where these callers are blocked for long
+	// periods of time on a single range without making progress, which can stall
+	// other operations that they are expected to perform (see
+	// https://github.com/cockroachdb/cockroach/issues/79249 for example).
+	if r.hasOutstandingLearnerSnapshotInFlight() {
+		return nil /* desc */, 0, /* learnersRemoved */
+			errCannotRemoveLearnerWhileSnapshotInFlight
 	}
 
 	// Now the config isn't joint any more, but we may have demoted some voters
-	// into learners. These learners should go as well.
+	// into learners. If so, we need to remove them.
 	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
-		return desc, nil
+		return desc, 0 /* learnersRemoved */, nil /* err */
 	}
 	targets := make([]roachpb.ReplicationTarget, len(learners))
 	for i := range learners {
@@ -1320,10 +1368,11 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 			},
 		)
 		if err != nil {
-			return nil, errors.Wrapf(err, `removing learners from %s`, origDesc)
+			return desc, learnersRemoved, errors.Wrapf(err, `removing learners from %s`, origDesc)
 		}
+		learnersRemoved++
 	}
-	return desc, nil
+	return desc, learnersRemoved, nil
 }
 
 // validateAdditionsPerStore ensures that we're not trying to add the same type
@@ -1786,9 +1835,8 @@ func (r *Replica) lockLearnerSnapshot(
 		r.addSnapshotLogTruncationConstraint(ctx, lockUUID, 1, addition.StoreID)
 	}
 	return func() {
-		now := timeutil.Now()
 		for _, lockUUID := range lockUUIDs {
-			r.completeSnapshotLogTruncationConstraint(ctx, lockUUID, now)
+			r.completeSnapshotLogTruncationConstraint(lockUUID)
 		}
 	}
 }
@@ -1855,7 +1903,8 @@ func (r *Replica) execReplicationChangesForVoters(
 
 	// Leave the joint config if we entered one. Also, remove any learners we
 	// might have picked up due to removal-via-demotion.
-	return r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+	desc, _, err = r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, desc)
+	return desc, err
 }
 
 // tryRollbackRaftLearner attempts to remove a learner specified by the target.
@@ -2768,8 +2817,7 @@ func (r *Replica) AdminRelocateRange(
 
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
-	newDesc, err :=
-		r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
+	newDesc, _, err := r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
 		return err
