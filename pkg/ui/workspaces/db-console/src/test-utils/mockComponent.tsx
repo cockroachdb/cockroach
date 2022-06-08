@@ -31,6 +31,9 @@ export function stubComponentInModule(
       let candidate: unknown;
       // eslint-disable-next-line no-prototype-builtins
       if (typeof orig === "object" && name && orig.hasOwnProperty(name)) {
+        console.log(
+          `Found component ${name} in ${path}: ${(orig as any)[name]}`,
+        );
         candidate = (orig as any)[name];
       } else {
         throw new Error(

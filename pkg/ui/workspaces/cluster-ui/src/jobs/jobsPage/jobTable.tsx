@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
+import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
 import { isEqual, map } from "lodash";
 import React from "react";
 import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
