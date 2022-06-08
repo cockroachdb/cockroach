@@ -75,12 +75,14 @@ func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 // ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
 func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
 	ctx context.Context,
+	req SpanConstraintRequirement,
+	tn *tree.TableName,
 	desc catalog.TableDescriptor,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	filter tree.Expr,
-) ([]roachpb.Span, error) {
-	return e.p.ConstrainPrimaryIndexSpanByExpr(ctx, desc, evalCtx, semaCtx, filter)
+) ([]roachpb.Span, tree.Expr, error) {
+	return e.p.ConstrainPrimaryIndexSpanByExpr(ctx, req, tn, desc, evalCtx, semaCtx, filter)
 }
 
 // JobExecContext provides the execution environment for a job. It is what is

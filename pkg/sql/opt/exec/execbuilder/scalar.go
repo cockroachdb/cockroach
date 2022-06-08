@@ -282,7 +282,7 @@ func (b *Builder) buildFunction(
 			return nil, err
 		}
 	}
-	funcRef := tree.WrapFunction(fn.Name)
+	funcRef := b.wrapFunction(fn.Name)
 	return tree.NewTypedFuncExpr(
 		funcRef,
 		0, /* aggQualifier */
@@ -361,7 +361,7 @@ func (b *Builder) buildAssignmentCast(
 		return input, nil
 	}
 	const fnName = "crdb_internal.assignment_cast"
-	funcRef := tree.WrapFunction(fnName)
+	funcRef := b.wrapFunction(fnName)
 	props, overloads := builtins.GetBuiltinProperties(fnName)
 	return tree.NewTypedFuncExpr(
 		funcRef,
