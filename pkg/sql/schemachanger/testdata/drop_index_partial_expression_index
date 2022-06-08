@@ -1,0 +1,462 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+CREATE INDEX idx ON t(lower(j)) WHERE i > 0
+----
+...
++object {100 101 t} -> 104
+
+test
+DROP INDEX idx CASCADE
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP INDEX
+increment telemetry for sql.schema.drop_index
+## StatementPhase stage 1 of 1 with 7 MutationType ops
+upsert descriptor #104
+  ...
+         family: StringFamily
+         oid: 25
+  -  - computeExpr: lower(j)
+  -    id: 3
+  -    inaccessible: true
+  -    name: crdb_internal_idx_expr
+  -    nullable: true
+  -    type:
+  -      family: StringFamily
+  -      oid: 25
+  -    virtual: true
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+     formatVersion: 3
+     id: 104
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 3
+  -    keyColumnNames:
+  -    - crdb_internal_idx_expr
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx
+  -    partitioning: {}
+  -    predicate: i > 0:::INT8
+  -    sharded: {}
+  -    version: 3
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  indexes: []
+  +  modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      computeExpr: lower(j)
+  +      id: 3
+  +      inaccessible: true
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: StringFamily
+  +        oid: 25
+  +      virtual: true
+  +    direction: DROP
+  +    mutationId: 2
+  +    state: DELETE_AND_WRITE_ONLY
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_internal_column_3_name_placeholder
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      predicate: i > 0:::INT8
+  +      sharded: {}
+  +      version: 3
+  +    mutationId: 2
+  +    state: DELETE_AND_WRITE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+write *eventpb.AlterTable to event log for descriptor #104: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - PUBLIC
+  +    - ABSENT
+  +    - ABSENT
+  +    - PUBLIC
+  +    - VALIDATED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    targets:
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          isInaccessible: true
+  +          pgAttributeNum: 3
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: crdb_internal_idx_expr
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 3
+  +          computeExpr:
+  +            expr: lower(j)
+  +          embeddedTypeT:
+  +            type:
+  +              family: StringFamily
+  +              oid: 25
+  +          isNullable: true
+  +          isVirtual: true
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 2
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          kind: KEY_SUFFIX
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        secondaryIndexPartial:
+  +          embeddedExpr:
+  +            expr: i > 0:::INT8
+  +          indexId: 2
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        secondaryIndex:
+  +          embeddedIndex:
+  +            indexId: 2
+  +            isCreatedExplicitly: true
+  +            tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 2
+  +          name: idx
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     mutations:
+     - column:
+  ...
+create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+upsert descriptor #104
+  ...
+         userName: root
+       currentStatuses:
+  -    - WRITE_ONLY
+  +    - DELETE_ONLY
+       - ABSENT
+       - PUBLIC
+  ...
+       - ABSENT
+       - PUBLIC
+  -    - VALIDATED
+  +    - DELETE_ONLY
+       - ABSENT
+       jobId: "1"
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     mutations:
+     - column:
+  ...
+       direction: DROP
+       mutationId: 2
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  ...
+         version: 3
+       mutationId: 2
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses:
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - PUBLIC
+  -    - ABSENT
+  -    - ABSENT
+  -    - PUBLIC
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  -        statement: DROP INDEX idx CASCADE
+  -        statementTag: DROP INDEX
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    targets:
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          isInaccessible: true
+  -          pgAttributeNum: 3
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: crdb_internal_idx_expr
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 3
+  -          computeExpr:
+  -            expr: lower(j)
+  -          embeddedTypeT:
+  -            type:
+  -              family: StringFamily
+  -              oid: 25
+  -          isNullable: true
+  -          isVirtual: true
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 2
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          kind: KEY_SUFFIX
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        secondaryIndexPartial:
+  -          embeddedExpr:
+  -            expr: i > 0:::INT8
+  -          indexId: 2
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        secondaryIndex:
+  -          embeddedIndex:
+  -            indexId: 2
+  -            isCreatedExplicitly: true
+  -            tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 2
+  -          name: idx
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+     id: 104
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  -  mutations:
+  -  - column:
+  -      computeExpr: lower(j)
+  -      id: 3
+  -      inaccessible: true
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -      virtual: true
+  -    direction: DROP
+  -    mutationId: 2
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_internal_column_3_name_placeholder
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      predicate: i > 0:::INT8
+  -      sharded: {}
+  -      version: 3
+  -    mutationId: 2
+  -    state: DELETE_ONLY
+  +  modificationTime: {}
+  +  mutations: []
+     name: t
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+write *eventpb.DropIndex to event log for descriptor #104: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+commit transaction #4
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

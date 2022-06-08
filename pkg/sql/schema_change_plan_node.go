@@ -76,6 +76,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.ExecCfg().Settings,
 		scs.stmts,
 		p.execCfg.InternalExecutor,
+		p,
 	)
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&
@@ -201,6 +202,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 			p.ExecCfg().Settings,
 			scs.stmts,
 			p.ExecCfg().InternalExecutor,
+			p,
 		)
 		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt)
 		if err != nil {
