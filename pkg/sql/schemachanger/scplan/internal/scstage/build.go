@@ -164,7 +164,7 @@ func (bc buildContext) makeStageBuilder(bs buildState) (sb stageBuilder) {
 	opTypes := []scop.Type{scop.BackfillType, scop.ValidationType, scop.MutationType}
 	switch bs.phase {
 	case scop.StatementPhase, scop.PreCommitPhase:
-		// We don't allow expensive operations pre-commit.
+		// We don't allow expensive operations in the statement transaction.
 		opTypes = []scop.Type{scop.MutationType}
 	}
 	for _, opType := range opTypes {

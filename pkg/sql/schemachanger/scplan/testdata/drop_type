@@ -5,32 +5,27 @@ CREATE TYPE defaultdb.typ AS ENUM('a')
 ops
 DROP TYPE defaultdb.typ
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
-  transitions:
-    [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[AliasType:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
-  ops:
-    *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 104
-    *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 105
-PreCommitPhase stage 1 of 1 with 7 MutationType ops
+StatementPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[EnumType:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[AliasType:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.MarkDescriptorAsDropped
+      DescID: 104
+    *scop.MarkDescriptorAsDropped
+      DescID: 105
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -43,10 +38,9 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
         DescriptorID: 105
         Name: _typ
         SchemaID: 101
-    *scop.MarkDescriptorAsDropped
-      DescID: 105
-    *scop.MarkDescriptorAsDropped
-      DescID: 104
+PreCommitPhase stage 1 of 1 with 3 MutationType ops
+  transitions:
+  ops:
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -129,54 +123,50 @@ deps
 DROP TYPE defaultdb.typ
 ----
 - from: [AliasType:{DescID: 105}, DROPPED]
-  to:   [EnumType:{DescID: 104}, DROPPED]
+  to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
-  rule: array type drops right before its element enum type
-- from: [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
-  to:   [EnumType:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
-  to:   [AliasType:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
-  to:   [EnumType:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
-  to:   [AliasType:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [Owner:{DescID: 104}, ABSENT]
-  to:   [EnumType:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [Owner:{DescID: 105}, ABSENT]
-  to:   [AliasType:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
-  to:   [EnumType:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
-  to:   [EnumType:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
-  to:   [EnumType:{DescID: 104}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
-  to:   [AliasType:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
-  to:   [AliasType:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
-- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
-  to:   [AliasType:{DescID: 105}, DROPPED]
-  kind: Precedence
-  rule: dependent element removal before descriptor drop
+  rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 105}, DROPPED]
+  to:   [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 105}, DROPPED]
+  to:   [Owner:{DescID: 105}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [AliasType:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [Owner:{DescID: 104}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 104}, DROPPED]
+  to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal

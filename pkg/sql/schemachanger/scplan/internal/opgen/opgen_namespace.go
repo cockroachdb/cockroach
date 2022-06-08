@@ -30,7 +30,6 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				emit(func(this *scpb.Namespace) scop.Op {

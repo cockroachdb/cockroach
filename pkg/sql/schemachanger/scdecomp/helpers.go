@@ -25,8 +25,7 @@ import (
 )
 
 // descriptorStatus tries to map a descriptor to an element status for its
-// top-level element on a best-effort basis. This is necessary incomplete as
-// we can't distinguish between TXN_DROPPED and DROPPED for dropped descriptors.
+// top-level element on a best-effort basis.
 //
 // TODO(postamar): handle offline descriptors?
 func descriptorStatus(desc catalog.Descriptor) scpb.Status {

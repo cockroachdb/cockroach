@@ -21,7 +21,6 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeAddedColumnDeleteOnly{
 						Column: *protoutil.Clone(this).(*scpb.Column),
@@ -32,7 +31,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeAddedColumnDeleteAndWriteOnly{
 						TableID:  this.TableID,
@@ -58,7 +56,6 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_WRITE_ONLY,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteAndWriteOnly{
 						TableID:  this.TableID,
@@ -70,7 +67,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_DELETE_ONLY,
-				minPhase(scop.PostCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteOnly{

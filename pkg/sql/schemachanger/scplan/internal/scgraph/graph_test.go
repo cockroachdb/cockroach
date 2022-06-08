@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +33,7 @@ func TestGraphRanks(t *testing.T) {
 		name     string
 		addNode  []bool
 		depEdges []depEdge
-		hasCycle bool
+		hasCycle string
 	}
 
 	testCases := []testCase{
@@ -59,7 +60,12 @@ func TestGraphRanks(t *testing.T) {
 				{1, 3},
 				{3, 1},
 			},
-			hasCycle: true,
+			hasCycle: `cycle:
+[[Table:{DescID: 0}, PUBLIC], PUBLIC] --> 0 to 1
+[[Table:{DescID: 1}, PUBLIC], PUBLIC] --> 1 to 3
+[[Table:{DescID: 3}, PUBLIC], PUBLIC] --> 3 to 0
+[[Table:{DescID: 0}, PUBLIC], PUBLIC]
+`,
 		},
 
 		// We will set up the dependency graph to have a swap, which won't affect
@@ -72,7 +78,11 @@ func TestGraphRanks(t *testing.T) {
 				{1, 0},
 				{2, 0},
 			},
-			hasCycle: true,
+			hasCycle: `cycle:
+[[Table:{DescID: 0}, PUBLIC], PUBLIC] --> 0 to 1
+[[Table:{DescID: 1}, PUBLIC], PUBLIC] --> 1 to 0
+[[Table:{DescID: 0}, PUBLIC], PUBLIC]
+`,
 		},
 	}
 
@@ -132,10 +142,15 @@ func TestGraphRanks(t *testing.T) {
 				scpb.Status_PUBLIC,
 			))
 		}
-		if err := graph.Validate(); err != nil {
-			require.True(t, tc.hasCycle)
+
+		err = graph.Validate()
+		if tc.hasCycle == "" {
+			require.NoError(t, err)
 		} else {
-			require.False(t, tc.hasCycle)
+			require.Error(t, err, "graph is not acyclical")
+			allDetails := errors.GetAllDetails(err)
+			require.NotEmpty(t, allDetails)
+			require.Equal(t, tc.hasCycle, allDetails[0])
 		}
 	}
 	for _, tc := range testCases {
