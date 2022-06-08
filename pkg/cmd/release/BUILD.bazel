@@ -14,6 +14,7 @@ go_library(
         "sender.go",
         "sentry.go",
         "templates.go",
+        "versionmap.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
     visibility = ["//visibility:private"],
