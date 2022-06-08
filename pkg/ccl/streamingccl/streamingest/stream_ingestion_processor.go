@@ -143,7 +143,7 @@ type streamIngestionProcessor struct {
 		pollingErr error
 	}
 
-	// metrics are monitoring counters shared between all ingestion jobs.
+	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 }
 
@@ -478,6 +478,10 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				sip.internalDrained = true
 				return sip.flush()
 			}
+			if event.Type() == streamingccl.KVEvent {
+				sip.metrics.AdmitLatency.RecordValue(
+					timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
+			}
 
 			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 				if streamingKnobs != nil {
@@ -621,19 +625,30 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	sort.Sort(sip.curBatch)
 
 	totalSize := 0
+	minBatchMVCCTimestamp := hlc.MaxTimestamp
 	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil { // problem is here
+		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
+		}
+		if kv.Key.Timestamp.Less(minBatchMVCCTimestamp) {
+			minBatchMVCCTimestamp = kv.Key.Timestamp
 		}
 		totalSize += len(kv.Key.Key) + len(kv.Value)
 	}
 
-	if err := sip.batcher.Flush(sip.Ctx); err != nil {
-		return nil, errors.Wrap(err, "flushing")
+	if len(sip.curBatch) > 0 {
+		preFlushTime := timeutil.Now()
+		defer func() {
+			sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
+			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
+			sip.metrics.Flushes.Inc(1)
+			sip.metrics.IngestedBytes.Inc(int64(totalSize))
+			sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
+		}()
+		if err := sip.batcher.Flush(sip.Ctx); err != nil {
+			return nil, errors.Wrap(err, "flushing")
+		}
 	}
-	sip.metrics.Flushes.Inc(1)
-	sip.metrics.IngestedBytes.Inc(int64(totalSize))
-	sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
 
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.
