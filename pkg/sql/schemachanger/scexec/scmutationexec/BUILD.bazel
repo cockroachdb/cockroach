@@ -14,10 +14,12 @@ go_library(
         "schema_change_job.go",
         "scmutationexec.go",
         "stats.go",
+        "zone_config.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/sql/catalog",

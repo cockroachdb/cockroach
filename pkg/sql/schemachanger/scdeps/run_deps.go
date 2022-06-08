@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// NewJobRunDependencies returns an scrun.JobRunDependencies implementation built from the
+// NewJobRunDependencies returns a scrun.JobRunDependencies implementation built from the
 // given arguments.
 func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
@@ -121,6 +121,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				indexValidator:     d.indexValidator,
 				eventLogger:        d.eventLoggerFactory(txn),
 				statsRefresher:     d.statsRefresher,
+				zoneConfigReader:   NewZoneConfigReader(txn, d.codec),
 				schemaChangerJobID: d.job.ID(),
 				kvTrace:            d.kvTrace,
 			},

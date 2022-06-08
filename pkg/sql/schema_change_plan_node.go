@@ -71,6 +71,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p,                              /* authAccessor */
 		p,                              /* astFormatter */
 		p,                              /* featureChecker */
+		p,                              /* settingsReader*/
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
@@ -196,6 +197,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 			p,
 			p,
 			p,
+			p,
 			p.SessionData(),
 			p.ExecCfg().Settings,
 			scs.stmts,
@@ -216,6 +218,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.Txn(),
 		p.Descriptors(),
 		p.EvalContext(),
+		nil,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,
 		scs.stmts,
@@ -238,6 +241,7 @@ func newSchemaChangerTxnRunDependencies(
 	txn *kv.Txn,
 	descriptors *descs.Collection,
 	evalContext *eval.Context,
+	zoneConfigReader scbuild.ZoneConfigReader,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	stmts []string,
