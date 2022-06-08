@@ -292,7 +292,7 @@ func max(a, b int64) int64 {
 
 // NewStreamer creates a new Streamer.
 //
-// txn must be a LeafTxn.
+// txn must be a LeafTxn that is not used by anything other than this Streamer.
 //
 // limitBytes determines the maximum amount of memory this Streamer is allowed
 // to use (i.e. it'll be used lazily, as needed). The more memory it has, the
