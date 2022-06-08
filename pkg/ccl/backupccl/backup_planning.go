@@ -9,7 +9,6 @@
 package backupccl
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -22,12 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -55,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -63,8 +60,6 @@ import (
 
 const (
 	backupOptRevisionHistory  = "revision_history"
-	backupOptEncPassphrase    = "encryption_passphrase"
-	backupOptEncKMS           = "kms"
 	backupOptWithPrivileges   = "privileges"
 	backupOptAsJSON           = "as_json"
 	backupOptWithDebugIDs     = "debug_ids"
@@ -72,6 +67,9 @@ const (
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
 	backupOptEncDir           = "encryption_info_dir"
 	backupOptCheckFiles       = "check_files"
+	// backupPartitionDescriptorPrefix is the file name prefix for serialized
+	// BackupPartitionDescriptor protos.
+	backupPartitionDescriptorPrefix = "BACKUP_PART"
 )
 
 type tableAndIndex struct {
@@ -786,116 +784,6 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
-// writeBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST and
-// CHECKSUM file. If it is a pure v22.1 cluster or later, it will write a
-// timestamped BACKUP-CHECKPOINT to the /progress directory. If it is a mixed
-// cluster version, it will write a non timestamped BACKUP-CHECKPOINT to the
-// base directory in order to not break backup jobs that resume on a v21.2 node.
-func writeBackupManifestCheckpoint(
-	ctx context.Context,
-	storageURI string,
-	encryption *jobspb.BackupEncryptionOptions,
-	desc *backuppb.BackupManifest,
-	execCfg *sql.ExecutorConfig,
-	user username.SQLUsername,
-) error {
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, storageURI, user)
-	if err != nil {
-		return err
-	}
-	defer defaultStore.Close()
-
-	sort.Sort(BackupFileDescriptors(desc.Files))
-
-	descBuf, err := protoutil.Marshal(desc)
-	if err != nil {
-		return err
-	}
-
-	descBuf, err = compressData(descBuf)
-	if err != nil {
-		return errors.Wrap(err, "compressing backup manifest")
-	}
-
-	if encryption != nil {
-		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
-		if err != nil {
-			return err
-		}
-		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
-		if err != nil {
-			return err
-		}
-	}
-
-	// If the cluster is still running on a mixed version, we want to write
-	// to the base directory instead of the progress directory. That way if
-	// an old node resumes a backup, it doesn't have to start over.
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		// We want to overwrite the latest checkpoint in the base directory,
-		// just write to the non versioned BACKUP-CHECKPOINT file.
-		err = cloud.WriteFile(ctx, defaultStore, backupManifestCheckpointName, bytes.NewReader(descBuf))
-		if err != nil {
-			return err
-		}
-
-		checksum, err := getChecksum(descBuf)
-		if err != nil {
-			return err
-		}
-
-		return cloud.WriteFile(ctx, defaultStore, backupManifestCheckpointName+backupManifestChecksumSuffix, bytes.NewReader(checksum))
-	}
-
-	// We timestamp the checkpoint files in order to enforce write once backups.
-	// When the job goes to read these timestamped files, it will List
-	// the checkpoints and pick the file whose name is lexicographically
-	// sorted to the top. This will be the last checkpoint we write, for
-	// details refer to newTimestampedCheckpointFileName.
-	filename := newTimestampedCheckpointFileName()
-
-	// HTTP storage does not support listing and so we cannot rely on the
-	// above-mentioned List method to return us the latest checkpoint file.
-	// Instead, we will write a checkpoint once with a well-known filename,
-	// and teach the job to always reach for that filename in the face of
-	// a resume. We may lose progress, but this is a cost we are willing
-	// to pay to uphold write-once semantics.
-	if defaultStore.Conf().Provider == roachpb.ExternalStorageProvider_http {
-		// TODO (darryl): We should do this only for file not found or directory
-		// does not exist errors. As of right now we only specifically wrap
-		// ReadFile errors for file not found so this is not possible yet.
-		if r, err := defaultStore.ReadFile(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName); err != nil {
-			// Since we did not find the checkpoint file this is the first time
-			// we are going to write a checkpoint, so write it with the well
-			// known filename.
-			filename = backupManifestCheckpointName
-		} else {
-			err = r.Close(ctx)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	err = cloud.WriteFile(ctx, defaultStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
-	if err != nil {
-		return errors.Wrap(err, "calculating checksum")
-	}
-
-	// Write the checksum file after we've successfully wrote the checkpoint.
-	checksum, err := getChecksum(descBuf)
-	if err != nil {
-		return errors.Wrap(err, "calculating checksum")
-	}
-
-	err = cloud.WriteFile(ctx, defaultStore, backupProgressDirectory+"/"+filename+backupManifestChecksumSuffix, bytes.NewReader(checksum))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // planSchedulePTSChaining populates backupDetails with information relevant to
 // the chaining of protected timestamp records between scheduled backups.
 // Depending on whether backupStmt is a full or incremental backup, we populate
@@ -1206,7 +1094,7 @@ func getBackupDetailAndManifest(
 	}
 	defer defaultStore.Close()
 
-	if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
+	if err := backupinfo.CheckForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
@@ -1215,7 +1103,7 @@ func getBackupDetailAndManifest(
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	prevBackups, encryptionOptions, memSize, err := fetchPreviousBackups(ctx, &mem, user,
+	prevBackups, encryptionOptions, memSize, err := backupinfo.FetchPreviousBackups(ctx, &mem, user,
 		makeCloudStorage, prevs, *initialDetails.EncryptionOptions, kmsEnv)
 
 	if err != nil {
@@ -1353,6 +1241,9 @@ func getTenantInfo(
 	return spans, tenants, nil
 }
 
+// TODO(adityamaru): We need to move this method into manifest_handling.go but
+// the method needs to be decomposed to decouple it from other planning related
+// operations.
 func createBackupManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -1396,7 +1287,7 @@ func createBackupManifest(
 			tables = append(tables, desc)
 			// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
 			// vs having each object in a separate file, or somewhere in between.
-			statsFiles[desc.GetID()] = backupStatisticsFileName
+			statsFiles[desc.GetID()] = backupinfo.BackupStatisticsFileName
 		}
 	}
 
@@ -1485,7 +1376,7 @@ func createBackupManifest(
 		CompleteDbs:         jobDetails.ResolvedCompleteDbs,
 		Spans:               spans,
 		IntroducedSpans:     newSpans,
-		FormatVersion:       BackupFormatDescriptorTrackingVersion,
+		FormatVersion:       backupinfo.BackupFormatDescriptorTrackingVersion,
 		BuildInfo:           build.GetInfo(),
 		ClusterVersion:      execCfg.Settings.Version.ActiveVersion(ctx).Version,
 		ClusterID:           execCfg.LogicalClusterID(),

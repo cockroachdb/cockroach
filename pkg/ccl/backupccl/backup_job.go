@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -249,7 +250,7 @@ func backup(
 
 				lastCheckpoint = timeutil.Now()
 
-				err := writeBackupManifestCheckpoint(
+				err := backupinfo.WriteBackupManifestCheckpoint(
 					ctx, defaultURI, encryption, backupManifest, execCtx.ExecCfg(), execCtx.User(),
 				)
 				if err != nil {
@@ -296,8 +297,8 @@ func backup(
 			// Set a unique filename for each partition backup descriptor. The ID
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
-			filename := fmt.Sprintf("%s_%d_%s",
-				backupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
+			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
+				nextPartitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
 			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
 			desc := backuppb.BackupPartitionDescriptor{
@@ -312,7 +313,7 @@ func backup(
 					return err
 				}
 				defer store.Close()
-				return writeBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
+				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
 			}(); err != nil {
 				return roachpb.RowCount{}, err
 			}
@@ -320,7 +321,8 @@ func backup(
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
-	if err := writeBackupManifest(ctx, settings, defaultStore, backupbase.BackupManifestName, encryption, backupManifest); err != nil {
+	if err := backupinfo.WriteBackupManifest(ctx, settings, defaultStore, backupbase.BackupManifestName,
+		encryption, backupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
@@ -350,12 +352,12 @@ func backup(
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup table statistics"})
-	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
+	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &statsTable); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
-	if writeMetadataSST.Get(&settings.SV) {
-		if err := writeBackupMetadataSST(ctx, defaultStore, encryption, backupManifest, tableStatistics); err != nil {
+	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
+		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, backupManifest, tableStatistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
 			if !build.IsRelease() {
 				return roachpb.RowCount{}, err
@@ -454,7 +456,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 
-		if err := writeBackupManifestCheckpoint(
+		if err := backupinfo.WriteBackupManifestCheckpoint(
 			ctx, details.URI, details.EncryptionOptions, backupManifest, p.ExecCfg(), p.User(),
 		); err != nil {
 			return err
@@ -736,20 +738,21 @@ func (b *backupResumer) readManifestOnResume(
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	desc, memSize, err := readBackupCheckpointManifest(ctx, mem, defaultStore, backupManifestCheckpointName,
-		details.EncryptionOptions)
+	desc, memSize, err := backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
+		backupinfo.BackupManifestCheckpointName, details.EncryptionOptions)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 		}
 		// Try reading temp checkpoint.
-		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
-		desc, memSize, err = readBackupCheckpointManifest(ctx, mem, defaultStore, tmpCheckpoint, details.EncryptionOptions)
+		tmpCheckpoint := backupinfo.TempCheckpointFileNameForJob(b.job.ID())
+		desc, memSize, err = backupinfo.ReadBackupCheckpointManifest(ctx, mem, defaultStore,
+			tmpCheckpoint, details.EncryptionOptions)
 		if err != nil {
 			return nil, 0, err
 		}
 		// "Rename" temp checkpoint.
-		if err := writeBackupManifestCheckpoint(
+		if err := backupinfo.WriteBackupManifestCheckpoint(
 			ctx, details.URI, details.EncryptionOptions, &desc, cfg, user,
 		); err != nil {
 			mem.Shrink(ctx, memSize)
@@ -759,8 +762,8 @@ func (b *backupResumer) readManifestOnResume(
 		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
 			log.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
 		}
-		if err := defaultStore.Delete(ctx, backupProgressDirectory+"/"+tmpCheckpoint); err != nil {
-			log.Errorf(ctx, "error removing temporary checkpoint %s", backupProgressDirectory+"/"+tmpCheckpoint)
+		if err := defaultStore.Delete(ctx, backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint); err != nil {
+			log.Errorf(ctx, "error removing temporary checkpoint %s", backupinfo.BackupProgressDirectory+"/"+tmpCheckpoint)
 		}
 	}
 
@@ -856,18 +859,18 @@ func (b *backupResumer) deleteCheckpoint(
 		defer exportStore.Close()
 		// We first attempt to delete from base directory to account for older
 		// backups, and then from the progress directory.
-		err = exportStore.Delete(ctx, backupManifestCheckpointName)
+		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName)
 		if err != nil {
 			log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in base directory: %+v", err)
 		}
-		err = exportStore.Delete(ctx, backupManifestCheckpointName+backupManifestChecksumSuffix)
+		err = exportStore.Delete(ctx, backupinfo.BackupManifestCheckpointName+backupinfo.BackupManifestChecksumSuffix)
 		if err != nil {
 			log.Warningf(ctx, "unable to delete checkpoint checksum file in base directory: %+v", err)
 		}
 		// Delete will not delete a nonempty directory, so we have to go through
 		// all files and delete each file one by one.
-		return exportStore.List(ctx, backupProgressDirectory, "", func(p string) error {
-			return exportStore.Delete(ctx, backupProgressDirectory+p)
+		return exportStore.List(ctx, backupinfo.BackupProgressDirectory, "", func(p string) error {
+			return exportStore.Delete(ctx, backupinfo.BackupProgressDirectory+p)
 		})
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
