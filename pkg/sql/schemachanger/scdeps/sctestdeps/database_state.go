@@ -44,7 +44,7 @@ WHERE job_type = 'SCHEMA CHANGE'
 		[][]string{{"0"}})
 }
 
-// ReadDescriptorsFromDB reads the set of d
+// ReadDescriptorsFromDB reads the set of descriptors from tdb.
 func ReadDescriptorsFromDB(
 	ctx context.Context, t *testing.T, tdb *sqlutils.SQLRunner,
 ) nstree.MutableCatalog {
@@ -86,7 +86,7 @@ ORDER BY id`)
 		case *tabledesc.Mutable:
 			t.TableDescriptor.ModificationTime = hlc.Timestamp{}
 			if t.TableDescriptor.CreateAsOfTime != (hlc.Timestamp{}) {
-				t.TableDescriptor.CreateAsOfTime = hlc.Timestamp{WallTime: 1}
+				t.TableDescriptor.CreateAsOfTime = hlc.Timestamp{WallTime: defaultOverriddenCreatedAt.UnixNano()}
 			}
 			if t.TableDescriptor.DropTime != 0 {
 				t.TableDescriptor.DropTime = 1

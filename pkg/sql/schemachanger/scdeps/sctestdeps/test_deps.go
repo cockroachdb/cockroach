@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -394,7 +396,7 @@ func (s *TestState) mayGetByName(
 		ParentSchemaID: parentSchemaID,
 		Name:           name,
 	}
-	ne := s.catalog.LookupNamespaceEntry(key)
+	ne := s.uncommitted.LookupNamespaceEntry(key)
 	if ne == nil {
 		return nil
 	}
@@ -405,11 +407,8 @@ func (s *TestState) mayGetByName(
 	if id == keys.PublicSchemaID {
 		return schemadesc.GetPublicSchema()
 	}
-	b := s.descBuilder(id)
-	if b == nil {
-		return nil
-	}
-	return b.BuildImmutable()
+	desc, _ := s.mustReadImmutableDescriptor(id)
+	return desc
 }
 
 // ReadObjectNamesAndIDs implements the scbuild.CatalogReader interface.
@@ -417,7 +416,7 @@ func (s *TestState) ReadObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
 ) (names tree.TableNames, ids descpb.IDs) {
 	m := make(map[string]descpb.ID)
-	_ = s.catalog.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	_ = s.uncommitted.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
 		if e.GetParentID() == db.GetID() && e.GetParentSchemaID() == schema.GetID() {
 			m[e.GetName()] = e.GetID()
 			names = append(names, tree.MakeTableNameWithSchema(
@@ -542,39 +541,42 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
-func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
-	if s.synthetic.LookupDescriptorEntry(id) != nil {
-		return nil, errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
+// mustReadImmutableDescriptor looks up a descriptor and returns a immutable
+// deep copy.
+func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descriptor, error) {
+	if u := s.uncommitted.LookupDescriptorEntry(id); u != nil {
+		return u.NewBuilder().BuildImmutable(), nil
 	}
-	b := s.descBuilder(id)
-	if b == nil {
+	return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
+}
+
+// mustReadMutableDescriptor looks up a descriptor and returns a mutable
+// deep copy.
+func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
+	u := s.uncommitted.LookupDescriptorEntry(id)
+	if u == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
 	}
-	return b.BuildExistingMutable(), nil
-}
-
-func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descriptor, error) {
-	b := s.descBuilderWithSynthetic(id)
-	if b == nil {
-		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
+	c := s.committed.LookupDescriptorEntry(id)
+	if c == nil {
+		return u.NewBuilder().BuildCreatedMutable(), nil
 	}
-	return b.BuildImmutable(), nil
-}
-
-// descBuilder is used to ensure that the contents of descs are copied on read.
-func (s *TestState) descBuilder(id descpb.ID) catalog.DescriptorBuilder {
-	if desc := s.catalog.LookupDescriptorEntry(id); desc != nil {
-		return desc.NewBuilder()
+	mut := c.NewBuilder().BuildExistingMutable()
+	pb := u.NewBuilder().BuildImmutable().DescriptorProto()
+	tbl, db, typ, sc := descpb.FromDescriptorWithMVCCTimestamp(pb, s.mvccTimestamp())
+	switch m := mut.(type) {
+	case *tabledesc.Mutable:
+		m.TableDescriptor = *tbl
+	case *dbdesc.Mutable:
+		m.DatabaseDescriptor = *db
+	case *typedesc.Mutable:
+		m.TypeDescriptor = *typ
+	case *schemadesc.Mutable:
+		m.SchemaDescriptor = *sc
+	default:
+		return nil, errors.AssertionFailedf("Unknown mutable descriptor type %T", mut)
 	}
-	return nil
-}
-
-// descBuilder is used to ensure that the contents of descs are copied on read.
-func (s *TestState) descBuilderWithSynthetic(id descpb.ID) catalog.DescriptorBuilder {
-	if desc := s.synthetic.LookupDescriptorEntry(id); desc != nil {
-		return desc.NewBuilder()
-	}
-	return s.descBuilder(id)
+	return mut, nil
 }
 
 var _ scexec.Dependencies = (*TestState)(nil)
@@ -609,16 +611,6 @@ func (s *TestState) MustReadImmutableDescriptors(
 		out = append(out, d)
 	}
 	return out, nil
-}
-
-// AddSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
-func (s *TestState) AddSyntheticDescriptor(desc catalog.Descriptor) {
-	s.synthetic.UpsertDescriptorEntry(desc)
-}
-
-// RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
-func (s *TestState) RemoveSyntheticDescriptor(id descpb.ID) {
-	s.synthetic.DeleteDescriptorEntry(id)
 }
 
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
@@ -733,7 +725,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	})
 	for _, nameInfo := range names {
 		expectedID := b.namesToDelete[nameInfo]
-		ne := b.s.catalog.LookupNamespaceEntry(nameInfo)
+		ne := b.s.uncommitted.LookupNamespaceEntry(nameInfo)
 		if ne == nil {
 			return errors.AssertionFailedf(
 				"cannot delete missing namespace entry %v", nameInfo)
@@ -752,28 +744,28 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 			}
 		}
 		b.s.LogSideEffectf("delete %s namespace entry %v -> %d", nameType, nameInfo, expectedID)
-		b.s.catalog.DeleteNamespaceEntry(nameInfo)
+		b.s.uncommitted.DeleteNamespaceEntry(nameInfo)
 	}
 	for _, desc := range b.descs {
 		var old protoutil.Message
-		if b := b.s.descBuilder(desc.GetID()); b != nil {
-			old = b.BuildImmutable().DescriptorProto()
+		if d, _ := b.s.mustReadImmutableDescriptor(desc.GetID()); d != nil {
+			old = d.DescriptorProto()
 		}
 		diff := sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
 			Indent:       "  ",
 			CompactLevel: 3,
 		})
 		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), diff)
-		b.s.catalog.UpsertDescriptorEntry(desc)
+		b.s.uncommitted.UpsertDescriptorEntry(desc)
 	}
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
 		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
-		b.s.catalog.DeleteDescriptorEntry(deletedID)
+		b.s.uncommitted.DeleteDescriptorEntry(deletedID)
 	}
 	for _, deletedID := range b.zoneConfigsToDelete.Ordered() {
 		b.s.LogSideEffectf("deleting zone config for #%d", deletedID)
 	}
-	ve := b.s.catalog.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
+	ve := b.s.uncommitted.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
 	return ve.CombinedError()
 }
 

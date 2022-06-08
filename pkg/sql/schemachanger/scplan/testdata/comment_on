@@ -179,7 +179,7 @@ COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS 'this is a rule';
 ops
 COMMENT ON DATABASE db1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -203,7 +203,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
 ops
 COMMENT ON SCHEMA db1.sc1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 1 MutationType op
+StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -213,7 +213,7 @@ PreCommitPhase stage 1 of 1 with 1 MutationType op
 ops
 COMMENT ON TABLE db1.sc1.t1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -237,7 +237,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
 ops
 COMMENT ON COLUMN db1.sc1.t1.id IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -265,7 +265,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
 ops
 COMMENT ON INDEX db1.sc1.t1_pkey IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -291,7 +291,7 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
 ops
 COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS NULL;
 ----
-PreCommitPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, ABSENT], PUBLIC] -> ABSENT
   ops:

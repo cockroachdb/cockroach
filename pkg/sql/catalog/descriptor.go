@@ -218,7 +218,7 @@ type Descriptor interface {
 	// was changed after running RunPostDeserializationChanges.
 	GetPostDeserializationChanges() PostDeserializationChanges
 
-	// HasConcurrentSchemaChanges returns if declarative schema
+	// HasConcurrentSchemaChanges returns true if declarative schema
 	// changes are currently in progress.
 	HasConcurrentSchemaChanges() bool
 }

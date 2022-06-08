@@ -15,19 +15,16 @@ increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType op
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 6 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 delete schema namespace entry {104 0 sc} -> 106
 upsert descriptor #104
    database:
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    jobId: "1"
      id: 104
-     modificationTime: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: db
+     privileges:
   ...
        public:
          id: 105
@@ -35,6 +32,36 @@ upsert descriptor #104
   -      id: 106
   -  version: "2"
   +  version: "3"
+upsert descriptor #106
+   schema:
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sc
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     id: 104
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: db
+     privileges:
+  ...
 upsert descriptor #106
    schema:
   +  declarativeSchemaChangerState:
@@ -112,18 +139,17 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 106
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sc
+     parentId: 104
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
 create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
-commit transaction #1
 notified job registry to adopt jobs: [1]
+commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -136,7 +162,11 @@ upsert descriptor #104
   -      userName: root
   -    jobId: "1"
      id: 104
-     modificationTime: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: db
+     privileges:
   ...
        public:
          id: 105
@@ -166,15 +196,38 @@ checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 1 MutationType op
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 4 MutationType ops
 delete object namespace entry {104 107 t} -> 108
 upsert descriptor #108
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 108
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: t
+     nextColumnId: 4
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 107
+  -  version: "1"
+  +  version: "2"
+delete all comments for table descriptors [108]
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -499,22 +552,22 @@ upsert descriptor #108
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: ABSENT
-  +  dropTime: <redacted>"
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 107
-  -  version: "1"
-  +  version: "2"
-delete all comments for table descriptors [108]
+     formatVersion: 3
+     id: 108
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: t
+     nextColumnId: 4
+  ...
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [108]
 # end PreCommitPhase
-commit transaction #1
 notified job registry to adopt jobs: [1]
+commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -523,7 +576,7 @@ begin transaction #3
 upsert descriptor #108
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -851,6 +904,14 @@ upsert descriptor #108
      dropTime: <redacted>"
      families:
   ...
+     formatVersion: 3
+     id: 108
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: t
+     nextColumnId: 4
+  ...
      state: DROP
      unexposedParentSchemaId: 107
   -  version: "2"
@@ -859,8 +920,8 @@ write *eventpb.DropTable to event log for descriptor #108: DROP TABLE ‹db›.�
 create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [108]
 update progress of schema change job #1: "all stages completed"
-commit transaction #3
 notified job registry to adopt jobs: [2]
+commit transaction #3
 # end PostCommitPhase
 
 test
@@ -871,21 +932,18 @@ increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 3 MutationType ops
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 7 MutationType ops
 delete schema namespace entry {104 0 sc} -> 107
 delete object namespace entry {104 107 e} -> 109
 delete object namespace entry {104 107 _e} -> 110
 upsert descriptor #104
    database:
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    jobId: "1"
      id: 104
-     modificationTime: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: db
+     privileges:
   ...
        public:
          id: 105
@@ -893,6 +951,66 @@ upsert descriptor #104
   -      id: 107
   -  version: "5"
   +  version: "6"
+upsert descriptor #107
+   schema:
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sc
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #109
+  ...
+       physicalRepresentation: wA==
+     id: 109
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: e
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #110
+  ...
+     id: 110
+     kind: ALIAS
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: _e
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 5 MutationType ops
+upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     id: 104
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: db
+     privileges:
+  ...
 upsert descriptor #107
    schema:
   +  declarativeSchemaChangerState:
@@ -970,13 +1088,12 @@ upsert descriptor #107
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 107
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sc
+     parentId: 104
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
 upsert descriptor #109
    type:
      arrayTypeId: 110
@@ -1070,11 +1187,14 @@ upsert descriptor #109
      enumMembers:
      - logicalRepresentation: a
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
+       physicalRepresentation: wA==
+     id: 109
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: e
+     parentId: 104
+  ...
 upsert descriptor #110
   ...
        family: ArrayFamily
@@ -1180,17 +1300,17 @@ upsert descriptor #110
   +      targetStatus: ABSENT
      id: 110
      kind: ALIAS
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: _e
+     parentId: 104
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
 create job #1 (non-cancelable: true): "DROP SCHEMA db.sc CASCADE"
   descriptor IDs: [104 107 109 110]
 # end PreCommitPhase
-commit transaction #1
 notified job registry to adopt jobs: [1]
+commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1203,7 +1323,11 @@ upsert descriptor #104
   -      userName: root
   -    jobId: "1"
      id: 104
-     modificationTime: {}
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: db
+     privileges:
   ...
        public:
          id: 105
@@ -1224,12 +1348,41 @@ checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 2 MutationType ops
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 delete database namespace entry {0 0 db} -> 104
 delete schema namespace entry {104 0 public} -> 105
+upsert descriptor #104
+   database:
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: db
+     privileges:
+  ...
+       public:
+         id: 105
+  -  version: "7"
+  +  state: DROP
+  +  version: "8"
+upsert descriptor #105
+   schema:
+     id: 105
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: public
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+delete role settings for database on #104
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
@@ -1317,13 +1470,12 @@ upsert descriptor #104
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 104
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: db
+     privileges:
   ...
-       public:
-         id: 105
-  -  version: "7"
-  +  state: DROP
-  +  version: "8"
 upsert descriptor #105
    schema:
   +  declarativeSchemaChangerState:
@@ -1413,19 +1565,17 @@ upsert descriptor #105
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 105
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: public
+     parentId: 104
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
-delete role settings for database on #104
 create job #1 (non-cancelable: true): "DROP DATABASE db CASCADE"
   descriptor IDs: [104 105]
 # end PreCommitPhase
-commit transaction #1
 notified job registry to adopt jobs: [1]
+commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
@@ -1478,10 +1628,7 @@ checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 15 MutationType ops
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 105 MutationType ops
+## StatementPhase stage 1 of 1 with 56 MutationType ops
 delete database namespace entry {0 0 db1} -> 111
 delete schema namespace entry {111 0 public} -> 112
 delete schema namespace entry {111 0 sc1} -> 113
@@ -1497,6 +1644,267 @@ delete object namespace entry {111 113 v4} -> 122
 delete object namespace entry {111 113 typ} -> 123
 delete object namespace entry {111 113 _typ} -> 124
 delete object namespace entry {111 113 v5} -> 125
+upsert descriptor #111
+   database:
+     id: 111
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: db1
+     privileges:
+  ...
+       sc1:
+         id: 113
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #112
+   schema:
+     id: 112
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: public
+     parentId: 111
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #113
+   schema:
+     id: 113
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sc1
+     parentId: 111
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #114
+  ...
+     formatVersion: 3
+     id: 114
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 111
+  ...
+       sequenceOwner: {}
+       start: "1"
+  +  state: DROP
+     unexposedParentSchemaId: 112
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #115
+  ...
+     formatVersion: 3
+     id: 115
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 111
+  ...
+       sequenceOwner: {}
+       start: "1"
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #116
+  ...
+       - 2
+       id: 119
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 116
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: t1
+     nextColumnId: 4
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #117
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 117
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: t1
+     nextColumnId: 4
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 112
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #118
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 118
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: ttl
+     nextColumnId: 3
+  ...
+       durationExpr: '''00:10:00'':::INTERVAL'
+       scheduleId: <redacted>
+  +  state: DROP
+     unexposedParentSchemaId: 112
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #119
+  ...
+     formatVersion: 3
+     id: 119
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: v1
+     nextColumnId: 2
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "3"
+  +  version: "4"
+     viewQuery: (SELECT name FROM db1.sc1.t1)
+upsert descriptor #120
+  ...
+     formatVersion: 3
+     id: 120
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: v2
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "3"
+  +  version: "4"
+     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+upsert descriptor #121
+  ...
+     formatVersion: 3
+     id: 121
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: v3
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "1"
+  +  version: "2"
+     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
+upsert descriptor #122
+  ...
+     formatVersion: 3
+     id: 122
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: v4
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "2"
+  +  version: "3"
+     viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
+upsert descriptor #123
+  ...
+       physicalRepresentation: gA==
+     id: 123
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: typ
+     parentId: 111
+  ...
+     referencingDescriptorIds:
+     - 125
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #124
+  ...
+     id: 124
+     kind: ALIAS
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: _typ
+     parentId: 111
+  ...
+     referencingDescriptorIds:
+     - 125
+  -  version: "2"
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #125
+  ...
+     formatVersion: 3
+     id: 125
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: v5
+     nextColumnId: 4
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "1"
+  +  version: "2"
+     viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
+delete all comments for table descriptors [114 115 116 117 118 119 120 121 122 125]
+delete role settings for database on #111
+delete scheduleId: <redacted>
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 16 MutationType ops
 upsert descriptor #111
    database:
   +  declarativeSchemaChangerState:
@@ -1584,13 +1992,12 @@ upsert descriptor #111
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 111
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: db1
+     privileges:
   ...
-       sc1:
-         id: 113
-  -  version: "2"
-  +  state: DROP
-  +  version: "3"
 upsert descriptor #112
    schema:
   +  declarativeSchemaChangerState:
@@ -1680,13 +2087,12 @@ upsert descriptor #112
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 112
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: public
+     parentId: 111
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
 upsert descriptor #113
    schema:
   +  declarativeSchemaChangerState:
@@ -1764,17 +2170,16 @@ upsert descriptor #113
   +        subWorkId: 1
   +      targetStatus: ABSENT
      id: 113
-     modificationTime: {}
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sc1
+     parentId: 111
   ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
 upsert descriptor #114
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -1853,16 +2258,18 @@ upsert descriptor #114
      dependedOnBy:
      - byId: true
   ...
-       sequenceOwner: {}
-       start: "1"
-  +  state: DROP
-     unexposedParentSchemaId: 112
-  -  version: "2"
-  +  version: "3"
+     formatVersion: 3
+     id: 114
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sq1
+     parentId: 111
+  ...
 upsert descriptor #115
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -1941,16 +2348,18 @@ upsert descriptor #115
      dependedOnBy:
      - byId: true
   ...
-       sequenceOwner: {}
-       start: "1"
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "2"
-  +  version: "3"
+     formatVersion: 3
+     id: 115
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sq1
+     parentId: 111
+  ...
 upsert descriptor #116
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -2280,22 +2689,19 @@ upsert descriptor #116
   +      targetStatus: ABSENT
      dependedOnBy:
      - columnIds:
-       - 2
-       id: 119
-  +  dropTime: <redacted>"
-     families:
-     - columnIds:
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "2"
-  +  version: "3"
+     formatVersion: 3
+     id: 116
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: t1
+     nextColumnId: 4
+  ...
 upsert descriptor #117
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -2623,20 +3029,21 @@ upsert descriptor #117
   +        sourceElementId: 3
   +        subWorkId: 1
   +      targetStatus: ABSENT
-  +  dropTime: <redacted>"
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 112
-  -  version: "1"
-  +  version: "2"
+     formatVersion: 3
+     id: 117
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: t1
+     nextColumnId: 4
+  ...
 upsert descriptor #118
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -2664,7 +3071,7 @@ upsert descriptor #118
   +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
-  +    - PUBLIC
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -2944,20 +3351,21 @@ upsert descriptor #118
   +        sourceElementId: 3
   +        subWorkId: 1
   +      targetStatus: ABSENT
-  +  dropTime: <redacted>"
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
-       durationExpr: '''00:10:00'':::INTERVAL'
-       scheduleId: <redacted>
-  +  state: DROP
-     unexposedParentSchemaId: 112
-  -  version: "1"
-  +  version: "2"
+     formatVersion: 3
+     id: 118
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: ttl
+     nextColumnId: 3
+  ...
 upsert descriptor #119
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -3158,17 +3566,18 @@ upsert descriptor #119
      dependedOnBy:
      - columnIds:
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "3"
-  +  version: "4"
-     viewQuery: (SELECT name FROM db1.sc1.t1)
+     formatVersion: 3
+     id: 119
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v1
+     nextColumnId: 2
+  ...
 upsert descriptor #120
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -3409,17 +3818,18 @@ upsert descriptor #120
      dependedOnBy:
      - columnIds:
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "3"
-  +  version: "4"
-     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+     formatVersion: 3
+     id: 120
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v2
+     nextColumnId: 3
+  ...
 upsert descriptor #121
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -3661,17 +4071,18 @@ upsert descriptor #121
      dependsOn:
      - 119
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "1"
-  +  version: "2"
-     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
+     formatVersion: 3
+     id: 121
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v3
+     nextColumnId: 3
+  ...
 upsert descriptor #122
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -3912,13 +4323,14 @@ upsert descriptor #122
      dependedOnBy:
      - columnIds:
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "2"
-  +  version: "3"
-     viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
+     formatVersion: 3
+     id: 122
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v4
+     nextColumnId: 3
+  ...
 upsert descriptor #123
    type:
      arrayTypeId: 124
@@ -4011,12 +4423,14 @@ upsert descriptor #123
   +      targetStatus: ABSENT
      enumMembers:
      - logicalRepresentation: a
+       physicalRepresentation: gA==
+     id: 123
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: typ
+     parentId: 111
   ...
-     referencingDescriptorIds:
-     - 125
-  -  version: "2"
-  +  state: DROP
-  +  version: "3"
 upsert descriptor #124
   ...
        family: ArrayFamily
@@ -4122,16 +4536,16 @@ upsert descriptor #124
   +      targetStatus: ABSENT
      id: 124
      kind: ALIAS
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: _typ
+     parentId: 111
   ...
-     referencingDescriptorIds:
-     - 125
-  -  version: "2"
-  +  state: DROP
-  +  version: "3"
 upsert descriptor #125
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
@@ -4413,29 +4827,28 @@ upsert descriptor #125
      dependsOn:
      - 122
   ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "1"
-  +  version: "2"
-     viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
-delete all comments for table descriptors [114 115 116 117 118 119 120 121 122 125]
-delete role settings for database on #111
+     formatVersion: 3
+     id: 125
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v5
+     nextColumnId: 4
+  ...
 create job #1 (non-cancelable: true): "DROP DATABASE db1 CASCADE"
   descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]
 # end PreCommitPhase
-commit transaction #1
 notified job registry to adopt jobs: [1]
+commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 82 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 81 MutationType ops
 upsert descriptor #114
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -4514,6 +4927,14 @@ upsert descriptor #114
      dependedOnBy:
      - byId: true
   ...
+     formatVersion: 3
+     id: 114
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 111
+  ...
      state: DROP
      unexposedParentSchemaId: 112
   -  version: "3"
@@ -4521,7 +4942,7 @@ upsert descriptor #114
 upsert descriptor #115
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -4600,6 +5021,14 @@ upsert descriptor #115
      dependedOnBy:
      - byId: true
   ...
+     formatVersion: 3
+     id: 115
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 111
+  ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "3"
@@ -4607,7 +5036,7 @@ upsert descriptor #115
 upsert descriptor #116
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -4938,6 +5367,14 @@ upsert descriptor #116
      dependedOnBy:
      - columnIds:
   ...
+     formatVersion: 3
+     id: 116
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: t1
+     nextColumnId: 4
+  ...
      state: DROP
      unexposedParentSchemaId: 113
   -  version: "3"
@@ -4945,7 +5382,7 @@ upsert descriptor #116
 upsert descriptor #117
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -5276,6 +5713,14 @@ upsert descriptor #117
      dropTime: <redacted>"
      families:
   ...
+     formatVersion: 3
+     id: 117
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: t1
+     nextColumnId: 4
+  ...
      state: DROP
      unexposedParentSchemaId: 112
   -  version: "2"
@@ -5283,7 +5728,7 @@ upsert descriptor #117
 upsert descriptor #118
   ...
      createAsOfTime:
-       wallTime: "1"
+       wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
@@ -5311,7 +5756,7 @@ upsert descriptor #118
   -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
-  -    - PUBLIC
+  -    - ABSENT
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -5594,6 +6039,14 @@ upsert descriptor #118
      dropTime: <redacted>"
      families:
   ...
+     formatVersion: 3
+     id: 118
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: ttl
+     nextColumnId: 3
+  ...
      state: DROP
      unexposedParentSchemaId: 112
   -  version: "2"
@@ -5609,10 +6062,9 @@ delete descriptor #123
 delete descriptor #124
 delete descriptor #125
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
-delete scheduleId: <redacted>
 create job #2 (non-cancelable: true): "GC for DROP DATABASE db1 CASCADE"
   descriptor IDs: [114 115 116 117 118 111]
 update progress of schema change job #1: "all stages completed"
-commit transaction #3
 notified job registry to adopt jobs: [2]
+commit transaction #3
 # end PostCommitPhase

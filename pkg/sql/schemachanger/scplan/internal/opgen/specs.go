@@ -10,10 +10,7 @@
 
 package opgen
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 
 type targetSpec struct {
 	from, to        scpb.Status
@@ -24,7 +21,6 @@ type transitionSpec struct {
 	from       scpb.Status
 	to         scpb.Status
 	revertible bool
-	minPhase   scop.Phase
 	emitFns    []interface{}
 }
 
@@ -47,18 +43,8 @@ func revertible(b bool) transitionProperty {
 	return revertibleProperty(b)
 }
 
-func minPhase(p scop.Phase) transitionProperty {
-	return phaseProperty(p)
-}
-
 func emit(fn interface{}) transitionProperty {
 	return emitFnSpec{fn}
-}
-
-type phaseProperty scop.Phase
-
-func (p phaseProperty) apply(spec *transitionSpec) {
-	spec.minPhase = scop.Phase(p)
 }
 
 type revertibleProperty bool

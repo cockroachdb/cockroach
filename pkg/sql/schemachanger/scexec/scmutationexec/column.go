@@ -156,29 +156,31 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 func (m *visitor) RemoveDroppedColumnType(
 	ctx context.Context, op scop.RemoveDroppedColumnType,
 ) error {
-	if desc, err := m.s.GetDescriptor(ctx, op.TableID); err != nil || desc.Dropped() {
-		return err
-	}
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	mut, err := FindMutation(tbl, MakeColumnIDMutationSelector(op.ColumnID))
-	if err != nil {
+	if err != nil || mut.AsColumn().IsSystemColumn() {
 		return err
 	}
 	col := mut.AsColumn().ColumnDesc()
-	col.ComputeExpr = nil
 	col.Type = types.Any
+	if col.IsComputed() {
+		// This operation needs to zero the computed column expression to remove
+		// any references to sequences and whatnot but it can't simply remove the
+		// expression entirely, otherwise in the case of virtual computed columns
+		// the column descriptor will then be interpreted as a virtual non-computed
+		// column, which doesn't make any sense.
+		null := tree.Serialize(tree.DNull)
+		col.ComputeExpr = &null
+	}
 	return nil
 }
 
 func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
-	if desc, err := m.s.GetDescriptor(ctx, op.TableID); err != nil || desc.Dropped() {
-		return err
-	}
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	mut, err := m.removeMutation(tbl, MakeColumnIDMutationSelector(op.ColumnID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
@@ -252,11 +254,8 @@ func (m *visitor) AddColumnDefaultExpression(
 func (m *visitor) RemoveColumnDefaultExpression(
 	ctx context.Context, op scop.RemoveColumnDefaultExpression,
 ) error {
-	if desc, err := m.s.GetDescriptor(ctx, op.TableID); err != nil || desc.Dropped() {
-		return err
-	}
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	col, err := tbl.FindColumnWithID(op.ColumnID)
@@ -296,11 +295,8 @@ func (m *visitor) AddColumnOnUpdateExpression(
 func (m *visitor) RemoveColumnOnUpdateExpression(
 	ctx context.Context, op scop.RemoveColumnOnUpdateExpression,
 ) error {
-	if desc, err := m.s.GetDescriptor(ctx, op.TableID); err != nil || desc.Dropped() {
-		return err
-	}
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	col, err := tbl.FindColumnWithID(op.ColumnID)

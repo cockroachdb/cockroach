@@ -43,7 +43,7 @@ type Rule2 = func(a, b Var) Clause
 // Rule3 is a rule with three input variables.
 type Rule3 = func(a, b, c Var) Clause
 
-// Rule4 is a rule with three input variables.
+// Rule4 is a rule with four input variables.
 type Rule4 = func(a, b, c, d Var) Clause
 
 // Def1 defines a Rule1.

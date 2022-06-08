@@ -21,7 +21,6 @@ func init() {
 		toTransientAbsent(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.TemporaryIndex) scop.Op {
 					return &scop.MakeAddedTempIndexDeleteOnly{
 						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
@@ -30,7 +29,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.TemporaryIndex) scop.Op {
 					return &scop.MakeAddedIndexDeleteAndWriteOnly{
 						TableID: this.TableID,
