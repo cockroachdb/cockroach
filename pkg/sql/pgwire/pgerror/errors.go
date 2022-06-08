@@ -162,7 +162,7 @@ func IsSQLRetryableError(err error) bool {
 	// here.
 	errString := FullError(err)
 	matched, merr := regexp.MatchString(
-		"(no inbound stream connection|connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|EOF|result is ambiguous)",
+		"(no inbound stream connection|connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|(^|\\s)EOF|result is ambiguous)",
 		errString)
 	if merr != nil {
 		return false

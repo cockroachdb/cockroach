@@ -267,6 +267,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
     *scop.LogEvent
       Element:
         View:
+          forwardReferences:
+          - columnIds:
+            - 2
+            - 4
+            toId: 109
           usesRelationIds:
           - 109
           viewId: 111

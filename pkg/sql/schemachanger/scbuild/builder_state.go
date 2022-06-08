@@ -742,12 +742,12 @@ func (b *builderState) ResolveIndex(
 }
 
 // ResolveTableIndexBestEffort implements the scbuildstmt.NameResolver interface.
-func (b *builderState) ResolveTableIndexBestEffort(
-	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams, required bool,
+func (b *builderState) ResolveIndexByName(
+	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	found, prefix, tbl, idx := b.cr.MayResolveIndex(b.ctx, *tableIndexName)
 	if !found {
-		if required {
+		if !p.IsExistenceOptional {
 			panic(pgerror.Newf(pgcode.UndefinedObject, "index %q does not exist", tableIndexName.Index))
 		}
 		return nil

@@ -289,6 +289,22 @@ message View {
   repeated uint32 uses_type_ids = 2 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 
+  // a reference from this view to another relation, tracked down to index/column level.
+  message Reference {
+    option (gogoproto.equal) = true;
+    uint32 to_id = 1 [
+      (gogoproto.customname) = "ToID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+    // If applicable, the ID of `ToID` relation's index that is referenced by this view.
+    uint32 index_id = 2 [
+      (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+    // The IDs of `ToID` relation's columns that are referenced by this view.
+    repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  }
+  // all forward reference from this view -- it gives more details of those references than just
+  // referenced relation ids (which is stored in `uses_relation_ids`).
+  repeated Reference forward_references = 4 [(gogoproto.customname) = "ForwardReferences"];
+
   bool is_temporary = 10;
   bool is_materialized = 11;
 }

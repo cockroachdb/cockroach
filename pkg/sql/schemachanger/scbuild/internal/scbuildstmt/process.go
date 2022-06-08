@@ -60,6 +60,8 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {CommentOnColumn, true},
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {CommentOnIndex, true},
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {CommentOnConstraint, true},
+	// TODO (Xiang): turn on `DROP INDEX` as fully supported.
+	reflect.TypeOf((*tree.DropIndex)(nil)): {DropIndex, false},
 }
 
 func init() {
