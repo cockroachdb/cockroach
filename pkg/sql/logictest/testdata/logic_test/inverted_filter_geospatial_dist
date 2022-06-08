@@ -19,14 +19,14 @@ INSERT INTO geo_table VALUES
 
 # Not distributed.
 query I
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 3
 6
 7
 
 query I
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
 7
@@ -66,7 +66,7 @@ NULL                  /1152921574000000000  {1}       1
 
 # Distributed.
 query I
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 3
 6
@@ -74,7 +74,7 @@ SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::
 
 # Data is distributed, but the filterer can't be distributed since it is not a union.
 query I
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
 7
@@ -93,7 +93,7 @@ NULL                  /1152921574000000000  {2}       2
 /1152921574000000000  NULL                  {2}       2
 
 query I
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 3
 6
