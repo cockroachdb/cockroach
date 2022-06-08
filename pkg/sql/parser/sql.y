@@ -3294,13 +3294,13 @@ copy_options:
   {
     return unimplementedWithIssueDetail(sqllex, 41608, "header")
   }
-| QUOTE SCONST error
+| QUOTE SCONST
   {
     return unimplementedWithIssueDetail(sqllex, 41608, "quote")
   }
 | ESCAPE SCONST error
   {
-    return unimplementedWithIssueDetail(sqllex, 41608, "escape")
+    $$.val = &tree.CopyOptions{Escape: tree.NewStrVal($2)}
   }
 | FORCE QUOTE error
   {

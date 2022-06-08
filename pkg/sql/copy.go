@@ -59,6 +59,7 @@ type copyMachine struct {
 	columns       tree.NameList
 	resultColumns colinfo.ResultColumns
 	format        tree.CopyFormat
+	csvEscape     rune
 	delimiter     byte
 	// textDelim is delimiter converted to a []byte so that we don't have to do that per row.
 	textDelim   []byte
@@ -174,6 +175,24 @@ func newCopyMachine(
 			return nil, err
 		}
 	}
+	if n.Options.Escape != nil {
+		s := n.Options.Escape.RawString()
+		if len(s) != 1 {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE must be a single rune",
+			)
+		}
+
+		if c.format != tree.CopyFormatCSV {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"ESCAPE can only be specified for CSV",
+			)
+		}
+
+		c.csvEscape, _ = utf8.DecodeRuneInString(s)
+	}
 
 	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, &c.p, &n.Table, flags)
@@ -250,6 +269,9 @@ func (c *copyMachine) run(ctx context.Context) error {
 		c.csvReader.Comma = rune(c.delimiter)
 		c.csvReader.ReuseRecord = true
 		c.csvReader.FieldsPerRecord = len(c.resultColumns)
+		if c.csvEscape != 0 {
+			c.csvReader.Escape = c.csvEscape
+		}
 	}
 
 Loop:

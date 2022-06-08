@@ -60,6 +60,29 @@ ReadyForQuery
 {"Type":"ErrorResponse","Code":"57014","Message":"COPY from stdin failed: client received an error"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Invalid ESCAPE syntax.
+send
+Query {"String": "COPY t FROM STDIN ESCAPE 'xxx'"}
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "COPY t FROM STDIN ESCAPE 'x'"}
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # Wrong number of columns.
 send
 Query {"String": "COPY t FROM STDIN"}
@@ -77,12 +100,13 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Verify that only one COPY can run at once.
-send
+# This crashes PG, so only run on CRDB.
+send crdb_only
 Query {"String": "COPY t FROM STDIN"}
 Query {"String": "COPY t FROM STDIN"}
 ----
 
-until
+until crdb_only
 ErrorResponse
 ReadyForQuery
 ----
@@ -91,12 +115,13 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Verify that after a COPY has started another statement cannot run.
-send
+# This crashes PG, so only run on CRDB.
+send crdb_only
 Query {"String": "COPY t FROM STDIN"}
 Query {"String": "SELECT 2"}
 ----
 
-until ignore=RowDescription
+until ignore=RowDescription crdb_only
 ErrorResponse
 ReadyForQuery
 ----
@@ -263,6 +288,31 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN CSV ESCAPE 'x'"}
+CopyData {"Data": "1,\"x\"\"\n"}
+CopyData {"Data": "1,\"xxx\",xx\"\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"\""}]}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"x\",x"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
 Query {"String": "COPY t FROM STDIN CSV"}
 CopyData {"Data": "1\n"}
 CopyData {"Data": "\\.\n"}
@@ -290,7 +340,7 @@ ReadyForQuery
 ReadyForQuery
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"DELETE 3"}
+{"Type":"CommandComplete","CommandTag":"DELETE 2"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
 {"Type":"CommandComplete","CommandTag":"COPY 3"}
