@@ -1,0 +1,724 @@
+# Create an index with a dependent FK constraint and a dependent view.
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+CREATE UNIQUE INDEX idx ON t(j);
+CREATE TABLE another_t(i INT PRIMARY KEY, j INT REFERENCES t(j));
+CREATE VIEW v AS (SELECT j FROM t@idx);
+----
+...
++object {100 101 t} -> 104
++object {100 101 another_t} -> 105
++object {100 101 v} -> 106
+
+# Drop `idx` cascade will also drop the FK constraint from `another_t` and view `v`
+test
+DROP INDEX idx CASCADE
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP INDEX
+increment telemetry for sql.schema.drop_index
+## StatementPhase stage 1 of 1 with 11 MutationType ops
+delete object namespace entry {100 101 v} -> 106
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 106
+  -    indexId: 2
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 104
+  -  inboundFks:
+  -  - constraintId: 2
+  -    name: another_t_j_fkey
+  -    originColumnIds:
+  -    - 2
+  -    originTableId: 105
+  -    referencedColumnIds:
+  -    - 2
+  -    referencedTableId: 104
+  -  indexes:
+  -  - constraintId: 2
+  -    createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 2
+  -    keyColumnNames:
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    unique: true
+  -    version: 3
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  inboundFks: []
+  +  indexes: []
+  +  modificationTime: {}
+  +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      constraintId: 2
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      unique: true
+  +      version: 3
+  +    mutationId: 2
+  +    state: DELETE_AND_WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+upsert descriptor #105
+  ...
+     formatVersion: 3
+     id: 105
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: another_t
+     nextColumnId: 3
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  -  outboundFks:
+  -  - constraintId: 2
+  -    name: another_t_j_fkey
+  -    originColumnIds:
+  -    - 2
+  -    originTableId: 105
+  -    referencedColumnIds:
+  -    - 2
+  -    referencedTableId: 104
+  +  outboundFks: []
+     parentId: 100
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+     formatVersion: 3
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: v
+     nextColumnId: 2
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+     viewQuery: (SELECT j FROM defaultdb.public.t@idx)
+delete all comments for table descriptors [106]
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          kind: KEY_SUFFIX
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        secondaryIndex:
+  +          embeddedIndex:
+  +            constraintId: 2
+  +            indexId: 2
+  +            isCreatedExplicitly: true
+  +            isUnique: true
+  +            tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 2
+  +          name: idx
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+     inboundFks: []
+     indexes: []
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     mutations:
+     - direction: DROP
+  ...
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks:
+  +    - 4
+  +    - 5
+  +    targets:
+  +    - elementProto:
+  +        foreignKeyConstraint:
+  +          columnIds:
+  +          - 2
+  +          constraintId: 2
+  +          referencedColumnIds:
+  +          - 2
+  +          referencedTableId: 104
+  +          tableId: 105
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        constraintName:
+  +          constraintId: 2
+  +          name: another_t_j_fkey
+  +          tableId: 105
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 105
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: another_t
+     nextColumnId: 3
+  ...
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks:
+  +    - 6
+  +    - 7
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
+  +    - 17
+  +    - 18
+  +    - 19
+  +    - 20
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 100
+  +          descriptorId: 106
+  +          name: v
+  +          schemaId: 101
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 106
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        view:
+  +          forwardReferences:
+  +          - columnIds:
+  +            - 2
+  +            indexId: 2
+  +            toId: 104
+  +          usesRelationIds:
+  +          - 104
+  +          viewId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        objectParent:
+  +          objectId: 106
+  +          parentSchemaId: 101
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          pgAttributeNum: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: j
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 1
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967295e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967295e+09
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967295e+09
+  +          name: crdb_internal_mvcc_timestamp
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967295e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: DecimalFamily
+  +              oid: 1700
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 4.294967294e+09
+  +          isHidden: true
+  +          isSystemColumn: true
+  +          pgAttributeNum: 4.294967294e+09
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 4.294967294e+09
+  +          name: tableoid
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 4.294967294e+09
+  +          embeddedTypeT:
+  +            type:
+  +              family: OidFamily
+  +              oid: 26
+  +          isNullable: true
+  +          isRelationBeingDropped: true
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     dependsOn:
+     - 104
+     formatVersion: 3
+     id: 106
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: v
+     nextColumnId: 2
+  ...
+create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104 105 106]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+upsert descriptor #104
+  ...
+       - ABSENT
+       - ABSENT
+  -    - VALIDATED
+  +    - DELETE_ONLY
+       - ABSENT
+       jobId: "1"
+  ...
+     inboundFks: []
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     mutations:
+     - direction: DROP
+  ...
+         version: 3
+       mutationId: 2
+  -    state: DELETE_AND_WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "10"
+  +  version: "11"
+upsert descriptor #105
+  ...
+     formatVersion: 3
+     id: 105
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: another_t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+delete descriptor #106
+write *eventpb.DropView to event log for descriptor #106: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending"
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  -        statement: DROP INDEX idx CASCADE
+  -        statementTag: DROP INDEX
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          kind: KEY_SUFFIX
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        secondaryIndex:
+  -          embeddedIndex:
+  -            constraintId: 2
+  -            indexId: 2
+  -            isCreatedExplicitly: true
+  -            isUnique: true
+  -            tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 2
+  -          name: idx
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+     inboundFks: []
+     indexes: []
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 2
+  -      createdAtNanos: "1640995200000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 2
+  -      keyColumnNames:
+  -      - j
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      unique: true
+  -      version: 3
+  -    mutationId: 2
+  -    state: DELETE_ONLY
+  +  modificationTime: {}
+  +  mutations: []
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "11"
+  +  version: "12"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  -        statement: DROP INDEX idx CASCADE
+  -        statementTag: DROP INDEX
+  -    targetRanks:
+  -    - 4
+  -    - 5
+  -    targets:
+  -    - elementProto:
+  -        foreignKeyConstraint:
+  -          columnIds:
+  -          - 2
+  -          constraintId: 2
+  -          referencedColumnIds:
+  -          - 2
+  -          referencedTableId: 104
+  -          tableId: 105
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        constraintName:
+  -          constraintId: 2
+  -          name: another_t_j_fkey
+  -          tableId: 105
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 105
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  +  modificationTime: {}
+     name: another_t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+write *eventpb.FinishSchemaChange to event log for descriptor 104
+write *eventpb.DropIndex to event log for descriptor #104: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+commit transaction #4
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

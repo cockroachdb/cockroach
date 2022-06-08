@@ -785,11 +785,19 @@ DROP OWNED BY r
     userName: r
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 2
+      toId: 108
     usesRelationIds:
     - 108
     viewId: 110
 - [[View:{DescID: 113}, ABSENT], PUBLIC]
   details:
+    forwardReferences:
+    - columnIds:
+      - 1
+      toId: 110
     usesRelationIds:
     - 110
     usesTypeIds:

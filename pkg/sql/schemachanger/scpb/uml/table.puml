@@ -15,6 +15,7 @@ object View
 View :  ViewID
 View : []UsesTypeIDs
 View : []UsesRelationIDs
+View : []ForwardReferences
 View :  IsTemporary
 View :  IsMaterialized
 
