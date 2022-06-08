@@ -97,6 +97,9 @@ Typical usage:
 
     dev testlogic --config=local
         Run the logic tests for the cluster configuration 'local'.
+
+    dev build short -- --verbose_failures --profile=prof.gz
+        Pass additional arguments directly to bazel (after the stand alone '--').
 `,
 		// Disable automatic printing of usage information whenever an error
 		// occurs. We presume that most errors will not the result of bad

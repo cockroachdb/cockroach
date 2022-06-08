@@ -229,14 +229,6 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
-	// This should fail since no highwatermark is set on the progress.
-	cutoverTime := timeutil.Now().Round(time.Microsecond)
-	_, err = db.ExecContext(
-		ctx,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		job.ID(), cutoverTime)
-	require.Error(t, err, "cannot cutover to a timestamp")
-
 	var highWater time.Time
 	err = job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		highWater = timeutil.Now().Round(time.Microsecond)
@@ -244,15 +236,6 @@ func TestCutoverBuiltin(t *testing.T) {
 		return jobs.UpdateHighwaterProgressed(hlcHighWater, md, ju)
 	})
 	require.NoError(t, err)
-
-	// This should fail since the highwatermark is less than the cutover time
-	// passed to the builtin.
-	cutoverTime = timeutil.Now().Round(time.Microsecond)
-	_, err = db.ExecContext(
-		ctx,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		job.ID(), cutoverTime)
-	require.Error(t, err, "cannot cutover to a timestamp")
 
 	// Ensure that the builtin runs locally.
 	var explain string
@@ -262,7 +245,6 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "distribution: local", explain)
 
-	// This should succeed since the highwatermark is equal to the cutover time.
 	var jobID int64
 	err = db.QueryRowContext(
 		ctx,
