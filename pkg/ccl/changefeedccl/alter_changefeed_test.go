@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -45,8 +43,8 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
@@ -75,15 +73,15 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
@@ -113,15 +111,16 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	// TODO: Figure out why this freezes on other sinks (ex: webhook)
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAlterChangefeedSwitchFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
@@ -150,15 +149,16 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	// TODO: Figure out why this freezes on other sinks (ex: cloudstorage)
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAlterChangefeedDropTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
@@ -185,15 +185,15 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 		assertPayloads(t, testFeed, nil)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya, foo FAMILY onlyb`)
@@ -219,15 +219,15 @@ func TestAlterChangefeedDropTargetFamily(t *testing.T) {
 
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedSetDiffOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -250,15 +250,15 @@ func TestAlterChangefeedSetDiffOption(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedUnsetDiffOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`)
@@ -281,15 +281,16 @@ func TestAlterChangefeedUnsetDiffOption(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	// TODO: Figure out why this fails on other sinks
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAlterChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -372,15 +373,15 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
@@ -399,15 +400,15 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 		)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
@@ -435,7 +436,7 @@ func TestAlterChangefeedTelemetry(t *testing.T) {
 		require.Equal(t, int32(1), counts[`changefeed.alter.unset_options.1`])
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 // The purpose of this test is to ensure that the ALTER CHANGEFEED statement
@@ -497,8 +498,9 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -516,18 +518,18 @@ func TestAlterChangefeedChangeSinkTypeError(t *testing.T) {
 		)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAlterChangefeedChangeSinkURI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		registry := f.Server().JobRegistry().(*jobs.Registry)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
 		ctx := context.Background()
 
-		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -554,19 +556,19 @@ func TestAlterChangefeedChangeSinkURI(t *testing.T) {
 		require.Equal(t, newSinkURI, details.SinkURI)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 1000)`)
 
-		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 
@@ -621,7 +623,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
-			registry := f.Server().JobRegistry().(*jobs.Registry)
+			registry := s.Server.JobRegistry().(*jobs.Registry)
 			job, err := registry.LoadJob(context.Background(), feed.JobID())
 			require.NoError(t, err)
 			prog := job.Progress()
@@ -643,15 +645,15 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		)
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE movr.users (id INT PRIMARY KEY, name STRING)`)
@@ -692,15 +694,15 @@ func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedDatabaseScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE DATABASE new_movr`)
 
@@ -737,15 +739,15 @@ func TestAlterChangefeedDatabaseScope(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE DATABASE new_movr`)
 
@@ -786,15 +788,15 @@ func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING, FAMILY onlyid (id), FAMILY onlyname (name))`)
 
@@ -831,15 +833,15 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.users (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t,
@@ -888,20 +890,20 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
-
+		
 func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	rnd, _ := randutil.NewPseudoRand()
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		disableDeclarativeSchemaChangesForTest(t, sqlDB)
 
-		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 
@@ -920,7 +922,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '1s', no_initial_scan`)
 		jobFeed := testFeed.(cdctest.EnterpriseTestFeed)
-		jobRegistry := f.Server().JobRegistry().(*jobs.Registry)
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
 		// Kafka feeds are not buffered, so we have to consume messages.
 		g := ctxgroup.WithContext(context.Background())
@@ -960,13 +962,13 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		var maxCheckpointSize int64 = 100 << 20
 		// Checkpoint progress frequently, and set the checkpoint size limit.
 		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 10*time.Millisecond)
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
+			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
 		// Note the tableSpan to avoid resolved events that leave no gaps
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+			s.SystemServer.DB(), s.Codec, "d", "foo")
 		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 		// ShouldSkipResolved should ensure that once the backfill begins, the following resolved events
@@ -1033,7 +1035,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
@@ -1045,8 +1047,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	const maxCheckpointSize = 1 << 20
 	const numRowsPerTable = 1000
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo(val INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(0, $1)`, numRowsPerTable-1)
 
@@ -1054,10 +1056,10 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO bar (val) SELECT * FROM generate_series(0, $1)`, numRowsPerTable-1)
 
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
-		fooTableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+			s.SystemServer.DB(), s.Codec, "d", "foo")
+		fooTableSpan := fooDesc.PrimaryIndexSpan(s.Codec)
 
-		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 
@@ -1095,11 +1097,11 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
 		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, 1)
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
-			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
+			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
-		registry := f.Server().JobRegistry().(*jobs.Registry)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '100ms'`)
 
 		g := ctxgroup.WithContext(context.Background())
@@ -1186,15 +1188,15 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		}
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn, feedTestNoTenants))
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedUpdateFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -1212,7 +1214,7 @@ func TestAlterChangefeedUpdateFilter(t *testing.T) {
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
 		require.True(t, ok)
 
-		require.NoError(t, feed.TickHighWaterMark(f.Server().Clock().Now()))
+		require.NoError(t, feed.TickHighWaterMark(s.Server.Clock().Now()))
 		require.NoError(t, feed.Pause())
 
 		// Try to set an invalid filter (column b is not part of primary key).
@@ -1235,7 +1237,7 @@ func TestAlterChangefeedUpdateFilter(t *testing.T) {
 		})
 
 		// Pause again, clear out filter and verify we get expected values.
-		require.NoError(t, feed.TickHighWaterMark(f.Server().Clock().Now()))
+		require.NoError(t, feed.TickHighWaterMark(s.Server.Clock().Now()))
 		require.NoError(t, feed.Pause())
 
 		// Set filter to emit a > 4.  We expect to see update row 5, and onward.
@@ -1257,7 +1259,7 @@ func TestAlterChangefeedUpdateFilter(t *testing.T) {
 		})
 	}
 
-	t.Run(`kafka`, kafkaTest(testFn))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestAlterChangefeedInitialScanBothSyntax(t *testing.T) {

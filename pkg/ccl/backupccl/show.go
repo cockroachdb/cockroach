@@ -11,10 +11,15 @@ package backupccl
 import (
 	"context"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -291,14 +296,15 @@ func showBackupPlanHook(
 
 		fullyResolvedDest := dest
 		if subdir != "" {
-			if strings.EqualFold(subdir, latestFileName) {
-				subdir, err = readLatestFile(ctx, dest[0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+			if strings.EqualFold(subdir, backupbase.LatestFileName) {
+				subdir, err = backupdest.ReadLatestFile(ctx, dest[0],
+					p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 					p.User())
 				if err != nil {
 					return errors.Wrap(err, "read LATEST path")
 				}
 			}
-			fullyResolvedDest, err = appendPaths(dest, subdir)
+			fullyResolvedDest, err = backuputils.AppendPaths(dest, subdir)
 			if err != nil {
 				return err
 			}
@@ -329,8 +335,8 @@ func showBackupPlanHook(
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
-			opts, err := readEncryptionOptions(ctx, encStore)
-			if errors.Is(err, errEncryptionInfoRead) {
+			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
+			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
 			}
 			if err != nil {
@@ -342,19 +348,22 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				Key:  encryptionKey,
 			}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
-			opts, err := readEncryptionOptions(ctx, encStore)
-			if errors.Is(err, errEncryptionInfoRead) {
+			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
+			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
 			}
 			if err != nil {
 				return err
 			}
 
-			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
+			env := &backupencryption.BackupKMSEnv{
+				Settings: p.ExecCfg().Settings,
+				Conf:     &p.ExecCfg().ExternalIODirConfig,
+			}
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, []string{kms},
-					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
+				defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, []string{kms},
+					backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
 				if err == nil {
 					break
 				}
@@ -377,8 +386,8 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 		}
 
-		collection, computedSubdir := CollectionAndSubdir(dest[0], subdir)
-		fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+		collection, computedSubdir := backupdest.CollectionAndSubdir(dest[0], subdir)
+		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
 			ctx,
 			p.User(),
 			p.ExecCfg(),
@@ -424,7 +433,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						"Consider using the new `BACKUP INTO` syntax and `SHOW BACKUP"+
 						" FROM <backup> IN <collection>`"))
 			} else if errors.Is(err, cloud.ErrFileDoesNotExist) {
-				latestFileExists, errLatestFile := checkForLatestFileInCollection(ctx, baseStores[0])
+				latestFileExists, errLatestFile := backupdest.CheckForLatestFileInCollection(ctx, baseStores[0])
 
 				if errLatestFile == nil && latestFileExists {
 					return errors.WithHintf(err, "The specified path is the root of a backup collection. "+
@@ -482,6 +491,8 @@ func checkBackupFiles(
 	storeFactory cloud.ExternalStorageFromURIFactory,
 	user username.SQLUsername,
 ) ([][]int64, error) {
+	const maxMissingFiles = 10
+	missingFiles := make(map[string]struct{}, maxMissingFiles)
 
 	checkLayer := func(layer int) ([]int64, error) {
 		// TODO (msbutler): Right now, checkLayer opens stores for each backup layer. In 22.2,
@@ -509,7 +520,7 @@ func checkBackupFiles(
 		for _, metaFile := range []string{
 			fileInfoPath,
 			metadataSSTName,
-			backupManifestName + backupManifestChecksumSuffix} {
+			backupbase.BackupManifestName + backupManifestChecksumSuffix} {
 			if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 					info.defaultURIs[layer], metaFile)
@@ -542,10 +553,19 @@ func checkBackupFiles(
 			}
 			sz, err := store.Size(ctx, f.Path)
 			if err != nil {
-				return nil, errors.Wrapf(err, "Error checking file %s in %s", f.Path, uri)
+				uriNoLocality := strings.Split(uri, "?")[0]
+				missingFile := path.Join(uriNoLocality, f.Path)
+				if _, ok := missingFiles[missingFile]; !ok {
+					missingFiles[missingFile] = struct{}{}
+					if maxMissingFiles == len(missingFiles) {
+						break
+					}
+				}
+				continue
 			}
 			fileSizes[i] = sz
 		}
+
 		return fileSizes, nil
 	}
 
@@ -555,7 +575,22 @@ func checkBackupFiles(
 		if err != nil {
 			return nil, err
 		}
+		if len(missingFiles) == maxMissingFiles {
+			break
+		}
 		manifestFileSizes[layer] = layerFileSizes
+	}
+	if len(missingFiles) > 0 {
+		filesForMsg := make([]string, 0, len(missingFiles))
+		for file := range missingFiles {
+			filesForMsg = append(filesForMsg, file)
+		}
+		errorMsgPrefix := "The following files are missing from the backup:"
+		if len(missingFiles) == maxMissingFiles {
+			errorMsgPrefix = "Multiple files cannot be read from the backup including:"
+		}
+		sort.Strings(filesForMsg)
+		return nil, errors.Newf("%s\n\t%s", errorMsgPrefix, strings.Join(filesForMsg, "\n\t"))
 	}
 	return manifestFileSizes, nil
 }
@@ -824,11 +859,11 @@ func getLogicalSSTSize(files []backuppb.BackupManifest_File) map[string]int64 {
 	return sstDataSize
 }
 
-// approximateTablePhysicalSize approximates the number bytes written to disk for the table.
-func approximateTablePhysicalSize(
-	logicalTableSize int64, logicalFileSize int64, sstFileSize int64,
+// approximateSpanPhysicalSize approximates the number of bytes written to disk for the span.
+func approximateSpanPhysicalSize(
+	logicalSpanSize int64, logicalSSTSize int64, physicalSSTSize int64,
 ) int64 {
-	return int64(float64(sstFileSize) * (float64(logicalTableSize) / float64(logicalFileSize)))
+	return int64(float64(physicalSSTSize) * (float64(logicalSpanSize) / float64(logicalSSTSize)))
 }
 
 // getTableSizes gathers row and size count for each table in the manifest
@@ -864,7 +899,8 @@ func getTableSizes(
 		s := tableSizes[descpb.ID(tableID)]
 		s.rowCount.Add(file.EntryCounts)
 		if len(fileSizes) > 0 {
-			s.fileSize = approximateTablePhysicalSize(s.rowCount.DataSize, logicalSSTSize[file.Path], fileSizes[i])
+			s.fileSize += approximateSpanPhysicalSize(file.EntryCounts.DataSize, logicalSSTSize[file.Path],
+				fileSizes[i])
 		}
 		tableSizes[descpb.ID(tableID)] = s
 	}
@@ -989,7 +1025,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 					backupType = "incremental"
 				}
 
-				sstDataSize := getLogicalSSTSize(manifest.Files)
+				logicalSSTSize := getLogicalSSTSize(manifest.Files)
 				for j, file := range manifest.Files {
 					filePath := file.Path
 					if inCol != nil {
@@ -1004,7 +1040,8 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 					}
 					sz := int64(-1)
 					if len(info.fileSizes) > 0 {
-						sz = approximateTablePhysicalSize(info.fileSizes[i][j], file.EntryCounts.DataSize, sstDataSize[file.Path])
+						sz = approximateSpanPhysicalSize(file.EntryCounts.DataSize,
+							logicalSSTSize[file.Path], info.fileSizes[i][j])
 					}
 					rows = append(rows, tree.Datums{
 						tree.NewDString(filePath),
@@ -1061,10 +1098,10 @@ func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) 
 	}
 
 	var incSubdir string
-	if strings.HasSuffix(incRoot, DefaultIncrementalsSubdir) {
+	if strings.HasSuffix(incRoot, backupbase.DefaultIncrementalsSubdir) {
 		// The incremental backup is stored in the default incremental
 		// directory (i.e. collectionURI/incrementals/fullSubdir)
-		incSubdir = path.Join("/"+DefaultIncrementalsSubdir, fullSubdir)
+		incSubdir = path.Join("/"+backupbase.DefaultIncrementalsSubdir, fullSubdir)
 	} else {
 		// Implies one of two scenarios:
 		// 1) the incremental chain is stored in the pre 22.1
@@ -1144,7 +1181,7 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := ListFullBackupsInCollection(ctx, store)
+		res, err := backupdest.ListFullBackupsInCollection(ctx, store)
 		if err != nil {
 			return err
 		}

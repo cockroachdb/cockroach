@@ -18,6 +18,6 @@ import React, { ExoticComponent } from "react";
  * > "However, we have no way of telling the JSX parser that it's a JSX element type or its props other than
  * > by pretending to be a normal component."
  * */
-export const normalizeConnectedComponent = (
-  ConnectedComponent: ExoticComponent,
-) => (props: React.ComponentProps<any>) => <ConnectedComponent {...props} />;
+export const normalizeConnectedComponent =
+  (ConnectedComponent: ExoticComponent) => (props: React.ComponentProps<any>) =>
+    <ConnectedComponent {...props} />;

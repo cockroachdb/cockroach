@@ -32,7 +32,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks performed
 	// by `dev doctor``. Increasing it will force doctor to be re-run before other
 	// dev commands can be run.
-	doctorStatusVersion = 3
+	doctorStatusVersion = 5
 
 	noCacheFlag = "no-cache"
 )
@@ -184,6 +184,36 @@ Please perform the following steps:
 			}
 		}
 	}
+	d.log.Println("doctor: running patch check")
+	{
+		stdout, err := d.exec.CommandContextSilent(ctx, "patch", "-v")
+		stdoutStr := strings.TrimSpace(string(stdout))
+		if err != nil {
+			log.Println("Failed to run `patch`. `patch` v2.7+ is required.")
+			printStdoutAndErr(stdoutStr, err)
+			failureStr := "Please install GNU `patch`."
+			if runtime.GOOS == "darwin" {
+				failureStr += "\nYou can install GNU patch with: `brew install gpatch`"
+			}
+			failures = append(failures, failureStr)
+		} else {
+			firstLine := strings.Split(stdoutStr, "\n")[0]
+			fields := strings.Fields(firstLine)
+			ver := fields[len(fields)-1]
+			d.log.Printf("got version %s", ver)
+			if ver < "2.7" {
+				failureStr := fmt.Sprintf("The installed version of `patch` is too old: %s", ver)
+				if runtime.GOOS == "darwin" {
+					failureStr += `
+You can install a more recent version of ` + "`patch` with: `brew install gpatch`" + `
+If you have already installed the package with brew but this check is still
+failing, you may have to update your $PATH so that ` + "`which path`" + ` returns
+the homebrew-installed path rather than /usr/bin/patch.`
+				}
+				failures = append(failures, failureStr)
+			}
+		}
+	}
 
 	const binDir = "bin"
 	const submodulesMarkerPath = binDir + "/.submodules-initialized"
@@ -257,6 +287,15 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 		log.Println(failedNogoTestMsg)
 	}
 
+	// Check whether the user has configured a custom tmpdir.
+	present := d.checkLinePresenceInBazelRcUser(workspace, "test --test_tmpdir=")
+	if !present {
+		failures = append(failures, "You haven't configured a tmpdir for your tests.\n"+
+			"Please add a `test --test_tmpdir=/PATH/TO/TMPDIR` line to your .bazelrc.user:\n"+
+			fmt.Sprintf("    echo \"test --test_tmpdir=%s\" >> .bazelrc.user\n", filepath.Join(workspace, "tmp"))+
+			"(You can choose any directory as a tmpdir.)")
+	}
+
 	// We want to make sure there are no other failures before trying to
 	// set up the cache.
 	if !noCache && len(failures) == 0 {
@@ -328,4 +367,20 @@ func (d *dev) checkPresenceInBazelRc(expectedBazelRcLine string) (string, error)
 		return "", nil
 	}
 	return errString, nil
+}
+
+// checkLinePresenceInBazelRcUser checks whether the .bazelrc.user file
+// contains a line starting with the given prefix. Returns true iff a matching
+// line is in the file. Failures to find the file are ignored.
+func (d *dev) checkLinePresenceInBazelRcUser(workspace, expectedSubstr string) bool {
+	contents, err := d.os.ReadFile(filepath.Join(workspace, ".bazelrc.user"))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(contents, "\n") {
+		if strings.HasPrefix(line, expectedSubstr) {
+			return true
+		}
+	}
+	return false
 }

@@ -382,8 +382,99 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 	benchmarkDecodeMVCCKeyResult = mvccKey // avoid compiler optimizing away function call
 }
 
+func TestMVCCRangeKeyString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testcases := map[string]struct {
+		rk     MVCCRangeKey
+		expect string
+	}{
+		"empty":           {MVCCRangeKey{}, "/Min"},
+		"only start":      {MVCCRangeKey{StartKey: roachpb.Key("foo")}, "foo"},
+		"only end":        {MVCCRangeKey{EndKey: roachpb.Key("foo")}, "{/Min-foo}"},
+		"only timestamp":  {MVCCRangeKey{Timestamp: hlc.Timestamp{Logical: 1}}, "/Min/0,1"},
+		"only span":       {MVCCRangeKey{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("z")}, "{a-z}"},
+		"all":             {MVCCRangeKey{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("z"), Timestamp: hlc.Timestamp{Logical: 1}}, "{a-z}/0,1"},
+		"all overlapping": {MVCCRangeKey{StartKey: roachpb.Key("ab"), EndKey: roachpb.Key("af"), Timestamp: hlc.Timestamp{Logical: 1}}, "a{b-f}/0,1"},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.rk.String())
+		})
+	}
+}
+
+func TestMVCCRangeKeyCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ab1 := MVCCRangeKey{roachpb.Key("a"), roachpb.Key("b"), hlc.Timestamp{Logical: 1}}
+	ac1 := MVCCRangeKey{roachpb.Key("a"), roachpb.Key("c"), hlc.Timestamp{Logical: 1}}
+	ac2 := MVCCRangeKey{roachpb.Key("a"), roachpb.Key("c"), hlc.Timestamp{Logical: 2}}
+	bc0 := MVCCRangeKey{roachpb.Key("b"), roachpb.Key("c"), hlc.Timestamp{Logical: 0}}
+	bc1 := MVCCRangeKey{roachpb.Key("b"), roachpb.Key("c"), hlc.Timestamp{Logical: 1}}
+	bc3 := MVCCRangeKey{roachpb.Key("b"), roachpb.Key("c"), hlc.Timestamp{Logical: 3}}
+	bd4 := MVCCRangeKey{roachpb.Key("b"), roachpb.Key("d"), hlc.Timestamp{Logical: 4}}
+
+	testcases := map[string]struct {
+		a      MVCCRangeKey
+		b      MVCCRangeKey
+		expect int
+	}{
+		"equal":                 {ac1, ac1, 0},
+		"start lt":              {ac1, bc1, -1},
+		"start gt":              {bc1, ac1, 1},
+		"end lt":                {ab1, ac1, -1},
+		"end gt":                {ac1, ab1, 1},
+		"time lt":               {ac2, ac1, -1}, // MVCC timestamps sort in reverse order
+		"time gt":               {ac1, ac2, 1},  // MVCC timestamps sort in reverse order
+		"empty time lt set":     {bc0, bc1, -1}, // empty MVCC timestamps sort before non-empty
+		"set time gt empty":     {bc1, bc0, 1},  // empty MVCC timestamps sort before non-empty
+		"start time precedence": {ac2, bc3, -1}, // a before b, but 3 before 2; key takes precedence
+		"time end precedence":   {bd4, bc3, -1}, // c before d, but 4 before 3; time takes precedence
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.a.Compare(tc.b))
+		})
+	}
+}
+
+func TestMVCCRangeKeyValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	a := roachpb.Key("a")
+	b := roachpb.Key("b")
+	blank := roachpb.Key("")
+	ts1 := hlc.Timestamp{Logical: 1}
+
+	testcases := map[string]struct {
+		rangeKey  MVCCRangeKey
+		expectErr string // empty if no error
+	}{
+		"valid":            {MVCCRangeKey{StartKey: a, EndKey: b, Timestamp: ts1}, ""},
+		"empty":            {MVCCRangeKey{}, "/Min: no start key"},
+		"no start":         {MVCCRangeKey{EndKey: b, Timestamp: ts1}, "{/Min-b}/0,1: no start key"},
+		"no end":           {MVCCRangeKey{StartKey: a, Timestamp: ts1}, "a/0,1: no end key"},
+		"no timestamp":     {MVCCRangeKey{StartKey: a, EndKey: b}, "{a-b}: no timestamp"},
+		"blank start":      {MVCCRangeKey{StartKey: blank, EndKey: b, Timestamp: ts1}, "{/Min-b}/0,1: no start key"},
+		"end at start":     {MVCCRangeKey{StartKey: a, EndKey: a, Timestamp: ts1}, `a{-}/0,1: start key "a" is at or after end key "a"`},
+		"end before start": {MVCCRangeKey{StartKey: b, EndKey: a, Timestamp: ts1}, `{b-a}/0,1: start key "b" is at or after end key "a"`},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			err := tc.rangeKey.Validate()
+			if tc.expectErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectErr)
+			}
+		})
+	}
+}
+
 func pointKey(key string, ts int) MVCCKey {
-	return MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{WallTime: int64(ts)}}
+	return MVCCKey{Key: roachpb.Key(key), Timestamp: wallTS(ts)}
 }
 
 func pointKV(key string, ts int, value string) MVCCKeyValue {
@@ -391,4 +482,30 @@ func pointKV(key string, ts int, value string) MVCCKeyValue {
 		Key:   pointKey(key, ts),
 		Value: stringValueRaw(value),
 	}
+}
+
+func rangeKey(start, end string, ts int) MVCCRangeKey {
+	return MVCCRangeKey{
+		StartKey:  roachpb.Key(start),
+		EndKey:    roachpb.Key(end),
+		Timestamp: wallTS(ts),
+	}
+}
+
+func rangeKV(start, end string, ts int, v MVCCValue) MVCCRangeKeyValue {
+	valueBytes, err := EncodeMVCCValue(v)
+	if err != nil {
+		panic(err)
+	}
+	if valueBytes == nil {
+		valueBytes = []byte{}
+	}
+	return MVCCRangeKeyValue{
+		RangeKey: rangeKey(start, end, ts),
+		Value:    valueBytes,
+	}
+}
+
+func wallTS(ts int) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: int64(ts)}
 }

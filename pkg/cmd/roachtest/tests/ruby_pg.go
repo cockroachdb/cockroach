@@ -85,11 +85,11 @@ func registerRubyPG(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install ruby 2.7",
+			"install ruby 3.1.2",
 			`mkdir -p ruby-install && \
-        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.6.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
+        curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.8.3.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo make -C ruby-install install && \
-        sudo ruby-install --system ruby 2.7.1 && \
+        sudo ruby-install --system ruby 3.1.2 && \
         sudo gem update --system`,
 		); err != nil {
 			t.Fatal(err)
@@ -132,7 +132,7 @@ func registerRubyPG(r registry.Registry) {
 			c,
 			node,
 			"installing gems",
-			`cd /mnt/data1/ruby-pg/ && sudo bundle install`,
+			`cd /mnt/data1/ruby-pg/ && bundle install`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +152,7 @@ func registerRubyPG(r registry.Registry) {
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
-			`cd /mnt/data1/ruby-pg/ && sudo rake`,
+			`cd /mnt/data1/ruby-pg/ && bundle exec rake compile test`,
 		)
 
 		// Expected to fail but we should still scan the error to check if
@@ -168,15 +168,11 @@ func registerRubyPG(r registry.Registry) {
 		}
 
 		rawResults := []byte(result.Stdout + result.Stderr)
-
 		t.L().Printf("Test Results:\n%s", rawResults)
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-		blocklistName, expectedFailures, _, _ := rubyPGBlocklist.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No ruby-pg blocklist defined for cockroach version %s", version)
-		}
+		blocklistName, expectedFailures := "rubyPGBlocklist", rubyPGBlocklist
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 		totalTests := int64(0)

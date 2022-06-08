@@ -351,7 +351,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privilegeDesc:        catpb.PrivilegeDescriptor{},
 			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
 			privileges: privilege.List{
-				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.ZONECONFIG,
+				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.ZONECONFIG,
 			},
 			incompatiblePrivileges: privilege.List{},
 			shouldChange:           false,
@@ -384,7 +384,7 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			privilegeDesc:        catpb.PrivilegeDescriptor{},
 			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
 			privileges: privilege.List{
-				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.ZONECONFIG,
+				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.ZONECONFIG,
 			},
 			incompatiblePrivileges: privilege.List{},
 			shouldChange:           false,
@@ -404,21 +404,21 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 		require.Equal(t, shouldChange, test.shouldChange)
 
 		for _, testUser := range test.users {
-			for _, privilege := range test.incompatiblePrivileges {
+			for _, priv := range test.incompatiblePrivileges {
 				// Check that the incompatible privileges are removed from the
 				// PrivilegeDescriptor.
-				if test.privilegeDesc.CheckPrivilege(testUser, privilege) {
-					t.Errorf("found incompatible privilege %s", privilege.String())
+				if test.privilegeDesc.CheckPrivilege(testUser, priv) {
+					t.Errorf("found incompatible privilege %s", priv.String())
 				}
 
 				forAllRoles := test.defaultPrivilegeDesc.
 					FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
 				// Check that the incompatible privileges have been converted to the
 				// equivalent default privileges.
-				if !forAllRoles.DefaultPrivilegesPerObject[tree.Tables].CheckPrivilege(testUser, privilege) {
+				if !forAllRoles.DefaultPrivilegesPerObject[privilege.Tables].CheckPrivilege(testUser, priv) {
 					t.Errorf(
 						"expected incompatible privilege %s to be converted to a default privilege",
-						privilege.String(),
+						priv.String(),
 					)
 				}
 			}

@@ -52,6 +52,10 @@ func MakeTrigrams(s string, pad bool) []string {
 		}
 	}
 
+	if len(output) == 0 {
+		return output
+	}
+
 	// Sort the array and deduplicate.
 	sort.Strings(output)
 

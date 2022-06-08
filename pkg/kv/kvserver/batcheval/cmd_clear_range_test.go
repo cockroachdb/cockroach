@@ -35,14 +35,14 @@ type wrappedBatch struct {
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) ClearIterRange(start, end roachpb.Key) error {
+func (wb *wrappedBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	wb.clearIterCount++
-	return wb.Batch.ClearIterRange(start, end)
+	return wb.Batch.ClearMVCCIteratorRange(start, end)
 }
 
-func (wb *wrappedBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
+func (wb *wrappedBatch) ClearMVCCRange(start, end roachpb.Key) error {
 	wb.clearRangeCount++
-	return wb.Batch.ClearMVCCRangeAndIntents(start, end)
+	return wb.Batch.ClearMVCCRange(start, end)
 }
 
 // TestCmdClearRangeBytesThreshold verifies that clear range resorts to

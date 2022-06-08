@@ -186,9 +186,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   metrics = createSelector(
     (props: { children?: React.ReactNode }) => props.children,
     children => {
-      return findChildrenOfType(children as any, Metric) as React.ReactElement<
-        MetricProps
-      >[];
+      return findChildrenOfType(
+        children as any,
+        Metric,
+      ) as React.ReactElement<MetricProps>[];
     },
   );
 

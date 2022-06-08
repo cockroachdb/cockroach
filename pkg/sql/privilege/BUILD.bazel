@@ -5,6 +5,7 @@ go_library(
     name = "privilege",
     srcs = [
         "privilege.go",
+        "target_object_type.go",
         ":gen-kind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",

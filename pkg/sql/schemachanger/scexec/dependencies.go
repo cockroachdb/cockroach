@@ -33,7 +33,8 @@ type Dependencies interface {
 	Clock() scmutationexec.Clock
 	TransactionalJobRegistry() TransactionalJobRegistry
 	IndexBackfiller() Backfiller
-	BackfillProgressTracker() BackfillTracker
+	IndexMerger() Merger
+	BackfillProgressTracker() BackfillerTracker
 	PeriodicProgressFlusher() PeriodicProgressFlusher
 	IndexValidator() IndexValidator
 	IndexSpanSplitter() IndexSpanSplitter
@@ -41,6 +42,7 @@ type Dependencies interface {
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
+	Telemetry() Telemetry
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -80,6 +82,13 @@ type EventLogger interface {
 	LogEventForSchemaChange(
 		ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 	) error
+}
+
+// Telemetry encapsulates metrics gather for the declarative schema changer.
+type Telemetry interface {
+	// IncrementSchemaChangeErrorType increments the number of errors of a given
+	// type observed by the schema changer.
+	IncrementSchemaChangeErrorType(typ string)
 }
 
 // CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
@@ -155,15 +164,30 @@ type Backfiller interface {
 		context.Context, BackfillProgress, catalog.TableDescriptor,
 	) (BackfillProgress, error)
 
-	// BackfillIndex will backfill the specified indexes on in the table with
+	// BackfillIndexes will backfill the specified indexes in the table with
 	// the specified source and destination indexes. Note that the
 	// MinimumWriteTimestamp on the progress must be non-zero. Use
 	// MaybePrepareDestIndexesForBackfill to construct a properly initialized
 	// progress.
-	BackfillIndex(
+	BackfillIndexes(
 		context.Context,
 		BackfillProgress,
-		BackfillProgressWriter,
+		BackfillerProgressWriter,
+		catalog.TableDescriptor,
+	) error
+}
+
+// Merger is an abstract index merger that performs index merges
+// when provided with a specification of tables and indexes and a way to track
+// job progress.
+type Merger interface {
+
+	// MergeIndexes will merge the specified indexes in the table, from each
+	// temporary index into each adding index.
+	MergeIndexes(
+		context.Context,
+		MergeProgress,
+		BackfillerProgressWriter,
 		catalog.TableDescriptor,
 	) error
 }
@@ -218,47 +242,84 @@ type Backfill struct {
 	DestIndexIDs  []descpb.IndexID
 }
 
-// BackfillTracker abstracts the infrastructure to read and write backfill
-// progress to job state. Implementations should support multiple concurrent
-// writers.
-type BackfillTracker interface {
-	BackfillProgressReader
-	BackfillProgressWriter
-	BackfillProgressFlusher
+// MergeProgress tracks the progress for a Merge.
+type MergeProgress struct {
+	Merge
+
+	// CompletedSpans contains the spans of the source indexes which have been
+	// merged into the destination indexes. The spans are expected to
+	// contain any tenant prefix. The outer slice is parallel to the
+	// SourceIndexIDs slice in the embedded Merge struct.
+	CompletedSpans [][]roachpb.Span
+}
+
+// MakeMergeProgress constructs a new MergeProgress for a merge with an empty
+// set of CompletedSpans.
+func MakeMergeProgress(m Merge) MergeProgress {
+	return MergeProgress{
+		Merge:          m,
+		CompletedSpans: make([][]roachpb.Span, len(m.SourceIndexIDs)),
+	}
+}
+
+// Merge corresponds to a definition of a merge from multiple temporary indexes
+// into adding indexes.
+type Merge struct {
+	TableID        descpb.ID
+	SourceIndexIDs []descpb.IndexID
+	DestIndexIDs   []descpb.IndexID
+}
+
+// BackfillerTracker abstracts the infrastructure to read and write backfill
+// and merge progress to job state. Implementations should support multiple
+// concurrent writers.
+type BackfillerTracker interface {
+	BackfillerProgressReader
+	BackfillerProgressWriter
+	BackfillerProgressFlusher
 }
 
 // PeriodicProgressFlusher is used to write updates to backfill progress
 // periodically.
 type PeriodicProgressFlusher interface {
-	StartPeriodicUpdates(ctx context.Context, tracker BackfillProgressFlusher) (stop func() error)
+	StartPeriodicUpdates(ctx context.Context, tracker BackfillerProgressFlusher) (stop func() error)
 }
 
-// BackfillProgressReader is used by the backfill execution layer to read
-// backfill progress.
-type BackfillProgressReader interface {
+// BackfillerProgressReader is used by the backfill execution layer to read
+// backfill and merge progress.
+type BackfillerProgressReader interface {
 	// GetBackfillProgress reads the backfill progress for the specified backfill.
 	// If no such backfill has been stored previously, this call will return a
 	// new BackfillProgress without the CompletedSpans or MinimumWriteTimestamp
 	// populated.
 	GetBackfillProgress(ctx context.Context, b Backfill) (BackfillProgress, error)
+	// GetMergeProgress reads the merge progress for the specified merge.
+	// If no such merge has been stored previously, this call will return a
+	// new MergeProgress without the CompletedSpans populated
+	GetMergeProgress(ctx context.Context, b Merge) (MergeProgress, error)
 }
 
-// BackfillProgressWriter is used by the backfiller to write out progress
+// BackfillerProgressWriter is used by the backfiller to write out progress
 // updates.
-type BackfillProgressWriter interface {
+type BackfillerProgressWriter interface {
 	// SetBackfillProgress updates the progress for a single backfill. Multiple
 	// backfills may be concurrently tracked. Setting the progress may not make
 	// that progress durable; the concrete implementation of the backfill tracker
 	// may defer writing until later.
 	SetBackfillProgress(ctx context.Context, progress BackfillProgress) error
+	// SetMergeProgress updates the progress for a single merge. Multiple
+	// merges may be concurrently tracked. Setting the progress may not make
+	// that progress durable; the concrete implementation of the merge tracker
+	// may defer writing until later.
+	SetMergeProgress(ctx context.Context, progress MergeProgress) error
 }
 
-// BackfillProgressFlusher is used to flush backfill progress state to
-// the underlying store.
-type BackfillProgressFlusher interface {
+// BackfillerProgressFlusher is used to flush backfill and merge progress state
+// to the underlying store.
+type BackfillerProgressFlusher interface {
 
 	// FlushCheckpoint writes out a checkpoint containing any data which has
-	// been previously set via SetBackfillProgress.
+	// been previously set via SetBackfillProgress or SetMergeProgress.
 	FlushCheckpoint(ctx context.Context) error
 
 	// FlushFractionCompleted writes out the fraction completed.

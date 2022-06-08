@@ -143,7 +143,7 @@ type streamIngestionProcessor struct {
 		pollingErr error
 	}
 
-	// metrics are monitoring counters shared between all ingestion jobs.
+	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 }
 
@@ -246,10 +246,6 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
-			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
-				return
-			}
 			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
 			if err != nil {
 				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
@@ -259,11 +255,11 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
-		subscriptions[id] = sub
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
 		}
+		subscriptions[id] = sub
 		sip.cg.GoCtx(sub.Subscribe)
 	}
 	sip.eventCh = sip.merge(ctx, subscriptions)
@@ -482,6 +478,10 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				sip.internalDrained = true
 				return sip.flush()
 			}
+			if event.Type() == streamingccl.KVEvent {
+				sip.metrics.AdmitLatency.RecordValue(
+					timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
+			}
 
 			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 				if streamingKnobs != nil {
@@ -493,7 +493,11 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 			switch event.Type() {
 			case streamingccl.KVEvent:
-				if err := sip.bufferKV(event); err != nil {
+				if err := sip.bufferKV(event.GetKV()); err != nil {
+					return nil, err
+				}
+			case streamingccl.SSTableEvent:
+				if err := sip.bufferSST(event.GetSSTable()); err != nil {
 					return nil, err
 				}
 			case streamingccl.CheckpointEvent:
@@ -544,11 +548,35 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 	return nil, nil
 }
 
-func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
+func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) error {
+	iter, err := storage.NewMemSSTIterator(sst.Data, true)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for ; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok { // cursor passed the span end key
+			break
+		}
+		if err = sip.bufferKV(&roachpb.KeyValue{
+			Key: iter.UnsafeKey().Key,
+			Value: roachpb.Value{
+				RawBytes:  iter.UnsafeValue(),
+				Timestamp: iter.UnsafeKey().Timestamp,
+			},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 	// TODO: In addition to flushing when receiving a checkpoint event, we
 	// should also flush when we've buffered sufficient KVs. A buffering adder
 	// would save us here.
-	kv := event.GetKV()
 	if kv == nil {
 		return errors.New("kv event expected to have kv")
 	}
@@ -597,19 +625,30 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	sort.Sort(sip.curBatch)
 
 	totalSize := 0
+	minBatchMVCCTimestamp := hlc.MaxTimestamp
 	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil { // problem is here
+		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
+		}
+		if kv.Key.Timestamp.Less(minBatchMVCCTimestamp) {
+			minBatchMVCCTimestamp = kv.Key.Timestamp
 		}
 		totalSize += len(kv.Key.Key) + len(kv.Value)
 	}
 
-	if err := sip.batcher.Flush(sip.Ctx); err != nil {
-		return nil, errors.Wrap(err, "flushing")
+	if len(sip.curBatch) > 0 {
+		preFlushTime := timeutil.Now()
+		defer func() {
+			sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
+			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
+			sip.metrics.Flushes.Inc(1)
+			sip.metrics.IngestedBytes.Inc(int64(totalSize))
+			sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
+		}()
+		if err := sip.batcher.Flush(sip.Ctx); err != nil {
+			return nil, errors.Wrap(err, "flushing")
+		}
 	}
-	sip.metrics.Flushes.Inc(1)
-	sip.metrics.IngestedBytes.Inc(int64(totalSize))
-	sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
 
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.

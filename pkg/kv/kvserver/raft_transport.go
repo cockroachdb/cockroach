@@ -29,11 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
@@ -434,12 +434,12 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
 	errCh := make(chan error, 1)
 	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
-	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(taskCtx, t.Tracer)
+	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(taskCtx, t.Tracer)
 	if err != nil {
 		log.Warningf(taskCtx, "error extracting tracing info from gRPC: %s", err)
 	}
 	taskCtx, span := t.Tracer.StartSpanCtx(
-		taskCtx, tracing.BatchMethodName,
+		taskCtx, grpcinterceptor.BatchMethodName,
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),
 		tracing.WithServerSpanKind,
 	)
@@ -775,7 +775,7 @@ func (t *RaftTransport) SendSnapshot(
 	snap *OutgoingSnapshot,
 	newBatch func() storage.Batch,
 	sent func(),
-	bytesSentCounter *metric.Counter,
+	recordBytesSent snapshotRecordMetrics,
 ) error {
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
 
@@ -794,7 +794,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent, bytesSentCounter)
+	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent, recordBytesSent)
 }
 
 // DelegateSnapshot creates a rpc stream between the leaseholder and the

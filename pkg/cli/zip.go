@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
 )
@@ -205,6 +205,9 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
+	// The zip output is sent directly into a text file, so the results should
+	// be scanned into strings.
+	sqlConn.SetAlwaysInferResultTypes(false)
 	if err != nil {
 		_ = s.fail(errors.Wrap(err, "unable to open a SQL session. Debug information will be incomplete"))
 	} else {
@@ -325,9 +328,7 @@ func maybeAddProfileSuffix(name string) string {
 func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
-	// TODO(knz): This can use context cancellation now that query
-	// cancellation is supported.
-	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
+	ctx := context.Background()
 	baseName := base + "/" + sanitizeFilename(table)
 
 	s := zr.start("retrieving SQL data for %s", table)
@@ -340,26 +341,33 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			zc.z.Lock()
 			defer zc.z.Unlock()
 
+			// TODO(knz): This can use context cancellation now that query
+			// cancellation is supported in v22.1 and later.
+			// SET must be run separately from the query so that the command tag output
+			// doesn't get added to the debug file.
+			err := conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
+			if err != nil {
+				return err
+			}
+
 			w, err := zc.z.createLocked(name, time.Time{})
 			if err != nil {
 				return err
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return sqlExecCtx.RunQueryAndFormatResults(
-				context.Background(),
-				conn, w, stderr, clisqlclient.MakeQuery(fullQuery))
+			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, stderr, clisqlclient.MakeQuery(query))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
 				return cErr
 			}
-			var pqErr *pq.Error
-			if !errors.As(sqlErr, &pqErr) {
+			var pgErr = (*pgconn.PgError)(nil)
+			if !errors.As(sqlErr, &pgErr) {
 				// Not a SQL error. Nothing to retry.
 				break
 			}
-			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.SerializationFailure {
+			if pgcode.MakeCode(pgErr.Code) != pgcode.SerializationFailure {
 				// A non-retry error. We've printed the error, and
 				// there's nothing to retry. Stop here.
 				break

@@ -40,9 +40,7 @@ export default function createChartComponent<T>(
     }
 
     redraw(props: T = this.props) {
-      d3.select(this.containerEl.current)
-        .datum(props)
-        .call(chart);
+      d3.select(this.containerEl.current).datum(props).call(chart);
     }
 
     handleResize = () => {

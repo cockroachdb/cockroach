@@ -29,17 +29,17 @@ init minlevel=0 maxlevel=30 maxcells=2
 index-keys name=nys-approx1
 ----
 F4/L5/10321, F4/L5/10322
-BoundingBox: lo_x:-1.3788101090755203 hi_x:-1.3439035240356338 lo_y:0.7155849933176747 hi_y:0.7679448708775054 
+BoundingBox: lo_x:-1.378810 hi_x:-1.343904 lo_y:0.715585 hi_y:0.767945
 
 index-keys name=nys-approx2
 ----
 F4/L5/10321, F4/L5/10322
-BoundingBox: lo_x:-1.3788101090755203 hi_x:-1.3439035240356338 lo_y:0.7155849933176747 hi_y:0.7679448708775054 
+BoundingBox: lo_x:-1.378810 hi_x:-1.343904 lo_y:0.715585 hi_y:0.767945
 
 index-keys name=point1
 ----
 F0/L30/200023210133112000102232313101, F0/L30/200033223021330130001101002333
-BoundingBox: lo_x:0.017453292519943295 hi_x:0.05235987755982989 lo_y:0.06981317007977318 hi_y:0.08726646259971647 
+BoundingBox: lo_x:0.017453 hi_x:0.052360 lo_y:0.069813 hi_y:0.087266
 
 covers name=point1
 ----
@@ -119,7 +119,7 @@ F0/L2/20, F0/L1/2, F0/L0/
 index-keys name=shortline1
 ----
 F4/L19/1010131200020223230, F4/L21/101013120002022323312
-BoundingBox: lo_x:-1.5116288797541255 hi_x:-1.5116268028123157 lo_y:0.5707865269994759 hi_y:0.5707869284252046 
+BoundingBox: lo_x:-1.511629 hi_x:-1.511627 lo_y:0.570787 hi_y:0.570787
 
 covers name=shortline1
 ----
@@ -173,7 +173,7 @@ F4/L2/10, F4/L1/1, F4/L0/
 index-keys name=nystate
 ----
 F2/L2/12, F4/L2/10
-BoundingBox: lo_x:-1.392116499292725 hi_x:-1.2523034089032152 lo_y:0.7064604119882483 hi_y:0.7856651987730039 
+BoundingBox: lo_x:-1.392116 hi_x:-1.252303 lo_y:0.706460 hi_y:0.785665
 
 covers name=nystate
 ----
@@ -190,7 +190,7 @@ F4/L1/1, F4/L0/
 index-keys name=red-hook-nyc
 ----
 F4/L13/1032010231102, F4/L13/1032010231113
-BoundingBox: lo_x:-1.2917981498721696 hi_x:-1.2917367221517457 lo_y:0.7096516548356566 hi_y:0.7096900164191924 
+BoundingBox: lo_x:-1.291798 hi_x:-1.291737 lo_y:0.709652 hi_y:0.709690
 
 init minlevel=0 maxlevel=30 maxcells=8
 ----
@@ -198,12 +198,12 @@ init minlevel=0 maxlevel=30 maxcells=8
 index-keys name=nystate
 ----
 F2/L5/12112, F2/L5/12121, F2/L5/12122, F2/L7/1221111, F4/L4/1001, F4/L4/1032, F4/L5/10330, F4/L5/10331
-BoundingBox: lo_x:-1.392116499292725 hi_x:-1.2523034089032152 lo_y:0.7064604119882483 hi_y:0.7856651987730039 
+BoundingBox: lo_x:-1.392116 hi_x:-1.252303 lo_y:0.706460 hi_y:0.785665
 
 index-keys name=red-hook-nyc
 ----
 F4/L16/1032010231102232, F4/L16/1032010231102233, F4/L15/103201023110230, F4/L17/10320102311132301, F4/L18/103201023111323020, F4/L16/1032010231113233, F4/L17/10320102311133000, F4/L17/10320102311133003
-BoundingBox: lo_x:-1.2917981498721696 hi_x:-1.2917367221517457 lo_y:0.7096516548356566 hi_y:0.7096900164191924 
+BoundingBox: lo_x:-1.291798 hi_x:-1.291737 lo_y:0.709652 hi_y:0.709690
 
 init minlevel=0 maxlevel=30 maxcells=1
 ----
@@ -211,7 +211,7 @@ init minlevel=0 maxlevel=30 maxcells=1
 index-keys name=point1
 ----
 F0/L30/200023210133112000102232313101, F0/L30/200033223021330130001101002333
-BoundingBox: lo_x:0.017453292519943295 hi_x:0.05235987755982989 lo_y:0.06981317007977318 hi_y:0.08726646259971647 
+BoundingBox: lo_x:0.017453 hi_x:0.052360 lo_y:0.069813 hi_y:0.087266
 
 covers name=point1
 ----
@@ -291,7 +291,7 @@ F0/L2/20, F0/L1/2, F0/L0/
 index-keys name=shortline1
 ----
 F4/L18/101013120002022323
-BoundingBox: lo_x:-1.5116288797541255 hi_x:-1.5116268028123157 lo_y:0.5707865269994759 hi_y:0.5707869284252046 
+BoundingBox: lo_x:-1.511629 hi_x:-1.511627 lo_y:0.570787 hi_y:0.570787
 
 covers name=shortline1
 ----
@@ -355,7 +355,7 @@ init minlevel=0 maxlevel=16 maxcells=2
 index-keys name=point1
 ----
 F0/L16/2000232101331120, F0/L16/2000332230213301
-BoundingBox: lo_x:0.017453292519943295 hi_x:0.05235987755982989 lo_y:0.06981317007977318 hi_y:0.08726646259971647 
+BoundingBox: lo_x:0.017453 hi_x:0.052360 lo_y:0.069813 hi_y:0.087266
 
 d-within distance=2000 name=point1
 ----
@@ -395,7 +395,7 @@ F0/L2/20, F0/L1/2
 index-keys name=nys-approx1
 ----
 F4/L5/10321, F4/L5/10322
-BoundingBox: lo_x:-1.3788101090755203 hi_x:-1.3439035240356338 lo_y:0.7155849933176747 hi_y:0.7679448708775054 
+BoundingBox: lo_x:-1.378810 hi_x:-1.343904 lo_y:0.715585 hi_y:0.767945
 
 intersects name=nys-approx1
 ----

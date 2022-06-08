@@ -11,9 +11,7 @@
 package caller
 
 import (
-	"fmt"
-	"path"
-	"regexp"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -22,186 +20,36 @@ import (
 )
 
 type cachedLookup struct {
-	file string
+	pkg  string // <logical package name>/<file>.go
+	file string // <file>.go
 	line int
 	fun  string
 }
 
-var dummyLookup = cachedLookup{file: "???", line: 1, fun: "???"}
+var dummyLookup = cachedLookup{pkg: "???", line: 1, fun: "???"}
 
-// A CallResolver is a helping hand around runtime.Caller() to look up file,
+// A CallResolver is a helping hand around runtime.Caller() to look up pkg,
 // line and name of the calling function. CallResolver caches the results of
 // its lookups and strips the uninteresting prefix from both the caller's
 // location and name; see NewCallResolver().
 type CallResolver struct {
 	mu    syncutil.Mutex
 	cache map[uintptr]*cachedLookup
-	re    *regexp.Regexp
 }
 
-var reStripNothing = regexp.MustCompile(`^$`)
+var defaultCallResolver = NewCallResolver()
 
-// findFileAndPackageRoot identifies separately the package path to
-// the crdb source tree relative to the package build root, and the
-// package build root. This information is needed to construct
-// defaultRE below.
-//
-// For example:
-//
-//     /home/kena/src/go/src/github.com/cockroachdb/cockroach/pkg/util/caller
-//                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ crdb package path
-//     ^^^^^^^^^^^^^^^^^^^^^^ package build root
-//
-// Within a Bazel sandbox:
-//
-//     github.com/cockroachdb/cockroach/pkg/util/caller
-//     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ crdb package path
-//     (there is no package build root in this case)
-//
-//
-// The first return value is false if the paths could not be
-// determined.
-func findFileAndPackageRoot() (ok bool, crdbPath string, srcRoot string) {
-	pcs := make([]uintptr, 1)
-	if runtime.Callers(1, pcs[:]) < 1 {
-		return false, "", ""
-	}
-	frame, _ := runtime.CallersFrames(pcs).Next()
-
-	// frame.Function is the name of the function prefixed by its
-	// *symbolic* package path.
-	// For example:
-	//     github.com/cockroachdb/cockroach/pkg/util/caller.findFileAndPackageRoot
-	funcName := frame.Function
-
-	crdbPath = strings.TrimSuffix(funcName, ".findFileAndPackageRoot")
-
-	// frame.File is the name of the file on the filesystem.
-	// For example:
-	//   /home/kena/src/go/src/github.com/cockroachdb/cockroach/pkg/util/caller/resolver.go
-	//
-	// (or, in a Bazel sandbox)
-	//   github.com/cockroachdb/cockroach/pkg/util/caller/resolver.go
-	//
-	// root is its immediate parent directory.
-	root := path.Dir(frame.File)
-
-	// if it is a forked repository, we need to normalize root
-	// For example:
-	//   /home/kena/src/go/src/github.com/kena/cockroach/pkg/util/caller/resolver.go
-	// should be
-	//   /home/kena/src/go/src/github.com/cockroachdb/cockroach/pkg/util/caller/resolver.gos
-	exp := regexp.MustCompile("github.com/([^/]+)/cockroach")
-	root = exp.ReplaceAllString(root, "github.com/cockroachdb/cockroach")
-
-	// Coverage tests report back as `[...]/util/caller/_test/_obj_test`;
-	// strip back to this package's directory.
-	if !strings.HasSuffix(root, "/caller") {
-		// This trims the last component.
-		root = path.Dir(root)
-	}
-
-	if !strings.HasSuffix(root, "/caller") {
-		// If we are not finding the current package in the path, this is
-		// indicative of a bug in this code; either:
-		//
-		// - the name of the function was changed without updating the TrimSuffix
-		//   call above.
-		// - the package was renamed without updating the two HasSuffix calls
-		//   above.
-		panic(fmt.Sprintf("cannot find self package: expected .../caller, got %q", root))
-	}
-
-	if !strings.HasSuffix(root, crdbPath) {
-		// We require the logical package name to be included in the
-		// physical file name.
-		//
-		// Conceptually, this requirement could be violated if e.g. the
-		// filesystem used different path separators as the logical
-		// package paths.
-		//
-		// However, as of Go 1.16, the stack frame code normalizes
-		// paths to use the same delimiters.
-		// If this ever changes, we'll need to update this logic.
-		panic(fmt.Sprintf("cannot find crdb path (%q) inside file path (%q)", crdbPath, root))
-	}
-
-	// The package build root is everything before the package path.
-	srcRoot = strings.TrimSuffix(root, crdbPath)
-
-	// For the crdb package root, rewind up to the `pkg` root
-	// and one up.
-	for {
-		if strings.HasSuffix(crdbPath, "/pkg") {
-			break
-		}
-		// Sanity check.
-		if crdbPath == "." {
-			// There was no "pkg" root.
-			panic(fmt.Sprintf("caller package is not located under pkg tree: %q", root))
-		}
-		crdbPath = path.Dir(crdbPath)
-	}
-	crdbPath = path.Dir(crdbPath) // Also trim /pkg.
-
-	// At this point we have simplified:
-	//
-	//     /home/kena/src/go/src/github.com/cockroachdb/cockroach/pkg/util/caller/resolver.go
-	//     crdbPath: "github.com/cockroachdb/cockroach"
-	//     srcRoot: "/home/kena/src/go/src/"
-	//
-	// Within a Bazel sandbox:
-	//
-	//     github.com/cockroachdb/cockroach/pkg/util/caller
-	//     crdbPath: "github.com/cockroachdb/cockroach"
-	//     srcRoot: ""
-	//
-	return true, crdbPath, srcRoot
-}
-
-// defaultRE strips as follows:
-//
-// - <fileroot><crdbroot>/(pkg/)?module/submodule/file.go
-//   -> module/submodule/file.go
-//
-// - <fileroot><crdbroot>/vendor/<otherpkg>/path/to/file
-//   -> vendor/<otherpkg>/path/to/file
-//
-// - <fileroot><otherpkg>/path/to/file
-//   -> <otherpkg>/path/to/file
-//
-// It falls back to stripping nothing when it's unable to look up its
-// own location via runtime.Caller().
-var defaultRE = func() *regexp.Regexp {
-	ok, crdbRoot, fileRoot := findFileAndPackageRoot()
-	if !ok {
-		return reStripNothing
-	}
-
-	pkgStrip := regexp.QuoteMeta(fileRoot) + "(?:" + regexp.QuoteMeta(crdbRoot) + "/)?(?:pkg/)?(.*)"
-	return regexp.MustCompile(pkgStrip)
-}()
-
-var defaultCallResolver = NewCallResolver(defaultRE)
-
-// Lookup returns the (reduced) file, line and function of the caller at the
+// Lookup returns the (reduced) pkg, line and function of the caller at the
 // requested depth, using a default call resolver which drops the path of
 // the project repository.
 func Lookup(depth int) (file string, line int, fun string) {
 	return defaultCallResolver.Lookup(depth + 1)
 }
 
-// NewCallResolver returns a CallResolver. The supplied pattern must specify a
-// valid regular expression and is used to format the paths returned by
-// Lookup(): If submatches are specified, their concatenation forms the path,
-// otherwise the match of the whole expression is used. Paths which do not
-// match at all are left unchanged.
-// TODO(bdarnell): don't strip paths at lookup time, but at display time;
-// need better handling for callers such as x/tools/something.
-func NewCallResolver(re *regexp.Regexp) *CallResolver {
+// NewCallResolver returns a CallResolver.
+func NewCallResolver() *CallResolver {
 	return &CallResolver{
 		cache: map[uintptr]*cachedLookup{},
-		re:    re,
 	}
 }
 
@@ -212,9 +60,15 @@ var uintptrSlPool = sync.Pool{
 	},
 }
 
-// Lookup returns the (reduced) file, line and function of the caller at the
-// requested depth.
-func (cr *CallResolver) Lookup(depth int) (_file string, _line int, _fun string) {
+var stripPrefixes = []string{
+	"github.com/cockroachdb/cockroach/pkg/",
+	"github.com/cockroachdb/",
+}
+
+// Lookup returns the "logical" path (i.e. logical import path of the
+// surrounding package joined with filename, regardless of the physical location
+// of the file), line and function of the caller at the requested depth.
+func (cr *CallResolver) Lookup(depth int) (_logicalPath string, _line int, _fun string) {
 	sl := uintptrSlPool.Get().(*[]uintptr)
 	// NB: +2 for Callers, +1 for Caller (historical reasons)
 	ok := runtime.Callers(depth+2, *sl) == 1
@@ -222,7 +76,7 @@ func (cr *CallResolver) Lookup(depth int) (_file string, _line int, _fun string)
 	uintptrSlPool.Put(sl)
 	sl = nil // prevent reuse
 	if !ok || cr == nil {
-		return dummyLookup.file, dummyLookup.line, dummyLookup.fun
+		return dummyLookup.pkg, dummyLookup.line, dummyLookup.fun
 	}
 
 	cr.mu.Lock()
@@ -232,19 +86,62 @@ func (cr *CallResolver) Lookup(depth int) (_file string, _line int, _fun string)
 	}
 	// Now do the expensive thing which we intend to cache.
 	frame, _ := runtime.CallersFrames([]uintptr{pc}).Next()
-	if matches := cr.re.FindStringSubmatch(frame.File); matches != nil {
-		if len(matches) == 1 {
-			frame.File = matches[0]
-		} else {
-			// NB: "path" is used here (and elsewhere in this file) over
-			// "path/filepath" because runtime.Caller always returns unix paths.
-			frame.File = path.Join(matches[1:]...)
+
+	pkg, fun := parseFQFun(frame.Function)
+
+	cl := &cachedLookup{
+		pkg:  pkg,
+		file: filepath.Join(pkg, filepath.Base(frame.File)),
+		line: frame.Line,
+		fun:  fun,
+	}
+	cr.cache[pc] = cl
+	return cl.file, cl.line, cl.fun
+}
+
+func parseFQFun(
+	fqFun string,
+) (
+	string, /* pkg */
+	string, /* fun */
+) {
+	pkg := fqFun
+	// Get the package name by stripping trailing dots until we see the first
+	// slash (or find that there is none), which is when we need to re-add the
+	// last component of the package path.
+	idx := len(pkg) - 1 // last char can't match '/.', this helps unify break below
+	var fun string
+	for {
+		newIdx := strings.LastIndexAny(pkg[:idx], "/.")
+		// Examples to consider (at time of `break`)
+		//
+		// github.com/foo/bar/baz.(*Something).Else
+		//                       ^-- idx
+		//                   ^------ newIdx
+		// github.com/foo/bar/baz.Else
+		//                       ^-- idx
+		//                   ^-- newIdx
+		// github.com/foo/bar/baz..func1
+		//                       ^-- idx
+		//                   ^-- newIdx
+		// main.(*Bar).Baz
+		//     ^-- idx
+		//         newIdx == -1
+		// main.init
+		//     ^-- idx
+		//         newIdx == -1
+		if newIdx == -1 || pkg[newIdx] == '/' {
+			pkg, fun = pkg[:idx], pkg[idx+1:]
+			break
 		}
+		idx = newIdx
 	}
 
-	if indDot := strings.LastIndexByte(frame.Function, '.'); indDot != -1 {
-		frame.Function = frame.Function[indDot+1:]
+	for _, pref := range stripPrefixes {
+		if strings.HasPrefix(pkg, pref) {
+			pkg = strings.TrimPrefix(pkg, pref)
+			break // only strip one prefix
+		}
 	}
-	cr.cache[pc] = &cachedLookup{file: frame.File, line: frame.Line, fun: frame.Function}
-	return frame.File, frame.Line, frame.Function
+	return pkg, fun
 }

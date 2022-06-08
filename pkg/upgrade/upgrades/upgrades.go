@@ -92,10 +92,10 @@ var upgrades = []upgrade.Upgrade{
 		ensureSpanConfigSubscription,
 	),
 	upgrade.NewTenantUpgrade(
-		"track grant options on users and enable granting/revoking with them",
-		toCV(clusterversion.ValidateGrantOption),
+		"remove grant privilege from users",
+		toCV(clusterversion.RemoveGrantPrivilege),
 		NoPrecondition,
-		grantOptionMigration,
+		removeGrantMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"delete comments that belong to dropped indexes",
@@ -124,12 +124,6 @@ var upgrades = []upgrade.Upgrade{
 		toCV(clusterversion.TenantSettingsTable),
 		NoPrecondition,
 		tenantSettingsTableMigration,
-	),
-	upgrade.NewTenantUpgrade(
-		"Rewrites cast that are negatively affected by DateStyle/IntervalStyle",
-		toCV(clusterversion.DateStyleIntervalStyleCastRewrite),
-		NoPrecondition,
-		fixCastForStyleMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"add the system.span_count table",

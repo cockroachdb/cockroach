@@ -787,6 +787,11 @@ func (s *TestState) IndexBackfiller() scexec.Backfiller {
 	return s.backfiller
 }
 
+// IndexMerger implements the scexec.Dependencies interface.
+func (s *TestState) IndexMerger() scexec.Merger {
+	return s.merger
+}
+
 // PeriodicProgressFlusher implements the scexec.Dependencies interface.
 func (s *TestState) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 	return scdeps.NewNoopPeriodicProgressFlusher()
@@ -1069,6 +1074,16 @@ func (s *TestState) TableReader() scbuild.TableReader {
 // StatsRefresher implement scexec.Dependencies.
 func (s *TestState) StatsRefresher() scexec.StatsRefreshQueue {
 	return s
+}
+
+// Telemetry implement scexec.Dependencies.
+func (s *TestState) Telemetry() scexec.Telemetry {
+	return s
+}
+
+// IncrementSchemaChangeErrorType implements scexec.Telemetry
+func (s *TestState) IncrementSchemaChangeErrorType(typ string) {
+	s.LogSideEffectf("incrementing schema change error type metric %s", typ)
 }
 
 // GetTestingKnobs implement scexec.Dependencies.

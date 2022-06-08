@@ -22,6 +22,16 @@ analysis_test(
     ),
 )
 
+# The output file will be empty unless we're using the force_build_cdeps config.
+genrule(
+    name = "test_force_build_cdeps",
+    outs = ["test_force_build_cdeps.txt"],
+    cmd = select({
+        "//build/toolchains:force_build_cdeps": "echo 1 > $@",
+        "//conditions:default": "touch $@",
+    }),
+)
+
 lint_binary(
     name = "lint",
     test = "//pkg/testutils/lint:lint_test",

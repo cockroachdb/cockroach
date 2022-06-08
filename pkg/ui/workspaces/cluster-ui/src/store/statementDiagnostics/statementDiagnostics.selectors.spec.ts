@@ -41,9 +41,8 @@ const reports: IStatementDiagnosticsReport[] = [
 describe("statementDiagnostics selectors", () => {
   describe("selectDiagnosticsReportsPerStatement", () => {
     it("returns diagnostics reports sorted in descending order", () => {
-      const diagnosticsPerStatement = selectDiagnosticsReportsPerStatement.resultFunc(
-        reports,
-      );
+      const diagnosticsPerStatement =
+        selectDiagnosticsReportsPerStatement.resultFunc(reports);
       assert.deepEqual(
         diagnosticsPerStatement["SHOW database"][0].id,
         Long.fromNumber(3),

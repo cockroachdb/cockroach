@@ -51,9 +51,8 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
     const [conditional, setConditional] = useState(false);
     const [expires, setExpires] = useState(true);
     const [minExecLatency, setMinExecLatency] = useState(100);
-    const [minExecLatencyUnit, setMinExecLatencyUnit] = useState(
-      "milliseconds",
-    );
+    const [minExecLatencyUnit, setMinExecLatencyUnit] =
+      useState("milliseconds");
     const [expiresAfter, setExpiresAfter] = useState(15);
 
     const handleSelectChange = (value: string) => {

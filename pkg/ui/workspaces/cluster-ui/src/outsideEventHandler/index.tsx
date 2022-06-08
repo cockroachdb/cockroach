@@ -22,9 +22,7 @@ export interface OutsideEventHandlerProps {
   ignoreClickOnRefs?: React.RefObject<HTMLDivElement>[];
 }
 
-export class OutsideEventHandler extends React.Component<
-  OutsideEventHandlerProps
-> {
+export class OutsideEventHandler extends React.Component<OutsideEventHandlerProps> {
   nodeRef: React.RefObject<HTMLDivElement>;
 
   constructor(props: any) {

@@ -11,12 +11,10 @@
 package kvcoord
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"runtime/debug"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -984,30 +982,6 @@ func sanityCheckErrWithTxn(
 	return err
 }
 
-// setTxnAnchorKey sets the key at which to anchor the transaction record. The
-// transaction anchor key defaults to the first key written in a transaction.
-func (tc *TxnCoordSender) setTxnAnchorKeyLocked(key roachpb.Key) error {
-	if len(tc.mu.txn.Key) != 0 {
-		return errors.Errorf("transaction anchor key already set")
-	}
-	tc.mu.txn.Key = key
-	return nil
-}
-
-// AnchorOnSystemConfigRange is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) AnchorOnSystemConfigRange() error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	// Allow this to be called more than once.
-	if bytes.Equal(tc.mu.txn.Key, keys.SystemConfigSpan.Key) {
-		return nil
-	}
-	// The system-config trigger must be run on the system-config range which
-	// means any transaction with the trigger set needs to be anchored to the
-	// system-config range.
-	return tc.setTxnAnchorKeyLocked(keys.SystemConfigSpan.Key)
-}
-
 // TxnStatus is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) TxnStatus() roachpb.TransactionStatus {
 	tc.mu.Lock()
@@ -1084,11 +1058,11 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	// The transaction must not have already been used in this epoch.
-	if !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty() {
+	if tc.hasPerformedReadsLocked() {
 		return errors.WithContextTags(errors.AssertionFailedf(
 			"cannot set fixed timestamp, txn %s already performed reads", tc.mu.txn), ctx)
 	}
-	if tc.mu.txn.Sequence != 0 {
+	if tc.hasPerformedWritesLocked() {
 		return errors.WithContextTags(errors.AssertionFailedf(
 			"cannot set fixed timestamp, txn %s already performed writes", tc.mu.txn), ctx)
 	}
@@ -1405,4 +1379,26 @@ func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
 		tc.mu.storedRetryableErr = nil
 		tc.mu.txnState = txnPending
 	}
+}
+
+// HasPerformedReads is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedReads() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.hasPerformedReadsLocked()
+}
+
+// HasPerformedWrites is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasPerformedWrites() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.hasPerformedWritesLocked()
+}
+
+func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
+	return !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty()
+}
+
+func (tc *TxnCoordSender) hasPerformedWritesLocked() bool {
+	return tc.mu.txn.Sequence != 0
 }

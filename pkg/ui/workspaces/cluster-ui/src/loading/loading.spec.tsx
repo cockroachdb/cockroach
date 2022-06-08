@@ -115,12 +115,7 @@ describe("<Loading>", () => {
         assert.isFalse(wrapper.find(Spinner).exists());
         assert.isTrue(wrapper.find(InlineAlert).exists());
         errors.forEach(e =>
-          assert.isTrue(
-            wrapper
-              .find(InlineAlert)
-              .text()
-              .includes(e.message),
-          ),
+          assert.isTrue(wrapper.find(InlineAlert).text().includes(e.message)),
         );
       });
     });
@@ -149,12 +144,7 @@ describe("<Loading>", () => {
         errors
           .filter(e => !!e)
           .forEach(e =>
-            assert.isTrue(
-              wrapper
-                .find(InlineAlert)
-                .text()
-                .includes(e.message),
-            ),
+            assert.isTrue(wrapper.find(InlineAlert).text().includes(e.message)),
           );
       });
     });

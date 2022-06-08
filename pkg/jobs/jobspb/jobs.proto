@@ -505,6 +505,10 @@ message NewSchemaChangeDetails {
   // be ongoing.
   repeated BackfillProgress backfill_progress = 4 [(gogoproto.nullable) = false];
 
+  // MergeProgress stores the progress for index merges which may
+  // be ongoing.
+  repeated MergeProgress merge_progress = 6 [(gogoproto.nullable) = false];
+
   reserved 1, 2, 3, 5;
 }
 
@@ -544,6 +548,39 @@ message BackfillProgress {
   repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
 }
 
+// MergeProgress is used to track index merge progress in the declarative
+// schema changer.
+message MergeProgress {
+
+  // ID is the ID of the descriptor to which this checkpoint corresponds.
+  uint32 id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  message MergePair {
+    // SourceIndexID is the IDs of the temporary index to merge from.
+    uint32 source_index_id = 2 [
+      (gogoproto.customname) = "SourceIndexID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+    ];
+
+    // DestIndexID is the ID of the added index to merge into.
+    uint32 dest_index_id = 3 [
+      (gogoproto.customname) = "DestIndexID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+    ];
+
+    // CompletedSpans is the set of spans of the temporary index which have
+    // been merged into the destination index. Note that this will never
+    // contain tenant prefixes even if the data corresponds to a secondary
+    // tenant.
+    repeated roachpb.Span completed_spans = 4 [(gogoproto.nullable) = false];
+  }
+
+  // MergePairs holds the progress for each (temporary index, added index) pair.
+  repeated MergePair merge_pairs = 2 [(gogoproto.nullable) = false];
+}
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {

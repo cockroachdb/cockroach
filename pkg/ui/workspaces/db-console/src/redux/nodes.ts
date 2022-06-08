@@ -513,6 +513,25 @@ export const singleVersionSelector = createSelector(
   },
 );
 
+// clusterVersionSelector returns build version of the cluster, or returns the lowest version
+// if cluster's version is staggered.
+export const clusterVersionLabelSelector = createSelector(
+  versionsSelector,
+  builds => {
+    if (!builds) {
+      return undefined;
+    }
+    if (builds.length > 1) {
+      const lowestVersion = _.chain(builds)
+        .sortBy(b => b)
+        .first()
+        .value();
+      return `${lowestVersion} - Mixed Versions`;
+    }
+    return builds[0];
+  },
+);
+
 /**
  * partitionedStatuses divides the list of node statuses into "live" and "dead".
  */

@@ -268,6 +268,9 @@ type StoreTestingKnobs struct {
 	// in handleRaftReady to refreshReasonNewLeaderOrConfigChange.
 	EnableUnconditionalRefreshesInRaftReady bool
 
+	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
+	// before any throttling or sending logic.
+	SendSnapshot func()
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
@@ -403,6 +406,9 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
+
+	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
+	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

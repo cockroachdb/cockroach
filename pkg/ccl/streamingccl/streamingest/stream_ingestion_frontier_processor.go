@@ -64,12 +64,15 @@ type streamIngestionFrontier struct {
 	// span set.
 	frontier *span.Frontier
 
+	// metrics are monitoring all running ingestion jobs.
+	metrics *Metrics
+
 	// heartbeatSender sends heartbeats to the source cluster to keep the replication
 	// stream alive.
 	heartbeatSender *heartbeatSender
 
 	lastPartitionUpdate time.Time
-	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
+	partitionProgress   map[string]*jobspb.StreamIngestionProgress_PartitionProgress
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -101,7 +104,8 @@ func newStreamIngestionFrontierProcessor(
 		input:             input,
 		highWaterAtStart:  spec.HighWaterAtStart,
 		frontier:          frontier,
-		partitionProgress: make(map[string]jobspb.StreamIngestionProgress_PartitionProgress),
+		partitionProgress: make(map[string]*jobspb.StreamIngestionProgress_PartitionProgress),
+		metrics:           flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
 		heartbeatSender:   heartbeatSender,
 	}
 	if err := sf.Init(
@@ -158,13 +162,16 @@ func newHeartbeatSender(
 	}, nil
 }
 
-func (h *heartbeatSender) maybeHeartbeat(ctx context.Context, frontier hlc.Timestamp) error {
+func (h *heartbeatSender) maybeHeartbeat(
+	ctx context.Context, frontier hlc.Timestamp,
+) (bool, streampb.StreamReplicationStatus, error) {
 	heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.flowCtx.EvalCtx.Settings.SV)
 	if h.lastSent.Add(heartbeatFrequency).After(timeutil.Now()) {
-		return nil
+		return false, streampb.StreamReplicationStatus{}, nil
 	}
 	h.lastSent = timeutil.Now()
-	return h.client.Heartbeat(ctx, h.streamID, frontier)
+	s, err := h.client.Heartbeat(ctx, h.streamID, frontier)
+	return true, s, err
 }
 
 func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
@@ -177,7 +184,7 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 			timer := time.NewTimer(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
 				Get(&h.flowCtx.EvalCtx.Settings.SV))
 			defer timer.Stop()
-			unknownStatusErr := log.Every(1 * time.Minute)
+			unknownStreamStatusRetryErr := log.Every(1 * time.Minute)
 			for {
 				select {
 				case <-ctx.Done():
@@ -190,24 +197,24 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 				case frontier := <-h.frontierUpdates:
 					h.frontier.Forward(frontier)
 				}
-				err := h.maybeHeartbeat(ctx, h.frontier)
-				if err == nil {
+				sent, streamStatus, err := h.maybeHeartbeat(ctx, h.frontier)
+				// TODO(casper): add unit tests to test different kinds of client errors.
+				if err != nil {
+					return err
+				}
+
+				if !sent || streamStatus.StreamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
 					continue
 				}
 
-				var se streamingccl.StreamStatusErr
-				if !errors.As(err, &se) {
-					return errors.Wrap(err, "unknown stream status error")
-				}
-
-				if se.StreamStatus == streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
-					if unknownStatusErr.ShouldLog() {
-						log.Warningf(ctx, "replication stream %d has unknown status error", se.StreamID)
+				if streamStatus.StreamStatus == streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+					if unknownStreamStatusRetryErr.ShouldLog() {
+						log.Warningf(ctx, "replication stream %d has unknown stream status error and will retry later", h.streamID)
 					}
 					continue
 				}
 				// The replication stream is either paused or inactive.
-				return err
+				return streamingccl.NewStreamStatusErr(h.streamID, streamStatus.StreamStatus)
 			}
 		}
 		err := errors.CombineErrors(sendHeartbeats(), h.client.Close())
@@ -231,6 +238,7 @@ func (h *heartbeatSender) err() error {
 // Start is part of the RowSource interface.
 func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
+	sf.metrics.RunningCount.Inc(1)
 	sf.input.Start(ctx)
 	sf.heartbeatSender.startHeartbeatLoop(ctx)
 }
@@ -253,16 +261,16 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
-		if err := sf.maybeUpdatePartitionProgress(); err != nil {
-			// Updating the partition progress isn't a fatal error.
-			log.Errorf(sf.Ctx, "failed to update partition progress: %+v", err)
-		}
-
 		var frontierChanged bool
 		var err error
 		if frontierChanged, err = sf.noteResolvedTimestamps(row[0]); err != nil {
 			sf.MoveToDraining(err)
 			break
+		}
+
+		if err := sf.maybeUpdatePartitionProgress(); err != nil {
+			// Updating the partition progress isn't a fatal error.
+			log.Errorf(sf.Ctx, "failed to update partition progress: %+v", err)
 		}
 
 		// Send back a row to the job so that it can update the progress.
@@ -303,6 +311,7 @@ func (sf *streamIngestionFrontier) ConsumerClosed() {
 		if err := sf.heartbeatSender.stop(); err != nil {
 			log.Errorf(sf.Ctx, "heartbeatSender exited with error: %s", err.Error())
 		}
+		sf.metrics.RunningCount.Dec(1)
 	}
 }
 
@@ -371,7 +380,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		partitionKey := span.Key
 		partition := string(partitionKey)
 		if curFrontier, ok := partitionFrontiers[partition]; !ok {
-			partitionFrontiers[partition] = jobspb.StreamIngestionProgress_PartitionProgress{
+			partitionFrontiers[partition] = &jobspb.StreamIngestionProgress_PartitionProgress{
 				IngestedTimestamp: timestamp,
 			}
 		} else if curFrontier.IngestedTimestamp.Less(timestamp) {
@@ -385,9 +394,11 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	return job.FractionProgressed(ctx, nil, /* txn */
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			prog := details.(*jobspb.Progress_StreamIngest).StreamIngest
-			prog.PartitionProgress = partitionFrontiers
-			// "FractionProgressed" isn't relevant on jobs that are streaming in
-			// changes.
+			prog.PartitionProgress = make(map[string]jobspb.StreamIngestionProgress_PartitionProgress)
+			for partition, progress := range partitionFrontiers {
+				prog.PartitionProgress[partition] = *progress
+			}
+			// "FractionProgressed" isn't relevant on jobs that are streaming in changes.
 			return 0.0
 		},
 	)

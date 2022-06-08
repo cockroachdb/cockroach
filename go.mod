@@ -47,7 +47,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
-	github.com/cockroachdb/pebble v0.0.0-20220523221036-bb2c1501ac23
+	github.com/cockroachdb/pebble v0.0.0-20220603185428-ad44a62e4d04
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220310203902-58fb4627376e
@@ -106,7 +106,7 @@ require (
 	github.com/kr/text v0.2.0
 	github.com/kylelemons/godebug v1.1.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
-	github.com/lib/pq v1.10.6-0.20220412200556-b3b833258663
+	github.com/lib/pq v1.10.6
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
 	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/lufia/iostat v1.2.1
@@ -186,6 +186,7 @@ require (
 	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect

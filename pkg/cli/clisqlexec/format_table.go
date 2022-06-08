@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"reflect"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -99,12 +98,11 @@ func NewRowSliceIter(allRows [][]string, align string) RowStrIter {
 
 type rowIter struct {
 	rows          clisqlclient.Rows
-	colTypes      []string
 	showMoreChars bool
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
-	nextRowString, err := getNextRowStrings(iter.rows, iter.colTypes, iter.showMoreChars)
+	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
 	if err != nil {
 		return nil, err
 	}
@@ -115,23 +113,26 @@ func (iter *rowIter) Next() (row []string, err error) {
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
-	return getAllRowStrings(iter.rows, iter.colTypes, iter.showMoreChars)
+	return getAllRowStrings(iter.rows, iter.showMoreChars)
 }
 
 func (iter *rowIter) Align() []int {
 	cols := iter.rows.Columns()
 	align := make([]int, len(cols))
 	for i := range align {
-		switch iter.rows.ColumnTypeScanType(i).Kind() {
-		case reflect.String:
+		typName := iter.rows.ColumnTypeDatabaseTypeName(i)
+		if typName == "" || strings.HasPrefix(typName, "_") {
+			// All array types begin with "_" and user-defined types may not have a
+			// type name available.
 			align[i] = tablewriter.ALIGN_LEFT
-		case reflect.Slice:
+			continue
+		}
+		switch typName {
+		case "TEXT", "BYTEA", "CHAR", "BPCHAR", "NAME", "UUID":
 			align[i] = tablewriter.ALIGN_LEFT
-		case reflect.Int64:
+		case "INT2", "INT4", "INT8", "FLOAT4", "FLOAT8", "NUMERIC", "OID":
 			align[i] = tablewriter.ALIGN_RIGHT
-		case reflect.Float64:
-			align[i] = tablewriter.ALIGN_RIGHT
-		case reflect.Bool:
+		case "BOOL":
 			align[i] = tablewriter.ALIGN_CENTER
 		default:
 			align[i] = tablewriter.ALIGN_DEFAULT
@@ -143,7 +144,6 @@ func (iter *rowIter) Align() []int {
 func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
-		colTypes:      rows.ColumnTypeNames(),
 		showMoreChars: showMoreChars,
 	}
 }
@@ -181,13 +181,13 @@ func render(
 	iter RowStrIter,
 	completedHook func(),
 	noRowsHook func() (bool, error),
-) (err error) {
+) (retErr error) {
 	described := false
 	nRows := 0
 	defer func() {
 		// If the column headers are not printed yet, do it now.
 		if !described {
-			err = errors.WithSecondaryError(err, r.describe(w, cols))
+			retErr = errors.CombineErrors(retErr, r.describe(w, cols))
 		}
 
 		// completedHook, if provided, is called unconditionally of error.
@@ -198,18 +198,20 @@ func render(
 		// We need to call doneNoRows/doneRows also unconditionally.
 		var handled bool
 		if nRows == 0 && noRowsHook != nil {
-			handled, err = noRowsHook()
-			if err != nil {
+			var noRowsErr error
+			handled, noRowsErr = noRowsHook()
+			if noRowsErr != nil {
+				retErr = errors.CombineErrors(retErr, noRowsErr)
 				return
 			}
 		}
 		if handled {
-			err = errors.WithSecondaryError(err, r.doneNoRows(w))
+			retErr = errors.CombineErrors(retErr, r.doneNoRows(w))
 		} else {
-			err = errors.WithSecondaryError(err, r.doneRows(w, nRows))
+			retErr = errors.CombineErrors(retErr, r.doneRows(w, nRows))
 		}
 
-		if err != nil && nRows > 0 {
+		if retErr != nil && nRows > 0 {
 			fmt.Fprintf(ew, "(error encountered after some results were delivered)\n")
 		}
 	}()

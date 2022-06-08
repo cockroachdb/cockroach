@@ -114,10 +114,8 @@ var validationMap = []struct {
 			"DropTime": {status: thisFieldReferencesNoObjects},
 			"ReplacementOf": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(bulkio): add validation"},
-			"AuditMode": {status: thisFieldReferencesNoObjects},
-			"DropJobID": {status: thisFieldReferencesNoObjects},
-			"GCMutations": {status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(schema): add validation"},
+			"AuditMode":                     {status: thisFieldReferencesNoObjects},
+			"DropJobID":                     {status: thisFieldReferencesNoObjects},
 			"CreateQuery":                   {status: thisFieldReferencesNoObjects},
 			"CreateAsOfTime":                {status: thisFieldReferencesNoObjects},
 			"OutboundFKs":                   {status: iSolemnlySwearThisFieldIsValidated},
@@ -147,7 +145,8 @@ var validationMap = []struct {
 			"StoreColumnNames": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"KeyColumnIDs": {status: iSolemnlySwearThisFieldIsValidated},
+			"InvertedColumnKinds": {status: thisFieldReferencesNoObjects},
+			"KeyColumnIDs":        {status: iSolemnlySwearThisFieldIsValidated},
 			"KeySuffixColumnIDs": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -156,7 +156,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			upsertUntilBackpressure()
 			s, repl := getStoreAndReplica()
-			trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, false)
+			trace, _, err := s.Enqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */, false /* async */)
 			require.NoError(t, err)
 			if !processedRegexp.MatchString(trace.String()) {
 				return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)
@@ -166,7 +166,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	}
 
 	thresholdRE := regexp.MustCompile(`(?s).*Threshold:(?P<threshold>[^\s]*)`)
-	thresholdFromTrace := func(trace tracing.Recording) hlc.Timestamp {
+	thresholdFromTrace := func(trace tracingpb.Recording) hlc.Timestamp {
 		threshStr := string(thresholdRE.ExpandString(nil, "$threshold",
 			trace.String(), thresholdRE.FindStringSubmatchIndex(trace.String())))
 		thresh, err := hlc.ParseTimestamp(threshStr)
@@ -200,13 +200,13 @@ func TestProtectedTimestamps(t *testing.T) {
 	s, repl := getStoreAndReplica()
 	// The protectedts record will prevent us from aging the MVCC garbage bytes
 	// past the oldest record so shouldQueue should be false. Verify that.
-	trace, _, err := s.ManuallyEnqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */)
+	trace, _, err := s.Enqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */, false /* async */)
 	require.NoError(t, err)
 	require.Regexp(t, "(?s)shouldQueue=false", trace.String())
 
 	// If we skipShouldQueue then gc will run but it should only run up to the
 	// timestamp of our record at the latest.
-	trace, _, err = s.ManuallyEnqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */)
+	trace, _, err = s.Enqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */, false /* async */)
 	require.NoError(t, err)
 	require.Regexp(t, "(?s)done with GC evaluation for 0 keys", trace.String())
 	thresh := thresholdFromTrace(trace)
@@ -258,7 +258,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	// happens up to the protected timestamp of the new record.
 	require.NoError(t, ptsWithDB.Release(ctx, nil, ptsRec.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
-		trace, _, err = s.ManuallyEnqueue(ctx, "mvccGC", repl, false)
+		trace, _, err = s.Enqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */, false /* async */)
 		require.NoError(t, err)
 		if !processedRegexp.MatchString(trace.String()) {
 			return errors.Errorf("%q does not match %q", trace.String(), processedRegexp)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestTxnVerboseTrace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tracer := tracing.NewTracer()
-	ctx, sp := tracer.StartSpanCtx(context.Background(), "test-txn", tracing.WithRecording(tracing.RecordingVerbose))
+	ctx, sp := tracer.StartSpanCtx(context.Background(), "test-txn", tracing.WithRecording(tracingpb.RecordingVerbose))
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
@@ -55,7 +56,7 @@ func TestTxnVerboseTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.Event(ctx, "txn complete")
-	collectedSpans := sp.FinishAndGetRecording(tracing.RecordingVerbose)
+	collectedSpans := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
 	dump := collectedSpans.String()
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
@@ -536,27 +537,6 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	if d := *txn.deadline(); d != pastDeadline {
 		t.Errorf("unexpected deadline: %s", d)
 	}
-}
-
-// Test that, if DeprecatedSetSystemConfigTrigger() fails, the systemConfigTrigger has not
-// been set.
-func TestAnchoringErrorNoTrigger(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
-			return nil, nil
-		}), clock, stopper)
-	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	require.EqualError(t, txn.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
-	require.False(t, txn.systemConfigTrigger)
 }
 
 // TestTxnNegotiateAndSend tests the behavior of NegotiateAndSend, both when the

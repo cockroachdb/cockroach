@@ -27,9 +27,7 @@ describe("Nodes sagas", () => {
 
   describe("refreshNodesSaga", () => {
     it("dispatches request nodes action", () => {
-      expectSaga(refreshNodesSaga)
-        .put(actions.request())
-        .run();
+      expectSaga(refreshNodesSaga).put(actions.request()).run();
     });
   });
 

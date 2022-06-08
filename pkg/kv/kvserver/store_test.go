@@ -60,7 +60,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -2370,6 +2370,10 @@ func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, replicaInQueue, hlc.Clo
 	// Do nothing
 }
 
+func (fq *fakeRangeQueue) AddAsync(context.Context, replicaInQueue, float64) {
+	// Do nothing
+}
+
 func (fq *fakeRangeQueue) MaybeRemove(rangeID roachpb.RangeID) {
 	fq.maybeRemovedRngs <- rangeID
 }
@@ -2814,7 +2818,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		expectedErr := errors.New("")
 		c := fakeSnapshotStream{nil, expectedErr}
 		err := sendSnapshot(
-			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* bytesSentCounter */
+			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
 		)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
@@ -2832,7 +2836,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(
-			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* bytesSentCounter */
+			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
 		)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
@@ -3089,7 +3093,9 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 		StoreID:   tc.store.StoreID(),
 		ReplicaID: 7,
 	})
-	_, _, err := tc.store.ManuallyEnqueue(ctx, "replicaGC", repl, true)
+	_, _, err := tc.store.Enqueue(
+		ctx, "replicaGC", repl, true /* skipShouldQueue */, false, /* async */
+	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not enqueueing uninitialized replica")
 }

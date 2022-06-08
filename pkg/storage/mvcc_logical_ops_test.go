@@ -110,6 +110,11 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// Write an inline value. This should be ignored by the log.
+			if err := MVCCPut(ctx, ol, nil, testKey6, hlc.Timestamp{}, hlc.ClockTimestamp{}, value6, nil); err != nil {
+				t.Fatal(err)
+			}
+
 			// Verify that the recorded logical ops match expectations.
 			makeOp := func(val interface{}) enginepb.MVCCLogicalOp {
 				var op enginepb.MVCCLogicalOp

@@ -37,7 +37,8 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate bazel     # DEPS.bzl and BUILD.bazel files
         dev generate cgo       # files that help non-Bazel systems (IDEs, go) link to our C dependencies
         dev generate docs      # generates documentation
-        dev generate go        # generates go code (execgen, stringer, protobufs, etc.)
+        dev generate go        # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
+        dev generate go_nocgo  # generates go code (execgen, stringer, protobufs, etc.)
         dev generate protobuf  # *.pb.go files (subset of 'dev generate go')
 `,
 		Args: cobra.MinimumNArgs(0),
@@ -56,56 +57,45 @@ type configuration struct {
 	Arch string
 }
 
-var archivedCdepConfigurations = []configuration{
-	{"linux", "amd64"},
-	{"linux", "arm64"},
-	{"darwin", "amd64"},
-	{"darwin", "arm64"},
-	{"windows", "amd64"},
-}
-
-// archivedCdepConfig returns eturn the cross config string associated with the
-// current machine configuration (e.g. "macosarm").
-func archivedCdepConfig() string {
-	for _, config := range archivedCdepConfigurations {
-		if config.Os == runtime.GOOS && config.Arch == runtime.GOARCH {
-			ret := config.Os
-			if ret == "darwin" {
-				ret = "macos"
-			}
-			if config.Arch == "arm64" {
-				ret += "arm"
-			}
-			return ret
-		}
-	}
-	return ""
-}
-
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
 		"bazel":    d.generateBazel,
 		"cgo":      d.generateCgo,
 		"docs":     d.generateDocs,
 		"go":       d.generateGo,
+		"go_nocgo": d.generateGoNoCgo,
 		"protobuf": d.generateProtobuf,
 	}
 
 	if len(targets) == 0 {
-		targets = append(targets, "bazel", "go", "docs", "cgo")
+		targets = append(targets, "bazel", "go_nocgo", "docs", "cgo")
 	}
 
 	targetsMap := make(map[string]struct{})
 	for _, target := range targets {
 		targetsMap[target] = struct{}{}
 	}
-	_, includesGo := targetsMap["go"]
-	_, includesDocs := targetsMap["docs"]
-	if includesGo && includesDocs {
-		delete(targetsMap, "go")
-		delete(targetsMap, "docs")
-		if err := d.generateGoAndDocs(cmd); err != nil {
-			return err
+	{
+		// In this case, generating both go and cgo would duplicate work.
+		// Generate go_nocgo instead.
+		_, includesGo := targetsMap["go"]
+		_, includesCgo := targetsMap["cgo"]
+		if includesGo && includesCgo {
+			delete(targetsMap, "go")
+			targetsMap["go_nocgo"] = struct{}{}
+		}
+	}
+	{
+		// generateGoAndDocs is a faster way to generate both (non-cgo)
+		// go code as well as the docs
+		_, includesGonocgo := targetsMap["go_nocgo"]
+		_, includesDocs := targetsMap["docs"]
+		if includesGonocgo && includesDocs {
+			delete(targetsMap, "go_nocgo")
+			delete(targetsMap, "docs")
+			if err := d.generateGoAndDocs(cmd); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -162,6 +152,13 @@ func (d *dev) generateGoAndDocs(cmd *cobra.Command) error {
 }
 
 func (d *dev) generateGo(cmd *cobra.Command) error {
+	if err := d.generateGoNoCgo(cmd); err != nil {
+		return err
+	}
+	return d.generateCgo(cmd)
+}
+
+func (d *dev) generateGoNoCgo(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:code")
 }
 
@@ -199,7 +196,7 @@ func (d *dev) generateRedactSafe(ctx context.Context) error {
 
 func (d *dev) generateCgo(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	args := []string{"build", "//c-deps:libjemalloc", "//c-deps:libproj"}
+	args := []string{"build", "//build/bazelutil:test_force_build_cdeps", "//c-deps:libjemalloc", "//c-deps:libproj"}
 	if runtime.GOOS == "linux" {
 		args = append(args, "//c-deps:libkrb5")
 	}
@@ -211,6 +208,11 @@ func (d *dev) generateCgo(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	bazelBin, err := d.getBazelBin(ctx)
+	if err != nil {
+		return err
+	}
+
 	const cgoTmpl = `// GENERATED FILE DO NOT EDIT
 
 package {{ .Package }}
@@ -221,8 +223,12 @@ import "C"
 `
 
 	tpl := template.Must(template.New("source").Parse(cgoTmpl))
+	archived, err := d.getArchivedCdepString(bazelBin)
+	if err != nil {
+		return err
+	}
+	// Figure out where to find the c-deps libraries.
 	var jemallocDir, projDir, krbDir string
-	archived := archivedCdepConfig()
 	if archived != "" {
 		execRoot, err := d.getExecutionRoot(ctx)
 		if err != nil {
@@ -234,10 +240,6 @@ import "C"
 			krbDir = filepath.Join(execRoot, "external", fmt.Sprintf("archived_cdep_libkrb5_%s", archived))
 		}
 	} else {
-		bazelBin, err := d.getBazelBin(ctx)
-		if err != nil {
-			return err
-		}
 		jemallocDir = filepath.Join(bazelBin, "c-deps/libjemalloc_foreign")
 		projDir = filepath.Join(bazelBin, "c-deps/libproj_foreign")
 		if runtime.GOOS == "linux" {

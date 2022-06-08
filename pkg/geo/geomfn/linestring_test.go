@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geotest"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -604,7 +605,7 @@ func TestLineSubstring(t *testing.T) {
 				require.Equal(t, tt.wantErrString, err.Error())
 				return
 			}
-			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeomT), got, 1e-4)
+			geotest.RequireGeometryInEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeomT), got, 1e-4)
 		})
 	}
 }

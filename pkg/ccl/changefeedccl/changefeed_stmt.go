@@ -1208,7 +1208,9 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetS
 	if len(cd.TargetSpecifications) > 0 {
 		for _, ts := range cd.TargetSpecifications {
 			if ts.TableID > 0 {
-				ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
+				if ts.StatementTimeName == "" {
+					ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
+				}
 				targets = append(targets, ts)
 			}
 		}

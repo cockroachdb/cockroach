@@ -568,6 +568,9 @@ type testClusterConfig struct {
 	// disableDeclarativeSchemaChanger will disable the declarative schema changer
 	// for logictest.
 	disableDeclarativeSchemaChanger bool
+	// disableLocalityOptimizedSearch disables the cluster setting
+	// locality_optimized_partitioned_index_scan, which is enabled by default.
+	disableLocalityOptimizedSearch bool
 }
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -898,6 +901,12 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:          9,
 		localities:        multiregion9node3region3azsLocalities,
 		overrideVectorize: "off",
+	},
+	{
+		name:                           "multiregion-9node-3region-3azs-no-los",
+		numNodes:                       9,
+		localities:                     multiregion9node3region3azsLocalities,
+		disableLocalityOptimizedSearch: true,
 	},
 	{
 		name:       "multiregion-15node-5region-3azs",
@@ -1922,6 +1931,14 @@ func (t *logicTest) newCluster(
 		if cfg.disableDeclarativeSchemaChanger {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if cfg.disableLocalityOptimizedSearch {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.locality_optimized_partitioned_index_scan.enabled = false",
+			); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -3249,6 +3266,13 @@ func (t *logicTest) processSubtest(
 				}
 			}
 			cleanupUserFunc := t.setUser(fields[1], nodeIdx)
+			// In multi-tenant tests, we may need to also create database test when
+			// we switch to a different tenant.
+			if t.cfg.useTenant && strings.HasPrefix(fields[1], "host-cluster-") {
+				if _, err := t.db.Exec("CREATE DATABASE IF NOT EXISTS test; USE test;"); err != nil {
+					return errors.Wrapf(err, "error creating database on admin tenant")
+				}
+			}
 			defer cleanupUserFunc()
 
 		case "skip":

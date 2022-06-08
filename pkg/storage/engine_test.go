@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
@@ -947,71 +949,6 @@ func TestEngineScan2(t *testing.T) {
 	}
 }
 
-func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, end MVCCKey) error) {
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
-
-			keys := []MVCCKey{
-				mvccKey("a"),
-				mvccKey("aa"),
-				mvccKey("aaa"),
-				mvccKey("ab"),
-				mvccKey("abc"),
-				mvccKey(roachpb.RKeyMax),
-			}
-
-			insertKeys(keys, engine, t)
-
-			// Scan all keys (non-inclusive of final key).
-			verifyScan(localMax, roachpb.KeyMax, 10, keys[:5], engine, t)
-
-			// Delete a range of keys
-			if err := clearRange(engine, mvccKey("aa"), mvccKey("abc")); err != nil {
-				t.Fatal(err)
-			}
-			// Verify what's left
-			verifyScan(localMax, roachpb.KeyMax, 10,
-				[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
-		})
-	}
-}
-
-func TestEngineDeleteRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		return engine.ClearMVCCRange(start, end)
-	})
-}
-
-func TestEngineDeleteRangeBatch(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		batch := engine.NewUnindexedBatch(true /* writeOnly */)
-		defer batch.Close()
-		if err := batch.ClearMVCCRange(start, end); err != nil {
-			return err
-		}
-		batch2 := engine.NewUnindexedBatch(true /* writeOnly */)
-		defer batch2.Close()
-		if err := batch2.ApplyBatchRepr(batch.Repr(), false); err != nil {
-			return err
-		}
-		return batch2.Commit(false)
-	})
-}
-
-func TestEngineDeleteIterRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		return engine.ClearIterRange(start.Key, end.Key)
-	})
-}
-
 func TestSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1599,6 +1536,64 @@ func TestFS(t *testing.T) {
 	}
 }
 
+func TestGetIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	reader, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer reader.Close()
+
+	txn1ID := uuid.MakeV4()
+	txn1TS := hlc.Timestamp{Logical: 1}
+	txn1 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn1ID, Epoch: 1, WriteTimestamp: txn1TS, MinTimestamp: txn1TS, CoordinatorNodeID: 1}, ReadTimestamp: txn1TS}
+
+	for _, keyName := range []string{"a", "aa"} {
+		key := roachpb.Key(keyName)
+		err := MVCCPut(ctx, reader, nil, key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: key}, txn1)
+		require.NoError(t, err)
+	}
+
+	txn2ID := uuid.MakeV4()
+	txn2TS := hlc.Timestamp{Logical: 2}
+	txn2 := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Key: roachpb.Key("a"), ID: txn2ID, Epoch: 2, WriteTimestamp: txn2TS, MinTimestamp: txn2TS, CoordinatorNodeID: 2}, ReadTimestamp: txn2TS}
+
+	key := roachpb.Key("b")
+	err = MVCCPut(ctx, reader, nil, key, txn2.ReadTimestamp, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: key}, txn2)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		key   string
+		txn   *roachpb.Transaction
+		err   bool
+		found bool
+	}{
+		{"found a", "a", txn1, false, true},
+		{"found aa", "aa", txn1, false, true},
+		{"found b", "b", txn2, false, true},
+		{"not found", "c", nil, false, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			intent, err := GetIntent(reader, roachpb.Key(test.key))
+			if test.err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if test.found {
+					require.NotNil(t, intent)
+					require.Equal(t, roachpb.Key(test.key), intent.Key)
+					require.Equal(t, test.txn.TxnMeta, intent.Txn)
+				} else {
+					require.Nil(t, intent)
+				}
+			}
+		})
+	}
+}
+
 func TestScanIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1657,6 +1652,156 @@ func TestScanIntents(t *testing.T) {
 	}
 }
 
+// TestEngineClearRange tests Clear*Range methods and related helpers.
+func TestEngineClearRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Set up initial dataset, where [b-g) will be cleared.
+	// [] is intent, o---o is MVCC range tombstone.
+	//
+	// 6  [a6][b6]       [e6]     [g6]
+	// 5   a5  b5  c5
+	// 4   o-------------------o   o---o
+	// 3                  e3
+	// 2   o-------------------o   g2
+	// 1           c1  o---------------o
+	//     a   b   c   d   e   f   g   h
+	//
+	// After a complete clear, the remaining state will be:
+	//
+	// 6  [a6]                    [g6]
+	// 5   a5
+	// 4   o---o                   o---o
+	// 3
+	// 2   o---o                   g2
+	// 1           								 o---o
+	//     a   b   c   d   e   f   g   h
+	//
+	// However, certain clearers cannot clear intents or range keys.
+	writeInitialData := func(t *testing.T, rw ReadWriter) {
+		var localTS hlc.ClockTimestamp
+		txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, wallTS(6), 1, 1)
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("c"), wallTS(1), localTS, stringValue("c1").Value, nil))
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("d", "h", 1), MVCCValue{}))
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 2), MVCCValue{}))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("g"), wallTS(2), localTS, stringValue("g2").Value, nil))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("e"), wallTS(3), localTS, stringValue("e3").Value, nil))
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 4), MVCCValue{}))
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("g", "h", 4), MVCCValue{}))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("a"), wallTS(5), localTS, stringValue("a2").Value, nil))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("b"), wallTS(5), localTS, stringValue("b2").Value, nil))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("c"), wallTS(5), localTS, stringValue("c2").Value, nil))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("a"), wallTS(6), localTS, stringValue("a6").Value, &txn))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("b"), wallTS(6), localTS, stringValue("b6").Value, &txn))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("e"), wallTS(6), localTS, stringValue("e6").Value, &txn))
+		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("g"), wallTS(6), localTS, stringValue("g6").Value, &txn))
+	}
+	start, end := roachpb.Key("b"), roachpb.Key("g")
+
+	testcases := map[string]struct {
+		clearRange      func(ReadWriter, roachpb.Key, roachpb.Key) error
+		clearsIntents   bool
+		clearsRangeKeys bool
+	}{
+		"ClearRawRange": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearRawRange(start, end)
+			},
+			clearsIntents:   false,
+			clearsRangeKeys: true,
+		},
+
+		"ClearMVCCRange": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearMVCCRange(start, end)
+			},
+			clearsIntents:   true,
+			clearsRangeKeys: true,
+		},
+
+		"ClearMVCCIteratorRange": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearMVCCIteratorRange(start, end)
+			},
+			clearsIntents:   true,
+			clearsRangeKeys: true,
+		},
+
+		"ClearMVCCVersions": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return rw.ClearMVCCVersions(MVCCKey{Key: start}, MVCCKey{Key: end})
+			},
+			clearsIntents:   false,
+			clearsRangeKeys: false,
+		},
+
+		"ClearRangeWithHeuristic": {
+			clearRange: func(rw ReadWriter, start, end roachpb.Key) error {
+				return ClearRangeWithHeuristic(rw, rw, start, end)
+			},
+			clearsIntents:   false,
+			clearsRangeKeys: true,
+		},
+	}
+	testutils.RunTrueAndFalse(t, "batch", func(t *testing.T, useBatch bool) {
+		for name, tc := range testcases {
+			t.Run(name, func(t *testing.T) {
+				eng := NewDefaultInMemForTesting()
+				defer eng.Close()
+				writeInitialData(t, eng)
+
+				rw := ReadWriter(eng)
+				if useBatch {
+					batch := eng.NewBatch()
+					defer batch.Close()
+					rw = batch
+				}
+
+				require.NoError(t, tc.clearRange(rw, start, end))
+
+				// We always expect all point keys to be cleared. We'll find provisional
+				// values for the intents.
+				require.Equal(t, []MVCCKey{
+					pointKey("a", 6), pointKey("a", 5), pointKey("g", 6), pointKey("g", 2),
+				}, scanPointKeys(t, rw))
+
+				// Which separated intents we find will depend on the clearer.
+				if tc.clearsIntents {
+					require.Equal(t, []roachpb.Key{roachpb.Key("a"), roachpb.Key("g")}, scanIntentKeys(t, rw))
+				} else {
+					require.Equal(t, []roachpb.Key{
+						roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("e"), roachpb.Key("g"),
+					}, scanIntentKeys(t, rw))
+				}
+
+				// Which range keys we find will depend on the clearer.
+				if tc.clearsRangeKeys {
+					require.Equal(t, []MVCCRangeKeyValue{
+						rangeKV("a", "b", 4, MVCCValue{}),
+						rangeKV("a", "b", 2, MVCCValue{}),
+						rangeKV("g", "h", 4, MVCCValue{}),
+						rangeKV("g", "h", 1, MVCCValue{}),
+					}, scanRangeKeys(t, rw))
+				} else {
+					require.Equal(t, []MVCCRangeKeyValue{
+						rangeKV("a", "d", 4, MVCCValue{}),
+						rangeKV("a", "d", 2, MVCCValue{}),
+						rangeKV("d", "f", 4, MVCCValue{}),
+						rangeKV("d", "f", 2, MVCCValue{}),
+						rangeKV("d", "f", 1, MVCCValue{}),
+						rangeKV("f", "g", 1, MVCCValue{}),
+						rangeKV("g", "h", 4, MVCCValue{}),
+						rangeKV("g", "h", 1, MVCCValue{}),
+					}, scanRangeKeys(t, rw))
+				}
+			})
+		}
+	})
+}
+
 // TestEngineIteratorVisibility checks iterator visibility for various readers.
 // See comment on Engine.NewMVCCIterator for detailed visibility semantics.
 func TestEngineIteratorVisibility(t *testing.T) {
@@ -1706,8 +1851,9 @@ func TestEngineIteratorVisibility(t *testing.T) {
 				eng := NewDefaultInMemForTesting()
 				defer eng.Close()
 
-				// Write initial point key.
+				// Write initial point and range keys.
 				require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
+				require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 1), MVCCValue{}))
 
 				// Set up two readers: one regular and one which will be pinned.
 				r := tc.makeReader(eng)
@@ -1720,6 +1866,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 				// Create an iterator. This will see the old engine state regardless
 				// of the type of reader.
 				opts := IterOptions{
+					KeyTypes:   IterKeyTypePointsAndRanges,
 					LowerBound: keys.LocalMax,
 					UpperBound: keys.MaxKey,
 				}
@@ -1736,13 +1883,17 @@ func TestEngineIteratorVisibility(t *testing.T) {
 
 				// Write a new key to the engine, and set up the expected results.
 				require.NoError(t, eng.PutMVCC(pointKey("a", 2), stringValue("a2")))
+				require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 2), MVCCValue{}))
 
-				expectOld := []MVCCKeyValue{
+				expectOld := []interface{}{
 					pointKV("a", 1, "a1"),
+					rangeKV("b", "c", 1, MVCCValue{}),
 				}
-				expectNew := []MVCCKeyValue{
+				expectNew := []interface{}{
 					pointKV("a", 2, "a2"),
 					pointKV("a", 1, "a1"),
+					rangeKV("b", "c", 2, MVCCValue{}),
+					rangeKV("b", "c", 1, MVCCValue{}),
 				}
 
 				// The existing (old) iterator should all see the old engine state,
@@ -1771,24 +1922,30 @@ func TestEngineIteratorVisibility(t *testing.T) {
 					require.Equal(t, expectNew, scanIter(t, iterPinned))
 				}
 
-				// If the reader is also a writer, check write interactions. In
-				// particular, a Batch should read its own writes for any new iterators,
-				// but not for any existing iterators.
+				// If the reader is also a writer, check interactions with writes.
+				// In particular, a Batch should read its own writes for any new
+				// iterators, but not for any existing iterators.
 				if tc.canWrite {
 					w, ok := r.(Writer)
 					require.Equal(t, tc.canWrite, ok)
 
-					// Write a new key to the writer (not engine), and set up expected
-					// results.
+					// Write a new point and range key to the writer (not engine), and set
+					// up expected results.
 					require.NoError(t, w.PutMVCC(pointKey("a", 3), stringValue("a3")))
-					expectNewAndOwn := []MVCCKeyValue{
+					require.NoError(t, w.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 3), MVCCValue{}))
+					expectNewAndOwn := []interface{}{
 						pointKV("a", 3, "a3"),
 						pointKV("a", 2, "a2"),
 						pointKV("a", 1, "a1"),
+						rangeKV("b", "c", 3, MVCCValue{}),
+						rangeKV("b", "c", 2, MVCCValue{}),
+						rangeKV("b", "c", 1, MVCCValue{}),
 					}
-					expectOldAndOwn := []MVCCKeyValue{
+					expectOldAndOwn := []interface{}{
 						pointKV("a", 3, "a3"),
 						pointKV("a", 1, "a1"),
+						rangeKV("b", "c", 3, MVCCValue{}),
+						rangeKV("b", "c", 1, MVCCValue{}),
 					}
 
 					// The existing iterators should see the same state as before these
@@ -1827,23 +1984,383 @@ func TestEngineIteratorVisibility(t *testing.T) {
 	}
 }
 
-// scanIter scans all point KVs from the iterator.
-func scanIter(t *testing.T, iter MVCCIterator) []MVCCKeyValue {
+// TestEngineRangeKeyMutations tests that range key mutations work as expected,
+// both for the engine directly and for batches.
+func TestEngineRangeKeyMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "batch", func(t *testing.T, useBatch bool) {
+		eng := NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		rw := ReadWriter(eng)
+		if useBatch {
+			rw = eng.NewBatch()
+			defer rw.Close()
+		}
+
+		require.True(t, rw.SupportsRangeKeys())
+
+		// Check errors for invalid, empty, and zero-length range keys. Not
+		// exhaustive, since we assume validation dispatches to
+		// MVCCRangeKey.Validate() which is tested separately.
+		empty := MVCCRangeKey{}
+		invalid := rangeKey("b", "a", 1)
+		zeroLength := rangeKey("a", "a", 1)
+
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(empty, MVCCValue{}))
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(invalid, MVCCValue{}))
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(zeroLength, MVCCValue{}))
+
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(empty))
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(invalid))
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(zeroLength))
+
+		require.Error(t, rw.ExperimentalClearAllMVCCRangeKeys(empty.StartKey, empty.EndKey))
+		require.Error(t, rw.ExperimentalClearAllMVCCRangeKeys(invalid.StartKey, invalid.EndKey))
+		require.Error(t, rw.ExperimentalClearAllMVCCRangeKeys(zeroLength.StartKey, zeroLength.EndKey))
+
+		// Check that non-tombstone values error.
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "b", 1), stringValue("foo")))
+
+		// Check that nothing got written during the errors above.
+		require.Empty(t, scanRangeKeys(t, rw))
+
+		// Write some range keys and read the fragmented keys back.
+		for _, rangeKey := range []MVCCRangeKey{
+			rangeKey("a", "d", 1),
+			rangeKey("f", "h", 1),
+			rangeKey("c", "g", 2),
+		} {
+			require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{}))
+		}
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "c", 1, MVCCValue{}),
+			rangeKV("c", "d", 2, MVCCValue{}),
+			rangeKV("c", "d", 1, MVCCValue{}),
+			rangeKV("d", "f", 2, MVCCValue{}),
+			rangeKV("f", "g", 2, MVCCValue{}),
+			rangeKV("f", "g", 1, MVCCValue{}),
+			rangeKV("g", "h", 1, MVCCValue{}),
+		}, scanRangeKeys(t, rw))
+
+		// Clear the f-g portion of [f-h)@1, twice for idempotency. This should not
+		// affect any other range keys, apart from removing the fragment boundary
+		// at f for [d-g)@2.
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 1)))
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 1)))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "c", 1, MVCCValue{}),
+			rangeKV("c", "d", 2, MVCCValue{}),
+			rangeKV("c", "d", 1, MVCCValue{}),
+			rangeKV("d", "g", 2, MVCCValue{}),
+			rangeKV("g", "h", 1, MVCCValue{}),
+		}, scanRangeKeys(t, rw))
+
+		// Write [e-f)@2 on top of existing [d-g)@2. This should be a noop.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("e", "f", 2), MVCCValue{}))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "c", 1, MVCCValue{}),
+			rangeKV("c", "d", 2, MVCCValue{}),
+			rangeKV("c", "d", 1, MVCCValue{}),
+			rangeKV("d", "g", 2, MVCCValue{}),
+			rangeKV("g", "h", 1, MVCCValue{}),
+		}, scanRangeKeys(t, rw))
+
+		// Clear all range keys in the [c-f) span. Twice for idempotency.
+		require.NoError(t, rw.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+		require.NoError(t, rw.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "c", 1, MVCCValue{}),
+			rangeKV("f", "g", 2, MVCCValue{}),
+			rangeKV("g", "h", 1, MVCCValue{}),
+		}, scanRangeKeys(t, rw))
+
+		// Write another range key to bridge the [c-g)@1 gap.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("c", "g", 1), MVCCValue{}))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "f", 1, MVCCValue{}),
+			rangeKV("f", "g", 2, MVCCValue{}),
+			rangeKV("f", "g", 1, MVCCValue{}),
+			rangeKV("g", "h", 1, MVCCValue{}),
+		}, scanRangeKeys(t, rw))
+
+		// Writing a range key [a-f)@2 which abuts [f-g)@2 should not merge if it
+		// has a different value (local timestamp).
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 2), withLocalTS(MVCCValue{}, 7)))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "f", 2, withLocalTS(MVCCValue{}, 7)),
+			rangeKV("a", "f", 1, MVCCValue{}),
+			rangeKV("f", "g", 2, MVCCValue{}),
+			rangeKV("f", "g", 1, MVCCValue{}),
+			rangeKV("g", "h", 1, MVCCValue{}),
+		}, scanRangeKeys(t, rw))
+
+		// If using a batch, make sure nothing has been written to the engine, then
+		// commit the batch and make sure it gets written to the engine.
+		if useBatch {
+			require.Empty(t, scanRangeKeys(t, eng))
+			require.NoError(t, rw.(Batch).Commit(true))
+			require.Equal(t, []MVCCRangeKeyValue{
+				rangeKV("a", "f", 2, withLocalTS(MVCCValue{}, 7)),
+				rangeKV("a", "f", 1, MVCCValue{}),
+				rangeKV("f", "g", 2, MVCCValue{}),
+				rangeKV("f", "g", 1, MVCCValue{}),
+				rangeKV("g", "h", 1, MVCCValue{}),
+			}, scanRangeKeys(t, eng))
+		}
+	})
+}
+
+// TestEngineRangeKeysUnsupported tests that engines without range key
+// support behave as expected, i.e. writes fail but reads degrade gracefully.
+func TestEngineRangeKeysUnsupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set up an engine with a version that doesn't support range keys.
+	version := clusterversion.ByKey(clusterversion.EnsurePebbleFormatVersionRangeKeys - 1)
+	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+
+	eng := NewDefaultInMemForTesting(Settings(st))
+	defer eng.Close()
+
+	require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+	snapshot := eng.NewSnapshot()
+	defer snapshot.Close()
+	readOnly := eng.NewReadOnly(StandardDurability)
+	defer readOnly.Close()
+
+	writers := map[string]Writer{
+		"engine": eng,
+		"batch":  batch,
+	}
+	readers := map[string]Reader{
+		"engine":   eng,
+		"batch":    batch,
+		"snapshot": snapshot,
+		"readonly": readOnly,
+	}
+
+	// Range key puts should error, but clears are noops (since old databases
+	// cannot contain range keys by definition).
+	for name, w := range writers {
+		t.Run(fmt.Sprintf("write/%s", name), func(t *testing.T) {
+			rangeKey := rangeKey("a", "b", 2)
+			err := w.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "range keys not supported")
+			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rangeKey))
+			require.NoError(t, w.ExperimentalClearAllMVCCRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+		})
+	}
+
+	// All range key iterators should degrade gracefully to point key iterators,
+	// and be empty for IterKeyTypeRangesOnly.
+	keyTypes := map[string]IterKeyType{
+		"PointsOnly":      IterKeyTypePointsOnly,
+		"PointsAndRanges": IterKeyTypePointsAndRanges,
+		"RangesOnly":      IterKeyTypeRangesOnly,
+	}
+	for name, r := range readers {
+		for keyTypeName, keyType := range keyTypes {
+			t.Run(fmt.Sprintf("read/%s/%s", name, keyTypeName), func(t *testing.T) {
+				require.False(t, r.SupportsRangeKeys())
+
+				iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					KeyTypes:             keyType,
+					UpperBound:           keys.MaxKey,
+					RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
+				})
+				defer iter.Close()
+
+				iter.SeekGE(pointKey("a", 0))
+
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+
+				if keyType == IterKeyTypeRangesOnly {
+					// With RangesOnly, the iterator must be empty.
+					require.False(t, ok)
+					hasPoint, hasRange := iter.HasPointAndRange()
+					require.False(t, hasPoint)
+					require.False(t, hasRange)
+					return
+				}
+
+				require.True(t, ok)
+				require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
+				require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
+
+				hasPoint, hasRange := iter.HasPointAndRange()
+				require.True(t, hasPoint)
+				require.False(t, hasRange)
+				require.Empty(t, iter.RangeBounds())
+				require.Empty(t, iter.RangeKeys())
+
+				// Exhaust the iterator.
+				iter.Next()
+				ok, err = iter.Valid()
+				require.NoError(t, err)
+				require.False(t, ok)
+			})
+		}
+	}
+}
+
+// TestUnindexedBatchClearAllRangeKeys tests that range keys are properly
+// cleared via an unindexed batch. This tests an optimization in
+// pebbleBatch.ExperimentalClearAllMVCCRangeKeys that tightens the span bounds
+// to existing keys to avoid dropping unnecessary Pebble range tombstones, which
+// must handle the range keys in the unindexed batch correctly.
+func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Write a range key [a-d)@1 into the engine.
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("a", "d", 1), MVCCValue{}))
+
+	// Set up an unindexed batch, and write [e-h)@2 into it. Then clear
+	// all range keys in the [c-f) span via the batch and commit it.
+	batch := eng.NewUnindexedBatch(true /* writeOnly */)
+	defer batch.Close()
+
+	require.NoError(t, batch.ExperimentalPutMVCCRangeKey(rangeKey("e", "h", 2), MVCCValue{}))
+	require.NoError(t, batch.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+	require.NoError(t, batch.Commit(false /* sync */))
+
+	// Read range keys back from engine. We should find [a-c)@1 and [f-h)@2.
+	require.Equal(t, []MVCCRangeKeyValue{
+		rangeKV("a", "c", 1, MVCCValue{}),
+		rangeKV("f", "h", 2, MVCCValue{}),
+	}, scanRangeKeys(t, eng))
+
+	// Now, set up another unindexed batch without any range keys, and clear
+	// all range keys in [b-g) via it.
+	batch = eng.NewUnindexedBatch(true /* writeOnly */)
+	defer batch.Close()
+
+	require.NoError(t, batch.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("b"), roachpb.Key("g")))
+	require.NoError(t, batch.Commit(false /* sync */))
+
+	// Read range keys back from engine. We should find [a-b)@1 and [g-h)@2.
+	require.Equal(t, []MVCCRangeKeyValue{
+		rangeKV("a", "b", 1, MVCCValue{}),
+		rangeKV("g", "h", 2, MVCCValue{}),
+	}, scanRangeKeys(t, eng))
+
+	// Now clear everything. Twice, for idempotency.
+	batch = eng.NewUnindexedBatch(true /* writeOnly */)
+	defer batch.Close()
+	require.NoError(t, batch.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
+	require.NoError(t, batch.Commit(false /* sync */))
+
+	batch = eng.NewUnindexedBatch(true /* writeOnly */)
+	defer batch.Close()
+	require.NoError(t, batch.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
+	require.NoError(t, batch.Commit(false /* sync */))
+
+	require.Empty(t, scanRangeKeys(t, eng))
+}
+
+// scanRangeKeys scans all range keys from the reader.
+func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKeyValue {
+	t.Helper()
+
+	iter := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	})
+	defer iter.Close()
+
+	var rangeKeys []MVCCRangeKeyValue
+	for iter.SeekGE(MVCCKey{Key: keys.LocalMax}); ; iter.Next() {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		for _, rangeKey := range iter.RangeKeys() {
+			rangeKeys = append(rangeKeys, rangeKey.Clone())
+		}
+	}
+	return rangeKeys
+}
+
+// scanPointKeys scans all point keys from the reader, excluding intents.
+func scanPointKeys(t *testing.T, r Reader) []MVCCKey {
+	t.Helper()
+
+	iter := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	})
+	defer iter.Close()
+
+	var pointKeys []MVCCKey
+	for iter.SeekGE(MVCCKey{Key: keys.LocalMax}); ; iter.Next() {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		pointKeys = append(pointKeys, iter.Key())
+	}
+	return pointKeys
+}
+
+// scanIntentKeys scans all separated intents from the reader, ignoring
+// provisional values.
+func scanIntentKeys(t *testing.T, r Reader) []roachpb.Key {
+	t.Helper()
+
+	var intentKeys []roachpb.Key
+	intents, err := ScanIntents(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0)
+	require.NoError(t, err)
+	for _, intent := range intents {
+		intentKeys = append(intentKeys, intent.Key.Clone())
+	}
+	return intentKeys
+}
+
+// scanIter scans all point/range keys from the iterator, and returns a combined
+// slice of MVCCRangeKeyValue and MVCCKeyValue in order.
+func scanIter(t *testing.T, iter MVCCIterator) []interface{} {
 	t.Helper()
 
 	iter.SeekGE(MVCCKey{Key: keys.LocalMax})
 
-	var keys []MVCCKeyValue
+	var keys []interface{}
+	var prevRangeStart roachpb.Key
 	for {
 		ok, err := iter.Valid()
 		require.NoError(t, err)
 		if !ok {
 			break
 		}
-		keys = append(keys, MVCCKeyValue{
-			Key:   iter.Key(),
-			Value: iter.Value(),
-		})
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasRange {
+			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
+				for _, rk := range iter.RangeKeys() {
+					keys = append(keys, rk.Clone())
+				}
+				prevRangeStart = bounds.Key.Clone()
+			}
+		}
+		if hasPoint {
+			keys = append(keys, MVCCKeyValue{
+				Key:   iter.Key(),
+				Value: iter.Value(),
+			})
+		}
 		iter.Next()
 	}
 	return keys

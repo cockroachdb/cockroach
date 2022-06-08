@@ -309,6 +309,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				MentionOnCreate: []string{"@cockroachdb/idonotexistbecausethisisatest"},
 				HelpCommand:     repro,
 				ExtraLabels:     []string{"release-blocker"},
+				ExtraParams:     map[string]string{"ROACHTEST_cloud": "gce"},
 			}
 			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
 
@@ -350,11 +351,19 @@ func TestPostEndToEnd(t *testing.T) {
 	unset := setEnv(env)
 	defer unset()
 
+	params := map[string]string{
+		"GOFLAGS":         "-race_test",
+		"ROACHTEST_cloud": "test",
+		"ROACHTEST_cpu":   "2",
+	}
+
 	req := PostRequest{
 		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
 		TestName:    "TestFooBarBaz",
 		Message:     "I'm a message",
 		ExtraLabels: []string{"release-blocker"},
+		ExtraParams: params,
+		HelpCommand: UnitTestHelpCommand(""),
 	}
 
 	require.NoError(t, Post(context.Background(), UnitTestFormatter, req))

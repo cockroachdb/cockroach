@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -153,23 +152,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		// Mark the statement as containing DDL for use
 		// in the SQL executor.
 		b.IsDDL = true
-
-		// This will set the system DB trigger for transactions containing
-		// schema-modifying statements that have no effect, such as
-		// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
-		// where the table already exists. This will generate some false schema
-		// cache refreshes, but that's expected to be quite rare in practice.
-		if !b.evalCtx.Settings.Version.IsActive(
-			b.evalCtx.Ctx(), clusterversion.DisableSystemConfigGossipTrigger,
-		) {
-			if err := b.evalCtx.Txn.DeprecatedSetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
-				return execPlan{}, errors.WithSecondaryError(
-					unimplemented.NewWithIssuef(26508,
-						"the first schema change statement in a transaction must precede any writes"),
-					err)
-			}
-		}
-
 	}
 
 	if opt.IsMutationOp(e) {

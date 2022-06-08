@@ -383,9 +383,7 @@ export interface APIReducersState {
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<api.DatabasesResponseMessage>;
-  databaseDetails: KeyedCachedDataReducerState<
-    api.DatabaseDetailsResponseMessage
-  >;
+  databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
@@ -398,22 +396,16 @@ export interface APIReducersState {
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
   range: KeyedCachedDataReducerState<api.RangeResponseMessage>;
-  allocatorRange: KeyedCachedDataReducerState<
-    api.AllocatorRangeResponseMessage
-  >;
+  allocatorRange: KeyedCachedDataReducerState<api.AllocatorRangeResponseMessage>;
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   sessions: CachedDataReducerState<api.SessionsResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
-  statementDetails: KeyedCachedDataReducerState<
-    api.StatementDetailsResponseMessage
-  >;
+  statementDetails: KeyedCachedDataReducerState<api.StatementDetailsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
-  statementDiagnosticsReports: CachedDataReducerState<
-    api.StatementDiagnosticsReportsResponseMessage
-  >;
+  statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
 }

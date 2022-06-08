@@ -317,7 +317,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		seen[col.Name] = true
 		// If this is the first column and it's invertible (i.e., JSONB), make an inverted index.
 		if len(cols) == 0 &&
-			colinfo.ColumnTypeIsInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
+			colinfo.ColumnTypeIsOnlyInvertedIndexable(tree.MustBeStaticallyKnownType(col.Type)) {
 			inverted = true
 			unique = false
 			cols = append(cols, tree.IndexElem{

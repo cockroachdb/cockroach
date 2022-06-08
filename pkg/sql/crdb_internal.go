@@ -1388,8 +1388,8 @@ CREATE TABLE crdb_internal.session_trace (
 // returns rows when accessed with an index constraint specifying the trace_id
 // for which inflight spans need to be aggregated from all nodes in the cluster.
 //
-// Each row in the virtual table corresponds to a single `tracing.Recording` on
-// a particular node. A `tracing.Recording` is the trace of a single operation
+// Each row in the virtual table corresponds to a single `tracingpb.Recording` on
+// a particular node. A `tracingpb.Recording` is the trace of a single operation
 // rooted at a root span on that node. Under the hood, the virtual table
 // contacts all "live" nodes in the cluster via the trace collector which
 // streams back a recording at a time.
@@ -1398,7 +1398,7 @@ CREATE TABLE crdb_internal.session_trace (
 // The virtual table also produces rows lazily, i.e. as and when they are
 // consumed by the consumer. Therefore, the memory overhead of querying this
 // table will be the size of all the `tracing.Recordings` of a particular
-// `trace_id` on a single node in the cluster. Each `tracing.Recording` has its
+// `trace_id` on a single node in the cluster. Each `tracingpb.Recording` has its
 // own memory protections via ring buffers, and so we do not expect this
 // overhead to grow in an unbounded manner.
 var crdbInternalClusterInflightTracesTable = virtualSchemaTable{
@@ -1489,7 +1489,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
 		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
-			for _, rec := range span.GetFullRecording(tracing.RecordingVerbose) {
+			for _, rec := range span.GetFullRecording(tracingpb.RecordingVerbose) {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
 				spanID := rec.SpanID
@@ -1615,15 +1615,16 @@ CREATE TABLE crdb_internal.session_variables (
 
 const txnsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-  id UUID,                 -- the unique ID of the transaction
-  node_id INT,             -- the ID of the node running the transaction
-  session_id STRING,       -- the ID of the session
-  start TIMESTAMP,         -- the start time of the transaction
-  txn_string STRING,       -- the string representation of the transcation
-  application_name STRING, -- the name of the application as per SET application_name
-  num_stmts INT,           -- the number of statements executed so far
-  num_retries INT,         -- the number of times the transaction was restarted
-  num_auto_retries INT     -- the number of times the transaction was automatically restarted
+  id UUID,                         -- the unique ID of the transaction
+  node_id INT,                     -- the ID of the node running the transaction
+  session_id STRING,               -- the ID of the session
+  start TIMESTAMP,                 -- the start time of the transaction
+  txn_string STRING,               -- the string representation of the transcation
+  application_name STRING,         -- the name of the application as per SET application_name
+  num_stmts INT,                   -- the number of statements executed so far
+  num_retries INT,                 -- the number of times the transaction was restarted
+  num_auto_retries INT,            -- the number of times the transaction was automatically restarted
+  last_auto_retry_reason STRING    -- the error causing the last automatic retry for this txn
 )`
 
 var crdbInternalLocalTxnsTable = virtualSchemaTable{
@@ -1684,6 +1685,7 @@ func populateTransactionsTable(
 				tree.NewDInt(tree.DInt(txn.NumStatementsExecuted)),
 				tree.NewDInt(tree.DInt(txn.NumRetries)),
 				tree.NewDInt(tree.DInt(txn.NumAutoRetries)),
+				tree.NewDString(txn.LastAutoRetryReason),
 			); err != nil {
 				return err
 			}
@@ -1704,6 +1706,7 @@ func populateTransactionsTable(
 				tree.DNull,                             // NumStatementsExecuted
 				tree.DNull,                             // NumRetries
 				tree.DNull,                             // NumAutoRetries
+				tree.DNull,                             // LastAutoRetryReason
 			); err != nil {
 				return err
 			}
@@ -1724,7 +1727,8 @@ CREATE TABLE crdb_internal.%s (
   client_address   STRING,         -- the address of the client that issued the query
   application_name STRING,         -- the name of the application as per SET application_name
   distributed      BOOL,           -- whether the query is running distributed
-  phase            STRING          -- the current execution phase
+  phase            STRING,         -- the current execution phase
+  full_scan        BOOL            -- whether the query contains a full table or index scan
 )`
 
 func (p *planner) makeSessionsRequest(
@@ -1820,11 +1824,17 @@ func populateQueriesTable(
 		sessionID := getSessionID(session)
 		for _, query := range session.ActiveQueries {
 			isDistributedDatum := tree.DNull
+			isFullScanDatum := tree.DNull
 			phase := strings.ToLower(query.Phase.String())
 			if phase == "executing" {
 				isDistributedDatum = tree.DBoolFalse
 				if query.IsDistributed {
 					isDistributedDatum = tree.DBoolTrue
+				}
+
+				isFullScanDatum = tree.DBoolFalse
+				if query.IsFullScan {
+					isFullScanDatum = tree.DBoolTrue
 				}
 			}
 
@@ -1858,6 +1868,7 @@ func populateQueriesTable(
 				tree.NewDString(session.ApplicationName),
 				isDistributedDatum,
 				tree.NewDString(phase),
+				isFullScanDatum,
 			); err != nil {
 				return err
 			}
@@ -1881,6 +1892,7 @@ func populateQueriesTable(
 				tree.DNull,                             // application_name
 				tree.DNull,                             // distributed
 				tree.DNull,                             // phase
+				tree.DNull,                             // full_scan
 			); err != nil {
 				return err
 			}
@@ -4865,21 +4877,14 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				dbNameStr := tree.NewDString(db.GetName())
 				// TODO(knz): This should filter for the current user, see
 				// https://github.com/cockroachdb/cockroach/issues/35572
-				populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 				for _, u := range privs {
 					userNameStr := tree.NewDString(u.User.Normalized())
 					for _, priv := range u.Privileges {
-						var isGrantable tree.Datum
-						if populateGrantOption {
-							isGrantable = yesOrNoDatum(priv.GrantOption)
-						} else {
-							isGrantable = tree.DNull
-						}
 						if err := addRow(
 							dbNameStr,                           // database_name
 							userNameStr,                         // grantee
 							tree.NewDString(priv.Kind.String()), // privilege_type
-							isGrantable,                         // is_grantable
+							yesOrNoDatum(priv.GrantOption),      // is_grantable
 						); err != nil {
 							return err
 						}
@@ -5192,7 +5197,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					}
 
 					if schema == tree.DNull {
-						for _, objectType := range tree.GetAlterDefaultPrivilegesTargetObjects() {
+						for _, objectType := range privilege.GetTargetObjectTypes() {
 							if catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, objectType) {
 								if err := addRow(
 									tree.NewDString(descriptor.GetName()), // database_name
@@ -5213,7 +5218,7 @@ CREATE TABLE crdb_internal.default_privileges (
 								tree.DNull,                            // schema_name
 								role,                                  // role
 								forAllRoles,                           // for_all_roles
-								tree.NewDString(tree.Types.String()),  // object_type
+								tree.NewDString(privilege.Types.String()),               // object_type
 								tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 								tree.NewDString(privilege.USAGE.String()),               // privilege_type
 							); err != nil {
@@ -5490,6 +5495,7 @@ GROUP BY
 
 var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running range feeds`,
+	// NB: startTS is exclusive; consider renaming to startAfter.
 	schema: `
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
@@ -5517,7 +5523,7 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				return addRow(
 					tree.NewDInt(tree.DInt(rfCtx.ID)),
 					tree.NewDString(rfCtx.CtxTags),
-					tree.NewDString(rf.StartTS.AsOfSystemTime()),
+					tree.NewDString(rf.StartAfter.AsOfSystemTime()),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
 					tree.NewDInt(tree.DInt(rf.NodeID)),
 					tree.NewDInt(tree.DInt(rf.RangeID)),

@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 )
@@ -856,15 +855,16 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue(
+	dbVal, hasVal := c.conn.GetServerValue(
 		context.Background(),
 		"transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return
 	}
 
-	txnString := clisqlexec.FormatVal(dbVal, dbColType,
-		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	txnString := clisqlexec.FormatVal(
+		dbVal, false /* showPrintableUnicode */, false, /* shownewLinesAndTabs */
+	)
 
 	// Change the prompt based on the response from the server.
 	switch txnString {
@@ -891,7 +891,7 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, dbColType, hasVal := c.conn.GetServerValue(
+	dbVal, hasVal := c.conn.GetServerValue(
 		context.Background(),
 		"database name", `SHOW DATABASE`)
 	if !hasVal {
@@ -904,8 +904,9 @@ func (c *cliState) refreshDatabaseName() string {
 			" Use SET database = <dbname> to change, CREATE DATABASE to make a new database.")
 	}
 
-	dbName := clisqlexec.FormatVal(dbVal, dbColType,
-		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
+	dbName := clisqlexec.FormatVal(
+		dbVal, false /* showPrintableUnicode */, false, /* shownewLinesAndTabs */
+	)
 
 	// Preserve the current database name in case of reconnects.
 	c.conn.SetCurrentDatabase(dbName)
@@ -930,8 +931,7 @@ func (c *cliState) GetCompletions(s string) []string {
 		var rows [][]string
 		var err error
 		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
-			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
-				clisqlclient.MakeQuery(query), true)
+			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
 			return err
 		})
 
@@ -1235,13 +1235,16 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\copy`:
 		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
-			return c.beginCopyFrom(ctx, c.concatLines)
+			// Strip out the starting \ in \copy.
+			return c.beginCopyFrom(ctx, line[1:])
 		})
-		if !c.singleStatement {
-			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
-		}
-		if c.exitErr != nil && c.iCtx.errExit {
-			return cliStop
+		if c.exitErr != nil {
+			if !c.singleStatement {
+				clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+			}
+			if c.iCtx.errExit {
+				return cliStop
+			}
 		}
 		return cliStartLine
 
@@ -1854,13 +1857,6 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 }
 
 func (c *cliState) beginCopyFrom(ctx context.Context, sql string) error {
-	c.refreshTransactionStatus()
-	if c.lastKnownTxnStatus != "" {
-		return unimplemented.Newf(
-			"cli_copy_in_txn",
-			"cannot use COPY inside a transaction",
-		)
-	}
 	copyFromState, err := clisqlclient.BeginCopyFrom(ctx, c.conn, sql)
 	if err != nil {
 		return err
@@ -2143,7 +2139,8 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		context.Background(),
 		c.conn,
 		clisqlclient.MakeQuery("SHOW SYNTAX "+lexbase.EscapeSQLString(sql)),
-		true)
+		true, /* showMoreChars */
+	)
 	if err != nil {
 		// The query failed with some error. This is not a syntax error
 		// detected by SHOW SYNTAX (those show up as valid rows) but
@@ -2198,14 +2195,6 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 	return "", nil
 }
 
-// At this time, lib/pq contains a bug whereby a query cancellation
-// results in the driver dropping the connection. This results in poor
-// user UX. Instead of suffering the UX drawback, we choose to disable
-// query cancellation for a little while more until we switch the shell
-// to use pgx instead.
-// See: https://github.com/cockroachdb/cockroach/issues/76483
-const queryCancelEnabled = false
-
 func (c *cliState) maybeHandleInterrupt() func() {
 	if !c.cliCtx.IsInteractive {
 		return func() {}
@@ -2214,65 +2203,51 @@ func (c *cliState) maybeHandleInterrupt() func() {
 	signal.Notify(intCh, os.Interrupt)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	if !queryCancelEnabled {
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					// Shell is terminating.
-					return
-				case <-intCh:
+	go func() {
+		for {
+			select {
+			case <-intCh:
+				c.iCtx.mu.Lock()
+				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
+				c.iCtx.mu.Unlock()
+				if cancelFn == nil {
+					// No query currently executing; nothing to do.
+					continue
 				}
-				fmt.Fprintln(c.iCtx.stderr,
-					"query cancellation disabled in this client; a second interrupt will stop the shell.")
-				signal.Reset(os.Interrupt)
-			}
-		}()
-	} else {
-		go func() {
-			for {
-				select {
-				case <-intCh:
-					c.iCtx.mu.Lock()
-					cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
-					c.iCtx.mu.Unlock()
-					if cancelFn == nil {
-						// No query currently executing; nothing to do.
-						continue
-					}
 
-					fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
-					// Cancel the query's context, which should make the driver
-					// send a cancellation message.
-					cancelFn()
-
-					// Now wait for the shell to process the cancellation.
-					//
-					// If it takes too long (e.g. server has become unresponsive,
-					// or we're connected to a pre-22.1 server which does not
-					// support cancellation), fall back to the previous behavior
-					// which is to interrupt the shell altogether.
-					tooLongTimer := time.After(3 * time.Second)
-				wait:
-					for {
-						select {
-						case <-doneCh:
-							break wait
-						case <-tooLongTimer:
-							fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
-							signal.Reset(os.Interrupt)
-						}
-					}
-					// Re-arm the signal handler.
-					signal.Notify(intCh, os.Interrupt)
-
-				case <-ctx.Done():
-					// Shell is terminating.
-					return
+				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
+				// Cancel the query's context, which should make the driver
+				// send a cancellation message.
+				if err := cancelFn(ctx); err != nil {
+					fmt.Fprintf(c.iCtx.stderr, "\nerror while cancelling query: %v\n", err)
 				}
+
+				// Now wait for the shell to process the cancellation.
+				//
+				// If it takes too long (e.g. server has become unresponsive,
+				// or we're connected to a pre-22.1 server which does not
+				// support cancellation), fall back to the previous behavior
+				// which is to interrupt the shell altogether.
+				tooLongTimer := time.After(3 * time.Second)
+			wait:
+				for {
+					select {
+					case <-doneCh:
+						break wait
+					case <-tooLongTimer:
+						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
+						signal.Reset(os.Interrupt)
+					}
+				}
+				// Re-arm the signal handler.
+				signal.Notify(intCh, os.Interrupt)
+
+			case <-ctx.Done():
+				// Shell is terminating.
+				return
 			}
-		}()
-	}
+		}
+	}()
 	return cancel
 }
 
@@ -2290,11 +2265,12 @@ func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) e
 
 	// Inform the Ctrl+C handler that this query is executing.
 	c.iCtx.mu.Lock()
-	c.iCtx.mu.cancelFn = cancel
+	c.iCtx.mu.cancelFn = c.conn.Cancel
 	c.iCtx.mu.doneCh = doneCh
 	c.iCtx.mu.Unlock()
 	defer func() {
 		c.iCtx.mu.Lock()
+		cancel()
 		c.iCtx.mu.cancelFn = nil
 		c.iCtx.mu.doneCh = nil
 		c.iCtx.mu.Unlock()
@@ -2326,8 +2302,7 @@ func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
 	var rows [][]string
 	var err error
 	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
-		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn,
-			clisqlclient.MakeQuery(query), true)
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
 		return err
 	})
 

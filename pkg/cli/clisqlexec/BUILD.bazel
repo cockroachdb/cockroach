@@ -23,7 +23,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_lib_pq//:pq",
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_pflag//:pflag",
     ],

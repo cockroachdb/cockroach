@@ -231,7 +231,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 			res = tree.NewDInt(tree.DInt(iv))
 		case *tree.DOid:
-			res = &v.DInt
+			res = tree.NewDInt(tree.DInt(v.Oid))
 		case *tree.DJSON:
 			dec, ok := v.AsDecimal()
 			if !ok {
@@ -856,13 +856,9 @@ func performCastWithoutPrecisionTruncation(
 	case types.OidFamily:
 		switch v := d.(type) {
 		case *tree.DOid:
-			return performIntToOidCast(ctx.Ctx(), ctx.Planner, t, v.DInt)
+			return performIntToOidCast(ctx.Ctx(), ctx.Planner, t, tree.DInt(v.Oid))
 		case *tree.DInt:
-			// OIDs are always unsigned 32-bit integers. Some languages, like Java,
-			// store OIDs as signed 32-bit integers, so we implement the cast
-			// by converting to a uint32 first. This matches Postgres behavior.
-			i := tree.DInt(uint32(*v))
-			return performIntToOidCast(ctx.Ctx(), ctx.Planner, t, i)
+			return performIntToOidCast(ctx.Ctx(), ctx.Planner, t, *v)
 		case *tree.DString:
 			if t.Oid() != oid.T_oid && string(*v) == tree.ZeroOidValue {
 				return tree.WrapAsZeroOid(t), nil
@@ -912,16 +908,23 @@ func performCastWithoutPrecisionTruncation(
 func performIntToOidCast(
 	ctx context.Context, res TypeResolver, t *types.T, v tree.DInt,
 ) (tree.Datum, error) {
+	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
+	// store OIDs as signed 32-bit integers, so we implement the cast
+	// by converting to a uint32 first. This matches Postgres behavior.
+	if v > math.MaxUint32 || v < math.MinInt32 {
+		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", v)
+	}
+	o := oid.Oid(v)
 	switch t.Oid() {
 	case oid.T_oid:
 		return tree.NewDOidWithType(v, t), nil
 	case oid.T_regtype:
 		// Mapping an dOid to a regtype is easy: we have a hardcoded map.
 		var name string
-		if typ, ok := types.OidToType[oid.Oid(v)]; ok {
+		if typ, ok := types.OidToType[o]; ok {
 			name = typ.PGName()
-		} else if types.IsOIDUserDefinedType(oid.Oid(v)) {
-			typ, err := res.ResolveTypeByOID(ctx, oid.Oid(v))
+		} else if types.IsOIDUserDefinedType(o) {
+			typ, err := res.ResolveTypeByOID(ctx, o)
 			if err != nil {
 				return nil, err
 			}
@@ -933,7 +936,7 @@ func performIntToOidCast(
 
 	case oid.T_regproc, oid.T_regprocedure:
 		// Mapping an dOid to a regproc is easy: we have a hardcoded map.
-		name, ok := tree.OidToBuiltinName[oid.Oid(v)]
+		name, ok := tree.OidToBuiltinName[o]
 		if !ok {
 			if v == 0 {
 				return tree.WrapAsZeroOid(t), nil

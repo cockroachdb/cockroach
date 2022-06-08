@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -55,6 +55,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -367,7 +370,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		schema.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
-		tree.Tables,
+		privilege.Tables,
 		n.dbDesc.GetPrivileges(),
 	)
 	if n.n.As() {
@@ -1313,12 +1316,12 @@ func NewTableDesc(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
 
-	if err := paramparse.SetStorageParameters(
+	if err := storageparam.Set(
 		ctx,
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
-		paramparse.NewTableStorageParamObserver(&desc),
+		tablestorageparam.NewSetter(&desc),
 	); err != nil {
 		return nil, err
 	}
@@ -1803,15 +1806,9 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				switch column.GetType().Family() {
-				case types.GeometryFamily:
-					config, err := geoindex.GeometryIndexConfigForSRID(column.GetType().GeoSRIDOrZero())
-					if err != nil {
-						return nil, err
-					}
-					idx.GeoConfig = *config
-				case types.GeographyFamily:
-					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+				if err := populateInvertedIndexDescriptor(
+					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
+					return nil, err
 				}
 			}
 
@@ -1854,12 +1851,12 @@ func NewTableDesc(
 				}
 				idx.Predicate = expr
 			}
-			if err := paramparse.SetStorageParameters(
+			if err := storageparam.Set(
 				ctx,
 				semaCtx,
 				evalCtx,
 				d.StorageParams,
-				&paramparse.IndexStorageParamObserver{IndexDesc: &idx},
+				&indexstorageparam.Setter{IndexDesc: &idx},
 			); err != nil {
 				return nil, err
 			}
@@ -2253,7 +2250,7 @@ func NewTableDesc(
 	if regionConfig != nil || n.Locality != nil {
 		localityTelemetryName := "unspecified"
 		if n.Locality != nil {
-			localityTelemetryName = n.Locality.TelemetryName()
+			localityTelemetryName = multiregion.TelemetryNameForLocality(n.Locality)
 		}
 		telemetry.Inc(sqltelemetry.CreateTableLocalityCounter(localityTelemetryName))
 		if n.Locality == nil {

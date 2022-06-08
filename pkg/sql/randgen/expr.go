@@ -218,7 +218,7 @@ func randExpr(
 		}
 
 	default:
-		vol, ok := cast.LookupCastVolatility(xTyp, types.String, cast.SessionOptions{})
+		vol, ok := cast.LookupCastVolatility(xTyp, types.String)
 		if ok && vol <= volatility.Immutable &&
 			!typeToStringCastHasIncorrectVolatility(xTyp) {
 			// We can cast to string; use lower(x::string)

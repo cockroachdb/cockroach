@@ -30,7 +30,8 @@ import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
 
-type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type ICollectedStatementStatistics =
+  cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 export interface StatementsSummaryData {
   statementFingerprintID: string;
   statement: string;

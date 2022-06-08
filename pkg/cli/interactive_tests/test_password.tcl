@@ -3,6 +3,7 @@
 source [file join [file dirname $argv0] common.tcl]
 
 set certs_dir "/certs"
+set home "/home/roach"
 set ::env(COCKROACH_INSECURE) "false"
 set ::env(COCKROACH_HOST) "localhost"
 
@@ -106,6 +107,70 @@ send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
 eexpect "Enter password:"
 send "125\r"
 eexpect "password authentication failed"
+eexpect $prompt
+end_test
+
+start_test "Log in using pgpass file"
+system "echo 'localhost:*:*:myuser:124' > $home/.pgpass"
+send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+eexpect myuser@
+eexpect "defaultdb>"
+send "\\q\r"
+eexpect $prompt
+system "rm $home/.pgpass"
+end_test
+
+start_test "Log in using custom pgpass file"
+system "echo 'localhost:*:*:myuser:125' > $home/.pgpass"
+system "echo 'localhost:*:*:myuser:124' > $home/my_pgpass"
+send "export PGPASSFILE=$home/my_pgpass\r"
+send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+eexpect myuser@
+eexpect "defaultdb>"
+send "\\q\r"
+eexpect $prompt
+system "rm $home/.pgpass"
+system "rm $home/my_pgpass"
+send "unset PGPASSFILE\r"
+end_test
+
+start_test "Log in using pgservicefile and custom pgpass"
+send "export PGDATABASE=postgres\r"
+system "echo 'localhost:*:*:myuser:124' > $home/my_pgpass"
+system "echo '
+# servicefile should override environment variables
+\[myservice\]
+host=localhost
+port=26257
+dbname=defaultdb
+user=myuser
+passfile=$home/my_pgpass
+' > $home/.pg_service.conf"
+send "$argv sql --url='postgres://myuser@localhost?service=myservice&sslrootcert=$certs_dir/ca.crt'\r"
+eexpect myuser@
+eexpect "defaultdb>"
+send "\\q\r"
+send "unset PGDATABASE\r"
+system "rm $home/.pg_service.conf"
+system "rm $home/my_pgpass"
+eexpect $prompt
+end_test
+
+start_test "Log in using custom pgservicefile with default root cert"
+system "mkdir $home/.postgresql/ && cp $certs_dir/ca.crt $home/.postgresql/root.crt"
+system "echo '
+\[myservice\]
+host=localhost
+port=26257
+dbname=postgres
+user=myuser
+password=124
+' > $home/my_pg_service.conf"
+send "$argv sql --url='postgres://myuser@localhost?service=myservice&servicefile=$home/my_pg_service.conf'\r"
+eexpect myuser@
+eexpect "postgres>"
+send "\\q\r"
+system "rm $home/my_pg_service.conf"
 eexpect $prompt
 end_test
 

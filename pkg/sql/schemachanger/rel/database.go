@@ -261,6 +261,12 @@ func (t *Database) chooseIndex(
 		if best >= 0 && overlap.len() <= bestOverlap.len() {
 			continue
 		}
+		// Only allow queries to proceed with no index overlap if this is the
+		// zero-attribute index, which implies the database creator accepts bad
+		// query plans.
+		if overlap == 0 && len(dims[i].attrs) > 0 {
+			continue
+		}
 		if !dims[i].exists.isContainedIn(m.union(hasAttrs)) {
 			continue
 		}

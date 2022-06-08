@@ -155,14 +155,18 @@ func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
 
 func BenchmarkMVCCGet_Pebble(b *testing.B) {
 	ctx := context.Background()
-	for _, numVersions := range []int{1, 10, 100} {
-		b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
-			for _, valueSize := range []int{8} {
-				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-					runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
-						numVersions: numVersions,
-						valueBytes:  valueSize,
-					})
+	for _, batch := range []bool{false, true} {
+		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
+			for _, numVersions := range []int{1, 10, 100} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, valueSize := range []int{8} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
+								numVersions: numVersions,
+								valueBytes:  valueSize,
+							}, batch)
+						})
+					}
 				})
 			}
 		})
@@ -190,9 +194,17 @@ func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
 
 func BenchmarkMVCCPut_Pebble(b *testing.B) {
 	ctx := context.Background()
-	for _, valueSize := range []int{10, 100, 1000, 10000} {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize)
+	for _, batch := range []bool{false, true} {
+		b.Run(fmt.Sprintf("batch=%t", batch), func(b *testing.B) {
+			for _, valueSize := range []int{10, 100, 1000, 10000} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					for _, versions := range []int{1, 10} {
+						b.Run(fmt.Sprintf("versions=%d", versions), func(b *testing.B) {
+							runMVCCPut(ctx, b, setupMVCCInMemPebble, valueSize, versions, batch)
+						})
+					}
+				})
+			}
 		})
 	}
 }
@@ -329,18 +341,18 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 	}
 }
 
-func BenchmarkClearMVCCRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearMVCCRange(start, end)
+		return batch.ClearMVCCVersions(start, end)
 	})
 }
 
-func BenchmarkClearIterRange_Pebble(b *testing.B) {
+func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		return batch.ClearIterRange(start.Key, end.Key)
+		return batch.ClearMVCCIteratorRange(start.Key, end.Key)
 	})
 }
 

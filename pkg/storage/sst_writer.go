@@ -128,18 +128,37 @@ func (fw *SSTWriter) Finish() error {
 }
 
 // ClearRawRange implements the Writer interface.
+//
+// TODO(erikgrinaker): This must clear range keys when SSTs support them.
 func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
 	return fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
 }
 
-// ClearMVCCRangeAndIntents implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
-	panic("ClearMVCCRangeAndIntents is unsupported")
+// ClearMVCCRange implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key) error {
+	panic("not implemented")
 }
 
-// ClearMVCCRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRange(start, end MVCCKey) error {
+// ClearMVCCVersions implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCVersions(start, end MVCCKey) error {
 	return fw.clearRange(start, end)
+}
+
+// ExperimentalPutMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
+	panic("not implemented")
+}
+
+// ExperimentalClearMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(MVCCRangeKey) error {
+	panic("not implemented")
+}
+
+// ExperimentalClearAllMVCCRangeKeys implements the Writer interface.
+//
+// TODO(erikgrinaker): This must clear range keys when SSTs support them.
+func (fw *SSTWriter) ExperimentalClearAllMVCCRangeKeys(roachpb.Key, roachpb.Key) error {
+	return nil
 }
 
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
@@ -299,9 +318,9 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 	panic("unimplemented")
 }
 
-// ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(start, end roachpb.Key) error {
-	panic("ClearIterRange is unsupported")
+// ClearMVCCIteratorRange implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+	panic("not implemented")
 }
 
 // Merge implements the Writer interface.

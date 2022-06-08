@@ -96,17 +96,6 @@ type Sender interface {
 type TxnSender interface {
 	Sender
 
-	// AnchorOnSystemConfigRange ensures that the transaction record,
-	// if/when it will be created, will be created on the system config
-	// range. This is useful because some commit triggers only work when
-	// the EndTxn is evaluated on that range.
-	//
-	// An error is returned if the transaction's key has already been
-	// set by anything other than a previous call to this function
-	// (i.e. if the transaction already performed any writes).
-	// It is allowed to call this method multiple times.
-	AnchorOnSystemConfigRange() error
-
 	// GetLeafTxnInputState retrieves the input state necessary and
 	// sufficient to initialize a LeafTxn from the current RootTxn.
 	//
@@ -336,6 +325,12 @@ type TxnSender interface {
 
 	// ClearTxnRetryableErr clears the retryable error, if any.
 	ClearTxnRetryableErr(ctx context.Context)
+
+	// HasPerformedReads returns true if a read has been performed.
+	HasPerformedReads() bool
+
+	// HasPerformedWrites returns true if a write has been performed.
+	HasPerformedWrites() bool
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

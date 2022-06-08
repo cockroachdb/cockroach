@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
@@ -116,7 +115,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	roundTrips := 0
 	b.ResetTimer()
 	b.StopTimer()
-	var r tracing.Recording
+	var r tracingpb.Recording
 
 	// Do an extra iteration and don't record it in order to deal with effects of
 	// running it the first time.
@@ -168,12 +167,12 @@ const roundTripsMetric = "roundtrips"
 
 // count the number of KvBatchRequests inside a recording, this is done by
 // counting each "txn coordinator send" operation.
-func countKvBatchRequestsInRecording(r tracing.Recording) (sends int, hasRetry bool) {
+func countKvBatchRequestsInRecording(r tracingpb.Recording) (sends int, hasRetry bool) {
 	root := r[0]
 	return countKvBatchRequestsInSpan(r, root)
 }
 
-func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) (int, bool) {
+func countKvBatchRequestsInSpan(r tracingpb.Recording, sp tracingpb.RecordedSpan) (int, bool) {
 	count := 0
 	// Count the number of OpTxnCoordSender operations while traversing the
 	// tree of spans.

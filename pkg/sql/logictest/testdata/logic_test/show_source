@@ -37,7 +37,6 @@ client_min_messages                                   notice
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
-datestyle_enabled                                     on
 default_int_size                                      8
 default_table_access_method                           heap
 default_tablespace                                    ·
@@ -78,7 +77,6 @@ index_recommendations_enabled                         off
 inject_retry_errors_enabled                           off
 integer_datetimes                                     on
 intervalstyle                                         postgres
-intervalstyle_enabled                                 on
 is_superuser                                          on
 join_reader_ordering_strategy_batch_size              10 KiB
 large_full_scan_rows                                  1000
@@ -198,9 +196,7 @@ query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
-system         public       descriptor  admin    GRANT           true
 system         public       descriptor  admin    SELECT          true
-system         public       descriptor  root     GRANT           true
 system         public       descriptor  root     SELECT          true
 
 query TTBITTBB colnames

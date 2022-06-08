@@ -94,9 +94,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() error {
 		descpb.InvalidID,
 		privilege.Database,
 		ddb.maybeModified.GetName())
-	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(ddb.maybeModified.Privileges)
-
-	if privsChanged || addedGrantOptions || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
+	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
 		ddb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {
@@ -141,12 +139,12 @@ func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
 
 		// Convert the incompatible privileges to default privileges.
 		role := defaultPrivileges.FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
-		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[tree.Tables]
+		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[privilege.Tables]
 
 		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
 		defaultPrivilegesForUser.Privileges |= incompatiblePrivileges
 
-		role.DefaultPrivilegesPerObject[tree.Tables] = tableDefaultPrivilegesForAllRoles
+		role.DefaultPrivilegesPerObject[privilege.Tables] = tableDefaultPrivilegesForAllRoles
 	}
 
 	return hasChanged

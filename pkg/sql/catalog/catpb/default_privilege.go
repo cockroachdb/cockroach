@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -112,7 +111,7 @@ func InitDefaultPrivilegesForRole(
 		}
 		return DefaultPrivilegesForRole{
 			Role:                       defaultPrivilegesRole,
-			DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
+			DefaultPrivilegesPerObject: map[privilege.TargetObjectType]PrivilegeDescriptor{},
 		}
 	}
 
@@ -138,7 +137,7 @@ func InitDefaultPrivilegesForRole(
 	}
 	return DefaultPrivilegesForRole{
 		Role:                       defaultPrivilegesRole,
-		DefaultPrivilegesPerObject: map[tree.AlterDefaultPrivilegesTargetObject]PrivilegeDescriptor{},
+		DefaultPrivilegesPerObject: map[privilege.TargetObjectType]PrivilegeDescriptor{},
 	}
 }
 
@@ -169,7 +168,7 @@ func (p *DefaultPrivilegeDescriptor) Validate() error {
 			return errors.AssertionFailedf("default privilege list is not sorted")
 		}
 		for objectType, defaultPrivileges := range defaultPrivilegesForRole.DefaultPrivilegesPerObject {
-			privilegeObjectType := objectType.ToPrivilegeObjectType()
+			privilegeObjectType := objectType.ToObjectType()
 			valid, u, remaining := defaultPrivileges.IsValidPrivilegesForObjectType(privilegeObjectType)
 			if !valid {
 				return errors.AssertionFailedf("user %s must not have %s privileges on %s",

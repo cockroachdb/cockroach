@@ -41,12 +41,91 @@ func init() {
 
 // SimpleMVCCIterator is an interface for iterating over key/value pairs in an
 // engine. SimpleMVCCIterator implementations are thread safe unless otherwise
-// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
+// noted. SimpleMVCCIterator is a subset of the functionality offered by
+// MVCCIterator.
+//
+// The iterator exposes both point keys and range keys. Range keys are only
+// emitted when enabled via IterOptions.KeyTypes. Currently, all range keys are
+// MVCC range tombstones, and this is enforced during writes.
+//
+// Range keys and point keys exist separately in Pebble. A specific key position
+// can have both a point key and multiple range keys overlapping it. Their
+// properties are accessed via:
+//
+// HasPointAndRange(): Key types present at the current position.
+// UnsafeKey():        Current position (point key if any).
+// UnsafeValue():      Current point key value (if any).
+// RangeBounds():      Start,end bounds of range keys at current position.
+// RangeKeys():        All range keys/values overlapping current position.
+//
+// Consider the following point keys and range keys:
+//
+//     4: a4  b4
+//     3: [-------)
+//     2: [-------)
+//     1:     b1  c1
+//        a   b   c
+//
+// Range keys cover a span between two roachpb.Key bounds (start inclusive, end
+// exclusive) and contain timestamp/value pairs. They overlap *all* point key
+// versions within their key bounds regardless of timestamp. For example, when
+// the iterator is positioned on b@4, it will also expose [a-c)@3 and [a-c)@2.
+//
+// During iteration with IterKeyTypePointsAndRanges, range keys are emitted at
+// their start key and at every overlapping point key. For example, iterating
+// across the above span would emit this sequence:
+//
+// UnsafeKey HasPointAndRange UnsafeValue RangeKeys
+// a         false,true       -           [a-c)@3 [a-c)@2
+// a@4       true,true        a4          [a-c)@3 [a-c)@2
+// b@4       true,true        b4          [a-c)@3 [a-c)@2
+// b@1       true,true        b1          [a-c)@3 [a-c)@2
+// c@1       true,false       c1          -
+//
+// MVCCIterator reverse iteration yields the above sequence in reverse.
+// Notably, bare range keys are still emitted at their start key (not end key),
+// so they will be emitted last in this example.
+//
+// When using SeekGE within range key bounds, the iterator may land on the bare
+// range key first, unless seeking exactly to an existing point key. E.g.:
+//
+// SeekGE UnsafeKey HasPointAndRange UnsafeValue RangeKeys
+// b      b         false,true       -           [a-c)@3 [a-c)@2
+// b@5    b@5       false,true       -           [a-c)@3 [a-c)@2
+// b@4    b@4       true,true        b@4         [a-c)@3 [a-c)@2
+// b@3    b@3       false,true       -           [a-c)@3 [a-c)@2
+//
+// Note that intents (with timestamp 0) encode to a bare roachpb.Key, so they
+// will be colocated with a range key start bound. For example, if there was an
+// intent on a in the above example, then both SeekGE(a) and forward iteration
+// would land on a@0 and [a-c)@3,[a-c)@2 simultaneously, instead of the bare
+// range keys first.
+//
+// Range keys do not have a stable, discrete identity, and should be
+// considered a continuum: they may be merged or fragmented by other range key
+// writes, split and merged along with CRDB ranges, partially removed by GC,
+// and truncated by iterator bounds.
+//
+// Range keys are fragmented by Pebble such that all overlapping range keys
+// between two keys form a stack of range key fragments at different timestamps.
+// For example, writing [a-e)@1 and [c-g)@2 will yield this fragment structure:
+//
+//     2:     |---|---|
+//     1: |---|---|
+//        a   c   e   g
+//
+// Fragmentation makes all range key properties local, which avoids incurring
+// unnecessary access costs across SSTs and CRDB ranges. It is deterministic
+// on the current range key state, and does not depend on write history.
+// Stacking allows easy access to all range keys overlapping a point key.
+//
+// TODO(erikgrinaker): Write a tech note on range keys and link it here.
 type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// SeekGE advances the iterator to the first key in the engine which
-	// is >= the provided key.
+	// SeekGE advances the iterator to the first key in the engine which is >= the
+	// provided key. This may be in the middle of a bare range key straddling the
+	// seek key.
 	SeekGE(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
@@ -56,15 +135,23 @@ type SimpleMVCCIterator interface {
 	// range, or (false, err) if an error has occurred. Valid() will
 	// never return true with a non-nil error.
 	Valid() (bool, error)
-	// Next advances the iterator to the next key/value in the
-	// iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the last key.
+	// Next advances the iterator to the next key in the iteration. After this
+	// call, Valid() will be true if the iterator was not positioned at the last
+	// key.
 	Next()
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
 	// for a key. NextKey must not be used to switch iteration direction from
 	// reverse iteration to forward iteration.
+	//
+	// If NextKey() lands on a bare range key, it is possible that there exists a
+	// versioned point key at the start key too. Calling NextKey() again would
+	// skip over this point key, since the start key was already emitted. If the
+	// caller wants to see it, it must call Next() to check for it. Note that
+	// this is not the case with intents: they don't have a timestamp, so the
+	// encoded key is identical to the range key's start bound, and they will
+	// be emitted together at that position.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
@@ -72,6 +159,21 @@ type SimpleMVCCIterator interface {
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
+	// HasPointAndRange returns whether the current iterator position has a point
+	// key and/or a range key. If Valid() returns true, one of these will be true,
+	// otherwise they are both false. For details on range keys, see comment on
+	// SimpleMVCCIterator.
+	HasPointAndRange() (bool, bool)
+	// RangeBounds returns the range bounds for the current range key, or an
+	// empty span if there are none. The returned keys are only valid until the
+	// next iterator call.
+	RangeBounds() roachpb.Span
+	// RangeKeys returns all range keys (with different timestamps) at the current
+	// key position, or an empty list if there are none. When at a point key, it
+	// will return all range keys overlapping that point key. The keys are only
+	// valid until the next iterator operation. For details on range keys, see
+	// comment on SimpleMVCCIterator.
+	RangeKeys() []MVCCRangeKeyValue
 }
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
@@ -103,15 +205,19 @@ type IteratorStats struct {
 // MVCCKey.Timestamp.IsEmpty()).
 //
 // MVCCIterator implementations are thread safe unless otherwise noted.
+//
+// For details on range keys and iteration, see comment on SimpleMVCCIterator.
 type MVCCIterator interface {
 	SimpleMVCCIterator
 
-	// SeekLT advances the iterator to the first key in the engine which
-	// is < the provided key.
+	// SeekLT advances the iterator to the first key in the engine which is < the
+	// provided key. Unlike SeekGE, when calling SeekLT within range key bounds
+	// this will not land on the seek key, but rather on the closest point key
+	// overlapping the range key or the range key's start bound.
 	SeekLT(key MVCCKey)
-	// Prev moves the iterator backward to the previous key/value
-	// in the iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the first key.
+	// Prev moves the iterator backward to the previous key in the iteration.
+	// After this call, Valid() will be true if the iterator was not positioned at
+	// the first key.
 	Prev()
 
 	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
@@ -121,7 +227,9 @@ type MVCCIterator interface {
 	// keys by avoiding the need to iterate over many deleted intents.
 	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
 
-	// Key returns the current key.
+	// Key returns the current key position. This may be a point key, or
+	// the current position inside a range key (typically the start key
+	// or the seek key when using SeekGE within its bounds).
 	Key() MVCCKey
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
@@ -140,7 +248,7 @@ type MVCCIterator interface {
 	// currently used by callers who pass around key information as a []byte --
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
-	// Value returns the current value as a byte slice.
+	// Value returns the current point key value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
@@ -278,6 +386,32 @@ type IterOptions struct {
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	// KeyTypes specifies the types of keys to surface: point and/or range keys.
+	// Use HasPointAndRange() to determine which key type is present at a given
+	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
+	// Defaults to IterKeyTypePointsOnly. For more details on range keys, see
+	// comment on SimpleMVCCIterator.
+	//
+	// Range keys are only supported for use with MVCCIterators. Enabling them
+	// for EngineIterators will error.
+	//
+	// TODO(erikgrinaker): Consider separating the options structs for
+	// EngineIterator and MVCCIterator.
+	KeyTypes IterKeyType
+	// RangeKeyMaskingBelow enables masking (hiding) of point keys by range keys.
+	// Any range key with a timestamp at or below RangeKeyMaskingBelow
+	// will mask point keys below it, preventing them from being surfaced.
+	// Consider the following example:
+	//
+	// 4          o---------------o    RangeKeyMaskingBelow=4 emits b3
+	// 3      b3      d3               RangeKeyMaskingBelow=3 emits b3,d3,f2
+	// 2  o---------------o   f2       RangeKeyMaskingBelow=2 emits b3,d3,f2
+	// 1  a1  b1          o-------o    RangeKeyMaskingBelow=1 emits a1,b3,b1,d3,f2
+	//    a   b   c   d   e   f   g
+	//
+	// Range keys themselves are not affected by the masking, and will be
+	// emitted as normal.
+	RangeKeyMaskingBelow hlc.Timestamp
 	// useL6Filters allows the caller to opt into reading filter blocks for
 	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
 	// Seeks are expected in quick succession, that are also likely to not
@@ -287,6 +421,20 @@ type IterOptions struct {
 	// this is a one-time Seek (where loading the data block directly is better).
 	useL6Filters bool
 }
+
+// IterKeyType configures which types of keys an iterator should surface.
+//
+// TODO(erikgrinaker): Combine this with MVCCIterKind somehow.
+type IterKeyType = pebble.IterKeyType
+
+const (
+	// IterKeyTypePointsOnly iterates over point keys only.
+	IterKeyTypePointsOnly = pebble.IterKeyTypePointsOnly
+	// IterKeyTypePointsAndRanges iterates over both point and range keys.
+	IterKeyTypePointsAndRanges = pebble.IterKeyTypePointsAndRanges
+	// IterKeyTypeRangesOnly iterates over only range keys.
+	IterKeyTypeRangesOnly = pebble.IterKeyTypeRangesOnly
+)
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
 // by the caller.
@@ -457,15 +605,18 @@ type Reader interface {
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
-	// after this function returns.
+	// after this function returns. EngineIterators do not support range keys.
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
-	// underlying Engine state. NB: this only applies to iterators without
-	// timestamp hints (see IterOptions), i.e., even if this returns true, those
-	// iterators can be "inconsistent" in terms of seeing a different engine
-	// state. The only exception to this is a Reader created using NewSnapshot.
+	// underlying Engine state. This is not true about Batch writes: new iterators
+	// will see new writes made to the batch, existing iterators won't.
 	ConsistentIterators() bool
+	// SupportsRangeKeys returns true if the Reader implementation supports
+	// range keys.
+	//
+	// TODO(erikgrinaker): Remove this after 22.2.
+	SupportsRangeKeys() bool
 
 	// PinEngineStateForIterators ensures that the state seen by iterators
 	// without timestamp hints (see IterOptions) is pinned and will not see
@@ -493,27 +644,26 @@ type Writer interface {
 	// returns.
 	ApplyBatchRepr(repr []byte, sync bool) error
 
-	// ClearMVCC removes the item from the db with the given MVCCKey. It
-	// requires that the timestamp is non-empty (see
-	// {ClearUnversioned,ClearIntent} if the timestamp is empty). Note that
-	// clear actually removes entries from the storage engine, rather than
-	// inserting MVCC tombstones.
+	// ClearMVCC removes the point key with the given MVCCKey from the db. It does
+	// not affect range keys. It requires that the timestamp is non-empty (see
+	// ClearUnversioned or ClearIntent if the timestamp is empty). Note that clear
+	// actually removes entries from the storage engine, rather than inserting
+	// MVCC tombstones.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCC(key MVCCKey) error
 	// ClearUnversioned removes an unversioned item from the db. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
-	// Range-ID local keys).
+	// Range-ID local keys). It does not affect range keys.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearUnversioned(key roachpb.Key) error
-	// ClearIntent removes an intent from the db. Unlike
-	// {ClearMVCC,ClearUnversioned} this is a higher-level method that may make
-	// changes in parts of the key space that are not only a function of the
-	// input, and may choose to use a single-clear under the covers.
-	// txnDidNotUpdateMeta allows for performance optimization when set to true,
-	// and has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can
-	// be conservatively set to false).
+	// ClearIntent removes an intent from the db. Unlike ClearMVCC and
+	// ClearUnversioned, this is a higher-level method that may make changes in
+	// parts of the key space that are not only a function of the input, and may
+	// choose to use a single-clear under the covers. txnDidNotUpdateMeta allows
+	// for performance optimization when set to true, and has semantics defined in
+	// MVCCMetadata.TxnDidNotUpdateMeta (it can be conservatively set to false).
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	//
@@ -523,44 +673,97 @@ type Writer interface {
 	// decrease, we can stop tracking txnDidNotUpdateMeta and still optimize
 	// ClearIntent by always doing single-clear.
 	ClearIntent(key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error
-	// ClearEngineKey removes the item from the db with the given EngineKey.
-	// Note that clear actually removes entries from the storage engine. This is
-	// a general-purpose and low-level method that should be used sparingly,
-	// only when the other Clear* methods are not applicable.
+	// ClearEngineKey removes the given point key from the engine. It does not
+	// affect range keys.  Note that clear actually removes entries from the
+	// storage engine. This is a general-purpose and low-level method that should
+	// be used sparingly, only when the other Clear* methods are not applicable.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearEngineKey(key EngineKey) error
 
-	// ClearRawRange removes a set of entries, from start (inclusive) to end
-	// (exclusive). It can be applied to a range consisting of MVCCKeys or the
-	// more general EngineKeys -- it simply uses the roachpb.Key parameters as
-	// the Key field of an EngineKey. Similar to the other Clear* methods,
-	// this method actually removes entries from the storage engine.
+	// ClearRawRange removes both point keys and range keys from start (inclusive)
+	// to end (exclusive) using a Pebble range tombstone. It can be applied to a
+	// range consisting of MVCCKeys or the more general EngineKeys -- it simply
+	// uses the roachpb.Key parameters as the Key field of an EngineKey. This
+	// implies that it does not clear intents unless the intent lock table is
+	// targeted explicitly.
 	//
-	// It is safe to modify the contents of the arguments after it returns.
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
 	ClearRawRange(start, end roachpb.Key) error
-	// ClearMVCCRangeAndIntents removes MVCC keys and intents from start (inclusive)
-	// to end (exclusive). This is a higher-level method that handles both
-	// interleaved and separated intents. Similar to the other Clear* methods,
-	// this method actually removes entries from the storage engine.
+	// ClearMVCCRange removes MVCC keys from start (inclusive) to end (exclusive)
+	// using a Pebble range tombstone. It will remove everything in the span,
+	// including intents and range keys.
 	//
-	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
-	// ClearMVCCRange removes MVCC keys from start (inclusive) to end
-	// (exclusive). It should not be expected to clear intents, though may clear
-	// interleaved intents that it encounters. It is meant for efficiently
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
+	ClearMVCCRange(start, end roachpb.Key) error
+	// ClearMVCCVersions removes MVCC point key versions from start (inclusive) to
+	// end (exclusive) using a Pebble range tombstone. It is meant for efficiently
 	// clearing a subset of versions of a key, since the parameters are MVCCKeys
-	// and not roachpb.Keys. Similar to the other Clear* methods, this method
-	// actually removes entries from the storage engine.
+	// and not roachpb.Keys, but it can also be used across multiple keys. It will
+	// ignore intents and range keys, leaving them in place.
 	//
-	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRange(start, end MVCCKey) error
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
+	ClearMVCCVersions(start, end MVCCKey) error
+	// ClearMVCCIteratorRange removes all keys in the given span using an MVCC
+	// iterator, by clearing individual keys (including intents) with Pebble point
+	// tombstones. It will also clear all range keys in the span.
+	//
+	// Similar to the other Clear* methods, this method actually removes entries
+	// from the storage engine. It is safe to modify the contents of the arguments
+	// after it returns.
+	ClearMVCCIteratorRange(start, end roachpb.Key) error
 
-	// ClearIterRange removes all keys in the given span using an iterator to
-	// iterate over point keys and remove them from the storage engine using
-	// per-key storage tombstones (not MVCC tombstones). Any separated
-	// intents/locks will also be cleared.
-	ClearIterRange(start, end roachpb.Key) error
+	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
+	// (inclusive) to end (exclusive) at the given timestamp. For any range key
+	// that straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Range keys at other timestamps are unaffected.
+	// Clears are idempotent.
+	//
+	// This method is primarily intended for MVCC garbage collection and similar
+	// internal use.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
+
+	// ExperimentalClearAllMVCCRangeKeys deletes all MVCC range keys (i.e. all
+	// versions) from start (inclusive) to end (exclusive). For any range key
+	// that straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Clears are idempotent.
+	//
+	// This method is primarily intended for MVCC garbage collection and similar
+	// internal use. It will do an internal scan across the span first to check
+	// whether it contains any range keys at all, and clear the smallest single
+	// span that covers all range keys (if any), to avoid dropping Pebble range
+	// tombstones across unnecessary spans.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error
+
+	// ExperimentalPutMVCCRangeKey writes an MVCC range key. It will replace any
+	// overlapping range keys at the given timestamp (even partial overlap). Only
+	// MVCC range tombstones, i.e. an empty value, are currently allowed (other
+	// kinds will need additional handling in MVCC APIs and elsewhere, e.g. stats
+	// and GC).
+	//
+	// Range keys must be accessed using special iterator options and methods,
+	// see SimpleMVCCIterator.RangeKeys() for details.
+	//
+	// TODO(erikgrinaker): Write a tech note on range keys and link it here.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
@@ -883,6 +1086,65 @@ type EncryptionRegistries struct {
 	KeyRegistry []byte
 }
 
+// GetIntent will look up an intent given a key. It there is no intent for a
+// key, it will return nil rather than an error. Errors are returned for problem
+// at the storage layer, problem decoding the key, problem unmarshalling the
+// intent, missing transaction on the intent or multiple intents for this key.
+func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
+	// Translate this key from a regular key to one in the lock space so it can be
+	// used for queries.
+	lbKey, _ := keys.LockTableSingleKey(key, nil)
+
+	iter := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+	defer iter.Close()
+
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: lbKey})
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		return nil, nil
+	}
+
+	engineKey, err := iter.EngineKey()
+	if err != nil {
+		return nil, err
+	}
+	checkKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+	if err != nil {
+		return nil, err
+	}
+	if !checkKey.Equal(key) {
+		// This should not be possible, a key and using prefix match means that it
+		// must match.
+		return nil, errors.AssertionFailedf("key does not match expected %v != %v", checkKey, key)
+	}
+	var meta enginepb.MVCCMetadata
+	if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+		return nil, err
+	}
+	if meta.Txn == nil {
+		return nil, errors.AssertionFailedf("txn is null for key %v, intent %v", key, meta)
+	}
+	intent := roachpb.MakeIntent(meta.Txn, key)
+
+	hasNext, err := iter.NextEngineKey()
+	if err != nil {
+		// We expect false on the call to next, but not an error.
+		return nil, err
+	}
+	// This should not be possible. There can only be one outstanding write
+	// intent for a key and with prefix match we don't find additional names.
+	if hasNext {
+		engineKey, err := iter.EngineKey()
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.AssertionFailedf("unexpected additional key found %v while looking for %v", engineKey, key)
+	}
+	return &intent, nil
+}
+
 // Scan returns up to max key/value objects starting from start (inclusive)
 // and ending at end (non-inclusive). Specify max=0 for unbounded scans. Since
 // this code may use an intentInterleavingIter, the caller should not attempt
@@ -966,9 +1228,10 @@ func WriteSyncNoop(eng Engine) error {
 }
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
-// (exclusive). Depending on the number of keys, it will either use ClearRawRange
-// or clear individual keys. It works with EngineKeys, so don't expect it to
-// find and clear separated intents if [start, end) refers to MVCC key space.
+// (exclusive), including any range keys. Depending on the number of keys, it
+// will either use ClearRawRange or clear individual keys. It works with
+// EngineKeys, so don't expect it to find and clear separated intents if
+// [start,end) refers to MVCC key space.
 func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Key) error {
 	iter := reader.NewEngineIterator(IterOptions{UpperBound: end})
 	defer iter.Close()
@@ -995,15 +1258,12 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	for valid {
 		count++
 		if count > clearRangeMinKeys {
-			break
+			return writer.ClearRawRange(start, end)
 		}
 		valid, err = iter.NextEngineKey()
 	}
 	if err != nil {
 		return err
-	}
-	if count > clearRangeMinKeys {
-		return writer.ClearRawRange(start, end)
 	}
 	valid, err = iter.SeekEngineKeyGE(EngineKey{Key: start})
 	for valid {
@@ -1016,7 +1276,10 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 		}
 		valid, err = iter.NextEngineKey()
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return writer.ExperimentalClearAllMVCCRangeKeys(start, end)
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(

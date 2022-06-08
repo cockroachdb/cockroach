@@ -42,6 +42,10 @@ type BuildCtx interface {
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
 
+	// AddTransient adds an absent element to the BuilderState, targeting
+	// TRANSIENT_ABSENT.
+	AddTransient(element scpb.Element)
+
 	// Drop sets the ABSENT target on an existing element in the BuilderState.
 	Drop(element scpb.Element)
 
@@ -184,10 +188,10 @@ type TableHelpers interface {
 	// to this materialized view.
 	NextViewIndexID(view *scpb.View) catid.IndexID
 
-	// SecondaryIndexPartitioningDescriptor creates a new partitioning descriptor
+	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.
-	SecondaryIndexPartitioningDescriptor(
-		index *scpb.SecondaryIndex,
+	IndexPartitioningDescriptor(
+		index *scpb.Index,
 		partBy *tree.PartitionBy,
 	) catpb.PartitioningDescriptor
 

@@ -136,6 +136,10 @@ type TestTenantInterface interface {
 	// SystemConfigProvider provides access to the system config.
 	SystemConfigProvider() config.SystemConfigProvider
 
+	// MustGetSQLCounter returns the value of a counter metric from the server's
+	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
+	MustGetSQLCounter(name string) int64
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.

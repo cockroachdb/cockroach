@@ -150,6 +150,7 @@ type CaptureFd2Config struct {
 //        buffering:
 //           max-staleness: 20s
 //           flush-trigger-size: 25KB
+//           max-buffer-size: 10MB
 //     sinks:
 //        file-groups:
 //           health:
@@ -162,15 +163,18 @@ type CaptureFd2Config struct {
 type CommonBufferSinkConfig struct {
 	// MaxStaleness is the maximum time a log message will sit in the buffer
 	// before a flush is triggered.
-	MaxStaleness *time.Duration `yaml:"max-staleness,omitempty"`
+	MaxStaleness *time.Duration `yaml:"max-staleness"`
 
 	// FlushTriggerSize is the number of bytes that will trigger the buffer
 	// to flush.
-	FlushTriggerSize *ByteSize `yaml:"flush-trigger-size,omitempty"`
+	FlushTriggerSize *ByteSize `yaml:"flush-trigger-size"`
 
-	// MaxInFlight is the maximum number of buffered flushes before messages
-	// start being dropped.
-	MaxInFlight *int `yaml:"max-in-flight,omitempty"`
+	// MaxBufferSize is the limit on the size of the messages that are buffered.
+	// If this limit is exceeded, messages are dropped. The limit is expected to
+	// be higher than FlushTriggerSize. A buffer is flushed as soon as
+	// FlushTriggerSize is reached, and a new buffer is created once the flushing
+	// is started. Only one flushing operation is active at a time.
+	MaxBufferSize *ByteSize `yaml:"max-buffer-size"`
 }
 
 // CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
@@ -1059,6 +1063,7 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
 				MaxStaleness:     &d,
 				FlushTriggerSize: &s,
+				MaxBufferSize:    &s,
 			}
 			return nil
 		}
@@ -1071,7 +1076,8 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 // After default propagation, buffering is disabled iff IsNone().
 func (w CommonBufferSinkConfigWrapper) IsNone() bool {
 	return (w.MaxStaleness != nil && *w.MaxStaleness == 0) &&
-		(w.FlushTriggerSize != nil && *w.FlushTriggerSize == 0)
+		(w.FlushTriggerSize != nil && *w.FlushTriggerSize == 0) &&
+		(w.MaxBufferSize != nil && *w.MaxBufferSize == 0)
 }
 
 // HTTPSinkMethod is a string restricted to "POST" and "GET"

@@ -27,8 +27,8 @@ import (
 
 // TestRoundTripResult verifies that we can serialize and deserialize a Result
 // without any corruption. Note that fields that are kept in-memory
-// ('ScanResp.Complete', 'memoryTok', and 'position') aren't set on the test
-// Results.
+// ('Position', 'memoryTok', 'subRequestIdx', 'subRequestDone', and
+// 'scanComplete') aren't set on the test Results.
 func TestRoundTripResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -60,13 +60,6 @@ func TestRoundTripResult(t *testing.T) {
 	})
 }
 
-func fillEnqueueKeys(r *kvstreamer.Result, rng *rand.Rand) {
-	r.EnqueueKeysSatisfied = make([]int, rng.Intn(20)+1)
-	for i := range r.EnqueueKeysSatisfied {
-		r.EnqueueKeysSatisfied[i] = rng.Int()
-	}
-}
-
 func makeResultWithGetResp(rng *rand.Rand, empty bool) kvstreamer.Result {
 	var r kvstreamer.Result
 	r.GetResp = &roachpb.GetResponse{}
@@ -82,7 +75,6 @@ func makeResultWithGetResp(rng *rand.Rand, empty bool) kvstreamer.Result {
 			},
 		}
 	}
-	fillEnqueueKeys(&r, rng)
 	return r
 }
 
@@ -95,9 +87,8 @@ func makeResultWithScanResp(rng *rand.Rand) kvstreamer.Result {
 		rng.Read(batchResponse)
 		batchResponses[i] = batchResponse
 	}
-	r.ScanResp.ScanResponse = &roachpb.ScanResponse{
+	r.ScanResp = &roachpb.ScanResponse{
 		BatchResponses: batchResponses,
 	}
-	fillEnqueueKeys(&r, rng)
 	return r
 }

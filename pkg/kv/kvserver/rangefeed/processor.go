@@ -200,12 +200,11 @@ func NewProcessor(cfg Config) *Processor {
 // engine has not been closed.
 type IntentScannerConstructor func() IntentScanner
 
-// CatchUpIteratorConstructor is used to construct an iterator that
-// can be used for catchup-scans. It should be called from underneath
-// a stopper task to ensure that the engine has not been closed.
-//
-// The constructed iterator must have an UpperBound set.
-type CatchUpIteratorConstructor func() *CatchUpIterator
+// CatchUpIteratorConstructor is used to construct an iterator that can be used
+// for catchup-scans. Takes the key span and exclusive start time to run the
+// catchup scan for. It should be called from underneath a stopper task to
+// ensure that the engine has not been closed.
+type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) *CatchUpIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.
@@ -436,7 +435,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // provided an error when the registration closes.
 //
 // The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp.
+// engine which occurred after the provided start timestamp (exclusive).
 //
 // If the method returns false, the processor will have been stopped, so calling
 // Stop is not necessary. If the method returns true, it will also return an
@@ -444,6 +443,8 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // registration.
 //
 // NOT safe to call on nil Processor.
+//
+// NB: startTS is exclusive; the first possible event will be at startTS.Next().
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,

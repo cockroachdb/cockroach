@@ -21,7 +21,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -43,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2585,6 +2583,9 @@ func (ex *connExecutor) setTransactionModes(
 		return errors.AssertionFailedf("expected an evaluated AS OF timestamp")
 	}
 	if !asOfTs.IsEmpty() {
+		if err := ex.state.checkReadsAndWrites(); err != nil {
+			return err
+		}
 		if err := ex.state.setHistoricalTimestamp(ctx, asOfTs); err != nil {
 			return err
 		}
@@ -2682,6 +2683,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
 			RangeProber:                    p.execCfg.RangeProber,
 			StmtDiagnosticsRequestInserter: ex.server.cfg.StmtDiagnosticsRecorder.InsertRequest,
+			CatalogBuiltins:                &p.evalCatalogBuiltins,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
@@ -2793,17 +2795,6 @@ func (ex *connExecutor) resetPlanner(
 	p.cancelChecker.Reset(ctx)
 
 	p.semaCtx = tree.MakeSemaContext()
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-		p.semaCtx.CastSessionOptions = cast.SessionOptions{
-			IntervalStyleEnabled: true,
-			DateStyleEnabled:     true,
-		}
-	} else {
-		p.semaCtx.CastSessionOptions = cast.SessionOptions{
-			IntervalStyleEnabled: ex.sessionData().IntervalStyleEnabled,
-			DateStyleEnabled:     ex.sessionData().DateStyleEnabled,
-		}
-	}
 	p.semaCtx.SearchPath = &ex.sessionData().SearchPath
 	p.semaCtx.Annotations = nil
 	p.semaCtx.TypeResolver = p
@@ -2818,6 +2809,7 @@ func (ex *connExecutor) resetPlanner(
 
 	p.schemaResolver.txn = txn
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
+	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
 }
@@ -2999,7 +2991,10 @@ func (ex *connExecutor) initStatementResult(
 			return err
 		}
 	}
-	if ast.StatementReturnType() == tree.Rows {
+	// If the output mode has been modified by instrumentation (e.g. EXPLAIN
+	// ANALYZE), then the columns will be set later.
+	if ex.planner.instrumentation.outputMode == unmodifiedOutput &&
+		ast.StatementReturnType() == tree.Rows {
 		// Note that this call is necessary even if cols is nil.
 		res.SetColumns(ctx, cols)
 	}
@@ -3052,6 +3047,13 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 	var activeTxnInfo *serverpb.TxnInfo
 	txn := ex.state.mu.txn
+
+	var autoRetryReasonStr string
+
+	if ex.extraTxnState.autoRetryReason != nil {
+		autoRetryReasonStr = ex.extraTxnState.autoRetryReason.Error()
+	}
+
 	if txn != nil {
 		id := txn.ID()
 		activeTxnInfo = &serverpb.TxnInfo{
@@ -3068,6 +3070,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			ReadOnly:              ex.state.readOnly,
 			Priority:              ex.state.priority.String(),
 			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
+			LastAutoRetryReason:   autoRetryReasonStr,
 		}
 	}
 
@@ -3108,6 +3111,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:       float32(progress),
+			IsFullScan:     query.isFullScan,
 		})
 	}
 	lastActiveQuery := ""

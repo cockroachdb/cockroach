@@ -17,7 +17,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -316,7 +320,7 @@ func backup(
 	}
 
 	resumerSpan.RecordStructured(&types.StringValue{Value: "writing backup manifest"})
-	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
+	if err := writeBackupManifest(ctx, settings, defaultStore, backupbase.BackupManifestName, encryption, backupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
@@ -405,7 +409,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	var backupManifest *backuppb.BackupManifest
 
-	// If planning didn't resolve the external destination, then we need to now.
+	// If the backup job has already resolved the destination in a previous
+	// resumption, we can skip this step.
+	//
+	// TODO(adityamaru: Break this code block into helper methods.
 	if details.URI == "" {
 		initialDetails := details
 		backupDetails, m, err := getBackupDetailAndManifest(
@@ -464,7 +471,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Ideally we'd re-render the description now that we know the subdir, but
 		// we don't have backup AST node anymore to easily call the rendering func.
 		// Instead we can just do a bit of dirty string replacement iff there is one
-		// "INTO 'LATEST' IN" (if there's >1, somenoe has a weird table/db names and
+		// "INTO 'LATEST' IN" (if there's >1, someone has a weird table/db names and
 		// we should just leave the description as-is, since it is just for humans).
 		description := b.job.Payload().Description
 		const unresolvedText = "INTO 'LATEST' IN"
@@ -508,9 +515,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// EncryptionInfo is non-nil only when new encryption information has been
 	// generated during BACKUP planning.
-	redactedURI := RedactURIForErrorMessage(details.URI)
+	redactedURI := backuputils.RedactURIForErrorMessage(details.URI)
 	if details.EncryptionInfo != nil {
-		if err := writeEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
+		if err := backupencryption.WriteEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
 			defaultStore); err != nil {
 			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
 		}
@@ -658,7 +665,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		defer c.Close()
 
-		if err := writeNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
+		if err := backupdest.WriteNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
 			return err
 		}
 	}

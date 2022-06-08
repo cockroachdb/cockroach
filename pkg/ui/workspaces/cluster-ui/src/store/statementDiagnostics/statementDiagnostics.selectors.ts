@@ -13,7 +13,8 @@ import { chain, orderBy } from "lodash";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { AppState } from "../reducers";
 
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export const statementDiagnostics = createSelector(
   (state: AppState) => state.adminUI,

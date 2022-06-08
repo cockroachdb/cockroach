@@ -55,11 +55,11 @@
   background-color: $colors--primary-blue-3;
 }
 
-.crl-dropdown__item--disabled{
+.crl-dropdown__item--disabled {
   color: $colors--neutral-4;
-  &:hover{
-      color: $colors--neutral-4;
-      background-color: $colors--white;
-      cursor: default;
-    }
+  &:hover {
+    color: $colors--neutral-4;
+    background-color: $colors--white;
+    cursor: default;
+  }
 }

@@ -3524,6 +3524,10 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 
 // Test CRUD operations can read NULL values for NOT NULL columns
 // in the middle of a column backfill.
+//
+// This test in its current form is stale regarding its use of schema changes.
+// It makes low level assumptions about how the legacy schema changer works.
+// TODO(ajwerner): Rework this test for the declarative schema changer.
 func TestCRUDWhileColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3563,6 +3567,7 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
+
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 
@@ -3589,7 +3594,8 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id INT8 NOT NULL DEFAULT 2, ADD u INT8 NOT NULL AS (v+1) STORED;`); err != nil {
+		if _, err := sqlDB.Exec(`SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ADD id INT8 NOT NULL DEFAULT 2, ADD u INT8 NOT NULL AS (v+1) STORED;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -3601,7 +3607,9 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 
 	go func() {
 		// Create a column that uses the above column in an expression.
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
+		if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = off;
+ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()

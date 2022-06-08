@@ -11,7 +11,7 @@ func _() {
 	_ = x[ALL-1]
 	_ = x[CREATE-2]
 	_ = x[DROP-3]
-	_ = x[GRANT-4]
+	_ = x[DEPRECATEDGRANT-4]
 	_ = x[SELECT-5]
 	_ = x[INSERT-6]
 	_ = x[DELETE-7]
@@ -22,9 +22,9 @@ func _() {
 	_ = x[RULE-12]
 }
 
-const _Kind_name = "ALLCREATEDROPGRANTSELECTINSERTDELETEUPDATEUSAGEZONECONFIGCONNECTRULE"
+const _Kind_name = "ALLCREATEDROPDEPRECATEDGRANTSELECTINSERTDELETEUPDATEUSAGEZONECONFIGCONNECTRULE"
 
-var _Kind_index = [...]uint8{0, 3, 9, 13, 18, 24, 30, 36, 42, 47, 57, 64, 68}
+var _Kind_index = [...]uint8{0, 3, 9, 13, 28, 34, 40, 46, 52, 57, 67, 74, 78}
 
 func (i Kind) String() string {
 	i -= 1

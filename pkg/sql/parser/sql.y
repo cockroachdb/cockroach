@@ -33,6 +33,8 @@ import (
     "github.com/cockroachdb/cockroach/pkg/roachpb"
     "github.com/cockroachdb/cockroach/pkg/security/username"
     "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+    "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+    "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/scanner"
@@ -761,8 +763,8 @@ func (u *sqlSymUnion) abbreviatedGrant() tree.AbbreviatedGrant {
 func (u *sqlSymUnion) abbreviatedRevoke() tree.AbbreviatedRevoke {
   return u.val.(tree.AbbreviatedRevoke)
 }
-func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPrivilegesTargetObject {
-  return u.val.(tree.AlterDefaultPrivilegesTargetObject)
+func (u *sqlSymUnion) targetObjectType() privilege.TargetObjectType {
+  return u.val.(privilege.TargetObjectType)
 }
 func (u *sqlSymUnion) setVar() *tree.SetVar {
     return u.val.(*tree.SetVar)
@@ -1488,7 +1490,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <bool> opt_with_grant_option
 %type <tree.NameList> opt_for_roles
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
-%type <tree.AlterDefaultPrivilegesTargetObject> alter_default_privileges_target_object
+%type <privilege.TargetObjectType> target_object_type
 %type <tree.TenantID> opt_as_tenant_clause
 
 
@@ -3960,7 +3962,7 @@ create_stats_option:
 // CREATE CHANGEFEED
 // FOR <targets> [INTO sink] [WITH <options>]
 //
-// Sink: Data caputre stream stream destination.  Enterprise only.
+// sink: data capture stream destination (Enterprise only)
 create_changefeed_stmt:
   CREATE CHANGEFEED FOR changefeed_targets opt_changefeed_sink opt_with_options
   {
@@ -8124,6 +8126,11 @@ sequence_option_elem:
   AS typename                  {
                                   // Valid option values must be integer types (ex. int2, bigint)
                                   parsedType := $2.colType()
+                                  if parsedType == nil {
+                                      sqllex.(*lexer).lastError = pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", $2.val)
+                                      sqllex.(*lexer).populateErrorDetails()
+                                      return 1
+                                  }
                                   if parsedType.Family() != types.IntFamily {
                                       sqllex.Error(fmt.Sprintf("invalid integer type: %s", parsedType.SQLString()))
                                       return 1
@@ -8726,12 +8733,6 @@ index_elem_options:
     opClass := $1
     dir := $2.dir()
     nullsOrder := $3.nullsOrder()
-    if opClass != "" {
-      if opClass == "gin_trgm_ops" || opClass == "gist_trgm_ops" {
-        return unimplementedWithIssueDetail(sqllex, 41285, "index using " + opClass)
-      }
-      return unimplementedWithIssue(sqllex, 47420)
-    }
     // We currently only support the opposite of Postgres defaults.
     if nullsOrder != tree.DefaultNullsOrder {
       if dir == tree.Descending && nullsOrder == tree.NullsFirst {
@@ -8741,7 +8742,7 @@ index_elem_options:
         return unimplementedWithIssue(sqllex, 6224)
       }
     }
-    $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder}
+    $$.val = tree.IndexElem{Direction: dir, NullsOrder: nullsOrder, OpClass: tree.Name(opClass)}
   }
 
 opt_class:
@@ -9117,11 +9118,11 @@ alter_default_privileges_stmt:
 | ALTER DEFAULT PRIVILEGES error // SHOW HELP: ALTER DEFAULT PRIVILEGES
 
 abbreviated_grant_stmt:
-  GRANT privileges ON alter_default_privileges_target_object TO role_spec_list opt_with_grant_option
+  GRANT privileges ON target_object_type TO role_spec_list opt_with_grant_option
   {
     $$.val = tree.AbbreviatedGrant{
       Privileges: $2.privilegeList(),
-      Target: $4.alterDefaultPrivilegesTargetObject(),
+      Target: $4.targetObjectType(),
       Grantees: $6.roleSpecList(),
       WithGrantOption: $7.bool(),
     }
@@ -9138,40 +9139,40 @@ opt_with_grant_option:
   }
 
 abbreviated_revoke_stmt:
-  REVOKE privileges ON alter_default_privileges_target_object FROM role_spec_list opt_drop_behavior
+  REVOKE privileges ON target_object_type FROM role_spec_list opt_drop_behavior
   {
     $$.val = tree.AbbreviatedRevoke{
       Privileges: $2.privilegeList(),
-      Target: $4.alterDefaultPrivilegesTargetObject(),
+      Target: $4.targetObjectType(),
       Grantees: $6.roleSpecList(),
     }
   }
-| REVOKE GRANT OPTION FOR privileges ON alter_default_privileges_target_object FROM role_spec_list opt_drop_behavior
+| REVOKE GRANT OPTION FOR privileges ON target_object_type FROM role_spec_list opt_drop_behavior
   {
     $$.val = tree.AbbreviatedRevoke{
       Privileges: $5.privilegeList(),
-      Target: $7.alterDefaultPrivilegesTargetObject(),
+      Target: $7.targetObjectType(),
       Grantees: $9.roleSpecList(),
       GrantOptionFor: true,
     }
   }
 
-alter_default_privileges_target_object:
+target_object_type:
   TABLES
   {
-    $$.val = tree.Tables
+    $$.val = privilege.Tables
   }
 | SEQUENCES
   {
-    $$.val = tree.Sequences
+    $$.val = privilege.Sequences
   }
 | TYPES
   {
-    $$.val = tree.Types
+    $$.val = privilege.Types
   }
 | SCHEMAS
   {
-    $$.val = tree.Schemas
+    $$.val = privilege.Schemas
   }
 | FUNCTIONS error
   {
@@ -9179,7 +9180,7 @@ alter_default_privileges_target_object:
   }
 | ROUTINES error
   {
-    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON FUNCTIONS ...")
+    return unimplemented(sqllex, "ALTER DEFAULT PRIVILEGES ... ON ROUTINES ...")
   }
 
 opt_for_roles:

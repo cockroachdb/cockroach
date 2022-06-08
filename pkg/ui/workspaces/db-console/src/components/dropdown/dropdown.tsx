@@ -137,11 +137,10 @@ export interface DropdownItemProps {
 
 export function DropdownItem(props: DropdownItemProps) {
   const { children, value, onClick, disabled = false } = props;
-  const onClickHandler = React.useCallback(() => !disabled && onClick(value), [
-    disabled,
-    onClick,
-    value,
-  ]);
+  const onClickHandler = React.useCallback(
+    () => !disabled && onClick(value),
+    [disabled, onClick, value],
+  );
   return (
     <div
       onClick={onClickHandler}

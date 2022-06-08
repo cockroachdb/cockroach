@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,10 +32,9 @@ type Inserter struct {
 	InsertColIDtoRowIndex catalog.TableColMap
 
 	// For allocation avoidance.
-	marshaled []roachpb.Value
-	key       roachpb.Key
-	valueBuf  []byte
-	value     roachpb.Value
+	key      roachpb.Key
+	valueBuf []byte
+	value    roachpb.Value
 }
 
 // MakeInserter creates a Inserter for the given table.
@@ -61,7 +59,6 @@ func MakeInserter(
 
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
-		marshaled:             make([]roachpb.Value, len(insertCols)),
 	}
 
 	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
@@ -141,20 +138,6 @@ func (ri *Inserter) InsertRow(
 		putFn = insertPutFn
 	}
 
-	// Encode the values to the expected column type. This needs to
-	// happen before index encoding because certain datum types (i.e. tuple)
-	// cannot be used as index values.
-	//
-	// TODO(radu): the legacy marshaling is used only in rare cases; this is
-	// wasteful.
-	for i, val := range values {
-		// Make sure the value can be written to the column before proceeding.
-		var err error
-		if ri.marshaled[i], err = valueside.MarshalLegacy(ri.InsertCols[i].GetType(), val); err != nil {
-			return err
-		}
-	}
-
 	// We don't want to insert any empty k/v's, so set includeEmpty to false.
 	// Consider the following case:
 	// TABLE t (
@@ -177,7 +160,7 @@ func (ri *Inserter) InsertRow(
 	ri.valueBuf, err = prepareInsertOrUpdateBatch(ctx, b,
 		&ri.Helper, primaryIndexKey, ri.InsertCols,
 		values, ri.InsertColIDtoRowIndex,
-		ri.marshaled, ri.InsertColIDtoRowIndex,
+		ri.InsertColIDtoRowIndex,
 		&ri.key, &ri.value, ri.valueBuf, putFn, overwrite, traceKV)
 	if err != nil {
 		return err

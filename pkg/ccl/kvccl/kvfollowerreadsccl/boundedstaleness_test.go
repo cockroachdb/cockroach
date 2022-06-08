@@ -234,7 +234,7 @@ func (bse *boundedStalenessEvents) onTxnRetry(
 	}
 }
 
-func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracing.Recording, stmt string) {
+func (bse *boundedStalenessEvents) onStmtTrace(nodeIdx int, rec tracingpb.Recording, stmt string) {
 	bse.mu.Lock()
 	defer bse.mu.Unlock()
 
@@ -275,7 +275,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WithStatementTrace: func(trace tracing.Recording, stmt string) {
+					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 						bse.onStmtTrace(i, trace, stmt)
 					},
 					OnTxnRetry: func(err error, evalCtx *eval.Context) {

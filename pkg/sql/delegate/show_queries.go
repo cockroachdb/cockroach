@@ -18,7 +18,20 @@ import (
 
 func (d *delegator) delegateShowQueries(n *tree.ShowQueries) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Queries)
-	const query = `SELECT query_id, node_id, session_id, user_name, start, query, client_address, application_name, distributed, phase FROM crdb_internal.`
+	const query = `
+SELECT
+  query_id,
+  node_id,
+  session_id,
+  user_name,
+  start,
+  query,
+  client_address,
+  application_name,
+  distributed,
+  full_scan,
+  phase
+FROM crdb_internal.`
 	table := `node_queries`
 	if n.Cluster {
 		table = `cluster_queries`
