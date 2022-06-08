@@ -805,6 +805,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaPreserveDowngradeLastUpdated = metric.Metadata{
+		Name:        "cluster.preserve.downgrade.option.last-updated",
+		Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
+		Measurement: "Timestamp",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 
 	// Below are the metadata for the statement started counters.
 	MetaQueryStarted = metric.Metadata{

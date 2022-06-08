@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/hintdetail"
 	"github.com/cockroachdb/redact"
@@ -553,6 +554,8 @@ func waitForSettingUpdate(
 			ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
 			name, expectedEncodedValue, observed,
 		)
+	} else {
+		syncPrometheusMetric(execCfg, name, reset)
 	}
 	return err
 }
@@ -695,5 +698,15 @@ func toSettingString(
 		return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
 	default:
 		return "", errors.Errorf("unsupported setting type %T", setting)
+	}
+}
+
+func syncPrometheusMetric(execCfg *ExecutorConfig, name string, reset bool) {
+	if name == "cluster.preserve_downgrade_option" {
+		var value int64
+		if !reset {
+			value = timeutil.Now().Unix()
+		}
+		execCfg.InternalExecutor.s.ServerMetrics.StatsMetrics.PreserveDowngradeLastUpdated.Update(value)
 	}
 }

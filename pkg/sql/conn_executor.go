@@ -472,6 +472,7 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 			SQLTxnStatsCollectionOverhead: metric.NewLatency(
 				MetaSQLTxnStatsCollectionOverhead, 6*metricsSampleInterval,
 			),
+			PreserveDowngradeLastUpdated: metric.NewGauge(MetaPreserveDowngradeLastUpdated),
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 	}

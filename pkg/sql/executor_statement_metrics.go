@@ -80,6 +80,8 @@ type StatsMetrics struct {
 	SQLStatsRemovedRows   *metric.Counter
 
 	SQLTxnStatsCollectionOverhead *metric.Histogram
+
+	PreserveDowngradeLastUpdated *metric.Gauge
 }
 
 // StatsMetrics is part of the metric.Struct interface.
