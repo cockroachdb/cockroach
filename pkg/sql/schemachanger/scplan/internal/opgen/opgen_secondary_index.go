@@ -113,10 +113,14 @@ func init() {
 			equiv(scpb.Status_BACKFILLED),
 			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.SecondaryIndex) scop.Op {
+				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) scop.Op {
+					return newLogEventOp(this, md)
+				}),
+				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) scop.Op {
 					return &scop.CreateGcJobForIndex{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
+						TableID:             this.TableID,
+						IndexID:             this.IndexID,
+						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {

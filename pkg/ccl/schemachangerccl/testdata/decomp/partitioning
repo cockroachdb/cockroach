@@ -45,6 +45,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
+    isVirtual: false
     pgAttributeNum: 1
     tableId: 104
   Status: PUBLIC
@@ -55,6 +56,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
+    isVirtual: false
     pgAttributeNum: 2
     tableId: 104
   Status: PUBLIC
@@ -65,6 +67,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
+    isVirtual: false
     pgAttributeNum: 3
     tableId: 104
   Status: PUBLIC
@@ -75,6 +78,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
+    isVirtual: false
     pgAttributeNum: 4.294967294e+09
     tableId: 104
   Status: PUBLIC
@@ -85,6 +89,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
+    isVirtual: false
     pgAttributeNum: 4.294967295e+09
     tableId: 104
   Status: PUBLIC
@@ -96,6 +101,7 @@ ElementState:
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
+      isPartial: false
       isUnique: true
       keyColumnDirections:
       - ASC
@@ -119,6 +125,7 @@ ElementState:
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: true
+      isPartial: false
       isUnique: false
       keyColumnDirections:
       - ASC
@@ -399,6 +406,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
+    isVirtual: false
     pgAttributeNum: 1
     tableId: 105
   Status: PUBLIC
@@ -409,6 +417,7 @@ ElementState:
     isHidden: false
     isInaccessible: false
     isSystemColumn: false
+    isVirtual: false
     pgAttributeNum: 2
     tableId: 105
   Status: PUBLIC
@@ -419,6 +428,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
+    isVirtual: false
     pgAttributeNum: 4.294967294e+09
     tableId: 105
   Status: PUBLIC
@@ -429,6 +439,7 @@ ElementState:
     isHidden: true
     isInaccessible: false
     isSystemColumn: true
+    isVirtual: false
     pgAttributeNum: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
@@ -440,6 +451,7 @@ ElementState:
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
+      isPartial: false
       isUnique: true
       keyColumnDirections:
       - ASC
@@ -461,6 +473,7 @@ ElementState:
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
+      isPartial: false
       isUnique: true
       keyColumnDirections:
       - ASC
