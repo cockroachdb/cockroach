@@ -310,10 +310,10 @@ const staticJobProps: Pick<
   status: "",
   show: "50",
   type: 0,
-  setSort: () => {},
-  setStatus: () => {},
-  setShow: () => {},
-  setType: () => {},
+  setSort: () => { },
+  setStatus: () => { },
+  setShow: () => { },
+  setType: () => { },
   refreshJobs: () => null,
 };
 

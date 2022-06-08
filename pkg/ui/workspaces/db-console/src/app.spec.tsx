@@ -9,9 +9,18 @@
 // licenses/APL.txt.
 
 import { stubComponentInModule } from "./test-utils/mockComponent";
-stubComponentInModule("src/views/databases/databaseDetailsPage", "DatabaseDetailsPage");
-stubComponentInModule("src/views/databases/databaseTablePage", "DatabaseTablePage");
-stubComponentInModule("src/views/cluster/containers/dataDistribution", "default");
+stubComponentInModule(
+  "src/views/databases/databaseDetailsPage",
+  "DatabaseDetailsPage",
+);
+stubComponentInModule(
+  "src/views/databases/databaseTablePage",
+  "DatabaseTablePage",
+);
+stubComponentInModule(
+  "src/views/cluster/containers/dataDistribution",
+  "default",
+);
 stubComponentInModule("src/views/statements/statementsPage", "default");
 stubComponentInModule("src/views/transactions/transactionsPage", "default");
 
@@ -72,9 +81,7 @@ describe("Routing to", () => {
       initialEntries: ["/"],
     });
     const store: Store<AdminUIState, Action> = createAdminUIStore(history);
-    appWrapper = mount(
-      <App history={history} store={store} />,
-    );
+    appWrapper = mount(<App history={history} store={store} />);
   });
 
   afterEach(() => {
