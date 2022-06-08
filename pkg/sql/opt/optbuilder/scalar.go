@@ -849,10 +849,15 @@ func NewScalar(
 	sb.scope.cols = make([]scopeColumn, 0, md.NumColumns())
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
 		colMeta := md.ColumnMeta(colID)
+		var alias tree.TableName
+		if colMeta.Table > 0 {
+			alias = md.TableMeta(colMeta.Table).Alias
+		}
 		sb.scope.cols = append(sb.scope.cols, scopeColumn{
-			name: scopeColName(tree.Name(colMeta.Alias)),
-			typ:  colMeta.Type,
-			id:   colID,
+			name:  scopeColName(tree.Name(colMeta.Alias)),
+			typ:   colMeta.Type,
+			id:    colID,
+			table: alias,
 		})
 	}
 

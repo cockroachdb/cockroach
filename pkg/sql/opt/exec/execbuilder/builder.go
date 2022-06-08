@@ -128,6 +128,12 @@ type Builder struct {
 
 	// ContainsMutation is set to true if the whole plan contains any mutations.
 	ContainsMutation bool
+
+	// wrapFunctionOverride overrides default implementation to return resolvable
+	// function reference for function with specified function name.
+	// The default can be overridden by calling SetSearchPath method to provide
+	// custom search path implementation.
+	wrapFunctionOverride func(fnName string) tree.ResolvableFunctionReference
 }
 
 // New constructs an instance of the execution node builder using the
@@ -191,6 +197,26 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Stats.RowCountIfAvailable())
 	return b.factory.ConstructPlan(plan.root, b.subqueries, b.cascades, b.checks, rootRowCount)
+}
+
+// SetSearchPath configures this builder to use specified search path.
+func (b *Builder) SetSearchPath(sp tree.SearchPath) {
+	if customFnResolver, ok := sp.(tree.CustomFunctionDefinitionResolver); ok {
+		b.wrapFunctionOverride = func(fnName string) tree.ResolvableFunctionReference {
+			fd := customFnResolver.Resolve(fnName)
+			if fd == nil {
+				panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(fnName)))
+			}
+			return tree.ResolvableFunctionReference{FunctionReference: fd}
+		}
+	}
+}
+
+func (b *Builder) wrapFunction(fnName string) tree.ResolvableFunctionReference {
+	if b.wrapFunctionOverride != nil {
+		return b.wrapFunctionOverride(fnName)
+	}
+	return tree.WrapFunction(fnName)
 }
 
 func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
