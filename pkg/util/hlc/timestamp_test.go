@@ -147,6 +147,21 @@ func TestTimestampNext(t *testing.T) {
 	}
 }
 
+func TestTimestampWallNext(t *testing.T) {
+	testCases := []struct {
+		ts, expWallNext Timestamp
+	}{
+		{makeTS(2, 0), makeTS(3, 0)},
+		{makeTS(1, 2), makeTS(2, 0)},
+		{makeTS(1, 1), makeTS(2, 0)},
+		{makeTS(1, 0), makeTS(2, 0)},
+		{makeSynTS(1, 2), makeSynTS(2, 0)},
+	}
+	for _, c := range testCases {
+		assert.Equal(t, c.expWallNext, c.ts.WallNext())
+	}
+}
+
 func TestTimestampPrev(t *testing.T) {
 	testCases := []struct {
 		ts, expPrev Timestamp
