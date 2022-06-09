@@ -1219,6 +1219,7 @@ func (ot *OptTester) AssignPlaceholders(
 			"", /* context */
 			&ot.semaCtx,
 			volatility.Volatile,
+			false, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err

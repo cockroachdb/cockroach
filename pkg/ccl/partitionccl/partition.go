@@ -105,6 +105,7 @@ func valueEncodePartitionTuple(
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].GetType(), "partition",
 			&semaCtx,
 			volatility.Immutable,
+			false, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err

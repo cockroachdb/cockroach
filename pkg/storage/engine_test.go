@@ -592,164 +592,128 @@ func TestEngineTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
-			var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
-			times := []hlc.Timestamp{
-				{WallTime: 2, Logical: 0},
-				minTimestamp,
-				maxTimestamp,
-				{WallTime: 2, Logical: 0},
-			}
+	minTimestamp := hlc.Timestamp{WallTime: 3, Logical: 0}
+	maxTimestamp := hlc.Timestamp{WallTime: 7, Logical: 0}
 
-			for i, time := range times {
-				s := fmt.Sprintf("%02d", i)
-				key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
-				value := MVCCValue{Value: roachpb.MakeValueFromString(s)}
-				if err := engine.PutMVCC(key, value); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := engine.Flush(); err != nil {
-				t.Fatal(err)
-			}
+	times := []hlc.Timestamp{
+		{WallTime: 5, Logical: 0},
+		minTimestamp,
+		maxTimestamp,
+		{WallTime: 5, Logical: 0},
+	}
 
-			batch := engine.NewBatch()
-			defer batch.Close()
+	for i, time := range times {
+		s := fmt.Sprintf("%02d", i)
+		key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
+		value := MVCCValue{Value: roachpb.MakeValueFromString(s)}
+		require.NoError(t, engine.PutMVCC(key, value))
+	}
+	require.NoError(t, engine.Flush())
 
-			check := func(t *testing.T, tbi MVCCIterator, keys, ssts int) {
-				defer tbi.Close()
-				tbi.SeekGE(NilKey)
+	batch := engine.NewBatch()
+	defer batch.Close()
 
-				var count int
-				for ; ; tbi.Next() {
-					ok, err := tbi.Valid()
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						break
-					}
-					count++
-				}
+	testCases := map[string]struct {
+		iter MVCCIterator
+		keys int
+	}{
+		"right not touching": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: maxTimestamp.WallNext(),
+				MaxTimestampHint: maxTimestamp.WallNext().WallNext(),
+				UpperBound:       roachpb.KeyMax,
+			}),
+			keys: 0,
+		},
+		"left not touching": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: minTimestamp.WallPrev().WallPrev(),
+				MaxTimestampHint: minTimestamp.WallPrev(),
+				UpperBound:       roachpb.KeyMax,
+			}),
+			keys: 0,
+		},
+		"right touching": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: maxTimestamp,
+				MaxTimestampHint: maxTimestamp,
+				UpperBound:       roachpb.KeyMax,
+			}),
+			keys: len(times),
+		},
+		"right touching ignores logical": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: maxTimestamp.Next(),
+				MaxTimestampHint: maxTimestamp.Next().Next(),
+				UpperBound:       roachpb.KeyMax,
+			}),
+			keys: len(times),
+		},
+		"left touching": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       roachpb.KeyMax,
+			}),
+			keys: len(times),
+		},
+		"left touching upperbound": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       []byte("02"),
+			}),
+			keys: 2,
+		},
+		"between": {
+			iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				MinTimestampHint: minTimestamp.Next(),
+				MaxTimestampHint: minTimestamp.Next(),
+				UpperBound:       roachpb.KeyMax,
+			}),
+			keys: len(times),
+		},
+	}
 
-				// Make sure the iterator sees no writes.
-				if keys != count {
-					t.Fatalf("saw %d values in time bounded iterator, but expected %d", count, keys)
-				}
-				stats := tbi.Stats()
-				if a := stats.TimeBoundNumSSTs; a != ssts {
-					t.Fatalf("touched %d SSTs, expected %d", a, ssts)
-				}
-			}
-
-			testCases := []struct {
-				iter       MVCCIterator
-				keys, ssts int
-			}{
-				// Completely to the right, not touching.
-				{
-					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						MinTimestampHint: maxTimestamp.Next(),
-						MaxTimestampHint: maxTimestamp.Next().Next(),
-						UpperBound:       roachpb.KeyMax,
-						WithStats:        true,
-					}),
-					keys: 0,
-					ssts: 0,
-				},
-				// Completely to the left, not touching.
-				{
-					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						MinTimestampHint: minTimestamp.Prev().Prev(),
-						MaxTimestampHint: minTimestamp.Prev(),
-						UpperBound:       roachpb.KeyMax,
-						WithStats:        true,
-					}),
-					keys: 0,
-					ssts: 0,
-				},
-				// Touching on the right.
-				{
-					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						MinTimestampHint: maxTimestamp,
-						MaxTimestampHint: maxTimestamp,
-						UpperBound:       roachpb.KeyMax,
-						WithStats:        true,
-					}),
-					keys: len(times),
-					ssts: 1,
-				},
-				// Touching on the left.
-				{
-					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						MinTimestampHint: minTimestamp,
-						MaxTimestampHint: minTimestamp,
-						UpperBound:       roachpb.KeyMax,
-						WithStats:        true,
-					}),
-					keys: len(times),
-					ssts: 1,
-				},
-				// Copy of last case, but confirm that we don't get SST stats if we don't
-				// ask for them.
-				{
-					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						MinTimestampHint: minTimestamp,
-						MaxTimestampHint: minTimestamp,
-						UpperBound:       roachpb.KeyMax,
-						WithStats:        false,
-					}),
-					keys: len(times),
-					ssts: 0,
-				},
-				// Copy of last case, but confirm that upper bound is respected.
-				{
-					iter: batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-						MinTimestampHint: minTimestamp,
-						MaxTimestampHint: minTimestamp,
-						UpperBound:       []byte("02"),
-						WithStats:        false,
-					}),
-					keys: 2,
-					ssts: 0,
-				},
-			}
-
-			for _, test := range testCases {
-				t.Run("", func(t *testing.T) {
-					check(t, test.iter, test.keys, test.ssts)
-				})
-			}
-
-			// Make a regular iterator. Before #21721, this would accidentally pick up the
-			// time bounded iterator instead.
-			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: keys.LocalMax})
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			tbi := tc.iter
+			defer tbi.Close()
 
 			var count int
-			for ; ; iter.Next() {
-				ok, err := iter.Valid()
-				if err != nil {
-					t.Fatal(err)
-				}
+			for tbi.SeekGE(NilKey); ; tbi.Next() {
+				ok, err := tbi.Valid()
+				require.NoError(t, err)
 				if !ok {
 					break
 				}
 				count++
 			}
 
-			// Make sure the iterator sees the writes (i.e. it's not the time bounded iterator).
-			if expCount := len(times); expCount != count {
-				t.Fatalf("saw %d values in regular iterator, but expected %d", count, expCount)
-			}
+			require.Equal(t, tc.keys, count)
 		})
 	}
+
+	// Make a regular iterator. Before #21721, this would accidentally pick up the
+	// time bounded iterator instead.
+	iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	defer iter.Close()
+
+	var count int
+	for iter.SeekGE(MVCCKey{Key: keys.LocalMax}); ; iter.Next() {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		count++
+	}
+
+	// Make sure the iterator sees the writes (i.e. it's not the time bounded iterator).
+	require.Equal(t, len(times), count)
 }
 
 func TestFlushNumSSTables(t *testing.T) {

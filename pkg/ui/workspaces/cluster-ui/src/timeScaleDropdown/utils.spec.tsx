@@ -28,7 +28,7 @@ describe("timescale utils", (): void => {
       };
       const [start, end] = toRoundedDateRange(ts);
       assert.equal(start.format("YYYY.MM.DD HH:mm:ss"), "2022.01.05 13:00:00");
-      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 14:00:00");
+      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 13:59:59");
     });
 
     it("already rounded values", () => {
@@ -40,7 +40,7 @@ describe("timescale utils", (): void => {
       };
       const [start, end] = toRoundedDateRange(ts);
       assert.equal(start.format("YYYY.MM.DD HH:mm:ss"), "2022.01.05 13:00:00");
-      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 14:00:00");
+      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 13:59:59");
     });
   });
 

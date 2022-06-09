@@ -4852,3 +4852,24 @@ func BenchmarkOptimisticEval(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkEmptyRebalance benchmarks the time it takes to add/remove replicas
+// of an empty range.
+func BenchmarkEmptyRebalance(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(
+		b, 2, base.TestClusterArgs{ReplicationMode: base.ReplicationManual},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchRange := tc.ScratchRange(b)
+	b.Run("add-remove", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
+			tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
+		}
+		b.StopTimer()
+	})
+}

@@ -161,7 +161,7 @@ func MakeColumnDefDescs(
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.DefaultExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, volatility.Volatile,
+			ctx, d.DefaultExpr.Expr, resType, "DEFAULT", semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err
@@ -181,7 +181,7 @@ func MakeColumnDefDescs(
 		// Verify the on update expression type is compatible with the column type
 		// and does not contain invalid functions.
 		ret.OnUpdateExpr, err = schemaexpr.SanitizeVarFreeExpr(
-			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile,
+			ctx, d.OnUpdateExpr.Expr, resType, "ON UPDATE", semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, err
@@ -266,7 +266,7 @@ func EvalShardBucketCount(
 			shardBuckets = paramVal
 		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, volatility.Volatile,
+			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return 0, err

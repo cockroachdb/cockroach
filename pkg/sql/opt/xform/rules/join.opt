@@ -611,10 +611,11 @@
     (LookupJoin
         $input
         $on
-        (CreateLocalityOptimizedLookupJoinPrivate
+        (CreateLocalityOptimizedLookupJoinPrivateIncludingCols
             $localExpr
             (EmptyFiltersExpr)
             $private
+            (OutputCols $input)
         )
     )
     $on

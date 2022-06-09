@@ -61,9 +61,6 @@ type pebbleIterator struct {
 	// True iff the iterator is exhausted in the current direction. There is
 	// no error to report when it is true.
 	mvccDone bool
-	// Stat tracking the number of sstables encountered during time-bound
-	// iteration. Only used for MVCCIterator.
-	timeBoundNumSSTables int
 }
 
 var _ MVCCIterator = &pebbleIterator{}
@@ -193,28 +190,24 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
+		// TODO(erikgrinaker): For compatibility with SSTables written by 21.2 nodes
+		// or earlier, we filter on table properties too. We still wrote these
+		// properties in 22.1, but stop doing so in 22.2. We can remove this
+		// filtering when nodes are guaranteed to no longer have SSTables written by
+		// 21.2 or earlier (which can still happen e.g. when clusters are upgraded
+		// through multiple major versions in rapid succession).
 		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint))
 		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint))
 		p.options.TableFilter = func(userProps map[string]string) bool {
 			tableMinTS := userProps["crdb.ts.min"]
 			if len(tableMinTS) == 0 {
-				if opts.WithStats {
-					p.timeBoundNumSSTables++
-				}
 				return true
 			}
 			tableMaxTS := userProps["crdb.ts.max"]
 			if len(tableMaxTS) == 0 {
-				if opts.WithStats {
-					p.timeBoundNumSSTables++
-				}
 				return true
 			}
-			used := encodedMaxTS >= tableMinTS && encodedMinTS <= tableMaxTS
-			if used && opts.WithStats {
-				p.timeBoundNumSSTables++
-			}
-			return used
+			return encodedMaxTS >= tableMinTS && encodedMinTS <= tableMaxTS
 		}
 		// We are given an inclusive [MinTimestampHint, MaxTimestampHint]. The
 		// MVCCWAllTimeIntervalCollector has collected the WallTimes and we need
@@ -808,8 +801,7 @@ func findSplitKeyUsingIterator(
 // Stats implements the {MVCCIterator,EngineIterator} interfaces.
 func (p *pebbleIterator) Stats() IteratorStats {
 	return IteratorStats{
-		TimeBoundNumSSTs: p.timeBoundNumSSTables,
-		Stats:            p.iter.Stats(),
+		Stats: p.iter.Stats(),
 	}
 }
 
