@@ -2577,8 +2577,13 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	}
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
 		appendStorageParam(`ttl`, `'on'`)
-		appendStorageParam(`ttl_automatic_column`, `'on'`)
-		appendStorageParam(`ttl_expire_after`, string(ttl.DurationExpr))
+		if ttl.HasDurationExpr() {
+			appendStorageParam(`ttl_automatic_column`, `'on'`)
+			appendStorageParam(`ttl_expire_after`, string(ttl.DurationExpr))
+		}
+		if ttl.HasExpirationExpr() {
+			appendStorageParam(`ttl_expiration_expression`, fmt.Sprintf("'%s'", string(ttl.ExpirationExpr)))
+		}
 		appendStorageParam(`ttl_job_cron`, fmt.Sprintf(`'%s'`, ttl.DeletionCronOrDefault()))
 		if bs := ttl.SelectBatchSize; bs != 0 {
 			appendStorageParam(`ttl_select_batch_size`, fmt.Sprintf(`%d`, bs))

@@ -323,14 +323,16 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	}
 
 	type testCase struct {
-		desc                string
-		createTable         string
-		preSetup            []string
-		postSetup           []string
-		numExpiredRows      int
-		numNonExpiredRows   int
-		numSplits           int
-		forceNonMultiTenant bool
+		desc                 string
+		createTable          string
+		preSetup             []string
+		postSetup            []string
+		numExpiredRows       int
+		numNonExpiredRows    int
+		numSplits            int
+		forceNonMultiTenant  bool
+		expirationExpression string
+		addRow               func(th *rowLevelTTLTestJobTestHelper, createTableStmt *tree.CreateTable, ts time.Time)
 	}
 	// Add some basic one and three column row-level TTL tests.
 	testCases := []testCase{
@@ -443,6 +445,23 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numNonExpiredRows: 5,
 			numSplits:         10,
 		},
+		{
+			desc: "ttl expiration expression",
+			createTable: `CREATE TABLE tbl (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  expire_at TIMESTAMP
+) WITH (ttl_expiration_expression = 'expire_at')`,
+			numExpiredRows:       1001,
+			numNonExpiredRows:    5,
+			expirationExpression: "expire_at",
+			addRow: func(th *rowLevelTTLTestJobTestHelper, createTableStmt *tree.CreateTable, ts time.Time) {
+				th.sqlDB.Exec(
+					t,
+					"INSERT INTO tbl (expire_at) VALUES ($1)",
+					ts,
+				)
+			},
+		},
 	}
 	// Also randomly generate random PKs.
 	for i := 0; i < 5; i++ {
@@ -468,6 +487,40 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				numExpiredRows:    rng.Intn(2000),
 				numNonExpiredRows: rng.Intn(100),
 			},
+		)
+	}
+
+	defaultAddRow := func(th *rowLevelTTLTestJobTestHelper, createTableStmt *tree.CreateTable, ts time.Time) {
+		insertColumns := []string{"crdb_internal_expiration"}
+		placeholders := []string{"$1"}
+		values := []interface{}{ts}
+
+		for _, def := range createTableStmt.Defs {
+			if def, ok := def.(*tree.ColumnTableDef); ok {
+				if def.HasDefaultExpr() {
+					continue
+				}
+				placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1))
+				var b bytes.Buffer
+				lexbase.EncodeRestrictedSQLIdent(&b, string(def.Name), lexbase.EncNoFlags)
+				insertColumns = append(insertColumns, b.String())
+
+				d := randgen.RandDatum(rng, def.Type.(*types.T), false /* nullOk */)
+				f := tree.NewFmtCtx(tree.FmtBareStrings)
+				d.Format(f)
+				values = append(values, f.CloseAndGetString())
+			}
+		}
+
+		th.sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				"INSERT INTO %s (%s) VALUES (%s)",
+				createTableStmt.Table.Table(),
+				strings.Join(insertColumns, ","),
+				strings.Join(placeholders, ","),
+			),
+			values...,
 		)
 	}
 
@@ -501,40 +554,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			require.NoError(t, err)
 			createTableStmt, ok := stmt.AST.(*tree.CreateTable)
 			require.True(t, ok)
-
-			addRow := func(ts time.Time) {
-				insertColumns := []string{"crdb_internal_expiration"}
-				placeholders := []string{"$1"}
-				values := []interface{}{ts}
-
-				for _, def := range createTableStmt.Defs {
-					if def, ok := def.(*tree.ColumnTableDef); ok {
-						if def.HasDefaultExpr() {
-							continue
-						}
-						placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1))
-						var b bytes.Buffer
-						lexbase.EncodeRestrictedSQLIdent(&b, string(def.Name), lexbase.EncNoFlags)
-						insertColumns = append(insertColumns, b.String())
-
-						d := randgen.RandDatum(rng, def.Type.(*types.T), false /* nullOk */)
-						f := tree.NewFmtCtx(tree.FmtBareStrings)
-						d.Format(f)
-						values = append(values, f.CloseAndGetString())
-					}
-				}
-
-				th.sqlDB.Exec(
-					t,
-					fmt.Sprintf(
-						"INSERT INTO %s (%s) VALUES (%s)",
-						createTableStmt.Table.Table(),
-						strings.Join(insertColumns, ","),
-						strings.Join(placeholders, ","),
-					),
-					values...,
-				)
-			}
 
 			// Split the ranges by a random PK value.
 			if tc.numSplits > 0 {
@@ -574,12 +593,17 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				}
 			}
 
+			addRow := defaultAddRow
+			if tc.addRow != nil {
+				addRow = tc.addRow
+			}
+
 			// Add expired and non-expired rows.
 			for i := 0; i < tc.numExpiredRows; i++ {
-				addRow(timeutil.Now().Add(-time.Hour))
+				addRow(th, createTableStmt, timeutil.Now().Add(-time.Hour))
 			}
 			for i := 0; i < tc.numNonExpiredRows; i++ {
-				addRow(timeutil.Now().Add(time.Hour * 24 * 30))
+				addRow(th, createTableStmt, timeutil.Now().Add(time.Hour*24*30))
 			}
 
 			for _, stmt := range tc.postSetup {
@@ -593,18 +617,24 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 
 			th.waitForSuccessfulScheduledJob(t)
 
+			table := createTableStmt.Table.Table()
+
 			// Check we have the number of expected rows.
 			var numRows int
 			th.sqlDB.QueryRow(
 				t,
-				fmt.Sprintf(`SELECT count(1) FROM %s`, createTableStmt.Table.Table()),
+				fmt.Sprintf(`SELECT count(1) FROM %s`, table),
 			).Scan(&numRows)
 			require.Equal(t, tc.numNonExpiredRows, numRows)
 
 			// Also check all the rows expire way into the future.
+			expirationExpression := "crdb_internal_expiration"
+			if tc.expirationExpression != "" {
+				expirationExpression = tc.expirationExpression
+			}
 			th.sqlDB.QueryRow(
 				t,
-				fmt.Sprintf(`SELECT count(1) FROM %s WHERE crdb_internal_expiration >= now()`, createTableStmt.Table.Table()),
+				fmt.Sprintf(`SELECT count(1) FROM %s WHERE %s >= now()`, table, expirationExpression),
 			).Scan(&numRows)
 			require.Equal(t, tc.numNonExpiredRows, numRows)
 
