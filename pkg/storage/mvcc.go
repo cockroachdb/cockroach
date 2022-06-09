@@ -2042,7 +2042,6 @@ func MVCCClearTimeRange(
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	maxBatchSize, maxBatchByteSize int64,
-	useTBI bool,
 ) (*roachpb.Span, error) {
 	var batchSize int64
 	var batchByteSize int64
@@ -2148,10 +2147,9 @@ func MVCCClearTimeRange(
 	// _expect_ to hit this since the RevertRange is only intended for non-live
 	// key spans, but there could be an intent leftover.
 	iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
-		EnableTimeBoundIteratorOptimization: useTBI,
-		EndKey:                              endKey,
-		StartTime:                           startTime,
-		EndTime:                             endTime,
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
 	})
 	defer iter.Close()
 

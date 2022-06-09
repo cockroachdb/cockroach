@@ -44,12 +44,6 @@ import (
 var backupOutputTypes = []*types.T{}
 
 var (
-	useTBI = settings.RegisterBoolSetting(
-		settings.TenantWritable,
-		"kv.bulk_io_write.experimental_incremental_export_enabled",
-		"use experimental time-bound file filter when exporting in BACKUP",
-		true,
-	)
 	priorityAfter = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"bulkio.backup.read_with_priority_after",
@@ -337,7 +331,7 @@ func runBackupProcessor(
 						RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
 						ResumeKeyTS:                         span.firstKeyTS,
 						StartTime:                           span.start,
-						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
+						EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
 						MVCCFilter:                          spec.MVCCFilter,
 						TargetFileSize:                      batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 						ReturnSST:                           true,
