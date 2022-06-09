@@ -51,7 +51,8 @@ func registerMultiTenantFairness(r registry.Registry) {
 			},
 			{
 				name:        "concurrency-skew",
-				concurrency: func(i int) int { return i * 250 },
+				// Factor of 100 gives same overall concurrency as "same" (i.e. 1000)
+				concurrency: func(i int) int { return i * 100 },
 			},
 		}
 		for i := range kvSpecs {
@@ -80,7 +81,8 @@ func registerMultiTenantFairness(r registry.Registry) {
 			},
 			{
 				name:        "concurrency-skew",
-				concurrency: func(i int) int { return i * 50 },
+				// Factor of 20 gives same overall concurrency as "same" (i.e. 200)
+				concurrency: func(i int) int { return i * 20 },
 			},
 		}
 		for i := range storeSpecs {
