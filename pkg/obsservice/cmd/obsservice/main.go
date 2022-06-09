@@ -14,7 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ var RootCmd = &cobra.Command{
 from one or more CockroachDB clusters.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
-		cfg := obslib.ReverseHTTPProxyConfig{
+		cfg := httpproxy.ReverseHTTPProxyConfig{
 			HTTPAddr:      httpAddr,
 			TargetURL:     targetURL,
 			CACertPath:    caCertPath,
@@ -40,7 +40,7 @@ from one or more CockroachDB clusters.`,
 		}
 
 		// Block forever running the proxy.
-		<-obslib.NewReverseHTTPProxy(ctx, cfg).RunAsync(ctx)
+		<-httpproxy.NewReverseHTTPProxy(ctx, cfg).RunAsync(ctx)
 	},
 }
 

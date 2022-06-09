@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/cli/exit",
-        "//pkg/obsservice/obslib",
+        "//pkg/obsservice/obslib/httpproxy",
         "//pkg/obsservice/obslib/migrations",
         "@com_github_spf13_cobra//:cobra",
     ],
