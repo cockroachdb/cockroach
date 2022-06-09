@@ -43,8 +43,8 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 	// Flatten away nested and clauses. We may need them at some point
 	// if we add something like or-join or not-join. At time of writing,
 	// the and case in processClause is an assertion failure.
-	clauses = flattened(clauses)
-	for _, t := range clauses {
+	forDisplay := flattened(clauses)
+	for _, t := range expanded(clauses) {
 		p.processClause(t)
 	}
 
@@ -77,7 +77,7 @@ func newQuery(sc *Schema, clauses Clauses) *Query {
 		schema:        sc,
 		variables:     p.variables,
 		variableSlots: p.variableSlots,
-		clauses:       clauses,
+		clauses:       forDisplay,
 		entities:      entities,
 		facts:         p.facts,
 		slots:         p.slots,
@@ -104,11 +104,11 @@ func (p *queryBuilder) processClause(t Clause) {
 		}
 	}()
 	switch t := t.(type) {
-	case *tripleDecl:
+	case tripleDecl:
 		p.processTripleDecl(t)
-	case *eqDecl:
+	case eqDecl:
 		p.processEqDecl(t)
-	case *filterDecl:
+	case filterDecl:
 		p.processFilterDecl(t)
 	case and:
 		panic(errors.AssertionFailedf("and clauses should be flattened away"))
@@ -117,7 +117,7 @@ func (p *queryBuilder) processClause(t Clause) {
 	}
 }
 
-func (p *queryBuilder) processTripleDecl(fd *tripleDecl) {
+func (p *queryBuilder) processTripleDecl(fd tripleDecl) {
 	f := fact{
 		variable: p.maybeAddVar(fd.entity, true /* entity */),
 		attr:     p.sc.mustGetOrdinal(fd.attribute),
@@ -127,7 +127,7 @@ func (p *queryBuilder) processTripleDecl(fd *tripleDecl) {
 	p.facts = append(p.facts, f)
 }
 
-func (p *queryBuilder) processEqDecl(t *eqDecl) {
+func (p *queryBuilder) processEqDecl(t eqDecl) {
 	varIdx := p.maybeAddVar(t.v, false)
 	valueIdx := p.processValueExpr(t.expr)
 	// This is somewhat inefficient but what it does is it lets
@@ -150,7 +150,7 @@ func (p *queryBuilder) processEqDecl(t *eqDecl) {
 		})
 }
 
-func (p *queryBuilder) processFilterDecl(t *filterDecl) {
+func (p *queryBuilder) processFilterDecl(t filterDecl) {
 	fv := reflect.ValueOf(t.predicateFunc)
 	// Type check the function.
 	if err := checkNotNil(fv); err != nil {
@@ -223,6 +223,12 @@ func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 }
 
 func (p *queryBuilder) maybeAddVar(v Var, entity bool) slotIdx {
+	if v == Blank {
+		if entity {
+			panic(errors.AssertionFailedf("cannot use _ as an entity"))
+		}
+		return p.fillSlot(slot{}, entity)
+	}
 	id, exists := p.variableSlots[v]
 	if exists {
 		if entity && !p.slotIsEntity[id] {

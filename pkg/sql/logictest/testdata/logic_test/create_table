@@ -296,7 +296,7 @@ like_no_pk_rowid_hidden  CREATE TABLE public.like_no_pk_rowid_hidden (
                          a INT8 NULL,
                          b INT8 NULL,
                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                         CONSTRAINT like_no_pk_table_pkey PRIMARY KEY (rowid ASC)
+                         CONSTRAINT like_no_pk_rowid_hidden_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error duplicate column name
@@ -323,9 +323,8 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                       t TIMESTAMPTZ NULL,
                       z DECIMAL NULL,
                       blah INT8 NULL,
-                      rowid INT8 NOT VISIBLE NOT NULL,
-                      rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                      CONSTRAINT like_more_specifiers_pkey PRIMARY KEY (rowid_1 ASC),
+                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                      CONSTRAINT like_more_specifiers_pkey PRIMARY KEY (rowid ASC),
                       INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC)
 )
 
@@ -340,9 +339,9 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
-           crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL,
+           crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT like_hash_base_pkey PRIMARY KEY (rowid ASC),
+           CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
            INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
@@ -359,7 +358,7 @@ like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
            crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT like_hash_base_pkey PRIMARY KEY (rowid ASC),
+           CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
            INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 

@@ -217,7 +217,7 @@ t10  CREATE TABLE public.t10 (
      a INT8 NULL,
      b INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t9_pkey PRIMARY KEY (rowid ASC),
+     CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
      INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
 )
 

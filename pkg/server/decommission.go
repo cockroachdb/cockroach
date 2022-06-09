@@ -54,6 +54,7 @@ func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 			// Nothing more to do.
 			return
 		}
+		t.nodes[decommissioningNodeID] = struct{}{}
 
 		logLimiter := log.Every(5 * time.Second) // avoid log spam
 		if err := stores.VisitStores(func(store *kvserver.Store) error {
@@ -215,4 +216,16 @@ func (s *Server) Decommission(
 		}
 	}
 	return nil
+}
+
+// DecommissioningNodeMap returns the set of node IDs that are decommissioning
+// from the perspective of the server.
+func (s *Server) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
+	s.decomNodeMap.RLock()
+	defer s.decomNodeMap.RUnlock()
+	nodes := make(map[roachpb.NodeID]interface{})
+	for key, val := range s.decomNodeMap.nodes {
+		nodes[key] = val
+	}
+	return nodes
 }

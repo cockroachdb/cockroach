@@ -13,6 +13,19 @@ attributes:
     na: {value: a}
     nb: {left: na, value: b}
     nc: {right: nb, value: c}
+rules:
+    - nodeEntity($node, $entity):
+        - $node[value] = $entity
+    - rightLeft($root, $right, $right-left, $v):
+        - $root[Type] = '*entitynodetest.node'
+        - $root[right] = $right
+        - $right[left] = $right-left
+        - $right[Type] = '*entitynodetest.node'
+        - $right-left[value] = $v
+        - '$v = {i8: 1, pi8: 1, i16: 1}'
+        - noop(*entitynodetest.node)($na)
+    - passThrough($a, $b, $c, $d):
+        - rightLeft($a, $b, $c, $d)
 queries:
     - indexes:
         0:
@@ -109,6 +122,17 @@ queries:
                 - [nb, b]
                 - [nc, c]
             unsatisfiableIndexes: [2, 3, 4, 5, 6]
+        nodes with elements where i8=2 (rule):
+            query:
+                - $i8 = 2
+                - $value[i8] = $i8
+                - nodeEntity($n, $value)
+            entities: [$value, $n]
+            result-vars: [$n, $value]
+            results:
+                - [nb, b]
+                - [nc, c]
+            unsatisfiableIndexes: [2, 3, 4, 5, 6]
         list all the i8 values:
             query:
                 - $value[i8] = $i8
@@ -153,6 +177,14 @@ queries:
             results:
                 - [na, nb, nc, a]
             unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+        nodes with rule:
+            query:
+                - passThrough($nc, $nb, $na, $a)
+            entities: [$nc, $nb, $na]
+            result-vars: [$nc, $nb, $na, $a]
+            results:
+                - [nc, nb, na, a]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
         list nodes:
             query:
                 - $n[Type] = '*entitynodetest.node'
@@ -287,5 +319,23 @@ queries:
             entities: [$e]
             result-vars: [$e, $i8]
             results: []
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+        using blank, bind all:
+            query:
+                - $e[i8] = $_
+            entities: [$e]
+            result-vars: [$e]
+            results:
+                - [a]
+                - [b]
+                - [c]
+            unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+        using blank, bind non-nil pointer:
+            query:
+                - $e[pi8] = $_
+            entities: [$e]
+            result-vars: [$e]
+            results:
+                - [a]
             unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
 comparisons: []

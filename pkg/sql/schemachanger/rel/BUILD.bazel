@@ -24,6 +24,7 @@ go_library(
         "schema.go",
         "schema_attribute.go",
         "schema_mappings.go",
+        "schema_rules.go",
         "schema_value.go",
         "system_attributes.go",
         "values.go",

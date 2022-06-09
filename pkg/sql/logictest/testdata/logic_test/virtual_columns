@@ -1176,7 +1176,7 @@ CREATE TABLE public.t63167_b (
    a INT8 NULL,
    v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t63167_a_pkey PRIMARY KEY (rowid ASC)
+   CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Test that columns backfills to tables with virtual columns work.

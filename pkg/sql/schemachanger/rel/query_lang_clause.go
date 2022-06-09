@@ -23,7 +23,7 @@ type tripleDecl struct {
 	value     expr
 }
 
-func (f *tripleDecl) clause() {}
+func (f tripleDecl) clause() {}
 
 var _ Clause = (*tripleDecl)(nil)
 
@@ -39,7 +39,7 @@ type eqDecl struct {
 	expr expr
 }
 
-func (e *eqDecl) clause() {}
+func (e eqDecl) clause() {}
 
 // and is a useful conjunctive construct which exists primarily as a tool
 // for libraries to write functions which emit clauses. At build time, the
@@ -65,3 +65,10 @@ type filterDecl struct {
 }
 
 func (f filterDecl) clause() {}
+
+type ruleInvocation struct {
+	args []Var
+	rule *RuleDef
+}
+
+func (f ruleInvocation) clause() {}

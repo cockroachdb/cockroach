@@ -275,3 +275,43 @@ func TestTooManyAttributes(t *testing.T) {
 		}
 	})
 }
+
+func TestRuleValidation(t *testing.T) {
+	type tooManyAttrs struct {
+		F1, F2 *uint32
+	}
+	a1, a2 := stringAttr("a1"), stringAttr("a2")
+	sc := rel.MustSchema("rules",
+		rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
+			rel.EntityAttr(a1, "F1"),
+			rel.EntityAttr(a2, "F2"),
+		),
+	)
+	require.PanicsWithError(t, "invalid rule test: [a b] input variable are not used", func() {
+		sc.Def2("test", "a", "b", func(a, b rel.Var) rel.Clauses {
+			return rel.Clauses{}
+		})
+	})
+	require.PanicsWithError(t, "invalid rule test: [b] input variable are not used", func() {
+		sc.Def2("test", "a", "b", func(a, b rel.Var) rel.Clauses {
+			return rel.Clauses{a.AttrEqVar(rel.Self, a)}
+		})
+	})
+	require.PanicsWithError(t, "invalid rule test: [c] are not defined variables", func() {
+		sc.Def2("test", "a", "b", func(a, b rel.Var) rel.Clauses {
+			c := rel.Var("c")
+			return rel.Clauses{
+				a.AttrEqVar(rel.Self, b),
+				c.AttrEqVar(rel.Self, a),
+			}
+		})
+	})
+	sc.Def2("test", "a", "b", func(a, b rel.Var) rel.Clauses {
+		return rel.Clauses{a.AttrEqVar(rel.Self, b)}
+	})
+	require.PanicsWithError(t, "already registered rule with name test", func() {
+		sc.Def2("test", "a", "b", func(a, b rel.Var) rel.Clauses {
+			return rel.Clauses{a.AttrEqVar(rel.Self, b)}
+		})
+	})
+}
