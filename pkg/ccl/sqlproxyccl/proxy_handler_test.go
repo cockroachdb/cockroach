@@ -1325,6 +1325,76 @@ func TestConnectionMigration(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+// TestCurConnCountMetric ensures that the CurConnCount metric is accurate.
+// Previously, there was a regression where the CurConnCount metric wasn't
+// decremented whenever the connections were closed due to a goroutine leak.
+func TestCurConnCountMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Start KV server, and enable session migration.
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Start a single SQL pod.
+	tenantID := serverutils.TestTenantID()
+	tenants := startTestTenantPods(ctx, t, s, tenantID, 1)
+	defer func() {
+		for _, tenant := range tenants {
+			tenant.Stopper().Stop(ctx)
+		}
+	}()
+
+	// Register the SQL pod in the directory server.
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(s.Stopper(), nil /* timeSource */)
+	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           tenants[0].SQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeutil.Now(),
+	})
+	require.NoError(t, tds.Start(ctx))
+
+	opts := &ProxyOptions{SkipVerify: true, DisableConnectionRebalancing: true}
+	opts.testingKnobs.directoryServer = tds
+	proxy, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-%s", addr, tenantID)
+
+	// Open 500 connections to the SQL pod.
+	const numConns = 500
+	var wg sync.WaitGroup
+	wg.Add(numConns)
+	for i := 0; i < numConns; i++ {
+		go func() {
+			defer wg.Done()
+
+			// Opens a new connection, runs SELECT 1, and closes it right away.
+			// Ignore all connection errors.
+			conn, err := pgx.Connect(ctx, connectionString)
+			if err != nil {
+				return
+			}
+			_ = conn.Ping(ctx)
+			conn.Close(ctx)
+		}()
+	}
+	wg.Wait()
+
+	// Ensure that the CurConnCount metric gets decremented to 0 whenever all
+	// the connections are closed.
+	testutils.SucceedsSoon(t, func() error {
+		val := proxy.metrics.CurConnCount.Value()
+		if val == 0 {
+			return nil
+		}
+		return errors.Newf("expected CurConnCount=0, but got %d", val)
+	})
+}
+
 func TestClusterNameAndTenantFromParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
