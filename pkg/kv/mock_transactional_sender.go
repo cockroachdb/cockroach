@@ -217,6 +217,16 @@ func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(cont
 	panic("unimplemented")
 }
 
+// HasPerformedReads is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedReads() bool {
+	panic("unimplemented")
+}
+
+// HasPerformedWrites is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedWrites() bool {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (

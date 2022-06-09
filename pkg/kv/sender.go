@@ -324,6 +324,12 @@ type TxnSender interface {
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
+
+	// HasPerformedReads returns true if a read has been performed.
+	HasPerformedReads() bool
+
+	// HasPerformedWrites returns true if a write has been performed.
+	HasPerformedWrites() bool
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
