@@ -257,15 +257,6 @@ func TestLint(t *testing.T) {
 					t.Errorf("did not find expected BSL license header in %s", filename)
 				}
 			}
-			if isCCL {
-				if cclHeader.Find(data) == nil {
-					t.Errorf("did not find expected license header (ccl=%t) in %s", isCCL, filename)
-				}
-			} else {
-				if bslHeader.Find(data) == nil && apacheHeader.Find(data) == nil {
-					t.Errorf("did not find expected license header (ccl=%t) in %s", isCCL, filename)
-				}
-			}
 		}); err != nil {
 			t.Fatal(err)
 		}
