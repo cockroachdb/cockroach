@@ -32,6 +32,9 @@ import (
 // when the keys to lookup (i.e. the enqueued requests themselves) as well as
 // the looked up rows are large. It additionally ensures that the Streamer
 // issues a reasonable number of the KV request.
+//
+// Additionally, this test verifies that the streamer is, in fact, used in all
+// cases when we expect.
 func TestLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -46,7 +49,7 @@ func TestLargeKeys(t *testing.T) {
 		},
 		{
 			name:  "index join, with ordering",
-			query: "SELECT max(extra), max(length(blob)) FROM foo@foo_attribute_idx GROUP BY attribute",
+			query: "SELECT * FROM foo@foo_attribute_idx ORDER BY attribute",
 		},
 		{
 			name:  "lookup join, no ordering",
@@ -54,7 +57,7 @@ func TestLargeKeys(t *testing.T) {
 		},
 		{
 			name:  "lookup join, with ordering",
-			query: "SELECT max(length(blob)) FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob GROUP BY pk_blob",
+			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob ORDER BY pk_blob",
 		},
 	}
 
@@ -86,9 +89,9 @@ func TestLargeKeys(t *testing.T) {
 	// join reader. That processor bumps the memory limit to be at least 100KiB
 	// and uses 1/12 of the limit to buffer its input row batch.
 	//
-	// The vectorized index join, however, uses a quarter of the limit for the
-	// input batch buffer size, so we get to 8.3KiB x 4 which is about 34KiB.
-	_, err := db.Exec("SET distsql_workmem='34KiB'")
+	// The vectorized index join, however, uses 1/8th of the limit for the input
+	// batch buffer size, so we get to 8.3KiB x 8 which is about 67KiB.
+	_, err := db.Exec("SET distsql_workmem='67KiB'")
 	require.NoError(t, err)
 	// To improve the test coverage, occasionally lower the maximum number of
 	// concurrent requests.
@@ -224,6 +227,10 @@ func TestLargeKeys(t *testing.T) {
 									// we use a 4x multiple on the number of
 									// rows.
 									require.Greater(t, 4*numRows, numStreamerRequests)
+									// Also assert that there were at least some
+									// requests to verify that the streamer is,
+									// in fact, used when we expect.
+									require.Greater(t, numStreamerRequests, 0)
 								})
 						}
 					}
