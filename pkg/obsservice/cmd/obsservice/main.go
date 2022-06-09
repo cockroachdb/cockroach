@@ -10,10 +10,12 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +35,10 @@ from one or more CockroachDB clusters.`,
 			UICertKeyPath: uiCertKeyPath,
 		}
 
+		if err := migrations.RunDBMigrations(ctx, sinkPGURL); err != nil {
+			panic(err)
+		}
+
 		// Block forever running the proxy.
 		<-obslib.NewReverseHTTPProxy(ctx, cfg).RunAsync(ctx)
 	},
@@ -44,9 +50,15 @@ var (
 	targetURL                 string
 	caCertPath                string
 	uiCertPath, uiCertKeyPath string
+	sinkPGURL                 string
 )
 
 func main() {
+
+	// Add all the flags registered with the standard "flag" package. Useful for
+	// --vmodule, for example.
+	RootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
+
 	RootCmd.PersistentFlags().StringVar(
 		&httpAddr,
 		"http-addr",
@@ -75,6 +87,13 @@ func main() {
 		"",
 		"Path to the private key used by the Observability Service. "+
 			"This is the key corresponding to the --ui-cert certificate.")
+
+	// Flags about connecting to the sink cluster.
+	RootCmd.PersistentFlags().StringVar(
+		&sinkPGURL,
+		"sink-pgurl",
+		"postgresql://root@andrei-desktop:26257/defaultdb?sslmode=disable",
+		"PGURL for the sink cluster.")
 
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
