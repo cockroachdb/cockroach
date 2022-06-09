@@ -2593,3 +2593,14 @@ CREATE INDEX idx_j ON t_add_column_not_null (j);
 
 statement ok
 DROP TABLE t_add_column_not_null
+
+subtest regression_81448
+
+statement ok
+CREATE TABLE t81448 (a INT PRIMARY KEY)
+
+statement error pq: multiple primary keys for table "t81448" are not allowed
+ALTER TABLE t81448 ADD COLUMN b INT PRIMARY KEY
+
+statement ok
+DROP TABLE t81448
