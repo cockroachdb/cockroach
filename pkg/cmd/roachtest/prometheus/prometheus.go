@@ -48,6 +48,67 @@ type ScrapeConfig struct {
 type Config struct {
 	PrometheusNode option.NodeListOption
 	ScrapeConfigs  []ScrapeConfig
+	NodeExporter   option.NodeListOption
+	Grafana        GrafanaConfig
+}
+
+// GrafanaConfig are options related to setting up a Grafana instance.
+type GrafanaConfig struct {
+	Enabled bool
+	// DashboardURLs are URLs (must be accessible by prometheus node, e.g. gists)
+	// to provision into Grafana. Failure to download them will be ignored.
+	// Datasource UID for these dashboards should be "localprom" or they won't
+	// load properly.
+	//
+	// NB: when using gists, https://gist.github.com/[gist_user]/[gist_id]/raw/
+	// provides a link that always references the most up to date version.
+	DashboardURLs []string
+}
+
+// WithWorkload sets up scraping for `workload` processes running on the given
+// node(s) and port. Chains for convenience.
+func (cfg *Config) WithWorkload(nodes option.NodeListOption, port int) *Config {
+	sn := ScrapeNode{Nodes: nodes, Port: port}
+	for i := range cfg.ScrapeConfigs {
+		sc := &cfg.ScrapeConfigs[i]
+		if sc.JobName == "workload" {
+			sc.ScrapeNodes = append(sc.ScrapeNodes, sn)
+			return cfg
+		}
+	}
+	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeWorkloadScrapeConfig("workload", []ScrapeNode{sn}))
+	return cfg
+}
+
+// WithPrometheusNode specifies the node to set up prometheus on.
+func (cfg *Config) WithPrometheusNode(node option.NodeListOption) *Config {
+	cfg.PrometheusNode = node
+	return cfg
+}
+
+// WithCluster adds scraping for a CockroachDB cluster running on the given nodes.
+// Chains for convenience.
+func (cfg *Config) WithCluster(nodes option.NodeListOption) *Config {
+	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeInsecureCockroachScrapeConfig(
+		"cockroach", nodes))
+	return cfg
+}
+
+// WithGrafanaDashboard adds links to dashboards to provision into Grafana. See
+// cfg.Grafana.DashboardURLs for helpful tips.
+// Enables Grafana if not already enabled.
+// Chains for convenience.
+func (cfg *Config) WithGrafanaDashboard(url string) *Config {
+	cfg.Grafana.Enabled = true
+	cfg.Grafana.DashboardURLs = append(cfg.Grafana.DashboardURLs, url)
+	return cfg
+}
+
+// WithNodeExporter causes node_exporter to be set up on the specified machines.
+// Chains for convenience.
+func (cfg *Config) WithNodeExporter(nodes option.NodeListOption) *Config {
+	cfg.NodeExporter = cfg.NodeExporter.Merge(nodes)
+	return cfg
 }
 
 // Cluster is a subset of roachtest.Cluster.
@@ -74,23 +135,48 @@ func Init(
 	c Cluster,
 	l *logger.Logger,
 	repeatFunc func(context.Context, option.NodeListOption, string, ...string) error,
-) (*Prometheus, error) {
-	if err := c.RunE(
+) (_ *Prometheus, saveSnap func(artifactsDir string), _ error) {
+	if len(cfg.NodeExporter) > 0 {
+		if err := repeatFunc(ctx, cfg.NodeExporter, "download node exporter",
+			`
+(sudo systemctl stop node_exporter || true) &&
+rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
+  https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz |
+  tar zxv --strip-components 1 -C node_exporter
+`); err != nil {
+			return nil, nil, err
+		}
+
+		// Start node_exporter.
+		if err := c.RunE(ctx, cfg.NodeExporter, `cd node_exporter &&
+sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
+		); err != nil {
+			return nil, nil, err
+		}
+		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
+			JobName:     "node_exporter",
+			MetricsPath: "/metrics",
+			ScrapeNodes: []ScrapeNode{{Nodes: cfg.NodeExporter, Port: 9100}},
+		})
+	}
+
+	if err := repeatFunc(
 		ctx,
 		cfg.PrometheusNode,
+		"reset prometheus",
 		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := repeatFunc(
 		ctx,
 		cfg.PrometheusNode,
 		"download prometheus",
-		`rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
+		`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
 			curl -fsSL https://storage.googleapis.com/cockroach-fixtures/prometheus/prometheus-2.27.1.linux-amd64.tar.gz | tar zxv --strip-components=1`,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	yamlCfg, err := makeYAMLConfig(
@@ -100,7 +186,7 @@ func Init(
 		cfg.ScrapeConfigs,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := c.PutString(
@@ -110,7 +196,7 @@ func Init(
 		0644,
 		cfg.PrometheusNode,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Start prometheus as systemd.
@@ -121,9 +207,74 @@ func Init(
 sudo systemd-run --unit prometheus --same-dir \
 	./prometheus --config.file=prometheus.yml --storage.tsdb.path=data/ --web.enable-admin-api`,
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &Prometheus{Config: cfg}, nil
+
+	if cfg.Grafana.Enabled {
+		// Install Grafana.
+		if err := repeatFunc(ctx, cfg.PrometheusNode, "install grafana",
+			`sudo apt-get install -qqy apt-transport-https &&
+sudo apt-get install -qqy software-properties-common wget &&
+wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add - &&
+echo "deb https://packages.grafana.com/enterprise/deb stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list &&
+sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo mkdir -p /var/lib/grafana/dashboards`,
+		); err != nil {
+			return nil, nil, err
+		}
+
+		// Provision local prometheus instance as data source.
+		if err := repeatFunc(ctx, cfg.PrometheusNode, "permissions",
+			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards`,
+		); err != nil {
+			return nil, nil, err
+		}
+		if err := c.PutString(ctx, `apiVersion: 1
+
+datasources:
+  - name: prometheusdata
+    type: prometheus
+    uid: localprom
+    url: http://localhost:9090
+`, "/etc/grafana/provisioning/datasources/prometheus.yaml", 0644, cfg.PrometheusNode); err != nil {
+			return nil, nil, err
+		}
+
+		if err := c.PutString(ctx, `apiVersion: 1
+
+providers:
+ - name: 'default'
+   orgId: 1
+   folder: ''
+   folderUid: ''
+   type: file
+   options:
+     path: /var/lib/grafana/dashboards
+`, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0644, cfg.PrometheusNode); err != nil {
+			return nil, nil, err
+		}
+
+		for idx, u := range cfg.Grafana.DashboardURLs {
+			if err := c.RunE(ctx, cfg.PrometheusNode,
+				"curl", "-fsSL", u, "-o", fmt.Sprintf("/var/lib/grafana/dashboards/%d.json", idx),
+			); err != nil {
+				l.PrintfCtx(ctx, "failed to download dashboard from %s: %s", u, err)
+			}
+		}
+
+		// Start Grafana. Default port is 3000.
+		if err := c.RunE(ctx, cfg.PrometheusNode, `sudo systemctl restart grafana-server`); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	p := &Prometheus{Config: cfg}
+	return p, func(destDir string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := p.Snapshot(ctx, c, l, destDir); err != nil {
+			l.Printf("failed to get prometheus snapshot: %v", err)
+		}
+	}, nil
 }
 
 // Snapshot takes a snapshot of prometheus and stores the snapshot and a script to spin up
