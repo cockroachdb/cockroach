@@ -199,6 +199,7 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 				}
 				sent, streamStatus, err := h.maybeHeartbeat(ctx, h.frontier)
 				// TODO(casper): add unit tests to test different kinds of client errors.
+				// Source cluster may be unavailable
 				if err != nil {
 					return err
 				}
@@ -298,7 +299,9 @@ func (sf *streamIngestionFrontier) Next() (
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
 		case <-sf.heartbeatSender.stoppedChan:
-			sf.MoveToDraining(sf.heartbeatSender.err())
+			err := sf.heartbeatSender.err()
+			log.Warningf(sf.Ctx, "heartbeat sender has stopped with error: %s\n", err)
+			sf.MoveToDraining(err)
 			return nil, sf.DrainHelper()
 		}
 	}

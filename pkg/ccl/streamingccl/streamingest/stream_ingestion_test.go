@@ -179,10 +179,6 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		return nil
 	})
 
-	// Canceling the job should fail as an ingestion job is non-cancelable.
-	_, err = conn.Exec(`CANCEL JOB $1`, jobID)
-	testutils.IsError(err, "not cancelable")
-
 	// Cutting over the job should shutdown the ingestion processors via a context
 	// cancellation, and subsequently rollback data above our frontier timestamp.
 	//

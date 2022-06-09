@@ -203,11 +203,13 @@ func ingestionPlanHook(
 		}
 
 		jr := jobs.Record{
-			Description:   jobDescription,
-			Username:      p.User(),
-			Progress:      jobspb.StreamIngestionProgress{},
-			Details:       streamIngestionDetails,
-			NonCancelable: true,
+			Description: jobDescription,
+			Username:    p.User(),
+			Progress:    jobspb.StreamIngestionProgress{},
+			Details:     streamIngestionDetails,
+			// TODO(casper): make it retryable with exponential backoff and
+			// finally pause on error.
+			NonCancelable: false,
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()

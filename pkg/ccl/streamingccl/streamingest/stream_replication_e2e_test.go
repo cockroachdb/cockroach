@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -140,6 +139,8 @@ func createTenantStreamingClusters(
 
 	args.srcInitFunc(t, sourceSysSQL, sourceTenantSQL)
 	args.destInitFunc(t, destSysSQL, destTenantSQL)
+	// Enable stream replication on dest by default.
+	destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true;`)
 	return &tenantStreamingClusters{
 			t:             t,
 			args:          args,
@@ -158,24 +159,34 @@ func (c *tenantStreamingClusters) srcExec(exec execFunc) {
 	exec(c.t, c.srcSysSQL, c.srcTenantSQL)
 }
 
-var srcClusterSetting = `
-	SET CLUSTER SETTING kv.rangefeed.enabled = true;
-	SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-	SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-  SET CLUSTER SETTING stream_replication.job_liveness_timeout = '20s';
-  SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';
-  SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
-  SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1';
-`
+var srcClusterSetting = map[string]string{
+	`kv.rangefeed.enabled`:                `true`,
+	`kv.closed_timestamp.target_duration`: `'1s'`,
+	// Large timeout makes test to not fail with unexpected timeout failures.
+	`stream_replication.job_liveness_timeout`:            `'20s'`,
+	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
+	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
+	// Make all AddSSTable operation to trigger AddSSTable events.
+	`kv.bulk_io_write.small_write_size`: `'1'`,
+	`jobs.registry.interval.adopt`:      `'1s'`,
+}
 
-var destClusterSetting = `
-	SET enable_experimental_stream_replication = true;
-	SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
-	SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '10ms';
-	SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
-`
+var destClusterSetting = map[string]string{
+	`stream_replication.consumer_heartbeat_frequency`:      `'1s'`,
+	`bulkio.stream_ingestion.minimum_flush_interval`:       `'10ms'`,
+	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
+	`jobs.registry.interval.adopt`:                         `'1s'`,
+}
 
-func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
+func clusterSettingStatements(setting map[string]string) []string {
+	res := make([]string, len(setting))
+	for key, val := range setting {
+		res = append(res, fmt.Sprintf("SET CLUSTER SETTING %s = %s;", key, val))
+	}
+	return res
+}
+
+func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -198,7 +209,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 		c, cleanup := createTenantStreamingClusters(ctx, t, tenantStreamingClustersArgs{
 			srcTenantID: roachpb.MakeTenantID(10),
 			srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-				sysSQL.ExecMultiple(t, strings.Split(srcClusterSetting, ";")...)
+				sysSQL.ExecMultiple(t, clusterSettingStatements(srcClusterSetting)...)
 				if !withInitialScan {
 					sysSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 				}
@@ -217,7 +228,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 			srcNumNodes:  1,
 			destTenantID: roachpb.MakeTenantID(20),
 			destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-				sysSQL.ExecMultiple(t, strings.Split(destClusterSetting, ";")...)
+				sysSQL.ExecMultiple(t, clusterSettingStatements(destClusterSetting)...)
 			},
 			destNumNodes: 1,
 		})
@@ -242,6 +253,8 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 		c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 			tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
 		})
+		// Check the dst cluster didn't receive the change after a while.
+		<-time.NewTimer(3 * time.Second).C
 		require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
 	}
 
@@ -252,4 +265,61 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	t.Run("no-initial-scan", func(t *testing.T) {
 		testTenantStreaming(t, false /* withInitialScan */)
 	})
+}
+
+func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	c, cleanup := createTenantStreamingClusters(ctx, t, tenantStreamingClustersArgs{
+		srcTenantID: roachpb.MakeTenantID(10),
+		srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			sysSQL.ExecMultiple(t, clusterSettingStatements(srcClusterSetting)...)
+			tenantSQL.Exec(t, `
+	CREATE DATABASE d;
+	CREATE TABLE d.t1(i int primary key, a string, b string);
+	CREATE TABLE d.t2(i int primary key);
+	INSERT INTO d.t1 (i) VALUES (42);
+	INSERT INTO d.t2 VALUES (2);
+	UPDATE d.t1 SET b = 'world' WHERE i = 42;
+	`)
+		},
+		srcNumNodes:  1,
+		destTenantID: roachpb.MakeTenantID(20),
+		destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			sysSQL.ExecMultiple(t, clusterSettingStatements(destClusterSetting)...)
+		},
+		destNumNodes: 1,
+	})
+	defer cleanup()
+
+	var startTime string
+	c.srcSysSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
+	// initial scan
+	producerJobID, ingestionJobID := c.startStreamReplication("" /* startTime */)
+
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Make producer job easily times out
+	c.srcSysSQL.ExecMultiple(t, clusterSettingStatements(map[string]string{
+		`stream_replication.job_liveness_timeout`: `'100ms'`,
+	})...)
+	log.Info(ctx, "changed timeout")
+
+	jobutils.WaitForJobToFail(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToFail(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Make dest cluster to ingest KV events faster.
+	c.srcSysSQL.ExecMultiple(t, clusterSettingStatements(map[string]string{
+		`stream_replication.min_checkpoint_frequency`: `'100ms'`,
+	})...)
+	c.srcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
+
+	// Check the dst cluster didn't receive the change after a while.
+	<-time.NewTimer(3 * time.Second).C
+	require.Equal(t, [][]string{{"0"}},
+		c.destTenantSQL.QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
 }
