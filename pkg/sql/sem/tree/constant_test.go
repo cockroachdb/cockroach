@@ -64,7 +64,9 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	wantInt := tree.NumValAvailInteger
+	wantIntNoOid := tree.NumValAvailIntegerNoOid
 	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
+	wantDecButCanBeIntNoOid := tree.NumValAvailDecimalNoFractionNoOid
 	wantDec := tree.NumValAvailDecimalWithFraction
 
 	testCases := []struct {
@@ -74,11 +76,11 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 		{"1", wantInt},
 		{"0", wantInt},
 		{"-1", wantInt},
-		{"9223372036854775807", wantInt},
+		{"9223372036854775807", wantIntNoOid},
 		{"1.0", wantDecButCanBeInt},
 		{"-1234.0000", wantDecButCanBeInt},
-		{"1e10", wantDecButCanBeInt},
-		{"1E10", wantDecButCanBeInt},
+		{"1e10", wantDecButCanBeIntNoOid},
+		{"1E10", wantDecButCanBeIntNoOid},
 		{"1.1", wantDec},
 		{"1e-10", wantDec},
 		{"1E-10", wantDec},

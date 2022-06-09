@@ -266,23 +266,36 @@ var (
 
 	// NumValAvailInteger is the set of available integer types.
 	NumValAvailInteger = append(intLikeTypes, decimalLikeTypes...)
+	// NumValAvailIntegerNoOid is the set of available integer types except for OID.
+	NumValAvailIntegerNoOid = append([]*types.T{types.Int}, decimalLikeTypes...)
 	// NumValAvailDecimalNoFraction is the set of available integral numeric types.
 	NumValAvailDecimalNoFraction = append(decimalLikeTypes, intLikeTypes...)
+	// NumValAvailDecimalNoFractionNoOid is the set of available integral numeric types except for OID.
+	NumValAvailDecimalNoFractionNoOid = append(decimalLikeTypes, types.Int)
 	// NumValAvailDecimalWithFraction is the set of available fractional numeric types.
 	NumValAvailDecimalWithFraction = decimalLikeTypes
 )
 
 // AvailableTypes implements the Constant interface.
 func (expr *NumVal) AvailableTypes() []*types.T {
-	switch {
-	case expr.canBeInt64():
-		if expr.Kind() == constant.Int {
-			return NumValAvailInteger
+	if i, err := expr.AsInt64(); err == nil {
+		noOid := false
+		if _, err := IntToOid(DInt(i)); err != nil {
+			noOid = true
 		}
-		return NumValAvailDecimalNoFraction
-	default:
-		return NumValAvailDecimalWithFraction
+		intKind := expr.Kind() == constant.Int
+		switch {
+		case noOid && intKind:
+			return NumValAvailIntegerNoOid
+		case noOid && !intKind:
+			return NumValAvailDecimalNoFractionNoOid
+		case !noOid && intKind:
+			return NumValAvailInteger
+		case !noOid && !intKind:
+			return NumValAvailDecimalNoFraction
+		}
 	}
+	return NumValAvailDecimalWithFraction
 }
 
 // DesirableTypes implements the Constant interface.
@@ -370,11 +383,7 @@ func (expr *NumVal) ResolveAsType(
 			return nil, err
 		}
 		dInt := MustBeDInt(d)
-		if dInt > math.MaxUint32 || dInt < math.MinInt32 {
-			return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", dInt)
-		}
-		oid := NewDOid(oid.Oid(dInt))
-		return oid, nil
+		return IntToOid(dInt)
 	default:
 		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}

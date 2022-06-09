@@ -15,7 +15,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_lib_pq//oid",
     ],
 )
 
