@@ -78,6 +78,10 @@ func alterTableAddColumn(
 				"UNIQUE WITHOUT INDEX constraint on the column",
 		))
 	}
+	if d.PrimaryKey.IsPrimaryKey {
+		panic(pgerror.Newf(pgcode.InvalidColumnDefinition,
+			"multiple primary keys for table %q are not allowed", tn.Object()))
+	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
