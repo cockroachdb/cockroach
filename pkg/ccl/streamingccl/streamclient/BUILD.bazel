@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/streaming",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
