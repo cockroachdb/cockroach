@@ -157,7 +157,7 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
+			ie := sc.ieProto.IeFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -744,21 +744,21 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieProto.IeFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.ieFactory, evalCtx.SessionData(), desc, txn, collection, c.GetName()); err != nil {
+					if err := validateFkInTxn(ctx, sc.ieProto.IeFactory, evalCtx.SessionData(), desc, txn, collection, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData()), desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieProto.IeFactory(ctx, evalCtx.SessionData()), desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieProto.IeFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2461,6 +2461,46 @@ func validateCheckInTxn(
 	})
 }
 
+func getTargetTablesAndFk(
+	ctx context.Context,
+	srcTable *tabledesc.Mutable,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	fkName string,
+) (
+	syntheticDescs []catalog.Descriptor,
+	fk *descpb.ForeignKeyConstraint,
+	targetTable catalog.TableDescriptor,
+	err error,
+) {
+	var syntheticTable catalog.TableDescriptor
+	if srcTable.Version > srcTable.ClusterVersion().Version {
+		syntheticTable = srcTable
+	}
+	for i := range srcTable.OutboundFKs {
+		def := &srcTable.OutboundFKs[i]
+		if def.Name == fkName {
+			fk = def
+			break
+		}
+	}
+	if fk == nil {
+		return nil, nil, nil, errors.AssertionFailedf("foreign key %s does not exist", fkName)
+	}
+	targetTable, err = descsCol.Direct().MustGetTableDescByID(ctx, txn, fk.ReferencedTableID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if syntheticTable != nil {
+		syntheticDescs = append(syntheticDescs, syntheticTable)
+		if targetTable.GetID() == syntheticTable.GetID() {
+			targetTable = syntheticTable
+		}
+	}
+	return syntheticDescs, fk, targetTable, nil
+}
+
 // validateFkInTxn validates foreign key constraints within the provided
 // transaction. If the provided table descriptor version is newer than the
 // cluster version, it will be used in the InternalExecutor that performs the
@@ -2482,31 +2522,9 @@ func validateFkInTxn(
 	descsCol *descs.Collection,
 	fkName string,
 ) error {
-	var syntheticTable catalog.TableDescriptor
-	if srcTable.Version > srcTable.ClusterVersion().Version {
-		syntheticTable = srcTable
-	}
-	var fk *descpb.ForeignKeyConstraint
-	for i := range srcTable.OutboundFKs {
-		def := &srcTable.OutboundFKs[i]
-		if def.Name == fkName {
-			fk = def
-			break
-		}
-	}
-	if fk == nil {
-		return errors.AssertionFailedf("foreign key %s does not exist", fkName)
-	}
-	targetTable, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, fk.ReferencedTableID)
+	syntheticDescs, fk, targetTable, err := getTargetTablesAndFk(ctx, srcTable, txn, descsCol, fkName)
 	if err != nil {
 		return err
-	}
-	var syntheticDescs []catalog.Descriptor
-	if syntheticTable != nil {
-		syntheticDescs = append(syntheticDescs, syntheticTable)
-		if targetTable.GetID() == syntheticTable.GetID() {
-			targetTable = syntheticTable
-		}
 	}
 	ie := ief(ctx, sd)
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {

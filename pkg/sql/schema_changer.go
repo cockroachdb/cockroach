@@ -113,8 +113,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
-	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
-
+	ieProto              sqlutil.SessionBoundInternalExecutorProto
 	// mvccCompliantAddIndex is set to true early in exec if we
 	// find that the schema change was created under the
 	// mvcc-compliant regime.
@@ -143,10 +142,12 @@ func NewSchemaChangerForTesting(
 		execCfg:       execCfg,
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
-		ieFactory: func(
-			ctx context.Context, sd *sessiondata.SessionData,
-		) sqlutil.InternalExecutor {
-			return execCfg.InternalExecutor
+		ieProto: sqlutil.SessionBoundInternalExecutorProto{
+			IeFactory: func(
+				ctx context.Context, sd *sessiondata.SessionData,
+			) sqlutil.InternalExecutor {
+				return execCfg.InternalExecutor
+			},
 		},
 		metrics:        NewSchemaChangerMetrics(),
 		clock:          db.Clock(),
@@ -2634,8 +2635,10 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+			ieProto: sqlutil.SessionBoundInternalExecutorProto{
+				IeFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
+					return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+				},
 			},
 			metrics: p.ExecCfg().SchemaChangerMetrics,
 		}
@@ -2822,8 +2825,10 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+		ieProto: sqlutil.SessionBoundInternalExecutorProto{
+			IeFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
+				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+			},
 		},
 	}
 
