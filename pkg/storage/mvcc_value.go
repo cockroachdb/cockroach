@@ -12,10 +12,10 @@ package storage
 
 import (
 	"encoding/binary"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -131,11 +131,11 @@ func (v MVCCValue) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	if v.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
-		w.Printf("vheader{")
+		w.Printf("{")
 		if !v.LocalTimestamp.IsEmpty() {
-			w.Printf(" localTs=%s", v.LocalTimestamp)
+			w.Printf("localTs=%s", v.LocalTimestamp)
 		}
-		w.Printf(" } ")
+		w.Printf("}")
 	}
 	w.Print(v.Value.PrettyPrint())
 }
@@ -146,12 +146,20 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 var disableSimpleValueEncoding = util.ConstantWithMetamorphicTestBool(
 	"mvcc-value-disable-simple-encoding", false)
 
-// SkipIfSimpleValueEncodingDisabled skips this test during metamorphic runs
-// that have disabled the simple MVCC value encoding.
-func SkipIfSimpleValueEncodingDisabled(t skip.SkippableTest) {
+// DisableMetamorphicSimpleValueEncoding disables the disableSimpleValueEncoding
+// metamorphic bool and emptyValueHeader value for the duration of a test,
+// resetting it at the end.
+func DisableMetamorphicSimpleValueEncoding(t *testing.T) {
 	t.Helper()
 	if disableSimpleValueEncoding {
-		skip.IgnoreLint(t, "disabled under metamorphic")
+		disableSimpleValueEncoding = false
+		oldHeader := emptyValueHeader
+		emptyValueHeader = enginepb.MVCCValueHeader{}
+
+		t.Cleanup(func() {
+			disableSimpleValueEncoding = true
+			emptyValueHeader = oldHeader
+		})
 	}
 }
 

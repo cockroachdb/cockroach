@@ -1098,7 +1098,7 @@ func runTestDBAddSSTable(
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	const max = 1 << 10
 	ctx := context.Background()
@@ -1214,7 +1214,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()

@@ -95,9 +95,9 @@ func TestMVCCValueFormat(t *testing.T) {
 		"tombstone":        {val: MVCCValue{}, expect: "/<empty>"},
 		"bytes":            {val: MVCCValue{Value: strVal}, expect: "/BYTES/foo"},
 		"int":              {val: MVCCValue{Value: intVal}, expect: "/INT/17"},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "vheader{ localTs=0.000000009,0 } /<empty>"},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "vheader{ localTs=0.000000009,0 } /BYTES/foo"},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "vheader{ localTs=0.000000009,0 } /INT/17"},
+		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "{localTs=0.000000009,0}/<empty>"},
+		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "{localTs=0.000000009,0}/BYTES/foo"},
+		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "{localTs=0.000000009,0}/INT/17"},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestMVCCValueFormat(t *testing.T) {
 
 func TestEncodeDecodeMVCCValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	var strVal, intVal roachpb.Value
 	strVal.SetString("foo")
