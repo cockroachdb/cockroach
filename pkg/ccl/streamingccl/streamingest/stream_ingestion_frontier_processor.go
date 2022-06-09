@@ -298,7 +298,9 @@ func (sf *streamIngestionFrontier) Next() (
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
 		case <-sf.heartbeatSender.stoppedChan:
-			sf.MoveToDraining(sf.heartbeatSender.err())
+			err := sf.heartbeatSender.err()
+			log.Warningf(sf.Ctx, "heartbeat sender has stopped with error: %s", err)
+			sf.MoveToDraining(err)
 			return nil, sf.DrainHelper()
 		}
 	}
