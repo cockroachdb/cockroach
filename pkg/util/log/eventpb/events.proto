@@ -54,7 +54,7 @@ message CommonSQLEventDetails {
   // This is included in the event to ease filtering of logging output
   // by application.
   // Application names starting with a dollar sign (`$`) are not considered sensitive.
-  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"safeif:\\$.*\""];
+  string application_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   // The mapping of SQL placeholders to their values, for prepared statements.
   repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
