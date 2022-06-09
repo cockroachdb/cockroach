@@ -911,10 +911,11 @@ func performIntToOidCast(
 	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 	// store OIDs as signed 32-bit integers, so we implement the cast
 	// by converting to a uint32 first. This matches Postgres behavior.
-	if v > math.MaxUint32 || v < math.MinInt32 {
-		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", v)
+	dOid, err := tree.IntToOid(v)
+	if err != nil {
+		return nil, err
 	}
-	o := oid.Oid(v)
+	o := dOid.Oid
 	switch t.Oid() {
 	case oid.T_oid:
 		return tree.NewDOidWithType(o, t), nil
