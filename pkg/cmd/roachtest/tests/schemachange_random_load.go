@@ -57,6 +57,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			}
 			runSchemaChangeRandomLoad(ctx, t, c, maxOps, concurrency)
 		},
+		Skip: "flaky: https://github.com/cockroachdb/cockroach/issues/82133",
 	})
 
 	// Run a few representative scbench specs in CI.
