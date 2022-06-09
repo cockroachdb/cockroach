@@ -9,6 +9,7 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[ServerErrFieldSeverity-83]
+	_ = x[ServerErrFieldSeverityNonLocalized-86]
 	_ = x[ServerErrFieldSQLState-67]
 	_ = x[ServerErrFieldMsgPrimary-77]
 	_ = x[ServerErrFieldDetail-68]
@@ -25,7 +26,8 @@ const (
 	_ServerErrFieldType_name_2 = "ServerErrFieldHint"
 	_ServerErrFieldType_name_3 = "ServerErrFieldSrcLineServerErrFieldMsgPrimary"
 	_ServerErrFieldType_name_4 = "ServerErrFieldSrcFunctionServerErrFieldSeverity"
-	_ServerErrFieldType_name_5 = "ServerErrFieldConstraintName"
+	_ServerErrFieldType_name_5 = "ServerErrFieldSeverityNonLocalized"
+	_ServerErrFieldType_name_6 = "ServerErrFieldConstraintName"
 )
 
 var (
@@ -49,8 +51,10 @@ func (i ServerErrFieldType) String() string {
 	case 82 <= i && i <= 83:
 		i -= 82
 		return _ServerErrFieldType_name_4[_ServerErrFieldType_index_4[i]:_ServerErrFieldType_index_4[i+1]]
-	case i == 110:
+	case i == 86:
 		return _ServerErrFieldType_name_5
+	case i == 110:
+		return _ServerErrFieldType_name_6
 	default:
 		return "ServerErrFieldType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
