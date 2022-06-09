@@ -43,8 +43,8 @@ func TestEventJSON(t *testing.T) {
 		// Check that conditional-sensitive fields are redacted conditionally.
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{User: "root"}}, `"User":"root"`},
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{User: "someother"}}, `"User":"‹someother›"`},
-		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "$ inte‹rnal"}}, `"ApplicationName":"$ inte?rnal"`},
-		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"‹myapp›"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "$ inte‹rnal"}}, `"ApplicationName":"$ inte‹rnal"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"myapp"`},
 
 		// Check that redactable strings get their redaction markers preserved.
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{Statement: "CREATE DATABASE ‹foo›"}}, `"Statement":"CREATE DATABASE ‹foo›"`},
