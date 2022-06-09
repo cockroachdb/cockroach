@@ -178,8 +178,6 @@ type SimpleMVCCIterator interface {
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
 type IteratorStats struct {
-	TimeBoundNumSSTs int
-
 	// Iteration stats. We directly expose pebble.IteratorStats. Callers
 	// may want to aggregate and interpret these in the following manner:
 	// - Aggregate {Forward,Reverse}SeekCount, {Forward,Reverse}StepCount.

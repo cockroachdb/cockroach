@@ -1185,7 +1185,6 @@ func (i *intentInterleavingIter) FindSplitKey(
 func (i *intentInterleavingIter) Stats() IteratorStats {
 	stats := i.iter.Stats()
 	intentStats := i.intentIter.Stats()
-	stats.TimeBoundNumSSTs += intentStats.TimeBoundNumSSTs
 	for i := pebble.IteratorStatsKind(0); i < pebble.NumStatsKind; i++ {
 		stats.Stats.ForwardSeekCount[i] += intentStats.Stats.ForwardSeekCount[i]
 		stats.Stats.ReverseSeekCount[i] += intentStats.Stats.ReverseSeekCount[i]

@@ -11,15 +11,11 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,16 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -76,81 +69,6 @@ func TestEngineComparer(t *testing.T) {
 	}
 	require.Equal(t, -1, EngineComparer.Compare(suffix(EncodeMVCCKey(keyA2)), suffix(EncodeMVCCKey(keyA1))),
 		"expected bare suffix with higher timestamp to sort first")
-}
-
-func TestPebbleTimeBoundPropCollector(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	datadriven.RunTest(t, testutils.TestDataPath(t, "time_bound_props"), func(t *testing.T, d *datadriven.TestData) string {
-		c := &pebbleTimeBoundPropCollector{}
-		switch d.Cmd {
-		case "build":
-			for _, line := range strings.Split(d.Input, "\n") {
-				parts := strings.Fields(line)
-				if len(parts) != 2 {
-					return fmt.Sprintf("malformed line: %s, expected: <key>/<timestamp> <value>", line)
-				}
-				keyParts := strings.Split(parts[0], "/")
-				if len(keyParts) != 2 {
-					return fmt.Sprintf("malformed key: %s, expected: <key>/<timestamp>", parts[0])
-				}
-
-				key := []byte(keyParts[0])
-				timestamp, err := strconv.Atoi(keyParts[1])
-				if err != nil {
-					return err.Error()
-				}
-				ikey := pebble.InternalKey{
-					UserKey: EncodeMVCCKey(MVCCKey{
-						Key:       key,
-						Timestamp: hlc.Timestamp{WallTime: int64(timestamp)},
-					}),
-				}
-
-				value := []byte(parts[1])
-				if timestamp == 0 {
-					if n, err := fmt.Sscanf(string(value), "timestamp=%d", &timestamp); err != nil {
-						return err.Error()
-					} else if n != 1 {
-						return fmt.Sprintf("malformed txn timestamp: %s, expected timestamp=<value>", value)
-					}
-					meta := &enginepb.MVCCMetadata{}
-					meta.Timestamp.WallTime = int64(timestamp)
-					meta.Txn = &enginepb.TxnMeta{}
-					var err error
-					value, err = protoutil.Marshal(meta)
-					if err != nil {
-						return err.Error()
-					}
-				}
-
-				if err := c.Add(ikey, value); err != nil {
-					return err.Error()
-				}
-			}
-
-			// Retrieve the properties and sort them for test determinism.
-			m := make(map[string]string)
-			if err := c.Finish(m); err != nil {
-				return err.Error()
-			}
-			var keys []string
-			for k := range m {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-
-			var buf bytes.Buffer
-			for _, k := range keys {
-				fmt.Fprintf(&buf, "%s: %x\n", k, m[k])
-			}
-			return buf.String()
-
-		default:
-			return fmt.Sprintf("unknown command: %s", d.Cmd)
-		}
-	})
 }
 
 func TestPebbleIterReuse(t *testing.T) {
@@ -1076,6 +994,98 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	require.NoError(t, err)
 	expected := []int64{7, 6, 5}
 	require.Equal(t, expected, found)
+}
+
+// TestPebbleTablePropertyFilter tests that pebbleIterator still respects
+// crdb.ts.min and crdb.ts.max table properties in SSTs written by 22.1 and
+// older nodes.
+func TestPebbleTablePropertyFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up a static property collector which always writes the same table
+	// properties [5-7] regardless of the SSTable contents. We keep the default
+	// block property collects too, which will use the actual SSTable timestamps.
+	overrideOptions := func(cfg *engineConfig) error {
+		cfg.Opts.TablePropertyCollectors = []func() pebble.TablePropertyCollector{
+			func() pebble.TablePropertyCollector {
+				return &staticTablePropertyCollector{
+					props: map[string]string{
+						"crdb.ts.min": "\x00\x00\x00\x00\x00\x00\x00\x05", // WallTime: 5
+						"crdb.ts.max": "\x00\x00\x00\x00\x00\x00\x00\x07", // WallTime: 7
+					},
+				}
+			},
+		}
+		return nil
+	}
+
+	eng := NewDefaultInMemForTesting(overrideOptions)
+	defer eng.Close()
+
+	// Write keys with timestamps 1 and 7.
+	require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
+	require.NoError(t, eng.PutMVCC(pointKey("b", 7), stringValue("b7")))
+	require.NoError(t, eng.Flush())
+
+	// Table and block properties now think the SST covers these spans:
+	//
+	// Block properties: [1-7]
+	// Table properties: [5-7]
+	//
+	// Both must be satisfied in order for the (only) SST to be included.
+	testcases := map[string]struct {
+		minTimestamp int64
+		maxTimestamp int64
+		expectResult bool
+	}{
+		"tableprop lower inclusive": {4, 5, true},
+		"tableprop upper inclusive": {7, 8, true},
+		"tableprop exact":           {5, 7, true},
+		"tableprop within":          {6, 6, true},
+		"tableprop covering":        {4, 8, true},
+		"tableprop below":           {3, 4, false},
+		"both above":                {8, 9, false},
+		"blockprop only":            {1, 3, false}, // needs both block and table props
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				UpperBound:       keys.MaxKey,
+				MinTimestampHint: hlc.Timestamp{WallTime: tc.minTimestamp},
+				MaxTimestampHint: hlc.Timestamp{WallTime: tc.maxTimestamp},
+			})
+			defer iter.Close()
+
+			kvs := scanIter(t, iter)
+			if tc.expectResult {
+				require.Equal(t, []interface{}{
+					pointKV("a", 1, "a1"),
+					pointKV("b", 7, "b7"),
+				}, kvs)
+			} else {
+				require.Empty(t, kvs)
+			}
+		})
+	}
+}
+
+type staticTablePropertyCollector struct {
+	props map[string]string
+}
+
+func (c *staticTablePropertyCollector) Add(pebble.InternalKey, []byte) error {
+	return nil
+}
+
+func (c *staticTablePropertyCollector) Finish(userProps map[string]string) error {
+	for k, v := range c.props {
+		userProps[k] = v
+	}
+	return nil
+}
+
+func (c *staticTablePropertyCollector) Name() string {
+	return "staticTablePropertyCollector"
 }
 
 func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {

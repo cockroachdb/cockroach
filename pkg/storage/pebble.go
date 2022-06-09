@@ -326,102 +326,6 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-// TODO(sumeer): consider removing pebbleTimeBoundPropCollector for the 22.2
-// release, since 22.1 nodes will be using BlockPropertyCollectors and there
-// shouldn't be significant sstables that do not get rewritten for 6 months
-// (we would have no time bound optimization for such sstables). Since it is
-// possible for users to upgrade to 22.1 and then to 22.2 in quick succession
-// this duration argument is not really valid. To be safe we could wait until
-// 23.1.
-
-// pebbleTimeBoundPropCollector implements a property collector for MVCC
-// Timestamps. Its behavior matches TimeBoundTblPropCollector in
-// table_props.cc.
-//
-// The handling of timestamps in intents is mildly complicated. Consider:
-//
-//   a@<meta>   -> <MVCCMetadata: Timestamp=t2>
-//   a@t2       -> <value>
-//   a@t1       -> <value>
-//
-// The metadata record (a.k.a. the intent) for a key always sorts first. The
-// timestamp field always points to the next record. In this case, the meta
-// record contains t2 and the next record is t2. Because of this duplication of
-// the timestamp both in the intent and in the timestamped record that
-// immediately follows it, we only need to unmarshal the MVCCMetadata if it is
-// the last key in the sstable.
-// The metadata unmarshaling logic discussed in the previous paragraph is
-// flawed (see the comment
-// https://github.com/cockroachdb/cockroach/issues/43799#issuecomment-576830234
-// and its preceding comment), and we've worked around it as indicated in that
-// issue. Due to that workaround, we need not unmarshal the metadata record at
-// all.
-type pebbleTimeBoundPropCollector struct {
-	min, max  []byte
-	lastValue []byte
-}
-
-func (t *pebbleTimeBoundPropCollector) Add(key pebble.InternalKey, value []byte) error {
-	engineKey, ok := DecodeEngineKey(key.UserKey)
-	if !ok {
-		return errors.Errorf("failed to split engine key")
-	}
-	if engineKey.IsMVCCKey() && len(engineKey.Version) > 0 {
-		t.lastValue = t.lastValue[:0]
-		t.updateBounds(engineKey.Version)
-	} else {
-		t.lastValue = append(t.lastValue[:0], value...)
-	}
-	return nil
-}
-
-func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error {
-	if len(t.lastValue) > 0 {
-		// The last record in the sstable was an intent. Unmarshal the metadata and
-		// update the bounds with the timestamp it contains.
-		meta := &enginepb.MVCCMetadata{}
-		if err := protoutil.Unmarshal(t.lastValue, meta); err != nil {
-			// We're unable to parse the MVCCMetadata. Fail open by not setting the
-			// min/max timestamp properties. This mimics the behavior of
-			// TimeBoundTblPropCollector.
-			// TODO(petermattis): Return the error here and in C++, see #43422.
-			return nil //nolint:returnerrcheck
-		}
-		if meta.Txn != nil {
-			ts := encodeMVCCTimestamp(meta.Timestamp.ToTimestamp())
-			t.updateBounds(ts)
-		}
-	}
-
-	userProps["crdb.ts.min"] = string(t.min)
-	userProps["crdb.ts.max"] = string(t.max)
-	return nil
-}
-
-func (t *pebbleTimeBoundPropCollector) updateBounds(ts []byte) {
-	if len(t.min) == 0 || bytes.Compare(ts, t.min) < 0 {
-		t.min = append(t.min[:0], ts...)
-	}
-	if len(t.max) == 0 || bytes.Compare(ts, t.max) > 0 {
-		t.max = append(t.max[:0], ts...)
-	}
-}
-
-func (t *pebbleTimeBoundPropCollector) Name() string {
-	// This constant needs to match the one used by the RocksDB version of this
-	// table property collector. DO NOT CHANGE.
-	return "TimeBoundTblPropCollectorFactory"
-}
-
-func (t *pebbleTimeBoundPropCollector) UpdateKeySuffixes(
-	oldProps map[string]string, oldSuffix []byte, newSuffix []byte,
-) error {
-	t.updateBounds(newSuffix)
-	return nil
-}
-
-var _ sstable.SuffixReplaceableTableCollector = (*pebbleTimeBoundPropCollector)(nil)
-
 // pebbleDeleteRangeCollector is the equivalent table collector as the RocksDB
 // DeleteRangeTblPropCollector. Pebble does not require it because Pebble will
 // prioritize its own compactions of range tombstones.
@@ -447,11 +351,8 @@ func (t *pebbleDeleteRangeCollector) UpdateKeySuffixes(
 	return nil
 }
 
-var _ sstable.SuffixReplaceableTableCollector = (*pebbleTimeBoundPropCollector)(nil)
-
 // PebbleTablePropertyCollectors is the list of Pebble TablePropertyCollectors.
 var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
-	func() pebble.TablePropertyCollector { return &pebbleTimeBoundPropCollector{} },
 	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
 }
 
