@@ -2644,6 +2644,31 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Long-Running"}},
+		Charts: []chartDescription{
+			{
+				Title: "Longest Running Statements and Transactions",
+				Metrics: []string{
+					"sql.query.long_running.max_duration",
+					"sql.query.long_running.max_duration.internal",
+					"sql.txn.long_running.max_duration",
+					"sql.txn.long_running.max_duration.internal",
+				},
+				AxisLabel: "Duration",
+			},
+			{
+				Title: "Number of Long Running Statements and Transactions",
+				Metrics: []string{
+					"sql.query.long_running.count",
+					"sql.query.long_running.count.internal",
+					"sql.txn.long_running.count",
+					"sql.txn.long_running.count.internal",
+				},
+				AxisLabel: "Long Running Operations",
+			},
+		},
+	},
+	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
 		Charts: []chartDescription{
 			{

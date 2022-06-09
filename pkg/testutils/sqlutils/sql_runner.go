@@ -246,10 +246,12 @@ func (sr *SQLRunner) CheckQueryResults(t testutils.TB, query string, expected []
 // CheckQueryResultsRetry checks that the rows returned by a query match the
 // expected response. If the results don't match right away, it will retry
 // using testutils.SucceedsSoon.
-func (sr *SQLRunner) CheckQueryResultsRetry(t testutils.TB, query string, expected [][]string) {
+func (sr *SQLRunner) CheckQueryResultsRetry(
+	t testutils.TB, query string, expected [][]string, args ...interface{},
+) {
 	t.Helper()
 	sr.succeedsWithin(t, func() error {
-		res := sr.QueryStr(t, query)
+		res := sr.QueryStr(t, query, args...)
 		if !reflect.DeepEqual(res, expected) {
 			return errors.Errorf("query '%s': expected:\n%v\ngot:\n%v\n",
 				query, MatrixToStr(expected), MatrixToStr(res),

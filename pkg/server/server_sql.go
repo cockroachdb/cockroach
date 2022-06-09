@@ -871,6 +871,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if capturedIndexUsageStatsKnobs := cfg.TestingKnobs.CapturedIndexUsageStatsKnobs; capturedIndexUsageStatsKnobs != nil {
 		execCfg.CaptureIndexUsageStatsKnobs = capturedIndexUsageStatsKnobs.(*scheduledlogging.CaptureIndexUsageStatsTestingKnobs)
 	}
+	if sessionMetricsTrackerKnobs := cfg.TestingKnobs.SessionMetricTrackerKnobs; sessionMetricsTrackerKnobs != nil {
+		execCfg.SessionMetricsTrackerTestingKnobs = sessionMetricsTrackerKnobs.(*sql.SessionMetricsTrackerTestingKnobs)
+	}
 
 	if unusedIndexRecommendationsKnobs := cfg.TestingKnobs.UnusedIndexRecommendKnobs; unusedIndexRecommendationsKnobs != nil {
 		execCfg.UnusedIndexRecommendationsKnobs = unusedIndexRecommendationsKnobs.(*idxusage.UnusedIndexRecommendationTestingKnobs)

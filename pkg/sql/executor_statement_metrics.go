@@ -102,6 +102,41 @@ var _ metric.Struct = GuardrailMetrics{}
 // MetricStruct is part of the metric.Struct interface.
 func (GuardrailMetrics) MetricStruct() {}
 
+// LongRunningMetrics tracks metrics for use detecting and diagnosing
+// long-running transactions.
+type LongRunningMetrics struct {
+	LongRunningStatementMaxDuration *metric.Gauge
+	LongRunningStatementCount       *metric.Gauge
+	LongRunningTxnMaxDuration       *metric.Gauge
+	LongRunningTxnCount             *metric.Gauge
+}
+
+func makeLongRunningMetrics(internal bool, smt *sessionMetricsTracker) LongRunningMetrics {
+	return LongRunningMetrics{
+		LongRunningStatementMaxDuration: metric.NewFunctionalGauge(
+			getMetricMeta(MetaLongRunningStatementMaxDuration, internal),
+			func() int64 { return smt.read(internal).stmt.longest.Nanoseconds() },
+		),
+		LongRunningStatementCount: metric.NewFunctionalGauge(
+			getMetricMeta(MetaLongRunningStatementCount, internal),
+			func() int64 { return smt.read(internal).stmt.count },
+		),
+		LongRunningTxnMaxDuration: metric.NewFunctionalGauge(
+			getMetricMeta(MetaLongRunningTxnMaxDuration, internal),
+			func() int64 { return smt.read(internal).txn.longest.Nanoseconds() },
+		),
+		LongRunningTxnCount: metric.NewFunctionalGauge(
+			getMetricMeta(MetaLongRunningTxnCount, internal),
+			func() int64 { return smt.read(internal).txn.count },
+		),
+	}
+}
+
+var _ metric.Struct = LongRunningMetrics{}
+
+// MetricStruct is part of the metric.Struct interface.
+func (LongRunningMetrics) MetricStruct() {}
+
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.

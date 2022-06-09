@@ -1109,6 +1109,30 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaLongRunningStatementMaxDuration = metric.Metadata{
+		Name:        "sql.query.long_running.max_duration",
+		Help:        "Duration of the currently longest-running SQL query",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaLongRunningTxnMaxDuration = metric.Metadata{
+		Name:        "sql.txn.long_running.max_duration",
+		Help:        "Duration of the currently longest-running SQL transaction query",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaLongRunningStatementCount = metric.Metadata{
+		Name:        "sql.query.long_running.count",
+		Help:        "Gauge of the number of statements which have been running for a long time",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaLongRunningTxnCount = metric.Metadata{
+		Name:        "sql.txn.long_running.count",
+		Help:        "Gauge of the number of transactions which have been running for a long time",
+		Measurement: "SQL Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
@@ -1202,6 +1226,7 @@ type ExecutorConfig struct {
 	StreamingTestingKnobs                *StreamingTestingKnobs
 	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
 	TelemetryLoggingTestingKnobs         *TelemetryLoggingTestingKnobs
+	SessionMetricsTrackerTestingKnobs    *SessionMetricsTrackerTestingKnobs
 	SpanConfigTestingKnobs               *spanconfig.TestingKnobs
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
 	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
