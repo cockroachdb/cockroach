@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,6 +50,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				*mockTimestampTZ,
 				2,
+				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -109,6 +111,7 @@ LIMIT 2`,
 				nil,
 				*mockTimestampTZ,
 				2,
+				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -165,6 +168,7 @@ LIMIT 2`,
 				tree.Datums{tree.NewDInt(181)},
 				*mockTimestampTZ,
 				2,
+				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -225,6 +229,7 @@ LIMIT 2`,
 				tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				*mockTimestampTZ,
 				2,
+				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -284,6 +289,7 @@ LIMIT 2`,
 				nil,
 				*mockTimestampTZ,
 				2,
+				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
@@ -366,7 +372,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 	}{
 		{
 			desc: "single delete less than batch size",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3),
+			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, colinfo.TTLDefaultExpirationColumnName),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{
@@ -384,7 +390,7 @@ func TestDeleteQueryBuilder(t *testing.T) {
 		},
 		{
 			desc: "multiple deletes",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3),
+			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, colinfo.TTLDefaultExpirationColumnName),
 			iterations: []iteration{
 				{
 					rows: []tree.Datums{

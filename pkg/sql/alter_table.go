@@ -1847,10 +1847,16 @@ func handleTTLStorageParamChange(
 	tableDesc *tabledesc.Mutable,
 	before, after *catpb.RowLevelTTL,
 ) error {
-	switch {
-	case before == nil && after == nil:
-		// Do not have to do anything here.
-	case before != nil && after != nil:
+
+	if before == nil && after != nil {
+		if err := checkTTLEnabledForCluster(params.ctx, params.p.ExecCfg().Settings); err != nil {
+			return err
+		}
+	}
+
+	// update existing config
+	if before != nil && after != nil {
+
 		// Update cron schedule if required.
 		if before.DeletionCron != after.DeletionCron {
 			env := JobSchedulerEnv(params.ExecCfg())
@@ -1871,8 +1877,9 @@ func handleTTLStorageParamChange(
 				return err
 			}
 		}
+
 		// Update default expression on automated column if required.
-		if before.DurationExpr != after.DurationExpr {
+		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
 			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
 			if err != nil {
 				return err
@@ -1905,11 +1912,10 @@ func handleTTLStorageParamChange(
 				return err
 			}
 		}
-	case before == nil && after != nil:
-		if err := checkTTLEnabledForCluster(params.ctx, params.p.ExecCfg().Settings); err != nil {
-			return err
-		}
+	}
 
+	// create new column
+	if (before == nil || !before.HasDurationExpr()) && (after != nil && after.HasDurationExpr()) {
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		tableDesc.RowLevelTTL = nil
@@ -1949,28 +1955,33 @@ func handleTTLStorageParamChange(
 		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
 			return err
 		}
-	case before != nil && after == nil:
+	}
+
+	// remove existing column
+	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
 		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
 
-		// Keep the TTL from beforehand, but create the DROP COLUMN job and the
-		// associated mutation.
-		tableDesc.RowLevelTTL = before
+		if before.HasDurationExpr() {
+			// Keep the TTL from beforehand, but create the DROP COLUMN job and the
+			// associated mutation.
+			tableDesc.RowLevelTTL = before
 
-		droppedViews, err := dropColumnImpl(params, tn, tableDesc, &tree.AlterTableDropColumn{
-			Column: colinfo.TTLDefaultExpirationColumnName,
-		})
-		if err != nil {
-			return err
-		}
-		// This should never happen as we do not CASCADE, but error again just in case.
-		if len(droppedViews) > 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop TTL automatic column if it is depended on by a view")
-		}
+			droppedViews, err := dropColumnImpl(params, tn, tableDesc, &tree.AlterTableDropColumn{
+				Column: colinfo.TTLDefaultExpirationColumnName,
+			})
+			if err != nil {
+				return err
+			}
+			// This should never happen as we do not CASCADE, but error again just in case.
+			if len(droppedViews) > 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop TTL automatic column if it is depended on by a view")
+			}
 
-		tableDesc.AddModifyRowLevelTTLMutation(
-			&descpb.ModifyRowLevelTTL{RowLevelTTL: before},
-			descpb.DescriptorMutation_DROP,
-		)
+			tableDesc.AddModifyRowLevelTTLMutation(
+				&descpb.ModifyRowLevelTTL{RowLevelTTL: before},
+				descpb.DescriptorMutation_DROP,
+			)
+		}
 	}
 
 	return nil

@@ -98,3 +98,13 @@ func (as *AutoStatsSettings) NoAutoStatsSettingsOverrides() bool {
 	}
 	return true
 }
+
+// HasDurationExpr is a utility method to determine if ttl_expires_after was set
+func (rowLevelTTL *RowLevelTTL) HasDurationExpr() bool {
+	return rowLevelTTL.DurationExpr != ""
+}
+
+// HasExpirationExpr is a utility method to determine if ttl_expiration_expression was set
+func (rowLevelTTL *RowLevelTTL) HasExpirationExpr() bool {
+	return rowLevelTTL.ExpirationExpr != ""
+}

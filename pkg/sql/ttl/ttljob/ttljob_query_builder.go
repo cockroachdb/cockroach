@@ -36,6 +36,7 @@ type selectQueryBuilder struct {
 	startPK, endPK  tree.Datums
 	selectBatchSize int
 	aost            tree.DTimestampTZ
+	ttlExpression   string
 
 	// isFirst is true if we have not invoked a query using the builder yet.
 	isFirst bool
@@ -59,6 +60,7 @@ func makeSelectQueryBuilder(
 	startPK, endPK tree.Datums,
 	aost tree.DTimestampTZ,
 	selectBatchSize int,
+	ttlExpression string,
 ) selectQueryBuilder {
 	// We will have a maximum of 1 + len(pkColumns)*2 columns, where one
 	// is reserved for AOST, and len(pkColumns) for both start and end key.
@@ -79,6 +81,7 @@ func makeSelectQueryBuilder(
 		endPK:           endPK,
 		aost:            aost,
 		selectBatchSize: selectBatchSize,
+		ttlExpression:   ttlExpression,
 
 		cachedArgs:          cachedArgs,
 		isFirst:             true,
@@ -133,12 +136,13 @@ func (b *selectQueryBuilder) buildQuery() string {
 	return fmt.Sprintf(
 		`SELECT %[1]s FROM [%[2]d AS tbl_name]
 AS OF SYSTEM TIME %[3]s
-WHERE crdb_internal_expiration <= $1%[4]s%[5]s
+WHERE %[4]s <= $1%[5]s%[6]s
 ORDER BY %[1]s
-LIMIT %[6]d`,
+LIMIT %[7]d`,
 		b.pkColumnNamesSQL,
 		b.tableID,
 		b.aost.String(),
+		b.ttlExpression,
 		filterClause,
 		endFilterClause,
 		b.selectBatchSize,
@@ -210,6 +214,7 @@ type deleteQueryBuilder struct {
 	pkColumns       []string
 	deleteBatchSize int
 	deleteOpName    string
+	ttlExpression   string
 
 	// cachedQuery is the cached query, which stays the same as long as we are
 	// deleting up to deleteBatchSize elements.
@@ -220,7 +225,12 @@ type deleteQueryBuilder struct {
 }
 
 func makeDeleteQueryBuilder(
-	tableID descpb.ID, cutoff time.Time, pkColumns []string, relationName string, deleteBatchSize int,
+	tableID descpb.ID,
+	cutoff time.Time,
+	pkColumns []string,
+	relationName string,
+	deleteBatchSize int,
+	ttlExpression string,
 ) deleteQueryBuilder {
 	cachedArgs := make([]interface{}, 0, 1+len(pkColumns)*deleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
@@ -230,8 +240,8 @@ func makeDeleteQueryBuilder(
 		pkColumns:       pkColumns,
 		deleteBatchSize: deleteBatchSize,
 		deleteOpName:    fmt.Sprintf("ttl delete %s", relationName),
-
-		cachedArgs: cachedArgs,
+		ttlExpression:   ttlExpression,
+		cachedArgs:      cachedArgs,
 	}
 }
 
@@ -253,8 +263,9 @@ func (b *deleteQueryBuilder) buildQuery(numRows int) string {
 	}
 
 	return fmt.Sprintf(
-		`DELETE FROM [%d AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (%s) IN (%s)`,
+		`DELETE FROM [%d AS tbl_name] WHERE %s <= $1 AND (%s) IN (%s)`,
 		b.tableID,
+		b.ttlExpression,
 		columnNamesSQL,
 		placeholderStr,
 	)

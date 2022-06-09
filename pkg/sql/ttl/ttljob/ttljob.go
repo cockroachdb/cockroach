@@ -356,6 +356,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		deleteRateLimit,
 	)
 
+	ttlExpression := colinfo.TTLDefaultExpirationColumnName
+	if ttlSettings.HasExpirationExpr() {
+		ttlExpression = "(" + string(ttlSettings.ExpirationExpr) + ")"
+	}
+
 	statsCloseCh := make(chan struct{})
 	ch := make(chan rangeToProcess, rangeConcurrency)
 	rowCount := int64(0)
@@ -379,6 +384,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					deleteBatchSize,
 					deleteRateLimiter,
 					*aost,
+					ttlExpression,
 				)
 				// add before returning err in case of partial success
 				atomic.AddInt64(&rowCount, rangeRowCount)
@@ -398,7 +404,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if ttlSettings.RowStatsPollInterval != 0 {
 		g.GoCtx(func(ctx context.Context) error {
 			// Do once initially to ensure we have some base statistics.
-			fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration)
+			fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration, ttlExpression)
 			// Wait until poll interval is reached, or early exit when we are done
 			// with the TTL job.
 			for {
@@ -406,7 +412,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				case <-statsCloseCh:
 					return nil
 				case <-time.After(ttlSettings.RowStatsPollInterval):
-					fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration)
+					fetchStatistics(ctx, p.ExecCfg(), knobs, relationName, details, metrics, aostDuration, ttlExpression)
 				}
 			}
 		})
@@ -521,12 +527,14 @@ func fetchStatistics(
 	details jobspb.RowLevelTTLDetails,
 	metrics rowLevelTTLMetrics,
 	aostDuration time.Duration,
+	ttlExpression string,
 ) {
 	if err := func() error {
 		aost, err := tree.MakeDTimestampTZ(timeutil.Now().Add(aostDuration), time.Microsecond)
 		if err != nil {
 			return err
 		}
+
 		for _, c := range []struct {
 			opName string
 			query  string
@@ -540,7 +548,7 @@ func fetchStatistics(
 			},
 			{
 				opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
-				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + colinfo.TTLDefaultExpirationColumnName + ` < $1`,
+				query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + ttlExpression + ` < $1`,
 				args:   []interface{}{details.Cutoff},
 				gauge:  metrics.TotalExpiredRows,
 			},
@@ -590,6 +598,7 @@ func runTTLOnRange(
 	selectBatchSize, deleteBatchSize int,
 	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
+	ttlExpression string,
 ) (rangeRowCount int64, err error) {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
@@ -609,6 +618,7 @@ func runTTLOnRange(
 		endPK,
 		aost,
 		selectBatchSize,
+		ttlExpression,
 	)
 	deleteBuilder := makeDeleteQueryBuilder(
 		details.TableID,
@@ -616,6 +626,7 @@ func runTTLOnRange(
 		pkColumns,
 		relationName,
 		deleteBatchSize,
+		ttlExpression,
 	)
 
 	for {
