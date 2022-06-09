@@ -86,7 +86,6 @@ func newPebbleTempEngine(
 			// Use the default bytes.Compare-like comparer.
 			cfg.Opts.Comparer = pebble.DefaultComparer
 			cfg.Opts.DisableWAL = true
-			cfg.Opts.TablePropertyCollectors = nil
 			cfg.Opts.Experimental.KeyValidationFunc = nil
 			return nil
 		},

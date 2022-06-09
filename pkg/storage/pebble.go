@@ -326,36 +326,6 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-// pebbleDeleteRangeCollector is the equivalent table collector as the RocksDB
-// DeleteRangeTblPropCollector. Pebble does not require it because Pebble will
-// prioritize its own compactions of range tombstones.
-type pebbleDeleteRangeCollector struct{}
-
-func (pebbleDeleteRangeCollector) Add(_ pebble.InternalKey, _ []byte) error {
-	return nil
-}
-
-func (pebbleDeleteRangeCollector) Finish(_ map[string]string) error {
-	return nil
-}
-
-func (pebbleDeleteRangeCollector) Name() string {
-	// This constant needs to match the one used by the RocksDB version of this
-	// table property collector. DO NOT CHANGE.
-	return "DeleteRangeTblPropCollectorFactory"
-}
-
-func (t *pebbleDeleteRangeCollector) UpdateKeySuffixes(
-	_ map[string]string, _ []byte, _ []byte,
-) error {
-	return nil
-}
-
-// PebbleTablePropertyCollectors is the list of Pebble TablePropertyCollectors.
-var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{
-	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
-}
-
 // pebbleDataBlockMVCCTimeIntervalCollector provides an implementation of
 // pebble.DataBlockIntervalCollector that is used to construct a
 // pebble.BlockPropertyCollector. This provides per-block filtering, which
@@ -489,7 +459,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
-		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 	}
 	// Used for experimental MVCC range tombstones.
