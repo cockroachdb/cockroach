@@ -353,6 +353,12 @@ type TableDescriptor interface {
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
 }
 
+// MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.
+type MutableTableDescriptor interface {
+	TableDescriptor
+	MutableDescriptor
+}
+
 // TypeDescriptor will eventually be called typedesc.Descriptor.
 // It is implemented by (Imm|M)utableTypeDescriptor.
 type TypeDescriptor interface {
