@@ -50,6 +50,18 @@ func WaitForJobToCancel(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID
 	waitForJobToHaveStatus(t, db, jobID, jobs.StatusCanceled)
 }
 
+// WaitForJobToRun waits for the specified job ID to be in a running state.
+func WaitForJobToRun(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusRunning)
+}
+
+// WaitForJobToFail waits for the specified job ID to be in a failed state.
+func WaitForJobToFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	waitForJobToHaveStatus(t, db, jobID, jobs.StatusFailed)
+}
+
 func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
 ) {
@@ -61,6 +73,9 @@ func waitForJobToHaveStatus(
 			t, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
 		).Scan(&status, &payloadBytes)
 		if jobs.Status(status) == jobs.StatusFailed {
+			if expectedStatus == jobs.StatusFailed {
+				return nil
+			}
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				t.Fatalf("job failed: %s", payload.Error)

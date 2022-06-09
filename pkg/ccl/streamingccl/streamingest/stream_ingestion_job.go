@@ -154,6 +154,8 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 
 	// Start ingesting KVs from the replication stream.
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
+	// TODO(casper): retry stream ingestion with exponential
+	// backoff and finally pause on error.
 	return ingest(resumeCtx, p, streamAddress, details.TenantID, details.NewTenantID,
 		streaming.StreamID(details.StreamID), details.StartTime, s.job.Progress(), s.job.ID())
 }
