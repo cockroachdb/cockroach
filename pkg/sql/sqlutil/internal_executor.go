@@ -20,15 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
-type QueryRowExFunc func(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	session sessiondata.InternalExecutorOverride,
-	stmt string,
-	qargs ...interface{},
-) (tree.Datums, error)
-
 // InternalExecutor is meant to be used by layers below SQL in the system that
 // nevertheless want to execute SQL queries (presumably against system tables).
 // It is extracted in this "sqlutil" package to avoid circular references and
