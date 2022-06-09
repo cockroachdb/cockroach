@@ -45,6 +45,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/trace"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -1122,7 +1123,7 @@ child operation: %s, tracer created at:
 	// Are we tracing everything, or have a parent, or want a real span, or were
 	// asked for a recording? Then we create a real trace span. In all other
 	// cases, a noop span will do.
-	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != RecordingOff) {
+	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan || opts.recordingType() != tracingpb.RecordingOff) {
 		if !opts.Sterile {
 			return maybeWrapCtx(ctx, t.noopSpan)
 		}
@@ -1299,7 +1300,7 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 	// we're not recording. A 21.1 node interprets a traceID as wanting structured
 	// recording (or verbose recording if fieldNameDeprecatedVerboseTracing is also
 	// set).
-	if compatMode && sm.recordingType == RecordingOff {
+	if compatMode && sm.recordingType == tracingpb.RecordingOff {
 		return
 	}
 
@@ -1307,7 +1308,7 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
 	carrier.Set(fieldNameRecordingType, sm.recordingType.ToCarrierValue())
 
-	if compatMode && sm.recordingType == RecordingVerbose {
+	if compatMode && sm.recordingType == tracingpb.RecordingVerbose {
 		carrier.Set(fieldNameDeprecatedVerboseTracing, "1")
 	}
 }
@@ -1323,7 +1324,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	var otelTraceID oteltrace.TraceID
 	var otelSpanID oteltrace.SpanID
 	var recordingTypeExplicit bool
-	var recordingType RecordingType
+	var recordingType tracingpb.RecordingType
 
 	iterFn := func(k, v string) error {
 		switch k = strings.ToLower(k); k {
@@ -1355,11 +1356,11 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 			}
 		case fieldNameRecordingType:
 			recordingTypeExplicit = true
-			recordingType = RecordingTypeFromCarrierValue(v)
+			recordingType = tracingpb.RecordingTypeFromCarrierValue(v)
 		case fieldNameDeprecatedVerboseTracing:
 			// Compatibility with 21.2.
 			if !recordingTypeExplicit {
-				recordingType = RecordingVerbose
+				recordingType = tracingpb.RecordingVerbose
 			}
 		}
 		return nil
@@ -1372,7 +1373,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		if err := c.ForEach(iterFn); err != nil {
 			return noopSpanMeta, err
 		}
-	case metadataCarrier:
+	case MetadataCarrier:
 		if err := c.ForEach(iterFn); err != nil {
 			return noopSpanMeta, err
 		}
@@ -1384,11 +1385,11 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		return noopSpanMeta, nil
 	}
 
-	if !recordingTypeExplicit && recordingType == RecordingOff {
+	if !recordingTypeExplicit && recordingType == tracingpb.RecordingOff {
 		// A 21.1 node (or a 21.2 mode running in backwards-compatibility mode)
 		// that passed a TraceID but not fieldNameDeprecatedVerboseTracing wants the
 		// structured events.
-		recordingType = RecordingStructured
+		recordingType = tracingpb.RecordingStructured
 	}
 
 	var otelCtx oteltrace.SpanContext
@@ -1422,15 +1423,15 @@ type RegistrySpan interface {
 	// WithDetachedRecording option. In other situations, the recording of such
 	// children is not included in the parent's recording but, in the case of the
 	// span registry, we want as much information as possible to be included.
-	GetFullRecording(recType RecordingType) Recording
+	GetFullRecording(recType tracingpb.RecordingType) tracingpb.Recording
 
 	// SetRecordingType sets the recording mode of the span and its children,
 	// recursively. Setting it to RecordingOff disables further recording.
 	// Everything recorded so far remains in memory.
-	SetRecordingType(to RecordingType)
+	SetRecordingType(to tracingpb.RecordingType)
 
 	// RecordingType returns the span's current recording type.
-	RecordingType() RecordingType
+	RecordingType() tracingpb.RecordingType
 }
 
 var _ RegistrySpan = &crdbSpan{}
@@ -1606,11 +1607,11 @@ func EnsureChildSpan(
 // Recording.String(). Tests can also use FindMsgInRecording().
 func ContextWithRecordingSpan(
 	ctx context.Context, tr *Tracer, opName string,
-) (_ context.Context, finishAndGetRecording func() Recording) {
-	ctx, sp := tr.StartSpanCtx(ctx, opName, WithRecording(RecordingVerbose))
-	var rec Recording
+) (_ context.Context, finishAndGetRecording func() tracingpb.Recording) {
+	ctx, sp := tr.StartSpanCtx(ctx, opName, WithRecording(tracingpb.RecordingVerbose))
+	var rec tracingpb.Recording
 	return ctx,
-		func() Recording {
+		func() tracingpb.Recording {
 			if rec != nil {
 				return rec
 			}
@@ -1661,4 +1662,57 @@ func makeOtelSpan(
 
 	_ /* ctx */, sp := otelTr.Start(ctx, opName, opts...)
 	return sp
+}
+
+// MetadataCarrier is an implementation of the Carrier interface for gRPC
+// metadata.
+type MetadataCarrier struct {
+	metadata.MD
+}
+
+// Set implements the Carrier interface.
+func (w MetadataCarrier) Set(key, val string) {
+	// The GRPC HPACK implementation rejects any uppercase keys here.
+	//
+	// As such, since the HTTP_HEADERS format is case-insensitive anyway, we
+	// blindly lowercase the key.
+	key = strings.ToLower(key)
+	w.MD[key] = append(w.MD[key], val)
+}
+
+// ForEach implements the Carrier interface.
+func (w MetadataCarrier) ForEach(fn func(key, val string) error) error {
+	for k, vals := range w.MD {
+		for _, v := range vals {
+			if err := fn(k, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// SpanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
+// create a span.
+//
+// We use this to circumvent the interceptor's work when tracing is
+// disabled. Otherwise, the interceptor causes an increase in the
+// number of packets (even with an empty context!).
+//
+// See #17177.
+func SpanInclusionFuncForClient(parent *Span) bool {
+	return parent != nil && !parent.IsNoop()
+}
+
+// SpanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
+// create a span.
+func SpanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
+	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
+	// configured to always trace, return true. The second part is particularly
+	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
+	// where client is never tracing.
+	return !spanMeta.Empty() || t.AlwaysTrace()
 }

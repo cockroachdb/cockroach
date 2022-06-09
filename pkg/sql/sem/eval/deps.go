@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -82,6 +83,52 @@ type DatabaseCatalog interface {
 	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user username.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
 }
 
+// CastFunc is a function which cases a datum to a given type.
+type CastFunc = func(context.Context, tree.Datum, *types.T) (tree.Datum, error)
+
+// CatalogBuiltins is a set of methods which can be implemented using the
+// lower-level descs.Collection for use in builtins. Its functionality is
+// available also during DistSQL making it possible to implement these
+// functions without disallowing DistSQL.
+//
+// TODO(ajwerner): Ideally we'd peel more and more catalog functionality off
+// of the Planner interface as we subsume its privilege checking into an
+// intermediate layer.
+type CatalogBuiltins interface {
+	// EncodeTableIndexKey constructs a deterministic and immutable encoding of
+	// a table index key from a tuple of datums. It is leveraged as the
+	// input to a hash function for hash-sharded indexes.
+	EncodeTableIndexKey(
+		ctx context.Context,
+		tableID catid.DescID,
+		indexID catid.IndexID,
+		rowDatums *tree.DTuple,
+		performCast CastFunc,
+	) ([]byte, error)
+
+	// NumGeometryInvertedIndexEntries computes the number of inverted index
+	// entries we'd expect to generate from a given geometry value given the
+	// index's configuration.
+	NumGeometryInvertedIndexEntries(
+		ctx context.Context, tableID catid.DescID, indexID catid.IndexID, g *tree.DGeometry,
+	) (int, error)
+
+	// NumGeographyInvertedIndexEntries computes the number of inverted index
+	// entries we'd expect to generate from a given geography value given the
+	// index's configuration.
+	NumGeographyInvertedIndexEntries(
+		ctx context.Context, tableID catid.DescID, indexID catid.IndexID, g *tree.DGeography,
+	) (int, error)
+
+	// PGColumnIsUpdatable returns whether the given column can be updated.
+	PGColumnIsUpdatable(
+		ctx context.Context, oidArg *tree.DOid, attNumArg tree.DInt,
+	) (*tree.DBool, error)
+
+	// PGRelationIsUpdatable returns the update events the relation supports.
+	PGRelationIsUpdatable(ctx context.Context, oid *tree.DOid) (*tree.DInt, error)
+}
+
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
 // Only one of { DatabaseName, DatabaseOID, SchemaName, TableName, TableOID } is filled.
 type HasPrivilegeSpecifier struct {
@@ -144,10 +191,6 @@ type Planner interface {
 
 	// ExecutorConfig returns *ExecutorConfig
 	ExecutorConfig() interface{}
-
-	// GetImmutableTableInterfaceByID returns an interface{} with
-	// catalog.TableDescriptor to avoid a circular dependency.
-	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
 
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.
@@ -250,6 +293,10 @@ type Planner interface {
 	// error if validation fails or if constraintName is not actually a unique
 	// constraint on the table.
 	RevalidateUniqueConstraint(ctx context.Context, tableID int, constraintName string) error
+
+	// IsConstraintActive returns if a given constraint is currently active,
+	// for the current transaction.
+	IsConstraintActive(ctx context.Context, tableID int, constraintName string) (bool, error)
 
 	// ValidateTTLScheduledJobsInCurrentDB checks scheduled jobs for each table
 	// in the database maps to a scheduled job.

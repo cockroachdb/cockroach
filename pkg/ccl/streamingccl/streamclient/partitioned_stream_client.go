@@ -75,31 +75,28 @@ func (p *partitionedStreamClient) Create(
 // Heartbeat implements Client interface.
 func (p *partitionedStreamClient) Heartbeat(
 	ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp,
-) error {
+) (streampb.StreamReplicationStatus, error) {
 	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
-		return err
+		return streampb.StreamReplicationStatus{}, err
 	}
 
 	row := conn.QueryRowContext(ctx,
 		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
 	if row.Err() != nil {
-		return errors.Wrapf(row.Err(), "Error in sending heartbeats to replication stream %d", streamID)
+		return streampb.StreamReplicationStatus{},
+			errors.Wrapf(row.Err(), "Error in sending heartbeats to replication stream %d", streamID)
 	}
 
 	var rawStatus []byte
 	if err := row.Scan(&rawStatus); err != nil {
-		return err
+		return streampb.StreamReplicationStatus{}, err
 	}
 	var status streampb.StreamReplicationStatus
 	if err := protoutil.Unmarshal(rawStatus, &status); err != nil {
-		return err
+		return streampb.StreamReplicationStatus{}, err
 	}
-	// TODO(casper): add observability for stream protected timestamp
-	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-		return streamingccl.NewStreamStatusErr(streamID, status.StreamStatus)
-	}
-	return nil
+	return status, nil
 }
 
 // postgresURL converts an SQL serving address into a postgres URL.
@@ -240,15 +237,20 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 		streamEvent.Checkpoint = nil
 		return event
 	}
+	var event streamingccl.Event
 	if streamEvent.Batch != nil {
-		event := streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
-		streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
-		if len(streamEvent.Batch.KeyValues) == 0 {
+		if len(streamEvent.Batch.Ssts) > 0 {
+			event = streamingccl.MakeSSTableEvent(streamEvent.Batch.Ssts[0])
+			streamEvent.Batch.Ssts = streamEvent.Batch.Ssts[1:]
+		} else if len(streamEvent.Batch.KeyValues) > 0 {
+			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
+			streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
+		}
+		if len(streamEvent.Batch.KeyValues) == 0 && len(streamEvent.Batch.Ssts) == 0 {
 			streamEvent.Batch = nil
 		}
-		return event
 	}
-	return nil
+	return event
 }
 
 // Subscribe implements the Subscription interface.

@@ -509,10 +509,20 @@ func (sc *SchemaChanger) dropConstraints(
 			return err
 		}
 		for id := range fksByBackrefTable {
-			if tableDescs[id], err = descsCol.GetImmutableTableByID(
-				ctx, txn, id, tree.ObjectLookupFlags{},
-			); err != nil {
+			desc, err := descsCol.GetImmutableTableByID(
+				ctx, txn, id, tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						IncludeDropped: true,
+					},
+				},
+			)
+			if err != nil {
 				return err
+			}
+			// If the backreference table has been dropped, we don't need to do
+			// anything there.
+			if !desc.Dropped() {
+				tableDescs[id] = desc
 			}
 		}
 		return nil
@@ -596,6 +606,11 @@ func (sc *SchemaChanger) addConstraints(
 					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey().ReferencedTableID, txn)
 					if err != nil {
 						return err
+					}
+					// If the backref table is being dropped, then we should treat this as
+					// the constraint addition failing and rollback.
+					if backrefTable.Dropped() {
+						return pgerror.Newf(pgcode.UndefinedTable, "referenced relation %q does not exist", backrefTable.GetName())
 					}
 					// Check that a unique constraint for the FK still exists on the
 					// referenced table. It's possible for the unique index found during
@@ -1691,11 +1706,19 @@ func ValidateForwardIndexes(
 						invalid <- idx.GetID()
 						return nil
 					}
+					// Resolve the table index descriptor name.
+					indexName, err := tableDesc.GetIndexNameByID(idx.GetID())
+					if err != nil {
+						log.Warningf(ctx,
+							"unable to find index by ID for ValidateForwardIndexes: %d",
+							idx.GetID())
+						indexName = idx.GetName()
+					}
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 						"duplicate key value violates unique constraint %q",
-						idx.GetName()),
-						idx.GetName())
+						indexName),
+						indexName)
 
 				}
 			case <-ctx.Done():
@@ -2655,6 +2678,27 @@ func indexTruncateInTxn(
 	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc, []uint32{uint32(idx.GetID())})
 }
 
+// We note the time at the start of the merge in order to limit the set of
+// keys merged from the temporary index to what's already there as of
+// mergeTimestamp. To identify the keys that should be merged, we perform a
+// historical read on the temporary index as of mergeTimestamp. We then
+// perform an additional read for the latest value for each key in order to
+// get correct merged value.
+//
+// We do this because the temporary index is still accepting writes during the
+// merge as we rely on it having the latest value or delete for every key. If
+// we don't limit number of keys merged, then it is possible for the rate of
+// new keys written to the temporary index to be faster than the rate at which
+// merge.
+//
+// The mergeTimestamp is currently not persisted because if this job is ran as
+// part of a restore, then timestamp will be too old and the job will fail. On
+// the next resume, a mergeTimestamp newer than the GC time will be picked and
+// the job can continue.
+func getMergeTimestamp(clock *hlc.Clock) hlc.Timestamp {
+	return clock.Now()
+}
+
 func (sc *SchemaChanger) distIndexMerge(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
@@ -2662,24 +2706,8 @@ func (sc *SchemaChanger) distIndexMerge(
 	temporaryIndexes []descpb.IndexID,
 	fractionScaler *multiStageFractionScaler,
 ) error {
-	// We note the time at the start of the merge in order to limit the set of
-	// keys merged from the temporary index to what's already there as of
-	// mergeTimestamp. To identify the keys that should be merged, we perform a
-	// historical read on the temporary index as of mergeTimestamp. We then
-	// perform an additional read for the latest value for each key in order to
-	// get correct merged value.
-	//
-	// We do this because the temporary index is still accepting writes during the
-	// merge as we rely on it having the latest value or delete for every key. If
-	// we don't limit number of keys merged, then it is possible for the rate of
-	// new keys written to the temporary index to be faster than the rate at which
-	// merge.
-	//
-	// The mergeTimestamp is currently not persisted because if this job is ran as
-	// part of a restore, then timestamp will be too old and the job will fail. On
-	// the next resume, a mergeTimestamp newer than the GC time will be picked and
-	// the job can continue.
-	mergeTimestamp := sc.clock.Now()
+
+	mergeTimestamp := getMergeTimestamp(sc.clock)
 	log.Infof(ctx, "merging all keys in temporary index before time %v", mergeTimestamp)
 
 	// Gather the initial resume spans for the merge process.

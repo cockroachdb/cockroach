@@ -345,8 +345,7 @@ export const createStatementDiagnosticsAlertSelector = createSelector(
       return {
         level: AlertLevel.CRITICAL,
         title: "There was an error activating statement diagnostics",
-        text:
-          "Please try activating again. If the problem continues please reach out to customer support.",
+        text: "Please try activating again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(
@@ -397,8 +396,7 @@ export const cancelStatementDiagnosticsAlertSelector = createSelector(
       return {
         level: AlertLevel.CRITICAL,
         title: "There was an error cancelling statement diagnostics",
-        text:
-          "Please try cancelling the statement diagnostic again. If the problem continues please reach out to customer support.",
+        text: "Please try cancelling the statement diagnostic again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(
@@ -446,8 +444,7 @@ export const terminateSessionAlertSelector = createSelector(
       return {
         level: AlertLevel.CRITICAL,
         title: "There was an error cancelling the session.",
-        text:
-          "Please try cancelling again. If the problem continues please reach out to customer support.",
+        text: "Please try cancelling again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
@@ -491,8 +488,7 @@ export const terminateQueryAlertSelector = createSelector(
       return {
         level: AlertLevel.CRITICAL,
         title: "There was an error cancelling the statement.",
-        text:
-          "Please try cancelling again. If the problem continues please reach out to customer support.",
+        text: "Please try cancelling again. If the problem continues please reach out to customer support.",
         showAsAlert: true,
         dismiss: (dispatch: Dispatch<Action>) => {
           dispatch(terminateQueryAlertLocalSetting.set({ show: false }));

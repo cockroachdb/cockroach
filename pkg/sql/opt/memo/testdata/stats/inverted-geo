@@ -181,7 +181,7 @@ project
       │    │              ├── stats: [rows=1.4e-06]
       │    │              ├── key: (3)
       │    │              └── scan t@t_g_idx
-      │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(geometry!null)
+      │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │                   ├── stats: [rows=1.4e-06, distinct(3)=4e-07, null(3)=0, avgsize(3)=4, distinct(6)=1.4e-06, null(6)=0, avgsize(6)=4]
@@ -307,7 +307,7 @@ memo (optimized, ~5KB, required=[presentation: i:1,g:2])
  ├── G1: (select G2 G3)
  │    └── [presentation: i:1,g:2]
  │         ├── best: (select G2 G3)
- │         └── cost: 2144.55
+ │         └── cost: 4144.55
  ├── G2: (scan t,cols=(1,2))
  │    └── []
  │         ├── best: (scan t,cols=(1,2))
@@ -401,7 +401,7 @@ project
       │    │              ├── stats: [rows=1.42e-06]
       │    │              ├── key: (3)
       │    │              └── scan t@t_g_idx
-      │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(geometry!null)
+      │    │                   ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │    │                   ├── inverted constraint: /6/3
       │    │                   │    └── spans: ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │                   ├── stats: [rows=1.42e-06, distinct(3)=4e-07, null(3)=0, avgsize(3)=4, distinct(6)=1.42e-06, null(6)=0, avgsize(6)=4]
@@ -480,7 +480,7 @@ select
  │         ├── stats: [rows=100]
  │         ├── key: (3)
  │         └── scan t@t_g_idx
- │              ├── columns: rowid:3(int!null) g_inverted_key:6(geometry!null)
+ │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
  │              ├── inverted constraint: /6/3
  │              │    └── spans
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -522,7 +522,7 @@ project
       │         ├── stats: [rows=100]
       │         ├── key: (3)
       │         └── scan t@t_g_idx
-      │              ├── columns: rowid:3(int!null) g_inverted_key:6(geometry!null)
+      │              ├── columns: rowid:3(int!null) g_inverted_key:6(encodedkey!null)
       │              ├── inverted constraint: /6/3
       │              │    └── spans
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]

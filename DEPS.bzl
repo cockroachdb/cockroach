@@ -1347,10 +1347,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "d9f3208c0bb38558acffd03addd6a057891665dc58c47c07ef0a4c8c6bfbb130",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220523221036-bb2c1501ac23",
+        sha256 = "6fb7e9f191b1efde244b55dec4697e6128eb17186b3cc25b0eae2f196024004b",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220603185428-ad44a62e4d04",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220523221036-bb2c1501ac23.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20220603185428-ad44a62e4d04.zip",
         ],
     )
     go_repository(
@@ -4001,10 +4001,10 @@ def go_deps():
         name = "com_github_hdrhistogram_hdrhistogram_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/HdrHistogram/hdrhistogram-go",
-        sha256 = "12281e93a8cf983caec3286e00eadb1475bddad684226015ab96979012f55ac9",
-        strip_prefix = "github.com/HdrHistogram/hdrhistogram-go@v1.1.0",
+        sha256 = "bbc1d64d3179248c78ffa3729ad2ab696ed1ff14874f37d8d4fc4a5a235fa77f",
+        strip_prefix = "github.com/HdrHistogram/hdrhistogram-go@v1.1.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/HdrHistogram/hdrhistogram-go/com_github_hdrhistogram_hdrhistogram_go-v1.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/HdrHistogram/hdrhistogram-go/com_github_hdrhistogram_hdrhistogram_go-v1.1.2.zip",
         ],
     )
     go_repository(
@@ -5099,10 +5099,10 @@ def go_deps():
         name = "com_github_lib_pq",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq",
-        sha256 = "5bca281c55dd8918e49a7e68d562eefb37f2cf17f7d45e1f3bd77e8eae49eb6e",
-        strip_prefix = "github.com/lib/pq@v1.10.6-0.20220412200556-b3b833258663",
+        sha256 = "7247dc4284bb572dd8bb3932ab1bf8a3de953882ade18c31a240838af8c73ee9",
+        strip_prefix = "github.com/lib/pq@v1.10.6",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/com_github_lib_pq-v1.10.6-0.20220412200556-b3b833258663.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/com_github_lib_pq-v1.10.6.zip",
         ],
     )
     go_repository(

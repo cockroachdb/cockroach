@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -34,11 +35,12 @@ import (
 )
 
 type eventStream struct {
-	streamID streaming.StreamID
-	execCfg  *sql.ExecutorConfig
-	spec     streampb.StreamPartitionSpec
-	mon      *mon.BytesMonitor
-	acc      mon.BoundAccount
+	streamID        streaming.StreamID
+	execCfg         *sql.ExecutorConfig
+	spec            streampb.StreamPartitionSpec
+	subscribedSpans roachpb.SpanGroup
+	mon             *mon.BytesMonitor
+	acc             mon.BoundAccount
 
 	data tree.Datums // Data to send to the consumer
 
@@ -93,6 +95,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		}),
 
 		rangefeed.WithMemoryMonitor(s.mon),
+
+		rangefeed.WithOnSSTable(s.onSSTable),
 	}
 
 	frontier, err := span.MakeFrontier(s.spec.Spans...)
@@ -130,7 +134,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	// Start rangefeed, which spins up a separate go routine to perform it's job.
 	s.rf = s.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onEvent, opts...)
+		fmt.Sprintf("streamID=%d", s.streamID), s.spec.StartFrom, s.onValue, opts...)
 	if err := s.rf.Start(ctx, s.spec.Spans); err != nil {
 		return err
 	}
@@ -215,12 +219,12 @@ func (s *eventStream) Close(ctx context.Context) {
 	s.sp.Finish()
 }
 
-func (s *eventStream) onEvent(ctx context.Context, value *roachpb.RangeFeedValue) {
+func (s *eventStream) onValue(ctx context.Context, value *roachpb.RangeFeedValue) {
 	select {
 	case <-ctx.Done():
 	case s.eventsCh <- roachpb.RangeFeedEvent{Val: value}:
 		if log.V(1) {
-			log.Infof(ctx, "onEvent: %s@%s", value.Key, value.Value.Timestamp)
+			log.Infof(ctx, "onValue: %s@%s", value.Key, value.Value.Timestamp)
 		}
 	}
 }
@@ -248,6 +252,16 @@ func (s *eventStream) onSpanCompleted(ctx context.Context, sp roachpb.Span) erro
 			log.Infof(ctx, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
 		}
 		return nil
+	}
+}
+
+func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTable) {
+	select {
+	case <-ctx.Done():
+	case s.eventsCh <- roachpb.RangeFeedEvent{SST: sst}:
+		if log.V(1) {
+			log.Infof(ctx, "onSSTable: %s@%s", sst.Span, sst.WriteTS)
+		}
 	}
 }
 
@@ -325,6 +339,68 @@ func (p *checkpointPacer) shouldCheckpoint(
 	return false
 }
 
+// Trim the received SST to only contain data within the boundaries of spans in the partition
+// spec, and execute the specified operation on each roachpb.KeyValue in the trimmed SSTable.
+func (s *eventStream) trimSST(
+	sst *roachpb.RangeFeedSSTable, op func(keyVal roachpb.KeyValue),
+) error {
+	iter, err := storage.NewMemSSTIterator(sst.Data, true)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	copyKV := func(mvccKey storage.MVCCKey, value []byte) roachpb.KeyValue {
+		keyCopy := make([]byte, len(mvccKey.Key))
+		copy(keyCopy, mvccKey.Key)
+		valueCopy := make([]byte, len(value))
+		copy(valueCopy, value)
+		return roachpb.KeyValue{
+			Key:   keyCopy,
+			Value: roachpb.Value{RawBytes: valueCopy, Timestamp: mvccKey.Timestamp},
+		}
+	}
+
+	return s.subscribedSpans.ForEach(func(span roachpb.Span) error {
+		iter.SeekGE(storage.MVCCKey{Key: span.Key})
+		endKey := storage.MVCCKey{Key: span.EndKey}
+		for ; ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil || !ok {
+				return err
+			}
+			if !iter.UnsafeKey().Less(endKey) { // passed the span boundary
+				break
+			}
+			op(copyKV(iter.UnsafeKey(), iter.UnsafeValue()))
+		}
+		return nil
+	})
+}
+
+// Add a RangeFeedSSTable into current batch and return number of bytes added.
+func (s *eventStream) addSST(
+	sst *roachpb.RangeFeedSSTable, batch *streampb.StreamEvent_Batch,
+) (int, error) {
+	// We send over the whole SSTable if the sst span is within
+	// the subscribed spans boundary.
+	if s.subscribedSpans.Encloses(sst.Span) {
+		batch.Ssts = append(batch.Ssts, *sst)
+		return sst.Size(), nil
+	}
+	// If the sst span exceeds boundaries of the watched spans,
+	// we trim the sst data to avoid sending unnecessary data.
+	// TODO(casper): add metrics to track number of SSTs, and number of ssts
+	// that are not inside the boundaries (and possible count+size of kvs in such ssts).
+	size := 0
+	if err := s.trimSST(sst, func(keyVal roachpb.KeyValue) {
+		batch.KeyValues = append(batch.KeyValues, keyVal)
+		size += keyVal.Size()
+	}); err != nil {
+		return 0, err
+	}
+	return size, nil
+}
+
 // streamLoop is the main processing loop responsible for reading rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
 func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) error {
@@ -346,6 +422,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 			defer func() {
 				batchSize = 0
 				batch.KeyValues = batch.KeyValues[:0]
+				batch.Ssts = batch.Ssts[:0]
 			}()
 			return s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batch})
 		}
@@ -385,8 +462,16 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 						return err
 					}
 				}
+			case ev.SST != nil:
+				size, err := s.addSST(ev.SST, &batch)
+				if err != nil {
+					return err
+				}
+				batchSize += size
+				if err := maybeFlushBatch(flushIfNeeded); err != nil {
+					return err
+				}
 			default:
-				// TODO(yevgeniy): Handle SSTs.
 				return errors.AssertionFailedf("unexpected event")
 			}
 		}
@@ -431,10 +516,15 @@ func streamPartition(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
+	var subscribedSpans roachpb.SpanGroup
+	for _, sp := range spec.Spans {
+		subscribedSpans.Add(sp)
+	}
 	return eval.MakeStreamingValueGenerator(&eventStream{
-		streamID: streamID,
-		spec:     spec,
-		execCfg:  execCfg,
-		mon:      evalCtx.Mon,
+		streamID:        streamID,
+		spec:            spec,
+		subscribedSpans: subscribedSpans,
+		execCfg:         execCfg,
+		mon:             evalCtx.Mon,
 	}), nil
 }

@@ -41,11 +41,10 @@ func TestMVCCValueLocalTimestampNeeded(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			mvccKey := MVCCKey{Timestamp: tc.versionTs}
 			mvccVal := MVCCValue{}
 			mvccVal.LocalTimestamp = hlc.ClockTimestamp(tc.localTs)
 
-			require.Equal(t, tc.expect, mvccVal.LocalTimestampNeeded(mvccKey))
+			require.Equal(t, tc.expect, mvccVal.LocalTimestampNeeded(tc.versionTs))
 		})
 	}
 }
@@ -71,11 +70,10 @@ func TestMVCCValueGetLocalTimestamp(t *testing.T) {
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			mvccKey := MVCCKey{Timestamp: tc.versionTs}
 			mvccVal := MVCCValue{}
 			mvccVal.LocalTimestamp = hlc.ClockTimestamp(tc.localTs)
 
-			require.Equal(t, hlc.ClockTimestamp(tc.expect), mvccVal.GetLocalTimestamp(mvccKey))
+			require.Equal(t, hlc.ClockTimestamp(tc.expect), mvccVal.GetLocalTimestamp(tc.versionTs))
 		})
 	}
 }
@@ -97,9 +95,9 @@ func TestMVCCValueFormat(t *testing.T) {
 		"tombstone":        {val: MVCCValue{}, expect: "/<empty>"},
 		"bytes":            {val: MVCCValue{Value: strVal}, expect: "/BYTES/foo"},
 		"int":              {val: MVCCValue{Value: intVal}, expect: "/INT/17"},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "vheader{ localTs=0.000000009,0 } /<empty>"},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "vheader{ localTs=0.000000009,0 } /BYTES/foo"},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "vheader{ localTs=0.000000009,0 } /INT/17"},
+		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: "{localTs=0.000000009,0}/<empty>"},
+		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: "{localTs=0.000000009,0}/BYTES/foo"},
+		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: "{localTs=0.000000009,0}/INT/17"},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -110,7 +108,7 @@ func TestMVCCValueFormat(t *testing.T) {
 
 func TestEncodeDecodeMVCCValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	var strVal, intVal roachpb.Value
 	strVal.SetString("foo")
@@ -246,4 +244,9 @@ func stringValueRaw(s string) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func withLocalTS(v MVCCValue, ts int) MVCCValue {
+	v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: int64(ts)}
+	return v
 }

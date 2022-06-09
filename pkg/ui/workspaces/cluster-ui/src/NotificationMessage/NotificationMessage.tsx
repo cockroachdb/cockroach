@@ -40,14 +40,9 @@ const severityIntent = (s: NotificationSeverity): BadgeIntent => {
   return intentMap[s] as BadgeIntent;
 };
 
-export const NotificationMessage: FunctionComponent<NotificationMessageProps> = ({
-  id,
-  description,
-  read,
-  severity,
-  timestamp,
-  title,
-}) => {
+export const NotificationMessage: FunctionComponent<
+  NotificationMessageProps
+> = ({ id, description, read, severity, timestamp, title }) => {
   const time = new Date(timestamp);
   return (
     <section key={id} className={cx("notification-message", { unread: !read })}>

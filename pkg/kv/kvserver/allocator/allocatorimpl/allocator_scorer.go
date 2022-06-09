@@ -79,7 +79,7 @@ const (
 
 	// L0SublevelInterval is the period over which to accumulate statistics on
 	// the number of L0 sublevels within a store.
-	L0SublevelInterval = time.Minute * 5
+	L0SublevelInterval = time.Minute * 2
 
 	// L0SublevelMaxSampled is maximum number of L0 sub-levels that may exist
 	// in a sample. This setting limits the extreme skew that could occur by
@@ -484,13 +484,6 @@ func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 		log.VEventf(
 			ctx, 4,
 			"delta between s%d and the next best candidate is not significant enough",
-			eqClass.existing.StoreID,
-		)
-	case significantlySwitchesRelativeDisposition:
-		metrics.LoadBasedReplicaRebalanceMetrics.SignificantlySwitchesRelativeDisposition.Inc(1)
-		log.VEventf(
-			ctx, 4,
-			"rebalancing from s%[1]d to the next best candidate could make it significantly hotter than s%[1]d",
 			eqClass.existing.StoreID,
 		)
 	case missingStatsForExistingStore:
@@ -1142,16 +1135,6 @@ type equivalenceClass struct {
 	candidates  candidateList
 }
 
-const (
-	// We generally discard replica and lease rebalancing opportunities that would
-	// invert the relative dispositions of the sending and receiving stores. In
-	// other words, we generally disallow rebalances were qps(s1) < qps(s2) before
-	// the rebalance but qps(s1) > qps(s2) after the rebalance. However, an
-	// exception to this is that if the inversion is insignificant (less than
-	// minQPSTransferOvershoot qps).
-	maxQPSTransferOvershoot = 500
-)
-
 // declineReason enumerates the various results of a call into
 // `bestStoreToMinimizeQPSDelta`. The result may be that we have a good
 // candidate to rebalance to (indicated by `shouldRebalance`) or it might be
@@ -1174,10 +1157,6 @@ const (
 	// replica rebalance. This delta is computed _ignoring_ the QPS of the
 	// lease/replica in question.
 	deltaNotSignificant
-	// significantlySwitchesRelativeDisposition indicates that the lease / replica
-	// transfer would make the receiving store significantly hotter than the
-	// sending store. See comment over `maxQPSTransferOvershoot` for more details.
-	significantlySwitchesRelativeDisposition
 	// missingStatsForExistingStore indicates that we're missing the store
 	// descriptor of the existing store, which means we don't have access to the
 	// QPS levels of the existing store. Nothing we can do in this case except
@@ -1260,11 +1239,6 @@ func bestStoreToMinimizeQPSDelta(
 	// Simulate the hottest existing store's QPS after it sheds the lease/replica
 	// away.
 	storeQPSMap[existing] = existingQPSIgnoringRepl
-	bestCandQPSWithRepl := storeQPSMap[bestCandidate]
-
-	if existingQPSIgnoringRepl+maxQPSTransferOvershoot < bestCandQPSWithRepl {
-		return 0, significantlySwitchesRelativeDisposition
-	}
 
 	// NB: We proceed with a lease transfer / rebalance even if `currentQPSDelta`
 	// is exactly equal to `newQPSDelta`. Consider the following example:

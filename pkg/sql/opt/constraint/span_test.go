@@ -700,7 +700,7 @@ func TestSpan_KeyCount(t *testing.T) {
 			// Multiple key span with DOid datum type.
 			keyCtx:   kcAscAsc,
 			length:   1,
-			span:     ParseSpan(&evalCtx, "[/-5 - /5]", types.OidFamily),
+			span:     ParseSpan(&evalCtx, "[/0 - /10]", types.OidFamily),
 			expected: "11",
 		},
 		{ // 3

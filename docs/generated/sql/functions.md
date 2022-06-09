@@ -655,6 +655,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string assuming the ISO, MDY DateStyle.</p>
 </span></td></tr>
+<tr><td><a name="to_timestamp"></a><code>to_timestamp(timestamp: <a href="decimal.html">decimal</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.</p>
+</span></td></tr>
+<tr><td><a name="to_timestamp"></a><code>to_timestamp(timestamp: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.</p>
+</span></td></tr>
+<tr><td><a name="to_timestamp"></a><code>to_timestamp(timestamp: <a href="int.html">int</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.</p>
+</span></td></tr>
+<tr><td><a name="to_timestamp"></a><code>to_timestamp(timestamp: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.</p>
+</span></td></tr>
 <tr><td><a name="transaction_timestamp"></a><code>transaction_timestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
@@ -2619,6 +2627,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="crdb_internal.start_replication_stream"></a><code>crdb_internal.start_replication_stream(tenant_id: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used on the producer side to start a replication stream for the specified tenant. The returned stream ID uniquely identifies created stream. The caller must periodically invoke crdb_internal.heartbeat_stream() function to notify that the replication is still ongoing.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.stream_ingestion_stats"></a><code>crdb_internal.stream_ingestion_stats(job_id: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function can be used on the ingestion side to get a statistics summary of a stream ingestion job in json format.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.stream_partition"></a><code>crdb_internal.stream_partition(stream_id: <a href="int.html">int</a>, partition_spec: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS stream_event}</code></td><td><span class="funcdesc"><p>Stream partition data</p>
 </span></td></tr></tbody>
 </table>
@@ -3038,6 +3048,9 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="crdb_internal.is_admin"></a><code>crdb_internal.is_admin() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Retrieves the current user’s admin status.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.is_at_least_version"></a><code>crdb_internal.is_at_least_version(version: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the cluster version is not older than the argument.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.is_constraint_active"></a><code>crdb_internal.is_constraint_active(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to determine if a given constraint is currently.
+active for the current transaction.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.lease_holder"></a><code>crdb_internal.lease_holder(key: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to fetch the leaseholder corresponding to a request key</p>
 </span></td></tr>

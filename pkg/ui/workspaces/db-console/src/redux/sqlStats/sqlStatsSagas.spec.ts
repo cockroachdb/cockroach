@@ -35,7 +35,8 @@ describe("SQL Stats sagas", () => {
       end: Long.fromNumber(1596820675),
       combined: false,
     });
-    const resetSQLStatsResponse = new cockroach.server.serverpb.ResetSQLStatsResponse();
+    const resetSQLStatsResponse =
+      new cockroach.server.serverpb.ResetSQLStatsResponse();
 
     it("successfully resets SQL stats", () => {
       // TODO(azhng): validate refreshStatement() actions once we can figure out

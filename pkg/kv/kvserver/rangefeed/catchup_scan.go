@@ -22,12 +22,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// A CatchUpIterator is an iterator for catchUp-scans.
-type CatchUpIterator struct {
-	simpleCatchupIter
-	close func()
-}
-
 // simpleCatchupIter is an extension of SimpleMVCCIterator that allows for the
 // primary iterator to be implemented using a regular MVCCIterator or a
 // (often) more efficient MVCCIncrementalIterator. When the caller wants to
@@ -52,43 +46,38 @@ func (i simpleCatchupIterAdapter) NextIgnoringTime() {
 
 var _ simpleCatchupIter = simpleCatchupIterAdapter{}
 
-// NewCatchUpIterator returns a CatchUpIterator for the given Reader.
-// If useTBI is true, a time-bound iterator will be used if possible,
-// configured with a start time taken from the RangeFeedRequest.
-func NewCatchUpIterator(
-	reader storage.Reader, args *roachpb.RangeFeedRequest, useTBI bool, closer func(),
-) *CatchUpIterator {
-	ret := &CatchUpIterator{
-		close: closer,
-	}
-	if useTBI {
-		ret.simpleCatchupIter = storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
-			EnableTimeBoundIteratorOptimization: true,
-			EndKey:                              args.Span.EndKey,
-			// StartTime is exclusive but args.Timestamp
-			// is inclusive.
-			StartTime: args.Timestamp.Prev(),
-			EndTime:   hlc.MaxTimestamp,
-			// We want to emit intents rather than error
-			// (the default behavior) so that we can skip
-			// over the provisional values during
-			// iteration.
-			IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-			// CatchUpScan currently emits all inline
-			// values it encounters.
-			//
-			// TODO(ssd): Re-evalutate if this behavior is
-			// still needed (#69357).
-			InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
-		})
-	} else {
-		iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-			UpperBound: args.Span.EndKey,
-		})
-		ret.simpleCatchupIter = simpleCatchupIterAdapter{SimpleMVCCIterator: iter}
-	}
+// CatchUpIterator is an iterator for catchup-scans.
+type CatchUpIterator struct {
+	simpleCatchupIter
+	close     func()
+	span      roachpb.Span
+	startTime hlc.Timestamp // exclusive
+}
 
-	return ret
+// NewCatchUpIterator returns a CatchUpIterator for the given Reader over the
+// given key/time span. startTime is exclusive.
+//
+// NB: startTime is exclusive, i.e. the first possible event will be emitted at
+// Timestamp.Next().
+func NewCatchUpIterator(
+	reader storage.Reader, span roachpb.Span, startTime hlc.Timestamp, closer func(),
+) *CatchUpIterator {
+	return &CatchUpIterator{
+		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
+			storage.MVCCIncrementalIterOptions{
+				EndKey:    span.EndKey,
+				StartTime: startTime,
+				EndTime:   hlc.MaxTimestamp,
+				// We want to emit intents rather than error
+				// (the default behavior) so that we can skip
+				// over the provisional values during
+				// iteration.
+				IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+			}),
+		close:     closer,
+		span:      span,
+		startTime: startTime,
+	}
 }
 
 // Close closes the iterator and calls the instantiator-supplied close
@@ -105,15 +94,9 @@ func (i *CatchUpIterator) Close() {
 // returns. However, we may revist this in #69596.
 type outputEventFn func(e *roachpb.RangeFeedEvent) error
 
-// CatchUpScan iterates over all changes for the given span of keys,
-// starting at catchUpTimestamp. Keys and Values are emitted as
-// RangeFeedEvents passed to the given outputFn. catchUpTimestamp is exclusive.
-func (i *CatchUpIterator) CatchUpScan(
-	startKey, endKey storage.MVCCKey,
-	catchUpTimestamp hlc.Timestamp,
-	withDiff bool,
-	outputFn outputEventFn,
-) error {
+// CatchUpScan iterates over all changes in the configured key/time span, and
+// emits them as RangeFeedEvents via outputFn in chronological order.
+func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store
@@ -148,7 +131,7 @@ func (i *CatchUpIterator) CatchUpScan(
 	// versions of each key that are after the registration's startTS, so we
 	// can't use NextKey.
 	var meta enginepb.MVCCMetadata
-	i.SeekGE(startKey)
+	i.SeekGE(storage.MVCCKey{Key: i.span.Key})
 	for {
 		if ok, err := i.Valid(); err != nil {
 			return err
@@ -158,56 +141,48 @@ func (i *CatchUpIterator) CatchUpScan(
 
 		unsafeKey := i.UnsafeKey()
 		unsafeValRaw := i.UnsafeValue()
-		var unsafeVal []byte
 		if !unsafeKey.IsValue() {
 			// Found a metadata key.
 			if err := protoutil.Unmarshal(unsafeValRaw, &meta); err != nil {
 				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
 			}
-			if !meta.IsInline() {
-				// This is an MVCCMetadata key for an intent. The catchUp scan
-				// only cares about committed values, so ignore this and skip past
-				// the corresponding provisional key-value. To do this, iterate to
-				// the provisional key-value, validate its timestamp, then iterate
-				// again. When using MVCCIncrementalIterator we know that the
-				// provisional value will also be within the time bounds so we use
-				// Next.
-				i.Next()
-				if ok, err := i.Valid(); err != nil {
-					return errors.Wrap(err, "iterating to provisional value for intent")
-				} else if !ok {
-					return errors.Errorf("expected provisional value for intent")
-				}
-				if !meta.Timestamp.ToTimestamp().EqOrdering(i.UnsafeKey().Timestamp) {
-					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
-						meta.Timestamp, i.UnsafeKey().Timestamp)
-				}
-				i.Next()
-				continue
+
+			// Inline values are unsupported by rangefeeds. MVCCIncrementalIterator
+			// should have errored on them already.
+			if meta.IsInline() {
+				return errors.AssertionFailedf("unexpected inline key %s", unsafeKey)
 			}
 
-			// If write is inline, it doesn't have a timestamp so we don't
-			// filter on the registration's starting timestamp. Instead, we
-			// return all inline writes.
-			//
-			// TODO(ssd): Do we want to continue to
-			// support inline values here at all? TBI may
-			// miss inline values completely and normal
-			// iterators may result in the rangefeed not
-			// seeing some intermediate values.
-			unsafeVal = meta.RawBytes
-		} else {
-			mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
-			if err != nil {
-				return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
+			// This is an MVCCMetadata key for an intent. The catchUp scan only cares
+			// about committed values, so ignore this and skip past the corresponding
+			// provisional key-value. To do this, iterate to the provisional
+			// key-value, validate its timestamp, then iterate again. When using
+			// MVCCIncrementalIterator we know that the provisional value will also be
+			// within the time bounds so we use Next.
+			i.Next()
+			if ok, err := i.Valid(); err != nil {
+				return errors.Wrap(err, "iterating to provisional value for intent")
+			} else if !ok {
+				return errors.Errorf("expected provisional value for intent")
 			}
-			unsafeVal = mvccVal.Value.RawBytes
+			if !meta.Timestamp.ToTimestamp().EqOrdering(i.UnsafeKey().Timestamp) {
+				return errors.Errorf("expected provisional value for intent with ts %s, found %s",
+					meta.Timestamp, i.UnsafeKey().Timestamp)
+			}
+			i.Next()
+			continue
 		}
 
-		// Ignore the version if it's not inline and its timestamp is at
-		// or before the registration's (exclusive) starting timestamp.
+		mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
+		if err != nil {
+			return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
+		}
+		unsafeVal := mvccVal.Value.RawBytes
+
+		// Ignore the version if its timestamp is at or before the registration's
+		// (exclusive) starting timestamp.
 		ts := unsafeKey.Timestamp
-		ignore := !(ts.IsEmpty() || catchUpTimestamp.Less(ts))
+		ignore := ts.LessEq(i.startTime)
 		if ignore && !withDiff {
 			// Skip all the way to the next key.
 			// NB: fast-path to avoid value copy when !r.withDiff.

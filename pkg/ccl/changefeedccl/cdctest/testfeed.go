@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -21,8 +20,6 @@ import (
 type TestFeedFactory interface {
 	// Feed creates a new TestFeed.
 	Feed(create string, args ...interface{}) (TestFeed, error)
-	// Server returns the raw underlying TestServer, if applicable.
-	Server() serverutils.TestServerInterface
 }
 
 // TestFeedMessage represents one row update or resolved timestamp message from

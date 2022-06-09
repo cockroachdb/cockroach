@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var _ catalog.Index = (*index)(nil)
@@ -169,11 +170,27 @@ func (w index) InvertedColumnName() string {
 }
 
 // InvertedColumnKeyType returns the type of the data element that is encoded
-// as the inverted index key. This is currently always Bytes.
+// as the inverted index key. This is currently always EncodedKey.
 //
 // Panics if the index is not inverted.
 func (w index) InvertedColumnKeyType() *types.T {
 	return w.desc.InvertedColumnKeyType()
+}
+
+// InvertedColumnKind returns the kind of the inverted column of the inverted
+// index.
+//
+// Panics if the index is not inverted.
+func (w index) InvertedColumnKind() catpb.InvertedIndexColumnKind {
+	if w.desc.Type != descpb.IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	if len(w.desc.InvertedColumnKinds) == 0 {
+		// Not every inverted index has kinds inside, since no kinds were set prior
+		// to version 22.2.
+		return catpb.InvertedIndexColumnKind_DEFAULT
+	}
+	return w.desc.InvertedColumnKinds[0]
 }
 
 // CollectKeyColumnIDs creates a new set containing the column IDs in the key

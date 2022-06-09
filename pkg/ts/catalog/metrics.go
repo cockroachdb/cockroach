@@ -97,6 +97,9 @@ var histogramMetricsNames = map[string]struct{}{
 	"changefeed.message_size_hist":              {},
 	"changefeed.commit_latency":                 {},
 	"changefeed.sink_batch_hist_nanos":          {},
+	"streaming.admit_latency":                   {},
+	"streaming.commit_latency":                  {},
+	"streaming.flush_hist_nanos":                {},
 }
 
 func allInternalTSMetricsNames() []string {

@@ -97,6 +97,9 @@ Typical usage:
 
     dev testlogic --config=local
         Run the logic tests for the cluster configuration 'local'.
+
+    dev build short -- --verbose_failures --profile=prof.gz
+        Pass additional arguments directly to bazel (after the stand alone '--').
 `,
 		// Disable automatic printing of usage information whenever an error
 		// occurs. We presume that most errors will not the result of bad
@@ -134,7 +137,16 @@ Typical usage:
 	var debugVar bool
 	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
 	ret.cli.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		skipDoctorCheck := cmd.Name() == "doctor" || cmd.Name() == "merge-test-xmls"
+		skipDoctorCheckCommands := []string{
+			"builder",
+			"doctor",
+			"help",
+			"merge-test-xmls",
+		}
+		var skipDoctorCheck bool
+		for _, skipDoctorCheckCommand := range skipDoctorCheckCommands {
+			skipDoctorCheck = skipDoctorCheck || cmd.Name() == skipDoctorCheckCommand
+		}
 		if !skipDoctorCheck {
 			if err := ret.checkDoctorStatus(cmd.Context()); err != nil {
 				return err

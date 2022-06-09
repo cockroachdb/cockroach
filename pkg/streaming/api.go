@@ -12,6 +12,7 @@ package streaming
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -81,9 +82,16 @@ type StreamIngestManager interface {
 	CompleteStreamIngestion(
 		evalCtx *eval.Context,
 		txn *kv.Txn,
-		streamID StreamID,
+		ingestionJobID jobspb.JobID,
 		cutoverTimestamp hlc.Timestamp,
 	) error
+
+	// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
+	GetStreamIngestionStats(
+		evalCtx *eval.Context,
+		txn *kv.Txn,
+		ingestionJobID jobspb.JobID,
+	) (*streampb.StreamIngestionStats, error)
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.

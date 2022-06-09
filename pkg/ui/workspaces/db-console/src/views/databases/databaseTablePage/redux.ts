@@ -34,11 +34,8 @@ import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 
-const {
-  TableDetailsRequest,
-  TableStatsRequest,
-  TableIndexStatsRequest,
-} = cockroach.server.serverpb;
+const { TableDetailsRequest, TableStatsRequest, TableIndexStatsRequest } =
+  cockroach.server.serverpb;
 
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 

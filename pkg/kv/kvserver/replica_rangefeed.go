@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,14 +57,6 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
 	0,
 	settings.NonNegativeDuration,
-)
-
-// RangefeedTBIEnabled controls whether or not we use a TBI during catch-up scan.
-var RangefeedTBIEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"kv.rangefeed.catchup_scan_iterator_optimization.enabled",
-	"if true, rangefeeds will use time-bound iterators for catchup-scans when possible",
-	util.ConstantWithMetamorphicTestBool("kv.rangefeed.catchup_scan_iterator_optimization.enabled", true),
 )
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
@@ -227,12 +218,11 @@ func (r *Replica) rangeFeedWithRangeID(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
 	if usingCatchUpIter {
-		catchUpIterFunc = func() *rangefeed.CatchUpIterator {
+		catchUpIterFunc = func(span roachpb.Span, startTime hlc.Timestamp) *rangefeed.CatchUpIterator {
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(),
-				args, RangefeedTBIEnabled.Get(&r.store.cfg.Settings.SV), iterSemRelease)
+			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease)
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
@@ -333,7 +323,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
-	startTS hlc.Timestamp,
+	startTS hlc.Timestamp, // exclusive
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,

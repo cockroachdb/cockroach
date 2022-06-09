@@ -41,9 +41,14 @@ start_test "Copy in transaction"
 send "BEGIN;\r"
 eexpect root@
 send "COPY t FROM STDIN CSV;\r"
-eexpect "cannot use COPY inside a transaction"
+eexpect ">>"
+send "11,cat\r"
+send "12,dog\r"
+send "\\.\r"
+
+eexpect "COPY 2"
 eexpect root@
-send "ROLLBACK;\r"
+send "COMMIT;\r"
 eexpect root@
 end_test
 
@@ -60,7 +65,11 @@ eexpect "COPY 3"
 eexpect root@
 
 # Try \copy as well.
-send "\copy t FROM STDIN CSV;\r"
+send "\\copy t FROM STDIN CSV INVALID;\r"
+eexpect "syntax error"
+eexpect root@
+
+send "\\copy t FROM STDIN CSV;\r"
 eexpect ">>"
 send "4,epa! epa!\r"
 send_eof
@@ -74,7 +83,10 @@ eexpect "1 | text with semicolon;"
 eexpect "2 | beat chef@;"
 eexpect "3 | more&text"
 eexpect "4 | epa! epa!"
-eexpect "(4 rows)"
+eexpect "11 | cat"
+eexpect "12 | dog"
+
+eexpect "(6 rows)"
 
 eexpect root@
 
@@ -92,7 +104,7 @@ eexpect "ERROR: COPY canceled by user"
 eexpect root@
 
 send "SELECT * FROM t ORDER BY id ASC;\r"
-eexpect "(4 rows)"
+eexpect "(6 rows)"
 eexpect root@
 
 send "TRUNCATE TABLE t;\r"

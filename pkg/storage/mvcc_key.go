@@ -68,6 +68,12 @@ func (k MVCCKey) Next() MVCCKey {
 	}
 }
 
+// Clone returns a copy of the key.
+func (k MVCCKey) Clone() MVCCKey {
+	k.Key = k.Key.Clone()
+	return k
+}
+
 // Compare returns -1 if this key is less than the given key, 0 if they're
 // equal, or 1 if this is greater. Comparison is by key,timestamp, where larger
 // timestamps sort before smaller ones except empty ones which sort first (like
@@ -219,13 +225,26 @@ func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
 // representation, including the length suffix but excluding the sentinel byte.
 // This is equivalent to the Pebble suffix.
 func EncodeMVCCTimestampSuffix(ts hlc.Timestamp) []byte {
+	return encodeMVCCTimestampSuffixToBuf(nil, ts)
+}
+
+// encodeMVCCTimestampSuffixToBuf encodes an MVCC timestamp into its Pebble
+// representation, including the length suffix but excluding the sentinel byte.
+// This is equivalent to the Pebble suffix. It reuses the given byte buffer if
+// it has sufficient capacity.
+func encodeMVCCTimestampSuffixToBuf(buf []byte, ts hlc.Timestamp) []byte {
 	tsLen := encodedMVCCTimestampLength(ts)
 	if tsLen == 0 {
-		return nil
+		return buf[:0]
 	}
-	buf := make([]byte, tsLen+mvccEncodedTimeLengthLen)
+	suffixLen := tsLen + mvccEncodedTimeLengthLen
+	if cap(buf) < suffixLen {
+		buf = make([]byte, suffixLen)
+	} else {
+		buf = buf[:suffixLen]
+	}
 	encodeMVCCTimestampToBuf(buf, ts)
-	buf[tsLen] = byte(tsLen + mvccEncodedTimeLengthLen)
+	buf[tsLen] = byte(suffixLen)
 	return buf
 }
 
@@ -335,4 +354,72 @@ func decodeMVCCTimestampSuffix(encodedTS []byte) (hlc.Timestamp, error) {
 			"bad timestamp: found length suffix %d, actual length %d", suffixLen, encodedLen)
 	}
 	return decodeMVCCTimestamp(encodedTS[:encodedLen-1])
+}
+
+// MVCCRangeKey is a versioned key span.
+type MVCCRangeKey struct {
+	StartKey  roachpb.Key
+	EndKey    roachpb.Key
+	Timestamp hlc.Timestamp
+}
+
+// Clone returns a copy of the range key.
+func (k MVCCRangeKey) Clone() MVCCRangeKey {
+	// k is already a copy, but byte slices must be cloned.
+	k.StartKey = k.StartKey.Clone()
+	k.EndKey = k.EndKey.Clone()
+	return k
+}
+
+// Compare returns -1 if this key is less than the given key, 0 if they're
+// equal, or 1 if this is greater. Comparison is by start,timestamp,end, where
+// larger timestamps sort before smaller ones except empty ones which sort first
+// (like elsewhere in MVCC).
+func (k MVCCRangeKey) Compare(o MVCCRangeKey) int {
+	if c := k.StartKey.Compare(o.StartKey); c != 0 {
+		return c
+	}
+	if k.Timestamp.IsEmpty() && !o.Timestamp.IsEmpty() {
+		return -1
+	} else if !k.Timestamp.IsEmpty() && o.Timestamp.IsEmpty() {
+		return 1
+	} else if c := k.Timestamp.Compare(o.Timestamp); c != 0 {
+		return -c // timestamps sort in reverse
+	}
+	return k.EndKey.Compare(o.EndKey)
+}
+
+// String formats the range key.
+func (k MVCCRangeKey) String() string {
+	s := roachpb.Span{Key: k.StartKey, EndKey: k.EndKey}.String()
+	if !k.Timestamp.IsEmpty() {
+		s += fmt.Sprintf("/%s", k.Timestamp)
+	}
+	return s
+}
+
+// Validate returns an error if the range key is invalid.
+//
+// This validation is for writing range keys (or checking existing range keys),
+// not for filters/bounds, so e.g. specifying an empty start key is invalid even
+// though it would be valid to start a range key scan at an empty start key.
+func (k MVCCRangeKey) Validate() (err error) {
+	defer func() {
+		err = errors.Wrapf(err, "invalid range key %s", k)
+	}()
+
+	switch {
+	case len(k.StartKey) == 0:
+		// We don't allow an empty start key, because we don't allow writing point
+		// keys at the empty key. The first valid key is 0x00.
+		return errors.Errorf("no start key")
+	case len(k.EndKey) == 0:
+		return errors.Errorf("no end key")
+	case k.Timestamp.IsEmpty():
+		return errors.Errorf("no timestamp")
+	case k.StartKey.Compare(k.EndKey) >= 0:
+		return errors.Errorf("start key %s is at or after end key %s", k.StartKey, k.EndKey)
+	default:
+		return nil
+	}
 }

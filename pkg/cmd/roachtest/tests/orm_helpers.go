@@ -54,8 +54,6 @@ func alterZoneConfigAndClusterSettings(
 
 		// Enable experimental features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
-		`SET CLUSTER SETTING sql.defaults.datestyle.enabled = true`,
-		`SET CLUSTER SETTING sql.defaults.intervalstyle.enabled = true;`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err

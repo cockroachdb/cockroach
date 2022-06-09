@@ -153,7 +153,7 @@ func CreateSchemaDescriptorWithPrivileges(
 		nil, /* schemaDefaultPrivilegeDescriptor */
 		db.GetID(),
 		user,
-		tree.Schemas,
+		privilege.Schemas,
 		db.GetPrivileges(),
 	)
 

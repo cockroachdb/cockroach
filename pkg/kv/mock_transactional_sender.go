@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
 // MockTransactionalSender allows a function to be used as a TxnSender.
@@ -64,11 +63,6 @@ func (m *MockTransactionalSender) UpdateRootWithLeafFinalState(
 	context.Context, *roachpb.LeafTxnFinalState,
 ) {
 	panic("unimplemented")
-}
-
-// AnchorOnSystemConfigRange is part of the TxnSender interface.
-func (m *MockTransactionalSender) AnchorOnSystemConfigRange() error {
-	return errors.New("unimplemented")
 }
 
 // TxnStatus is part of the TxnSender interface.
@@ -229,6 +223,16 @@ func (m *MockTransactionalSender) GetTxnRetryableErr(
 
 // ClearTxnRetryableErr is part of the TxnSender interface.
 func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
+}
+
+// HasPerformedReads is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedReads() bool {
+	panic("unimplemented")
+}
+
+// HasPerformedWrites is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasPerformedWrites() bool {
+	panic("unimplemented")
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.

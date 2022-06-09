@@ -17,7 +17,8 @@ import { bar, formatTwoPlaces, approximify } from "./utils";
 import { barChartFactory, BarChartOptions } from "./barChartFactory";
 import { AggregateStatistics } from "src/statementsTable/statementsTable";
 
-type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+type StatementStatistics =
+  protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 const cx = classNames.bind(styles);
 
 const countBars = [

@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -293,12 +295,6 @@ var (
 		Name:        "rebalancing.writespersecond",
 		Help:        "Number of keys written (i.e. applied by raft) per second to the store, averaged over a large time period as used in rebalancing decisions",
 		Measurement: "Keys/Sec",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaL0SubLevelHistogram = metric.Metadata{
-		Name:        "rebalancing.l0_sublevels_histogram",
-		Help:        "The summary view of sub levels in level 0 of the stores LSM",
-		Measurement: "Storage",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageRequestsPerSecond = metric.Metadata{
@@ -566,6 +562,42 @@ var (
 	metaRangeSnapshotSentBytes = metric.Metadata{
 		Name:        "range.snapshots.sent-bytes",
 		Help:        "Number of snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotUnknownRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.unknown.rcvd-bytes",
+		Help:        "Number of unknown snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotUnknownSentBytes = metric.Metadata{
+		Name:        "range.snapshots.unknown.sent-bytes",
+		Help:        "Number of unknown snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRebalancingRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.rebalancing.rcvd-bytes",
+		Help:        "Number of rebalancing snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRebalancingSentBytes = metric.Metadata{
+		Name:        "range.snapshots.rebalancing.sent-bytes",
+		Help:        "Number of rebalancing snapshot bytes sent",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRecoveryRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.recovery.rcvd-bytes",
+		Help:        "Number of recovery snapshot bytes received",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotRecoverySentBytes = metric.Metadata{
+		Name:        "range.snapshots.recovery.sent-bytes",
+		Help:        "Number of recovery snapshot bytes sent",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1453,13 +1485,19 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 
 	// Rebalancing metrics.
-	L0SubLevelsHistogram       *metric.Histogram
 	AverageQueriesPerSecond    *metric.GaugeFloat64
 	AverageWritesPerSecond     *metric.GaugeFloat64
 	AverageReadsPerSecond      *metric.GaugeFloat64
 	AverageRequestsPerSecond   *metric.GaugeFloat64
 	AverageWriteBytesPerSecond *metric.GaugeFloat64
 	AverageReadBytesPerSecond  *metric.GaugeFloat64
+	// l0SublevelsWindowedMax doesn't get recorded to metrics itself, it maintains
+	// an ad-hoc history for gosipping information for allocator use.
+	l0SublevelsWindowedMax syncutil.AtomicFloat64
+	l0SublevelsTracker     struct {
+		syncutil.Mutex
+		swag *slidingwindow.Swag
+	}
 
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
@@ -1522,6 +1560,12 @@ type StoreMetrics struct {
 	RangeSnapshotsAppliedByNonVoters             *metric.Counter
 	RangeSnapshotRcvdBytes                       *metric.Counter
 	RangeSnapshotSentBytes                       *metric.Counter
+	RangeSnapshotUnknownRcvdBytes                *metric.Counter
+	RangeSnapshotUnknownSentBytes                *metric.Counter
+	RangeSnapshotRecoveryRcvdBytes               *metric.Counter
+	RangeSnapshotRecoverySentBytes               *metric.Counter
+	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
+	RangeSnapshotRebalancingSentBytes            *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1879,6 +1923,7 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	rdbBytesIngested := storageLevelGaugeSlice(metaRdbBytesIngested)
+
 	sm := &StoreMetrics{
 		registry:              storeRegistry,
 		TenantsStorageMetrics: newTenantsStorageMetrics(),
@@ -1917,15 +1962,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Reserved:  metric.NewGauge(metaReserved),
 
 		// Rebalancing metrics.
-		AverageQueriesPerSecond: metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
-		AverageWritesPerSecond:  metric.NewGaugeFloat64(metaAverageWritesPerSecond),
-		// TODO(tbg): this histogram seems bogus? What are we tracking here?
-		L0SubLevelsHistogram: metric.NewHistogram(
-			metaL0SubLevelHistogram,
-			allocatorimpl.L0SublevelInterval,
-			allocatorimpl.L0SublevelMaxSampled,
-			1, /* sig figures (integer) */
-		),
+		AverageQueriesPerSecond:    metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
+		AverageWritesPerSecond:     metric.NewGaugeFloat64(metaAverageWritesPerSecond),
 		AverageRequestsPerSecond:   metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
 		AverageReadsPerSecond:      metric.NewGaugeFloat64(metaAverageReadsPerSecond),
 		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
@@ -1977,6 +2015,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotsAppliedByNonVoters:             metric.NewCounter(metaRangeSnapshotsAppliedByNonVoter),
 		RangeSnapshotRcvdBytes:                       metric.NewCounter(metaRangeSnapshotRcvdBytes),
 		RangeSnapshotSentBytes:                       metric.NewCounter(metaRangeSnapshotSentBytes),
+		RangeSnapshotUnknownRcvdBytes:                metric.NewCounter(metaRangeSnapshotUnknownRcvdBytes),
+		RangeSnapshotUnknownSentBytes:                metric.NewCounter(metaRangeSnapshotUnknownSentBytes),
+		RangeSnapshotRecoveryRcvdBytes:               metric.NewCounter(metaRangeSnapshotRecoveryRcvdBytes),
+		RangeSnapshotRecoverySentBytes:               metric.NewCounter(metaRangeSnapshotRecoverySentBytes),
+		RangeSnapshotRebalancingRcvdBytes:            metric.NewCounter(metaRangeSnapshotRebalancingRcvdBytes),
+		RangeSnapshotRebalancingSentBytes:            metric.NewCounter(metaRangeSnapshotRebalancingSentBytes),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 
@@ -2127,8 +2171,21 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaCircuitBreakerCurTripped: metric.NewGauge(metaReplicaCircuitBreakerCurTripped),
 		ReplicaCircuitBreakerCumTripped: metric.NewCounter(metaReplicaCircuitBreakerCumTripped),
 	}
-	storeRegistry.AddMetricStruct(sm)
 
+	{
+		// Track the maximum L0 sublevels seen in the last 10 minutes. backed
+		// by a sliding window, which we  record and query indirectly in
+		// L0SublevelsMax. this is not exported to as metric.
+		sm.l0SublevelsTracker.swag = slidingwindow.NewMaxSwag(
+			timeutil.Now(),
+			allocatorimpl.L0SublevelInterval,
+			// 5 sliding windows, by the default interval (2 mins) will track the
+			// maximum for up to 10 minutes. Selected experimentally.
+			5,
+		)
+	}
+
+	storeRegistry.AddMetricStruct(sm)
 	return sm
 }
 
@@ -2193,11 +2250,17 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbReadAmplification.Update(int64(m.ReadAmp()))
 	sm.RdbPendingCompaction.Update(int64(m.Compact.EstimatedDebt))
 	sm.RdbMarkedForCompactionFiles.Update(int64(m.Compact.MarkedFiles))
-	sm.L0SubLevelsHistogram.RecordValue(int64(m.Levels[0].Sublevels))
 	sm.RdbNumSSTables.Update(m.NumSSTables())
 	sm.RdbWriteStalls.Update(m.WriteStallCount)
 	sm.DiskSlow.Update(m.DiskSlowCount)
 	sm.DiskStalled.Update(m.DiskStallCount)
+
+	// Update the maximum number of L0 sub-levels seen.
+	sm.l0SublevelsTracker.Lock()
+	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
+	curMax, _ := sm.l0SublevelsTracker.swag.Query(timeutil.Now())
+	sm.l0SublevelsTracker.Unlock()
+	syncutil.StoreFloat64(&sm.l0SublevelsWindowedMax, curMax)
 
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
 	sm.RdbL0NumFiles.Update(m.Levels[0].NumFiles)

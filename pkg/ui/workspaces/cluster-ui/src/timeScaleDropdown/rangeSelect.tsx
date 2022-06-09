@@ -100,10 +100,8 @@ const RangeSelect = ({
    * customBackWasJustSelected holds whether the "Back", as in back to preset options, button in the custom menu was
    * just selected.
    */
-  const [
-    customBackWasJustSelected,
-    setReturnToPresetOptionsWasJustSelected,
-  ] = useState<boolean>(false);
+  const [customBackWasJustSelected, setReturnToPresetOptionsWasJustSelected] =
+    useState<boolean>(false);
 
   const rangeContainer = useRef<HTMLDivElement>();
 
@@ -152,45 +150,47 @@ const RangeSelect = ({
 
   const menu = (
     <>
-      {/**
-       * isVisible is used here to trigger a remount of DateRangeMenu and re-initialize the time in the custom menu. See
-       *  comments on DateRangeMenu.
-       * It is needed because passing isVisible to <Dropdown> merely causes a css change in visibility, and does not
-       *  re-mount the component.
-       * The coupling of setting isVisible to true with the need to re-initialize the time relies on the implicit
-       *  assumption that the dropdown is always in a closed state after a user-induced time change.
-       */
-      isVisible && (
-        <div
-          className={cx(
-            "range-selector",
-            `${shouldShowCustom ? "__custom" : "__options"}`,
-          )}
-        >
-          {shouldShowCustom ? (
-            <div className={cx("custom-menu")}>
-              <DateRangeMenu
-                startInit={selected.timeWindow.start}
-                endInit={selected.timeWindow.end}
-                onSubmit={onCustomSelectWrapper}
-                onCancel={closeDropdown}
-                onReturnToPresetOptionsClick={onReturnToPresetOptionsClick}
-              />
-            </div>
-          ) : (
-            <div className={cx("_quick-view")}>
-              {options.map(option => (
-                <OptionButton
-                  key={option.label}
-                  isSelected={selected.key === option.value}
-                  option={option}
-                  onClick={onDropdownOptionClick}
+      {
+        /**
+         * isVisible is used here to trigger a remount of DateRangeMenu and re-initialize the time in the custom menu. See
+         *  comments on DateRangeMenu.
+         * It is needed because passing isVisible to <Dropdown> merely causes a css change in visibility, and does not
+         *  re-mount the component.
+         * The coupling of setting isVisible to true with the need to re-initialize the time relies on the implicit
+         *  assumption that the dropdown is always in a closed state after a user-induced time change.
+         */
+        isVisible && (
+          <div
+            className={cx(
+              "range-selector",
+              `${shouldShowCustom ? "__custom" : "__options"}`,
+            )}
+          >
+            {shouldShowCustom ? (
+              <div className={cx("custom-menu")}>
+                <DateRangeMenu
+                  startInit={selected.timeWindow.start}
+                  endInit={selected.timeWindow.end}
+                  onSubmit={onCustomSelectWrapper}
+                  onCancel={closeDropdown}
+                  onReturnToPresetOptionsClick={onReturnToPresetOptionsClick}
                 />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            ) : (
+              <div className={cx("_quick-view")}>
+                {options.map(option => (
+                  <OptionButton
+                    key={option.label}
+                    isSelected={selected.key === option.value}
+                    option={option}
+                    onClick={onDropdownOptionClick}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
     </>
   );
 

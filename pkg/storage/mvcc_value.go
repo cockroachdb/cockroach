@@ -12,10 +12,10 @@ package storage
 
 import (
 	"encoding/binary"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -86,7 +86,10 @@ func (v MVCCValue) IsTombstone() bool {
 // LocalTimestampNeeded returns whether the MVCCValue's local timestamp is
 // needed, or whether it can be implied by (i.e. set to the same value as)
 // its key's version timestamp.
-func (v MVCCValue) LocalTimestampNeeded(k MVCCKey) bool {
+//
+// TODO(erikgrinaker): Consider making this and GetLocalTimestamp() generic over
+// MVCCKey and MVCCRangeKey once generics have matured a bit.
+func (v MVCCValue) LocalTimestampNeeded(keyTS hlc.Timestamp) bool {
 	// If the local timestamp is empty, it is assumed to be equal to the key's
 	// version timestamp and so the local timestamp is not needed.
 	return !v.LocalTimestamp.IsEmpty() &&
@@ -96,15 +99,15 @@ func (v MVCCValue) LocalTimestampNeeded(k MVCCKey) bool {
 		// However, it is not safe for the local clock timestamp to be rounded up,
 		// as this could lead to stale reads. As a result, in such cases, the local
 		// timestamp is needed and cannot be implied by the version timestamp.
-		v.LocalTimestamp.ToTimestamp().Less(k.Timestamp)
+		v.LocalTimestamp.ToTimestamp().Less(keyTS)
 }
 
 // GetLocalTimestamp returns the MVCCValue's local timestamp. If the local
 // timestamp is not set explicitly, its implicit value is taken from the
-// provided MVCCKey and returned.
-func (v MVCCValue) GetLocalTimestamp(k MVCCKey) hlc.ClockTimestamp {
+// provided key version timestamp and returned.
+func (v MVCCValue) GetLocalTimestamp(keyTS hlc.Timestamp) hlc.ClockTimestamp {
 	if v.LocalTimestamp.IsEmpty() {
-		if k.Timestamp.Synthetic {
+		if keyTS.Synthetic {
 			// A synthetic version timestamp means that the version timestamp is
 			// disconnected from real time and did not come from an HLC clock on the
 			// leaseholder that wrote the value or from somewhere else in the system.
@@ -115,7 +118,7 @@ func (v MVCCValue) GetLocalTimestamp(k MVCCKey) hlc.ClockTimestamp {
 			// timestamp.
 			return hlc.MinClockTimestamp
 		}
-		return hlc.ClockTimestamp(k.Timestamp)
+		return hlc.ClockTimestamp(keyTS)
 	}
 	return v.LocalTimestamp
 }
@@ -128,11 +131,11 @@ func (v MVCCValue) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 	if v.MVCCValueHeader != (enginepb.MVCCValueHeader{}) {
-		w.Printf("vheader{")
+		w.Printf("{")
 		if !v.LocalTimestamp.IsEmpty() {
-			w.Printf(" localTs=%s", v.LocalTimestamp)
+			w.Printf("localTs=%s", v.LocalTimestamp)
 		}
-		w.Printf(" } ")
+		w.Printf("}")
 	}
 	w.Print(v.Value.PrettyPrint())
 }
@@ -143,12 +146,20 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 var disableSimpleValueEncoding = util.ConstantWithMetamorphicTestBool(
 	"mvcc-value-disable-simple-encoding", false)
 
-// SkipIfSimpleValueEncodingDisabled skips this test during metamorphic runs
-// that have disabled the simple MVCC value encoding.
-func SkipIfSimpleValueEncodingDisabled(t skip.SkippableTest) {
+// DisableMetamorphicSimpleValueEncoding disables the disableSimpleValueEncoding
+// metamorphic bool and emptyValueHeader value for the duration of a test,
+// resetting it at the end.
+func DisableMetamorphicSimpleValueEncoding(t *testing.T) {
 	t.Helper()
 	if disableSimpleValueEncoding {
-		skip.IgnoreLint(t, "disabled under metamorphic")
+		disableSimpleValueEncoding = false
+		oldHeader := emptyValueHeader
+		emptyValueHeader = enginepb.MVCCValueHeader{}
+
+		t.Cleanup(func() {
+			disableSimpleValueEncoding = true
+			emptyValueHeader = oldHeader
+		})
 	}
 }
 

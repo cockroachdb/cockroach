@@ -638,28 +638,6 @@ var dateStyle = settings.RegisterEnumSetting(
 	dateStyleEnumMap,
 ).WithPublic()
 
-const intervalStyleEnabledClusterSetting = "sql.defaults.intervalstyle.enabled"
-
-// intervalStyleEnabled controls intervals representation.
-// TODO(sql-exp): retire this setting in 22.2.
-var intervalStyleEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	intervalStyleEnabledClusterSetting,
-	"default value for intervalstyle_enabled session setting",
-	false,
-)
-
-const dateStyleEnabledClusterSetting = "sql.defaults.datestyle.enabled"
-
-// dateStyleEnabled controls dates representation.
-// TODO(sql-exp): retire this setting in 22.2.
-var dateStyleEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	dateStyleEnabledClusterSetting,
-	"default value for datestyle_enabled session setting",
-	false,
-)
-
 var txnRowsWrittenLog = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.defaults.transaction_rows_written_log",
@@ -1266,6 +1244,9 @@ type ExecutorConfig struct {
 	// object which mostly just holds on to an ExecConfig.
 	IndexBackfiller *IndexBackfillPlanner
 
+	// IndexMerger is also used to backfill indexes and is also rather circular.
+	IndexMerger *IndexBackfillerMergePlanner
+
 	// IndexValidator is used to validate indexes.
 	IndexValidator scexec.IndexValidator
 
@@ -1437,7 +1418,7 @@ type ExecutorTestingKnobs struct {
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
-	WithStatementTrace func(trace tracing.Recording, stmt string)
+	WithStatementTrace func(trace tracingpb.Recording, stmt string)
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
@@ -1522,6 +1503,10 @@ type TenantTestingKnobs struct {
 	// OverrideTokenBucketProvider allows a test-only TokenBucketProvider (which
 	// can optionally forward requests to the real provider).
 	OverrideTokenBucketProvider func(origProvider kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider
+
+	// AllowSplitAndScatter, if set, allows secondary tenants to execute ALTER
+	// TABLE ... SPLIT AT and SCATTER SQL commands.
+	AllowSplitAndScatter bool
 }
 
 var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
@@ -1894,6 +1879,12 @@ type queryMeta struct {
 	// to determine whether this query has entered execution yet.
 	isDistributed bool
 
+	// States whether this query is a full scan. As with isDistributed, this field
+	// will be set to false for all queries until the start of execution, at which
+	// point we can determine whether a full scan will occur. Use the phase variable
+	// to determine whether this query has entered execution.
+	isFullScan bool
+
 	// Current phase of execution of query.
 	phase queryPhase
 
@@ -2192,7 +2183,7 @@ type SessionTracing struct {
 
 	// If recording==true, recordingType indicates the type of the current
 	// recording.
-	recordingType tracing.RecordingType
+	recordingType tracingpb.RecordingType
 
 	// ex is the connExecutor to which this SessionTracing is tied.
 	ex *connExecutor
@@ -2213,7 +2204,7 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 		return st.lastRecording, nil
 	}
 
-	return generateSessionTraceVTable(st.connSpan.GetRecording(tracing.RecordingVerbose))
+	return generateSessionTraceVTable(st.connSpan.GetRecording(tracingpb.RecordingVerbose))
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
@@ -2235,7 +2226,7 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 //   are per-row.
 // showResults: If set, result rows are reported in the trace.
 func (st *SessionTracing) StartTracing(
-	recType tracing.RecordingType, kvTracingEnabled, showResults bool,
+	recType tracingpb.RecordingType, kvTracingEnabled, showResults bool,
 ) error {
 	if st.enabled {
 		// We're already tracing. Only treat as no-op if the same options
@@ -2277,7 +2268,7 @@ func (st *SessionTracing) StartTracing(
 			opName,
 			tracing.WithForceRealSpan(),
 		)
-		st.connSpan.SetRecordingType(tracing.RecordingVerbose)
+		st.connSpan.SetRecordingType(tracingpb.RecordingVerbose)
 		st.ex.ctxHolder.hijack(newConnCtx)
 	}
 
@@ -2314,14 +2305,14 @@ func (st *SessionTracing) StopTracing() error {
 	st.enabled = false
 	st.kvTracingEnabled = false
 	st.showResults = false
-	st.recordingType = tracing.RecordingOff
+	st.recordingType = tracingpb.RecordingOff
 
 	// Accumulate all recordings and finish the tracing spans.
-	rec := st.connSpan.GetRecording(tracing.RecordingVerbose)
+	rec := st.connSpan.GetRecording(tracingpb.RecordingVerbose)
 	// We're about to finish this span, but there might be a child that remains
 	// open - the child corresponding to the current transaction. We don't want
 	// that span to be recording any more.
-	st.connSpan.SetRecordingType(tracing.RecordingOff)
+	st.connSpan.SetRecordingType(tracingpb.RecordingOff)
 	st.connSpan.Finish()
 	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()
@@ -3158,16 +3149,6 @@ func (m *sessionDataMutator) SetIntervalStyle(style duration.IntervalStyle) {
 func (m *sessionDataMutator) SetDateStyle(style pgdate.DateStyle) {
 	m.data.DataConversionConfig.DateStyle = style
 	m.bufferParamStatusUpdate("DateStyle", style.SQLString())
-}
-
-// SetIntervalStyleEnabled sets the IntervalStyleEnabled for the given session.
-func (m *sessionDataMutator) SetIntervalStyleEnabled(enabled bool) {
-	m.data.IntervalStyleEnabled = enabled
-}
-
-// SetDateStyleEnabled sets the DateStyleEnabled for the given session.
-func (m *sessionDataMutator) SetDateStyleEnabled(enabled bool) {
-	m.data.DateStyleEnabled = enabled
 }
 
 // SetStubCatalogTablesEnabled sets default value for stub_catalog_tables.

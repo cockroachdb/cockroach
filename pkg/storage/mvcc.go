@@ -101,6 +101,21 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
+// MVCCRangeKeyValue contains the raw bytes of the value for a key.
+type MVCCRangeKeyValue struct {
+	RangeKey MVCCRangeKey
+	Value    []byte
+}
+
+// Clone returns a copy of the MVCCRangeKeyValue.
+func (r MVCCRangeKeyValue) Clone() MVCCRangeKeyValue {
+	r.RangeKey = r.RangeKey.Clone()
+	if r.Value != nil {
+		r.Value = append([]byte{}, r.Value...)
+	}
+	return r
+}
+
 // optionalValue represents an optional roachpb.Value. It is preferred
 // over a *roachpb.Value to avoid the forced heap allocation.
 type optionalValue struct {
@@ -693,12 +708,26 @@ func (opts *MVCCGetOptions) validate() error {
 	return nil
 }
 
-func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCIterator {
-	iterKind := MVCCKeyAndIntentsIterKind
-	if inlineMeta {
-		iterKind = MVCCKeyIterKind
+// newMVCCIterator sets up a suitable iterator for high-level MVCC operations
+// operating at the given timestamp. If timestamp is empty, the iterator is
+// considered to be used for inline values, disabling intents and range keys.
+// If rangeKeyMasking is true, IterOptions.RangeKeyMaskingBelow is set to the
+// given timestamp.
+func newMVCCIterator(
+	reader Reader, timestamp hlc.Timestamp, rangeKeyMasking bool, opts IterOptions,
+) MVCCIterator {
+	// If reading inline then just return a plain MVCCIterator without intents.
+	// We also disable range keys, since they're not allowed across inline values.
+	if timestamp.IsEmpty() {
+		opts.KeyTypes = IterKeyTypePointsOnly
+		return reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
-	return reader.NewMVCCIterator(iterKind, opts)
+	// Enable range key masking if requested.
+	if rangeKeyMasking && opts.KeyTypes != IterKeyTypePointsOnly &&
+		opts.RangeKeyMaskingBelow.IsEmpty() {
+		opts.RangeKeyMaskingBelow = timestamp
+	}
+	return reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
 }
 
 // MVCCGet returns the most recent value for the specified key whose timestamp
@@ -728,7 +757,7 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(reader, timestamp, !opts.Tombstones, IterOptions{Prefix: true})
 	defer iter.Close()
 	value, intent, err := mvccGet(ctx, iter, key, timestamp, opts)
 	return value.ToPointer(), intent, err
@@ -1009,7 +1038,7 @@ func MVCCPut(
 	var iter MVCCIterator
 	blind := ms == nil && timestamp.IsEmpty()
 	if !blind {
-		iter = rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+		iter = newMVCCIterator(rw, timestamp, false /* rangeKeyMasking */, IterOptions{Prefix: true})
 		defer iter.Close()
 	}
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, txn, nil)
@@ -1053,7 +1082,7 @@ func MVCCDelete(
 	localTimestamp hlc.ClockTimestamp,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp, false /* rangeKeyMasking */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, noValue, txn, nil)
@@ -1339,12 +1368,6 @@ func mvccPutInternal(
 		if ms != nil {
 			updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
 		}
-		if err == nil {
-			writer.LogLogicalOp(MVCCWriteValueOpType, MVCCLogicalOpDetails{
-				Key:  key,
-				Safe: true,
-			})
-		}
 		return err
 	}
 
@@ -1438,7 +1461,7 @@ func mvccPutInternal(
 					iter.SeekGE(oldVersionKey)
 					if valid, err := iter.Valid(); err != nil {
 						return err
-					} else if !valid && !iter.UnsafeKey().Equal(oldVersionKey) {
+					} else if !valid || !iter.UnsafeKey().Equal(oldVersionKey) {
 						return errors.Errorf("existing intent value missing: %s", oldVersionKey)
 					}
 
@@ -1615,7 +1638,8 @@ func mvccPutInternal(
 	versionValue := MVCCValue{}
 	versionValue.Value = value
 	versionValue.LocalTimestamp = localTimestamp
-	if !versionValue.LocalTimestampNeeded(versionKey) || !writer.ShouldWriteLocalTimestamps(ctx) {
+	if !versionValue.LocalTimestampNeeded(versionKey.Timestamp) ||
+		!writer.ShouldWriteLocalTimestamps(ctx) {
 		versionValue.LocalTimestamp = hlc.ClockTimestamp{}
 	}
 
@@ -1716,7 +1740,7 @@ func MVCCIncrement(
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp, false /* rangeKeyMasking */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var int64Val int64
@@ -1790,7 +1814,7 @@ func MVCCConditionalPut(
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp, false /* rangeKeyMasking */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(
@@ -1872,7 +1896,7 @@ func MVCCInitPut(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp, false /* rangeKeyMasking */, IterOptions{Prefix: true})
 	defer iter.Close()
 	return mvccInitPutUsingIter(ctx, rw, iter, ms, key, timestamp, localTimestamp, value, failOnTombstones, txn)
 }
@@ -2018,7 +2042,6 @@ func MVCCClearTimeRange(
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	maxBatchSize, maxBatchByteSize int64,
-	useTBI bool,
 ) (*roachpb.Span, error) {
 	var batchSize int64
 	var batchByteSize int64
@@ -2064,7 +2087,7 @@ func MVCCClearTimeRange(
 
 	flushClearedKeys := func(nonMatch MVCCKey) error {
 		if len(clearRangeStart.Key) != 0 {
-			if err := rw.ClearMVCCRange(clearRangeStart, nonMatch); err != nil {
+			if err := rw.ClearMVCCVersions(clearRangeStart, nonMatch); err != nil {
 				return err
 			}
 			batchByteSize += int64(clearRangeStart.EncodedSize() + nonMatch.EncodedSize())
@@ -2079,7 +2102,7 @@ func MVCCClearTimeRange(
 			// clearrange, the byte size of the keys we did get is now too large to
 			// encode them all within the byte size limit, so use clearrange anyway.
 			if batchByteSize+encodedBufSize >= maxBatchByteSize {
-				if err := rw.ClearMVCCRange(buf[0], nonMatch); err != nil {
+				if err := rw.ClearMVCCVersions(buf[0], nonMatch); err != nil {
 					return err
 				}
 				batchByteSize += int64(buf[0].EncodedSize() + nonMatch.EncodedSize())
@@ -2124,10 +2147,9 @@ func MVCCClearTimeRange(
 	// _expect_ to hit this since the RevertRange is only intended for non-live
 	// key spans, but there could be an intent leftover.
 	iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
-		EnableTimeBoundIteratorOptimization: useTBI,
-		EndKey:                              endKey,
-		StartTime:                           startTime,
-		EndTime:                             endTime,
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
 	})
 	defer iter.Close()
 
@@ -2253,7 +2275,7 @@ func MVCCDeleteRange(
 
 	buf := newPutBuffer()
 	defer buf.release()
-	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	iter := newMVCCIterator(rw, timestamp, false /* rangeKeyMasking */, IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var keys []roachpb.Key
@@ -2557,7 +2579,10 @@ func MVCCScan(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp, !opts.Tombstones, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2570,7 +2595,10 @@ func MVCCScanToBytes(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
-	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp, !opts.Tombstones, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 	return mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
 }
@@ -2613,8 +2641,10 @@ func MVCCIterate(
 	opts MVCCScanOptions,
 	f func(roachpb.KeyValue) error,
 ) ([]roachpb.Intent, error) {
-	iter := newMVCCIterator(
-		reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
+	iter := newMVCCIterator(reader, timestamp, !opts.Tombstones, IterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
 	defer iter.Close()
 
 	var intents []roachpb.Intent
@@ -3128,9 +3158,9 @@ func mvccResolveWriteIntent(
 			// while the transaction was still pending, in which case it can be advanced
 			// to the observed timestamp.
 			newValue := oldValue
-			newValue.LocalTimestamp = oldValue.GetLocalTimestamp(oldKey)
+			newValue.LocalTimestamp = oldValue.GetLocalTimestamp(oldKey.Timestamp)
 			newValue.LocalTimestamp.Forward(intent.ClockWhilePending.Timestamp)
-			if !newValue.LocalTimestampNeeded(newKey) || !rw.ShouldWriteLocalTimestamps(ctx) {
+			if !newValue.LocalTimestampNeeded(newKey.Timestamp) || !rw.ShouldWriteLocalTimestamps(ctx) {
 				newValue.LocalTimestamp = hlc.ClockTimestamp{}
 			}
 
@@ -3401,7 +3431,8 @@ func MVCCResolveWriteIntentRange(
 		mvccIter = rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 	} else {
 		// For correctness, we need mvccIter to be consistent with engineIter.
-		mvccIter = newPebbleIterator(nil, engineIter.GetRawIter(), iterOpts, StandardDurability)
+		mvccIter = newPebbleIterator(
+			nil, engineIter.GetRawIter(), iterOpts, StandardDurability, rw.SupportsRangeKeys())
 	}
 	iterAndBuf := GetBufUsingIter(mvccIter)
 	defer func() {

@@ -86,11 +86,7 @@ func gcIndexes(
 			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
 		}
 
-		if err := completeDroppedIndex(
-			ctx, execCfg, parentTable, index.IndexID, progress,
-		); err != nil {
-			return err
-		}
+		markIndexGCed(ctx, index.IndexID, progress)
 	}
 	return nil
 }
@@ -115,22 +111,4 @@ func clearIndex(
 	}
 	rSpan := roachpb.RSpan{Key: start, EndKey: end}
 	return clearSpanData(ctx, execCfg.DB, execCfg.DistSender, rSpan)
-}
-
-// completeDroppedIndexes updates the mutations of the table descriptor to
-// indicate that the index was dropped, as well as the job detail payload.
-func completeDroppedIndex(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	table catalog.TableDescriptor,
-	indexID descpb.IndexID,
-	progress *jobspb.SchemaChangeGCProgress,
-) error {
-	if err := updateDescriptorGCMutations(ctx, execCfg, table.GetID(), indexID); err != nil {
-		return errors.Wrapf(err, "updating GC mutations")
-	}
-
-	markIndexGCed(ctx, indexID, progress)
-
-	return nil
 }

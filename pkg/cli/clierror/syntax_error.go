@@ -13,15 +13,15 @@ package clierror
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
+	"github.com/jackc/pgconn"
 )
 
 // IsSQLSyntaxError returns true iff the provided error is a SQL
 // syntax error. The function works for the queries executed via the
 // clisqlclient/clisqlexec packages.
 func IsSQLSyntaxError(err error) bool {
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		return string(pqErr.Code) == pgcode.Syntax.String()
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		return pgErr.Code == pgcode.Syntax.String()
 	}
 	return false
 }

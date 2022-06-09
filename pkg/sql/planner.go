@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -27,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -237,6 +236,9 @@ type planner struct {
 	noticeSender noticeSender
 
 	queryCacheSession querycache.Session
+
+	// evalCatalogBuiltins is used as part of the eval.Context.
+	evalCatalogBuiltins evalcatalog.Builtins
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -346,17 +348,6 @@ func newInternalPlanner(
 	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.DateStyleIntervalStyleCastRewrite) {
-		p.semaCtx.CastSessionOptions = cast.SessionOptions{
-			IntervalStyleEnabled: true,
-			DateStyleEnabled:     true,
-		}
-	} else {
-		p.semaCtx.CastSessionOptions = cast.SessionOptions{
-			IntervalStyleEnabled: sd.IntervalStyleEnabled,
-			DateStyleEnabled:     sd.DateStyleEnabled,
-		}
-	}
 	p.semaCtx.SearchPath = &sd.SearchPath
 	p.semaCtx.TypeResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
@@ -412,6 +403,7 @@ func newInternalPlanner(
 	p.schemaResolver.sessionDataStack = sds
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
+	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

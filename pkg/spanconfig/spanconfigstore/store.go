@@ -28,6 +28,7 @@ import (
 // using the gossip backed system config span to instead using the span configs
 // infrastructure. It has no effect if COCKROACH_DISABLE_SPAN_CONFIGS
 // is set.
+// TODO(richardjcai): We can likely remove this.
 var EnabledSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.store.enabled",

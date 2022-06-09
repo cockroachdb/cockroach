@@ -28,7 +28,7 @@ import {
 import { cockroach } from "src/js/protos";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
-export default function(props: GraphDashboardProps) {
+export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, storeSources } = props;
 
   return [

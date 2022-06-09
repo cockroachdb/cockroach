@@ -177,13 +177,6 @@ func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	return errors.WithStack(errEvalPlanner)
 }
 
-// GetImmutableTableInterfaceByID is part of the Planner interface.
-func (ep *DummyEvalPlanner) GetImmutableTableInterfaceByID(
-	ctx context.Context, id int,
-) (interface{}, error) {
-	return nil, errors.WithStack(errEvalPlanner)
-}
-
 // UnsafeDeleteDescriptor is part of the Planner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	ctx context.Context, descID int64, force bool,
@@ -276,6 +269,13 @@ func (*DummyEvalPlanner) RevalidateUniqueConstraint(
 	ctx context.Context, tableID int, constraintName string,
 ) error {
 	return errors.WithStack(errEvalPlanner)
+}
+
+// IsConstraintActive is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) IsConstraintActive(
+	ctx context.Context, tableID int, constraintName string,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
 }
 
 // ValidateTTLScheduledJobsInCurrentDB is part of the Planner interface.

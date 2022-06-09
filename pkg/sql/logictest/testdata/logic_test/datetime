@@ -1752,11 +1752,6 @@ true
 
 subtest datestyle_order
 
-query T noticetrace
-set datestyle_enabled = false
-----
-NOTICE: ignoring datestyle_enabled setting; it is always true
-
 # Setting datestyle is always allowed in 22.1.
 statement ok
 set datestyle = 'dmy'
@@ -1987,11 +1982,6 @@ ORDER BY pk
 0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300  0000-01-01 11:30:45.123 +0300 +0300
 
 # Regression test for #71776 -- intervalstyle should apply to pg_catalog.
-
-query T noticetrace
-SET intervalstyle_enabled = false;
-----
-NOTICE: ignoring intervalstyle_enabled setting; it is always true
 
 statement ok
 SET intervalstyle = iso_8601;

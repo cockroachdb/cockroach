@@ -38,13 +38,13 @@ export function* notifificationsSaga() {
   // Terminate Query notifications //
   // ***************************** //
   yield all([
-    takeEvery(terminateQueryActions.terminateSessionCompleted, function*() {
+    takeEvery(terminateQueryActions.terminateSessionCompleted, function* () {
       yield put(
         notificationAction(NotificationType.Success, "Session cancelled."),
       );
     }),
 
-    takeEvery(terminateQueryActions.terminateSessionFailed, function*() {
+    takeEvery(terminateQueryActions.terminateSessionFailed, function* () {
       yield put(
         notificationAction(
           NotificationType.Error,
@@ -53,13 +53,13 @@ export function* notifificationsSaga() {
       );
     }),
 
-    takeEvery(terminateQueryActions.terminateQueryCompleted, function*() {
+    takeEvery(terminateQueryActions.terminateQueryCompleted, function* () {
       yield put(
         notificationAction(NotificationType.Success, "Statement cancelled."),
       );
     }),
 
-    takeEvery(terminateQueryActions.terminateQueryFailed, function*() {
+    takeEvery(terminateQueryActions.terminateQueryFailed, function* () {
       yield put(
         notificationAction(
           NotificationType.Error,

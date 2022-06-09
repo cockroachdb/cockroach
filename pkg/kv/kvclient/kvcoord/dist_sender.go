@@ -1813,7 +1813,7 @@ func maybeSetResumeSpan(
 			// Case 2.
 			return
 		}
-		key := req.Header().Span().Key
+		key := req.Header().Key
 		if isReverse {
 			if !nextKey.Less(roachpb.RKey(key)) {
 				// key <= nextKey, so this request was not completed (case 3).
@@ -1832,17 +1832,17 @@ func maybeSetResumeSpan(
 		return
 	}
 
-	origSpan := req.Header().Span()
+	origHeader := req.Header()
 	if isReverse {
 		if hdr.ResumeSpan != nil {
 			// The ResumeSpan.Key might be set to the StartKey of a range;
 			// correctly set it to the Key of the original request span.
-			hdr.ResumeSpan.Key = origSpan.Key
-		} else if roachpb.RKey(origSpan.Key).Less(nextKey) {
+			hdr.ResumeSpan.Key = origHeader.Key
+		} else if roachpb.RKey(origHeader.Key).Less(nextKey) {
 			// Some keys have yet to be processed.
 			hdr.ResumeSpan = new(roachpb.Span)
-			*hdr.ResumeSpan = origSpan
-			if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
+			*hdr.ResumeSpan = origHeader.Span()
+			if nextKey.Less(roachpb.RKey(origHeader.EndKey)) {
 				// The original span has been partially processed.
 				hdr.ResumeSpan.EndKey = nextKey.AsRawKey()
 			}
@@ -1854,16 +1854,16 @@ func maybeSetResumeSpan(
 			// doesn't know any better). In that case, we correct it to the EndKey
 			// of the original request span. Note that this doesn't touch
 			// ResumeSpan.Key, which is really the important part of the ResumeSpan.
-			hdr.ResumeSpan.EndKey = origSpan.EndKey
+			hdr.ResumeSpan.EndKey = origHeader.EndKey
 		} else {
 			// The request might have been fully satisfied, in which case it doesn't
 			// need a ResumeSpan, or it might not have. Figure out if we're in the
 			// latter case.
-			if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
+			if nextKey.Less(roachpb.RKey(origHeader.EndKey)) {
 				// Some keys have yet to be processed.
 				hdr.ResumeSpan = new(roachpb.Span)
-				*hdr.ResumeSpan = origSpan
-				if roachpb.RKey(origSpan.Key).Less(nextKey) {
+				*hdr.ResumeSpan = origHeader.Span()
+				if roachpb.RKey(origHeader.Key).Less(nextKey) {
 					// The original span has been partially processed.
 					hdr.ResumeSpan.Key = nextKey.AsRawKey()
 				}

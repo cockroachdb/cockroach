@@ -8,8 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package paramparse parses parameters that are set in param lists
-// or session vars.
+// Package paramparse provides utilities for parsing storage paramaters.
 package paramparse
 
 import (

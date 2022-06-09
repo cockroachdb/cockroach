@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "indexstorageparam",
+    srcs = ["index_storage_param.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/paramparse",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/storageparam",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

@@ -12,20 +12,14 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,7 +50,7 @@ CREATE TABLE foo (
   FAMILY only_c (c)
 )`)
 
-	tableDesc := getHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
 	mainFamily := mustGetFamily(t, tableDesc, 0)
 	cFamily := mustGetFamily(t, tableDesc, 1)
 
@@ -95,7 +89,7 @@ CREATE TABLE foo (
 		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
-			ed, err := newEventDescriptor(tableDesc, tc.family, tc.includeVirtual)
+			ed, err := newEventDescriptor(tableDesc, tc.family, tc.includeVirtual, s.Clock().Now())
 			require.NoError(t, err)
 
 			// Verify Metadata information for event descriptor.
@@ -105,7 +99,7 @@ CREATE TABLE foo (
 			require.True(t, ed.HasOtherFamilies)
 
 			// Verify primary key and family columns are as expected.
-			r := Row{eventDescriptor: ed}
+			r := Row{EventDescriptor: ed}
 			require.Equal(t, tc.expectedKeyCols, slurpColumns(t, r.ForEachKeyColumn()))
 			require.Equal(t, tc.expectedColumns, slurpColumns(t, r.ForEachColumn()))
 			require.Equal(t, tc.expectedUDTCols, slurpColumns(t, r.ForEachUDTColumn()))
@@ -134,37 +128,9 @@ CREATE TABLE foo (
   FAMILY only_c (c)
 )`)
 
-	tableDesc := getHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
-
-	// We'll use rangefeed to pluck out updated rows from the table.
-	rf := s.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory
-	ctx := context.Background()
-	rows := make(chan *roachpb.RangeFeedValue)
-	_, err := rf.RangeFeed(ctx, "foo-feed",
-		[]roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)},
-		s.Clock().Now(),
-		func(ctx context.Context, value *roachpb.RangeFeedValue) {
-			select {
-			case <-ctx.Done():
-			case rows <- value:
-			}
-		},
-		rangefeed.WithDiff(true),
-	)
-	require.NoError(t, err)
-
-	// Helper to read next rangefeed value.
-	popRow := func(t *testing.T) *roachpb.RangeFeedValue {
-		t.Helper()
-		select {
-		case r := <-rows:
-			log.Infof(ctx, "Got Row: %s", roachpb.PrettyPrintKey(nil, r.Key))
-			return r
-		case <-time.After(5 * time.Second):
-			t.Fatal("timeout reading row")
-			return nil
-		}
-	}
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), kvDB, "foo")
+	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
+	defer cleanup()
 
 	type decodeExpectation struct {
 		expectUnwatchedErr bool
@@ -182,7 +148,7 @@ CREATE TABLE foo (
 	for _, tc := range []struct {
 		testName          string
 		familyName        string // Must be set if targetType ChangefeedTargetSpecification_COLUMN_FAMILY
-		virtualColumn     changefeedbase.VirtualColumnVisibility
+		includeVirtual    bool
 		actions           []string
 		expectMainFamily  []decodeExpectation
 		expectOnlyCFamily []decodeExpectation
@@ -200,10 +166,10 @@ CREATE TABLE foo (
 			},
 		},
 		{
-			testName:      "main/primary_cols_with_virtual",
-			familyName:    "main",
-			actions:       []string{"INSERT INTO foo (a, b) VALUES (1, 'second test')"},
-			virtualColumn: changefeedbase.OptVirtualColumnsNull,
+			testName:       "main/primary_cols_with_virtual",
+			familyName:     "main",
+			actions:        []string{"INSERT INTO foo (a, b) VALUES (1, 'second test')"},
+			includeVirtual: true,
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues:   []string{"second test", "1"},
@@ -319,30 +285,26 @@ CREATE TABLE foo (
 				targetType = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
 			}
 
-			details := jobspb.ChangefeedDetails{
-				Opts: map[string]string{
-					changefeedbase.OptVirtualColumns: string(tc.virtualColumn),
-				},
-				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
-					{
-						Type:       targetType,
-						TableID:    tableDesc.GetID(),
-						FamilyName: tc.familyName,
-					},
-				},
-			}
-
 			for _, action := range tc.actions {
 				sqlDB.Exec(t, action)
 			}
 
+			targets := []jobspb.ChangefeedTargetSpecification{
+				{
+					Type:       targetType,
+					TableID:    tableDesc.GetID(),
+					FamilyName: tc.familyName,
+				},
+			}
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
-			decoder := NewEventDecoder(ctx, &serverCfg, details)
+			ctx := context.Background()
+			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual)
+			require.NoError(t, err)
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
 			for i := 0; i < expectedEvents; i++ {
 				v := popRow(t)
 
-				_, eventFamilyID, err := decoder.(*eventDecoder).rfCache.tableDescForKey(ctx, v.Key, v.Timestamp())
+				eventFamilyID, err := TestingGetFamilyIDFromKey(decoder, v.Key, v.Timestamp())
 				require.NoError(t, err)
 
 				var expect decodeExpectation
@@ -434,23 +396,4 @@ func slurpDatums(t *testing.T, it Iterator) (res []string) {
 			return nil
 		}))
 	return res
-}
-
-func getHydratedTableDescriptor(
-	t *testing.T, execCfgI interface{}, kvDB *kv.DB, tableName string,
-) catalog.TableDescriptor {
-	t.Helper()
-	desc := desctestutils.TestingGetPublicTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
-	if !desc.ContainsUserDefinedTypes() {
-		return desc
-	}
-
-	ctx := context.Background()
-	execCfg := execCfgI.(sql.ExecutorConfig)
-	collection := execCfg.CollectionFactory.NewCollection(ctx, nil)
-	var err error
-	desc, err = refreshUDT(context.Background(), desc.GetID(), kvDB, collection, execCfg.Clock.Now())
-	require.NoError(t, err)
-	return desc
 }

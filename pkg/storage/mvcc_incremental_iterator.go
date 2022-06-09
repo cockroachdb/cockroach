@@ -13,10 +13,15 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+// mvccIncrementalIteratorMetamorphicTBI will randomly enable TBIs.
+var mvccIncrementalIteratorMetamorphicTBI = util.ConstantWithMetamorphicTestBool(
+	"mvcc-incremental-iter-tbi", true)
 
 // MVCCIncrementalIterator iterates over the diff of the key range
 // [startKey,endKey) and time range (startTime,endTime]. If a key was added or
@@ -24,9 +29,8 @@ import (
 // most recent version (before or at endTime) of that key. If the key was most
 // recently deleted, this is signaled with an empty value.
 //
-// Inline values (non-user data) are handled according to the
-// MVCCIncrementalIterInlinePolicy. By default, an error will be
-// returned.
+// Inline (unversioned) values are not supported, and may return an error or be
+// omitted entirely. The iterator should not be used across such keys.
 //
 // Intents outside the time bounds are ignored. Intents inside the
 // time bounds are handled according to the provided
@@ -87,7 +91,6 @@ type MVCCIncrementalIterator struct {
 
 	// Configuration passed in MVCCIncrementalIterOptions.
 	intentPolicy MVCCIncrementalIterIntentPolicy
-	inlinePolicy MVCCIncrementalIterInlinePolicy
 
 	// Optional collection of intents created on demand when first intent encountered.
 	intents []roachpb.Intent
@@ -123,31 +126,17 @@ const (
 	MVCCIncrementalIterIntentPolicyEmit
 )
 
-// MVCCIncrementalIterInlinePolicy controls how the
-// MVCCIncrementalIterator will handle inline values that it
-// encounters when iterating.
-type MVCCIncrementalIterInlinePolicy int
-
-const (
-	// MVCCIncrementalIterInlinePolicyError will immediately
-	// return an error for any inline value found.
-	MVCCIncrementalIterInlinePolicyError MVCCIncrementalIterInlinePolicy = iota
-	// MVCCIncrementalIterInlinePolicyEmit will return inline
-	// values to the caller.
-	MVCCIncrementalIterInlinePolicyEmit
-)
-
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
-	EnableTimeBoundIteratorOptimization bool
-	EndKey                              roachpb.Key
-	// Keys visible by the MVCCIncrementalIterator must be within (StartTime,
-	// EndTime].
+	EndKey roachpb.Key
+
+	// Only keys within (StartTime,EndTime] will be emitted. EndTime defaults to
+	// hlc.MaxTimestamp. The time-bound iterator optimization will only be used if
+	// StartTime is set, since we assume EndTime will be near the current time.
 	StartTime hlc.Timestamp
 	EndTime   hlc.Timestamp
 
 	IntentPolicy MVCCIncrementalIterIntentPolicy
-	InlinePolicy MVCCIncrementalIterInlinePolicy
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -156,9 +145,22 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
+	// Default to MaxTimestamp for EndTime, since the code assumes it is set.
+	if opts.EndTime.IsEmpty() {
+		opts.EndTime = hlc.MaxTimestamp
+	}
+
+	// We assume EndTime is near the current time, so there is little to gain from
+	// using a TBI unless StartTime is set. However, we always vary it in
+	// metamorphic test builds, for better test coverage of both paths.
+	useTBI := opts.StartTime.IsSet()
+	if util.IsMetamorphicBuild() { // NB: always randomize when metamorphic
+		useTBI = mvccIncrementalIteratorMetamorphicTBI
+	}
+
 	var iter MVCCIterator
 	var timeBoundIter MVCCIterator
-	if opts.EnableTimeBoundIteratorOptimization {
+	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
 		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
@@ -185,7 +187,6 @@ func NewMVCCIncrementalIterator(
 		endTime:       opts.EndTime,
 		timeBoundIter: timeBoundIter,
 		intentPolicy:  opts.IntentPolicy,
-		inlinePolicy:  opts.InlinePolicy,
 	}
 }
 
@@ -349,16 +350,9 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 	}
 
 	if i.meta.IsInline() {
-		switch i.inlinePolicy {
-		case MVCCIncrementalIterInlinePolicyError:
-			i.valid = false
-			i.err = errors.Errorf("unexpected inline value found: %s", unsafeKey.Key)
-			return i.err
-		case MVCCIncrementalIterInlinePolicyEmit:
-			return nil
-		default:
-			return errors.AssertionFailedf("unknown inline policy: %d", i.inlinePolicy)
-		}
+		i.valid = false
+		i.err = errors.Errorf("unexpected inline value found: %s", unsafeKey.Key)
+		return i.err
 	}
 
 	if i.meta.Txn == nil {
@@ -396,13 +390,9 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 // advance advances the main iterator until it is referencing a key within
 // (start_time, end_time].
 //
-// It populates i.err with an error if either of the following was encountered:
-//
-// a) an inline value when the inline policy is
-//    MVCCIncrementalIterInlinePolicyError; or
-//
-// b) an intent with a timestamp within the incremental iterator's bounds when
-//    the intent policy is MVCCIncrementalIterIntentPolicyError.
+// It populates i.err with an error if it encountered an inline value or an
+// intent with a timestamp within the incremental iterator's bounds when the
+// intent policy is MVCCIncrementalIterIntentPolicyError.
 func (i *MVCCIncrementalIterator) advance() {
 	for {
 		i.maybeSkipKeys()
@@ -411,14 +401,6 @@ func (i *MVCCIncrementalIterator) advance() {
 		}
 
 		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
-			return
-		}
-
-		// If we have an inline value and the policy was to error, we
-		// would have errored in the call above. If our policy is to
-		// emit inline values, we don't want to advance past it. Inline
-		// values don't have timestamps that we can filter on.
-		if i.meta.IsInline() && i.inlinePolicy == MVCCIncrementalIterInlinePolicyEmit {
 			return
 		}
 
@@ -488,6 +470,21 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 	return i.iter.UnsafeKey()
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
+	panic("not implemented")
+}
+
 // UnsafeValue returns the same value as Value, but the memory is invalidated on
 // the next call to {Next,Reset,Close}.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
@@ -496,8 +493,8 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 
 // NextIgnoringTime returns the next key/value that would be encountered in a
 // non-incremental iteration by moving the underlying non-TBI iterator forward.
-// Intents in the time range (startTime,EndTime] and inline values are handled
-// according to the iterator policy.
+// Intents in the time range (startTime,EndTime] are handled according to the
+// iterator policy.
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	for {
 		i.iter.Next()
@@ -516,15 +513,15 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 			continue
 		}
 
-		// We have a valid KV or an intent or an inline value to emit.
+		// We have a valid KV or an intent to emit.
 		return
 	}
 }
 
 // NextKeyIgnoringTime returns the next distinct key that would be encountered
 // in a non-incremental iteration by moving the underlying non-TBI iterator
-// forward. Intents in the time range (startTime,EndTime] and inline values are
-// handled according to the iterator policy.
+// forward. Intents in the time range (startTime,EndTime] are handled according
+// to the iterator policy.
 //
 // TODO(sumeer): consider removing this method since it is never used, and it
 // isn't clear what purpose it can serve in the future. We have two current
@@ -553,7 +550,7 @@ func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 			continue
 		}
 
-		// We have a valid KV or an intent or an inline value to emit.
+		// We have a valid KV or an intent to emit.
 		return
 	}
 }

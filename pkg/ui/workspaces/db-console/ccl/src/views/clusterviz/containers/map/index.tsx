@@ -66,7 +66,8 @@ export class ClusterVisualization extends React.Component<
     const contentItemClasses = cn(
       "cluster-visualization-layout__content-item",
       {
-        "cluster-visualization-layout__content-item--show-license": showingLicensePage,
+        "cluster-visualization-layout__content-item--show-license":
+          showingLicensePage,
       },
     );
 

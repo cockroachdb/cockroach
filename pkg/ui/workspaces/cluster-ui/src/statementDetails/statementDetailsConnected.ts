@@ -45,7 +45,8 @@ import { StatementDetailsRequest } from "../api";
 import { TimeScale } from "../timeScaleDropdown";
 import { getMatchParamByName, statementAttr } from "../util";
 type IDuration = google.protobuf.IDuration;
-type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const CreateStatementDiagnosticsReportRequest =
   cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;

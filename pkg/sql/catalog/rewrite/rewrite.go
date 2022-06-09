@@ -394,6 +394,35 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	return nil
 }
 
+// MaybeClearSchemaChangerStateInDescs goes over all mutable descriptors and
+// cleans any state information from descriptors which have no targets associated
+// with the corresponding jobs. The state is used to lock a descriptor to ensure
+// no concurrent schema change jobs can occur, which needs to be cleared if no
+// jobs exist working on *any* targets, since otherwise the descriptor would
+// be left locked.
+func MaybeClearSchemaChangerStateInDescs(descriptors []catalog.MutableDescriptor) error {
+	nonEmptyJobs := make(map[jobspb.JobID]struct{})
+	// Track all the schema changer states that have a non-empty job associated
+	// with them.
+	for _, desc := range descriptors {
+		if state := desc.GetDeclarativeSchemaChangerState(); state != nil &&
+			len(state.Targets) > 0 {
+			nonEmptyJobs[state.JobID] = struct{}{}
+		}
+	}
+	// Clean up any schema changer states that have empty jobs that don't have any
+	// targets associated.
+	for _, desc := range descriptors {
+		if state := desc.GetDeclarativeSchemaChangerState(); state != nil &&
+			len(state.Targets) == 0 {
+			if _, found := nonEmptyJobs[state.JobID]; !found {
+				desc.SetDeclarativeSchemaChangerState(nil)
+			}
+		}
+	}
+	return nil
+}
+
 // TypeDescs rewrites all ID's in the input slice of TypeDescriptors
 // using the input ID rewrite mapping.
 func TypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
@@ -521,9 +550,6 @@ func rewriteSchemaChangerState(
 		}
 		// TODO(ajwerner): Remember to rewrite views when the time comes. Currently
 		// views are not handled by the declarative schema changer.
-	}
-	if len(state.Targets) == 0 {
-		d.SetDeclarativeSchemaChangerState(nil)
 	}
 	return nil
 }

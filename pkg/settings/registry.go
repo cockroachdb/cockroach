@@ -126,6 +126,14 @@ var retiredSettings = map[string]struct{}{
 	"kv.bulk_ingest.buffer_increment":                                  {},
 	"schemachanger.backfiller.buffer_increment":                        {},
 	"kv.rangefeed.separated_intent_scan.enabled":                       {},
+
+	// removed as of 22.2.
+	"kv.bulk_io_write.experimental_incremental_export_enabled":  {},
+	"kv.bulk_io_write.revert_range_time_bound_iterator.enabled": {},
+	"kv.rangefeed.catchup_scan_iterator_optimization.enabled":   {},
+	"kv.refresh_range.time_bound_iterators.enabled":             {},
+	"sql.defaults.datestyle.enabled":                            {},
+	"sql.defaults.intervalstyle.enabled":                        {},
 }
 
 var sqlDefaultSettings = map[string]struct{}{

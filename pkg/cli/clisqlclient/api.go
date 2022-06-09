@@ -13,7 +13,7 @@ package clisqlclient
 import (
 	"context"
 	"database/sql/driver"
-	"reflect"
+	"io"
 	"time"
 )
 
@@ -24,7 +24,7 @@ type Conn interface {
 	Close() error
 
 	// EnsureConn (re-)establishes the connection to the server.
-	EnsureConn() error
+	EnsureConn(ctx context.Context) error
 
 	// Exec executes a statement.
 	Exec(ctx context.Context, query string, args ...interface{}) error
@@ -68,7 +68,12 @@ type Conn interface {
 	// server requests one.
 	SetMissingPassword(missing bool)
 
-	// GetServerMetadata() returns details about the CockroachDB node
+	// SetAlwaysInferResultTypes configures the alwaysInferResultTypes flag, which
+	// determines if the client should use the underlying driver to infer result
+	// types.
+	SetAlwaysInferResultTypes(b bool)
+
+	// GetServerMetadata returns details about the CockroachDB node
 	// this connection is connected to.
 	GetServerMetadata(ctx context.Context) (
 		nodeID int32,
@@ -83,39 +88,35 @@ type Conn interface {
 	// The what argument is a descriptive label for the value being
 	// retrieved, for inclusion inside warning or error message.
 	// The sql argument is the SQL query to use to retrieve the value.
-	GetServerValue(ctx context.Context, what, sql string) (driver.Value, string, bool)
+	GetServerValue(ctx context.Context, what, sql string) (driver.Value, bool)
 
-	// GetDriverConn exposes the underlying SQL driver connection object
+	// GetDriverConn exposes the underlying driver connection object
 	// for use by the cli package.
 	GetDriverConn() DriverConn
+
+	// Cancel sends a query cancellation request to the server.
+	Cancel(ctx context.Context) error
 }
 
 // Rows describes a result set.
 type Rows interface {
+	driver.Rows
+
 	// The caller must call Close() when done with the
 	// result and check the error.
 	Close() error
 
 	// Columns returns the column labels of the current result set.
+	// The implementation of this method should cache the result so that the
+	// result does not need to be constructed on each invocation.
 	Columns() []string
-
-	// ColumnTypeScanType returns the natural Go type of values at the
-	// given column index.
-	ColumnTypeScanType(index int) reflect.Type
 
 	// ColumnTypeDatabaseTypeName returns the database type name
 	// of the column at the given column index.
 	ColumnTypeDatabaseTypeName(index int) string
 
-	// ColumnTypeNames returns the database type names for all
-	// columns.
-	ColumnTypeNames() []string
-
-	// Result retrieves the underlying driver result object.
-	Result() driver.Result
-
 	// Tag retrieves the statement tag for the current result set.
-	Tag() string
+	Tag() (CommandTag, error)
 
 	// Next populates values with the next row of results. []byte values are copied
 	// so that subsequent calls to Next and Close do not mutate values. This
@@ -128,6 +129,12 @@ type Rows interface {
 	//
 	// TODO(mjibson): clean this up after 1.8 is released.
 	NextResultSet() (bool, error)
+}
+
+// CommandTag represents the result of a SQL command.
+type CommandTag interface {
+	RowsAffected() int64
+	String() string
 }
 
 // QueryStatsDuration represents a duration value retrieved by
@@ -168,10 +175,32 @@ type TxBoundConn interface {
 }
 
 // DriverConn is the type of the connection object returned by
-// (Conn).GetDriverConn(). It gives access to the underlying Go sql
+// (Conn).GetDriverConn(). It gives access to the underlying sql
 // driver.
 type DriverConn interface {
-	driver.Conn
-	driver.ExecerContext
-	driver.QueryerContext
+	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
+	Exec(ctx context.Context, query string, args ...interface{}) error
+	CopyFrom(ctx context.Context, reader io.Reader, query string) error
+}
+
+type driverConnAdapter struct {
+	c *sqlConn
+}
+
+var _ DriverConn = (*driverConnAdapter)(nil)
+
+func (d *driverConnAdapter) Query(
+	ctx context.Context, query string, args ...interface{},
+) (driver.Rows, error) {
+	rows, err := d.c.Query(ctx, query, args...)
+	return driver.Rows(rows), err
+}
+
+func (d *driverConnAdapter) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return d.c.Exec(ctx, query, args...)
+}
+
+func (d *driverConnAdapter) CopyFrom(ctx context.Context, reader io.Reader, query string) error {
+	_, err := d.c.conn.PgConn().CopyFrom(ctx, reader, query)
+	return err
 }

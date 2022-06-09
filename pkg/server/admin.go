@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -2889,7 +2890,9 @@ func (s *adminServer) enqueueRangeLocal(
 		queueName = "mvccGC"
 	}
 
-	traceSpans, processErr, err := store.ManuallyEnqueue(ctx, queueName, repl, req.SkipShouldQueue)
+	traceSpans, processErr, err := store.Enqueue(
+		ctx, queueName, repl, req.SkipShouldQueue, false, /* async */
+	)
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil
@@ -3326,7 +3329,7 @@ func (s *adminServer) queryTableID(
 	if row == nil {
 		return descpb.InvalidID, errors.Newf("failed to resolve %q as a table name", tableName)
 	}
-	return descpb.ID(tree.MustBeDOid(row[0]).DInt), nil
+	return descpb.ID(tree.MustBeDOid(row[0]).Oid), nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
@@ -3647,7 +3650,7 @@ func (s *adminServer) GetTrace(
 	if err != nil {
 		return nil, err
 	}
-	var recording tracing.Recording
+	var recording tracingpb.Recording
 	var snapshotID tracing.SnapshotID
 
 	traceID := req.TraceID
@@ -3676,7 +3679,7 @@ func (s *adminServer) GetTrace(
 		}
 		traceStillExists = true
 		if recording == nil {
-			recording = sp.GetFullRecording(tracing.RecordingVerbose)
+			recording = sp.GetFullRecording(tracingpb.RecordingVerbose)
 		}
 		return iterutil.StopIteration()
 	}); err != nil {
@@ -3708,7 +3711,7 @@ func (s *adminServer) SetTraceRecordingType(
 			return nil
 		}
 		// NB: The recording type propagates to the children, recursively.
-		sp.SetRecordingType(tracing.RecordingTypeFromProto(req.RecordingMode))
+		sp.SetRecordingType(tracingpb.RecordingTypeFromProto(req.RecordingMode))
 		return nil
 	})
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil

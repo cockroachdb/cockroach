@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -30,13 +31,13 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 }
 
 // GetCumulativeContentionTime is a helper function to calculate the cumulative
-// contention time from the tracing span from the context. All contention events
-// found in the trace are included.
-func GetCumulativeContentionTime(ctx context.Context) time.Duration {
+// contention time from the given recording or, if the recording is nil, from
+// the tracing span from the context. All contention events found in the trace
+// are included.
+func GetCumulativeContentionTime(ctx context.Context, recording tracingpb.Recording) time.Duration {
 	var cumulativeContentionTime time.Duration
-	recording := tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	if recording == nil {
-		return cumulativeContentionTime
+		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	}
 	var ev roachpb.ContentionEvent
 	for i := range recording {
@@ -81,12 +82,12 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.NumInternalSeeks = optional.MakeUint(ss.NumInternalSeeks)
 }
 
-// GetScanStats is a helper function to calculate scan stats from the tracing
-// span from the context.
-func GetScanStats(ctx context.Context) (ss ScanStats) {
-	recording := tracing.SpanFromContext(ctx).GetConfiguredRecording()
+// GetScanStats is a helper function to calculate scan stats from the given
+// recording or, if the recording is nil, from the tracing span from the
+// context.
+func GetScanStats(ctx context.Context, recording tracingpb.Recording) (ss ScanStats) {
 	if recording == nil {
-		return ScanStats{}
+		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	}
 	var ev roachpb.ScanStats
 	for i := range recording {

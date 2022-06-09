@@ -59,8 +59,8 @@ function makeStateWithLocations(locationData: ILocation[]) {
   };
 }
 
-describe("selectLocations", function() {
-  it("returns an empty array if location data is missing", function() {
+describe("selectLocations", function () {
+  it("returns an empty array if location data is missing", function () {
     const state = {
       cachedData: {
         locations: {
@@ -75,7 +75,7 @@ describe("selectLocations", function() {
 
   // Data must still be returned while the state is invalid to avoid
   // flickering while the data is being refreshed.
-  it("returns location data if it exists but is invalid", function() {
+  it("returns location data if it exists but is invalid", function () {
     const locationData = [
       {
         locality_key: "city",
@@ -93,13 +93,13 @@ describe("selectLocations", function() {
     );
   });
 
-  it("returns an empty array if location data is null", function() {
+  it("returns an empty array if location data is null", function () {
     const state = makeStateWithLocations(null);
 
     assert.deepEqual(selectLocations(state).map(climbOutOfTheMorass), []);
   });
 
-  it("returns location data if valid", function() {
+  it("returns location data if valid", function () {
     const locationData = [
       {
         locality_key: "city",
@@ -116,14 +116,14 @@ describe("selectLocations", function() {
   });
 });
 
-describe("selectLocationTree", function() {
-  it("returns an empty object if locations are empty", function() {
+describe("selectLocationTree", function () {
+  it("returns an empty object if locations are empty", function () {
     const state = makeStateWithLocations([]);
 
     assert.deepEqual(selectLocationTree(state), {});
   });
 
-  it("makes a key for each locality tier in locations", function() {
+  it("makes a key for each locality tier in locations", function () {
     const tiers = ["region", "city", "data-center", "rack"];
     const locations = tiers.map(tier => ({ locality_key: tier }));
     const state = makeStateWithLocations(locations);
@@ -131,7 +131,7 @@ describe("selectLocationTree", function() {
     assert.hasAllKeys(selectLocationTree(state), tiers);
   });
 
-  it("makes a key for each locality value in each tier", function() {
+  it("makes a key for each locality value in each tier", function () {
     const cities = ["nyc", "sf", "walla-walla"];
     const dataCenters = ["us-east-1", "us-west-1"];
     const cityLocations = cities.map(city => ({
@@ -151,7 +151,7 @@ describe("selectLocationTree", function() {
     assert.hasAllKeys(tree["data-center"], dataCenters);
   });
 
-  it("returns each location under its key and value", function() {
+  it("returns each location under its key and value", function () {
     const us = {
       locality_key: "country",
       locality_value: "US",

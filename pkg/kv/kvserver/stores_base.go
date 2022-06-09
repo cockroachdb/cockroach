@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -58,14 +58,14 @@ func (s *baseStore) StoreID() roachpb.StoreID {
 // Enqueue is part of kvserverbase.Store.
 func (s *baseStore) Enqueue(
 	ctx context.Context, queue string, rangeID roachpb.RangeID, skipShouldQueue bool,
-) (tracing.Recording, error) {
+) (tracingpb.Recording, error) {
 	store := (*Store)(s)
 	repl, err := store.GetReplica(rangeID)
 	if err != nil {
 		return nil, err
 	}
 
-	trace, processErr, enqueueErr := store.ManuallyEnqueue(ctx, queue, repl, skipShouldQueue)
+	trace, processErr, enqueueErr := store.Enqueue(ctx, queue, repl, skipShouldQueue, false /* async */)
 	if processErr != nil {
 		return nil, processErr
 	}

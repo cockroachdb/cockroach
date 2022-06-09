@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -512,12 +513,12 @@ func checkForExistingBackupsInCollection(
 	ctx context.Context, p sql.PlanHookState, destinations []string,
 ) error {
 	makeCloudFactory := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
-	collectionURI, _, err := getURIsByLocalityKV(destinations, "")
+	collectionURI, _, err := backupdest.GetURIsByLocalityKV(destinations, "")
 	if err != nil {
 		return err
 	}
 
-	_, err = readLatestFile(ctx, collectionURI, makeCloudFactory, p.User())
+	_, err = backupdest.ReadLatestFile(ctx, collectionURI, makeCloudFactory, p.User())
 	if err == nil {
 		// A full backup has already been taken to this location.
 		return errors.Newf("backups already created in %s; to ignore existing backups, "+

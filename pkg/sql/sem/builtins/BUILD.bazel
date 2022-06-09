@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "builtins",
@@ -38,6 +39,7 @@ go_library(
         "//pkg/geo/geos",
         "//pkg/geo/geotransform",
         "//pkg/geo/twkb",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient",
@@ -51,12 +53,10 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/descs",
         "//pkg/sql/colexecerror",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
-        "//pkg/sql/paramparse",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -75,10 +75,11 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/storageparam",
+        "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
         "//pkg/streaming",
         "//pkg/util",
@@ -168,5 +169,16 @@ go_test(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    src = "builtins",
+    disallowed_list = [
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/typedesc",
     ],
 )

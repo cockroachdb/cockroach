@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -91,46 +92,55 @@ func TestCatchupScan(t *testing.T) {
 	if err := storage.MVCCPut(ctx, eng, nil, kv1_4_4.Key.Key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val, &txn); err != nil {
 		t.Fatal(err)
 	}
-	testutils.RunTrueAndFalse(t, "useTBI", func(t *testing.T, useTBI bool) {
-		testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
-			iter := NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
-				Header: roachpb.Header{
-					// Inclusive, so want everything >= ts2
-					Timestamp: ts2,
-				},
-				Span: roachpb.Span{
-					EndKey: roachpb.KeyMax,
-				},
-				WithDiff: withDiff,
-			}, useTBI, nil)
-			defer iter.Close()
-			var events []roachpb.RangeFeedValue
-			// ts1 here is exclusive, so we do not want the versions at ts1.
-			require.NoError(t, iter.CatchUpScan(storage.MakeMVCCMetadataKey(testKey1),
-				storage.MakeMVCCMetadataKey(roachpb.KeyMax), ts1, withDiff,
-				func(e *roachpb.RangeFeedEvent) error {
-					events = append(events, *e.Val)
-					return nil
-				}))
-			require.Equal(t, 4, len(events))
-			checkEquality := func(
-				kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event roachpb.RangeFeedValue) {
-				require.Equal(t, string(kv.Key.Key), string(event.Key))
-				require.Equal(t, kv.Key.Timestamp, event.Value.Timestamp)
-				require.Equal(t, string(kv.Value), string(event.Value.RawBytes))
-				if withDiff {
-					// TODO(sumeer): uncomment after clarifying CatchUpScan behavior.
-					// require.Equal(t, prevKV.Key.Timestamp, event.PrevValue.Timestamp)
-					require.Equal(t, string(prevKV.Value), string(event.PrevValue.RawBytes))
-				} else {
-					require.Equal(t, hlc.Timestamp{}, event.PrevValue.Timestamp)
-					require.Equal(t, 0, len(event.PrevValue.RawBytes))
-				}
+	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
+		span := roachpb.Span{Key: testKey1, EndKey: roachpb.KeyMax}
+		iter := NewCatchUpIterator(eng, span, ts1, nil)
+		defer iter.Close()
+		var events []roachpb.RangeFeedValue
+		// ts1 here is exclusive, so we do not want the versions at ts1.
+		require.NoError(t, iter.CatchUpScan(func(e *roachpb.RangeFeedEvent) error {
+			events = append(events, *e.Val)
+			return nil
+		}, withDiff))
+		require.Equal(t, 4, len(events))
+		checkEquality := func(
+			kv storage.MVCCKeyValue, prevKV storage.MVCCKeyValue, event roachpb.RangeFeedValue) {
+			require.Equal(t, string(kv.Key.Key), string(event.Key))
+			require.Equal(t, kv.Key.Timestamp, event.Value.Timestamp)
+			require.Equal(t, string(kv.Value), string(event.Value.RawBytes))
+			if withDiff {
+				// TODO(sumeer): uncomment after clarifying CatchUpScan behavior.
+				// require.Equal(t, prevKV.Key.Timestamp, event.PrevValue.Timestamp)
+				require.Equal(t, string(prevKV.Value), string(event.PrevValue.RawBytes))
+			} else {
+				require.Equal(t, hlc.Timestamp{}, event.PrevValue.Timestamp)
+				require.Equal(t, 0, len(event.PrevValue.RawBytes))
 			}
-			checkEquality(kv1_2_2, kv1_1_1, events[0])
-			checkEquality(kv1_3_3, kv1_2_2, events[1])
-			checkEquality(kv2_2_2, kv2_1_1, events[2])
-			checkEquality(kv2_5_3, kv2_2_2, events[3])
-		})
+		}
+		checkEquality(kv1_2_2, kv1_1_1, events[0])
+		checkEquality(kv1_3_3, kv1_2_2, events[1])
+		checkEquality(kv2_2_2, kv2_1_1, events[2])
+		checkEquality(kv2_5_3, kv2_2_2, events[3])
 	})
+}
+
+func TestCatchupScanInlineError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Write an inline value.
+	require.NoError(t, storage.MVCCPut(ctx, eng, nil, roachpb.Key("inline"), hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
+
+	// Run a catchup scan across the span and watch it error.
+	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
+	iter := NewCatchUpIterator(eng, span, hlc.Timestamp{}, nil)
+	defer iter.Close()
+
+	err := iter.CatchUpScan(nil, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unexpected inline value")
 }

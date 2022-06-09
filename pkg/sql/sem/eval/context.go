@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -208,6 +207,10 @@ type Context struct {
 	// crdb_internal.request_statement_bundle builtin to insert a statement bundle
 	// request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
+
+	// CatalogBuiltins is used by various builtins which depend on looking up
+	// catalog information. Unlike the Planner, it is available in DistSQL.
+	CatalogBuiltins CatalogBuiltins
 }
 
 var _ tree.ParseTimeContext = &Context{}
@@ -286,17 +289,6 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 		return nil
 	}
 	return ec.SessionDataStack.Top()
-}
-
-// CastSessionOptions returns the SessionOptions for casts.
-func (ec *Context) CastSessionOptions() cast.SessionOptions {
-	if ec.SessionData() == nil {
-		return cast.SessionOptions{}
-	}
-	return cast.SessionOptions{
-		IntervalStyleEnabled: ec.SessionData().IntervalStyleEnabled,
-		DateStyleEnabled:     ec.SessionData().DateStyleEnabled,
-	}
 }
 
 // Copy returns a deep copy of ctx.

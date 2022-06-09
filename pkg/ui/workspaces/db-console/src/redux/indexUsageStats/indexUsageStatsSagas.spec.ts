@@ -27,7 +27,8 @@ import { cockroach } from "src/js/protos";
 
 describe("Index Usage Stats sagas", () => {
   describe("resetIndexUsageStatsSaga", () => {
-    const resetIndexUsageStatsResponse = new cockroach.server.serverpb.ResetIndexUsageStatsResponse();
+    const resetIndexUsageStatsResponse =
+      new cockroach.server.serverpb.ResetIndexUsageStatsResponse();
     const action = resetIndexUsageStatsAction("database", "table");
 
     it("successfully resets index usage stats", () => {

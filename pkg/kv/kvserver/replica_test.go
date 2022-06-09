@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -218,8 +217,6 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	tc.transport = store.cfg.Transport
 	tc.engine = store.engine
 	tc.store = store
-	// TODO(tbg): see if this is needed. Would like to remove it.
-	require.NoError(t, tc.initConfigs(t))
 }
 
 func (tc *testContext) Sender() kv.Sender {
@@ -250,27 +247,6 @@ func (tc *testContext) SendWrappedWith(
 // SendWrapped is identical to SendWrappedWith with a zero header.
 func (tc *testContext) SendWrapped(args roachpb.Request) (roachpb.Response, *roachpb.Error) {
 	return tc.SendWrappedWith(roachpb.Header{}, args)
-}
-
-// initConfigs creates default configuration entries.
-//
-// TODO(ajwerner): Remove this in 22.2.
-func (tc *testContext) initConfigs(t testing.TB) error {
-	// Put an empty system config into gossip so that gossip callbacks get
-	// run. We're using a fake config, but it's hooked into SystemConfig.
-	if err := tc.gossip.AddInfoProto(gossip.KeyDeprecatedSystemConfig,
-		&config.SystemConfigEntries{}, 0); err != nil {
-		return err
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		if cfg := tc.gossip.DeprecatedGetSystemConfig(); cfg == nil {
-			return errors.Errorf("expected system config to be set")
-		}
-		return nil
-	})
-
-	return nil
 }
 
 // addBogusReplicaToRangeDesc modifies the range descriptor to include a second
@@ -1195,14 +1171,6 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// If this actually failed, we would have gossiped from MVCCPutProto.
-	// Unlikely, but why not check.
-	if cfg := tc.gossip.DeprecatedGetSystemConfig(); cfg != nil {
-		if nv := len(cfg.Values); nv == 1 && cfg.Values[nv-1].Key.Equal(key) {
-			t.Errorf("unexpected gossip of system config: %s", cfg)
-		}
-	}
-
 	// Expire our own lease which we automagically acquired due to being
 	// first range and config holder.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
@@ -1221,12 +1189,6 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	tc.manualClock.Increment(11 + int64(tc.Clock().MaxOffset())) // advance time
 	now = tc.Clock().NowAsClockTimestamp()
 
-	ch := tc.gossip.DeprecatedRegisterSystemConfigChannel()
-	select {
-	case <-ch:
-	default:
-	}
-
 	// Give lease to this range.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now.ToTimestamp().Add(11, 0).UnsafeToClockTimestamp(),
@@ -1239,24 +1201,6 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-
-	testutils.SucceedsSoon(t, func() error {
-		sysCfg := tc.gossip.DeprecatedGetSystemConfig()
-		if sysCfg == nil {
-			return errors.Errorf("no system config yet")
-		}
-		var found bool
-		for _, cur := range sysCfg.Values {
-			if key.Equal(cur.Key) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return errors.Errorf("key %s not found in SystemConfig", key)
-		}
-		return nil
-	})
 }
 
 // TestReplicaTSCacheLowWaterOnLease verifies that the low water mark
@@ -1551,20 +1495,6 @@ func TestReplicaGossipFirstRange(t *testing.T) {
 		if key == gossip.KeySentinel && len(bytes) == 0 {
 			t.Errorf("expected non-empty gossiped sentinel, got %q", bytes)
 		}
-	}
-}
-
-// TestReplicaGossipAllConfigs verifies that all config types are gossiped.
-func TestReplicaGossipAllConfigs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
-	if cfg := tc.gossip.DeprecatedGetSystemConfig(); cfg == nil {
-		t.Fatal("config not set")
 	}
 }
 
@@ -6247,7 +6177,7 @@ func verifyRangeStats(
 func TestRangeStatsComputation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -10426,10 +10356,13 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	tc := testContext{}
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
+	confReader, err := tc.store.GetConfReader(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
-		sysCfg := tc.store.Gossip().DeprecatedGetSystemConfig()
-		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg)
+		processed, err := tc.store.consistencyQueue.process(ctx, tc.repl, confReader)
 		if !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}

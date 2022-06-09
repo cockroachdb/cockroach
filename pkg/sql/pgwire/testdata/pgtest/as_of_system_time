@@ -63,6 +63,29 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Make sure two AOSTs in the same txn errors as appropriate.
+send
+Parse {"Name": "parse1", "Query": "SELECT * FROM tab AS OF SYSTEM TIME '-1us'"}
+Bind {"DestinationPortal": "aostportal1", "PreparedStatement": "parse1"}
+Execute {"Portal": "aostportal1"}
+Parse {"Name": "parse2", "Query": "SELECT * FROM tab AS OF SYSTEM TIME '-4us'"}
+Bind {"DestinationPortal": "aostportal2", "PreparedStatement": "parse2"}
+Execute {"Portal": "aostportal2"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
 # Make sure AOST is handled consistently during Bind/Execute. This also should
 # not be able to see the data in the table, since this is a historical read.
 send
@@ -112,4 +135,38 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "s1", "Query": "SET TRANSACTION AS OF SYSTEM TIME $1"}
+Describe {"ObjectType": "S", "Name": "s1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[0]}
+{"Type":"NoData"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

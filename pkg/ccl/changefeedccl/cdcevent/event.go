@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -38,6 +37,7 @@ type Metadata struct {
 	FamilyID         descpb.FamilyID          // Column family ID.
 	FamilyName       string                   // Column family name.
 	HasOtherFamilies bool                     // True if the table multiple families.
+	SchemaTS         hlc.Timestamp            // Schema timestamp for table descriptor.
 }
 
 // Decoder is an interface for decoding KVs into cdc event row.
@@ -48,7 +48,7 @@ type Decoder interface {
 
 // Row holds a row corresponding to an event.
 type Row struct {
-	*eventDescriptor
+	*EventDescriptor
 
 	// datums is the new value of a changed table row.
 	datums rowenc.EncDatumRow
@@ -84,12 +84,25 @@ func (r Row) ForEachKeyColumn() Iterator {
 
 // ForEachColumn returns Iterator for each column.
 func (r Row) ForEachColumn() Iterator {
-	return iter{r: r, cols: r.familyCols}
+	return iter{r: r, cols: r.valueCols}
 }
 
 // ForEachUDTColumn returns Datum iterator for each column containing user defined types.
 func (r Row) ForEachUDTColumn() Iterator {
 	return iter{r: r, cols: r.udtCols}
+}
+
+// DatumAt returns Datum at specified position.
+func (r Row) DatumAt(at int) (tree.Datum, error) {
+	if at >= len(r.cols) {
+		return nil, errors.AssertionFailedf("column at %d out of bounds", at)
+	}
+	col := r.cols[at]
+	encDatum := r.datums[col.ord]
+	if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
+		return nil, errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
+	}
+	return encDatum.Datum, nil
 }
 
 // IsDeleted returns true if event corresponds to a deletion event.
@@ -99,7 +112,7 @@ func (r Row) IsDeleted() bool {
 
 // IsInitialized returns true if event row is initialized.
 func (r Row) IsInitialized() bool {
-	return r.eventDescriptor != nil
+	return r.EventDescriptor != nil
 }
 
 // HasValues returns true if event row has values to decode.
@@ -160,12 +173,9 @@ func (c ResultColumn) Ordinal() int {
 	return c.ord
 }
 
-// eventDescriptor implements Metadata interface, and associates
-// table/family descriptor with the information needed to decode events.
-type eventDescriptor struct {
+// EventDescriptor is a cdc event descriptor: collection of information describing Row.
+type EventDescriptor struct {
 	Metadata
-	desc   catalog.TableDescriptor
-	family *descpb.ColumnFamilyDescriptor
 
 	// List of result columns produced by this descriptor.
 	// This may be different from the table descriptors public columns
@@ -173,15 +183,18 @@ type eventDescriptor struct {
 	cols []ResultColumn
 
 	// Precomputed index lists into cols.
-	keyCols    []int // Primary key columns.
-	familyCols []int // All column family columns.
-	udtCols    []int // Columns containing UDTs.
+	keyCols   []int // Primary key columns.
+	valueCols []int // All column family columns.
+	udtCols   []int // Columns containing UDTs.
 }
 
 func newEventDescriptor(
-	desc catalog.TableDescriptor, family *descpb.ColumnFamilyDescriptor, includeVirtualColumns bool,
-) (*eventDescriptor, error) {
-	sd := eventDescriptor{
+	desc catalog.TableDescriptor,
+	family *descpb.ColumnFamilyDescriptor,
+	includeVirtualColumns bool,
+	schemaTS hlc.Timestamp,
+) (*EventDescriptor, error) {
+	sd := EventDescriptor{
 		Metadata: Metadata{
 			TableID:          desc.GetID(),
 			TableName:        desc.GetName(),
@@ -189,13 +202,12 @@ func newEventDescriptor(
 			FamilyID:         family.ID,
 			FamilyName:       family.Name,
 			HasOtherFamilies: desc.NumFamilies() > 1,
+			SchemaTS:         schemaTS,
 		},
-		family: family,
-		desc:   desc,
 	}
 
 	// addColumn is a helper to add a column to this descriptor.
-	addColumn := func(col catalog.Column, ord int, colIdxSlice *[]int) {
+	addColumn := func(col catalog.Column, ord int) int {
 		resultColumn := ResultColumn{
 			ResultColumn: colinfo.ResultColumn{
 				Name:           col.GetName(),
@@ -209,23 +221,26 @@ func newEventDescriptor(
 
 		colIdx := len(sd.cols)
 		sd.cols = append(sd.cols, resultColumn)
-		*colIdxSlice = append(*colIdxSlice, colIdx)
 
 		if col.GetType().UserDefined() {
 			sd.udtCols = append(sd.udtCols, colIdx)
 		}
+		return colIdx
 	}
 
 	// Primary key columns must be added in the same order they
 	// appear in the primary key index.
 	primaryIdx := desc.GetPrimaryIndex()
 	colOrd := catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
+	sd.keyCols = make([]int, primaryIdx.NumKeyColumns())
+	var primaryKeyOrdinal catalog.TableColMap
+
 	for i := 0; i < primaryIdx.NumKeyColumns(); i++ {
 		ord, ok := colOrd.Get(primaryIdx.GetKeyColumnID(i))
 		if !ok {
 			return nil, errors.AssertionFailedf("expected to find column %d", ord)
 		}
-		addColumn(desc.PublicColumns()[ord], ord, &sd.keyCols)
+		primaryKeyOrdinal.Set(desc.PublicColumns()[ord].GetID(), i)
 	}
 
 	// Remaining columns go in same order as public columns.
@@ -233,8 +248,17 @@ func newEventDescriptor(
 	for ord, col := range desc.PublicColumns() {
 		isInFamily := inFamily.Contains(col.GetID())
 		virtual := col.IsVirtual() && includeVirtualColumns
-		if isInFamily || virtual {
-			addColumn(col, ord, &sd.familyCols)
+		isValueCol := isInFamily || virtual
+		pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
+		if isValueCol || isPKey {
+			colIdx := addColumn(col, ord)
+			if isValueCol {
+				sd.valueCols = append(sd.valueCols, colIdx)
+			}
+
+			if isPKey {
+				sd.keyCols[pKeyOrd] = colIdx
+			}
 		}
 	}
 
@@ -242,20 +266,31 @@ func newEventDescriptor(
 }
 
 // DebugString returns event descriptor debug information.
-func (d *eventDescriptor) DebugString() string {
-	return fmt.Sprintf("eventDescriptor{table: %q(%d) family: %q(%d) pkCols=%v valCols=%v",
-		d.TableName, d.TableID, d.FamilyName, d.FamilyID, d.keyCols, d.familyCols)
+func (d *EventDescriptor) DebugString() string {
+	return fmt.Sprintf("EventDescriptor{table: %q(%d) family: %q(%d) pkCols=%v valCols=%v",
+		d.TableName, d.TableID, d.FamilyName, d.FamilyID, d.keyCols, d.valueCols)
 }
 
 // SafeFormat implements SafeFormatter interface.
-func (d *eventDescriptor) SafeFormat(p redact.SafePrinter, _ rune) {
+func (d *EventDescriptor) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Print(d.DebugString())
+}
+
+// ResultColumns returns all results columns in this descriptor.
+func (d *EventDescriptor) ResultColumns() []ResultColumn {
+	return d.cols
+}
+
+// Equals returns true if this descriptor equals other.
+func (d *EventDescriptor) Equals(other *EventDescriptor) bool {
+	return other != nil && d.TableID == other.TableID && d.Version == other.Version && d.FamilyID == other.FamilyID
 }
 
 type eventDescriptorFactory func(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
-) (*eventDescriptor, error)
+	schemaTS hlc.Timestamp,
+) (*EventDescriptor, error)
 
 type eventDecoder struct {
 	// Cached allocations for *row.Fetcher
@@ -281,12 +316,13 @@ func getEventDescriptorCached(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
 	includeVirtual bool,
+	schemaTS hlc.Timestamp,
 	cache *cache.UnorderedCache,
-) (*eventDescriptor, error) {
+) (*EventDescriptor, error) {
 	idVer := idVersion{id: desc.GetID(), version: desc.GetVersion(), family: family.ID}
 
 	if v, ok := cache.Get(idVer); ok {
-		ed := v.(*eventDescriptor)
+		ed := v.(*EventDescriptor)
 
 		// Normally, this is a no-op since majority of changefeeds do not use UDTs.
 		// However, in case we do, we must update cached UDT information based on this
@@ -299,7 +335,7 @@ func getEventDescriptorCached(
 		return ed, nil
 	}
 
-	ed, err := newEventDescriptor(desc, family, includeVirtual)
+	ed, err := newEventDescriptor(desc, family, includeVirtual, schemaTS)
 	if err != nil {
 		return nil, err
 	}
@@ -309,30 +345,36 @@ func getEventDescriptorCached(
 
 // NewEventDecoder returns key value decoder.
 func NewEventDecoder(
-	ctx context.Context, cfg *execinfra.ServerConfig, details jobspb.ChangefeedDetails,
-) Decoder {
-	rfCache := newRowFetcherCache(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	targets []jobspb.ChangefeedTargetSpecification,
+	includeVirtual bool,
+) (Decoder, error) {
+	rfCache, err := newRowFetcherCache(
 		ctx,
 		cfg.Codec,
 		cfg.LeaseManager.(*lease.Manager),
 		cfg.CollectionFactory,
 		cfg.DB,
-		details,
+		targets,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
 	eventDescriptorCache := cache.NewUnorderedCache(defaultCacheConfig)
 	getEventDescriptor := func(
 		desc catalog.TableDescriptor,
 		family *descpb.ColumnFamilyDescriptor,
-	) (*eventDescriptor, error) {
-		return getEventDescriptorCached(desc, family, includeVirtual, eventDescriptorCache)
+		schemaTS hlc.Timestamp,
+	) (*EventDescriptor, error) {
+		return getEventDescriptorCached(desc, family, includeVirtual, schemaTS, eventDescriptorCache)
 	}
 
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
-	}
+	}, nil
 }
 
 // DecodeKV decodes key value at specified schema timestamp.
@@ -354,13 +396,13 @@ func (d *eventDecoder) DecodeKV(
 		return Row{}, err
 	}
 
-	ed, err := d.getEventDescriptor(d.desc, d.family)
+	ed, err := d.getEventDescriptor(d.desc, d.family, schemaTS)
 	if err != nil {
 		return Row{}, err
 	}
 
 	return Row{
-		eventDescriptor: ed,
+		EventDescriptor: ed,
 		datums:          datums,
 		deleted:         isDeleted,
 		alloc:           &d.alloc,
@@ -441,22 +483,31 @@ func (it iter) Col(fn ColumnFn) error {
 // TestingMakeEventRow initializes Row with provided arguments.
 // Exposed for unit tests.
 func TestingMakeEventRow(
-	desc catalog.TableDescriptor, encRow rowenc.EncDatumRow, deleted bool,
+	desc catalog.TableDescriptor, familyID descpb.FamilyID, encRow rowenc.EncDatumRow, deleted bool,
 ) Row {
-	family, err := desc.FindFamilyByID(0)
+	family, err := desc.FindFamilyByID(familyID)
 	if err != nil {
 		panic(err) // primary column family always exists.
 	}
 	const includeVirtual = false
-	ed, err := newEventDescriptor(desc, family, includeVirtual)
+	ed, err := newEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
 	if err != nil {
 		panic(err)
 	}
 	var alloc tree.DatumAlloc
 	return Row{
-		eventDescriptor: ed,
+		EventDescriptor: ed,
 		datums:          encRow,
 		deleted:         deleted,
 		alloc:           &alloc,
 	}
+}
+
+// TestingGetFamilyIDFromKey returns family ID encoded in the specified roachpb.Key.
+// Exposed for testing.
+func TestingGetFamilyIDFromKey(
+	decoder Decoder, key roachpb.Key, ts hlc.Timestamp,
+) (descpb.FamilyID, error) {
+	_, familyID, err := decoder.(*eventDecoder).rfCache.tableDescForKey(context.Background(), key, ts)
+	return familyID, err
 }

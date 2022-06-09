@@ -100,11 +100,7 @@ export default class EncryptionStatus {
     if (active.eq(total)) {
       return 100;
     }
-    return (
-      Long.fromInt(100)
-        .mul(active)
-        .toNumber() / total.toNumber()
-    );
+    return Long.fromInt(100).mul(active).toNumber() / total.toNumber();
   }
 
   renderFileStats(stats: protos.cockroach.server.serverpb.IStoreDetails) {
@@ -150,9 +146,10 @@ export default class EncryptionStatus {
 
     // Attempt to decode protobuf.
     try {
-      decodedStatus = protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(
-        rawStatus,
-      );
+      decodedStatus =
+        protosccl.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(
+          rawStatus,
+        );
     } catch (e) {
       return [
         this.renderSimpleRow(

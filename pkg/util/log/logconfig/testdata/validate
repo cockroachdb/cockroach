@@ -445,7 +445,7 @@ fluent-defaults:
   buffering:
     max-staleness: 15s
     flush-trigger-size: 10KiB
-    max-in-flight: 4
+    max-buffer-size: 2MiB
 sinks:
   fluent-servers:
     a:
@@ -462,7 +462,7 @@ sinks:
       address: c
       channels: HEALTH
       buffering:
-        max-in-flight: 16
+        max-buffer-size: 3MiB
     d:
       address: d
       channels: SESSIONS
@@ -486,7 +486,7 @@ sinks:
       buffering:
         max-staleness: 10s
         flush-trigger-size: 10KiB
-        max-in-flight: 4
+        max-buffer-size: 2.0MiB
     b:
       channels: {INFO: [OPS]}
       net: tcp
@@ -499,7 +499,7 @@ sinks:
       buffering:
         max-staleness: 15s
         flush-trigger-size: 5.0KiB
-        max-in-flight: 4
+        max-buffer-size: 2.0MiB
     c:
       channels: {INFO: [HEALTH]}
       net: tcp
@@ -512,7 +512,7 @@ sinks:
       buffering:
         max-staleness: 15s
         flush-trigger-size: 10KiB
-        max-in-flight: 16
+        max-buffer-size: 3.0MiB
     d:
       channels: {INFO: [SESSIONS]}
       net: tcp

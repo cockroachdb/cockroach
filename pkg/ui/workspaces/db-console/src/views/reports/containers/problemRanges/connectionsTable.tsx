@@ -25,9 +25,7 @@ interface ConnectionTableColumn {
 }
 
 interface ConnectionsTableProps {
-  problemRanges: CachedDataReducerState<
-    protos.cockroach.server.serverpb.ProblemRangesResponse
-  >;
+  problemRanges: CachedDataReducerState<protos.cockroach.server.serverpb.ProblemRangesResponse>;
 }
 
 const connectionTableColumns: ConnectionTableColumn[] = [

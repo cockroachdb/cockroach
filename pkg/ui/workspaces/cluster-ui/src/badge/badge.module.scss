@@ -1,4 +1,4 @@
-@import '../core/index.module.scss';
+@import "../core/index.module.scss";
 @import "~@cockroachlabs/design-tokens/dist/web/_tokens.scss";
 
 .badge {
@@ -11,10 +11,8 @@
   cursor: default;
 }
 
-.badge--size-small, 
-
-.badge--size-large, 
-
+.badge--size-small,
+.badge--size-large,
 .badge--size-medium {
   height: $line-height--medium;
   font-size: $font-size--small;

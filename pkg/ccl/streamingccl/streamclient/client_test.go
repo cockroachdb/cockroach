@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -43,8 +44,8 @@ func (sc testStreamClient) Plan(ctx context.Context, ID streaming.StreamID) (Top
 // Heartbeat implements the Client interface.
 func (sc testStreamClient) Heartbeat(
 	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
-) error {
-	return nil
+) (streampb.StreamReplicationStatus, error) {
+	return streampb.StreamReplicationStatus{}, nil
 }
 
 // Close implements the Client interface.
@@ -130,7 +131,7 @@ func ExampleClient() {
 				ts := ingested.ts
 				ingested.Unlock()
 
-				if err := client.Heartbeat(ctx, id, ts); err != nil {
+				if _, err := client.Heartbeat(ctx, id, ts); err != nil {
 					return err
 				}
 			}
@@ -162,7 +163,10 @@ func ExampleClient() {
 				switch event.Type() {
 				case streamingccl.KVEvent:
 					kv := event.GetKV()
-					fmt.Printf("%s->%s@%d\n", kv.Key.String(), string(kv.Value.RawBytes), kv.Value.Timestamp.WallTime)
+					fmt.Printf("kv: %s->%s@%d\n", kv.Key.String(), string(kv.Value.RawBytes), kv.Value.Timestamp.WallTime)
+				case streamingccl.SSTableEvent:
+					sst := event.GetSSTable()
+					fmt.Printf("sst: %s->%s@%d\n", sst.Span.String(), string(sst.Data), sst.WriteTS.WallTime)
 				case streamingccl.CheckpointEvent:
 					ingested.Lock()
 					ingested.ts.Forward(*event.GetResolved())
@@ -183,8 +187,8 @@ func ExampleClient() {
 	}
 
 	// Output:
-	// "key_1"->value_1@1
+	// kv: "key_1"->value_1@1
 	// resolved 100
-	// "key_1"->value_1@1
+	// kv: "key_1"->value_1@1
 	// resolved 100
 }

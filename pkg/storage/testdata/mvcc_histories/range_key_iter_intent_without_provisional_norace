@@ -1,0 +1,120 @@
+# Set up a couple of intents around range keys, but clear their provisional
+# values. The initial setup will fail when it's scanning the data afterwards,
+# but the data is still written so that's fine.
+#
+# This test does not run under race, because the error behavior differs due
+# to additional (costly) assertions. We want to test that we are reasonably
+# resistant to invariant violations even when not under race.
+run error
+with t=A
+  txn_begin ts=5
+  put k=c v=c5
+  put k=e v=e5
+clear k=c ts=5
+clear k=e ts=5
+put k=f ts=1 v=f1
+put_rangekey k=b end=d ts=5
+put_rangekey k=e end=g ts=5
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+rangekey: {b-d}/[5.000000000,0=/<empty>]
+rangekey: {e-g}/[5.000000000,0=/<empty>]
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+error: (*withstack.withStack:) intentIter at intent, but iter not at provisional value
+
+# Forward and reverse scans should error eventually, and should never
+# show the wrong range key for the intent.
+run error
+iter_new types=pointsAndRanges
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {b-d}/[5.000000000,0=/<empty>]
+iter_scan: {b-d}/[5.000000000,0=/<empty>]
+iter_scan: err=iter ahead of provisional value for intent "c" (at "e"/0,0)
+error: (*withstack.withStack:) iter ahead of provisional value for intent "c" (at "e"/0,0)
+
+run error
+iter_new types=pointsAndRanges
+iter_seek_lt k=z
+iter_scan reverse
+----
+iter_seek_lt: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
+iter_scan: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
+iter_scan: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_scan: err=intentIter should not be after iter
+error: (*withstack.withStack:) intentIter should not be after iter
+
+# Seeking to intent at c will error, due to best-effort checks for provisional
+# value.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_ge k=c
+----
+iter_seek_ge: err=iter not on provisional value for intent "c"
+
+# Seeking to e intent will not error immediately, because the best-effort checks
+# only look for a point key covered by a range key (which it finds at f@1). This
+# is fine, as long as we expose the correct range key. The next step will error.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_ge k=e
+iter_next
+----
+iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_next: err=intentIter at intent, but iter not at provisional value
+
+# With prefix iterators, both seeks immediately error.
+run ok
+iter_new prefix types=pointsAndRanges
+iter_seek_ge k=c
+iter_seek_ge k=e
+----
+iter_seek_ge: err=iter not on provisional value for intent "c"
+iter_seek_ge: err=iter not on provisional value for intent "e"
+
+# Reverse seek at f will land on intent at e, even though there was no
+# provisional value. This is fine, as long as we emit the correct range keys.
+# It eventually errors because 
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=f
+iter_prev
+----
+iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_prev: err=intentIter should not be after iter
+
+# Reverse seek at d ends up succeeding. This is also fine, as long as the
+# emitted range keys and values are correct.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=d
+iter_prev
+iter_prev
+----
+iter_seek_lt: "c"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {b-d}/[5.000000000,0=/<empty>]
+iter_prev: {b-d}/[5.000000000,0=/<empty>]
+iter_prev: .
+
+# Switching directions on these positions should also error if appropriate, and
+# never expose the wrong range key for an intent.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_ge k=e
+iter_prev
+----
+iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_prev: err=iter not at provisional value, cmp: -1
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=f
+iter_next
+iter_prev
+iter_next
+----
+iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_next: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
+iter_prev: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_next: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]

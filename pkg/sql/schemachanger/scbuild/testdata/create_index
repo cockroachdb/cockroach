@@ -10,7 +10,7 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
     indexId: 2
     name: id1
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
@@ -24,6 +24,22 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 3
+- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 3
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true
 
 build
 CREATE INVERTED INDEX CONCURRENTLY id2
@@ -34,7 +50,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
     indexId: 2
     name: id2
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
@@ -50,6 +66,24 @@ CREATE INVERTED INDEX CONCURRENTLY id2
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 3
+- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 3
+      isConcurrently: true
+      isInverted: true
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true
 
 build skip=sql_dependencies
 CREATE INDEX id3
@@ -68,7 +102,13 @@ CREATE INDEX id3
     partitioning:
       numColumns: 1
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, PUBLIC], ABSENT]
+- [[IndexPartitioning:{DescID: 104, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    indexId: 3
+    partitioning:
+      numColumns: 1
+    tableId: 104
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
@@ -82,6 +122,22 @@ CREATE INDEX id3
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 3
+- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 3
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true
 
 build
 CREATE INDEX id4
@@ -109,9 +165,9 @@ CREATE INDEX id4
         oid: 23
         width: 32
     tableId: 104
-- [[IndexName:{DescID: 104, Name: id4, IndexID: 3}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: id4, IndexID: 4}, PUBLIC], ABSENT]
   details:
-    indexId: 3
+    indexId: 4
     name: id4
     tableId: 104
 - [[IndexName:{DescID: 104, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
@@ -138,7 +194,7 @@ CREATE INDEX id4
       - 2
       - 3
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
@@ -154,10 +210,11 @@ CREATE INDEX id4
       - 3
       - 4
       tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0}, PUBLIC], ABSENT]
+      temporaryIndexId: 3
+- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
-      indexId: 3
+      indexId: 4
       keyColumnDirections:
       - ASC
       - ASC
@@ -175,3 +232,42 @@ CREATE INDEX id4
       storingColumnIds:
       - 3
       tableId: 104
+      temporaryIndexId: 5
+- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+  details:
+    embeddedIndex:
+      constraintId: 1
+      indexId: 3
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      - 3
+      - 4
+      tableId: 104
+- [[TemporaryIndex:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  details:
+    embeddedIndex:
+      indexId: 5
+      keyColumnDirections:
+      - ASC
+      - ASC
+      keyColumnIds:
+      - 1
+      - 2
+      sharding:
+        columnNames:
+        - id
+        - name
+        isSharded: true
+        name: crdb_internal_id_name_shard_8
+        shardBuckets: 8
+      sourceIndexId: 1
+      storingColumnIds:
+      - 3
+      tableId: 104
+    isUsingSecondaryEncoding: true

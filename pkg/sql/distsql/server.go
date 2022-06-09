@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -278,7 +279,7 @@ func (ds *ServerImpl) setupFlow(
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
-	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*kv.Txn, error) {
+	makeLeaf := func() (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
 		if tis == nil {
 			// This must be a flow running for some bulk-io operation that doesn't use
@@ -311,7 +312,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.Mon = monitor
 		if localState.HasConcurrency {
 			var err error
-			leafTxn, err = makeLeaf(req)
+			leafTxn, err = makeLeaf()
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -333,7 +334,7 @@ func (ds *ServerImpl) setupFlow(
 		// It's important to populate evalCtx.Txn early. We'll write it again in the
 		// f.SetTxn() call below, but by then it will already have been captured by
 		// processors.
-		leafTxn, err = makeLeaf(req)
+		leafTxn, err = makeLeaf()
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -369,7 +370,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		ctx, req.Flow.FlowID, evalCtx, makeLeaf, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -417,7 +418,7 @@ func (ds *ServerImpl) setupFlow(
 	} else {
 		// If I haven't created the leaf already, do it now.
 		if leafTxn == nil {
-			leafTxn, err = makeLeaf(req)
+			leafTxn, err = makeLeaf()
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -442,6 +443,7 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
+	makeLeafTxn func() (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
 	localState LocalState,
@@ -454,6 +456,7 @@ func (ds *ServerImpl) newFlowContext(
 		ID:             id,
 		EvalCtx:        evalCtx,
 		Txn:            evalCtx.Txn,
+		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		CollectStats:   collectStats,
@@ -478,6 +481,8 @@ func (ds *ServerImpl) newFlowContext(
 		// on flow cleanup.
 		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
 		flowCtx.IsDescriptorsCleanupRequired = true
+		flowCtx.EvalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
+		evalCtx.CatalogBuiltins = &flowCtx.EvalCatalogBuiltins
 	}
 	return flowCtx
 }
@@ -576,23 +581,23 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 		// It's not expected to have a span in the context since the gRPC server
 		// interceptor that generally opens spans exempts this particular RPC. Note
 		// that this method is not called for flows local to the gateway.
-		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+		return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
 			tracing.WithParent(parentSpan),
 			tracing.WithServerSpanKind)
 	}
 
 	if !req.TraceInfo.Empty() {
-		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+		return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
 			tracing.WithRemoteParentFromTraceInfo(&req.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
 	// For backwards compatibility with 21.2, if tracing info was passed as
 	// gRPC metadata, we use it.
-	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
 	if err != nil {
 		log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 	}
-	return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+	return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),
 		tracing.WithServerSpanKind)
 }

@@ -15,7 +15,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/gcjob",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/jobs",

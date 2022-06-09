@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -62,6 +63,7 @@ const (
 	// TenantID specifies the ID of the tenant we are ingesting data into. This
 	// allows the client to prefix the generated KVs with the appropriate tenant
 	// prefix.
+	// TODO(casper): ensure this should be consistent across the usage of APIs
 	TenantID = "TENANT_ID"
 	// IngestionDatabaseID is the ID used in the generated table descriptor.
 	IngestionDatabaseID = 50 /* defaultDB */
@@ -258,9 +260,9 @@ func (m *randomStreamClient) Create(
 
 // Heartbeat implements the Client interface.
 func (m *randomStreamClient) Heartbeat(
-	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
-) error {
-	return nil
+	ctx context.Context, _ streaming.StreamID, _ hlc.Timestamp,
+) (streampb.StreamReplicationStatus, error) {
+	return streampb.StreamReplicationStatus{}, nil
 }
 
 // getDescriptorAndNamespaceKVForTableID returns the namespace and descriptor

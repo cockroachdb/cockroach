@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -45,12 +44,6 @@ import (
 var backupOutputTypes = []*types.T{}
 
 var (
-	useTBI = settings.RegisterBoolSetting(
-		settings.TenantWritable,
-		"kv.bulk_io_write.experimental_incremental_export_enabled",
-		"use experimental time-bound file filter when exporting in BACKUP",
-		true,
-	)
 	priorityAfter = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"bulkio.backup.read_with_priority_after",
@@ -78,20 +71,6 @@ var (
 		"target size for individual data files produced during BACKUP",
 		128<<20,
 	).WithPublic()
-
-	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
-		"backup-merge-file-buffer-size",
-		128<<20, /* defaultValue */
-		1<<20,   /* metamorphic min */
-		16<<20,  /* metamorphic max */
-	)
-	smallFileBuffer = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
-		"bulkio.backup.merge_file_buffer_size",
-		"size limit used when buffering backup files before merging them",
-		int64(defaultSmallFileBuffer),
-		settings.NonNegativeInt,
-	)
 
 	splitKeysOnTimestamps = settings.RegisterBoolSetting(
 		settings.TenantWritable,
@@ -352,7 +331,7 @@ func runBackupProcessor(
 						RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
 						ResumeKeyTS:                         span.firstKeyTS,
 						StartTime:                           span.start,
-						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
+						EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
 						MVCCFilter:                          spec.MVCCFilter,
 						TargetFileSize:                      batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
 						ReturnSST:                           true,

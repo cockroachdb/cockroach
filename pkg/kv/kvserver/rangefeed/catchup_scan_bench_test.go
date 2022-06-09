@@ -46,19 +46,13 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			iter := rangefeed.NewCatchUpIterator(eng, &roachpb.RangeFeedRequest{
-				Header: roachpb.Header{
-					Timestamp: opts.ts,
-				},
-				WithDiff: opts.withDiff,
-				Span:     span,
-			}, opts.useTBI, func() {})
+			iter := rangefeed.NewCatchUpIterator(eng, span, opts.ts, nil)
 			defer iter.Close()
 			counter := 0
-			err := iter.CatchUpScan(storage.MakeMVCCMetadataKey(startKey), storage.MakeMVCCMetadataKey(endKey), opts.ts, opts.withDiff, func(*roachpb.RangeFeedEvent) error {
+			err := iter.CatchUpScan(func(*roachpb.RangeFeedEvent) error {
 				counter++
 				return nil
-			})
+			}, opts.withDiff)
 			if err != nil {
 				b.Fatalf("failed catchUp scan: %+v", err)
 			}
@@ -136,22 +130,17 @@ func BenchmarkCatchUpScan(b *testing.B) {
 
 	for name, do := range dataOpts {
 		b.Run(name, func(b *testing.B) {
-			for _, useTBI := range []bool{true, false} {
-				b.Run(fmt.Sprintf("useTBI=%v", useTBI), func(b *testing.B) {
-					for _, withDiff := range []bool{true, false} {
-						b.Run(fmt.Sprintf("withDiff=%v", withDiff), func(b *testing.B) {
-							for _, tsExcludePercent := range []float64{0.0, 0.50, 0.75, 0.95, 0.99} {
-								wallTime := int64((5 * (float64(numKeys)*tsExcludePercent + 1)))
-								ts := hlc.Timestamp{WallTime: wallTime}
-								b.Run(fmt.Sprintf("perc=%2.2f", tsExcludePercent*100), func(b *testing.B) {
-									runCatchUpBenchmark(b, setupMVCCPebble, benchOptions{
-										dataOpts: do,
-										ts:       ts,
-										useTBI:   useTBI,
-										withDiff: withDiff,
-									})
-								})
-							}
+			for _, withDiff := range []bool{true, false} {
+				b.Run(fmt.Sprintf("withDiff=%v", withDiff), func(b *testing.B) {
+					for _, tsExcludePercent := range []float64{0.0, 0.50, 0.75, 0.95, 0.99} {
+						wallTime := int64((5 * (float64(numKeys)*tsExcludePercent + 1)))
+						ts := hlc.Timestamp{WallTime: wallTime}
+						b.Run(fmt.Sprintf("perc=%2.2f", tsExcludePercent*100), func(b *testing.B) {
+							runCatchUpBenchmark(b, setupMVCCPebble, benchOptions{
+								dataOpts: do,
+								ts:       ts,
+								withDiff: withDiff,
+							})
 						})
 					}
 				})
@@ -170,7 +159,6 @@ type benchDataOptions struct {
 
 type benchOptions struct {
 	ts       hlc.Timestamp
-	useTBI   bool
 	withDiff bool
 	dataOpts benchDataOptions
 }

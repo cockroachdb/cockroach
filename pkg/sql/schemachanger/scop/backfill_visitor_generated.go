@@ -23,9 +23,15 @@ type BackfillOp interface {
 // BackfillVisitor is a visitor for BackfillOp operations.
 type BackfillVisitor interface {
 	BackfillIndex(context.Context, BackfillIndex) error
+	MergeIndex(context.Context, MergeIndex) error
 }
 
 // Visit is part of the BackfillOp interface.
 func (op BackfillIndex) Visit(ctx context.Context, v BackfillVisitor) error {
 	return v.BackfillIndex(ctx, op)
+}
+
+// Visit is part of the BackfillOp interface.
+func (op MergeIndex) Visit(ctx context.Context, v BackfillVisitor) error {
+	return v.MergeIndex(ctx, op)
 }

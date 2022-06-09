@@ -117,9 +117,9 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		default:
 			return nil, missingTypeErr
 		}
-		// Types we don't support get OID -1, so they won't match anything
+		// Types we don't support get OID 0, so they won't match anything
 		// in catalogs.
-		return tree.NewDOidWithTypeAndName(-1, t, s), nil
+		return tree.NewDOidWithTypeAndName(0, t, s), nil
 
 	case oid.T_regclass:
 		tn, err := castStringToRegClassTableName(s)

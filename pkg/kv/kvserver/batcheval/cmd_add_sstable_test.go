@@ -760,12 +760,8 @@ func TestEvalAddSSTable(t *testing.T) {
 						}
 
 						// Scan resulting data from engine.
-						iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{
-							EndKey:       keys.MaxKey,
-							StartTime:    hlc.MinTimestamp,
-							EndTime:      hlc.MaxTimestamp,
-							IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-							InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
+						iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+							UpperBound: keys.MaxKey,
 						})
 						defer iter.Close()
 						iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
@@ -1102,7 +1098,7 @@ func runTestDBAddSSTable(
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	const max = 1 << 10
 	ctx := context.Background()
@@ -1218,7 +1214,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	storage.SkipIfSimpleValueEncodingDisabled(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()

@@ -18,7 +18,7 @@ SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1us'
 
 # Verify that we can use computed expressions.
 query I
-SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'us')::INTERVAL )
+SELECT * FROM t AS OF SYSTEM TIME -( parse_interval('1000' || 'us') )
 ----
 2
 
@@ -108,3 +108,27 @@ SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp())
 skipif config 3node-tenant
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1s'::interval)
+
+statement ok
+BEGIN
+
+statement ok
+SELECT * from t
+
+statement error cannot set fixed timestamp, .* already performed reads
+SET TRANSACTION AS OF system time '-1s'
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t VALUES(1)
+
+statement error cannot set fixed timestamp, .* already performed writes
+SET TRANSACTION AS OF system time '-1s'
+
+statement ok
+ROLLBACK

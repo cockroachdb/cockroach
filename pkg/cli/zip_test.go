@@ -336,6 +336,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `dial tcp ...`)
 	re = regexp.MustCompile(`(?m)rpc error: .*$`)
 	out = re.ReplaceAllString(out, `rpc error: ...`)
+	re = regexp.MustCompile(`(?m)failed to connect to .*$`)
+	out = re.ReplaceAllString(out, `failed to connect to ...`)
 
 	// The number of memory profiles previously collected is not deterministic.
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ heap profiles found$`)

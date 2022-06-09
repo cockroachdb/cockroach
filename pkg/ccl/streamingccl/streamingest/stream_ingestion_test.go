@@ -55,13 +55,13 @@ func getHighWaterMark(jobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
 	return payload.GetHighWater(), nil
 }
 
-func getTestRandomClientURI() string {
+func getTestRandomClientURI(tenantID int) string {
 	valueRange := 100
 	kvsPerResolved := 200
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 2
 	dupProbability := 0.2
-	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency, dupProbability)
+	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency, dupProbability, tenantID)
 }
 
 // TestStreamIngestionJobWithRandomClient creates a stream ingestion job that is
@@ -88,11 +88,11 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// Register interceptors on the random stream client, which will be used by
 	// the processors.
 	const oldTenantID = 10
-	const tenantID = 30
+	const newTenantID = 30
 	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MakeTenantID(oldTenantID)),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{{
 			OldID: roachpb.MakeTenantID(oldTenantID),
-			NewID: roachpb.MakeTenantID(tenantID),
+			NewID: roachpb.MakeTenantID(newTenantID),
 		}}, true /* restoreTenantFromStream */)
 	require.NoError(t, err)
 	streamValidator := newStreamClientValidator(rekeyer)
@@ -144,8 +144,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
-	streamAddr := getTestRandomClientURI()
-	query := fmt.Sprintf(`RESTORE TENANT 10 FROM REPLICATION STREAM FROM '%s' AS TENANT %d`, streamAddr, tenantID)
+	streamAddr := getTestRandomClientURI(oldTenantID)
+	query := fmt.Sprintf(`RESTORE TENANT %d FROM REPLICATION STREAM FROM '%s' AS TENANT %d`,
+		oldTenantID, streamAddr, newTenantID)
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
 	_, err = conn.Exec(query)
@@ -212,7 +213,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(tenantID)))
+	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(newTenantID)))
 	t.Logf("counting kvs in span %v", tenantPrefix)
 	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantPrefix)
 	// Sanity check that the max ts in the store is less than the revert range

@@ -584,7 +584,6 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 				MaxSize:            0,
 				MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
 				StopMidKey:         false,
-				UseTBI:             true,
 			}, destination)
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
@@ -638,29 +637,21 @@ func TestExportSplitMidKey(t *testing.T) {
 
 	for _, test := range []struct {
 		exportAll    bool
-		useTBI       bool
 		stopMidKey   bool
 		useMaxSize   bool
 		resumeCount  int
 		resumeWithTs int
 	}{
-		{false, true, false, false, 3, 0},
-		{true, true, false, false, 3, 0},
-		{false, true, true, false, 3, 0},
+		{false, false, false, 3, 0},
+		{true, false, false, 3, 0},
+		{false, true, false, 3, 0},
 		// No resume timestamps since we fall under max size criteria
-		{true, true, true, false, 3, 0},
-		{true, true, true, true, 4, 1},
-		{false, false, false, false, 3, 0},
-		{true, false, false, false, 3, 0},
-		{false, false, true, false, 3, 0},
-		// No resume timestamps since we fall under max size criteria
-		{true, false, true, false, 3, 0},
-		{true, false, true, true, 4, 1},
+		{true, true, false, 3, 0},
+		{true, true, true, 4, 1},
 	} {
 		t.Run(
-			fmt.Sprintf(
-				"exportAll=%t,useTBI=%t,stopMidKey=%t,useMaxSize=%t",
-				test.exportAll, test.useTBI, test.stopMidKey, test.useMaxSize),
+			fmt.Sprintf("exportAll=%t,stopMidKey=%t,useMaxSize=%t",
+				test.exportAll, test.stopMidKey, test.useMaxSize),
 			func(t *testing.T) {
 				firstKeyTS := hlc.Timestamp{}
 				resumeKey := key(1)
@@ -682,7 +673,6 @@ func TestExportSplitMidKey(t *testing.T) {
 							TargetSize:         1,
 							MaxSize:            maxSize,
 							StopMidKey:         test.stopMidKey,
-							UseTBI:             test.useTBI,
 						}, dest)
 					if !firstKeyTS.IsEmpty() {
 						resumeWithTs++
@@ -917,7 +907,6 @@ func exportAllData(t *testing.T, engine Engine, limits queryLimits) []MVCCKey {
 		StartTS:            limits.minTimestamp,
 		EndTS:              limits.maxTimestamp,
 		ExportAllRevisions: !limits.latest,
-		UseTBI:             true,
 	}, sstFile)
 	require.NoError(t, err, "Failed to export expected data")
 	return sstToKeys(t, sstFile.Data())
@@ -962,7 +951,6 @@ func assertDataEqual(
 			StartTS:            query.minTimestamp,
 			EndTS:              query.maxTimestamp,
 			ExportAllRevisions: !query.latest,
-			UseTBI:             true,
 			StopMidKey:         true,
 			ResourceLimiter:    &limiter,
 		}, sstFile)
@@ -1080,7 +1068,7 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 
 func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	SkipIfSimpleValueEncodingDisabled(t)
+	DisableMetamorphicSimpleValueEncoding(t)
 
 	eng := createTestPebbleEngine()
 	defer eng.Close()

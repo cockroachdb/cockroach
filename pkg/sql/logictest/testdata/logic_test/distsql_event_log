@@ -16,8 +16,10 @@ CREATE TABLE a (id INT PRIMARY KEY, x INT, y INT, INDEX x_idx (x, y))
 statement ok
 CREATE STATISTICS s1 ON id FROM a
 
-statement ok
-CREATE STATISTICS __auto__ FROM a
+# TODO(msirek): Re-enable this test once autostats collection is made
+#               consistently retryable.
+# statement ok retry
+# CREATE STATISTICS __auto__ FROM a
 
 # Check explicitly for table id 106. System tables could trigger autostats
 # collections at any time.
@@ -28,7 +30,6 @@ WHERE "eventType" = 'create_statistics' AND "targetID" = 106
 ORDER BY "timestamp", info
 ----
 106  1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
-106  1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS __auto__ FROM test.public.a", "TableName": "test.public.a", "Tag": "CREATE STATISTICS", "User": "root"}
 
 statement ok
 DROP TABLE a

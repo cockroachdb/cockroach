@@ -237,6 +237,11 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 			ret = index.IndexID + 1
 		}
 	})
+	scpb.ForEachTemporaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.TemporaryIndex) {
+		if index.TableID == id && index.IndexID >= ret {
+			ret = index.IndexID + 1
+		}
+	})
 	scpb.ForEachSecondaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
 		if index.TableID == id && index.IndexID >= ret {
 			ret = index.IndexID + 1
@@ -245,10 +250,10 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 	return ret
 }
 
-// SecondaryIndexPartitioningDescriptor implements the scbuildstmt.TableHelpers
+// IndexPartitioningDescriptor implements the scbuildstmt.TableHelpers
 // interface.
-func (b *builderState) SecondaryIndexPartitioningDescriptor(
-	index *scpb.SecondaryIndex, partBy *tree.PartitionBy,
+func (b *builderState) IndexPartitioningDescriptor(
+	index *scpb.Index, partBy *tree.PartitionBy,
 ) catpb.PartitioningDescriptor {
 	b.ensureDescriptor(index.TableID)
 	desc := b.descCache[index.TableID].desc
@@ -267,7 +272,7 @@ func (b *builderState) SecondaryIndexPartitioningDescriptor(
 	oldKeyColumnNames := make([]string, len(index.KeyColumnIDs))
 	for i, colID := range index.KeyColumnIDs {
 		scpb.ForEachColumnName(b, func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
-			if cn.TableID != index.TableID && cn.ColumnID != colID {
+			if cn.TableID != index.TableID || cn.ColumnID != colID {
 				return
 			}
 			oldKeyColumnNames[i] = cn.Name

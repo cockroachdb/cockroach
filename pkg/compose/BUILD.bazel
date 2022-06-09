@@ -11,9 +11,8 @@ go_test(
     name = "compose_test",
     srcs = ["compose_test.go"],
     data = [
-        "//pkg/cmd/cockroach",
+        "//c-deps:libgeos",
         "//pkg/compose:compare/docker-compose.yml",
-        "//pkg/compose/compare/compare:compare_test",
     ],
     embed = [":compose"],
     gotags = ["compose"],

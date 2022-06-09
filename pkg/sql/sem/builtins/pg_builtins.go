@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/errors"
@@ -85,21 +83,6 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.TimestampTZ.Oid(): {},
 	types.AnyTuple.Oid():    {},
 }
-
-// UpdatableCommand matches update operations in postgres.
-type UpdatableCommand tree.DInt
-
-// The following constants are the values for UpdatableCommand enumeration.
-const (
-	UpdateCommand UpdatableCommand = 2 + iota
-	InsertCommand
-	DeleteCommand
-)
-
-var (
-	nonUpdatableEvents = tree.NewDInt(0)
-	allUpdatableEvents = tree.NewDInt((1 << UpdateCommand) | (1 << InsertCommand) | (1 << DeleteCommand))
-)
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
 // is either the type's postgres display name or the type's postgres display
@@ -671,7 +654,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_function_result",
 					sessiondata.NoSessionDataOverride,
-					`SELECT prorettype::REGTYPE::TEXT FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
+					`SELECT prorettype::REGTYPE::TEXT FROM pg_proc WHERE oid=$1`, funcOid.Oid)
 				if err != nil {
 					return nil, err
 				}
@@ -698,7 +681,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_get_function_identity_arguments",
 					sessiondata.NoSessionDataOverride,
-					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, int(funcOid.DInt))
+					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, funcOid.Oid)
 				if err != nil {
 					return nil, err
 				}
@@ -947,7 +930,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				maybeTypmod := args[1]
-				oid := oid.Oid(oidArg.(*tree.DOid).DInt)
+				oid := oidArg.(*tree.DOid).Oid
 				typ, ok := types.OidToType[oid]
 				if !ok {
 					// If the type wasn't statically known, try looking it up as a user
@@ -1026,7 +1009,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getPgObjDesc(ctx, "", int(args[0].(*tree.DOid).DInt))
+				return getPgObjDesc(ctx, "", args[0].(*tree.DOid).Oid)
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
@@ -1037,7 +1020,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getPgObjDesc(ctx,
 					string(tree.MustBeDString(args[1])),
-					int(args[0].(*tree.DOid).DInt),
+					args[0].(*tree.DOid).Oid,
 				)
 			},
 			Info:       notUsableInfo,
@@ -1049,8 +1032,8 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		tree.Overload{
 			Types:      tree.ArgTypes{{"int", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Oid),
-			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDOid(*args[0].(*tree.DInt)), nil
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return eval.PerformCast(evalCtx, args[0], types.Oid)
 			},
 			Info:       "Converts an integer to an OID.",
 			Volatility: volatility.Immutable,
@@ -1063,7 +1046,7 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				catalogName := string(tree.MustBeDString(args[1]))
-				objOid := int(args[0].(*tree.DOid).DInt)
+				objOid := args[0].(*tree.DOid).Oid
 
 				classOid, ok := getCatalogOidForComments(catalogName)
 				if !ok {
@@ -1148,7 +1131,7 @@ SELECT description
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_function_is_visible",
 					sessiondata.NoSessionDataOverride,
-					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", int(oid.DInt))
+					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", oid.Oid)
 				if err != nil {
 					return nil, err
 				}
@@ -1171,7 +1154,7 @@ SELECT description
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := ctx.Planner.IsTableVisible(
-					ctx.Context, ctx.SessionData().Database, ctx.SessionData().SearchPath, oid.Oid(oidArg.DInt),
+					ctx.Context, ctx.SessionData().Database, ctx.SessionData().SearchPath, oidArg.Oid,
 				)
 				if err != nil {
 					return nil, err
@@ -1199,7 +1182,7 @@ SELECT description
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := ctx.Planner.IsTypeVisible(
-					ctx.Context, ctx.SessionData().Database, ctx.SessionData().SearchPath, oid.Oid(oidArg.DInt),
+					ctx.Context, ctx.SessionData().Database, ctx.SessionData().SearchPath, oidArg.Oid,
 				)
 				if err != nil {
 					return nil, err
@@ -1220,28 +1203,11 @@ SELECT description
 			Types:      tree.ArgTypes{{"reloid", types.Oid}, {"include_triggers", types.Bool}},
 			ReturnType: tree.FixedReturnType(types.Int4),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oidArg := tree.MustBeDOid(args[0])
-				oid := int(oidArg.DInt)
-				tableDescI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
+				ret, err := ctx.CatalogBuiltins.PGRelationIsUpdatable(ctx.Ctx(), tree.MustBeDOid(args[0]))
 				if err != nil {
-					// For postgres compatibility, it is expected that rather returning
-					// an error this return nonUpdatableEvents (Zero) because there could
-					// be oid references on deleted tables.
-					if sqlerrors.IsUndefinedRelationError(err) {
-						return nonUpdatableEvents, nil
-					}
-					return nonUpdatableEvents, err
+					return nil, err
 				}
-				tableDesc := tableDescI.(catalog.TableDescriptor)
-				if !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
-					return nonUpdatableEvents, nil
-				}
-
-				// pg_relation_is_updatable was created for compatibility. This
-				// should return the update events the relation supports, but as crdb
-				// does not support updatable views or foreign tables, right now this
-				// basically return allEvents or none.
-				return allUpdatableEvents, nil
+				return ret, nil
 			},
 			Info:       `Returns the update events the relation supports.`,
 			Volatility: volatility.Stable,
@@ -1258,42 +1224,11 @@ SELECT description
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oidArg := tree.MustBeDOid(args[0])
-				attNumArg := tree.MustBeDInt(args[1])
-				oid := int(oidArg.DInt)
-				attNum := uint32(attNumArg)
-				if attNumArg < 0 {
-					// System columns are not updatable.
-					return tree.DBoolFalse, nil
-				}
-				tableDescI, err := ctx.Planner.GetImmutableTableInterfaceByID(ctx.Ctx(), oid)
+				ret, err := ctx.CatalogBuiltins.PGColumnIsUpdatable(ctx.Ctx(), tree.MustBeDOid(args[0]), tree.MustBeDInt(args[1]))
 				if err != nil {
-					if sqlerrors.IsUndefinedRelationError(err) {
-						// For postgres compatibility, it is expected that rather returning
-						// an error this return nonUpdatableEvents (Zero) because there could
-						// be oid references on deleted tables.
-						return tree.DBoolFalse, nil
-					}
-					return tree.DBoolFalse, err
+					return nil, err
 				}
-				tableDesc := tableDescI.(catalog.TableDescriptor)
-				if !tableDesc.IsTable() || tableDesc.IsVirtualTable() {
-					return tree.DBoolFalse, nil
-				}
-
-				column, err := tableDesc.FindColumnWithID(descpb.ColumnID(attNum))
-				if err != nil {
-					if sqlerrors.IsUndefinedColumnError(err) {
-						// When column does not exist postgres returns true.
-						return tree.DBoolTrue, nil
-					}
-					return tree.DBoolFalse, err
-				}
-
-				// pg_column_is_updatable was created for compatibility. This
-				// will return true if is a table (not virtual) and column is not
-				// a computed column.
-				return tree.MakeDBool(tree.DBool(!column.IsComputed())), nil
+				return ret, nil
 			},
 			Info:       `Returns whether the given column can be updated.`,
 			Volatility: volatility.Stable,
@@ -2005,7 +1940,7 @@ SELECT description
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				typid := oid.Oid(args[0].(*tree.DOid).DInt)
+				typid := args[0].(*tree.DOid).Oid
 				typmod := *args[1].(*tree.DInt)
 				if typmod == -1 {
 					return tree.DNull, nil
@@ -2075,7 +2010,7 @@ SELECT description
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				typid := oid.Oid(tree.MustBeDOid(args[0]).DInt)
+				typid := tree.MustBeDOid(args[0]).Oid
 				typmod := tree.MustBeDInt(args[1])
 				switch typid {
 				case oid.T_int2:
@@ -2112,7 +2047,7 @@ SELECT description
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				typid := oid.Oid(tree.MustBeDOid(args[0]).DInt)
+				typid := tree.MustBeDOid(args[0]).Oid
 				if typid == oid.T_int2 || typid == oid.T_int4 || typid == oid.T_int8 || typid == oid.T_float4 || typid == oid.T_float8 {
 					return tree.NewDInt(2), nil
 				} else if typid == oid.T_numeric {
@@ -2134,7 +2069,7 @@ SELECT description
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				typid := oid.Oid(tree.MustBeDOid(args[0]).DInt)
+				typid := tree.MustBeDOid(args[0]).Oid
 				typmod := tree.MustBeDInt(args[1])
 				if typid == oid.T_int2 || typid == oid.T_int4 || typid == oid.T_int8 {
 					return tree.NewDInt(0), nil
@@ -2201,7 +2136,7 @@ func getCatalogOidForComments(catalogName string) (id int, ok bool) {
 // getPgObjDesc queries pg_description for object comments. catalog_name, if not
 // empty, provides a constraint on which "system catalog" the comment is in.
 // System catalogs are things like pg_class, pg_type, pg_database, and so on.
-func getPgObjDesc(ctx *eval.Context, catalogName string, oid int) (tree.Datum, error) {
+func getPgObjDesc(ctx *eval.Context, catalogName string, oidVal oid.Oid) (tree.Datum, error) {
 	classOidFilter := ""
 	if catalogName != "" {
 		classOid, ok := getCatalogOidForComments(catalogName)
@@ -2221,7 +2156,7 @@ SELECT description
    AND objsubid = 0
    %[2]s
  LIMIT 1`,
-			oid,
+			oidVal,
 			classOidFilter,
 		))
 	if err != nil {
@@ -2240,8 +2175,8 @@ func databaseHasPrivilegeSpecifier(databaseArg tree.Datum) (eval.HasPrivilegeSpe
 		s := string(*t)
 		specifier.DatabaseName = &s
 	case *tree.DOid:
-		oid := oid.Oid(t.DInt)
-		specifier.DatabaseOID = &oid
+		oidVal := t.Oid
+		specifier.DatabaseOID = &oidVal
 	default:
 		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", databaseArg)
 	}
@@ -2261,8 +2196,8 @@ func tableHasPrivilegeSpecifier(
 		s := string(*t)
 		specifier.TableName = &s
 	case *tree.DOid:
-		oid := oid.Oid(t.DInt)
-		specifier.TableOID = &oid
+		oidVal := t.Oid
+		specifier.TableOID = &oidVal
 	default:
 		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", tableArg)
 	}

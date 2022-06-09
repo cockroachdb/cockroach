@@ -12,15 +12,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -70,8 +69,6 @@ const (
 	backupOptAsJSON           = "as_json"
 	backupOptWithDebugIDs     = "debug_ids"
 	backupOptIncStorage       = "incremental_location"
-	localityURLParam          = "COCKROACH_LOCALITY"
-	defaultLocalityValue      = "default"
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
 	backupOptEncDir           = "encryption_info_dir"
 	backupOptCheckFiles       = "check_files"
@@ -82,46 +79,12 @@ type tableAndIndex struct {
 	indexID descpb.IndexID
 }
 
-type backupKMSEnv struct {
-	settings *cluster.Settings
-	conf     *base.ExternalIODirConfig
-}
-
-var _ cloud.KMSEnv = &backupKMSEnv{}
-
 // featureBackupEnabled is used to enable and disable the BACKUP feature.
 var featureBackupEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
-
-func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
-	return p.settings
-}
-
-func (p *backupKMSEnv) KMSConfig() *base.ExternalIODirConfig {
-	return p.conf
-}
-
-type (
-	plaintextMasterKeyID string
-	hashedMasterKeyID    string
-	encryptedDataKeyMap  struct {
-		m map[hashedMasterKeyID][]byte
-	}
-)
-
-// featureFullBackupUserSubdir, when true, will create a full backup at a user
-// specified subdirectory if no backup already exists at that subdirectory. As
-// of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
-var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
-	"when true, a backup command with a user specified subdirectory will create a full backup at"+
-		" the subdirectory if no backup already exists at that subdirectory.",
-	false,
 ).WithPublic()
 
 // forEachPublicIndexTableSpan constructs a span for each public index of the
@@ -202,77 +165,6 @@ func spansForAllTableIndexes(
 	}
 
 	return mergedSpans, nil
-}
-
-func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
-	parsedURI, err := url.Parse(uri)
-	if err != nil {
-		return "", "", err
-	}
-	q := parsedURI.Query()
-	localityKV := q.Get(localityURLParam)
-	// Remove the backup locality parameter.
-	q.Del(localityURLParam)
-	parsedURI.RawQuery = q.Encode()
-
-	parsedURI.Path = JoinURLPath(parsedURI.Path, appendPath)
-
-	baseURI := parsedURI.String()
-	return localityKV, baseURI, nil
-}
-
-// getURIsByLocalityKV takes a slice of URIs for a single (possibly partitioned)
-// backup, and returns the default backup destination URI and a map of all other
-// URIs by locality KV, appending appendPath to the path component of both the
-// default URI and all the locality URIs. The URIs in the result do not include
-// the COCKROACH_LOCALITY parameter.
-func getURIsByLocalityKV(
-	to []string, appendPath string,
-) (defaultURI string, urisByLocalityKV map[string]string, err error) {
-	urisByLocalityKV = make(map[string]string)
-	if len(to) == 1 {
-		localityKV, baseURI, err := getLocalityAndBaseURI(to[0], appendPath)
-		if err != nil {
-			return "", nil, err
-		}
-		if localityKV != "" && localityKV != defaultLocalityValue {
-			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
-				localityURLParam, localityKV)
-		}
-		return baseURI, urisByLocalityKV, nil
-	}
-
-	for _, uri := range to {
-		localityKV, baseURI, err := getLocalityAndBaseURI(uri, appendPath)
-		if err != nil {
-			return "", nil, err
-		}
-		if localityKV == "" {
-			return "", nil, errors.Errorf(
-				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
-				localityURLParam,
-			)
-		}
-		if localityKV == defaultLocalityValue {
-			if defaultURI != "" {
-				return "", nil, errors.Errorf("multiple default URLs provided for partition backup")
-			}
-			defaultURI = baseURI
-		} else {
-			kv := roachpb.Tier{}
-			if err := kv.FromString(localityKV); err != nil {
-				return "", nil, errors.Wrap(err, "failed to parse backup locality")
-			}
-			if _, ok := urisByLocalityKV[localityKV]; ok {
-				return "", nil, errors.Errorf("duplicate URIs for locality %s", localityKV)
-			}
-			urisByLocalityKV[localityKV] = baseURI
-		}
-	}
-	if defaultURI == "" {
-		return "", nil, errors.Errorf("no default URL provided for partitioned backup")
-	}
-	return defaultURI, urisByLocalityKV, nil
 }
 
 func resolveOptionsForBackupJobDescription(
@@ -699,14 +591,14 @@ func backupPlanHook(
 
 		if backupStmt.Nested {
 			if backupStmt.AppendToLatest {
-				initialDetails.Destination.Subdir = latestFileName
+				initialDetails.Destination.Subdir = backupbase.LatestFileName
 				initialDetails.Destination.Exists = true
 
 			} else if subdir != "" {
 				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
 				initialDetails.Destination.Exists = true
 			} else {
-				initialDetails.Destination.Subdir = endTime.GoTime().Format(DateBasedIntoFolderName)
+				initialDetails.Destination.Subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)
 			}
 		}
 
@@ -719,137 +611,29 @@ func backupPlanHook(
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.BackupResolutionInJob) {
-			description, err := backupJobDescription(p,
-				backupStmt.Backup, to, incrementalFrom,
-				encryptionParams.RawKmsUris,
-				initialDetails.Destination.Subdir,
-				initialDetails.Destination.IncrementalStorage,
-			)
-			if err != nil {
-				return err
-			}
-			jr := jobs.Record{
-				Description: description,
-				Details:     initialDetails,
-				Progress:    jobspb.BackupProgress{},
-				CreatedBy:   backupStmt.CreatedByInfo,
-				Username:    p.User(),
-				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-					for i := range targetDescs {
-						sqlDescIDs = append(sqlDescIDs, targetDescs[i].GetID())
-					}
-					return sqlDescIDs
-				}(),
-			}
-			plannerTxn := p.Txn()
-
-			if backupStmt.Options.Detached {
-				// When running inside an explicit transaction, we simply create the job
-				// record. We do not wait for the job to finish.
-				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-					ctx, jr, jobID, plannerTxn)
-				if err != nil {
-					return err
-				}
-				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-				return nil
-			}
-			var sj *jobs.StartableJob
-			if err := func() (err error) {
-				defer func() {
-					if err == nil || sj == nil {
-						return
-					}
-					if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-						log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
-					}
-				}()
-				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
-					return err
-				}
-				// We commit the transaction here so that the job can be started. This
-				// is safe because we're in an implicit transaction. If we were in an
-				// explicit transaction the job would have to be run with the detached
-				// option and would have been handled above.
-				return plannerTxn.Commit(ctx)
-			}(); err != nil {
-				return err
-			}
-			if err := sj.Start(ctx); err != nil {
-				return err
-			}
-			if err := sj.AwaitCompletion(ctx); err != nil {
-				return err
-			}
-			return sj.ReportExecutionResults(ctx, resultsCh)
-		}
-
-		// TODO(dt): delete this in 22.2.
-		backupDetails, backupManifest, err := getBackupDetailAndManifest(
-			ctx, p.ExecCfg(), p.Txn(), initialDetails, p.User(),
+		description, err := backupJobDescription(p,
+			backupStmt.Backup, to, incrementalFrom,
+			encryptionParams.RawKmsUris,
+			initialDetails.Destination.Subdir,
+			initialDetails.Destination.IncrementalStorage,
 		)
 		if err != nil {
 			return err
 		}
-
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.RawKmsUris, backupDetails.Destination.Subdir, initialDetails.Destination.IncrementalStorage)
-		if err != nil {
-			return err
-		}
-
-		// We create the job record in the planner's transaction to ensure that
-		// the job record creation happens transactionally.
-		plannerTxn := p.Txn()
-
-		// Write backup manifest into a temporary checkpoint file.
-		// This accomplishes 2 purposes:
-		//  1. Persists large state needed for backup job completion.
-		//  2. Verifies we can write to destination location.
-		// This temporary checkpoint file gets renamed to real checkpoint
-		// file when the backup jobs starts execution.
-		//
-		// TODO (pbardea): For partitioned backups, also add verification for other
-		// stores we are writing to in addition to the default.
-		if err := planSchedulePTSChaining(ctx, p.ExecCfg(), plannerTxn, &backupDetails, backupStmt.CreatedByInfo); err != nil {
-			return err
-		}
-
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.EnableProtectedTimestampsForTenant) {
-			protectedtsID := uuid.MakeV4()
-			backupDetails.ProtectedTimestampRecord = &protectedtsID
-		} else if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
-			protectedtsID := uuid.MakeV4()
-			backupDetails.ProtectedTimestampRecord = &protectedtsID
-		}
-
 		jr := jobs.Record{
 			Description: description,
+			Details:     initialDetails,
+			Progress:    jobspb.BackupProgress{},
+			CreatedBy:   backupStmt.CreatedByInfo,
 			Username:    p.User(),
-			// TODO(yevgeniy): Consider removing -- this info available in backup manifest.
 			DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
-				for i := range backupManifest.Descriptors {
-					sqlDescIDs = append(sqlDescIDs,
-						descpb.GetDescriptorID(&backupManifest.Descriptors[i]))
+				for i := range targetDescs {
+					sqlDescIDs = append(sqlDescIDs, targetDescs[i].GetID())
 				}
 				return sqlDescIDs
 			}(),
-			Details:   backupDetails,
-			Progress:  jobspb.BackupProgress{},
-			CreatedBy: backupStmt.CreatedByInfo,
 		}
-
-		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().LogicalClusterID(), p.ExecCfg().Organization(), "",
-		) != nil
-
-		if backupDetails.ProtectedTimestampRecord != nil {
-			if err := protectTimestampForBackup(
-				ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
-			); err != nil {
-				return err
-			}
-		}
+		plannerTxn := p.Txn()
 
 		if backupStmt.Options.Detached {
 			// When running inside an explicit transaction, we simply create the job
@@ -859,20 +643,9 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-
-			if err := writeBackupManifestCheckpoint(
-				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
-			); err != nil {
-				return err
-			}
-
 			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-			collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
 			return nil
 		}
-
-		// Construct the job and commit the transaction. Perform this work in a
-		// closure to ensure that the job is cleaned up if an error occurs.
 		var sj *jobs.StartableJob
 		if err := func() (err error) {
 			defer func() {
@@ -886,13 +659,6 @@ func backupPlanHook(
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
-
-			if err := writeBackupManifestCheckpoint(
-				ctx, backupDetails.URI, backupDetails.EncryptionOptions, &backupManifest, p.ExecCfg(), p.User(),
-			); err != nil {
-				return err
-			}
-
 			// We commit the transaction here so that the job can be started. This
 			// is safe because we're in an implicit transaction. If we were in an
 			// explicit transaction the job would have to be run with the detached
@@ -901,8 +667,6 @@ func backupPlanHook(
 		}(); err != nil {
 			return err
 		}
-
-		collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}
@@ -972,7 +736,7 @@ func collectTelemetry(
 	if backupDetails.CollectionURI != "" {
 		countSource("backup.nested")
 		timeBaseSubdir := true
-		if _, err := time.Parse(DateBasedIntoFolderName,
+		if _, err := time.Parse(backupbase.DateBasedIntoFolderName,
 			initialDetails.Destination.Subdir); err != nil {
 			timeBaseSubdir = false
 		}
@@ -985,7 +749,7 @@ func collectTelemetry(
 				countSource("backup.full-no-subdir")
 			}
 		} else {
-			if initialDetails.Destination.Subdir == latestFileName {
+			if initialDetails.Destination.Subdir == backupbase.LatestFileName {
 				countSource("backup.incremental-latest-subdir")
 			} else if !timeBaseSubdir {
 				countSource("backup.deprecated-incremental-nontime-subdir")
@@ -1022,12 +786,11 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
-// writebackuppb.BackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST
-// and CHECKSUM file. If it is a pure v22.1 cluster or later, it will write
-// a timestamped BACKUP-CHECKPOINT to the /progress directory.
-// If it is a mixed cluster version, it will write a non timestamped BACKUP-CHECKPOINT
-// to the base directory in order to not break backup jobs that resume
-// on a v21.2 node.
+// writeBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST and
+// CHECKSUM file. If it is a pure v22.1 cluster or later, it will write a
+// timestamped BACKUP-CHECKPOINT to the /progress directory. If it is a mixed
+// cluster version, it will write a non timestamped BACKUP-CHECKPOINT to the
+// base directory in order to not break backup jobs that resume on a v21.2 node.
 func writeBackupManifestCheckpoint(
 	ctx context.Context,
 	storageURI string,
@@ -1055,7 +818,7 @@ func writeBackupManifestCheckpoint(
 	}
 
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
+		encryptionKey, err := backupencryption.GetEncryptionKey(ctx, encryption, execCfg.Settings, defaultStore.ExternalIOConf())
 		if err != nil {
 			return err
 		}
@@ -1432,7 +1195,7 @@ func getBackupDetailAndManifest(
 	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 	// backupDestination struct.
 	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-		resolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
+		backupdest.ResolveDest(ctx, user, initialDetails.Destination, initialDetails.EndTime, initialDetails.IncrementalFrom, execCfg)
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
@@ -1447,7 +1210,7 @@ func getBackupDetailAndManifest(
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
-	kmsEnv := &backupKMSEnv{settings: execCfg.Settings, conf: &execCfg.ExternalIODirConfig}
+	kmsEnv := &backupencryption.BackupKMSEnv{Settings: execCfg.Settings, Conf: &execCfg.ExternalIODirConfig}
 
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
@@ -1744,7 +1507,7 @@ func updateBackupDetails(
 	urisByLocalityKV map[string]string,
 	prevBackups []backuppb.BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
-	kmsEnv *backupKMSEnv,
+	kmsEnv *backupencryption.BackupKMSEnv,
 ) (jobspb.BackupDetails, error) {
 	var err error
 	var startTime hlc.Timestamp
@@ -1756,7 +1519,7 @@ func updateBackupDetails(
 	// need to generate encryption specific data.
 	var encryptionInfo *jobspb.EncryptionInfo
 	if encryptionOptions == nil {
-		encryptionOptions, encryptionInfo, err = makeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
+		encryptionOptions, encryptionInfo, err = backupencryption.MakeNewEncryptionOptions(ctx, *details.EncryptionOptions, kmsEnv)
 		if err != nil {
 			return jobspb.BackupDetails{}, err
 		}

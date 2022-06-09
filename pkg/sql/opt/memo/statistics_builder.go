@@ -4583,7 +4583,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 			var hasNullValue, ok bool
 			var values tree.Datums
 			var distinctVals uint64
-			invertedIndexableColumnType := colinfo.ColumnTypeIsInvertedIndexable(colType)
+			onlyInvertedIndexableColumnType := colinfo.ColumnTypeIsOnlyInvertedIndexable(colType)
 			if distinctVals, ok = filterConstraint.CalculateMaxResults(sb.evalCtx, cols, cols); ok {
 				// If the number of values is excessive, don't spend too much time building the histogram,
 				// as it may slow down the query.
@@ -4606,7 +4606,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 			// types of such columns (JSON, ARRAY, and spatial types) aren't likely to
 			// occur in CHECK constraints.  So, let's play it safe and don't create a
 			// histogram directly on columns that have a data type which is
-			// InvertedIndexable since the possible user benefit of adding this
+			// OnlyInvertedIndexable since the possible user benefit of adding this
 			// support seems low.
 			//
 			// Also, histogram building errors out when the number of samples is
@@ -4615,7 +4615,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 			// not expect to see null values. If we do see a null, something may have
 			// gone wrong, so do not build a histogram in this case either.
 			useHistogram := sb.evalCtx.SessionData().OptimizerUseHistograms && numValues > 0 &&
-				!hasNullValue && !invertedIndexableColumnType && int64(numValues) <= numRows
+				!hasNullValue && !onlyInvertedIndexableColumnType && int64(numValues) <= numRows
 			if !useHistogram {
 				if distinctVals > math.MaxInt32 {
 					continue

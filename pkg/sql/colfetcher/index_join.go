@@ -101,6 +101,8 @@ type ColIndexJoin struct {
 
 	flowCtx *execinfra.FlowCtx
 	cf      *cFetcher
+	// txn is the transaction used by the index joiner.
+	txn *kv.Txn
 
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
@@ -150,7 +152,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 		s.streamerInfo.Streamer = kvstreamer.NewStreamer(
 			s.flowCtx.Cfg.DistSender,
 			s.flowCtx.Stopper(),
-			s.flowCtx.Txn,
+			s.txn,
 			s.flowCtx.EvalCtx.Settings,
 			row.GetWaitPolicy(s.cf.lockWaitPolicy),
 			s.streamerInfo.budgetLimit,
@@ -252,7 +254,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			} else {
 				err = s.cf.StartScan(
 					s.Ctx,
-					s.flowCtx.Txn,
+					s.txn,
 					spans,
 					nil,   /* bsHeader */
 					false, /* limitBatches */
@@ -407,7 +409,7 @@ func (s *ColIndexJoin) next() bool {
 // DrainMeta is part of the colexecop.MetadataSource interface.
 func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
-	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.flowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	meta := execinfrapb.GetProducerMeta()
@@ -437,7 +439,7 @@ func (s *ColIndexJoin) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
-	return execstats.GetCumulativeContentionTime(s.Ctx)
+	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
@@ -453,9 +455,29 @@ var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 	productionIndexJoinBatchSize, /* max */
 ))
 
-const productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
+var usingStreamerInputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
+	"ColIndexJoin-using-streamer-batch-size",
+	productionIndexJoinUsingStreamerBatchSize, /* defaultValue */
+	1, /* min */
+	productionIndexJoinUsingStreamerBatchSize, /* max */
+))
 
-func getIndexJoinBatchSize(forceProductionValue bool) int64 {
+const (
+	// This number was copy-pased from
+	// rowexec.joinReaderIndexJoinStrategy.getLookupRowsBatchSizeHint.
+	productionIndexJoinBatchSize = 4 << 20 /* 4MiB */
+	// This number was chosen with running tpchvec/bench roachtest using TPCH
+	// queries 4, 5, 6, 10, 12, 14, 15, 16.
+	productionIndexJoinUsingStreamerBatchSize = 8 << 20 /* 8MiB */
+)
+
+func getIndexJoinBatchSize(useStreamer bool, forceProductionValue bool) int64 {
+	if useStreamer {
+		if forceProductionValue {
+			return productionIndexJoinUsingStreamerBatchSize
+		}
+		return usingStreamerInputBatchSizeLimit
+	}
 	if forceProductionValue {
 		return productionIndexJoinBatchSize
 	}
@@ -498,18 +520,25 @@ func NewColIndexJoin(
 		return nil, err
 	}
 
-	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+	totalMemoryLimit := execinfra.GetWorkMemLimit(flowCtx)
+	cFetcherMemoryLimit := totalMemoryLimit
+	var streamerBudgetLimit int64
 
 	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
+		flowCtx.MakeLeafTxn != nil && row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
+	txn := flowCtx.Txn
 	if useStreamer {
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
 		}
-		// Keep the quarter of the memory limit for the output batch of the
-		// cFetcher, and we'll give the remaining three quarters to the streamer
-		// budget below.
-		memoryLimit = int64(math.Ceil(float64(memoryLimit) / 4.0))
+		// Keep 1/8th of the memory limit for the output batch of the cFetcher,
+		// and we'll give the remaining memory to the streamer budget below.
+		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 8.0))
+		streamerBudgetLimit = 7 * cFetcherMemoryLimit
+		txn, err = flowCtx.MakeLeafTxn()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -517,7 +546,7 @@ func NewColIndexJoin(
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
-		memoryLimit,
+		cFetcherMemoryLimit,
 		// Note that the correct estimated row count will be set by the index
 		// joiner for each set of spans to read.
 		0,     /* estimatedRowCount */
@@ -542,13 +571,16 @@ func NewColIndexJoin(
 		spanAssembler:    spanAssembler,
 		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
+		txn:              txn,
 		usesStreamer:     useStreamer,
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
-	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
+	op.mem.inputBatchSizeLimit = getIndexJoinBatchSize(
+		useStreamer, flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+	)
 	op.prepareMemLimit(inputTypes)
 	if useStreamer {
-		op.streamerInfo.budgetLimit = 3 * memoryLimit
+		op.streamerInfo.budgetLimit = streamerBudgetLimit
 		op.streamerInfo.budgetAcc = streamerBudgetAcc
 		if spec.MaintainOrdering && diskMonitor == nil {
 			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
@@ -556,19 +588,18 @@ func NewColIndexJoin(
 		op.streamerInfo.diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
 			flowCtx.Cfg.TempStorage, diskMonitor,
 		)
-		if memoryLimit < op.mem.inputBatchSizeLimit {
+		if cFetcherMemoryLimit < op.mem.inputBatchSizeLimit {
 			// If we have a low workmem limit, then we want to reduce the input
 			// batch size limit.
 			//
-			// The Streamer gets three quarters of workmem as its budget which
-			// accounts for two usages - for the footprint of the spans
-			// themselves in the enqueued requests as well as the footprint of
-			// the responses received by the Streamer. If we don't reduce the
-			// input batch size limit here, then 4MiB value will be used, and
-			// the constructed spans (i.e. the enqueued requests) alone might
-			// exceed the budget leading to the Streamer erroring out in
-			// Enqueue().
-			op.mem.inputBatchSizeLimit = memoryLimit
+			// The Streamer gets most of workmem as its budget which accounts
+			// for two usages - for the footprint of the spans themselves in the
+			// enqueued requests as well as the footprint of the responses
+			// received by the Streamer. If we don't reduce the input batch size
+			// limit here, then 8MiB value will be used, and the constructed
+			// spans (i.e. the enqueued requests) alone might exceed the budget
+			// leading to the Streamer erroring out in Enqueue().
+			op.mem.inputBatchSizeLimit = cFetcherMemoryLimit
 		}
 	}
 
@@ -625,7 +656,7 @@ func adjustMemEstimate(estimate int64) int64 {
 
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *ColIndexJoin) GetScanStats() execstats.ScanStats {
-	return execstats.GetScanStats(s.Ctx)
+	return execstats.GetScanStats(s.Ctx, nil /* recording */)
 }
 
 // Release implements the execinfra.Releasable interface.

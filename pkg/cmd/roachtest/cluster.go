@@ -167,6 +167,7 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 		}
 		dirs := []string{
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/"),
+			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/artifacts/"),
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib+suffix),
 			filepath.Join(os.ExpandEnv("$PWD"), binOrLib+suffix),
 			filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach", binOrLib),
@@ -1717,6 +1718,7 @@ func (c *clusterImpl) GitClone(
 ) error {
 	cmd := []string{"bash", "-e", "-c", fmt.Sprintf(`'
 		if ! test -d %[1]s; then
+			git config --global --add safe.directory %[1]s
 			git clone -b %[2]s --depth 1 %[3]s %[1]s
   		else
 			cd %[1]s
