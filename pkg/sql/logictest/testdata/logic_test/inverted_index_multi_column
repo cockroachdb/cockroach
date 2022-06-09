@@ -103,7 +103,7 @@ CREATE TABLE public.dst (
    b INT8 NULL,
    j JSONB NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT src_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT dst_pkey PRIMARY KEY (rowid ASC),
    INVERTED INDEX src_a_j_idx (a ASC, j ASC),
    INVERTED INDEX src_a_b_j_idx (a ASC, b ASC, j ASC)
 )
