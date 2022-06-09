@@ -943,9 +943,13 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	require.Error(t, collector.UpdateKeySuffixes(nil, nil, suffix))
 }
 
+// TestPebbleMVCCTimeIntervalCollectorAndFilter tests that point and range key
+// time interval collection and filtering works. It only tests basic
+// integration.
 func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Set up an engine with tiny blocks, so each key gets its own block.
 	overrideOptions := func(cfg *engineConfig) error {
 		cfg.Opts.FormatMajorVersion = pebble.FormatNewest
 		for i := range cfg.Opts.Levels {
@@ -956,32 +960,51 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	}
 	eng := NewDefaultInMemForTesting(overrideOptions)
 	defer eng.Close()
-	// We are simply testing that the integration is working.
-	aKey := roachpb.Key("a")
-	for i := 0; i < 10; i++ {
-		require.NoError(t, eng.PutMVCC(
-			MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: int64(i), Logical: 1}},
-			MVCCValue{Value: roachpb.MakeValueFromString(fmt.Sprintf("val%d", i))}))
-	}
+
+	// Write point keys at 3-6 and range keys at 5-8.
+	require.NoError(t, eng.PutMVCC(pointKey("a", 3), stringValue("a3")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 4), stringValue("a4")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 5), stringValue("a5")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 6), stringValue("a6")))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 6), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 7), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 8), MVCCValue{}))
 	require.NoError(t, eng.Flush())
-	iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-		LowerBound:       aKey,
-		MinTimestampHint: hlc.Timestamp{WallTime: 5},
-		MaxTimestampHint: hlc.Timestamp{WallTime: 7},
-	})
-	defer iter.Close()
-	iter.SeekGE(MVCCKey{Key: aKey})
-	var err error
-	var valid bool
-	var found []int64
-	for valid, err = iter.Valid(); valid; {
-		found = append(found, iter.Key().Timestamp.WallTime)
-		iter.Next()
-		valid, err = iter.Valid()
+
+	testcases := map[string]struct {
+		minTimestamp hlc.Timestamp
+		maxTimestamp hlc.Timestamp
+		keyTypes     IterKeyType
+		expect       []interface{}
+	}{
+		"all": {wallTS(1), wallTS(10), IterKeyTypePointsAndRanges, []interface{}{
+			pointKV("a", 6, "a6"),
+			pointKV("a", 5, "a5"),
+			pointKV("a", 4, "a4"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 8, MVCCValue{}),
+			rangeKV("b", "c", 7, MVCCValue{}),
+			rangeKV("b", "c", 6, MVCCValue{}),
+			rangeKV("b", "c", 5, MVCCValue{}),
+		}},
+		// TODO(erikgrinaker): Range key filtering does not appear to work, probably
+		// because we're using an in-memory arena. Add more tests when it works.
+		"above all": {wallTS(9), wallTS(10), IterKeyTypePointsAndRanges, []interface{}{}},
+		"below all": {wallTS(1), wallTS(2), IterKeyTypePointsAndRanges, []interface{}{}},
 	}
-	require.NoError(t, err)
-	expected := []int64{7, 6, 5}
-	require.Equal(t, expected, found)
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+				KeyTypes:         tc.keyTypes,
+				UpperBound:       keys.MaxKey,
+				MinTimestampHint: tc.minTimestamp,
+				MaxTimestampHint: tc.maxTimestamp,
+			})
+			defer iter.Close()
+			require.Equal(t, tc.expect, scanIter(t, iter))
+		})
+	}
 }
 
 // TestPebbleTablePropertyFilter tests that pebbleIterator still respects
