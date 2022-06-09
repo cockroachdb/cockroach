@@ -122,8 +122,9 @@ func (ex *connExecutor) addPreparedStmt(
 	for i, it := range prepared.InferredTypes {
 		// If the client did not provide an OID type hint, then infer the OID.
 		if it == 0 || it == oid.T_unknown {
-			t, _ := prepared.ValueType(tree.PlaceholderIdx(i))
-			prepared.InferredTypes[i] = t.Oid()
+			if t, ok := prepared.ValueType(tree.PlaceholderIdx(i)); ok {
+				prepared.InferredTypes[i] = t.Oid()
+			}
 		}
 	}
 
