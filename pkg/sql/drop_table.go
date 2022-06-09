@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -210,7 +212,8 @@ func (p *planner) canRemoveFKBackreference(
 		return err
 	}
 	if behavior != tree.DropCascade {
-		return fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
+		return pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"%q is referenced by foreign key from table %q", from, table.Name)
 	}
 	// Check to see whether we're allowed to edit the table that has a
 	// foreign key constraint on the table that we're dropping right now.
