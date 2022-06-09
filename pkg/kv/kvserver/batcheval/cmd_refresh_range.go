@@ -15,23 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-)
-
-// refreshRangeTBIEnabled controls whether we use a TBI during ranged refreshes.
-var refreshRangeTBIEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.refresh_range.time_bound_iterators.enabled",
-	"use time-bound iterators when performing ranged transaction refreshes",
-	util.ConstantWithMetamorphicTestBool("kv.refresh_range.time_bound_iterators.enabled", true),
 )
 
 func init() {
@@ -65,8 +55,7 @@ func RefreshRange(
 	}
 
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	tbi := refreshRangeTBIEnabled.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-	return result.Result{}, refreshRange(reader, tbi, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
+	return result.Result{}, refreshRange(reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
 }
 
 // refreshRange iterates over the specified key span until it discovers a value
@@ -78,21 +67,16 @@ func RefreshRange(
 // If such a conflict is found, the function returns an error. Otherwise, no
 // error is returned.
 func refreshRange(
-	reader storage.Reader,
-	timeBoundIterator bool,
-	span roachpb.Span,
-	refreshFrom, refreshTo hlc.Timestamp,
-	txnID uuid.UUID,
+	reader storage.Reader, span roachpb.Span, refreshFrom, refreshTo hlc.Timestamp, txnID uuid.UUID,
 ) error {
 	// Construct an incremental iterator with the desired time bounds. Incremental
 	// iterators will emit MVCC tombstones by default and will emit intents when
 	// configured to do so (see IntentPolicy).
 	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
-		EnableTimeBoundIteratorOptimization: timeBoundIterator,
-		EndKey:                              span.EndKey,
-		StartTime:                           refreshFrom, // exclusive
-		EndTime:                             refreshTo,   // inclusive
-		IntentPolicy:                        storage.MVCCIncrementalIterIntentPolicyEmit,
+		EndKey:       span.EndKey,
+		StartTime:    refreshFrom, // exclusive
+		EndTime:      refreshTo,   // inclusive
+		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
 	})
 	defer iter.Close()
 

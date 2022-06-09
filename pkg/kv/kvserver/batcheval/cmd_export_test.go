@@ -438,7 +438,6 @@ func exportUsingGoIterator(
 	filter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	startKey, endKey roachpb.Key,
-	enableTimeBoundIteratorOptimization timeBoundOptimisation,
 	reader storage.Reader,
 ) ([]byte, error) {
 	memFile := &storage.MemFile{}
@@ -461,10 +460,9 @@ func exportUsingGoIterator(
 	}
 
 	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
-		EndKey:                              endKey,
-		EnableTimeBoundIteratorOptimization: bool(enableTimeBoundIteratorOptimization),
-		StartTime:                           startTime,
-		EndTime:                             endTime,
+		EndKey:    endKey,
+		StartTime: startTime,
+		EndTime:   endTime,
 	})
 	defer iter.Close()
 	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
@@ -537,7 +535,6 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 
 type exportRevisions bool
 type batchBoundaries bool
-type timeBoundOptimisation bool
 
 const (
 	exportAll    exportRevisions = true
@@ -545,9 +542,6 @@ const (
 
 	stopAtTimestamps batchBoundaries = true
 	stopAtKeys       batchBoundaries = false
-
-	optimizeTimeBounds     timeBoundOptimisation = true
-	dontOptimizeTimeBounds timeBoundOptimisation = false
 )
 
 func assertEqualKVs(
@@ -557,7 +551,6 @@ func assertEqualKVs(
 	startTime, endTime hlc.Timestamp,
 	exportAllRevisions exportRevisions,
 	stopMidKey batchBoundaries,
-	enableTimeBoundIteratorOptimization timeBoundOptimisation,
 	targetSize uint64,
 ) func(*testing.T) {
 	return func(t *testing.T) {
@@ -572,8 +565,7 @@ func assertEqualKVs(
 
 		// Run the oracle which is a legacy implementation of pebbleExportToSst
 		// backed by an MVCCIncrementalIterator.
-		expected, err := exportUsingGoIterator(ctx, filter, startTime, endTime,
-			startKey, endKey, enableTimeBoundIteratorOptimization, e)
+		expected, err := exportUsingGoIterator(ctx, filter, startTime, endTime, startKey, endKey, e)
 		if err != nil {
 			t.Fatalf("Oracle failed to export provided key range.")
 		}
@@ -597,7 +589,6 @@ func assertEqualKVs(
 				TargetSize:         targetSize,
 				MaxSize:            maxSize,
 				StopMidKey:         bool(stopMidKey),
-				UseTBI:             bool(enableTimeBoundIteratorOptimization),
 			}, sstFile)
 			require.NoError(t, err)
 			sst = sstFile.Data()
@@ -646,7 +637,6 @@ func assertEqualKVs(
 					TargetSize:         targetSize,
 					MaxSize:            maxSize,
 					StopMidKey:         false,
-					UseTBI:             bool(enableTimeBoundIteratorOptimization),
 				}, &storage.MemFile{})
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
@@ -794,18 +784,12 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			{"kv [randLower, randUpper)", keys[keyLowerBound], keys[keyUpperBound], tsMin, tsMax},
 			{"kv (randLowerTime, randUpperTime]", keyMin, keyMax, timestamps[tsLowerBound], timestamps[tsUpperBound]},
 		} {
-			t.Run(fmt.Sprintf("%s, latest, nontimebound", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportLatest, stopAtKeys, dontOptimizeTimeBounds, targetSize))
-			t.Run(fmt.Sprintf("%s, all, nontimebound", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtKeys, dontOptimizeTimeBounds, targetSize))
-			t.Run(fmt.Sprintf("%s, all, split rows, nontimebound", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtTimestamps, dontOptimizeTimeBounds, targetSize))
-			t.Run(fmt.Sprintf("%s, latest, timebound", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportLatest, stopAtKeys, optimizeTimeBounds, targetSize))
-			t.Run(fmt.Sprintf("%s, all, timebound", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtKeys, optimizeTimeBounds, targetSize))
-			t.Run(fmt.Sprintf("%s, all, split rows, timebound", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtTimestamps, optimizeTimeBounds, targetSize))
+			t.Run(fmt.Sprintf("%s, latest", s.name),
+				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportLatest, stopAtKeys, targetSize))
+			t.Run(fmt.Sprintf("%s, all", s.name),
+				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtKeys, targetSize))
+			t.Run(fmt.Sprintf("%s, all, split rows", s.name),
+				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtTimestamps, targetSize))
 		}
 	}
 	// Exercise min to max time and key ranges.
