@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -42,6 +43,7 @@ type ScrapeConfig struct {
 	JobName     string
 	MetricsPath string
 	ScrapeNodes []ScrapeNode
+	Labels      map[string]string // additional static labels to add
 }
 
 // Config is a monitor that watches over the running of prometheus.
@@ -89,8 +91,7 @@ func (cfg *Config) WithPrometheusNode(node option.NodeListOption) *Config {
 // WithCluster adds scraping for a CockroachDB cluster running on the given nodes.
 // Chains for convenience.
 func (cfg *Config) WithCluster(nodes option.NodeListOption) *Config {
-	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeInsecureCockroachScrapeConfig(
-		"cockroach", nodes))
+	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeInsecureCockroachScrapeConfig(nodes)...)
 	return cfg
 }
 
@@ -153,11 +154,15 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		); err != nil {
 			return nil, nil, err
 		}
-		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
-			JobName:     "node_exporter",
-			MetricsPath: "/metrics",
-			ScrapeNodes: []ScrapeNode{{Nodes: cfg.NodeExporter, Port: 9100}},
-		})
+		for _, node := range cfg.NodeExporter {
+			s := strconv.Itoa(node)
+			cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
+				JobName:     "node_exporter-" + s,
+				MetricsPath: "/metrics",
+				Labels:      map[string]string{"node": s},
+				ScrapeNodes: []ScrapeNode{{Nodes: []int{node}, Port: 9100}},
+			})
+		}
 	}
 
 	if err := repeatFunc(
@@ -337,6 +342,7 @@ func makeYAMLConfig(
 	ctx context.Context, l *logger.Logger, c Cluster, scrapeConfigs []ScrapeConfig,
 ) (string, error) {
 	type yamlStaticConfig struct {
+		Labels  map[string]string `yaml:",omitempty"`
 		Targets []string
 	}
 
@@ -377,6 +383,7 @@ func makeYAMLConfig(
 				MetricsPath: scrapeConfig.MetricsPath,
 				StaticConfigs: []yamlStaticConfig{
 					{
+						Labels:  scrapeConfig.Labels,
 						Targets: targets,
 					},
 				},
@@ -400,15 +407,22 @@ func MakeWorkloadScrapeConfig(jobName string, scrapeNodes []ScrapeNode) ScrapeCo
 // MakeInsecureCockroachScrapeConfig creates scrape configs for the given
 // cockroach nodes. All nodes are assumed to be insecure and running on
 // port 26258.
-func MakeInsecureCockroachScrapeConfig(jobName string, nodes option.NodeListOption) ScrapeConfig {
-	return ScrapeConfig{
-		JobName:     jobName,
-		MetricsPath: "/_status/vars",
-		ScrapeNodes: []ScrapeNode{
-			{
-				Nodes: nodes,
-				Port:  26258,
+func MakeInsecureCockroachScrapeConfig(nodes option.NodeListOption) []ScrapeConfig {
+	var sl []ScrapeConfig
+	for _, node := range nodes {
+		s := strconv.Itoa(node)
+		sl = append(sl, ScrapeConfig{
+			JobName:     "cockroach-n" + s,
+			MetricsPath: "/_status/vars",
+			Labels:      map[string]string{"node": s},
+			ScrapeNodes: []ScrapeNode{
+				{
+					Nodes: []int{node},
+					Port:  26258,
+				},
 			},
-		},
+		})
 	}
+
+	return sl
 }

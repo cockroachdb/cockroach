@@ -114,12 +114,15 @@ scrape_configs:
 					ExternalIP(ctx, nilLogger(), []int{6}).
 					Return([]string{"127.0.0.6"}, nil)
 				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{8, 9}).
-					Return([]string{"127.0.0.8", "127.0.0.9"}, nil)
+					ExternalIP(ctx, nilLogger(), []int{8}).
+					Return([]string{"127.0.0.8"}, nil)
+				c.EXPECT().
+					ExternalIP(ctx, nilLogger(), []int{9}).
+					Return([]string{"127.0.0.9"}, nil)
 				return c
 			},
-			scrapeConfigs: []ScrapeConfig{
-				MakeWorkloadScrapeConfig(
+			scrapeConfigs: func() (sc []ScrapeConfig) {
+				sc = append(sc, MakeWorkloadScrapeConfig(
 					"workload",
 					[]ScrapeNode{
 						{
@@ -131,12 +134,12 @@ scrape_configs:
 							Port:  2009,
 						},
 					},
-				),
-				MakeInsecureCockroachScrapeConfig(
-					"roachie",
+				))
+				sc = append(sc, MakeInsecureCockroachScrapeConfig(
 					option.NodeListOption([]int{8, 9}),
-				),
-			},
+				)...)
+				return sc
+			}(),
 			expected: `global:
   scrape_interval: 10s
   scrape_timeout: 5s
@@ -149,10 +152,18 @@ scrape_configs:
     - 127.0.0.5:2005
     - 127.0.0.6:2009
   metrics_path: /
-- job_name: roachie
+- job_name: cockroach-n8
   static_configs:
-  - targets:
+  - labels:
+      node: "8"
+    targets:
     - 127.0.0.8:26258
+  metrics_path: /_status/vars
+- job_name: cockroach-n9
+  static_configs:
+  - labels:
+      node: "9"
+    targets:
     - 127.0.0.9:26258
   metrics_path: /_status/vars
 `,

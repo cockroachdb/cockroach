@@ -1439,13 +1439,9 @@ func setupPrometheusForTPCC(
 		cfg = &prometheus.Config{
 			PrometheusNode: workloadNode,
 			// Scrape each CockroachDB node and the workload node.
-			ScrapeConfigs: []prometheus.ScrapeConfig{
-				prometheus.MakeInsecureCockroachScrapeConfig(
-					"cockroach",
-					c.Range(1, c.Spec().NodeCount-1),
-				),
+			ScrapeConfigs: append(prometheus.MakeInsecureCockroachScrapeConfig(c.Range(1, c.Spec().NodeCount-1)),
 				prometheus.MakeWorkloadScrapeConfig("workload", makeWorkloadScrapeNodes(workloadNode, workloadInstances)),
-			},
+			),
 		}
 	}
 	if opts.DisablePrometheus {
