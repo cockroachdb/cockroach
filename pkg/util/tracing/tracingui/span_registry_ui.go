@@ -144,6 +144,7 @@ type ProcessedTag struct {
 	Children        []ProcessedChildTag
 }
 
+// ProcessedChildTag is a span tag that is embedded as a lazy tag in a parent tag.
 type ProcessedChildTag struct {
 	Key, Val string
 }
@@ -187,49 +188,28 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 		GoroutineID:  s.GoroutineID,
 	}
 
-	if len(s.TagGroups) == 0 {
-		// Sort the tags.
-		tagKeys := make([]string, 0, len(s.Tags))
-		for k := range s.Tags {
-			tagKeys = append(tagKeys, k)
-		}
-		sort.Strings(tagKeys)
-
-		p.Tags = make([]ProcessedTag, len(s.Tags))
-		for i, k := range tagKeys {
-			p.Tags[i] = processTag(k, s.Tags[k], snap)
-		}
-		return p
-	}
 	p.Tags = make([]ProcessedTag, 0)
 	for _, tagGroup := range s.TagGroups {
-		// If the tag group has exactly one tag, use its key and value.
-		// Otherwise, use the name as the key, and value should be empty.
+		key := tagGroup.Name
 
-		var key string
-		var value string
-		if len(tagGroup.Tags) == 1 {
-			tag := tagGroup.Tags[0]
-			p.Tags = append(p.Tags, processTag(
-				tag.Key,
-				tag.Value,
-				snap))
-			continue
-		}
-
-		key = tagGroup.Name
-		value = ""
-
-		processedParentTag := processTag(key, value, snap)
-		processedParentTag.Children = make([]ProcessedChildTag, len(tagGroup.Tags))
-		for i, tag := range tagGroup.Tags {
-			processedParentTag.Children[i] = ProcessedChildTag{
-				Key: tag.Key,
-				Val: tag.Value,
+		if key == "" {
+			// The anonymous tag group. Each tag should be treated as top-level.
+			for _, tagKV := range tagGroup.Tags {
+				p.Tags = append(p.Tags, processTag(tagKV.Key, tagKV.Value, snap))
 			}
+		} else {
+			// A named tag group. Each tag should be treated as a child of this parent.
+			processedParentTag := processTag(key, "", snap)
+			processedParentTag.Children = make([]ProcessedChildTag, len(tagGroup.Tags))
+			for i, tag := range tagGroup.Tags {
+				processedParentTag.Children[i] = ProcessedChildTag{
+					Key: tag.Key,
+					Val: tag.Value,
+				}
+			}
+			p.Tags = append(p.Tags, processedParentTag)
 		}
 
-		p.Tags = append(p.Tags, processedParentTag)
 	}
 	sort.Slice(p.Tags, func(i, j int) bool {
 		a := p.Tags[i]

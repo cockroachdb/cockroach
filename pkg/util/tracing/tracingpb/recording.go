@@ -370,22 +370,12 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 	// node present in the trace.
 	getProcessID := func(sp RecordedSpan) jaegerjson.ProcessID {
 		node := "unknown node"
-		if len(sp.TagGroups) == 0 {
-			for k, v := range sp.Tags {
-				if k == "node" {
-					node = fmt.Sprintf("node %s", v)
+		for _, tagGroup := range sp.TagGroups {
+			for _, tag := range tagGroup.Tags {
+				if tag.Key == "node" {
+					node = fmt.Sprintf("node %s", tag.Value)
 					break
 				}
-			}
-		} else {
-			for _, tagGroup := range sp.TagGroups {
-				for _, tag := range tagGroup.Tags {
-					if tag.Key == "node" {
-						node = fmt.Sprintf("node %s", tag.Value)
-						break
-					}
-				}
-
 			}
 		}
 		// If we have passed in an explicit nodeStr then use that as a processID.
@@ -424,23 +414,13 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 			}}
 		}
 
-		if len(sp.TagGroups) == 0 {
-			for k, v := range sp.Tags {
+		for _, tagGroup := range sp.TagGroups {
+			for _, tag := range tagGroup.Tags {
 				s.Tags = append(s.Tags, jaegerjson.KeyValue{
-					Key:   k,
-					Value: v,
+					Key:   tag.Key,
+					Value: tag.Value,
 					Type:  "STRING",
 				})
-			}
-		} else {
-			for _, tagGroup := range sp.TagGroups {
-				for _, tag := range tagGroup.Tags {
-					s.Tags = append(s.Tags, jaegerjson.KeyValue{
-						Key:   tag.Key,
-						Value: tag.Value,
-						Type:  "STRING",
-					})
-				}
 			}
 		}
 		for _, l := range sp.Logs {

@@ -64,9 +64,11 @@ func (s *RecordedSpan) Structured(visit func(*types.Any, time.Time)) {
 	}
 }
 
+// FindTagGroup returns the tag group matching the supplied name, or nil if
+// the name is not found.
 func (s *RecordedSpan) FindTagGroup(name string) *TagGroup {
 	for _, tagGroup := range s.TagGroups {
-		if tagGroup.GetName() == name {
+		if tagGroup.Name == name {
 			return tagGroup
 		}
 	}
@@ -107,13 +109,8 @@ func (r *StructuredRecord) MemorySize() int {
 		r.Payload.Size() // TODO(andrei): this is the encoded size, not the mem size
 }
 
-func (tg *TagGroup) GetName() string {
-	if len(tg.Tags) == 1 {
-		return tg.Tags[0].Key
-	}
-	return tg.Name
-}
-
+// FindTag returns the value matching the supplied key, or nil if the key is
+// not found.
 func (tg *TagGroup) FindTag(key string) *string {
 	for _, tag := range tg.Tags {
 		if tag.Key == key {

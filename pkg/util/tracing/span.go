@@ -359,6 +359,24 @@ func (sp *Span) GetConfiguredRecording() tracingpb.Recording {
 //
 // This function is used to import a recording from another node.
 func (sp *Span) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
+	// TODO(benbardin): Remove for 23.1
+	for i := range remoteRecording {
+		span := &remoteRecording[i]
+		if len(span.TagGroups) == 0 {
+			anonymousTagGroup := &tracingpb.TagGroup{
+				Tags: make([]tracingpb.Tag, len(span.Tags)),
+			}
+			i := 0
+			for tagKey, tagValue := range span.Tags {
+				anonymousTagGroup.Tags[i] = tracingpb.Tag{
+					Key:   tagKey,
+					Value: tagValue,
+				}
+				i++
+			}
+			span.TagGroups = []*tracingpb.TagGroup{anonymousTagGroup}
+		}
+	}
 	if !sp.detectUseAfterFinish() {
 		sp.i.ImportRemoteRecording(remoteRecording)
 	}

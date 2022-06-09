@@ -768,27 +768,27 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		rs.Finished = true
 	}
 
+	getOrCreateTagGroup := func(name string) *tracingpb.TagGroup {
+		for _, tg := range rs.TagGroups {
+			if tg.Name == name {
+				return tg
+			}
+		}
+		tagGroup := &tracingpb.TagGroup{
+			Name: name,
+		}
+		rs.TagGroups = append(rs.TagGroups, tagGroup)
+		return tagGroup
+	}
+
 	addTag := func(k, v string) {
 		rs.Tags[k] = v
 
-		rs.TagGroups = append(rs.TagGroups, &tracingpb.TagGroup{
-			Tags: []*tracingpb.TagKV{
-				{
-					Key:   k,
-					Value: v,
-				},
-			},
+		tg := getOrCreateTagGroup("")
+		tg.Tags = append(tg.Tags, tracingpb.Tag{
+			Key:   k,
+			Value: v,
 		})
-	}
-
-	addNestedTag := func(childKey, childValue string, tagGroup *tracingpb.TagGroup) {
-		rs.Tags[childKey] = childValue
-		tagGroup.Tags = append(tagGroup.Tags,
-			&tracingpb.TagKV{
-				Key:   childKey,
-				Value: childValue,
-			},
-		)
 	}
 
 	// If the span is not verbose, optimize by avoiding the tags.
@@ -832,12 +832,20 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.lazyTags {
 			switch v := kv.Value.(type) {
 			case LazyTag:
-				tagGroup := &tracingpb.TagGroup{
-					Name: kv.Key,
-				}
+				tagGroup := getOrCreateTagGroup(kv.Key)
 				rs.TagGroups = append(rs.TagGroups, tagGroup)
 				for _, tag := range v.Render() {
-					addNestedTag(string(tag.Key), tag.Value.Emit(), tagGroup)
+					childKey := string(tag.Key)
+					childValue := tag.Value.Emit()
+
+					rs.Tags[childKey] = childValue
+
+					tagGroup.Tags = append(tagGroup.Tags,
+						tracingpb.Tag{
+							Key:   childKey,
+							Value: childValue,
+						},
+					)
 				}
 			case fmt.Stringer:
 				addTag(kv.Key, v.String())

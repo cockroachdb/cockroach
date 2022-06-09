@@ -268,19 +268,22 @@ func TestGRPCInterceptors(t *testing.T) {
 				// the test.
 				delete(rec.Tags, "_unfinished")
 				delete(rec.Tags, "_verbose")
-				filteredTagGroups := make([]*tracingpb.TagGroup, 0)
-				for _, tagGroup := range rec.TagGroups {
-					name := tagGroup.GetName()
-					if name == "_unfinished" {
-						continue
-					}
-					if name == "_verbose" {
-						continue
-					}
-					filteredTagGroups = append(filteredTagGroups, tagGroup)
+				anonymousTagGroup := rec.FindTagGroup("")
+				if anonymousTagGroup == nil {
+					continue
 				}
 
-				rec.TagGroups = filteredTagGroups
+				filteredAnonymousTags := make([]tracingpb.Tag, 0)
+				for _, tag := range anonymousTagGroup.Tags {
+					if tag.Key == "_unfinished" {
+						continue
+					}
+					if tag.Key == "_verbose" {
+						continue
+					}
+					filteredAnonymousTags = append(filteredAnonymousTags, tag)
+				}
+				anonymousTagGroup.Tags = filteredAnonymousTags
 			}
 			require.Equal(t, 1, n)
 
