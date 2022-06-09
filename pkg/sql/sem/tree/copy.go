@@ -10,7 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
 
 // CopyFrom represents a COPY FROM statement.
 type CopyFrom struct {
@@ -26,6 +29,7 @@ type CopyOptions struct {
 	CopyFormat  CopyFormat
 	Delimiter   Expr
 	Null        Expr
+	Escape      *StrVal
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -88,6 +92,11 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.Destination)
 		addSep = true
 	}
+	if o.Escape != nil {
+		maybeAddSep()
+		ctx.WriteString("ESCAPE ")
+		ctx.FormatNode(o.Escape)
+	}
 }
 
 // IsDefault returns true if this struct has default value.
@@ -100,27 +109,33 @@ func (o CopyOptions) IsDefault() bool {
 func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 	if other.Destination != nil {
 		if o.Destination != nil {
-			return errors.New("destination option specified multiple times")
+			return pgerror.Newf(pgcode.Syntax, "destination option specified multiple times")
 		}
 		o.Destination = other.Destination
 	}
 	if other.CopyFormat != CopyFormatText {
 		if o.CopyFormat != CopyFormatText {
-			return errors.New("format option specified multiple times")
+			return pgerror.Newf(pgcode.Syntax, "format option specified multiple times")
 		}
 		o.CopyFormat = other.CopyFormat
 	}
 	if other.Delimiter != nil {
 		if o.Delimiter != nil {
-			return errors.New("delimiter option specified multiple times")
+			return pgerror.Newf(pgcode.Syntax, "delimiter option specified multiple times")
 		}
 		o.Delimiter = other.Delimiter
 	}
 	if other.Null != nil {
 		if o.Null != nil {
-			return errors.New("null option specified multiple times")
+			return pgerror.Newf(pgcode.Syntax, "null option specified multiple times")
 		}
 		o.Null = other.Null
+	}
+	if other.Escape != nil {
+		if o.Escape != nil {
+			return pgerror.Newf(pgcode.Syntax, "escape option specified multiple times")
+		}
+		o.Escape = other.Escape
 	}
 	return nil
 }

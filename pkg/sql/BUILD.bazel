@@ -381,6 +381,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/encoding/csv",
         "//pkg/util/envutil",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
