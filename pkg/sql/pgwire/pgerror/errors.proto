@@ -24,7 +24,8 @@ message Error {
   string detail = 3;
   string hint = 4;
   string severity = 8;
-  string constraint_name = 9;
+  string severity_nonlocalized = 9;
+  string constraint_name = 10;
 
   message Source {
       string file = 1;
