@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -560,7 +561,7 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	aKey := roachpb.Key("a")
-	collector := &pebbleDataBlockMVCCTimeIntervalCollector{}
+	collector := &pebbleDataBlockMVCCTimeIntervalPointCollector{}
 	finishAndCheck := func(lower, upper uint64) {
 		l, u, err := collector.FinishDataBlock()
 		require.NoError(t, err)
@@ -605,11 +606,16 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	require.Error(t, collector.UpdateKeySuffixes(nil, nil, suffix))
 }
 
+// TestPebbleMVCCTimeIntervalCollectorAndFilter tests that point and range key
+// time interval collection and filtering works. It only tests basic
+// integration.
 func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Set up an engine with tiny blocks, so each point key gets its own block,
+	// and disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
-		cfg.Opts.FormatMajorVersion = pebble.FormatNewest
+		cfg.Opts.DisableAutomaticCompactions = true
 		for i := range cfg.Opts.Levels {
 			cfg.Opts.Levels[i].BlockSize = 1
 			cfg.Opts.Levels[i].IndexBlockSize = 1
@@ -618,32 +624,302 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	}
 	eng := NewDefaultInMemForTesting(overrideOptions)
 	defer eng.Close()
-	// We are simply testing that the integration is working.
-	aKey := roachpb.Key("a")
-	for i := 0; i < 10; i++ {
-		require.NoError(t, eng.PutMVCC(
-			MVCCKey{Key: aKey, Timestamp: hlc.Timestamp{WallTime: int64(i), Logical: 1}},
-			MVCCValue{Value: roachpb.MakeValueFromString(fmt.Sprintf("val%d", i))}))
-	}
+
+	// Point keys a@3, a@5, a@7 in separate blocks in a single SST.
+	require.NoError(t, eng.PutMVCC(pointKey("a", 3), stringValue("a3")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 5), stringValue("a5")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 7), stringValue("a7")))
 	require.NoError(t, eng.Flush())
-	iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
-		LowerBound:       aKey,
-		MinTimestampHint: hlc.Timestamp{WallTime: 5},
-		MaxTimestampHint: hlc.Timestamp{WallTime: 7},
-	})
-	defer iter.Close()
-	iter.SeekGE(MVCCKey{Key: aKey})
-	var err error
-	var valid bool
-	var found []int64
-	for valid, err = iter.Valid(); valid; {
-		found = append(found, iter.Key().Timestamp.WallTime)
-		iter.Next()
-		valid, err = iter.Valid()
+
+	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 share a block in a single SST.
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
+	require.NoError(t, eng.Flush())
+
+	// Overlapping range keys [x-z)@5, [x-z)@7 share a block in a single SST.
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("x", "z", 5), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("x", "z", 7), MVCCValue{}))
+	require.NoError(t, eng.Flush())
+
+	testcases := map[string]struct {
+		minTimestamp hlc.Timestamp
+		maxTimestamp hlc.Timestamp
+		expect       []interface{}
+	}{
+		"no bounds": {wallTS(0), wallTS(0), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 5, "a5"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
+		}},
+		"all": {wallTS(1), wallTS(10), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 5, "a5"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
+		}},
+		"above all": {wallTS(10), wallTS(11), nil},
+		"below all": {wallTS(0), wallTS(1), nil},
+		"intersect": {wallTS(5), wallTS(5), []interface{}{
+			pointKV("a", 5, "a5"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
+		}},
+		"between": {wallTS(6), wallTS(6), []interface{}{
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+			rangeKV("x", "z", 7, MVCCValue{}),
+			rangeKV("x", "z", 5, MVCCValue{}),
+		}},
+		"touches lower": {wallTS(1), wallTS(3), []interface{}{
+			pointKV("a", 3, "a3"),
+		}},
+		"touches upper": {wallTS(9), wallTS(10), []interface{}{
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+		}},
 	}
-	require.NoError(t, err)
-	expected := []int64{7, 6, 5}
-	require.Equal(t, expected, found)
+
+	keyTypes := []IterKeyType{IterKeyTypePointsAndRanges, IterKeyTypePointsOnly, IterKeyTypeRangesOnly}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			for _, keyType := range keyTypes {
+				t.Run(keyType.String(), func(t *testing.T) {
+					// Filter out expected values based on key type.
+					var expect []interface{}
+					for _, kv := range tc.expect {
+						if _, isPoint := kv.(MVCCKeyValue); !isPoint && keyType == IterKeyTypePointsOnly {
+							continue
+						} else if _, isRange := kv.(MVCCRangeKeyValue); !isRange && keyType == IterKeyTypeRangesOnly {
+							continue
+						}
+						expect = append(expect, kv)
+					}
+
+					iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+						KeyTypes:         keyType,
+						UpperBound:       keys.MaxKey,
+						MinTimestampHint: tc.minTimestamp,
+						MaxTimestampHint: tc.maxTimestamp,
+					})
+					defer iter.Close()
+					require.Equal(t, expect, scanIter(t, iter))
+				})
+			}
+		})
+	}
+}
+
+// TestPebbleMVCCTimeIntervalWithClears tests that point and range key
+// time interval collection and filtering works in the presence of
+// point/range clears.
+func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up an engine. In this case, we use large blocks to force all point and
+	// range keys into the same blocks, to demonstrate the effect of clears in
+	// separate SSTs when the clearing SST does not satisfy the filter. We
+	// disable compactions to keep SSTs separate.
+	overrideOptions := func(cfg *engineConfig) error {
+		cfg.Opts.DisableAutomaticCompactions = true
+		for i := range cfg.Opts.Levels {
+			cfg.Opts.Levels[i].BlockSize = 65536
+			cfg.Opts.Levels[i].IndexBlockSize = 65536
+		}
+		return nil
+	}
+	eng := NewDefaultInMemForTesting(overrideOptions)
+	defer eng.Close()
+
+	// Point keys a@3, a@5, a@7 in a single block in a single SST.
+	require.NoError(t, eng.PutMVCC(pointKey("a", 3), stringValue("a3")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 5), stringValue("a5")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 7), stringValue("a7")))
+	require.NoError(t, eng.Flush())
+
+	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 in a single block in a single SST.
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
+	require.NoError(t, eng.Flush())
+
+	// Clear a@5 and [c-d)@7 in a separate SST.
+	require.NoError(t, eng.ClearMVCC(pointKey("a", 5)))
+	require.NoError(t, eng.ExperimentalClearMVCCRangeKey(rangeKey("c", "d", 7)))
+	require.NoError(t, eng.Flush())
+
+	testcases := map[string]struct {
+		minTimestamp hlc.Timestamp
+		maxTimestamp hlc.Timestamp
+		expect       []interface{}
+	}{
+		"no bounds": {wallTS(0), wallTS(0), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+		}},
+		"all": {wallTS(1), wallTS(10), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+		}},
+		"at cleared point": {wallTS(5), wallTS(5), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+		}},
+		// NB: This reveals a@5 which has been deleted, because the SST block
+		// containing the point clear does not satisfy the [7-7] filter.
+		"at cleared range": {wallTS(7), wallTS(7), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 5, "a5"),
+			pointKV("a", 3, "a3"),
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+		}},
+		// NB: This reveals a@5 which has been deleted, because the SST block
+		// containing the point clear does not satisfy the [1-3] filter.
+		"touches lower": {wallTS(1), wallTS(3), []interface{}{
+			pointKV("a", 7, "a7"),
+			pointKV("a", 5, "a5"),
+			pointKV("a", 3, "a3"),
+		}},
+		// NB: This reveals [c-d)@7 which has been deleted, because the SST block
+		// containing the range key clear does not satisfy the [9-10] filter.
+		"touches upper": {wallTS(9), wallTS(10), []interface{}{
+			rangeKV("b", "c", 5, MVCCValue{}),
+			rangeKV("c", "d", 7, MVCCValue{}),
+			rangeKV("d", "e", 9, MVCCValue{}),
+		}},
+	}
+
+	keyTypes := []IterKeyType{IterKeyTypePointsAndRanges, IterKeyTypePointsOnly, IterKeyTypeRangesOnly}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			for _, keyType := range keyTypes {
+				t.Run(keyType.String(), func(t *testing.T) {
+					// Filter out expected values based on key type.
+					var expect []interface{}
+					for _, kv := range tc.expect {
+						if _, isPoint := kv.(MVCCKeyValue); !isPoint && keyType == IterKeyTypePointsOnly {
+							continue
+						} else if _, isRange := kv.(MVCCRangeKeyValue); !isRange && keyType == IterKeyTypeRangesOnly {
+							continue
+						}
+						expect = append(expect, kv)
+					}
+
+					iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+						KeyTypes:         keyType,
+						UpperBound:       keys.MaxKey,
+						MinTimestampHint: tc.minTimestamp,
+						MaxTimestampHint: tc.maxTimestamp,
+					})
+					defer iter.Close()
+					require.Equal(t, expect, scanIter(t, iter))
+				})
+			}
+		})
+	}
+}
+
+// TestPebbleMVCCTimeIntervalWithRangeClears tests how point and range key
+// time interval collection and filtering works in the presence of
+// a ranged clear (i.e. Pebble range tombstone).
+func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 83376, "property filters may ignore Pebble range tombstones")
+
+	// Set up an engine with tiny blocks, so each point key gets its own block,
+	// and disable compactions to keep SSTs separate.
+	overrideOptions := func(cfg *engineConfig) error {
+		cfg.Opts.DisableAutomaticCompactions = true
+		for i := range cfg.Opts.Levels {
+			cfg.Opts.Levels[i].BlockSize = 1
+			cfg.Opts.Levels[i].IndexBlockSize = 1
+		}
+		return nil
+	}
+	eng := NewDefaultInMemForTesting(overrideOptions)
+	defer eng.Close()
+
+	// Point keys a@3, a@5, a@7 in separate blocks in a single SST.
+	require.NoError(t, eng.PutMVCC(pointKey("a", 3), stringValue("a3")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 5), stringValue("a5")))
+	require.NoError(t, eng.PutMVCC(pointKey("a", 7), stringValue("a7")))
+	require.NoError(t, eng.Flush())
+
+	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 in a single block in a single SST.
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
+	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
+	require.NoError(t, eng.Flush())
+
+	// Clear [a-z) in a separate SST.
+	require.NoError(t, eng.ClearMVCCRange(roachpb.Key("a"), roachpb.Key("z")))
+	require.NoError(t, eng.Flush())
+
+	testcases := map[string]struct {
+		minTimestamp hlc.Timestamp
+		maxTimestamp hlc.Timestamp
+		expect       []interface{}
+	}{
+		"no bounds":     {wallTS(0), wallTS(0), nil},
+		"all":           {wallTS(1), wallTS(10), nil},
+		"above all":     {wallTS(10), wallTS(11), nil},
+		"below all":     {wallTS(0), wallTS(1), nil},
+		"intersect":     {wallTS(5), wallTS(5), nil},
+		"between":       {wallTS(6), wallTS(6), nil},
+		"touches lower": {wallTS(1), wallTS(3), nil},
+		"touches upper": {wallTS(9), wallTS(10), nil},
+	}
+
+	keyTypes := []IterKeyType{IterKeyTypePointsAndRanges, IterKeyTypePointsOnly, IterKeyTypeRangesOnly}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			for _, keyType := range keyTypes {
+				t.Run(keyType.String(), func(t *testing.T) {
+					// Filter out expected values based on key type.
+					var expect []interface{}
+					for _, kv := range tc.expect {
+						if _, isPoint := kv.(MVCCKeyValue); !isPoint && keyType == IterKeyTypePointsOnly {
+							continue
+						} else if _, isRange := kv.(MVCCRangeKeyValue); !isRange && keyType == IterKeyTypeRangesOnly {
+							continue
+						}
+						expect = append(expect, kv)
+					}
+
+					iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+						KeyTypes:         keyType,
+						UpperBound:       keys.MaxKey,
+						MinTimestampHint: tc.minTimestamp,
+						MaxTimestampHint: tc.maxTimestamp,
+					})
+					defer iter.Close()
+					require.Equal(t, expect, scanIter(t, iter))
+				})
+			}
+		})
+	}
 }
 
 // TestPebbleTablePropertyFilter tests that pebbleIterator still respects
