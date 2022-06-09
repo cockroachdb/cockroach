@@ -249,6 +249,8 @@ func (s *CrossRangeTxnWrapperSender) Wrapped() Sender {
 	return s.wrapped
 }
 
+var _ TxnInterface = &DB{}
+
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {

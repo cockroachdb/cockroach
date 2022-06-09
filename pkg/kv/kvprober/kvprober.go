@@ -189,6 +189,8 @@ func (p *ProberOps) Write(key interface{}) func(context.Context, *kv.Txn) error 
 	}
 }
 
+var _ kv.TxnInterface = &proberTxnImpl{}
+
 // proberTxnImpl is used to run transactions.
 type proberTxnImpl struct {
 	db *kv.DB

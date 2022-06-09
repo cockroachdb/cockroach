@@ -11,6 +11,7 @@
 package kv
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -119,4 +120,8 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 	}
 
 	return r, fmt.Errorf("unable to marshal %T: %v", v, v)
+}
+
+type TxnInterface interface {
+	Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error
 }
