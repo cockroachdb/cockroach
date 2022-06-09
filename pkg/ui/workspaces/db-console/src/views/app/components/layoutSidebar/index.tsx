@@ -56,6 +56,11 @@ export class Sidebar extends React.Component<SidebarProps> {
       text: "Hot Ranges",
       activeFor: ["/hotranges"],
     },
+    {
+      path: "/keyvisualizer",
+      text: "Key Visualizer",
+      activeFor: ["/keyvisualizer"],
+    },
     { path: "/jobs", text: "Jobs", activeFor: [] },
     {
       path: "/debug",

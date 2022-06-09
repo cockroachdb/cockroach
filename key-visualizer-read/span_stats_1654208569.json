@@ -1,0 +1,216 @@
+{
+  "samples": [
+    {
+      "sampleTime": { "wallTime": "1654208569047127000" },
+      "spanStats": [
+        {
+          "span": { "startKey": "/Min", "endKey": "/System/NodeLiveness" },
+          "sp": { "key": "", "endKey": "BABsaXZlbmVzcy0=" },
+          "qps": "12"
+        },
+        {
+          "span": {
+            "startKey": "/System/NodeLiveness",
+            "endKey": "/System/NodeLivenessMax"
+          },
+          "sp": { "key": "BABsaXZlbmVzcy0=", "endKey": "BABsaXZlbmVzcy4=" },
+          "qps": "5"
+        },
+        {
+          "span": {
+            "startKey": "/System/NodeLivenessMax",
+            "endKey": "/System/tsd"
+          },
+          "sp": { "key": "BABsaXZlbmVzcy4=", "endKey": "BHRzZA==" },
+          "qps": "3"
+        },
+        {
+          "span": { "startKey": "/System/tsd", "endKey": "/System/\"tse\"" },
+          "sp": { "key": "BHRzZA==", "endKey": "BHRzZQ==" },
+          "qps": "1388"
+        },
+        {
+          "span": {
+            "startKey": "/System/\"tse\"",
+            "endKey": "/Table/SystemConfigSpan/Start"
+          },
+          "sp": { "key": "BHRzZQ==", "endKey": "iA==" }
+        },
+        {
+          "span": {
+            "startKey": "/Table/SystemConfigSpan/Start",
+            "endKey": "/Table/11"
+          },
+          "sp": { "key": "iA==", "endKey": "kw==" }
+        },
+        {
+          "span": { "startKey": "/Table/11", "endKey": "/Table/12" },
+          "sp": { "key": "kw==", "endKey": "lA==" }
+        },
+        {
+          "span": { "startKey": "/Table/12", "endKey": "/Table/13" },
+          "sp": { "key": "lA==", "endKey": "lQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/13", "endKey": "/Table/14" },
+          "sp": { "key": "lQ==", "endKey": "lg==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/14", "endKey": "/Table/15" },
+          "sp": { "key": "lg==", "endKey": "lw==" }
+        },
+        {
+          "span": { "startKey": "/Table/15", "endKey": "/Table/16" },
+          "sp": { "key": "lw==", "endKey": "mA==" },
+          "qps": "4"
+        },
+        {
+          "span": { "startKey": "/Table/16", "endKey": "/Table/17" },
+          "sp": { "key": "mA==", "endKey": "mQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/17", "endKey": "/Table/18" },
+          "sp": { "key": "mQ==", "endKey": "mg==" }
+        },
+        {
+          "span": { "startKey": "/Table/18", "endKey": "/Table/19" },
+          "sp": { "key": "mg==", "endKey": "mw==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/19", "endKey": "/Table/20" },
+          "sp": { "key": "mw==", "endKey": "nA==" }
+        },
+        {
+          "span": { "startKey": "/Table/20", "endKey": "/Table/21" },
+          "sp": { "key": "nA==", "endKey": "nQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/21", "endKey": "/Table/22" },
+          "sp": { "key": "nQ==", "endKey": "ng==" }
+        },
+        {
+          "span": { "startKey": "/Table/22", "endKey": "/Table/23" },
+          "sp": { "key": "ng==", "endKey": "nw==" }
+        },
+        {
+          "span": { "startKey": "/Table/23", "endKey": "/Table/24" },
+          "sp": { "key": "nw==", "endKey": "oA==" }
+        },
+        {
+          "span": { "startKey": "/Table/24", "endKey": "/Table/25" },
+          "sp": { "key": "oA==", "endKey": "oQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/25", "endKey": "/Table/26" },
+          "sp": { "key": "oQ==", "endKey": "og==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/26", "endKey": "/Table/27" },
+          "sp": { "key": "og==", "endKey": "ow==" }
+        },
+        {
+          "span": { "startKey": "/Table/27", "endKey": "/Table/28" },
+          "sp": { "key": "ow==", "endKey": "pA==" }
+        },
+        {
+          "span": { "startKey": "/Table/28", "endKey": "/Table/29" },
+          "sp": { "key": "pA==", "endKey": "pQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/29", "endKey": "/NamespaceTable/30" },
+          "sp": { "key": "pQ==", "endKey": "pg==" },
+          "qps": "1"
+        },
+        {
+          "span": {
+            "startKey": "/NamespaceTable/30",
+            "endKey": "/NamespaceTable/Max"
+          },
+          "sp": { "key": "pg==", "endKey": "pw==" }
+        },
+        {
+          "span": { "startKey": "/NamespaceTable/Max", "endKey": "/Table/32" },
+          "sp": { "key": "pw==", "endKey": "qA==" }
+        },
+        {
+          "span": { "startKey": "/Table/32", "endKey": "/Table/33" },
+          "sp": { "key": "qA==", "endKey": "qQ==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/33", "endKey": "/Table/34" },
+          "sp": { "key": "qQ==", "endKey": "qg==" }
+        },
+        {
+          "span": { "startKey": "/Table/34", "endKey": "/Table/35" },
+          "sp": { "key": "qg==", "endKey": "qw==" }
+        },
+        {
+          "span": { "startKey": "/Table/35", "endKey": "/Table/36" },
+          "sp": { "key": "qw==", "endKey": "rA==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/36", "endKey": "/Table/37" },
+          "sp": { "key": "rA==", "endKey": "rQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/37", "endKey": "/Table/38" },
+          "sp": { "key": "rQ==", "endKey": "rg==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/38", "endKey": "/Table/39" },
+          "sp": { "key": "rg==", "endKey": "rw==" }
+        },
+        {
+          "span": { "startKey": "/Table/39", "endKey": "/Table/40" },
+          "sp": { "key": "rw==", "endKey": "sA==" },
+          "qps": "13"
+        },
+        {
+          "span": { "startKey": "/Table/40", "endKey": "/Table/41" },
+          "sp": { "key": "sA==", "endKey": "sQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/41", "endKey": "/Table/42" },
+          "sp": { "key": "sQ==", "endKey": "sg==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/42", "endKey": "/Table/43" },
+          "sp": { "key": "sg==", "endKey": "sw==" }
+        },
+        {
+          "span": { "startKey": "/Table/43", "endKey": "/Table/44" },
+          "sp": { "key": "sw==", "endKey": "tA==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/44", "endKey": "/Table/45" },
+          "sp": { "key": "tA==", "endKey": "tQ==" }
+        },
+        {
+          "span": { "startKey": "/Table/45", "endKey": "/Table/46" },
+          "sp": { "key": "tQ==", "endKey": "tg==" },
+          "qps": "1"
+        },
+        {
+          "span": { "startKey": "/Table/46", "endKey": "/Table/47" },
+          "sp": { "key": "tg==", "endKey": "tw==" }
+        },
+        {
+          "span": { "startKey": "/Table/47", "endKey": "/Table/50" },
+          "sp": { "key": "tw==", "endKey": "ug==" }
+        },
+        {
+          "span": { "startKey": "/Table/50", "endKey": "/Max" },
+          "sp": { "key": "ug==", "endKey": "//8=" }
+        }
+      ]
+    }
+  ]
+}
