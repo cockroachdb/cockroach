@@ -33,6 +33,11 @@ import (
 // joinReaderSpanGenerator is used by the joinReader to generate spans for
 // looking up into the index.
 type joinReaderSpanGenerator interface {
+	// setResizeMemoryAccountFunc provides the generator with a
+	// resizeMemoryAccountFunc. It must be called once before the generator is
+	// used.
+	setResizeMemoryAccountFunc(resizeMemoryAccountFunc)
+
 	// generateSpans generates spans for the given batch of input rows. The spans
 	// are returned in rows order, but there are no duplicates (i.e. if a 2nd row
 	// results in the same spans as a previous row, the results don't include them
@@ -55,6 +60,8 @@ type joinReaderSpanGenerator interface {
 var _ joinReaderSpanGenerator = &defaultSpanGenerator{}
 var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
+
+type resizeMemoryAccountFunc func(_ *mon.BoundAccount, oldSz, newSz int64) error
 
 // spanIDHelper helps joinReaderSpanGenerators in maintaining a mapping between
 // spans returned by generateSpans() and input rows that need the result of each
@@ -154,8 +161,10 @@ type defaultSpanGenerator struct {
 	scratchSpans roachpb.Spans
 
 	// memAcc is owned by this span generator and is closed when the generator
-	// is closed.
-	memAcc *mon.BoundAccount
+	// is closed. All memory reservations should be done via
+	// resizeMemoryAccount.
+	memAcc              *mon.BoundAccount
+	resizeMemoryAccount resizeMemoryAccountFunc
 }
 
 func (g *defaultSpanGenerator) init(
@@ -181,6 +190,10 @@ func (g *defaultSpanGenerator) init(
 	}
 	g.memAcc = memAcc
 	return nil
+}
+
+func (g *defaultSpanGenerator) setResizeMemoryAccountFunc(f resizeMemoryAccountFunc) {
+	g.resizeMemoryAccount = f
 }
 
 // Generate spans for a given row.
@@ -246,8 +259,8 @@ func (g *defaultSpanGenerator) generateSpans(
 	// NOTE: this does not account for scratchSpans because the joinReader
 	// passes the ownership of spans to the fetcher which will account for it
 	// accordingly.
-	if err := g.memAcc.ResizeTo(ctx, g.memUsage()); err != nil {
-		return nil, nil, addWorkmemHint(err)
+	if err := g.resizeMemoryAccount(g.memAcc, g.memAcc.Used(), g.memUsage()); err != nil {
+		return nil, nil, err
 	}
 
 	return g.scratchSpans, g.scratchSpanIDs, nil
@@ -306,8 +319,10 @@ type multiSpanGenerator struct {
 	scratchSpans roachpb.Spans
 
 	// memAcc is owned by this span generator and is closed when the generator
-	// is closed.
-	memAcc *mon.BoundAccount
+	// is closed. All memory reservations should be done via
+	// resizeMemoryAccount.
+	memAcc              *mon.BoundAccount
+	resizeMemoryAccount resizeMemoryAccountFunc
 }
 
 // multiSpanGeneratorColInfo contains info about the values that a specific
@@ -612,6 +627,10 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 	return nil
 }
 
+func (g *multiSpanGenerator) setResizeMemoryAccountFunc(f resizeMemoryAccountFunc) {
+	g.resizeMemoryAccount = f
+}
+
 // generateNonNullSpans generates spans for a given row. It does not include
 // null values, since those values would not match the lookup condition anyway.
 func (g *multiSpanGenerator) generateNonNullSpans(row rowenc.EncDatumRow) (roachpb.Spans, error) {
@@ -754,6 +773,11 @@ func (g *localityOptimizedSpanGenerator) init(
 		)
 	}
 	return nil
+}
+
+func (g *localityOptimizedSpanGenerator) setResizeMemoryAccountFunc(f resizeMemoryAccountFunc) {
+	g.localSpanGen.setResizeMemoryAccountFunc(f)
+	g.remoteSpanGen.setResizeMemoryAccountFunc(f)
 }
 
 // generateSpans is part of the joinReaderSpanGenerator interface.
