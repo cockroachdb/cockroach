@@ -784,7 +784,7 @@ func sanitizeExprsForImport(
 
 	// If we have immutable expressions, then we can just return it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "import_default", &semaCtx, volatility.Immutable)
+		ctx, expr, targetType, "import_default", &semaCtx, volatility.Immutable, false /*allowAssignmentCast*/)
 	if err == nil {
 		return typedExpr, overrideImmutable, nil
 	}

@@ -374,7 +374,7 @@ func (e *exprEval) typeCheck(
 ) (tree.TypedExpr, error) {
 	// If we have variable free immutable expressions, then we can just evaluate it right away.
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, expr, targetType, "cdc", &e.semaCtx, volatility.Immutable)
+		ctx, expr, targetType, "cdc", &e.semaCtx, volatility.Immutable, false)
 	if err == nil {
 		d, err := eval.Expr(e.evalCtx, typedExpr)
 		if err != nil {

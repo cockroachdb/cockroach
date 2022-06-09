@@ -373,6 +373,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			"REGIONAL BY ROW DEFAULT",
 			params.p.SemaCtx(),
 			volatility.Volatile,
+			false, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return err

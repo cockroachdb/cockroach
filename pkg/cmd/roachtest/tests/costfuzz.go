@@ -40,6 +40,7 @@ func registerCostFuzz(r registry.Registry) {
 		Tags:            nil,
 		Cluster:         r.MakeClusterSpec(1),
 		Run:             runCostFuzz,
+		Skip:            "flaky test: https://github.com/cockroachdb/cockroach/issues/81717",
 	})
 }
 
