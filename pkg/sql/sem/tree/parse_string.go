@@ -11,12 +11,9 @@
 package tree
 
 import (
-	"math"
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -115,10 +112,7 @@ func ParseDOidAsInt(s string) (*DOid, error) {
 	if err != nil {
 		return nil, MakeParseError(s, types.Oid, err)
 	}
-	if i > math.MaxUint32 || i < math.MinInt32 {
-		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", i)
-	}
-	return NewDOid(oid.Oid(i)), nil
+	return IntToOid(DInt(i))
 }
 
 // FormatBitArrayToType formats bit arrays such that they fill the total width

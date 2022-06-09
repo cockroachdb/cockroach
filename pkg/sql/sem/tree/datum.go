@@ -759,10 +759,11 @@ func (d *DInt) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
-		if thisInt > math.MaxUint32 || thisInt < math.MinInt32 {
-			return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", thisInt)
+		o, err := IntToOid(thisInt)
+		if err != nil {
+			return 0, err
 		}
-		thisInt = DInt(uint32(thisInt))
+		thisInt = DInt(o.Oid)
 		v = DInt(t.Oid)
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -4883,6 +4884,15 @@ type DOid struct {
 	name string
 }
 
+// IntToOid is a helper that turns a DInt into a *DOid and checks that the value
+// is in range.
+func IntToOid(i DInt) (*DOid, error) {
+	if i > math.MaxUint32 || i < math.MinInt32 {
+		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", i)
+	}
+	return NewDOid(oid.Oid(i)), nil
+}
+
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
 func MakeDOid(d oid.Oid, semanticType *types.T) DOid {
 	return DOid{Oid: d, semanticType: semanticType, name: ""}
@@ -4976,10 +4986,11 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
-		if *t > math.MaxUint32 || *t < math.MinInt32 {
-			return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", *t)
+		o, err := IntToOid(*t)
+		if err != nil {
+			return 0, err
 		}
-		v = oid.Oid(*t)
+		v = o.Oid
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
