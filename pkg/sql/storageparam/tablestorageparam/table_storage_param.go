@@ -14,6 +14,7 @@ package tablestorageparam
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -221,6 +222,37 @@ var tableParams = map[string]tableParam{
 				pgerror.Newf(
 					pgcode.InvalidParameterValue,
 					`resetting "ttl_expire_after" is not permitted`,
+				),
+				"use `RESET (ttl)` to remove TTL from the table",
+			)
+		},
+	},
+	`ttl_expiration_expression`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			stringVal, err := paramparse.DatumAsString(evalCtx, key, datum)
+			stringVal = strings.TrimSpace(stringVal)
+			if !strings.HasPrefix(stringVal, "(") && !strings.HasSuffix(stringVal, ")") {
+				stringVal = "(" + stringVal + ")"
+			}
+			if err != nil {
+				return err
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			_, err = parser.ParseExpr(stringVal)
+			if err != nil {
+				return err
+			}
+			// todo(wall): add type checking
+			po.tableDesc.RowLevelTTL.ExpirationExpr = catpb.Expression(stringVal)
+			return nil
+		},
+		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`resetting "ttl_expiration_expression" is not permitted`,
 				),
 				"use `RESET (ttl)` to remove TTL from the table",
 			)
