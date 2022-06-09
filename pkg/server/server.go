@@ -1080,11 +1080,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Register the SpanStats service, to power the key visualizer.
 	spanStatsServer := &spanStatsServer{server: s}
-	//serverpb.RegisterSpanStatsServer(s.grpc.Server, spanStatsServer)
 	spanStatsServer.RegisterService(s.grpc.Server)
-	s.spanStatsServer = spanStatsServer // only for testing via TestServer; XXX: unnecessary
+	s.spanStatsServer = spanStatsServer
 
-	// every 5 minutes call getSpan
 	collectStats := func() {
 		ctx := context.Background()
 		sample, err := s.spanStatsServer.GetSpanStatistics(ctx, &serverpb.GetSpanStatisticsRequest{})
@@ -1095,11 +1093,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 		m := jsonpb.Marshaler{}
 		result, _ := m.MarshalToString(sample)
-		log.Infof(ctx, "Span Stat: %s", result)
-
 
 		// write to file
-		filename := fmt.Sprintf("span_stats_%d.json", time.Now().Unix())
+		filename := fmt.Sprintf("./key-visualizer-write/span_stats_%d.json", time.Now().Unix())
 		f, err := os.OpenFile(filename, os.O_CREATE | os.O_WRONLY, 0777)
 		if err != nil {
 			log.Fatal(ctx, err.Error())
@@ -1117,7 +1113,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	go func() {
 		for {
-			time.Sleep(10 * time.Second)
+			time.Sleep(15 * time.Second)
 			collectStats()
 		}
 	}()

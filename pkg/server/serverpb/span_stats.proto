@@ -29,6 +29,7 @@ message Sample {
 
 message SpanStatistics {
 
+  // needed for pretty keys
   message Span {
     string startKey = 1;
     string endKey = 2;
@@ -46,19 +47,27 @@ message GetSpanStatisticsResponse {
 message SetSpanBoundariesRequest{}
 message SetSpanBoundariesResponse{}
 
+// TODO: use time window
+message GetSamplesRequest {}
+
+message GetSamplesResponse {
+  repeated Sample samples = 1;
+  repeated string keys = 2;
+}
+
 service SpanStats {
   // GetSpanStatistics fans out to all stores of interest to retrieve
   // histogram data over the requested period and aggregates the results.
-  rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) {
+  rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) {}
+
+
+  rpc SetSpanBoundaries(SetSpanBoundariesRequest) returns (SetSpanBoundariesResponse) {}
+
+
+  rpc GetSamples(GetSamplesRequest) returns (GetSamplesResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/span_stats"
+      get: "/_status/v1/key-visualizer"
     };
   }
 
-  rpc SetSpanBoundaries(SetSpanBoundariesRequest) returns (SetSpanBoundariesResponse) {
-    option (google.api.http) = {
-      post: "/_admin/v1/set_span_boundaries"
-      body : "*"
-    };
-  }
 }

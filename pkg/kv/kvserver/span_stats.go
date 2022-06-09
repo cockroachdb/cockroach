@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -34,7 +33,6 @@ func (s *Store) SetBucketBoundaries() error {
 			return false
 		}
 
-		log.Infof(context.Background(), "Add Bucket: %s", desc.KeySpan().String())
 		return true
 	})
 
