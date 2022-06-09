@@ -649,6 +649,34 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
+// ExperimentalDelRangeUsingTombstone deletes the rows between begin (inclusive)
+// and end (exclusive) using an MVCC range tombstone. Callers must check the
+// MVCCRangeTombstones version gate before using this.
+//
+// This method is EXPERIMENTAL: range tombstones are under active development,
+// and have severe limitations including being ignored by all KV and MVCC APIs
+// and only being stored in memory.
+func (b *Batch) ExperimentalDelRangeUsingTombstone(s, e interface{}) {
+	start, err := marshalKey(s)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	end, err := marshalKey(e)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	b.appendReqs(&roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    start,
+			EndKey: end,
+		},
+		UseExperimentalRangeTombstone: true,
+	})
+	b.initResult(1, 0, notRaw, nil)
+}
+
 // adminMerge is only exported on DB. It is here for symmetry with the
 // other operations.
 func (b *Batch) adminMerge(key interface{}) {
