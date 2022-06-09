@@ -362,11 +362,19 @@ func defaultClusterAllocator(
 				skipWipe:       r.config.skipClusterWipeOnAttach,
 			}
 			lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
-			return attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
+			c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
+			if err == nil {
+				return c, nil
+			}
+			if err != nil && !errors.Is(err, errClusterNotFound) {
+				return nil, err
+			}
+			// Fall through to create new cluster with name override.
 		}
 		lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s", t.Name, t.Cluster)
 
 		cfg := clusterConfig{
+			nameOverride: clustersOpt.clusterName, // only set if we hit errClusterFound above
 			spec:         t.Cluster,
 			artifactsDir: artifactsDir,
 			username:     clustersOpt.user,
