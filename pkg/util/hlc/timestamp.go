@@ -295,6 +295,15 @@ func (t Timestamp) FloorPrev() Timestamp {
 	panic("cannot take the previous value to a zero timestamp")
 }
 
+// WallNext adds 1 to the WallTime and resets Logical.
+func (t Timestamp) WallNext() Timestamp {
+	return Timestamp{
+		WallTime:  t.WallTime + 1,
+		Logical:   0,
+		Synthetic: t.Synthetic,
+	}
+}
+
 // WallPrev subtracts 1 from the WallTime and resets Logical.
 func (t Timestamp) WallPrev() Timestamp {
 	return Timestamp{
