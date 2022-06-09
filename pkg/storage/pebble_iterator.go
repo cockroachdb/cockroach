@@ -225,6 +225,11 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 				uint64(opts.MinTimestampHint.WallTime),
 				uint64(opts.MaxTimestampHint.WallTime)+1),
 		}
+		p.options.RangeKeyFilters = []pebble.BlockPropertyFilter{
+			sstable.NewBlockIntervalFilter(mvccWallTimeIntervalCollector,
+				uint64(opts.MinTimestampHint.WallTime),
+				uint64(opts.MaxTimestampHint.WallTime)+1),
+		}
 	}
 
 	// Set the new iterator options. We unconditionally do so, since Pebble will

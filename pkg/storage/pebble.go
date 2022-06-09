@@ -432,7 +432,7 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 		return sstable.NewBlockIntervalCollector(
 			mvccWallTimeIntervalCollector,
 			&pebbleDataBlockMVCCTimeIntervalCollector{}, /* points */
-			nil, /* ranges */
+			&pebbleDataBlockMVCCTimeIntervalCollector{}, /* ranges */
 		)
 	},
 }
