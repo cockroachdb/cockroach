@@ -687,7 +687,8 @@ func (c *clusterImpl) closeLogger() {
 }
 
 type clusterConfig struct {
-	spec spec.ClusterSpec
+	nameOverride string
+	spec         spec.ClusterSpec
 	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
 	// username is the username passed via the --username argument
@@ -746,6 +747,9 @@ func (f *clusterFactory) releaseSem() {
 func (f *clusterFactory) genName(cfg clusterConfig) string {
 	if cfg.localCluster {
 		return "local" // The roachprod tool understands this magic name.
+	}
+	if cfg.nameOverride != "" {
+		return cfg.nameOverride
 	}
 	count := atomic.AddUint64(&f.counter, 1)
 	return makeClusterName(
@@ -940,14 +944,14 @@ func attachToExistingCluster(
 		r: r,
 	}
 
-	if err := r.registerCluster(c); err != nil {
-		return nil, err
-	}
-
 	if !opt.skipValidation {
 		if err := c.validate(ctx, spec, l); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := r.registerCluster(c); err != nil {
+		return nil, err
 	}
 
 	if !opt.skipStop {
@@ -1017,6 +1021,8 @@ func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	c.destroyState.mu.Unlock()
 }
 
+var errClusterNotFound = errors.New("cluster not found")
+
 // validateCluster takes a cluster and checks that the reality corresponds to
 // the cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
@@ -1033,7 +1039,7 @@ func (c *clusterImpl) validate(
 	}
 	cDetails, ok := cloudClusters.Clusters[c.name]
 	if !ok {
-		return fmt.Errorf("cluster %q not found", c.name)
+		return errors.Wrapf(errClusterNotFound, "%q", c.name)
 	}
 	if len(cDetails.VMs) < c.spec.NodeCount {
 		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.spec.NodeCount)
