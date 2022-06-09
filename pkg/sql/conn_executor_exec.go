@@ -776,9 +776,11 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 			}
 			return errors.AssertionFailedf("expected bounded_staleness set with a max_timestamp_bound")
 		}
-		return errors.AssertionFailedf(
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
 			"cannot specify AS OF SYSTEM TIME with different timestamps. expected: %s, got: %s",
-			p.extendedEvalCtx.AsOfSystemTime.Timestamp, asOf.Timestamp,
+			p.extendedEvalCtx.AsOfSystemTime.Timestamp,
+			asOf.Timestamp,
 		)
 	}
 	// If we're in an explicit txn, we allow AOST but only if it matches with
