@@ -78,6 +78,19 @@ func alterTableAddColumn(
 				"UNIQUE WITHOUT INDEX constraint on the column",
 		))
 	}
+	if d.PrimaryKey.IsPrimaryKey {
+		publicTargets := b.QueryByID(tbl.TableID).Filter(
+			func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+				return target == scpb.ToPublic
+			},
+		)
+		_, _, primaryIdx := scpb.FindPrimaryIndex(publicTargets)
+		// TODO(#82735): support when primary key is implicit
+		if primaryIdx != nil {
+			panic(pgerror.Newf(pgcode.InvalidColumnDefinition,
+				"multiple primary keys for table %q are not allowed", tn.Object()))
+		}
+	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
 	}
