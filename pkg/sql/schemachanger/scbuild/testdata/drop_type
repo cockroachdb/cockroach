@@ -25,6 +25,11 @@ DROP TYPE defaultdb.typ
   details:
     arrayTypeId: 105
     typeId: 104
+- [[EnumTypeValue:{DescID: 104}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 104
 - [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100

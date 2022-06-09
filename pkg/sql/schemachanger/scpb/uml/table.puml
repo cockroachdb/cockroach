@@ -100,10 +100,11 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 
-object ZoneConfig
+object TableZoneConfig
 
-ZoneConfig :  TableID
-ZoneConfig :  ZoneConfig
+TableZoneConfig :  TableID
+TableZoneConfig :  ZoneConfigID
+TableZoneConfig :  ZoneConfig
 
 object TableLocalityGlobal
 
@@ -276,9 +277,9 @@ Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
 Table <|-- RowLevelTTL
-Table <|-- ZoneConfig
-View <|-- ZoneConfig
-Sequence <|-- ZoneConfig
+Table <|-- TableZoneConfig
+View <|-- TableZoneConfig
+Sequence <|-- TableZoneConfig
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion

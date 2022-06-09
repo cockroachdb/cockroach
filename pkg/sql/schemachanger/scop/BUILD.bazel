@@ -19,6 +19,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/jobs/jobspb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

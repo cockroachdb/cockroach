@@ -11,6 +11,7 @@
 package scop
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -540,4 +541,11 @@ type DeleteSchedule struct {
 type RefreshStats struct {
 	mutationOp
 	TableID descpb.ID
+}
+
+// SetZoneConfig the zone config.
+type SetZoneConfig struct {
+	mutationOp
+	DescriptorID descpb.ID
+	ZoneConfig   *zonepb.ZoneConfig
 }

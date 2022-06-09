@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
@@ -182,5 +184,22 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,
 	)
+	return err
+}
+
+func (mu metadataUpdater) SetZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) error {
+	if zone == nil {
+		_, err := mu.ie.Exec(ctx, "delete-zone", mu.txn,
+			"DELETE FROM system.zones WHERE id = $1", id)
+		return err
+	}
+	bytes, err := protoutil.Marshal(zone)
+	if err != nil {
+		return err
+	}
+	_, err = mu.ie.Exec(ctx, "update-zone", mu.txn,
+		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", id, bytes)
 	return err
 }

@@ -368,6 +368,7 @@ go_library(
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/privilege",
         "//pkg/sql/querycache",
+        "//pkg/sql/regionutils",
         "//pkg/sql/roleoption",
         "//pkg/sql/row",
         "//pkg/sql/rowcontainer",

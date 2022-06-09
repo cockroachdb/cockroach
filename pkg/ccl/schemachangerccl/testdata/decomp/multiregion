@@ -50,7 +50,10 @@ ElementState:
   Status: PUBLIC
 - DatabaseRegionConfig:
     databaseId: 104
+    placement: 0
+    primaryRegion: us-east1
     regionEnumTypeId: 105
+    survivalGoal: 1
   Status: PUBLIC
 - DatabaseRoleSetting:
     databaseId: 104
@@ -933,4 +936,19 @@ ElementState:
 - ObjectParent:
     objectId: 105
     parentSchemaId: 106
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: us-east1
+    physicalRepresentation: QA==
+    typeId: 105
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: us-east2
+    physicalRepresentation: gA==
+    typeId: 105
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: us-east3
+    physicalRepresentation: wA==
+    typeId: 105
   Status: PUBLIC

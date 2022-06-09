@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -173,7 +174,7 @@ type PrivilegeChecker interface {
 
 // TableHelpers has methods useful for creating new table elements.
 type TableHelpers interface {
-
+	NextZoneConfigID(table *scpb.Table) uint32
 	// NextTableColumnID returns the ID that should be used for any new column
 	// added to this table.
 	NextTableColumnID(table *scpb.Table) catid.ColumnID
@@ -210,6 +211,9 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+
+	IndexPrefix(tableID catid.DescID, indexID catid.IndexID) roachpb.Key
+	TablePrefix(tableID catid.DescID) roachpb.Key
 }
 
 // ElementResultSet wraps the results of an element query.

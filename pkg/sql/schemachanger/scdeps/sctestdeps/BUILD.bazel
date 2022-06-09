@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

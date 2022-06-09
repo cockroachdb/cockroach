@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -159,6 +160,17 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)
 
+func (b *builderState) NextZoneConfigID(table *scpb.Table) uint32 {
+	tblElts := b.QueryByID(table.TableID)
+	zoneConfigID := uint32(0)
+	scpb.ForEachTableZoneConfig(tblElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableZoneConfig) {
+		if e.ZoneConfigID > zoneConfigID {
+			zoneConfigID = e.ZoneConfigID
+		}
+	})
+	return zoneConfigID + 1
+}
+
 // NextTableColumnID implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID) {
 	{
@@ -213,6 +225,14 @@ func (b *builderState) NextViewIndexID(view *scpb.View) (ret catid.IndexID) {
 		panic(errors.AssertionFailedf("expected materialized view: %s", screl.ElementString(view)))
 	}
 	return b.nextIndexID(view.ViewID)
+}
+
+func (b *builderState) IndexPrefix(tableID catid.DescID, indexID catid.IndexID) roachpb.Key {
+	return b.evalCtx.Codec.IndexPrefix(uint32(tableID), uint32(indexID))
+}
+
+func (b *builderState) TablePrefix(tableID catid.DescID) roachpb.Key {
+	return b.evalCtx.Codec.TablePrefix(uint32(tableID))
 }
 
 func (b *builderState) IsTableEmpty(table *scpb.Table) bool {

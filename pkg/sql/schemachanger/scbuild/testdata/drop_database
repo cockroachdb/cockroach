@@ -734,6 +734,11 @@ DROP DATABASE db1 CASCADE
   details:
     arrayTypeId: 116
     typeId: 115
+- [[EnumTypeValue:{DescID: 115}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
+    typeId: 115
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
   details:
     comment: t1_pkey is good

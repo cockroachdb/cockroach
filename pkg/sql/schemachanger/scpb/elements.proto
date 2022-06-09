@@ -70,7 +70,7 @@ message ElementProto {
   ForeignKeyConstraint foreign_key_constraint = 27 [(gogoproto.moretags) = "parent:\"Table\""];
   TableComment table_comment = 28 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
-  ZoneConfig zone_config = 121 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
+  TableZoneConfig table_zone_config = 121 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
 
   // Multi-region elements.
   TableLocalityGlobal locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -468,7 +468,8 @@ message EnumTypeValue {
   string logical_representation = 3;
 }
 
-message ZoneConfig {
+message TableZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  cockroach.config.zonepb.ZoneConfig zone_config = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/config/zonepb.ZoneConfig"];
+  uint32 zone_config_id = 2 [(gogoproto.customname) = "ZoneConfigID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/config/zonepb.ZoneConfig"];
 }

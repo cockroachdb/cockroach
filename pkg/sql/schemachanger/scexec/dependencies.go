@@ -13,6 +13,7 @@ package scexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -352,6 +353,10 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
+
+	SetZoneConfig(
+		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+	) error
 }
 
 // DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given

@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -292,6 +293,11 @@ func updateDescriptorMetadata(
 			return err
 		}
 	}
+	for id, zoneCfg := range mvs.zoneConfigsToUpdate {
+		if err := m.SetZoneConfig(ctx, id, zoneCfg); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -355,7 +361,7 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
-
+	zoneConfigsToUpdate          map[descpb.ID]*zonepb.ZoneConfig
 	gcJobs
 }
 
@@ -406,10 +412,11 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 
 func newMutationVisitorState(c Catalog) *mutationVisitorState {
 	return &mutationVisitorState{
-		c:                 c,
-		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
-		eventsByStatement: make(map[uint32][]eventPayload),
-		statsToRefresh:    make(map[descpb.ID]struct{}),
+		c:                   c,
+		drainedNames:        make(map[descpb.ID][]descpb.NameInfo),
+		eventsByStatement:   make(map[uint32][]eventPayload),
+		statsToRefresh:      make(map[descpb.ID]struct{}),
+		zoneConfigsToUpdate: make(map[descpb.ID]*zonepb.ZoneConfig),
 	}
 }
 
@@ -590,5 +597,10 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 			details:        details,
 		},
 	)
+	return nil
+}
+
+func (mvs *mutationVisitorState) SetZoneConfig(id descpb.ID, config *zonepb.ZoneConfig) error {
+	mvs.zoneConfigsToUpdate[id] = config
 	return nil
 }

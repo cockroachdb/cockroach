@@ -16,6 +16,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

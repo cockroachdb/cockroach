@@ -188,7 +188,7 @@ func synthesizeMultiRegionConfig(b BuildCtx, dbID descpb.ID) multiregion.RegionC
 		descpb.SurvivalGoal(dbMRConfig.SurvivalGoal),
 		dbMRConfig.RegionEnumTypeID,
 		descpb.DataPlacement(dbMRConfig.Placement),
-		nil,
+		nil, // FIXME
 		descpb.ZoneConfigExtensions{},
 	)
 

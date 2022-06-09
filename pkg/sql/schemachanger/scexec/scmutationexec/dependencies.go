@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -111,4 +112,6 @@ type MutationVisitorStateUpdater interface {
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
+
+	SetZoneConfig(id descpb.ID, config *zonepb.ZoneConfig) error
 }

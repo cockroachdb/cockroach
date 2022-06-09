@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -93,15 +94,6 @@ func alterTableAddColumn(
 	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
-	}
-	{
-		tableElts := b.QueryByID(tbl.TableID)
-		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			_, _, namespace := scpb.FindNamespace(tableElts)
-			synthesizeMultiRegionConfig(b, namespace.DatabaseID)
-			panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported"))
-		}
 	}
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx())
 	if err != nil {
@@ -215,9 +207,11 @@ func alterTableAddColumn(
 	}
 	// Add secondary indexes for this column.
 	var primaryIdx *scpb.PrimaryIndex
+	var indexIDsForZoneConfig []catid.IndexID
 
 	if newPrimary := addColumn(b, spec); newPrimary != nil {
 		primaryIdx = newPrimary
+		indexIDsForZoneConfig = append(indexIDsForZoneConfig, newPrimary.IndexID)
 	} else {
 		publicTargets := b.QueryByID(tbl.TableID).Filter(
 			func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
@@ -240,8 +234,24 @@ func alterTableAddColumn(
 				cdd.PrimaryKeyOrUniqueIndexDescriptor.KeyColumnIDs = append(cdd.PrimaryKeyOrUniqueIndexDescriptor.KeyColumnIDs, namesToIDs[colName])
 			}
 		}
-		addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
+		secondaryIndexIDs := addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
+		indexIDsForZoneConfig = append(indexIDsForZoneConfig, secondaryIndexIDs...)
 	}
+	if len(indexIDsForZoneConfig) > 0 {
+		tableElts := b.QueryByID(tbl.TableID)
+		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+			_, _, namespace := scpb.FindNamespace(tableElts)
+			dbRegionConfig := synthesizeMultiRegionConfig(b, namespace.DatabaseID)
+			prepareZoneConfigForMultiRegionTable(b,
+				dbRegionConfig,
+				tbl.TableID,
+				applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDsForZoneConfig...))
+
+			/*	panic(scerrors.NotImplementedErrorf(d,
+				"regional by row partitioning is not supported %v", dbRegionConfig))*/
+		}
+	}
+
 	switch spec.colType.Type.Family() {
 	case types.EnumFamily:
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
@@ -485,7 +495,7 @@ func getImplicitSecondaryIndexName(
 
 func addSecondaryIndexTargetsForAddColumn(
 	b BuildCtx, tbl *scpb.Table, desc *descpb.IndexDescriptor, newPrimaryIdx *scpb.PrimaryIndex,
-) {
+) []catid.IndexID {
 	var partitioning *catpb.PartitioningDescriptor
 	index := scpb.Index{
 		TableID:             tbl.TableID,
@@ -613,4 +623,5 @@ func addSecondaryIndexTargetsForAddColumn(
 			PartitioningDescriptor: *protoutil.Clone(partitioning).(*catpb.PartitioningDescriptor),
 		})
 	}
+	return []catid.IndexID{temp.IndexID, index.IndexID}
 }

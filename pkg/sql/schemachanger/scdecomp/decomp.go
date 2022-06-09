@@ -181,6 +181,7 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 		})
 		for ord := 0; ord < typ.NumEnumMembers(); ord++ {
 			w.ev(descriptorStatus(typ), &scpb.EnumTypeValue{
+				TypeID:                 typ.GetID(),
 				PhysicalRepresentation: typ.GetMemberPhysicalRepresentation(ord),
 				LogicalRepresentation:  typ.GetMemberLogicalRepresentation(ord),
 			})
@@ -283,7 +284,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	})
 	zc := w.zoneConfigReader.GetZoneConfigRaw(w.ctx, tbl.GetID())
 	if zc != nil {
-		w.ev(descriptorStatus(tbl), &scpb.ZoneConfig{
+		w.ev(scpb.Status_PUBLIC, &scpb.TableZoneConfig{
 			TableID:    tbl.GetID(),
 			ZoneConfig: zc,
 		})

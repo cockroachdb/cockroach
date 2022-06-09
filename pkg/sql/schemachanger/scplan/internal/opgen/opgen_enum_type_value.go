@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -16,21 +16,19 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.ZoneConfig)(nil),
+	opRegistry.register((*scpb.EnumTypeValue)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ZoneConfig) scop.Op {
+				emit(func(this *scpb.EnumTypeValue) scop.Op {
 					return notImplemented(this)
 				}),
 			),
 		),
-	)
-	opRegistry.register((*scpb.ZoneConfig)(nil),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.ZoneConfig) scop.Op {
+				emit(func(this *scpb.EnumTypeValue) scop.Op {
 					return notImplemented(this)
 				}),
 			),

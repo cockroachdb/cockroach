@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1044,6 +1045,13 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 	return nil
 }
 
+func (s *TestState) SetZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) error {
+	s.zoneConfigs[id] = zone
+	return nil
+}
+
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,
@@ -1086,4 +1094,12 @@ func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
 // AddTableForStatsRefresh implements scexec.StatsRefreshQueue
 func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 	s.LogSideEffectf("adding table for stats refresh: %d", id)
+}
+
+func (s *TestState) GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig {
+	return s.zoneConfigs[id]
+}
+
+func (s *TestState) ZoneConfigReader() scbuild.ZoneConfigReader {
+	return s
 }

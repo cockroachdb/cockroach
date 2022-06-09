@@ -65,6 +65,7 @@ const (
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
 	TemporaryIndexID
+	ZoneConfigID
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -279,8 +280,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(Comment, "Comment"),
 	),
-	rel.EntityMapping(t((*scpb.ZoneConfig)(nil)),
+	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ZoneConfigID, "ZoneConfigID"),
 	),
 }
 
