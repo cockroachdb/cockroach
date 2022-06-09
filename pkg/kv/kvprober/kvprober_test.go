@@ -205,8 +205,6 @@ func initTestProber(ctx context.Context, m *mock) *Prober {
 	return p
 }
 
-var _ kv.TxnInterface = &mock{}
-
 type mock struct {
 	t *testing.T
 

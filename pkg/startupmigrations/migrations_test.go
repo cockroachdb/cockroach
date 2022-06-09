@@ -83,8 +83,6 @@ func (f *fakeLeaseManager) TimeRemaining(l *leasemanager.Lease) time.Duration {
 	return f.leaseTimeRemaining
 }
 
-var _ kv.TxnInterface = &fakeDB{}
-
 type fakeDB struct {
 	codec   keys.SQLCodec
 	kvs     map[string][]byte

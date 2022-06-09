@@ -205,11 +205,47 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
+type SessionBoundInternalExecutorProto struct {
+	IeFactory     SessionBoundInternalExecutorFactory
+	SytheticDescs []catalog.Descriptor
+}
+
 // SessionBoundInternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
 type SessionBoundInternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
+
+// WithTxn is to run SQL statements under the same txn.
+func (p SessionBoundInternalExecutorProto) WithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, sessionData)
+	return ie.WithSyntheticDescriptors(
+		p.SytheticDescs,
+		func() error {
+			return run(ctx, txn, ie)
+		},
+	)
+}
+
+// WithoutTxn is to run SQL statements without a txn context.
+func (p SessionBoundInternalExecutorProto) WithoutTxn(
+	ctx context.Context,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, sessionData)
+	return ie.WithSyntheticDescriptors(
+		p.SytheticDescs,
+		func() error {
+			return run(ctx, ie)
+		},
+	)
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
