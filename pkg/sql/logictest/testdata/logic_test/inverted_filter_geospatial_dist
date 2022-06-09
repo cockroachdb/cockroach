@@ -1,32 +1,33 @@
 # LogicTest: 5node
 
 statement ok
-CREATE TABLE geo_table(
-  k int primary key,
-  geom geometry,
-  INVERTED INDEX geom_index(geom)
+CREATE TABLE geo_table (
+  k INT PRIMARY KEY,
+  s STRING,
+  geom GEOMETRY,
+  INVERTED INDEX geom_index (geom)
 )
 
 statement ok
 INSERT INTO geo_table VALUES
-  (1, 'POINT(1 1)'),
-  (2, 'LINESTRING(1 1, 2 2)'),
-  (3, 'POINT(3 3)'),
-  (4, 'LINESTRING(4 4, 5 5)'),
-  (5, 'LINESTRING(40 40, 41 41)'),
-  (6, 'POLYGON((1 1, 5 1, 5 5, 1 5, 1 1))'),
-  (7, 'LINESTRING(1 1, 3 3)')
+  (1, 'foo', 'POINT(1 1)'),
+  (2, 'foo', 'LINESTRING(1 1, 2 2)'),
+  (3, 'foo', 'POINT(3 3)'),
+  (4, 'bar', 'LINESTRING(4 4, 5 5)'),
+  (5, 'bar', 'LINESTRING(40 40, 41 41)'),
+  (6, 'bar', 'POLYGON((1 1, 5 1, 5 5, 1 5, 1 1))'),
+  (7, 'foo', 'LINESTRING(1 1, 3 3)')
 
 # Not distributed.
 query I
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 3
 6
 7
 
 query I
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
 7
@@ -66,7 +67,7 @@ NULL                  /1152921574000000000  {1}       1
 
 # Distributed.
 query I
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 3
 6
@@ -74,7 +75,7 @@ SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::
 
 # Data is distributed, but the filterer can't be distributed since it is not a union.
 query I
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
 7
@@ -93,7 +94,7 @@ NULL                  /1152921574000000000  {2}       2
 /1152921574000000000  NULL                  {2}       2
 
 query I
-SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 3
 6
@@ -101,7 +102,65 @@ SELECT k FROM geo_table WHERE ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::
 
 # Filtering is placed at node 2.
 query I
-SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----
 6
+7
+
+statement ok
+DROP INDEX geom_index;
+
+# Test for multi-column geo-spatial indexes.
+statement ok
+CREATE INVERTED INDEX geom_index2 ON geo_table(s, geom)
+
+query TI colnames,rowsort
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2]
+----
+replicas  lease_holder
+{2}       2
+
+# Not distributed.
+query I
+SELECT k FROM geo_table@geom_index2 WHERE s = 'foo' AND ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+3
+7
+
+query I
+SELECT k FROM geo_table@geom_index2 WHERE s = 'foo' AND ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+7
+
+statement ok
+ALTER INDEX geo_table@geom_index2 SPLIT AT VALUES ('foo', 1152921574000000000)
+
+query TI colnames,rowsort
+SELECT replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2]
+----
+replicas  lease_holder
+{2}       2
+{2}       2
+
+statement ok
+ALTER INDEX geo_table@geom_index2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'foo', 1152921574000000000)
+
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2]
+----
+start_key                   end_key                     replicas  lease_holder
+NULL                        /"foo"/1152921574000000000  {2}       2
+/"foo"/1152921574000000000  NULL                        {1}       1
+
+# Distributed.
+query I
+SELECT k FROM geo_table@geom_index2 WHERE s = 'foo' AND ST_Intersects('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
+3
+7
+
+# Data is distributed, but the filterer can't be distributed since it is not a union.
+query I
+SELECT k FROM geo_table@geom_index2 WHERE s = 'foo' AND ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
+----
 7
