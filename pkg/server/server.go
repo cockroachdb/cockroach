@@ -123,6 +123,7 @@ type Server struct {
 	admin           *adminServer
 	status          *statusServer
 	drain           *drainServer
+	decomNodeMap    *decommissioningNodeMap
 	authentication  *authenticationServer
 	migrationServer *migrationServer
 	tsDB            *ts.DB
@@ -844,6 +845,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admin:                  sAdmin,
 		status:                 sStatus,
 		drain:                  drain,
+		decomNodeMap:           decomNodeMap,
 		authentication:         sAuth,
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
