@@ -2171,7 +2171,9 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 	if _, ok := ex.machine.CurState().(stateOpen); !ok {
 		return nil
 	}
-	if advInfo.txnEvent.eventType == txnStart || advInfo.txnEvent.eventType == txnRestart {
+	if advInfo.txnEvent.eventType == txnStart ||
+		advInfo.txnEvent.eventType == txnRestart ||
+		advInfo.txnEvent.eventType == txnUpgradeToExplicit {
 		var nextPos CmdPos
 		switch advInfo.code {
 		case stayInPlace:
@@ -2844,7 +2846,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 	// Handle transaction events which cause updates to txnState.
 	switch advInfo.txnEvent.eventType {
-	case noEvent:
+	case noEvent, txnUpgradeToExplicit:
 		_, nextStateIsAborted := ex.machine.CurState().(stateAborted)
 		// Update the deadline on the transaction based on the collections,
 		// if the transaction is currently open. If the next state is aborted
