@@ -24,10 +24,10 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 	if ttl == nil {
 		return nil
 	}
-	if ttl.DurationExpr == "" {
+	if (ttl.DurationExpr == "") == (ttl.ExpirationExpr == "") {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"ttl_expire_after" must be set`,
+			`either "ttl_expire_after" or "ttl_expiration_expression" must be set`,
 		)
 	}
 	if ttl.DeleteBatchSize != 0 {

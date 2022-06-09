@@ -226,6 +226,28 @@ var tableParams = map[string]tableParam{
 			)
 		},
 	},
+	`ttl_expiration_expression`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			stringVal, err := paramparse.DatumAsString(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
+			}
+			po.tableDesc.RowLevelTTL.ExpirationExpr = catpb.Expression(stringVal)
+			return nil
+		},
+		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`resetting "ttl_expiration_expression" is not permitted`,
+				),
+				"use `RESET (ttl)` to remove TTL from the table",
+			)
+		},
+	},
 	`ttl_select_batch_size`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
