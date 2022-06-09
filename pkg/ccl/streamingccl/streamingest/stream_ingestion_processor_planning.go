@@ -187,7 +187,7 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 		return errors.New("streamIngestionResultWriter expects non-nil row entry")
 	}
 
-	// Decode the row, write the ts into job record, and send a heartbeat to source cluster.
+	// Decode the row and write the ts into job record.
 	var ingestedHighWatermark hlc.Timestamp
 	if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)),
 		&ingestedHighWatermark); err != nil {
@@ -195,7 +195,17 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 	}
 	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, false, /* useReadLock */
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			return jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju)
+			if err := jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju); err != nil {
+				return err
+			}
+
+			// Reset RunStats.NumRuns to 1 since the stream ingestion has returned to
+			// a steady state. By resetting NumRuns,we avoid future job system level
+			// retries from having a large backoff because of past failures.
+			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
+				ju.UpdateRunStats(1, md.RunStats.LastRun)
+			}
+			return nil
 		})
 }
 
