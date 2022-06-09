@@ -1473,7 +1473,7 @@ func NewTableDesc(
 	}
 
 	// Create the TTL column if one does not already exist.
-	if ttl := desc.GetRowLevelTTL(); ttl != nil {
+	if ttl := desc.GetRowLevelTTL(); ttl != nil && ttl.HasDurationExpr() {
 		if err := checkTTLEnabledForCluster(ctx, st); err != nil {
 			return nil, err
 		}
