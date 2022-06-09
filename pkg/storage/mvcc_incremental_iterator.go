@@ -11,6 +11,8 @@
 package storage
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -89,6 +91,25 @@ type MVCCIncrementalIterator struct {
 	// regardless if they are metakeys.
 	meta enginepb.MVCCMetadata
 
+	// hasPoint and hasRange control whether the iterator should surface a point
+	// or range key from the underlying iterator. If true, this implies that the
+	// underlying iterator returns true as well. This can be used to hide point or
+	// range keys where one key kind satisfies the time predicate but the other
+	// one doesn't.
+	hasPoint, hasRange bool
+
+	// rangeKeysStart contains the last seen range key start bound. It is used
+	// to detect changes to range keys.
+	//
+	// TODO(erikgrinaker): This pattern keeps coming up, and involves one
+	// comparison for every covered point key. Consider exposing this from Pebble,
+	// who has presumably already done these comparisons, so we can avoid them.
+	rangeKeysStart roachpb.Key
+
+	// ignoringTime is true if the iterator is currently ignoring time bounds,
+	// i.e. following a call to NextIgnoringTime().
+	ignoringTime bool
+
 	// Configuration passed in MVCCIncrementalIterOptions.
 	intentPolicy MVCCIncrementalIterIntentPolicy
 
@@ -128,7 +149,9 @@ const (
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
-	EndKey roachpb.Key
+	KeyTypes IterKeyType
+	StartKey roachpb.Key
+	EndKey   roachpb.Key
 
 	// Only keys within (StartTime,EndTime] will be emitted. EndTime defaults to
 	// hlc.MaxTimestamp. The time-bound iterator optimization will only be used if
@@ -164,11 +187,15 @@ func NewMVCCIncrementalIterator(
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
 		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   opts.KeyTypes,
+			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
 		})
 		// The timeBoundIter is only required to see versioned keys, since the
 		// intents will be found by iter.
 		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			KeyTypes:   opts.KeyTypes,
+			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
 			// The call to startTime.Next() converts our exclusive start bound into
 			// the inclusive start bound that MinTimestampHint expects.
@@ -177,6 +204,8 @@ func NewMVCCIncrementalIterator(
 		})
 	} else {
 		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   opts.KeyTypes,
+			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
 		})
 	}
@@ -208,11 +237,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(startKey)
-	if !i.updateValid() {
-		return
-	}
-	i.err = nil
-	i.valid = true
+	i.rangeKeysStart = nil
 	i.advance()
 }
 
@@ -227,9 +252,6 @@ func (i *MVCCIncrementalIterator) Close() {
 // Next implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) Next() {
 	i.iter.Next()
-	if !i.updateValid() {
-		return
-	}
 	i.advance()
 }
 
@@ -237,20 +259,13 @@ func (i *MVCCIncrementalIterator) Next() {
 // returns true if valid.
 // gcassert:inline
 func (i *MVCCIncrementalIterator) updateValid() bool {
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
-		return false
-	}
-	return true
+	i.valid, i.err = i.iter.Valid()
+	return i.valid
 }
 
 // NextKey implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) NextKey() {
 	i.iter.NextKey()
-	if !i.updateValid() {
-		return
-	}
 	i.advance()
 }
 
@@ -259,6 +274,11 @@ func (i *MVCCIncrementalIterator) NextKey() {
 // to the earliest version of the next candidate key.
 // It is expected (but not required) that TBI is at a key <= main iterator key
 // when calling maybeSkipKeys().
+//
+// TODO(erikgrinaker): Make sure this works properly when TBIs handle range
+// keys. In particular, we need to make sure a SeekGE doesn't get stuck
+// prematurely on a bare range key that we've already emitted, but moves onto
+// the next TBI point key (which can much further ahead).
 func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	if i.timeBoundIter == nil {
 		// If there is no time bound iterator, we cannot skip any keys.
@@ -387,12 +407,62 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 // intent with a timestamp within the incremental iterator's bounds when the
 // intent policy is MVCCIncrementalIterIntentPolicyError.
 func (i *MVCCIncrementalIterator) advance() {
+	i.ignoringTime = false
 	for {
+		if !i.updateValid() {
+			return
+		}
 		i.maybeSkipKeys()
 		if !i.valid {
 			return
 		}
 
+		// NB: Don't update i.hasRange directly -- we only change it when
+		// i.rangeKeysStart changes, to avoid unnecessary checks.
+		hasPoint, hasRange := i.iter.HasPointAndRange()
+		i.hasPoint = hasPoint
+
+		// Process range keys.
+		//
+		// TODO(erikgrinaker): This needs to be optimized. For example, range keys
+		// only change on unversioned keys (except after a SeekGE), which can save a
+		// bunch of comparisons here. HasPointAndRange() has also been seen to have
+		// a non-negligible cost even without any range keys.
+		var newRangeKey bool
+		if hasRange {
+			if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
+				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
+				// Find the first range key at or below EndTime. If that's also above
+				// StartTime then we have visible range keys. We use a linear search
+				// rather than a binary search because we expect EndTime to be near the
+				// current time, so the first range key will typically be sufficient.
+				hasRange = false
+				for _, rkv := range i.iter.RangeKeys() {
+					if ts := rkv.RangeKey.Timestamp; ts.LessEq(i.endTime) {
+						hasRange = i.startTime.Less(ts)
+						break
+					}
+				}
+				i.hasRange = hasRange
+				newRangeKey = hasRange
+			}
+			// else keep i.hasRange from last i.rangeKeysStart change.
+		} else {
+			i.hasRange = false
+		}
+
+		// If we're on a visible, bare range key then we're done. If the range key
+		// isn't visible either, then we keep going.
+		if !i.hasPoint {
+			if !i.hasRange {
+				i.iter.Next()
+				continue
+			}
+			i.meta.Reset()
+			return
+		}
+
+		// Process point keys.
 		if err := i.updateMeta(); err != nil {
 			return
 		}
@@ -406,14 +476,15 @@ func (i *MVCCIncrementalIterator) advance() {
 				// intent. If it is outside our time bounds, it
 				// will be filtered below.
 			case MVCCIncrementalIterIntentPolicyError, MVCCIncrementalIterIntentPolicyAggregate:
-				// We have encountered an intent but it must lie
-				// outside the timestamp span (startTime,
-				// endTime] or we have aggregated it. In either
-				// case, we want to advance past it.
-				i.iter.Next()
-				if !i.updateValid() {
+				// We have encountered an intent but it must lie outside the timestamp
+				// span (startTime, endTime] or we have aggregated it. In either case,
+				// we want to advance past it, unless we're also on a new range key that
+				// must be emitted.
+				if newRangeKey {
+					i.hasPoint = false
 					return
 				}
+				i.iter.Next()
 				continue
 			}
 		}
@@ -421,8 +492,15 @@ func (i *MVCCIncrementalIterator) advance() {
 		// Note that MVCC keys are sorted by key, then by _descending_ timestamp
 		// order with the exception of the metakey (timestamp 0) being sorted
 		// first.
+		//
+		// If we encountered a new range key on this position, then we must emit it
+		// even if the the point key should be skipped. This typically happens on a
+		// filtered intent or when seeking directly to a filtered point version.
 		metaTimestamp := i.meta.Timestamp.ToTimestamp()
-		if i.endTime.Less(metaTimestamp) {
+		if newRangeKey {
+			i.hasPoint = i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime)
+			return
+		} else if i.endTime.Less(metaTimestamp) {
 			i.iter.Next()
 		} else if metaTimestamp.LessEq(i.startTime) {
 			i.iter.NextKey()
@@ -430,9 +508,6 @@ func (i *MVCCIncrementalIterator) advance() {
 			// The current key is a valid user key and within the time bounds. We are
 			// done.
 			break
-		}
-		if !i.updateValid() {
-			return
 		}
 	}
 }
@@ -449,21 +524,61 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) HasPointAndRange() (bool, bool) {
-	panic("not implemented")
+	return i.hasPoint && i.valid, i.hasRange && i.valid
 }
 
 // RangeBounds implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
-	panic("not implemented")
+	if !i.hasRange || !i.valid {
+		return roachpb.Span{}
+	}
+	return i.iter.RangeBounds()
 }
 
 // RangeKeys implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
-	panic("not implemented")
+	if !i.hasRange || !i.valid {
+		return []MVCCRangeKeyValue{}
+	}
+
+	// TODO(erikgrinaker): It may be worthwhile to clone and memoize this result
+	// for the same range key. However, callers may avoid calling RangeKeys()
+	// unnecessarily, and we may optimize parent iterators, so let's measure.
+	rangeKeys := i.iter.RangeKeys()
+
+	if i.ignoringTime {
+		return rangeKeys
+	}
+
+	// Find the first range key at or below endTime, and truncate rangeKeys. We do
+	// a linear search rather than a binary search, because we expect endTime to
+	// be near the current time, so the first element will typically match.
+	first := len(rangeKeys) - 1
+	for idx, rkv := range rangeKeys {
+		if rkv.RangeKey.Timestamp.LessEq(i.endTime) {
+			first = idx
+			break
+		}
+	}
+	rangeKeys = rangeKeys[first:]
+
+	// Find the first range key at or below startTime, and truncate rangeKeys.
+	if i.startTime.IsSet() {
+		if idx := sort.Search(len(rangeKeys), func(idx int) bool {
+			return rangeKeys[idx].RangeKey.Timestamp.LessEq(i.startTime)
+		}); idx >= 0 {
+			rangeKeys = rangeKeys[:idx]
+		}
+	}
+
+	return rangeKeys
 }
 
 // UnsafeValue implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
+	if !i.hasPoint {
+		return nil
+	}
 	return i.iter.UnsafeValue()
 }
 
@@ -472,9 +587,23 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 // Intents in the time range (startTime,EndTime] are handled according to the
 // iterator policy.
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
+	i.ignoringTime = true
 	for {
 		i.iter.Next()
 		if !i.updateValid() {
+			return
+		}
+
+		i.hasPoint, i.hasRange = i.iter.HasPointAndRange()
+		if i.hasRange {
+			// Make sure we update rangeKeysStart appropriately so that switching back
+			// to regular iteration won't emit bare range keys twice.
+			if rangeStart := i.iter.RangeBounds().Key; !rangeStart.Equal(i.rangeKeysStart) {
+				i.rangeKeysStart = append(i.rangeKeysStart[:0], rangeStart...)
+			}
+		}
+
+		if !i.hasPoint {
 			return
 		}
 
