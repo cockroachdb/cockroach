@@ -271,6 +271,13 @@ func (*DummyEvalPlanner) RevalidateUniqueConstraint(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// IsConstraintActive is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) IsConstraintActive(
+	ctx context.Context, tableID int, constraintName string,
+) (bool, error) {
+	return false, errors.WithStack(errEvalPlanner)
+}
+
 // ValidateTTLScheduledJobsInCurrentDB is part of the Planner interface.
 func (*DummyEvalPlanner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
 	return errors.WithStack(errEvalPlanner)

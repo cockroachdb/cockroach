@@ -4102,3 +4102,20 @@ DELETE FROM p76852 WHERE i = 1;
 query B
 SELECT b FROM c76852@idx WHERE b
 ----
+
+# Tests the scenario where a foreign key constraint is added and the table
+# referencing it is dropped.
+subtest 79972
+
+statement ok
+CREATE TABLE drop_fk_during_addition (name INT8);
+CREATE TABLE drop_fk_during_addition_ref (name INT8 PRIMARY KEY);
+
+statement ok
+BEGIN;
+ALTER TABLE drop_fk_during_addition
+	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
+DROP TABLE drop_fk_during_addition_ref;
+
+statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: \(42P01\): referenced relation \"drop_fk_during_addition_ref\" does not exist
+COMMIT;
