@@ -1,0 +1,1329 @@
+# Tests range key handling in MVCCIncrementalIterator. It does not support
+# reverse iteration, as it does not implement MVCCIterator.
+#
+# Sets up the following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
+#
+#  8             [d8]                                [m8]
+#  7 [a7]                                [j7]    [l7]       [o7]
+#  6                      f6
+#  5          o---------------o               k5
+#  4  x   x       d4      f4  g4  x
+#  3      o-------o   e3  o-------oh3                 o---o
+#  2  a2                  f2  g2
+#  1  o---------------------------------------o
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+#
+run ok
+put_rangekey k=a end=k ts=1
+put_rangekey k=m end=n ts=3 localTs=2
+put_rangekey k=b end=d ts=3
+put_rangekey k=f end=h ts=3
+put_rangekey k=c end=g ts=5
+put k=a ts=2 v=a2
+del k=a ts=4
+del k=b ts=4
+put k=d ts=4 v=d4
+put k=e ts=3 v=e3
+put k=f ts=2 v=f2
+put k=f ts=4 v=f4
+put k=f ts=6 v=f6
+put k=g ts=2 v=g2
+put k=g ts=4 v=g4
+put k=h ts=3 v=h3
+del k=h ts=4
+put k=k ts=5 v=k5
+with t=A
+  txn_begin ts=7
+  put k=a v=a7
+  put k=j v=j7
+  put k=l v=l7
+  put k=o v=o7
+with t=B
+  txn_begin ts=8
+  put k=d v=d8
+  put k=m v=m8
+----
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=8.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/7.000000000,0 -> /BYTES/a7
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/8.000000000,0 -> /BYTES/d8
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /<empty>
+data: "h"/3.000000000,0 -> /BYTES/h3
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+data: "k"/5.000000000,0 -> /BYTES/k5
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/7.000000000,0 -> /BYTES/l7
+meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "m"/8.000000000,0 -> /BYTES/m8
+meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "o"/7.000000000,0 -> /BYTES/o7
+
+# Iterate across the entire span for all key types.
+run ok
+iter_new_incremental types=pointsOnly intents=emit
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "a"/4.000000000,0=/<empty>
+iter_scan: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "b"/4.000000000,0=/<empty>
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/8.000000000,0=/BYTES/d8
+iter_scan: "d"/4.000000000,0=/BYTES/d4
+iter_scan: "e"/3.000000000,0=/BYTES/e3
+iter_scan: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "f"/4.000000000,0=/BYTES/f4
+iter_scan: "f"/2.000000000,0=/BYTES/f2
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "g"/2.000000000,0=/BYTES/g2
+iter_scan: "h"/4.000000000,0=/<empty>
+iter_scan: "h"/3.000000000,0=/BYTES/h3
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=rangesOnly intents=emit
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+# Iterate across the span while moving StartTime upwards.
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "a"/4.000000000,0=/<empty>
+iter_scan: "a"/2.000000000,0=/BYTES/a2
+iter_scan: {b-c}/[3.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty>
+iter_scan: "h"/3.000000000,0=/BYTES/h3
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=2
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "a"/4.000000000,0=/<empty>
+iter_scan: {b-c}/[3.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty>
+iter_scan: "h"/3.000000000,0=/BYTES/h3
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=3
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "a"/4.000000000,0=/<empty>
+iter_scan: "b"/4.000000000,0=/<empty>
+iter_scan: {c-d}/[5.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "h"/4.000000000,0=/<empty>
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=4
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: {c-d}/[5.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=5
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/8.000000000,0=/BYTES/d8
+iter_scan: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=6
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/8.000000000,0=/BYTES/d8
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=7
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/8.000000000,0=/BYTES/d8
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=8
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: .
+iter_scan: .
+
+# Iterate across the span while moving EndTime downwards.
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=8
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=7
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=6
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=5
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=4
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[1.000000000,0=/<empty>]
+iter_scan: {f-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=3
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[1.000000000,0=/<empty>]
+iter_scan: {f-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=2
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[1.000000000,0=/<empty>]
+iter_scan: {c-d}/[1.000000000,0=/<empty>]
+iter_scan: {d-f}/[1.000000000,0=/<empty>]
+iter_scan: {f-g}/[1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[1.000000000,0=/<empty>]
+iter_scan: {g-h}/[1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit endTs=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[1.000000000,0=/<empty>]
+iter_scan: {c-d}/[1.000000000,0=/<empty>]
+iter_scan: {d-f}/[1.000000000,0=/<empty>]
+iter_scan: {f-g}/[1.000000000,0=/<empty>]
+iter_scan: {g-h}/[1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: .
+
+# Run a scan of a single timestamp going upwards.
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=0 endTs=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[1.000000000,0=/<empty>]
+iter_scan: {c-d}/[1.000000000,0=/<empty>]
+iter_scan: {d-f}/[1.000000000,0=/<empty>]
+iter_scan: {f-g}/[1.000000000,0=/<empty>]
+iter_scan: {g-h}/[1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=1 endTs=2
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "a"/2.000000000,0=/BYTES/a2
+iter_scan: "f"/2.000000000,0=/BYTES/f2
+iter_scan: "g"/2.000000000,0=/BYTES/g2
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=2 endTs=3
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {b-c}/[3.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty>]
+iter_scan: {c-d}/[3.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3
+iter_scan: {f-g}/[3.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=3 endTs=4
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_scan: "a"/4.000000000,0=/<empty>
+iter_scan: "b"/4.000000000,0=/<empty>
+iter_scan: "d"/4.000000000,0=/BYTES/d4
+iter_scan: "f"/4.000000000,0=/BYTES/f4
+iter_scan: "g"/4.000000000,0=/BYTES/g4
+iter_scan: "h"/4.000000000,0=/<empty>
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=4 endTs=5
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {c-d}/[5.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=5 endTs=6
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
+iter_scan: "f"/6.000000000,0=/BYTES/f6
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=6 endTs=7
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "a"/7.000000000,0=/BYTES/a7
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "j"/7.000000000,0=/BYTES/j7
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=7 endTs=8
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "d"/8.000000000,0=/BYTES/d8
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "m"/8.000000000,0=/BYTES/m8
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit startTs=8 endTs=9
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: .
+iter_scan: .
+
+# Bounded scan.
+run ok
+iter_new_incremental types=pointsAndRanges k=ccc end=fff intents=emit startTs=1 endTs=5
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {ccc-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: {ccc-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty>]
+iter_scan: f{-ff}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 f{-ff}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 f{-ff}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_scan: .
+
+# NextKey across span, unbounded and bounded.
+run ok
+iter_new_incremental types=pointsAndRanges intents=emit
+iter_seek_ge k=a
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_next_key: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key: {h-k}/[1.000000000,0=/<empty>]
+iter_next_key: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_next_key: "k"/5.000000000,0=/BYTES/k5
+iter_next_key: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_key: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_next_key: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_key: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=ccc end=fff intents=emit startTs=1 endTs=5
+iter_seek_ge k=a
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+----
+iter_seek_ge: {ccc-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_next_key: {d-f}/[5.000000000,0=/<empty>]
+iter_next_key: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty>]
+iter_next_key: f{-ff}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_next_key: .
+
+# Seek to every point location.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=1 endTs=4 intents=emit
+iter_seek_ge k=a
+iter_seek_ge k=b
+iter_seek_ge k=c
+iter_seek_ge k=d
+iter_seek_ge k=e
+iter_seek_ge k=f
+iter_seek_ge k=g
+iter_seek_ge k=h
+iter_seek_ge k=i
+iter_seek_ge k=j
+iter_seek_ge k=k
+iter_seek_ge k=l
+iter_seek_ge k=m
+iter_seek_ge k=n
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_seek_ge: {b-c}/[3.000000000,0=/<empty>]
+iter_seek_ge: {c-d}/[3.000000000,0=/<empty>]
+iter_seek_ge: "d"/4.000000000,0=/BYTES/d4
+iter_seek_ge: "e"/3.000000000,0=/BYTES/e3
+iter_seek_ge: {f-g}/[3.000000000,0=/<empty>]
+iter_seek_ge: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_ge: "h"/4.000000000,0=/<empty>
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: .
+
+# Seek to every point location above and below the filtered time span.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=1 endTs=4 intents=emit
+iter_seek_ge k=a ts=5
+iter_seek_ge k=b ts=5
+iter_seek_ge k=c ts=5
+iter_seek_ge k=d ts=5
+iter_seek_ge k=e ts=5
+iter_seek_ge k=f ts=5
+iter_seek_ge k=g ts=5
+iter_seek_ge k=h ts=5
+iter_seek_ge k=i ts=5
+iter_seek_ge k=j ts=5
+iter_seek_ge k=k ts=5
+iter_seek_ge k=l ts=5
+iter_seek_ge k=m ts=5
+iter_seek_ge k=n ts=5
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_seek_ge: {b-c}/[3.000000000,0=/<empty>]
+iter_seek_ge: {c-d}/[3.000000000,0=/<empty>]
+iter_seek_ge: "d"/4.000000000,0=/BYTES/d4
+iter_seek_ge: "e"/3.000000000,0=/BYTES/e3
+iter_seek_ge: {f-g}/[3.000000000,0=/<empty>]
+iter_seek_ge: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_ge: "h"/4.000000000,0=/<empty>
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=3 endTs=6 intents=emit
+iter_seek_ge k=a ts=3
+iter_seek_ge k=b ts=3
+iter_seek_ge k=c ts=3
+iter_seek_ge k=d ts=3
+iter_seek_ge k=e ts=3
+iter_seek_ge k=f ts=3
+iter_seek_ge k=g ts=3
+iter_seek_ge k=h ts=3
+iter_seek_ge k=i ts=3
+iter_seek_ge k=j ts=3
+iter_seek_ge k=k ts=3
+iter_seek_ge k=l ts=3
+iter_seek_ge k=m ts=3
+iter_seek_ge k=n ts=3
+----
+iter_seek_ge: "b"/4.000000000,0=/<empty>
+iter_seek_ge: {c-d}/[5.000000000,0=/<empty>]
+iter_seek_ge: {c-d}/[5.000000000,0=/<empty>]
+iter_seek_ge: {d-f}/[5.000000000,0=/<empty>]
+iter_seek_ge: {d-f}/[5.000000000,0=/<empty>]
+iter_seek_ge: {f-g}/[5.000000000,0=/<empty>]
+iter_seek_ge: "h"/4.000000000,0=/<empty>
+iter_seek_ge: "k"/5.000000000,0=/BYTES/k5
+iter_seek_ge: "k"/5.000000000,0=/BYTES/k5
+iter_seek_ge: "k"/5.000000000,0=/BYTES/k5
+iter_seek_ge: .
+iter_seek_ge: .
+iter_seek_ge: .
+iter_seek_ge: .
+
+# Seek directly to a hidden point, and then iterate forward. In particular, this
+# tests that the bare range key is emitted first.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=emit
+iter_seek_ge k=f ts=6
+iter_next
+----
+iter_seek_ge: {f-g}/[3.000000000,0=/<empty>]
+iter_next: "f"/4.000000000,0=/BYTES/f4 {f-g}/[3.000000000,0=/<empty>]
+
+# Seeking twice to within the same range key must emit the bare range key both
+# times.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=1 endTs=4 intents=emit
+iter_seek_ge k=d
+iter_seek_ge k=d ts=2
+iter_seek_ge k=e
+----
+iter_seek_ge: "d"/4.000000000,0=/BYTES/d4
+iter_seek_ge: "e"/3.000000000,0=/BYTES/e3
+iter_seek_ge: "e"/3.000000000,0=/BYTES/e3
+
+# Test intent error handling.
+run error
+iter_new_incremental types=pointsAndRanges k=a end=z intents=error
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: err=conflicting intents on "a"
+iter_scan: err=conflicting intents on "a"
+error: (*roachpb.WriteIntentError:) conflicting intents on "a"
+
+run error
+iter_new_incremental types=pointsAndRanges k=a end=z intents=aggregate
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "m", "o"
+
+run error
+iter_new_incremental types=pointsAndRanges k=a end=z endTs=7 intents=aggregate
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+error: (*roachpb.WriteIntentError:) conflicting intents on "a", "j", "l", "o"
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z endTs=6 intents=aggregate
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=e end=j intents=aggregate
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: {e-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {e-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {e-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-j}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-j}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-j}/[1.000000000,0=/<empty>]
+iter_scan: .
+
+# Test that intents outside of time bounds won't error, and will be skipped
+# instead. Within time bounds will error.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=error
+iter_seek_ge k=c
+iter_next_ignoring_time
+----
+iter_seek_ge: {c-d}/[3.000000000,0=/<empty>]
+iter_next_ignoring_time: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run error
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=10 intents=error
+iter_seek_ge k=c
+iter_next_ignoring_time
+----
+iter_seek_ge: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_next_ignoring_time: err=conflicting intents on "d"
+error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+
+# Test NextIgnoringTime().
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=emit
+iter_seek_ge k=a
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_next_ignoring_time: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_next_ignoring_time: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: {h-k}/[1.000000000,0=/<empty>]
+iter_next_ignoring_time: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_next_ignoring_time: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_next_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_next_ignoring_time: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_next_ignoring_time: "k"/5.000000000,0=/BYTES/k5
+iter_next_ignoring_time: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_ignoring_time: "l"/7.000000000,0=/BYTES/l7
+iter_next_ignoring_time: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_next_ignoring_time: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_next_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_ignoring_time: "o"/7.000000000,0=/BYTES/o7
+
+# Switch from ignoring to respecting time at point key.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=emit
+iter_seek_ge k=a
+iter_next_ignoring_time
+iter_next
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_next_ignoring_time: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_next: {b-c}/[3.000000000,0=/<empty>]
+
+# Switch from ignoring to respecting time at range key.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=emit
+iter_seek_ge k=a
+iter_next
+iter_next
+iter_next_ignoring_time
+iter_next
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_next: {b-c}/[3.000000000,0=/<empty>]
+iter_next: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty>]
+iter_next_ignoring_time: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next: "d"/4.000000000,0=/BYTES/d4
+
+# Range key masking at increasing timestamps.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=2
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/2.000000000,0=/BYTES/f2 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/2.000000000,0=/BYTES/g2 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=3
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=4
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/4.000000000,0=/BYTES/d4 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/4.000000000,0=/BYTES/f4 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=5
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit maskBelow=6
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/7.000000000,0=/BYTES/a7 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/4.000000000,0=/<empty> {a-b}/[1.000000000,0=/<empty>]
+iter_scan: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>]
+iter_scan: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "b"/4.000000000,0=/<empty> {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_scan: {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/4.000000000,0=/<empty> {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "h"/3.000000000,0=/BYTES/h3 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "j"/7.000000000,0=/BYTES/j7 {h-k}/[1.000000000,0=/<empty>]
+iter_scan: "k"/5.000000000,0=/BYTES/k5
+iter_scan: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "l"/7.000000000,0=/BYTES/l7
+iter_scan: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "m"/8.000000000,0=/BYTES/m8 {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_scan: "o"/7.000000000,0=/BYTES/o7
+iter_scan: .
+
+# Range key masking also affects NextIgnoringTime.
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z intents=emit startTs=3 maskBelow=5
+iter_seek_ge k=f
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+iter_next_ignoring_time
+----
+iter_seek_ge: {f-g}/[5.000000000,0=/<empty>]
+iter_next_ignoring_time: "f"/6.000000000,0=/BYTES/f6 {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: "g"/4.000000000,0=/BYTES/g4 {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_ignoring_time: {h-k}/[1.000000000,0=/<empty>]
