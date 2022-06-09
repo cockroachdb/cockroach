@@ -225,6 +225,29 @@ func (f *forwarder) Close() {
 	if serverConn != nil {
 		serverConn.Close()
 	}
+
+	// Broadcast all waiters in the processors. At this point, context has
+	// already been cancelled, so waking them up would terminate the waiter
+	// functions (e.g. waitResumed).
+	//
+	// This handles the following scenario:
+	//   1. Goroutine 1 invokes resumeProcessors, which starts up Goroutine 2
+	//      and 3 to resume the individual processors.
+	//   2. Goroutine 1 invokes waitResumed on the request processor, and waits
+	//      because the processor has not been resumed yet.
+	//   3. Goroutine 2 resumes the request processor, and broadcasts the
+	//      condition variable. At this point, if the client closes the session,
+	//      resume will return right away with an error, closing the forwarder.
+	//   4. Goroutine 1 wakes up due the broadcast in (3), checks that the
+	//      resumed field is false, and goes back to wait. Goroutine 1 is now
+	//      stuck because waiting forever, resulting in a leak.
+	request, response := f.getProcessors()
+	if request != nil {
+		request.broadcast()
+	}
+	if response != nil {
+		response.broadcast()
+	}
 }
 
 // IsIdle returns true if the forwarder is idle, and false otherwise.
@@ -511,6 +534,15 @@ func (p *processor) resume(ctx context.Context) error {
 		}
 	}
 	return ctx.Err()
+}
+
+// broadcast sends a broadcast signal to the condition variable. This should
+// only be called within the Close function of the forwarder to wake all
+// blocked waiters after cancelling the forwarder's context.
+func (p *processor) broadcast() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.cond.Broadcast()
 }
 
 // waitResumed waits until the processor has been resumed. This can be used to
