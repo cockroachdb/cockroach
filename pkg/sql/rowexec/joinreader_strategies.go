@@ -85,6 +85,13 @@ type joinReaderStrategy interface {
 	nextRowToEmit(ctx context.Context) (rowenc.EncDatumRow, joinReaderState, error)
 	// spilled returns whether the strategy spilled to disk.
 	spilled() bool
+	// growMemoryAccount and resizeMemoryAccount should be used instead of
+	// memAcc.Grow and memAcc.Resize, respectively. The goal of these functions
+	// is to provide strategies a way to try to handle "memory budget exceeded"
+	// errors. These methods also wrap all errors with a workmem hint so that
+	// the caller doesn't have to.
+	growMemoryAccount(memAcc *mon.BoundAccount, delta int64) error
+	resizeMemoryAccount(memAcc *mon.BoundAccount, oldSz, newSz int64) error
 	// close releases any resources associated with the joinReaderStrategy.
 	close(ctx context.Context)
 }
@@ -143,10 +150,10 @@ type joinReaderNoOrderingStrategy struct {
 
 	groupingState *inputBatchGroupingState
 
-	// memAcc is owned by this strategy and is closed when the strategy is
-	// closed. inputRows are owned by the joinReader, so they aren't accounted
-	// for with this memory account.
-	memAcc *mon.BoundAccount
+	// strategyMemAcc is owned by this strategy and is closed when the strategy
+	// is closed. inputRows are owned by the joinReader, so they aren't
+	// accounted for with this memory account.
+	strategyMemAcc *mon.BoundAccount
 }
 
 // getLookupRowsBatchSizeHint returns the batch size for the join reader no
@@ -201,8 +208,8 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 		matchingInputRowIndices = s.scratchMatchingInputRowIndices
 
 		// Perform memory accounting.
-		if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage()); err != nil {
-			return jrStateUnknown, addWorkmemHint(err)
+		if err := s.resizeMemoryAccount(s.strategyMemAcc, s.strategyMemAcc.Used(), s.memUsage()); err != nil {
+			return jrStateUnknown, err
 		}
 	}
 	s.emitState.processingLookupRow = true
@@ -237,8 +244,8 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 			s.emitState.unmatchedInputRowIndicesCursor = 0
 
 			// Perform memory accounting.
-			if err := s.memAcc.ResizeTo(s.Ctx, s.memUsage()); err != nil {
-				return nil, jrStateUnknown, addWorkmemHint(err)
+			if err := s.resizeMemoryAccount(s.strategyMemAcc, s.strategyMemAcc.Used(), s.memUsage()); err != nil {
+				return nil, jrStateUnknown, err
 			}
 		}
 
@@ -298,8 +305,20 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 
 func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
 
+func (s *joinReaderNoOrderingStrategy) growMemoryAccount(
+	memAcc *mon.BoundAccount, delta int64,
+) error {
+	return addWorkmemHint(memAcc.Grow(s.Ctx, delta))
+}
+
+func (s *joinReaderNoOrderingStrategy) resizeMemoryAccount(
+	memAcc *mon.BoundAccount, oldSz, newSz int64,
+) error {
+	return addWorkmemHint(memAcc.Resize(s.Ctx, oldSz, newSz))
+}
+
 func (s *joinReaderNoOrderingStrategy) close(ctx context.Context) {
-	s.memAcc.Close(ctx)
+	s.strategyMemAcc.Close(ctx)
 	s.joinReaderSpanGenerator.close(ctx)
 	*s = joinReaderNoOrderingStrategy{}
 }
@@ -347,13 +366,13 @@ type joinReaderIndexJoinStrategy struct {
 		lookedUpRow         rowenc.EncDatumRow
 	}
 
-	// memAcc is owned by this strategy and is closed when the strategy is
-	// closed. inputRows are owned by the joinReader, so they aren't accounted
-	// for with this memory account.
+	// strategyMemAcc is owned by this strategy and is closed when the strategy
+	// is closed. inputRows are owned by the joinReader, so they aren't
+	// accounted for with this memory account.
 	//
-	// Note that joinReaderIndexJoinStrategy doesn't actually need a
-	// memory account, and it's only responsible for closing it.
-	memAcc *mon.BoundAccount
+	// Note that joinReaderIndexJoinStrategy doesn't actually need a memory
+	// account, and it's only responsible for closing it.
+	strategyMemAcc *mon.BoundAccount
 }
 
 // getLookupRowsBatchSizeHint returns the batch size for the join reader index
@@ -408,8 +427,20 @@ func (s *joinReaderIndexJoinStrategy) spilled() bool {
 	return false
 }
 
+func (s *joinReaderIndexJoinStrategy) growMemoryAccount(
+	memAcc *mon.BoundAccount, delta int64,
+) error {
+	return addWorkmemHint(memAcc.Grow(s.Ctx, delta))
+}
+
+func (s *joinReaderIndexJoinStrategy) resizeMemoryAccount(
+	memAcc *mon.BoundAccount, oldSz, newSz int64,
+) error {
+	return addWorkmemHint(memAcc.Resize(s.Ctx, oldSz, newSz))
+}
+
 func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {
-	s.memAcc.Close(ctx)
+	s.strategyMemAcc.Close(ctx)
 	s.joinReaderSpanGenerator.close(ctx)
 	*s = joinReaderIndexJoinStrategy{}
 }
@@ -494,11 +525,11 @@ type joinReaderOrderingStrategy struct {
 	// the second join in paired-joins).
 	outputGroupContinuationForLeftRow bool
 
-	// memAcc is owned by this strategy and is closed when the strategy is
-	// closed. inputRows are owned by the joinReader, so they aren't accounted
-	// for with this memory account.
-	memAcc       *mon.BoundAccount
-	accountedFor struct {
+	// strategyMemAcc is owned by this strategy and is closed when the strategy
+	// is closed. inputRows are owned by the joinReader, so they aren't
+	// accounted for with this memory account.
+	strategyMemAcc *mon.BoundAccount
+	accountedFor   struct {
 		// sliceOverhead contains the memory usage of
 		// inputRowIdxToLookedUpRowIndices and
 		// accountedFor.inputRowIdxToLookedUpRowIndices that is currently
@@ -591,7 +622,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 	// Account for the new allocations, if any.
 	sliceOverhead := memsize.IntSliceOverhead*int64(cap(s.inputRowIdxToLookedUpRowIndices)) +
 		memsize.Int64*int64(cap(s.accountedFor.inputRowIdxToLookedUpRowIndices))
-	if err := s.growMemoryAccount(sliceOverhead - s.accountedFor.sliceOverhead); err != nil {
+	if err := s.growMemoryAccount(s.strategyMemAcc, sliceOverhead-s.accountedFor.sliceOverhead); err != nil {
 		return nil, err
 	}
 	s.accountedFor.sliceOverhead = sliceOverhead
@@ -655,7 +686,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 		delta += newSize - s.accountedFor.inputRowIdxToLookedUpRowIndices[idx]
 		s.accountedFor.inputRowIdxToLookedUpRowIndices[idx] = newSize
 	}
-	if err := s.growMemoryAccount(delta); err != nil {
+	if err := s.growMemoryAccount(s.strategyMemAcc, delta); err != nil {
 		return jrStateUnknown, err
 	}
 
@@ -756,7 +787,7 @@ func (s *joinReaderOrderingStrategy) spilled() bool {
 }
 
 func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
-	s.memAcc.Close(ctx)
+	s.strategyMemAcc.Close(ctx)
 	s.joinReaderSpanGenerator.close(ctx)
 	if s.lookedUpRows != nil {
 		s.lookedUpRows.Close(ctx)
@@ -770,8 +801,10 @@ func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
 // reservation is denied initially, then it'll attempt to spill lookedUpRows row
 // container to disk, so the error is only returned when that wasn't
 // successful.
-func (s *joinReaderOrderingStrategy) growMemoryAccount(delta int64) error {
-	if err := s.memAcc.Grow(s.Ctx, delta); err != nil {
+func (s *joinReaderOrderingStrategy) growMemoryAccount(
+	memAcc *mon.BoundAccount, delta int64,
+) error {
+	if err := memAcc.Grow(s.Ctx, delta); err != nil {
 		// We don't have enough budget to account for the new size. Check
 		// whether we can spill the looked up rows to disk to free up the
 		// budget.
@@ -780,7 +813,28 @@ func (s *joinReaderOrderingStrategy) growMemoryAccount(delta int64) error {
 			return addWorkmemHint(errors.CombineErrors(err, spillErr))
 		}
 		// We freed up some budget, so try to perform the accounting again.
-		return addWorkmemHint(s.memAcc.Grow(s.Ctx, delta))
+		return addWorkmemHint(memAcc.Grow(s.Ctx, delta))
+	}
+	return nil
+}
+
+// resizeMemoryAccount resizes the memory account according to oldSz and newSz.
+// If the reservation is denied initially, then it'll attempt to spill
+// lookedUpRows row container to disk, so the error is only returned when that
+// wasn't successful.
+func (s *joinReaderOrderingStrategy) resizeMemoryAccount(
+	memAcc *mon.BoundAccount, oldSz, newSz int64,
+) error {
+	if err := memAcc.Resize(s.Ctx, oldSz, newSz); err != nil {
+		// We don't have enough budget to account for the new size. Check
+		// whether we can spill the looked up rows to disk to free up the
+		// budget.
+		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx)
+		if !spilled || spillErr != nil {
+			return addWorkmemHint(errors.CombineErrors(err, spillErr))
+		}
+		// We freed up some budget, so try to perform the accounting again.
+		return addWorkmemHint(memAcc.Resize(s.Ctx, oldSz, newSz))
 	}
 	return nil
 }

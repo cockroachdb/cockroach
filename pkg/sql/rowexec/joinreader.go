@@ -578,11 +578,15 @@ func (jr *joinReader) initJoinReaderStrategy(
 		}
 	}
 
+	defer func() {
+		generator.setResizeMemoryAccountFunc(jr.strategy.resizeMemoryAccount)
+	}()
+
 	if readerType == indexJoinReaderType {
 		jr.strategy = &joinReaderIndexJoinStrategy{
 			joinerBase:              &jr.joinerBase,
 			joinReaderSpanGenerator: generator,
-			memAcc:                  &strategyMemAcc,
+			strategyMemAcc:          &strategyMemAcc,
 		}
 		return nil
 	}
@@ -593,7 +597,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			joinReaderSpanGenerator: generator,
 			isPartialJoin:           jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 			groupingState:           jr.groupingState,
-			memAcc:                  &strategyMemAcc,
+			strategyMemAcc:          &strategyMemAcc,
 		}
 		return nil
 	}
@@ -604,6 +608,10 @@ func (jr *joinReader) initJoinReaderStrategy(
 	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
 	jr.limitedMemMonitor = execinfra.NewLimitedMonitor(ctx, jr.MemMonitor, flowCtx, "joinreader-limited")
+	// We want to make sure that if the disk-backed container is spilled to
+	// disk, it releases all of the memory reservations, so we make the
+	// corresponding memory monitor not hold on to any bytes.
+	jr.limitedMemMonitor.RelinquishAllOnReleaseBytes()
 	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "joinreader-disk")
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
@@ -625,7 +633,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		lookedUpRows:                      drc,
 		groupingState:                     jr.groupingState,
 		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
-		memAcc:                            &strategyMemAcc,
+		strategyMemAcc:                    &strategyMemAcc,
 	}
 	return nil
 }
@@ -720,8 +728,8 @@ func (jr *joinReader) readInput() (
 		// We've just discarded the old rows, so we have to update the memory
 		// accounting accordingly.
 		newSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
-		if err := jr.memAcc.ResizeTo(jr.Ctx, newSz); err != nil {
-			jr.MoveToDraining(addWorkmemHint(err))
+		if err := jr.strategy.resizeMemoryAccount(&jr.memAcc, jr.memAcc.Used(), newSz); err != nil {
+			jr.MoveToDraining(err)
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 		jr.scratchInputRows = jr.scratchInputRows[:0]
@@ -784,8 +792,8 @@ func (jr *joinReader) readInput() (
 		//
 		// We need to subtract the EncDatumRowOverhead because that is already
 		// tracked in jr.accountedFor.scratchInputRows.
-		if err := jr.memAcc.Grow(jr.Ctx, rowSize-int64(rowenc.EncDatumRowOverhead)); err != nil {
-			jr.MoveToDraining(addWorkmemHint(err))
+		if err := jr.strategy.growMemoryAccount(&jr.memAcc, rowSize-int64(rowenc.EncDatumRowOverhead)); err != nil {
+			jr.MoveToDraining(err)
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 		jr.scratchInputRows = append(jr.scratchInputRows, jr.rowAlloc.CopyRow(encDatumRow))
@@ -1004,7 +1012,7 @@ func (jr *joinReader) performMemoryAccounting() error {
 	jr.accountedFor.scratchInputRows = int64(cap(jr.scratchInputRows)) * int64(rowenc.EncDatumRowOverhead)
 	jr.accountedFor.groupingState = jr.groupingState.memUsage()
 	newSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
-	return addWorkmemHint(jr.memAcc.Resize(jr.Ctx, oldSz, newSz))
+	return jr.strategy.resizeMemoryAccount(&jr.memAcc, oldSz, newSz)
 }
 
 // Start is part of the RowSource interface.
