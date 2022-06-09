@@ -1385,10 +1385,9 @@ func insertJSONStatistic(
 func (p *planner) removeColumnComment(
 	ctx context.Context, tableID descpb.ID, pgAttributeNum descpb.PGAttributeNum,
 ) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	_, err := p.ExecEx(
 		ctx,
 		"delete-column-comment",
-		p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.ColumnCommentType,

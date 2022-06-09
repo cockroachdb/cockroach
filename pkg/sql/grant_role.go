@@ -181,10 +181,9 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	var rowsAffected int
 	for _, r := range n.roles {
 		for _, m := range n.members {
-			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			affected, err := params.p.ExecEx(
 				params.ctx,
 				opName,
-				params.p.txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				memberStmt,
 				r.Normalized(), m.Normalized(), n.adminOption,

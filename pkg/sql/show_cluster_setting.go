@@ -57,9 +57,8 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 			// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 			return retry.WithMaxAttempts(ctx, retry.Options{}, math.MaxInt32, func() error {
 				return p.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+					datums, err := p.QueryRowEx(
 						ctx, "read-setting",
-						txn,
 						sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 						"SELECT value FROM system.settings WHERE name = $1", name,
 					)

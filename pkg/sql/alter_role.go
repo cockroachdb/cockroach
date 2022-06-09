@@ -160,10 +160,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.QueryRowEx(
 		params.ctx,
 		opName,
-		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
@@ -241,10 +240,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			}
 		}
 
-		affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		affected, err := params.p.ExecEx(
 			params.ctx,
 			opName,
-			params.p.txn,
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			stmt,
 			qargs...,
@@ -443,20 +441,18 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		var rowsAffected int
 		var internalExecErr error
 		if newSettings == nil {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.p.ExecEx(
 				params.ctx,
 				opName,
-				params.p.txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				deleteQuery,
 				n.dbDescID,
 				roleName,
 			)
 		} else {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.p.ExecEx(
 				params.ctx,
 				opName,
-				params.p.txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				upsertQuery,
 				n.dbDescID,
@@ -558,10 +554,9 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.QueryRowEx(
 		params.ctx,
 		opName,
-		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf("SELECT 1 FROM %s WHERE username = $1", sessioninit.UsersTableName),
 		n.roleName,
@@ -605,10 +600,9 @@ func (n *alterRoleSetNode) makeNewSettings(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
-	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	datums, err := params.p.QueryRowEx(
 		params.ctx,
 		opName,
-		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		selectQuery,
 		n.dbDescID,

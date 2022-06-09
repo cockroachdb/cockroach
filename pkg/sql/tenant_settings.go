@@ -133,8 +133,8 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 	if n.value == nil {
 		// TODO(radu,knz): DEFAULT might be confusing, we really want to say "NO OVERRIDE"
 		reportedValue = "DEFAULT"
-		if _, err := params.p.execCfg.InternalExecutor.ExecEx(
-			params.ctx, "reset-tenant-setting", params.p.Txn(),
+		if _, err := params.p.ExecEx(
+			params.ctx, "reset-tenant-setting",
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.name,
 		); err != nil {
@@ -150,8 +150,8 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if _, err := params.p.execCfg.InternalExecutor.ExecEx(
-			params.ctx, "update-tenant-setting", params.p.Txn(),
+		if _, err := params.p.ExecEx(
+			params.ctx, "update-tenant-setting",
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
 			tenantID, n.name, encoded, n.setting.Typ(),

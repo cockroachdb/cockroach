@@ -269,10 +269,9 @@ func (p *planner) createDropSchemaJob(
 }
 
 func (p *planner) removeSchemaComment(ctx context.Context, schemaID descpb.ID) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+	_, err := p.ExecEx(
 		ctx,
 		"delete-schema-comment",
-		p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 		keys.SchemaCommentType,

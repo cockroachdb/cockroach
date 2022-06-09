@@ -61,10 +61,9 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 	}
 
 	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := params.p.ExecEx(
 			params.ctx,
 			"set-column-comment",
-			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
@@ -75,10 +74,9 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err := params.p.ExecEx(
 			params.ctx,
 			"delete-column-comment",
-			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,

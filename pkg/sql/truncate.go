@@ -545,10 +545,9 @@ func (p *planner) reassignIndexComments(
 	}
 	if int(tree.MustBeDInt(row[0])) > 0 {
 		for old, new := range indexIDMapping {
-			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+			if _, err := p.ExecEx(
 				ctx,
 				"update-table-comments",
-				p.txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
 				new,

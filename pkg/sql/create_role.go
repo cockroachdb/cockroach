@@ -194,10 +194,9 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			}
 		}
 
-		_, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		_, err = params.p.ExecEx(
 			params.ctx,
 			opName,
-			params.p.txn,
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			stmt,
 			qargs...,

@@ -619,8 +619,8 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
-		ctx, "has-role-option", p.Txn(),
+	hasRolePrivilege, err := p.QueryRowEx(
+		ctx, "has-role-option",
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,

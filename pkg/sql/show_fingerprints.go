@@ -164,9 +164,8 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 
-	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	fingerprintCols, err := params.p.QueryRowEx(
 		params.ctx, "hash-fingerprint",
-		params.p.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		sql,
 	)
