@@ -151,6 +151,10 @@ type TestServerInterface interface {
 	// Decommission idempotently sets the decommissioning flag for specified nodes.
 	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
 
+	// DecommissioningNodeMap returns a map of nodeIDs that are known to the
+	// server to be decommissioning.
+	DecommissioningNodeMap() map[roachpb.NodeID]interface{}
+
 	// SplitRange splits the range containing splitKey.
 	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 

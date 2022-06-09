@@ -2444,6 +2444,19 @@ func TestDecommissionEnqueueReplicas(t *testing.T) {
 
 		// Ensure that the scratch range's replica was proactively enqueued.
 		require.Equal(t, <-enqueuedRangeIDs, tc.LookupRangeOrFatal(t, scratchKey).RangeID)
+
+		// Check that the node was marked as decommissioning in each of the nodes'
+		// decommissioningNodeMap. This needs to be wrapped in a SucceedsSoon to
+		// deal with gossip propagation delays.
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < tc.NumServers(); i++ {
+				srv := tc.Server(i)
+				if _, exists := srv.DecommissioningNodeMap()[decommissioningSrv.NodeID()]; !exists {
+					return errors.Newf("node %d not detected to be decommissioning", decommissioningSrv.NodeID())
+				}
+			}
+			return nil
+		})
 	}
 
 	decommissionAndCheck(2 /* decommissioningSrvIdx */)
