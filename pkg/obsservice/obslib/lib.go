@@ -20,9 +20,11 @@ import (
 	"net/http/httputil"
 	"net/http/pprof"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -101,15 +103,18 @@ to trust the certificate presented by CockroachDB.`)
 func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
 	ch := make(chan struct{})
 
+	listener, err := net.Listen("tcp", p.listenAddr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to listen for incoming HTTP connections on address %s: %s",
+			p.listenAddr, err)
+		exit.WithCode(exit.UnspecifiedError())
+	}
+
 	https := p.certs.UICert != nil
 	go func() {
 		defer close(ch)
 		var err error
 
-		listener, err := net.Listen("tcp", p.listenAddr)
-		if err != nil {
-			log.Fatalf(ctx, "%s", err)
-		}
 		defer func() {
 			_ = listener.Close()
 		}()
