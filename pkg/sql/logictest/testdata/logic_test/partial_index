@@ -523,31 +523,6 @@ SELECT * FROM f@a_b_gt_30_idx WHERE b > 30
 ----
 6  60
 
-# Backfill a partial index with a reference to a new column in the predicate.
-
-statement ok
-CREATE TABLE g (a INT)
-
-statement ok
-INSERT INTO g VALUES (1)
-
-statement ok
-BEGIN
-
-statement ok
-ALTER TABLE g ADD COLUMN b INT
-
-statement ok
-CREATE INDEX a_b_null_idx ON g (a) WHERE b IS NULL
-
-statement ok
-COMMIT
-
-query II rowsort
-SELECT * FROM g@a_b_null_idx WHERE b IS NULL
-----
-1  NULL
-
 # Backfill a partial index with a user defined type.
 
 statement ok
@@ -1857,3 +1832,78 @@ query IB
 SELECT k, (j->'b' = '1') IS NULL FROM t75907@t75907_partial_idx WHERE (j->'b' = '1') IS NULL
 ----
 1  true
+
+# Regression test for #79613 to disallow adding a partial index referencing a
+# a column added in the same transaction.
+subtest column_added_in_same_transaction
+
+statement ok
+CREATE TABLE t79613 (i INT PRIMARY KEY);
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE INDEX idx ON t79613(i) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
+BEGIN;
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t79613
+
+# If the table was created in the same transaction, then it's fine to add
+# these partial indexes because we'll have backfilled the new column
+# synchronously.
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE INDEX idx ON t79613(i) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   CREATE UNIQUE INDEX idx ON t79613(i) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1;
+   ALTER TABLE t79613 ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
+statement ok
+BEGIN;
+   CREATE TABLE t79613 (i INT PRIMARY KEY);
+   ALTER TABLE t79613 ADD COLUMN k INT DEFAULT 1,
+       ADD CONSTRAINT c UNIQUE (k) WHERE (k > 1);
+COMMIT;
+SELECT * FROM t79613;
+DROP TABLE t79613;
+
