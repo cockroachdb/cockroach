@@ -121,7 +121,8 @@ func main() {
 		&clusterName, "cluster", "c", "",
 		"Comma-separated list of names existing cluster to use for running tests. "+
 			"If fewer than --parallelism names are specified, then the parallelism "+
-			"is capped to the number of clusters specified.")
+			"is capped to the number of clusters specified. When a cluster does not exist "+
+			"yet, it is created according to the spec.")
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
