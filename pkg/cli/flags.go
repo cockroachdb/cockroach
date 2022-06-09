@@ -283,10 +283,6 @@ func init() {
 	pf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		flag := pflag.PFlagFromGoFlag(f)
-		// TODO(peter): Decide if we want to make the lightstep flags visible.
-		if strings.HasPrefix(flag.Name, "lightstep_") {
-			flag.Hidden = true
-		}
 		if strings.HasPrefix(flag.Name, "httptest.") {
 			// If we test the cli commands in tests, we may end up transitively
 			// importing httptest, for example via `testify/assert`. Make sure
