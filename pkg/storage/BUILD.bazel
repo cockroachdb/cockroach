@@ -59,7 +59,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
-        "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/bufalloc",
         "//pkg/util/encoding",
