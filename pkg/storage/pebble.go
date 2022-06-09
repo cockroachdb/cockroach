@@ -325,23 +325,64 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
-// pebbleDataBlockMVCCTimeIntervalCollector provides an implementation of
+// pebbleDataBlockMVCCTimeIntervalPointCollector implements
+// pebble.DataBlockIntervalCollector for point keys.
+type pebbleDataBlockMVCCTimeIntervalPointCollector struct {
+	pebbleDataBlockMVCCTimeIntervalCollector
+}
+
+var (
+	_ sstable.DataBlockIntervalCollector      = &pebbleDataBlockMVCCTimeIntervalPointCollector{}
+	_ sstable.SuffixReplaceableBlockCollector = (*pebbleDataBlockMVCCTimeIntervalPointCollector)(nil)
+)
+
+func (tc *pebbleDataBlockMVCCTimeIntervalPointCollector) Add(
+	key pebble.InternalKey, _ []byte,
+) error {
+	return tc.add(key.UserKey)
+}
+
+// pebbleDataBlockMVCCTimeIntervalRangeCollector implements
+// pebble.DataBlockIntervalCollector for range keys.
+type pebbleDataBlockMVCCTimeIntervalRangeCollector struct {
+	pebbleDataBlockMVCCTimeIntervalCollector
+}
+
+var (
+	_ sstable.DataBlockIntervalCollector      = &pebbleDataBlockMVCCTimeIntervalRangeCollector{}
+	_ sstable.SuffixReplaceableBlockCollector = (*pebbleDataBlockMVCCTimeIntervalRangeCollector)(nil)
+)
+
+// pebbleDataBlockMVCCTimeIntervalCollector is a helper for a
 // pebble.DataBlockIntervalCollector that is used to construct a
 // pebble.BlockPropertyCollector. This provides per-block filtering, which
 // also gets aggregated to the sstable-level and filters out sstables. It must
 // only be used for MVCCKeyIterKind iterators, since it will ignore
 // blocks/sstables that contain intents (and any other key that is not a real
 // MVCC key).
+//
+// Wrapper classes for point or range key collection are also provided, which
+// actually implement pebble.DataBlockIntervalCollector.
 type pebbleDataBlockMVCCTimeIntervalCollector struct {
 	// min, max are the encoded timestamps.
 	min, max []byte
 }
 
-var _ sstable.DataBlockIntervalCollector = &pebbleDataBlockMVCCTimeIntervalCollector{}
-var _ sstable.SuffixReplaceableBlockCollector = (*pebbleDataBlockMVCCTimeIntervalCollector)(nil)
-
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) Add(key pebble.InternalKey, _ []byte) error {
-	return tc.add(key.UserKey)
+func (tc *pebbleDataBlockMVCCTimeIntervalRangeCollector) Add(
+	key pebble.InternalKey, value []byte,
+) error {
+	// TODO(erikgrinaker): should reuse a buffer for keysDst, but keyspan.Key is
+	// not exported by Pebble.
+	span, err := sstable.DecodeRangeKey(key, value, nil)
+	if err != nil {
+		return errors.Wrapf(err, "decoding range key at %s", key)
+	}
+	for _, k := range span.Keys {
+		if err := tc.add(k.Suffix); err != nil {
+			return errors.Wrapf(err, "adding suffix %x for range key at %s", k.Suffix, key)
+		}
+	}
+	return nil
 }
 
 // add collects the given slice in the collector. The slice may be an entire
@@ -431,8 +472,8 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 	func() pebble.BlockPropertyCollector {
 		return sstable.NewBlockIntervalCollector(
 			mvccWallTimeIntervalCollector,
-			&pebbleDataBlockMVCCTimeIntervalCollector{}, /* points */
-			nil, /* ranges */
+			&pebbleDataBlockMVCCTimeIntervalPointCollector{},
+			&pebbleDataBlockMVCCTimeIntervalRangeCollector{},
 		)
 	},
 }
