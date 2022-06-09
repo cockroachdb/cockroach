@@ -521,12 +521,15 @@ func TestSuspendResumeProcessor(t *testing.T) {
 			interceptor.NewPGConn(serverProxy),
 		)
 		require.EqualError(t, p.resume(ctx), context.Canceled.Error())
+		p.mu.Lock()
+		require.True(t, p.mu.closed)
+		p.mu.Unlock()
 
 		// Set resumed to true to simulate suspend loop.
 		p.mu.Lock()
 		p.mu.resumed = true
 		p.mu.Unlock()
-		require.EqualError(t, p.suspend(ctx), context.Canceled.Error())
+		require.EqualError(t, p.suspend(ctx), errProcessorClosed.Error())
 	})
 
 	t.Run("wait_for_resumed", func(t *testing.T) {
@@ -586,15 +589,15 @@ func TestSuspendResumeProcessor(t *testing.T) {
 			interceptor.NewPGConn(serverProxy),
 		)
 
-		// Ensure that everything will return a resumed error except 1.
+		// Ensure that two resume calls will return right away.
 		errCh := make(chan error, 2)
 		go func() { errCh <- p.resume(ctx) }()
 		go func() { errCh <- p.resume(ctx) }()
 		go func() { errCh <- p.resume(ctx) }()
 		err := <-errCh
-		require.EqualError(t, err, errProcessorResumed.Error())
+		require.NoError(t, err)
 		err = <-errCh
-		require.EqualError(t, err, errProcessorResumed.Error())
+		require.NoError(t, err)
 
 		// Suspend the last goroutine.
 		err = p.waitResumed(ctx)
@@ -604,7 +607,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 
 		// Validate suspension.
 		err = <-errCh
-		require.Nil(t, err)
+		require.NoError(t, err)
 		p.mu.Lock()
 		require.False(t, p.mu.resumed)
 		require.False(t, p.mu.inPeek)
@@ -694,10 +697,7 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		// Wait until all resume calls except 1 have returned.
 		for i := 0; i < concurrency-1; i++ {
 			err := <-errResumeCh
-			// If error is not nil, it has to be an already resumed error.
-			if err != nil {
-				require.EqualError(t, err, errProcessorResumed.Error())
-			}
+			require.NoError(t, err)
 		}
 
 		// Wait until the last one returns. We can guarantee that this is for

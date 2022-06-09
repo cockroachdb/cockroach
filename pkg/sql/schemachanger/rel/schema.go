@@ -29,6 +29,8 @@ type Schema struct {
 	entityTypeSchemas        map[reflect.Type]*entityTypeSchema
 	typeOrdinal, selfOrdinal ordinal
 	stringAttrs              ordinalSet
+	rules                    []*RuleDef
+	rulesByName              map[string]*RuleDef
 }
 
 type entityTypeSchemaSort Schema
@@ -115,6 +117,7 @@ func buildSchema(name string, opts ...SchemaOption) *Schema {
 			name:              name,
 			attrToOrdinal:     make(map[Attr]ordinal),
 			entityTypeSchemas: make(map[reflect.Type]*entityTypeSchema),
+			rulesByName:       make(map[string]*RuleDef),
 		},
 		m: m,
 	}

@@ -291,21 +291,30 @@ var Schema = rel.MustSchema("screl", append(
 	),
 )...)
 
-// JoinTarget generates a clause that joins the target
-// to the corresponding element.
-func JoinTarget(element, target rel.Var) rel.Clause {
-	return rel.And(
-		target.Type((*scpb.Target)(nil)),
-		target.AttrEqVar(Element, element),
-	)
-}
+var (
+	// JoinTarget generates a clause that joins the target
+	// to the corresponding element.
+	JoinTarget = Schema.Def2(
+		"joinTarget", "element", "target", func(
+			element, target rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				target.Type((*scpb.Target)(nil)),
+				target.AttrEqVar(Element, element),
+				element.AttrEqVar(DescID, rel.Blank),
+			}
+		})
 
-// JoinTargetNode generates a clause that joins the target and node vars
-// to the corresponding element.
-func JoinTargetNode(element, target, node rel.Var) rel.Clause {
-	return rel.And(
-		JoinTarget(element, target),
-		node.Type((*Node)(nil)),
-		node.AttrEqVar(Target, target),
-	)
-}
+	// JoinTargetNode generates a clause that joins the target and node vars
+	// to the corresponding element.
+	JoinTargetNode = Schema.Def3(
+		"joinTargetNode", "element", "target", "node", func(
+			element, target, node rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				JoinTarget(element, target),
+				node.Type((*Node)(nil)),
+				node.AttrEqVar(Target, target),
+			}
+		})
+)
