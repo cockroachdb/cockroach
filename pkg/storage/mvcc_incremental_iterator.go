@@ -190,9 +190,7 @@ func NewMVCCIncrementalIterator(
 	}
 }
 
-// SeekGE advances the iterator to the first key in the engine which is >= the
-// provided key. startKey is not restricted to metadata key and could point to
-// any version within a history as required.
+// SeekGE implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 	if i.timeBoundIter != nil {
 		// Check which is the first key seen by the TBI.
@@ -210,7 +208,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		}
 	}
 	i.iter.SeekGE(startKey)
-	if !i.checkValidAndSaveErr() {
+	if !i.updateValid() {
 		return
 	}
 	i.err = nil
@@ -218,7 +216,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 	i.advance()
 }
 
-// Close frees up resources held by the iterator.
+// Close implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) Close() {
 	i.iter.Close()
 	if i.timeBoundIter != nil {
@@ -226,21 +224,19 @@ func (i *MVCCIncrementalIterator) Close() {
 	}
 }
 
-// Next advances the iterator to the next key/value in the iteration. After this
-// call, Valid() will be true if the iterator was not positioned at the last
-// key.
+// Next implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) Next() {
 	i.iter.Next()
-	if !i.checkValidAndSaveErr() {
+	if !i.updateValid() {
 		return
 	}
 	i.advance()
 }
 
-// checkValidAndSaveErr checks if the underlying iter is valid after the operation
-// and saves the error and validity state. Returns true if the underlying iterator
-// is valid.
-func (i *MVCCIncrementalIterator) checkValidAndSaveErr() bool {
+// updateValid updates i.valid and i.err based on the underlying iterator, and
+// returns true if valid.
+// gcassert:inline
+func (i *MVCCIncrementalIterator) updateValid() bool {
 	if ok, err := i.iter.Valid(); !ok {
 		i.err = err
 		i.valid = false
@@ -249,12 +245,10 @@ func (i *MVCCIncrementalIterator) checkValidAndSaveErr() bool {
 	return true
 }
 
-// NextKey advances the iterator to the next key. This operation is distinct
-// from Next which advances to the next version of the current key or the next
-// key if the iterator is currently located at the last version for a key.
+// NextKey implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) NextKey() {
 	i.iter.NextKey()
-	if !i.checkValidAndSaveErr() {
+	if !i.updateValid() {
 		return
 	}
 	i.advance()
@@ -320,18 +314,17 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// "nearby" (within the same sstable block).
 			seekKey := MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
-			if !i.checkValidAndSaveErr() {
+			if !i.updateValid() {
 				return
 			}
 		}
 	}
 }
 
-// initMetaAndCheckForIntentOrInlineError initializes i.meta, and throws an
-// error if it encounters an intent in the timestamp span (startTime, endTime]
-// or an inline meta.
-// The method sets i.err with the error for future processing.
-func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error {
+// updateMeta initializes i.meta. It sets i.err and returns an error on any
+// errors, e.g. if it encounters an intent in the time span (startTime, endTime]
+// or an inline value.
+func (i *MVCCIncrementalIterator) updateMeta() error {
 	unsafeKey := i.iter.UnsafeKey()
 	if unsafeKey.IsValue() {
 		// The key is an MVCC value and not an intent or inline.
@@ -400,7 +393,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
-		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
+		if err := i.updateMeta(); err != nil {
 			return
 		}
 
@@ -418,7 +411,7 @@ func (i *MVCCIncrementalIterator) advance() {
 				// endTime] or we have aggregated it. In either
 				// case, we want to advance past it.
 				i.iter.Next()
-				if !i.checkValidAndSaveErr() {
+				if !i.updateValid() {
 					return
 				}
 				continue
@@ -438,34 +431,18 @@ func (i *MVCCIncrementalIterator) advance() {
 			// done.
 			break
 		}
-		if !i.checkValidAndSaveErr() {
+		if !i.updateValid() {
 			return
 		}
 	}
 }
 
-// Valid must be called after any call to Reset(), Next(), or similar methods.
-// It returns (true, nil) if the iterator points to a valid key (it is undefined
-// to call Key(), Value(), or similar methods unless Valid() has returned (true,
-// nil)). It returns (false, nil) if the iterator has moved past the end of the
-// valid range, or (false, err) if an error has occurred. Valid() will never
-// return true with a non-nil error.
+// Valid implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 	return i.valid, i.err
 }
 
-// Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() MVCCKey {
-	return i.iter.Key()
-}
-
-// Value returns the current value as a byte slice.
-func (i *MVCCIncrementalIterator) Value() []byte {
-	return i.iter.Value()
-}
-
-// UnsafeKey returns the same key as Key, but the memory is invalidated on the
-// next call to {Next,Reset,Close}.
+// UnsafeKey implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 	return i.iter.UnsafeKey()
 }
@@ -485,8 +462,7 @@ func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
 	panic("not implemented")
 }
 
-// UnsafeValue returns the same value as Value, but the memory is invalidated on
-// the next call to {Next,Reset,Close}.
+// UnsafeValue implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
@@ -498,47 +474,11 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	for {
 		i.iter.Next()
-		if !i.checkValidAndSaveErr() {
+		if !i.updateValid() {
 			return
 		}
 
-		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
-			return
-		}
-
-		// We have encountered an intent but it does not lie in the timestamp span
-		// (startTime, endTime] so we do not throw an error, and attempt to move to
-		// the next valid KV.
-		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
-			continue
-		}
-
-		// We have a valid KV or an intent to emit.
-		return
-	}
-}
-
-// NextKeyIgnoringTime returns the next distinct key that would be encountered
-// in a non-incremental iteration by moving the underlying non-TBI iterator
-// forward. Intents in the time range (startTime,EndTime] are handled according
-// to the iterator policy.
-//
-// TODO(sumeer): consider removing this method since it is never used, and it
-// isn't clear what purpose it can serve in the future. We have two current
-// use cases that want to do a next-ignoring-time (a) want to see the next
-// older version of the same roachpb.Key regardless of time, (b) want to know
-// if there are any intermediate keys (even with a different roachpb.Key) with
-// a version outside the time bounds (so as to interrupt any optimization that
-// attempts to use an engine range tombstone). Both these use cases use
-// NextIgnoringTime.
-func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
-	i.iter.NextKey()
-	for {
-		if !i.checkValidAndSaveErr() {
-			return
-		}
-
-		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
+		if err := i.updateMeta(); err != nil {
 			return
 		}
 
@@ -546,7 +486,6 @@ func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 		// (startTime, endTime] so we do not throw an error, and attempt to move to
 		// the next valid KV.
 		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
-			i.Next()
 			continue
 		}
 

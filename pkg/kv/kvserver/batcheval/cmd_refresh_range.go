@@ -91,7 +91,7 @@ func refreshRange(
 			break
 		}
 
-		key := iter.Key()
+		key := iter.UnsafeKey().Clone()
 		if !key.IsValue() {
 			// Found an intent. Check whether it is owned by this transaction.
 			// If so, proceed with iteration. Otherwise, return an error.
