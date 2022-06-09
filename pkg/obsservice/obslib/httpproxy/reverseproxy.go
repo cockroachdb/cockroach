@@ -6,7 +6,7 @@
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 
-package obslib
+package httpproxy
 
 import (
 	"context"
