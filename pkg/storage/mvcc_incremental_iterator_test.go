@@ -38,6 +38,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// See also tests in testdata/mvcc_histories/range_key_iter_incremental which
+// cover iteration with range keys.
+
 const all, latest = true, false
 
 func makeKVT(key roachpb.Key, value roachpb.Value, ts hlc.Timestamp) MVCCKeyValue {

@@ -48,42 +48,46 @@ error: (*withstack.withStack:) intentIter should not be after iter
 
 # Seeking to intent at c will error, due to best-effort checks for provisional
 # value.
-run ok
+run error
 iter_new types=pointsAndRanges
 iter_seek_ge k=c
 ----
 iter_seek_ge: err=iter not on provisional value for intent "c"
+error: (*withstack.withStack:) iter not on provisional value for intent "c"
 
 # Seeking to e intent will not error immediately, because the best-effort checks
 # only look for a point key covered by a range key (which it finds at f@1). This
 # is fine, as long as we expose the correct range key. The next step will error.
-run ok
+run error
 iter_new types=pointsAndRanges
 iter_seek_ge k=e
 iter_next
 ----
 iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_next: err=intentIter at intent, but iter not at provisional value
+error: (*withstack.withStack:) intentIter at intent, but iter not at provisional value
 
 # With prefix iterators, both seeks immediately error.
-run ok
+run error
 iter_new prefix types=pointsAndRanges
 iter_seek_ge k=c
 iter_seek_ge k=e
 ----
 iter_seek_ge: err=iter not on provisional value for intent "c"
 iter_seek_ge: err=iter not on provisional value for intent "e"
+error: (*withstack.withStack:) iter not on provisional value for intent "e"
 
 # Reverse seek at f will land on intent at e, even though there was no
 # provisional value. This is fine, as long as we emit the correct range keys.
 # It eventually errors because 
-run ok
+run error
 iter_new types=pointsAndRanges
 iter_seek_lt k=f
 iter_prev
 ----
 iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_prev: err=intentIter should not be after iter
+error: (*withstack.withStack:) intentIter should not be after iter
 
 # Reverse seek at d ends up succeeding. This is also fine, as long as the
 # emitted range keys and values are correct.
@@ -99,13 +103,14 @@ iter_prev: .
 
 # Switching directions on these positions should also error if appropriate, and
 # never expose the wrong range key for an intent.
-run ok
+run error
 iter_new types=pointsAndRanges
 iter_seek_ge k=e
 iter_prev
 ----
 iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_prev: err=iter not at provisional value, cmp: -1
+error: (*withstack.withStack:) iter not at provisional value, cmp: -1
 
 run ok
 iter_new types=pointsAndRanges
