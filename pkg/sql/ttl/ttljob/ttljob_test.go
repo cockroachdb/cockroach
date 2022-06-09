@@ -584,3 +584,177 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		})
 	}
 }
+
+// TestRowLevelTTLJobRandomEntries inserts random entries into a given table
+// and runs a TTL job on them.
+func TestRowLevelTTLJobExpirationExpressionRandomEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewTestRand()
+
+	type testCase struct {
+		desc              string
+		createTable       string
+		preSetup          []string
+		postSetup         []string
+		numExpiredRows    int
+		numNonExpiredRows int
+		numSplits         int
+	}
+	// Add some basic one and three column row-level TTL tests.
+	testCases := []testCase{
+		{
+			desc: "one column pk",
+			createTable: `CREATE TABLE tbl (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	text TEXT,
+  expire_at TIMESTAMP
+) WITH (ttl_expiration_expression = 'expire_at')`,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Log to make it slightly easier to reproduce a random config.
+			t.Logf("test case: %#v", tc)
+
+			var zeroDuration time.Duration
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
+				AOSTDuration: &zeroDuration,
+				OnStatisticsError: func(err error) {
+					require.NoError(t, err, "error gathering statistics")
+				},
+			})
+			defer cleanupFunc()
+
+			rangeBatchSize := 1 + rng.Intn(3)
+			t.Logf("range batch size: %d", rangeBatchSize)
+
+			for _, stmt := range tc.preSetup {
+				t.Logf("running pre statement: %s", stmt)
+				th.sqlDB.Exec(t, stmt)
+			}
+
+			th.sqlDB.Exec(t, tc.createTable)
+			th.sqlDB.Exec(t, `SET CLUSTER SETTING sql.ttl.range_batch_size = $1`, rangeBatchSize)
+
+			// Extract the columns from CREATE TABLE.
+			stmt, err := parser.ParseOne(tc.createTable)
+			require.NoError(t, err)
+			createTableStmt, ok := stmt.AST.(*tree.CreateTable)
+			require.True(t, ok)
+
+			addRow := func(ts time.Time) {
+				insertColumns := make([]string, 0)
+				placeholders := make([]string, 0)
+				values := make([]interface{}, 0)
+
+				for _, def := range createTableStmt.Defs {
+					if def, ok := def.(*tree.ColumnTableDef); ok {
+						if def.HasDefaultExpr() {
+							continue
+						}
+						placeholders = append(placeholders, fmt.Sprintf("$%d", len(placeholders)+1))
+						var b bytes.Buffer
+						lexbase.EncodeRestrictedSQLIdent(&b, string(def.Name), lexbase.EncNoFlags)
+						insertColumns = append(insertColumns, b.String())
+
+						if def.Name.String() == "expire_at" {
+							values = append(values, ts)
+						} else {
+							d := randgen.RandDatum(rng, def.Type.(*types.T), false /* nullOk */)
+							f := tree.NewFmtCtx(tree.FmtBareStrings)
+							d.Format(f)
+							values = append(values, f.CloseAndGetString())
+						}
+					}
+				}
+
+				th.sqlDB.Exec(
+					t,
+					fmt.Sprintf(
+						"INSERT INTO %s (%s) VALUES (%s)",
+						createTableStmt.Table.Table(),
+						strings.Join(insertColumns, ","),
+						strings.Join(placeholders, ","),
+					),
+					values...,
+				)
+			}
+
+			tbDesc := desctestutils.TestingGetPublicTableDescriptor(
+				th.kvDB,
+				keys.SystemSQLCodec,
+				"defaultdb",
+				createTableStmt.Table.Table(),
+			)
+			require.NotNil(t, tbDesc)
+
+			// Split the ranges by a random PK value.
+			if tc.numSplits > 0 {
+				for i := 0; i < tc.numSplits; i++ {
+					var values []interface{}
+					var placeholders []string
+
+					// Note we can split a PRIMARY KEY partially.
+					numKeyCols := 1 + rng.Intn(tbDesc.GetPrimaryIndex().NumKeyColumns())
+					for idx := 0; idx < numKeyCols; idx++ {
+						col, err := tbDesc.FindColumnWithID(tbDesc.GetPrimaryIndex().GetKeyColumnID(idx))
+						require.NoError(t, err)
+						placeholders = append(placeholders, fmt.Sprintf("$%d", idx+1))
+
+						d := randgen.RandDatum(rng, col.GetType(), false)
+						f := tree.NewFmtCtx(tree.FmtBareStrings)
+						d.Format(f)
+						values = append(values, f.CloseAndGetString())
+					}
+					th.sqlDB.Exec(
+						t,
+						fmt.Sprintf(
+							"ALTER TABLE %s SPLIT AT VALUES (%s)",
+							createTableStmt.Table.Table(),
+							strings.Join(placeholders, ","),
+						),
+						values...,
+					)
+				}
+			}
+
+			// Add expired and non-expired rows.
+			for i := 0; i < tc.numExpiredRows; i++ {
+				addRow(timeutil.Now().Add(-time.Hour))
+			}
+			for i := 0; i < tc.numNonExpiredRows; i++ {
+				addRow(timeutil.Now().Add(time.Hour * 24 * 30))
+			}
+
+			for _, stmt := range tc.postSetup {
+				t.Logf("running post statement: %s", stmt)
+				th.sqlDB.Exec(t, stmt)
+			}
+
+			// Force the schedule to execute.
+			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
+			require.NoError(t, th.executeSchedules())
+
+			th.waitForSuccessfulScheduledJob(t)
+
+			// Check we have the number of expected rows.
+			var numRows int
+			th.sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(`SELECT count(1) FROM %s`, createTableStmt.Table.Table()),
+			).Scan(&numRows)
+			require.Equal(t, tc.numNonExpiredRows, numRows)
+
+			// Also check all the rows expire way into the future.
+			th.sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(`SELECT count(1) FROM %s WHERE expire_at >= now()`, createTableStmt.Table.Table()),
+			).Scan(&numRows)
+			require.Equal(t, tc.numNonExpiredRows, numRows)
+		})
+	}
+}

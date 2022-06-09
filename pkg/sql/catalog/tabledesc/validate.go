@@ -190,30 +190,32 @@ func (desc *wrapper) ValidateCrossReferences(
 
 	// For row-level TTL, only ascending PKs are permitted.
 	if desc.HasRowLevelTTL() {
-		pk := desc.GetPrimaryIndex()
-		if col, err := desc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err != nil {
-			vea.Report(errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName))
-		} else {
-			intervalExpr := desc.GetRowLevelTTL().DurationExpr
-			expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
-			if col.GetDefaultExpr() != expectedStr {
-				vea.Report(pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					"expected DEFAULT expression of %s to be %s",
-					colinfo.TTLDefaultExpirationColumnName,
-					expectedStr,
-				))
-			}
-			if col.GetOnUpdateExpr() != expectedStr {
-				vea.Report(pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					"expected ON UPDATE expression of %s to be %s",
-					colinfo.TTLDefaultExpirationColumnName,
-					expectedStr,
-				))
+		if desc.RowLevelTTL.DurationExpr != "" {
+			if col, err := desc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err != nil {
+				vea.Report(errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName))
+			} else {
+				intervalExpr := desc.GetRowLevelTTL().DurationExpr
+				expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
+				if col.GetDefaultExpr() != expectedStr {
+					vea.Report(pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"expected DEFAULT expression of %s to be %s",
+						colinfo.TTLDefaultExpirationColumnName,
+						expectedStr,
+					))
+				}
+				if col.GetOnUpdateExpr() != expectedStr {
+					vea.Report(pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						"expected ON UPDATE expression of %s to be %s",
+						colinfo.TTLDefaultExpirationColumnName,
+						expectedStr,
+					))
+				}
 			}
 		}
 
+		pk := desc.GetPrimaryIndex()
 		for i := 0; i < pk.NumKeyColumns(); i++ {
 			dir := pk.GetKeyColumnDirection(i)
 			if dir != descpb.IndexDescriptor_ASC {
