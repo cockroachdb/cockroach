@@ -149,6 +149,9 @@ type proxyHandler struct {
 
 	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
+
+	// cancelInfoMap keeps track of all the cancel request keys for this proxy.
+	cancelInfoMap *cancelInfoMap
 }
 
 const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure. Make
@@ -171,10 +174,11 @@ func newProxyHandler(
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	handler := proxyHandler{
-		stopper:      stopper,
-		metrics:      proxyMetrics,
-		ProxyOptions: options,
-		certManager:  certmgr.NewCertManager(ctx),
+		stopper:       stopper,
+		metrics:       proxyMetrics,
+		ProxyOptions:  options,
+		certManager:   certmgr.NewCertManager(ctx),
+		cancelInfoMap: makeCancelInfoMap(),
 	}
 
 	err := handler.setupIncomingCert(ctx)
@@ -406,6 +410,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	// Record the connection success and how long it took.
 	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connRecievedTime).Nanoseconds())
 	handler.metrics.SuccessfulConnCount.Inc(1)
+	handler.cancelInfoMap.addCancelInfo(connector.CancelInfo.proxySecretID(), connector.CancelInfo)
 
 	log.Infof(ctx, "new connection")
 	connBegin := timeutil.Now()
