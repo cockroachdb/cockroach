@@ -715,7 +715,7 @@ func (r *Replica) evaluateProposal(
 
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
-		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
+		res.Replicated.IsLeaseRequest = ba.IsSingleRequestLeaseRequest()
 		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		} else {
