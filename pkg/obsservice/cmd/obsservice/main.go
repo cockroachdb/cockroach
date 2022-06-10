@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
+	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/spf13/cobra"
 )
 
