@@ -1607,6 +1607,37 @@ message CreateStatementDiagnosticsReportRequest {
   google.protobuf.Duration min_execution_latency = 2  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
   // ExpiresAfter, when non-zero, sets the expiration interval of this request.
   google.protobuf.Duration expires_after = 3 [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+  // SamplingProbability controls how likely we are to try and collect a
+  // diagnostics report for a given execution. The semantics with
+  // MinExecutionLatency are worth noting (and perhaps simplifying?):
+  // - If SamplingProbability is zero, we're always sampling. This is for
+  //   compatibility with pre-22.2 versions where this parameter was not
+  //   available.
+  // - If SamplingProbability is non-zero, MinExecutionLatency must be non-zero.
+  //   We'll sample stmt executions with the given probability until:
+  //   (a) we capture one that exceeds MinExecutionLatency, or
+  //   (b) we hit the ExpiresAfter point.
+  //
+  // SamplingProbability lets users control at a per-stmt granularity how much
+  // collection overhead is acceptable to try an capture an outlier execution
+  // for further analysis (are high p99.9s due to latch waits? racing with split
+  // transfers?). A high sampling rate can capture a trace sooner, but the added
+  // overhead may also cause the trace to be non-representative if the tracing
+  // overhead across all requests is causing resource saturation (network,
+  // memory) and resulting in slowdown.
+  //
+  // TODO(irfansharif): Wire this up to the UI code. When selecting the latency
+  // threshold, we should want to force specifying a sampling probability.
+  //
+  // TODO(irfansharif): We could do better than a hard-coded default value for
+  // probability (100% could be too high-overhead so probably not the
+  // right one). Strawman: could consider the recent request rate for the
+  // fingerprint (say averaged over the last 10m? 30m?), consider what %-ile the
+  // latency target we're looking to capture is under, and suggest a sampling
+  // probability that gets you at least one trace in the next T seconds with 95%
+  // likelihood? Or provide a hint for how long T is for the currently chosen
+  // sampling probability.
+  double sampling_probability = 4;
 }
 
 message CreateStatementDiagnosticsReportResponse {

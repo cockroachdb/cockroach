@@ -18,9 +18,13 @@ import (
 // InsertRequestInternal exposes the form of insert which returns the request ID
 // as an int64 to tests in this package.
 func (r *Registry) InsertRequestInternal(
-	ctx context.Context, fprint string, minExecutionLatency time.Duration, expiresAfter time.Duration,
+	ctx context.Context,
+	fprint string,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
 ) (int64, error) {
-	id, err := r.insertRequestInternal(ctx, fprint, minExecutionLatency, expiresAfter)
+	id, err := r.insertRequestInternal(ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter)
 	return int64(id), err
 }
 

@@ -7008,6 +7008,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"stmtFingerprint", types.String},
+				{"samplingProbability", types.Float},
 				{"minExecutionLatency", types.Interval},
 				{"expiresAfter", types.Interval},
 			},
@@ -7041,12 +7042,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				}
 
 				stmtFingerprint := string(tree.MustBeDString(args[0]))
-				minExecutionLatency := time.Duration(tree.MustBeDInterval(args[1]).Nanos())
-				expiresAfter := time.Duration(tree.MustBeDInterval(args[2]).Nanos())
+				samplingProbability := float64(tree.MustBeDFloat(args[1]))
+				minExecutionLatency := time.Duration(tree.MustBeDInterval(args[2]).Nanos())
+				expiresAfter := time.Duration(tree.MustBeDInterval(args[3]).Nanos())
 
 				if err := evalCtx.StmtDiagnosticsRequestInserter(
 					evalCtx.Ctx(),
 					stmtFingerprint,
+					samplingProbability,
 					minExecutionLatency,
 					expiresAfter,
 				); err != nil {

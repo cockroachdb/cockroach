@@ -2646,7 +2646,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		sessiondata.InternalExecutorOverride{
 			User: authenticatedUserNameNoAdmin(),
 		},
-		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
 	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY or ADMIN role option")
 
@@ -2673,7 +2673,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		sessiondata.InternalExecutorOverride{
 			User: authenticatedUserNameNoAdmin(),
 		},
-		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
 	require.NoError(t, err)
 
@@ -2704,7 +2704,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		sessiondata.InternalExecutorOverride{
 			User: authenticatedUserNameNoAdmin(),
 		},
-		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::INTERVAL, 0::INTERVAL)",
+		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
 	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED role option cannot request statement bundle")
 }
