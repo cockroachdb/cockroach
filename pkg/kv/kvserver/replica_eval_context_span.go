@@ -86,7 +86,7 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 }
 
 // GetFirstIndex returns the first index.
-func (rec *SpanSetReplicaEvalContext) GetFirstIndex() (uint64, error) {
+func (rec *SpanSetReplicaEvalContext) GetFirstIndex() uint64 {
 	return rec.i.GetFirstIndex()
 }
 

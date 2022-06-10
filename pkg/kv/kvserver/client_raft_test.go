@@ -518,10 +518,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	repl := store.LookupReplica(key)
 	// Get that command's log index.
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := repl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
@@ -603,10 +600,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 
 	repl := store.LookupReplica(key)
 	require.NotNil(t, repl)
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := repl.GetLastIndex()
 
 	// Verifies the recomputed log size against what we track in `r.mu.raftLogSize`.
 	assertCorrectRaftLogSize := func() error {
@@ -721,10 +715,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			tc.WaitForValues(t, key, []int64{incAB, incA, incAB})
 
 			repl0 := store.LookupReplica(key)
-			index, err := repl0.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			index := repl0.GetLastIndex()
 
 			// Truncate the log at index+1 (log entries < N are removed, so this
 			// includes the increment).
@@ -805,13 +796,13 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				// persistently unavailable range.
 				repl0 = tc.GetFirstStoreFromServer(t, otherStore1).LookupReplica(key)
 				require.NotNil(t, repl0)
-				expectedLastIndex, _ := repl0.GetLastIndex()
+				expectedLastIndex := repl0.GetLastIndex()
 				expectedLastTerm := repl0.GetCachedLastTerm()
 
 				verifyIndexAndTerm := func(i int) error {
 					repl1 := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
 					require.NotNil(t, repl1)
-					if lastIndex, _ := repl1.GetLastIndex(); expectedLastIndex != lastIndex {
+					if lastIndex := repl1.GetLastIndex(); expectedLastIndex != lastIndex {
 						return fmt.Errorf("%d: expected last index %d, but found %d", i, expectedLastIndex, lastIndex)
 					}
 					if lastTerm := repl1.GetCachedLastTerm(); expectedLastTerm != lastTerm {
@@ -836,8 +827,7 @@ func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, newFirstInde
 		// Flush the engine to advance durability, which triggers truncation.
 		require.NoError(t, r.Engine().Flush())
 		// FirstIndex has changed.
-		firstIndex, err := r.GetFirstIndex()
-		require.NoError(t, err)
+		firstIndex := r.GetFirstIndex()
 		if firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}
@@ -1003,10 +993,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	tc.WaitForValues(t, key, []int64{incA, incAB, incAB})
 	log.Infof(ctx, "test: waiting for values... done")
 
-	index, err := newLeaderRepl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := newLeaderRepl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
@@ -1232,8 +1219,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	}
 
 	tc.WaitForValues(t, key, []int64{1, 2, 2})
-	index, err := otherRepl.GetLastIndex()
-	require.NoError(t, err)
+	index := otherRepl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment). This means that the partitioned replica will need a
@@ -1431,10 +1417,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 
 	tc.WaitForValues(t, key, []int64{incAB, incA, incA, incAB, incAB})
 
-	index, err := repl.GetLastIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	index := repl.GetLastIndex()
 
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
@@ -2004,10 +1987,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	{
 		// Get the last increment's log index.
 		repl := store.LookupReplica(roachpb.RKey(key))
-		index, err := repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
+		index := repl.GetLastIndex()
 		// Truncate the log at index+1 (log entries < N are removed, so this includes
 		// the increment).
 		truncArgs := truncateLogArgs(index+1, repl.RangeID)

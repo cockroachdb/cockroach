@@ -903,13 +903,6 @@ func (r *Replica) GetConcurrencyManager() concurrency.Manager {
 	return r.concMgr
 }
 
-// GetTerm returns the term of the given index in the raft log.
-func (r *Replica) GetTerm(i uint64) (uint64, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.raftTermRLocked(i)
-}
-
 // GetRangeID returns the Range ID.
 func (r *Replica) GetRangeID() roachpb.RangeID {
 	return r.RangeID

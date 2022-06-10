@@ -75,10 +75,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// Get the raft leader (and ensure one exists).
 	raftLeaderRepl := tc.GetRaftLeader(t, roachpb.RKey(key))
 	require.NotNil(t, raftLeaderRepl)
-	originalIndex, err := raftLeaderRepl.GetFirstIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	originalIndex := raftLeaderRepl.GetFirstIndex()
 
 	// Write a collection of values to increase the raft log.
 	value := bytes.Repeat(key, 1000) // 1KB
@@ -100,10 +97,7 @@ func TestRaftLogQueue(t *testing.T) {
 		require.NoError(t, raftLeaderRepl.Engine().Flush())
 		// Ensure that firstIndex has increased indicating that the log
 		// truncation has occurred.
-		afterTruncationIndex, err = raftLeaderRepl.GetFirstIndex()
-		if err != nil {
-			return err
-		}
+		afterTruncationIndex = raftLeaderRepl.GetFirstIndex()
 		if afterTruncationIndex <= originalIndex {
 			return errors.Errorf("raft log has not been truncated yet, afterTruncationIndex:%d originalIndex:%d",
 				afterTruncationIndex, originalIndex)
@@ -122,10 +116,7 @@ func TestRaftLogQueue(t *testing.T) {
 		tc.GetFirstStoreFromServer(t, i).MustForceRaftLogScanAndProcess()
 	}
 
-	after2ndTruncationIndex, err := raftLeaderRepl.GetFirstIndex()
-	if err != nil {
-		t.Fatal(err)
-	}
+	after2ndTruncationIndex := raftLeaderRepl.GetFirstIndex()
 	if afterTruncationIndex > after2ndTruncationIndex {
 		t.Fatalf("second truncation destroyed state: afterTruncationIndex:%d after2ndTruncationIndex:%d",
 			afterTruncationIndex, after2ndTruncationIndex)

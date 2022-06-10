@@ -603,10 +603,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			oldFirstIndex, err := r.GetFirstIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			oldFirstIndex := r.GetFirstIndex()
 
 			for i := 0; i < c.count; i++ {
 				key := roachpb.Key(fmt.Sprintf("key%02d", i))
@@ -624,10 +621,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 					// Flush the engine to advance durability, which triggers truncation.
 					require.NoError(t, store.engine.Flush())
 				}
-				newFirstIndex, err := r.GetFirstIndex()
-				if err != nil {
-					t.Fatal(err)
-				}
+				newFirstIndex := r.GetFirstIndex()
 				if newFirstIndex <= oldFirstIndex {
 					return errors.Errorf("log was not correctly truncated, old first index:%d, current first index:%d",
 						oldFirstIndex, newFirstIndex)
@@ -669,7 +663,7 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	assertMin := func(exp uint64, now time.Time) {
 		t.Helper()
 		const anyRecipientStore roachpb.StoreID = 0
-		if maxIndex := r.getSnapshotLogTruncationConstraintsLocked(anyRecipientStore); maxIndex != exp {
+		if maxIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore); maxIndex != exp {
 			t.Fatalf("unexpected max index %d, wanted %d", maxIndex, exp)
 		}
 	}
@@ -722,10 +716,7 @@ func TestTruncateLog(t *testing.T) {
 			if _, pErr := tc.SendWrapped(args); pErr != nil {
 				t.Fatal(pErr)
 			}
-			idx, err := tc.repl.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			idx := tc.repl.GetLastIndex()
 			indexes = append(indexes, idx)
 		}
 
@@ -760,7 +751,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// The term of the last truncated entry is still available.
 		tc.repl.mu.Lock()
-		term, err := tc.repl.raftTermRLocked(indexes[4])
+		term, err := tc.repl.raftTermLocked(indexes[4])
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -771,7 +762,7 @@ func TestTruncateLog(t *testing.T) {
 
 		// The terms of older entries are gone.
 		tc.repl.mu.Lock()
-		_, err = tc.repl.raftTermRLocked(indexes[3])
+		_, err = tc.repl.raftTermLocked(indexes[3])
 		tc.repl.mu.Unlock()
 		if !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
@@ -793,7 +784,7 @@ func TestTruncateLog(t *testing.T) {
 
 		tc.repl.mu.Lock()
 		// The term of the last truncated entry is still available.
-		term, err = tc.repl.raftTermRLocked(indexes[4])
+		term, err = tc.repl.raftTermLocked(indexes[4])
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -921,8 +912,7 @@ func waitForTruncationForTesting(
 			require.NoError(t, r.Engine().Flush())
 		}
 		// FirstIndex should have changed.
-		firstIndex, err := r.GetFirstIndex()
-		require.NoError(t, err)
+		firstIndex := r.GetFirstIndex()
 		if firstIndex != newFirstIndex {
 			return errors.Errorf("expected firstIndex == %d, got %d", newFirstIndex, firstIndex)
 		}

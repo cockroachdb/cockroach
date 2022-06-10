@@ -48,7 +48,8 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // of these methods may acquire either lock, but they may require
 // their caller to hold one or both locks (even though they do not
 // follow our "Locked" naming convention). Specific locking
-// requirements are noted in each method's comments.
+// requirements (e.g. whether r.mu must be held for reading or writing)
+// are noted in each method's comments.
 //
 // Many of the methods defined in this file are wrappers around static
 // functions. This is done to facilitate their use from
@@ -58,7 +59,8 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // to Replica.store.Engine().
 
 // InitialState implements the raft.Storage interface.
-// InitialState requires that r.mu is held.
+// InitialState requires that r.mu is held for writing because it requires
+// exclusive access to r.mu.stateLoader.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.Engine())
@@ -73,6 +75,8 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
+// Entries requires that r.mu is held for writing because it requires exclusive
+// access to r.mu.stateLoader.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
@@ -84,7 +88,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
-// raftEntriesLocked requires that r.mu is held.
+// raftEntriesLocked requires that r.mu is held for writing.
 func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
 }
@@ -270,6 +274,8 @@ func iterateEntries(
 const invalidLastTerm = 0
 
 // Term implements the raft.Storage interface.
+// Term requires that r.mu is held for writing because it requires exclusive
+// access to r.mu.stateLoader.
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	// TODO(nvanbenschoten): should we set r.mu.lastTerm when
 	//   r.mu.lastIndex == i && r.mu.lastTerm == invalidLastTerm?
@@ -286,9 +292,17 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)
 }
 
-// raftTermLocked requires that r.mu is locked for reading.
-func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
+// raftTermLocked requires that r.mu is locked for writing.
+func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
 	return (*replicaRaftStorage)(r).Term(i)
+}
+
+// GetTerm returns the term of the given index in the raft log. It requires that
+// r.mu is not held.
+func (r *Replica) GetTerm(i uint64) (uint64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.raftTermLocked(i)
 }
 
 func term(
@@ -320,57 +334,41 @@ func term(
 	return ents[0].Term, nil
 }
 
+// raftLastIndexRLocked requires that r.mu is held for reading.
+func (r *Replica) raftLastIndexRLocked() uint64 {
+	return r.mu.lastIndex
+}
+
 // LastIndex implements the raft.Storage interface.
+// LastIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) LastIndex() (uint64, error) {
-	return r.mu.lastIndex, nil
+	return (*Replica)(r).raftLastIndexRLocked(), nil
 }
 
-// raftLastIndexLocked requires that r.mu is held.
-func (r *Replica) raftLastIndexLocked() (uint64, error) {
-	return (*replicaRaftStorage)(r).LastIndex()
+// GetLastIndex returns the index of the last entry in the replica's Raft log.
+func (r *Replica) GetLastIndex() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftLastIndexRLocked()
 }
 
-// raftTruncatedStateLocked returns metadata about the log that preceded the
-// first current entry. This includes both entries that have been compacted away
-// and the dummy entries that make up the starting point of an empty log.
-// raftTruncatedStateLocked requires that r.mu is held.
-func (r *Replica) raftTruncatedStateLocked(
-	ctx context.Context,
-) (roachpb.RaftTruncatedState, error) {
-	if r.mu.state.TruncatedState != nil {
-		return *r.mu.state.TruncatedState, nil
-	}
-	ts, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, r.store.Engine())
-	if err != nil {
-		return ts, err
-	}
-	if ts.Index != 0 {
-		r.mu.state.TruncatedState = &ts
-	}
-	return ts, nil
+// raftFirstIndexRLocked requires that r.mu is held for reading.
+func (r *Replica) raftFirstIndexRLocked() uint64 {
+	// TruncatedState is guaranteed to be non-nil.
+	return r.mu.state.TruncatedState.Index + 1
 }
 
 // FirstIndex implements the raft.Storage interface.
+// FirstIndex requires that r.mu is held for reading.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
-	ctx := r.AnnotateCtx(context.TODO())
-	ts, err := (*Replica)(r).raftTruncatedStateLocked(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return ts.Index + 1, nil
+	return (*Replica)(r).raftFirstIndexRLocked(), nil
 }
 
-// raftFirstIndexLocked requires that r.mu is held.
-func (r *Replica) raftFirstIndexLocked() (uint64, error) {
-	return (*replicaRaftStorage)(r).FirstIndex()
-}
-
-// GetFirstIndex is the same function as raftFirstIndexLocked but it requires
-// that r.mu is not held.
-func (r *Replica) GetFirstIndex() (uint64, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftFirstIndexLocked()
+// GetFirstIndex returns the index of the first entry in the replica's Raft log.
+func (r *Replica) GetFirstIndex() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftFirstIndexRLocked()
 }
 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
@@ -380,10 +378,13 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 	return r.mu.state.LeaseAppliedIndex
 }
 
-// Snapshot implements the raft.Storage interface. Snapshot requires that
-// r.mu is held. Note that the returned snapshot is a placeholder and
-// does not contain any of the replica data. The snapshot is actually generated
-// (and sent) by the Raft snapshot queue.
+// Snapshot implements the raft.Storage interface.
+// Snapshot requires that r.mu is held for writing because it requires exclusive
+// access to r.mu.stateLoader.
+//
+// Note that the returned snapshot is a placeholder and does not contain any of
+// the replica data. The snapshot is actually generated (and sent) by the Raft
+// snapshot queue.
 //
 // More specifically, this method is called by etcd/raft in
 // (*raftLog).snapshot. Raft expects that it generates the snapshot (by
@@ -408,7 +409,7 @@ func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	}, nil
 }
 
-// raftSnapshotLocked requires that r.mu is held.
+// raftSnapshotLocked requires that r.mu is held for writing.
 func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 	return (*replicaRaftStorage)(r).Snapshot()
 }
