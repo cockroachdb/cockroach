@@ -1898,7 +1898,7 @@ upsert descriptor #125
      unexposedParentSchemaId: 113
   -  version: "1"
   +  version: "2"
-     viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
+     viewQuery: (SELECT b'\x80':::@100123::STRING AS k, n2, n1 FROM db1.sc1.v4)
 delete all comments for table descriptors [114 115 116 117 118 119 120 121 122 125]
 delete role settings for database on #111
 delete scheduleId: <redacted>

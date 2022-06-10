@@ -917,8 +917,19 @@ CREATE VIEW rv as select val from tval;
 statement ok;
 USE DB2;
 
-statement ok;
-CREATE VIEW vm as (select s.last_value, t.val as a, v.val as b, cast('open' as db1.status) from db1.tval as t, db1.sq1 as s, db1.rv as v)
+# Cross-database type references are not allowed.
+statement error cross database type references are not supported: db1.public.status
+CREATE VIEW vm as (select cast('open' as db1.status) from db1.tval as t)
+
+# If the view is being created in the same database as the type, that is allowed.
+statement ok
+CREATE VIEW db1.vm as (select cast('open' as db1.status) from db1.tval as t)
+
+statement ok
+CREATE TYPE db2.status AS ENUM ('open', 'closed', 'inactive');
+
+statement ok
+CREATE VIEW vm as (select s.last_value, t.val as a, v.val as b, cast('open' as db2.status) from db1.tval as t, db1.sq1 as s, db1.rv as v)
 
 query TTTTTTT
 select * from "".crdb_internal.cross_db_references order by object_database, object_schema, object_name, referenced_object_database, referenced_object_schema, referenced_object_name desc;
@@ -928,10 +939,8 @@ db1  public  sys2  system  public  descriptor  view references table
 db2  public  v1    db1     public  ab          view references table
 db2  public  v2    db1     public  ab          view references table
 db2  public  vm    db1     public  tval        view references table
-db2  public  vm    db1     public  status      view references type
 db2  public  vm    db1     public  sq1         view references table
 db2  public  vm    db1     public  rv          view references table
-db2  public  vm    db1     public  _status     view references type
 
 
 # Test that user defined types used in views are tracked.
@@ -1109,9 +1118,9 @@ ALTER TYPE view_typ RENAME TO view_typ_new
 query TT
 SHOW CREATE VIEW v10
 ----
-v10                                    CREATE VIEW public.v10 (
-                                       view_typ
-) AS SELECT 'a':::public.view_typ_new
+v10                                        CREATE VIEW public.v10 (
+                                           view_typ
+) AS SELECT 'a':::db2.public.view_typ_new
 
 query T
 SELECT * FROM v10
@@ -1127,9 +1136,9 @@ ALTER TYPE view_typ_new RENAME TO view_typ
 query TT
 SHOW CREATE VIEW v11
 ----
-v11                                                               CREATE VIEW public.v11 (
-                                                                  k
-) AS (SELECT 'a':::public.view_typ < 'a':::public.view_typ AS k)
+v11                                                                       CREATE VIEW public.v11 (
+                                                                          k
+) AS (SELECT 'a':::db2.public.view_typ < 'a':::db2.public.view_typ AS k)
 
 query B
 SELECT * FROM v11
@@ -1145,9 +1154,9 @@ ALTER TYPE view_typ RENAME TO view_type_new
 query TT
 SHOW CREATE VIEW v12
 ----
-v12                                                            CREATE VIEW public.v12 (
-                                                               k
-) AS (SELECT k FROM (SELECT 'a':::public.view_type_new AS k))
+v12                                                                CREATE VIEW public.v12 (
+                                                                   k
+) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k))
 
 query T
 SELECT * FROM v12
@@ -1163,9 +1172,9 @@ ALTER TYPE view_type_new RENAME TO view_type
 query TT
 SHOW CREATE VIEW v13
 ----
-v13                                                                            CREATE VIEW public.v13 (
-                                                                               k
-) AS (SELECT 'a':::public.view_type AS k UNION SELECT 'b':::public.view_type)
+v13                                                                                    CREATE VIEW public.v13 (
+                                                                                       k
+) AS (SELECT 'a':::db2.public.view_type AS k UNION SELECT 'b':::db2.public.view_type)
 
 query T
 SELECT * FROM v13 ORDER BY k
@@ -1182,9 +1191,12 @@ ALTER TYPE view_type RENAME TO view_type_new
 query TT
 SHOW CREATE VIEW v14
 ----
-v14                                                                                                   CREATE VIEW public.v14 (
-                                                                                                      "array"
-) AS (SELECT ARRAY['a':::public.view_type_new, 'b':::public.view_type_new]:::public.view_type_new[])
+v14  CREATE VIEW public.v14 (
+     "array"
+) AS (
+     SELECT
+       ARRAY['a':::db2.public.view_type_new, 'b':::db2.public.view_type_new]:::db2.public.view_type_new[]
+  )
 
 query T
 SELECT * FROM v14
@@ -1200,9 +1212,12 @@ ALTER TYPE view_type_new RENAME TO view_type
 query TT
 SHOW CREATE VIEW v15
 ----
-v15                                                                                             CREATE VIEW public.v15 (
-                                                                                                view_type_new
-) AS (SELECT ARRAY['a':::public.view_type, 'b':::public.view_type][2:::INT8] AS view_type_new)
+v15  CREATE VIEW public.v15 (
+     view_type_new
+) AS (
+     SELECT
+       ARRAY['a':::db2.public.view_type, 'b':::db2.public.view_type][2:::INT8] AS view_type_new
+  )
 
 query T
 SELECT * FROM v15
