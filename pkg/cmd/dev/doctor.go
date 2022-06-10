@@ -32,7 +32,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks performed
 	// by `dev doctor``. Increasing it will force doctor to be re-run before other
 	// dev commands can be run.
-	doctorStatusVersion = 5
+	doctorStatusVersion = 6
 
 	noCacheFlag = "no-cache"
 )
@@ -199,9 +199,15 @@ Please perform the following steps:
 		} else {
 			firstLine := strings.Split(stdoutStr, "\n")[0]
 			fields := strings.Fields(firstLine)
-			ver := fields[len(fields)-1]
+			var ver string
+			for _, field := range fields {
+				if field[0] >= '0' && field[0] <= '9' {
+					ver = field
+					break
+				}
+			}
 			d.log.Printf("got version %s", ver)
-			if ver < "2.7" {
+			if ver < "2.7" || ver == "" {
 				failureStr := fmt.Sprintf("The installed version of `patch` is too old: %s", ver)
 				if runtime.GOOS == "darwin" {
 					failureStr += `
@@ -210,8 +216,26 @@ If you have already installed the package with brew but this check is still
 failing, you may have to update your $PATH so that ` + "`which path`" + ` returns
 the homebrew-installed path rather than /usr/bin/patch.`
 				}
+				if runtime.GOOS == "freebsd" {
+					failureStr += `
+You can install a more recent of ` + "`patch` with: `pkg install patch`" + `
+If you have already installed the package with pkg but this check is still
+failing, you may have to add a symlink, like ` + "`ln -s /usr/local/bin/gpatch /bin/patch`" + `
+If you have done this correctly, ` + "`patch --version`" + ` should return a
+version number >= 2.7.0.`
+				}
 				failures = append(failures, failureStr)
 			}
+		}
+	}
+
+	d.log.Println("doctor: running node check")
+	if runtime.GOOS == "freebsd" {
+		// Having a pre-installed node is only necessary on freebsd.
+		_, err := d.exec.CommandContextSilent(ctx, "/usr/local/bin/node", "--version")
+		if err != nil {
+			failures = append(failures, `/usr/local/bin/node not found.
+You can install node with: `+"`pkg install node`")
 		}
 	}
 

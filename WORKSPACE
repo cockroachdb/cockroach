@@ -27,15 +27,21 @@ http_archive(
 
 # Like the above, but for nodeJS.
 http_archive(
-    name = "rules_nodejs",
-    sha256 = "4d48998e3fa1e03c684e6bdf7ac98051232c7486bfa412e5b5475bbaec7bb257",
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-core-5.5.0.tar.gz"],
+    name = "build_bazel_rules_nodejs",
+    sha256 = "7f3f747db3f924547b9ffdf86da6c604335ad95e09d4e5a69fdcfdb505099421",
+    strip_prefix = "cockroachdb-rules_nodejs-59a92cc",
+    # As of 59a92ccbcd2f5c40cf2368bbb9f7b102491f537b, crl-5.5.0 in our
+    # rules_nodejs fork.
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_nodejs-5.5.0-1-g59a92cc.tar.gz"],
 )
 
+# The rules_nodejs "core" module. We use the same source archive as the non-core
+# module above, because otherwise it'll pull from upstream.
 http_archive(
-    name = "build_bazel_rules_nodejs",
-    sha256 = "0fad45a9bda7dc1990c47b002fd64f55041ea751fafc00cd34efb96107675778",
-    urls = [ "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_nodejs-5.5.0.tar.gz" ],
+    name = "rules_nodejs",
+    sha256 = "7f3f747db3f924547b9ffdf86da6c604335ad95e09d4e5a69fdcfdb505099421",
+    strip_prefix = "cockroachdb-rules_nodejs-59a92cc",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_nodejs-5.5.0-1-g59a92cc.tar.gz"],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -205,7 +211,7 @@ build_bazel_rules_nodejs_dependencies()
 
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install")
-load("@rules_nodejs//nodejs:yarn_repositories.bzl", "yarn_repositories")
+load("@build_bazel_rules_nodejs//nodejs:yarn_repositories.bzl", "yarn_repositories")
 
 node_repositories(
     node_repositories = {
@@ -560,6 +566,7 @@ register_toolchains(
     "//build/toolchains:cross_arm64_macos_toolchain",
     "//build/toolchains:cross_arm64_macos_arm_toolchain",
     "//build/toolchains:dev_darwin_x86_64_toolchain",
+    "//build/toolchains:node_freebsd_toolchain",
 )
 
 http_archive(
@@ -597,3 +604,10 @@ http_archive(
 
 load("//build/bazelutil:repositories.bzl", "distdir_repositories")
 distdir_repositories()
+
+# This is used only by rules_nodejs to find the local version of node.
+new_local_repository(
+    name = "nodejs_freebsd_amd64",
+    path = "/usr/local",
+    build_file_content = """exports_files[("bin/node")]""",
+)
