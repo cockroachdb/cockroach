@@ -1030,7 +1030,9 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 		}
 
-		if !changefeedbase.IsRetryableError(err) {
+		isRetryableErr := changefeedbase.IsRetryableError(err) ||
+			(ctx.Err() == nil && errors.Is(err, context.Canceled))
+		if !isRetryableErr {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
