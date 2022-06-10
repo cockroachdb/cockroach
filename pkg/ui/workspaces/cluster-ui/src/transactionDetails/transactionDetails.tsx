@@ -59,7 +59,9 @@ import { Transaction } from "src/transactionsTable";
 import Long from "long";
 import { StatementsRequest } from "../api";
 import {
+  getValidOption,
   TimeScale,
+  timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleToString,
   toDateRange,
@@ -132,6 +134,14 @@ export class TransactionDetails extends React.Component<
       },
       latestTransactionText: "",
     };
+
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.props.onTimeScaleChange(ts);
+    }
   }
 
   static defaultProps: Partial<TransactionDetailsProps> = {
@@ -246,6 +256,7 @@ export class TransactionDetails extends React.Component<
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown
+              options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.props.onTimeScaleChange}
             />
