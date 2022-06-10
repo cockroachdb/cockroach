@@ -11,7 +11,6 @@
 package log
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -21,33 +20,31 @@ import (
 
 func TestClose(t *testing.T) {
 	t.Run("returns after all registered sinks exit", func(t *testing.T) {
-		fakeSinkRoutine := func(ctx context.Context, bs *bufferedSink, closer *BufferedSinkCloser) {
-			defer closer.BufferedSinkDone(bs)
-			<-ctx.Done()
+		fakeSinkRoutine := func(stopC <-chan struct{}, bs *bufferedSink, cleanup func()) {
+			defer cleanup()
+			<-stopC
 		}
 
-		closer := NewBufferedSinkCloser()
+		closer := newBufferedSinkCloser()
 		for i := 0; i < 3; i++ {
 			fakeBufferSink := &bufferedSink{}
-			ctx := closer.RegisterBufferedSink(fakeBufferSink)
-			go fakeSinkRoutine(ctx, fakeBufferSink, closer)
+			stopC, cleanup := closer.RegisterBufferedSink(fakeBufferSink)
+			go fakeSinkRoutine(stopC, fakeBufferSink, cleanup)
 		}
 
-		closer.timeout = 100 * time.Millisecond
-		require.NoError(t, closer.Close())
+		require.NoError(t, closer.Close(1000*time.Hour) /* timeout - verify that it doesn't expire */)
 	})
 
-	t.Run("times out if leaked bufferedSink doesn't signal BufferedSinkDone()", func(t *testing.T) {
-		closer := NewBufferedSinkCloser()
-		closer.timeout = 100 * time.Millisecond
-		_ = closer.RegisterBufferedSink(&bufferedSink{})
-		require.Error(t, closer.Close())
+	t.Run("times out if leaked bufferedSink doesn't shut down", func(t *testing.T) {
+		closer := newBufferedSinkCloser()
+		_, _ = closer.RegisterBufferedSink(&bufferedSink{})
+		require.Error(t, closer.Close(time.Nanosecond /* timeout */))
 	})
 }
 
 func TestRegisterBufferSink(t *testing.T) {
 	t.Run("registers bufferedSink as expected", func(t *testing.T) {
-		lc := NewBufferedSinkCloser()
+		lc := newBufferedSinkCloser()
 		bs := &bufferedSink{}
 		lc.RegisterBufferedSink(bs)
 		lc.mu.Lock()
@@ -57,7 +54,7 @@ func TestRegisterBufferSink(t *testing.T) {
 	})
 
 	t.Run("panics if same bufferedSink registered twice", func(t *testing.T) {
-		lc := NewBufferedSinkCloser()
+		lc := newBufferedSinkCloser()
 		bs := &bufferedSink{}
 		lc.RegisterBufferedSink(bs)
 		assert.Panics(t,
@@ -68,7 +65,7 @@ func TestRegisterBufferSink(t *testing.T) {
 
 func TestBufferSinkDone(t *testing.T) {
 	t.Run("signals waitgroup and removes bufferSink from registry", func(t *testing.T) {
-		closer := NewBufferedSinkCloser()
+		closer := newBufferedSinkCloser()
 		bs := &bufferedSink{}
 
 		closer.RegisterBufferedSink(bs)
@@ -77,18 +74,17 @@ func TestBufferSinkDone(t *testing.T) {
 		assert.Len(t, closer.mu.sinkRegistry, 1, "expected sink registry to include registered bufferedSink")
 		closer.mu.Unlock()
 
-		closer.BufferedSinkDone(bs)
+		closer.bufferedSinkDone(bs)
 
 		closer.mu.Lock()
 		assert.Empty(t, closer.mu.sinkRegistry, "expected sink registry to be empty")
 		closer.mu.Unlock()
 
-		closer.timeout = 100 * time.Millisecond
-		require.NoError(t, closer.Close(), "BufferedSinkCloser timed out unexpectedly")
+		require.NoError(t, closer.Close(time.Second /* timeout */), "bufferedSinkCloser timed out unexpectedly")
 	})
 
 	t.Run("panics if called on unregistered bufferSink", func(t *testing.T) {
-		closer := NewBufferedSinkCloser()
+		closer := newBufferedSinkCloser()
 		bs1 := &bufferedSink{}
 		bs2 := &bufferedSink{}
 
@@ -101,7 +97,7 @@ func TestBufferSinkDone(t *testing.T) {
 		closer.mu.Unlock()
 
 		require.Panics(t, func() {
-			closer.BufferedSinkDone(bs2)
+			closer.bufferedSinkDone(bs2)
 		})
 	})
 }

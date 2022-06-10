@@ -36,10 +36,10 @@ func getMockBufferedSync(
 	ctrl := gomock.NewController(t)
 	mock = NewMockLogSink(ctrl)
 	sink = newBufferedSink(mock, maxStaleness, sizeTrigger, maxBufferSize, false /* crashOnAsyncFlushErr */)
-	closer := NewBufferedSinkCloser()
+	closer := newBufferedSinkCloser()
 	sink.Start(closer)
 	cleanup = func() {
-		closer.Close()
+		require.NoError(t, closer.Close(defaultCloserTimeout))
 		ctrl.Finish()
 	}
 	return sink, mock, cleanup
@@ -166,8 +166,8 @@ func TestBufferSizeTriggerMultipleFlush(t *testing.T) {
 func TestBufferedSinkCrashOnAsyncFlushErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	closer := NewBufferedSinkCloser()
-	defer closer.Close()
+	closer := newBufferedSinkCloser()
+	defer func() { require.NoError(t, closer.Close(defaultCloserTimeout)) }()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
@@ -230,8 +230,8 @@ func TestBufferedSinkForceSync(t *testing.T) {
 // Test that messages are buffered while a flush is in-flight.
 func TestBufferedSinkBlockedFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	closer := NewBufferedSinkCloser()
-	defer closer.Close()
+	closer := newBufferedSinkCloser()
+	defer func() { require.NoError(t, closer.Close(defaultCloserTimeout)) }()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
@@ -310,8 +310,8 @@ b9`), out)
 // Test that multiple messages with the forceSync option work.
 func TestBufferedSinkSyncFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	closer := NewBufferedSinkCloser()
-	defer closer.Close()
+	closer := newBufferedSinkCloser()
+	defer func() { require.NoError(t, closer.Close(defaultCloserTimeout)) }()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mock := NewMockLogSink(ctrl)
@@ -326,7 +326,7 @@ func TestBufferedSinkSyncFlush(t *testing.T) {
 
 func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	closer := NewBufferedSinkCloser()
+	closer := newBufferedSinkCloser()
 	ctrl := gomock.NewController(t)
 	mock := NewMockLogSink(ctrl)
 	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, noMaxBufferSize, false /* crashOnAsyncFlushErr */)
@@ -345,7 +345,7 @@ func TestBufferCtxDoneFlushesRemainingMsgs(t *testing.T) {
 	require.NoError(t, sink.output([]byte("test1"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test2"), sinkOutputOptions{}))
 	require.NoError(t, sink.output([]byte("test3"), sinkOutputOptions{}))
-	closer.Close()
+	require.NoError(t, closer.Close(defaultCloserTimeout))
 }
 
 type sinkOutputOptionsMatcher struct {

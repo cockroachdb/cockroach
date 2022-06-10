@@ -124,13 +124,13 @@ func newBufferedSink(
 
 // Start starts an internal goroutine that will run until the provided closer is
 // closed.
-func (bs *bufferedSink) Start(closer *BufferedSinkCloser) {
-	ctx := closer.RegisterBufferedSink(bs)
+func (bs *bufferedSink) Start(closer *bufferedSinkCloser) {
+	stopC, unregister := closer.RegisterBufferedSink(bs)
 	// Start the runFlusher goroutine & mark as done on the
 	// closer once it exits.
 	go func() {
-		bs.runFlusher(ctx)
-		closer.BufferedSinkDone(bs)
+		defer unregister()
+		bs.runFlusher(stopC)
 	}()
 }
 
@@ -236,13 +236,13 @@ func (bs *bufferedSink) exitCode() exit.Code {
 //
 // TODO(knz): How does this interact with the runFlusher logic in log_flush.go?
 // See: https://github.com/cockroachdb/cockroach/issues/72458
-func (bs *bufferedSink) runFlusher(ctx context.Context) {
+func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 	buf := &bs.mu.buf
 	for {
 		done := false
 		select {
 		case <-bs.flushC:
-		case <-ctx.Done():
+		case <-stopC:
 			// We'll return after flushing everything.
 			done = true
 		}

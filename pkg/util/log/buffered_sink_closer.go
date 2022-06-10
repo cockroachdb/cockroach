@@ -11,7 +11,6 @@
 package log
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -20,7 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// BufferedSinkCloser is a utility used by the logging system to
+// bufferedSinkCloser is a utility used by the logging system to
 // trigger the teardown of logging facilities gracefully within
 // CockroachDB.
 //
@@ -31,105 +30,93 @@ import (
 // wait for all registered buffered log sinks to finish processing
 // before exiting, to help ensure a graceful shutdown of buffered
 // log sinks.
-type BufferedSinkCloser struct {
-	// ctx is the BufferedSinkCloser's own context created at initialization.
-	// All registered bufferedSink's are provided a child context of this
-	// context to detect cancellation on `ctx.Done()`.
-	ctx context.Context
-	// cancel is the context cancellation function associated with ctx.
-	cancel context.CancelFunc
-	// timeout is used in Close as a solution to potential deadlocks.
-	// Is only intended to be modified for testing purposes.
-	timeout time.Duration
+type bufferedSinkCloser struct {
+	// stopC is closed by Close() to signal all the registered sinks to shut down.
+	stopC chan struct{}
 	// wg is the WaitGroup used during the Close procedure to ensure that
 	// all registered bufferedSink's have completed before returning.
 	wg sync.WaitGroup
 	mu struct {
 		syncutil.Mutex
 		// sinkRegistry acts as a set and stores references to all bufferSink's
-		// registered with this BufferedSinkCloser instance. Only useful for debugging
+		// registered with this bufferedSinkCloser instance. Only useful for debugging
 		// purposes.
 		sinkRegistry map[*bufferedSink]struct{}
 	}
 }
 
-// Default timeout used in Close
-var defaultCloserTimeout = 90 * time.Second
-
-// NewCloser returns a new instance of a BufferedSinkCloser.
-func NewBufferedSinkCloser() *BufferedSinkCloser {
-	ctx, cancel := context.WithCancel(context.Background())
-	closer := &BufferedSinkCloser{
-		ctx:     ctx,
-		cancel:  cancel,
-		timeout: defaultCloserTimeout,
+// newBufferedSinkCloser returns a new bufferedSinkCloser.
+func newBufferedSinkCloser() *bufferedSinkCloser {
+	closer := &bufferedSinkCloser{
+		stopC: make(chan struct{}),
 	}
 	closer.mu.sinkRegistry = make(map[*bufferedSink]struct{})
 	return closer
 }
 
-// RegisterBufferedSink notifies the BufferedSinkCloser of the existence
-// of an active buffered log sink within the logging system.
-// This increments a sync.WaitGroup counter, so be sure that the
-// caller also has a subsequent call to BufferedSinkDone.
+// RegisterBufferedSink registers a bufferedSink with closer. closer.Close will
+// block for this sink's shutdown.
 //
-// A reference to the bufferSink is also maintained in an
-// internal registry to aid in debug capabilities.
+// A reference to the bufferSink is maintained in an internal registry to aid in
+// debug capabilities.
 //
-// Returns a context, which will be cancelled on Close.
-func (l *BufferedSinkCloser) RegisterBufferedSink(bs *bufferedSink) context.Context {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+// Returns a channel that will be closed when closer.Close() is called. The
+// bufferedSink should listen to this channel and shutdown. The cleanup function
+// needs to be called once the bufferedSink has shutdown.
+func (closer *bufferedSinkCloser) RegisterBufferedSink(
+	bs *bufferedSink,
+) (shutdown <-chan (struct{}), cleanup func()) {
+	closer.mu.Lock()
+	defer closer.mu.Unlock()
 
-	if _, ok := l.mu.sinkRegistry[bs]; ok {
-		panic(errors.AssertionFailedf("buffered log sink registered more than once within log.BufferedSinkCloser: %T", bs.child))
+	if _, ok := closer.mu.sinkRegistry[bs]; ok {
+		panic(errors.AssertionFailedf("buffered log sink registered more than once within log.bufferedSinkCloser: %T", bs.child))
 	}
 
-	l.mu.sinkRegistry[bs] = struct{}{}
-	l.wg.Add(1)
-	return l.ctx
+	closer.mu.sinkRegistry[bs] = struct{}{}
+	closer.wg.Add(1)
+	return closer.stopC, func() { closer.bufferedSinkDone(bs) }
 }
 
-// BufferedSinkDone notifies the BufferedSinkCloser that one of the buffered
+// bufferedSinkDone notifies the bufferedSinkCloser that one of the buffered
 // log sinks registered via RegisterBufferedSink has finished processing
 // & has terminated.
-func (l *BufferedSinkCloser) BufferedSinkDone(bs *bufferedSink) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (closer *bufferedSinkCloser) bufferedSinkDone(bs *bufferedSink) {
+	closer.mu.Lock()
+	defer closer.mu.Unlock()
 	// If we don't have the sink in the registry, then the sink is not accounted for
 	// in the WaitGroup. Warn and return early - to signal the WaitGroup could prematurely
 	// end the shutdown sequence of a different bufferSink that is registered.
-	if _, ok := l.mu.sinkRegistry[bs]; !ok {
+	if _, ok := closer.mu.sinkRegistry[bs]; !ok {
 		panic(errors.AssertionFailedf(
-			"# WARNING: log shutdown sequence has detected an unregistered log sink: %T\n", bs.child))
-		return
+			"log shutdown sequence has detected an unregistered log sink: %T\n", bs.child))
 	}
-	delete(l.mu.sinkRegistry, bs)
-	l.wg.Done()
+	delete(closer.mu.sinkRegistry, bs)
+	closer.wg.Done()
 }
 
-// Close triggers the logging shutdown process, closing the held context and waiting
-// for all buffered log sinks registered with the BufferedSinkCloser to signal that
-// they've finished processing before returning.
-//
-// Will give up on waiting after l.timeout to protect against registered sink(s)
-// failing to call BufferedSinkDone causing the process to indefinitely hang.
-func (l *BufferedSinkCloser) Close() error {
-	l.cancel()
+// defaultCloserTimeout is the default duration that
+// bufferedSinkCloser.Close(timeout) will wait for sinks to shut down.
+const defaultCloserTimeout = 90 * time.Second
+
+// Close triggers the logging shutdown process, signaling all registered sinks
+// to shut down and waiting for them to do so up to timeout.
+func (closer *bufferedSinkCloser) Close(timeout time.Duration) error {
+	close(closer.stopC)
 	doneCh := make(chan struct{})
 	go func() {
-		l.wg.Wait()
+		closer.wg.Wait()
 		doneCh <- struct{}{}
 	}()
 
 	select {
 	case <-doneCh:
 		return nil
-	case <-time.After(l.timeout):
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		leakedSinks := make([]string, 0, len(l.mu.sinkRegistry))
-		for bs := range l.mu.sinkRegistry {
+	case <-time.After(timeout):
+		closer.mu.Lock()
+		defer closer.mu.Unlock()
+		leakedSinks := make([]string, 0, len(closer.mu.sinkRegistry))
+		for bs := range closer.mu.sinkRegistry {
 			leakedSinks = append(leakedSinks, fmt.Sprintf("%T", bs.child))
 		}
 		return errors.Newf(

@@ -100,7 +100,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// which is populated if fd2 capture is enabled, below.
 	fd2CaptureCleanupFn := func() {}
 
-	closer := NewBufferedSinkCloser()
+	closer := newBufferedSinkCloser()
 	// logShutdownFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
 	logShutdownFn = func() {
@@ -109,7 +109,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
-		if err := closer.Close(); err != nil {
+		if err := closer.Close(defaultCloserTimeout); err != nil {
 			panic(err)
 		}
 		for _, l := range secLoggers {
@@ -402,7 +402,7 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 //
 // The provided closer needs to be closed to stop the bufferedSink internal goroutines.
 func attachBufferWrapper(
-	s *sinkInfo, bufConfig logconfig.CommonBufferSinkConfigWrapper, closer *BufferedSinkCloser,
+	s *sinkInfo, bufConfig logconfig.CommonBufferSinkConfigWrapper, closer *bufferedSinkCloser,
 ) {
 	if bufConfig.IsNone() {
 		return
