@@ -85,7 +85,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	} else {
 		fmt.Printf("Outstanding activation requests:\n")
 		w := tabwriter.NewWriter(&buf, 4, 0, 2, ' ', 0)
-		fmt.Fprint(w, "  ID\tActivation time\tStatement\tMin execution latency\tExpires at\n")
+		fmt.Fprint(w, "  ID\tActivation time\tStatement\tSampling probability\tMin execution latency\tExpires at\n")
 		for _, r := range reqs {
 			minExecLatency := "N/A"
 			if r.MinExecutionLatency != 0 {
@@ -95,9 +95,15 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 			if !r.ExpiresAt.IsZero() {
 				expiresAt = r.ExpiresAt.String()
 			}
+			var samplingProbability string
+			if r.SamplingProbability == 0 {
+				samplingProbability = fmt.Sprintf("%0.4f", 1.0)
+			} else {
+				samplingProbability = fmt.Sprintf("%0.4f", r.SamplingProbability)
+			}
 			fmt.Fprintf(
-				w, "  %d\t%s\t%s\t%s\t%s\n",
-				r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement, minExecLatency, expiresAt,
+				w, "  %d\t%s\t%s\t%s\t%s\t%s\n",
+				r.ID, r.RequestedAt.UTC().Format(timeFmt), r.Statement, samplingProbability, minExecLatency, expiresAt,
 			)
 		}
 		_ = w.Flush()

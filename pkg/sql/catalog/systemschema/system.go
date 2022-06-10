@@ -411,10 +411,11 @@ CREATE TABLE system.statement_diagnostics_requests(
 	requested_at TIMESTAMPTZ NOT NULL,
 	min_execution_latency INTERVAL NULL,
 	expires_at TIMESTAMPTZ NULL,
+	sampling_probability FLOAT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
-	INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at),
-
-	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at)
+	CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
+	INDEX completed_idx (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability),
+	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -1783,28 +1784,37 @@ var (
 				{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
 				{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
 				{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
+				{Name: "sampling_probability", ID: 8, Type: types.Float, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 				},
 			},
 			pk("id"),
 			// Index for the polling query.
 			descpb.IndexDescriptor{
-				Name:                "completed_idx_v2",
+				Name:                "completed_idx",
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
-		))
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:      "check_sampling_probability",
+				Expr:      "sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8",
+				ColumnIDs: []descpb.ColumnID{8},
+			}}
+		},
+	)
 
 	StatementDiagnosticsTable = registerSystemTable(
 		StatementDiagnosticsTableSchema,
