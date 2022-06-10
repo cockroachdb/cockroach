@@ -134,12 +134,13 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 
 	ltc.tester = t
 	cfg.RPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   baseCtx,
-		Clock:    ltc.Clock,
-		Stopper:  ltc.stopper,
-		Settings: cfg.Settings,
-		NodeID:   nc,
+		TenantID:  roachpb.SystemTenantID,
+		Config:    baseCtx,
+		Clock:     ltc.Clock.WallClock(),
+		MaxOffset: ltc.Clock.MaxOffset(),
+		Stopper:   ltc.stopper,
+		Settings:  cfg.Settings,
+		NodeID:    nc,
 	})
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID

@@ -73,11 +73,12 @@ func NewInsecureTestingContextWithKnobs(
 ) *Context {
 	return NewContext(ctx,
 		ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
-			Clock:    clock,
-			Stopper:  stopper,
-			Settings: cluster.MakeTestingClusterSettings(),
-			Knobs:    knobs,
+			TenantID:  roachpb.SystemTenantID,
+			Config:    &base.Config{Insecure: true},
+			Clock:     clock.WallClock(),
+			MaxOffset: clock.MaxOffset(),
+			Stopper:   stopper,
+			Settings:  cluster.MakeTestingClusterSettings(),
+			Knobs:     knobs,
 		})
 }

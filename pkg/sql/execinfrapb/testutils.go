@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -34,12 +35,13 @@ func newInsecureRPCContext(ctx context.Context, stopper *stop.Stopper) *rpc.Cont
 	ctx = logtags.AddTag(ctx, "n", nc)
 	return rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			NodeID:   nc,
-			Config:   &base.Config{Insecure: true},
-			Clock:    hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
-			Stopper:  stopper,
-			Settings: cluster.MakeTestingClusterSettings(),
+			TenantID:  roachpb.SystemTenantID,
+			NodeID:    nc,
+			Config:    &base.Config{Insecure: true},
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: time.Nanosecond,
+			Stopper:   stopper,
+			Settings:  cluster.MakeTestingClusterSettings(),
 		})
 }
 

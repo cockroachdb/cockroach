@@ -61,7 +61,7 @@ func TestDialNoBreaker(t *testing.T) {
 	// Don't use setUpNodedialerTest because we want access to the underlying clock and rpcContext.
 	stopper := stop.NewStopper()
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx := newTestContext(clock.WallClock(), clock.MaxOffset(), stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, _ := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
@@ -125,7 +125,7 @@ func TestConnHealth(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx := newTestContext(clock.WallClock(), clock.MaxOffset(), stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
@@ -177,7 +177,7 @@ func TestConnHealthTryDial(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx := newTestContext(clock.WallClock(), clock.MaxOffset(), stopper)
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	_, ln, hb := newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	defer stopper.Stop(ctx)
@@ -234,7 +234,7 @@ func TestConnHealthInternal(t *testing.T) {
 
 	// Set up an internal server and relevant configuration. The RPC connection
 	// will then be considered internal, and we don't have to dial it.
-	rpcCtx := newTestContext(clock, stopper)
+	rpcCtx := newTestContext(clock.WallClock(), clock.MaxOffset(), stopper)
 	rpcCtx.SetLocalInternalServer(&internalServer{}, rpc.ServerInterceptorInfo{}, rpc.ClientInterceptorInfo{})
 	rpcCtx.NodeID.Set(ctx, staticNodeID)
 	rpcCtx.Config.AdvertiseAddr = localAddr.String()
@@ -393,7 +393,7 @@ func setUpNodedialerTest(
 	stopper = stop.NewStopper()
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	// Create an rpc Context and then
-	rpcCtx = newTestContext(clock, stopper)
+	rpcCtx = newTestContext(clock.WallClock(), clock.MaxOffset(), stopper)
 	rpcCtx.NodeID.Set(context.Background(), nodeID)
 	_, ln, hb = newTestServer(t, clock, stopper, true /* useHeartbeat */)
 	nd = New(rpcCtx, newSingleNodeResolver(nodeID, ln.Addr()))
@@ -440,17 +440,20 @@ func newTestServer(
 	return s, il, hb
 }
 
-func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
+func newTestContext(
+	clock hlc.WallClock, maxOffset time.Duration, stopper *stop.Stopper,
+) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
 	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   cfg,
-		Clock:    clock,
-		Stopper:  stopper,
-		Settings: cluster.MakeTestingClusterSettings(),
+		TenantID:  roachpb.SystemTenantID,
+		Config:    cfg,
+		Clock:     clock,
+		MaxOffset: maxOffset,
+		Stopper:   stopper,
+		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from

@@ -217,7 +217,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeID:           cfg.IDContainer,
 		StorageClusterID: cfg.ClusterIDContainer,
 		Config:           cfg.Config,
-		Clock:            clock,
+		Clock:            clock.WallClock(),
+		MaxOffset:        clock.MaxOffset(),
 		Stopper:          stopper,
 		Settings:         cfg.Settings,
 		OnOutgoingPing: func(ctx context.Context, req *rpc.PingRequest) error {
