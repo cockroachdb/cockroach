@@ -67,6 +67,7 @@ message PingRequest {
 message PingResponse {
   // An echo of value sent with PingRequest.
   optional string pong = 1 [(gogoproto.nullable) = false];
+  // A clock reading from the server, in nanos since epoch.
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
   optional roachpb.Version server_version = 3 [(gogoproto.nullable) = false];
   // Cluster name to prevent joining a new node to the wrong cluster.
