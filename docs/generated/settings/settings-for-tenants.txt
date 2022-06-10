@@ -273,7 +273,6 @@ sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TT
 sql.ttl.default_range_concurrency	integer	1	default amount of ranges to process at once during a TTL delete
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled
-sql.ttl.range_batch_size	integer	100	amount of ranges to fetch at a time for a table during the TTL job
 timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.

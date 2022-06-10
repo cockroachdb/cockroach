@@ -127,6 +127,9 @@ var retiredSettings = map[string]struct{}{
 	"schemachanger.backfiller.buffer_increment":                        {},
 	"kv.rangefeed.separated_intent_scan.enabled":                       {},
 
+	// removed as of 22.1.2 and 22.2.
+	"sql.ttl.range_batch_size": {},
+
 	// removed as of 22.2.
 	"kv.bulk_io_write.experimental_incremental_export_enabled":  {},
 	"kv.bulk_io_write.revert_range_time_bound_iterator.enabled": {},
