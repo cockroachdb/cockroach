@@ -46,11 +46,13 @@ func TestRemoteOffsetString(t *testing.T) {
 
 func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 5))
+	maxOffset := time.Nanosecond /* maxOffset */
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		settings:           st,
 	}
@@ -75,7 +77,8 @@ func TestHeartbeatReply(t *testing.T) {
 
 // A ManualHeartbeatService allows manual control of when heartbeats occur.
 type ManualHeartbeatService struct {
-	clock              *hlc.Clock
+	clock              hlc.WallClock
+	maxOffset          time.Duration
 	remoteClockMonitor *RemoteClockMonitor
 	settings           *cluster.Settings
 	nodeID             *base.NodeIDContainer
@@ -100,6 +103,7 @@ func (mhs *ManualHeartbeatService) Ping(
 	}
 	hs := HeartbeatService{
 		clock:              mhs.clock,
+		maxOffset:          mhs.maxOffset,
 		remoteClockMonitor: mhs.remoteClockMonitor,
 		clusterID:          &base.ClusterIDContainer{},
 		settings:           mhs.settings,
@@ -110,17 +114,20 @@ func (mhs *ManualHeartbeatService) Ping(
 
 func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 5))
+	maxOffset := time.Nanosecond
 	st := cluster.MakeTestingClusterSettings()
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		ready:              make(chan error, 1),
 		settings:           st,
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		settings:           st,
 	}
@@ -169,11 +176,13 @@ func TestClockOffsetMismatch(t *testing.T) {
 
 	ctx := context.Background()
 
-	clock := hlc.NewClockWithSystemTimeSource(250 * time.Millisecond /* maxOffset */)
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := 250 * time.Millisecond
 	st := cluster.MakeTestingClusterSettings()
 	hs := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		settings:           st,
 	}
@@ -213,11 +222,13 @@ func TestClusterIDCompare(t *testing.T) {
 		{"cluster ID mismatch", uuid1, uuid2, true},
 	}
 
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 5))
+	maxOffset := time.Nanosecond
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		settings:           st,
 	}
@@ -256,11 +267,13 @@ func TestNodeIDCompare(t *testing.T) {
 		{"node ID mismatch", 1, 2, true},
 	}
 
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 5))
+	maxOffset := time.Nanosecond
 	st := cluster.MakeTestingClusterSettings()
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		nodeID:             &base.NodeIDContainer{},
 		settings:           st,
@@ -290,14 +303,16 @@ func TestNodeIDCompare(t *testing.T) {
 // active where the system tenant may not.
 func TestTenantVersionCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 5)), time.Nanosecond /* maxOffset */)
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 5))
+	maxOffset := time.Nanosecond
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
 		true /* initialize */)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		maxOffset:          maxOffset,
+		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		settings:           st,
 	}
