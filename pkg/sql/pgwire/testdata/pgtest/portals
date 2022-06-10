@@ -1356,3 +1356,41 @@ ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"g","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Test preparing a SQL-level DECLARE
+
+send
+Parse {"Query": "DECLARE bar CURSOR FOR SELECT g::INT8 FROM generate_series(1, $1) g(g)", "ParameterOIDs": [21]}
+Bind {"PreparedStatement": "", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [{"text":"2"}]}
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"DECLARE CURSOR"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "FETCH 2 bar"}
+Bind
+Describe {"ObjectType": "P", "Name": ""}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"g","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"FETCH 2"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
