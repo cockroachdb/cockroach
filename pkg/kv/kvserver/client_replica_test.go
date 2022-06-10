@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -3535,6 +3536,13 @@ func TestStrictGCEnforcement(t *testing.T) {
 			t.Helper()
 			require.NoError(t, performScan())
 		}
+		assertScanAtOk = func(t *testing.T, at hlc.Timestamp) {
+			t.Helper()
+			txn := db.NewTxn(ctx, "foo")
+			require.NoError(t, txn.SetFixedTimestamp(ctx, at))
+			_, err := txn.Scan(ctx, tableKey, tableKey.PrefixEnd(), 1)
+			require.NoError(t, err)
+		}
 		setGCTTL = func(t *testing.T, object string, exp int) {
 			t.Helper()
 			testutils.SucceedsSoon(t, func() error {
@@ -3580,14 +3588,38 @@ func TestStrictGCEnforcement(t *testing.T) {
 		}
 		refreshPastLeaseStart = func(t *testing.T) {
 			for i := 0; i < tc.NumServers(); i++ {
-				ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
+				ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				l, _ := r.GetLease()
 				require.NoError(
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, l.Start.ToTimestamp().Next()),
 				)
-				err := r.ReadProtectedTimestamps(ctx)
+				_, _, err := r.ReadProtectedTimestamps(ctx)
+				require.NoError(t, err)
+			}
+		}
+		refreshPTSCacheTo = func(t *testing.T, asOf hlc.Timestamp) {
+			for i := 0; i < tc.NumServers(); i++ {
+				s := tc.Server(i)
+				ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				require.NoError(t, ptp.Refresh(ctx, asOf))
+			}
+		}
+		refreshUptoPTSCache = func(t *testing.T) {
+			for i := 0; i < tc.NumServers(); i++ {
+				s := tc.Server(i)
+				ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+				cacheFreshness := ptp.Iterate(ctx, tableSpan.Key, tableSpan.EndKey, func(record *ptpb.Record) (wantMore bool) {
+					return true
+				})
+				ptsReader := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().ProtectedTimestampReader
+				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
+				require.NoError(
+					t,
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, cacheFreshness),
+				)
+				_, _, err := r.ReadProtectedTimestamps(ctx)
 				require.NoError(t, err)
 			}
 		}
@@ -3611,7 +3643,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 					}
 					return nil
 				})
-				require.NoError(t, r.ReadProtectedTimestamps(ctx))
+				_, _, err := r.ReadProtectedTimestamps(ctx)
+				require.NoError(t, err)
 			}
 		}
 	)
@@ -3655,6 +3688,100 @@ func TestStrictGCEnforcement(t *testing.T) {
 		_, err := txn.Scan(ctx, descriptorTable, descriptorTable.PrefixEnd(), 1)
 		require.NoError(t, err)
 	})
+	// This test attempts to tickle a bug where the implied GCThreshold used when
+	// evaluating whether a batch request is below the replicas' GCThreshold, was
+	// not using the `readAt` of the cached PTS state.
+	//
+	// In 22.1 we rely on both the Cache and KVSubscriber to update PTS state. The
+	// test simulates a situation where the Cache holds up the `readAt` timestamp
+	// and ensures that we can issue a ScanRequest at `readAt - GCTTL`.
+	t.Run("implied gcthreshold respects cached readAt", func(t *testing.T) {
+		s := tc.Server(0)
+
+		// Set the poll interval to be very long. This ensures that our cache will
+		// not be updated for the duration of the test.
+		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
+		// Reset to default.
+		defer protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 2*time.Minute)
+
+		// Block the KVSubscriber rangefeed from progressing.
+		blockKVSubscriberCh := make(chan struct{})
+		var isBlocked syncutil.AtomicBool
+		isBlocked.Set(false)
+		mu.Lock()
+		mu.blockOnTimestampUpdate = func() {
+			isBlocked.Set(true)
+			<-blockKVSubscriberCh
+		}
+		mu.Unlock()
+
+		// Ensure that the KVSubscriber has been blocked.
+		testutils.SucceedsSoon(t, func() error {
+			if !isBlocked.Get() {
+				return errors.New("kvsubscriber not blocked yet")
+			}
+			return nil
+		})
+
+		// First, refresh all PTS Caches while the KVSubscriber is blocked.
+		// This ensures that all PTS Caches have a freshness >= refreshedUpto.
+		refreshedUpto := s.Clock().Now()
+		refreshPTSCacheTo(t, refreshedUpto)
+
+		// Unblock the KVSubscriber and wait for the KVSubscribers' freshness to be
+		// >= Cache freshness.
+		close(blockKVSubscriberCh)
+		refreshUptoPTSCache(t)
+
+		// Now, let's assert some things on the leaseholder replica.
+		desc, err := tc.LookupRange(tableKey)
+		require.NoError(t, err)
+		target, err := tc.FindRangeLeaseHolder(desc, nil)
+		require.NoError(t, err)
+		_, r := getFirstStoreReplica(t, tc.Server(int(target.NodeID)), tableKey)
+		oldReadAt, _ := r.ReadCachedProtectedTS()
+
+		assertScanRejected(t)
+
+		// Write a protected timestamp record for no other reason than to bump
+		// KVSubscriber freshness.
+		ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		rec := mkRecord()
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return ptp.Protect(ctx, txn, &rec)
+		}))
+		defer func() {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return ptp.Release(ctx, txn, rec.ID.GetUUID())
+			}))
+		}()
+
+		var cachedReadAt, newReadAt, cachedEarliestProtectionTimestamp, earliestProtectionTimestamp hlc.Timestamp
+		testutils.SucceedsSoon(t, func() error {
+			var err error
+			newReadAt, earliestProtectionTimestamp, err = r.ReadProtectedTimestamps(ctx)
+			require.NoError(t, err)
+
+			// Wait for the replica to see the protected timestamp record. This
+			// implies that the KVSubscriber freshness has also progressed.
+			if earliestProtectionTimestamp.IsEmpty() {
+				return errors.New("expected a protection policy")
+			}
+
+			// Cached PTS state however, should not have been updated because the PTS
+			// Cache freshness has not been allowed to progress.
+			cachedReadAt, cachedEarliestProtectionTimestamp = r.ReadCachedProtectedTS()
+			require.Empty(t, cachedEarliestProtectionTimestamp)
+			return nil
+		})
+
+		// The replicas' readAt should not have progressed since the PTS Cache has
+		// not been refreshed.
+		require.Equal(t, oldReadAt, newReadAt)
+		require.Equal(t, oldReadAt, cachedReadAt)
+		// Assert that a scan at the lagging readAt - GCTTL is okay.
+		assertScanAtOk(t, oldReadAt.Add(-1*time.Second.Nanoseconds(), 0))
+	})
 	t.Run("protected timestamps are respected", func(t *testing.T) {
 		// Block the KVSubscriber rangefeed from progressing.
 		blockKVSubscriberCh := make(chan struct{})
@@ -3683,6 +3810,11 @@ func TestStrictGCEnforcement(t *testing.T) {
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return ptp.Protect(ctx, txn, &rec)
 		}))
+		defer func() {
+			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return ptp.Release(ctx, txn, rec.ID.GetUUID())
+			}))
+		}()
 		assertScanRejected(t)
 
 		// Unblock the KVSubscriber and wait for the PTS record to reach KV.

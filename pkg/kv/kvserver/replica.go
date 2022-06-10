@@ -998,7 +998,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 // opts out of strict GC enforcement (typically data outside the user keyspace),
 // we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
-	st kvserverpb.LeaseStatus, isAdmin bool,
+	ctx context.Context, st kvserverpb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
 	// The GC threshold is the oldest value we can return here.
 	if isAdmin || !StrictGCEnforcement.Get(&r.store.ClusterSettings().SV) ||
@@ -1019,15 +1019,20 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 		return *r.mu.state.GCThreshold
 	}
 
-	threshold := gc.CalculateThreshold(st.Now.ToTimestamp(), r.mu.conf.TTL())
-	threshold.Forward(*r.mu.state.GCThreshold)
-
-	// If we have a protected timestamp record which precedes the implied
-	// threshold, use the threshold it implies instead.
-	if !c.earliestProtectionTimestamp.IsEmpty() && c.earliestProtectionTimestamp.Less(threshold) {
-		return c.earliestProtectionTimestamp.Prev()
+	gcTTL := r.mu.conf.TTL()
+	gcThreshold := gc.CalculateThreshold(c.readAt, gcTTL)
+	if !c.earliestProtectionTimestamp.IsEmpty() {
+		// We want to allow GC up to the timestamp preceding the earliest valid
+		// protection timestamp.
+		impliedGCThreshold := c.earliestProtectionTimestamp.Prev()
+		// If we have a protected timestamp record which precedes the gcThreshold,
+		// use the threshold it implies instead.
+		if impliedGCThreshold.Less(gcThreshold) {
+			gcThreshold = impliedGCThreshold
+		}
 	}
-	return threshold
+	gcThreshold.Forward(*r.mu.state.GCThreshold)
+	return gcThreshold
 }
 
 func (r *Replica) isRangefeedEnabled() (ret bool) {
@@ -1486,7 +1491,7 @@ func (r *Replica) checkGCThresholdAndLeaseRLocked(
 	// Check if request is below the GC threshold and if so, error out. Note that
 	// this uses the lease status no matter whether it's valid or not, and the
 	// method is set up to handle that.
-	if err := r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin()); err != nil {
+	if err := r.checkTSAboveGCThresholdRLocked(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin()); err != nil {
 		return kvserverpb.LeaseStatus{}, false, err
 	}
 
@@ -1506,7 +1511,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(ctx, ts, status, false /* isAdmin */); err != nil {
 		return err
 	} else if r.requiresExpiringLeaseRLocked() {
 		// Ensure that the range does not require an expiration-based lease. If it
@@ -1531,9 +1536,9 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by
 // its read timestamp) wants to read below the range's GC threshold.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
+	ctx context.Context, ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
-	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
+	threshold := r.getImpliedGCThresholdRLocked(ctx, st, isAdmin)
 	if threshold.Less(ts) {
 		return nil
 	}

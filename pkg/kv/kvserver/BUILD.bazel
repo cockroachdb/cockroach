@@ -337,6 +337,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/kv/kvserver/protectedts/ptutil",
