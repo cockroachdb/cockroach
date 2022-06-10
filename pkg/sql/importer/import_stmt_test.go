@@ -1879,12 +1879,12 @@ func TestFailedImportGC(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		// Test fails with the SQL server. This may be because we're trying
+		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultSQLServer: true,
-		SQLMemoryPoolSize:       256 << 20,
-		ExternalIODir:           baseDir,
+		DisableDefaultTestTenant: true,
+		SQLMemoryPoolSize:        256 << 20,
+		ExternalIODir:            baseDir,
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 		},
@@ -1981,11 +1981,11 @@ func TestImportCSVStmt(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		// Test fails when run under the SQL server. More
+		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
-		DisableDefaultSQLServer: true,
-		SQLMemoryPoolSize:       256 << 20,
-		ExternalIODir:           baseDir,
+		DisableDefaultTestTenant: true,
+		SQLMemoryPoolSize:        256 << 20,
+		ExternalIODir:            baseDir,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -2534,11 +2534,11 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		// Test fails when run under the SQL server. More investigation
+		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DisableDefaultSQLServer: true,
-		ExternalIODir:           baseDir,
-		SQLMemoryPoolSize:       256 << 20,
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir,
+		SQLMemoryPoolSize:        256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -2812,10 +2812,10 @@ func TestImportIntoCSV(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "csv")
 	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		// Test fails when run under the SQL server. More investigation
+		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
-		DisableDefaultSQLServer: true,
-		ExternalIODir:           baseDir}})
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
@@ -4417,9 +4417,9 @@ func TestImportDefaultWithResume(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Test hangs when run with the SQL server. More investigation
+			// Test hangs when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -4938,9 +4938,9 @@ func TestImportControlJobRBAC(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Test fails when run under the SQL server. More investigation
+			// Test fails when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -6094,9 +6094,9 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 	t.Run("inject-error-ensure-cleanup", func(t *testing.T) {
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
-		// Test fails with the SQL server. More investigation is required.
+		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
-		args.DisableDefaultSQLServer = true
+		args.DisableDefaultTestTenant = true
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
@@ -6725,9 +6725,9 @@ func TestImportJobEventLogging(t *testing.T) {
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	// Test fails with the SQL server. More investigation is required.
+	// Test fails within a test tenant. More investigation is required.
 	// Tracked with #76378.
-	args.DisableDefaultSQLServer = true
+	args.DisableDefaultTestTenant = true
 	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc := serverutils.StartNewTestCluster(t, nodes, params)

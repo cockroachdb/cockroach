@@ -415,8 +415,9 @@ func TestImportInTenant(t *testing.T) {
 	baseDir := sharedTestdata(t)
 	args := base.TestServerArgs{
 		ExternalIODir: baseDir,
-		// Test is designed to run inside a tenant.
-		DisableDefaultSQLServer: true,
+		// Test is designed to run inside a tenant so no need to
+		// probabilistically run it inside the default test tenant.
+		DisableDefaultTestTenant: true,
 	}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)

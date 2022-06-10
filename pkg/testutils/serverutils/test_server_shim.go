@@ -285,14 +285,14 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	if !params.DisableDefaultSQLServer {
-		// Determine if we should probabilistically start a default SQL server
-		// (aka tenant) for this server.
+	if !params.DisableDefaultTestTenant {
+		// Determine if we should probabilistically start a test tenant
+		// for this server.
 		startDefaultSQLServer := ShouldStartDefaultSQLServer(t)
 		if !startDefaultSQLServer {
-			// If we're told not to start a default SQL server, set the
+			// If we're told not to start a test tenant, set the
 			// disable flag explicitly.
-			params.DisableDefaultSQLServer = true
+			params.DisableDefaultTestTenant = true
 		}
 	}
 

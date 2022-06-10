@@ -556,8 +556,8 @@ type testClusterConfig struct {
 	// If true, a sql tenant server will be started and pointed at a node in the
 	// cluster. Connections on behalf of the logic test will go to that tenant.
 	useTenant bool
-	// Disable the default SQL server in the test server.
-	disableDefaultSQLServer bool
+	// Disable the default test tenant.
+	disableDefaultTestTenant bool
 	// isCCLConfig should be true for any config that can only be run with a CCL
 	// binary.
 	isCCLConfig bool
@@ -741,8 +741,8 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		// local is the configuration where we run all tests which have bad
-		// interactions with the default SQL server.
-		disableDefaultSQLServer: true,
+		// interactions with the default test tenant.
+		disableDefaultTestTenant: true,
 	},
 	{
 		name:                            "local-legacy-schema-changer",
@@ -810,11 +810,11 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "5node",
 		numNodes:            5,
 		overrideDistSQLMode: "on",
-		// Have to disable the default SQL server here as there are test run in
+		// Have to disable the default test tenant here as there are test run in
 		// this mode which try to modify zone configurations and we're more
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #75569 for more info.
-		disableDefaultSQLServer: true,
+		disableDefaultTestTenant: true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -899,10 +899,10 @@ var logicTestConfigs = []testClusterConfig{
 		name:       "multiregion-9node-3region-3azs",
 		numNodes:   9,
 		localities: multiregion9node3region3azsLocalities,
-		// Need to disable the default SQL server here until we have the
+		// Need to disable the default test tenant here until we have the
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
-		disableDefaultSQLServer: true,
+		disableDefaultTestTenant: true,
 	},
 	{
 		name:       "multiregion-9node-3region-3azs-tenant",
@@ -931,12 +931,12 @@ var logicTestConfigs = []testClusterConfig{
 		name:                "local-mixed-21.2-22.1",
 		numNodes:            1,
 		overrideDistSQLMode: "off",
-		// Test fails when run under the default SQL server. Tracked with
+		// Test fails when run within a test tenant. Tracked with
 		// #76378.
-		disableDefaultSQLServer: true,
-		bootstrapVersion:        roachpb.Version{Major: 21, Minor: 2},
-		binaryVersion:           roachpb.Version{Major: 22, Minor: 1},
-		disableUpgrade:          true,
+		disableDefaultTestTenant: true,
+		bootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
+		binaryVersion:            roachpb.Version{Major: 22, Minor: 1},
+		disableUpgrade:           true,
 	},
 	{
 		// 3node-backup is a config that periodically performs a cluster backup,
@@ -1696,7 +1696,7 @@ func (t *logicTest) newCluster(
 			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
 				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
 			),
-			DisableDefaultSQLServer: t.cfg.useTenant || t.cfg.disableDefaultSQLServer,
+			DisableDefaultTestTenant: t.cfg.useTenant || t.cfg.disableDefaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
@@ -1874,7 +1874,7 @@ func (t *logicTest) newCluster(
 			opt.apply(clusterSettingOverrideArgs)
 		}
 
-		conn := t.cluster.HostClusterConn()
+		conn := t.cluster.StorageClusterConn()
 		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.

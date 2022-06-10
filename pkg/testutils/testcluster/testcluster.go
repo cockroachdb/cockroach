@@ -58,13 +58,13 @@ type TestCluster struct {
 	Servers []*server.TestServer
 	Conns   []*gosql.DB
 
-	// Connection to the host cluster. Typically, the first connection in Conns,
-	// but could be different if we're transparently running in SQL servers
-	// (see the DisableDefaultSQLServer flag of base.TestServerArgs for more
-	// detail).
-	HostConn *gosql.DB
-	stopper  *stop.Stopper
-	mu       struct {
+	// Connection to the storage cluster. Typically, the first connection in
+	// Conns, but could be different if we're transparently running in a test
+	// tenant (see the DisableDefaultTestTenant flag of base.TestServerArgs for
+	// more detail).
+	storageConn *gosql.DB
+	stopper     *stop.Stopper
+	mu          struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
@@ -97,8 +97,8 @@ func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 }
 
 // HostClusterConn is part of TestClusterInterface.
-func (tc *TestCluster) HostClusterConn() *gosql.DB {
-	return tc.HostConn
+func (tc *TestCluster) StorageClusterConn() *gosql.DB {
+	return tc.storageConn
 }
 
 // Stopper returns the stopper for this testcluster.
@@ -343,9 +343,9 @@ func (tc *TestCluster) Start(t testing.TB) {
 			disableLBS = true
 		}
 
-		// If we're not probabilistically starting the test SQL server, disable
+		// If we're not probabilistically starting the test tenant, disable
 		// its start and set the "started" flag accordingly. We need to do this
-		// with two separate if checks because the DisableDefaultSQLServer flag
+		// with two separate if checks because the DisableDefaultTestTenant flag
 		// could have been set coming into this function by the caller.
 		if !probabilisticallyStartTestSQLServer {
 			tc.Servers[i].Cfg.DisableDefaultSQLServer = true
@@ -594,7 +594,7 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	defer tc.mu.Unlock()
 	tc.Conns = append(tc.Conns, dbConn)
 	if idx == 0 {
-		tc.HostConn = hostDbConn
+		tc.storageConn = hostDbConn
 	}
 	return nil
 }

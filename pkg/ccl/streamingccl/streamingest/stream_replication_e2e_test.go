@@ -96,7 +96,7 @@ func createTenantStreamingClusters(
 	serverArgs := base.TestServerArgs{
 		// Test fails because it tries to set a cluster setting only accessible
 		// to system tenants. Tracked with #76378.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	}

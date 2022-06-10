@@ -64,9 +64,10 @@ func TestTenantUpgrade(t *testing.T) {
 		clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Test validates tenant behavior. No need for a SQL server.
-			DisableDefaultSQLServer: true,
-			Settings:                settings,
+			// Test validates tenant behavior. No need for the default test
+			// tenant.
+			DisableDefaultTestTenant: true,
+			Settings:                 settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -212,9 +213,10 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	// Initialize the version to the BinaryMinSupportedVersion.
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Test validates tenant behavior. No need for a SQL server.
-			DisableDefaultSQLServer: true,
-			Settings:                settings,
+			// Test validates tenant behavior. No need for the default test
+			// tenant here.
+			DisableDefaultTestTenant: true,
+			Settings:                 settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -383,9 +385,9 @@ func TestTenantSystemConfigUpgrade(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
-			// Test is designed to run with explicit tenants. No need to run
-			// with an implicit tenant.
-			DisableDefaultSQLServer: true,
+			// Test is designed to run within a tenant. No need
+			// for the test tenant here.
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

@@ -86,13 +86,13 @@ func TestTenantStreaming(t *testing.T) {
 	ctx := context.Background()
 
 	args := base.TestServerArgs{
-		// Disabling the SQL server because the test below assumes that
+		// Disabling the test tenant because the test below assumes that
 		// when it's monitoring the streaming job, it's doing so from the system
-		// SQL server and not from within a non-system SQL server. When inside
-		// the non-system SQL server, it won't be able to see the streaming job.
+		// tenant and not from within a secondary tenant. When inside
+		// a secondary tenant, it won't be able to see the streaming job.
 		// This may also be impacted by the fact that we don't currently support
 		// tenant->tenant streaming. Tracked with #76378.
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	}
@@ -125,11 +125,11 @@ SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
 
 	// Start the destination server.
 	hDest, cleanupDest := streamingtest.NewReplicationHelper(t,
-		// Test fails without the SQL server disabled.  More investigation
+		// Test fails when run from within the test tenant. More investigation
 		// is required. Tracked with #76378.
 		// TODO(ajstorm): This may be the right course of action here as the
 		//  replication is now being run inside a tenant.
-		base.TestServerArgs{DisableDefaultSQLServer: true},
+		base.TestServerArgs{DisableDefaultTestTenant: true},
 		roachpb.MakeTenantID(20))
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
@@ -212,10 +212,10 @@ func TestCutoverBuiltin(t *testing.T) {
 
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Disable the SQL server as the test below looks for a
-			// streaming job assuming that it's on the host cluster.
+			// Disable the test tenant as the test below looks for a
+			// streaming job assuming that it's within the system tenant.
 			// Tracked with #76378.
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

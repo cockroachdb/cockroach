@@ -273,7 +273,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TempStorageConfig = params.TempStorageConfig
 	}
 
-	cfg.DisableDefaultSQLServer = params.DisableDefaultSQLServer
+	cfg.DisableDefaultSQLServer = params.DisableDefaultTestTenant
 
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
@@ -313,9 +313,9 @@ type TestServer struct {
 	*httpTestServer
 	// The SQL servers associated with this server, and used for probabilistic
 	// testing within SQL servers (aka tenants). Currently, there is only one
-	// SQL server created by default, but longer term we may allow for the
-	// creation of multiple SQLServers for more advanced testing.
-	SQLServers []serverutils.TestTenantInterface
+	// SQL server reated by default, but longer term we may allow for the
+	// creation of multiple testTenants for more advanced testing.
+	testTenants []serverutils.TestTenantInterface
 }
 
 var _ serverutils.TestServerInterface = &TestServer{}
@@ -513,9 +513,9 @@ func (ts *TestServer) maybeStartTestSQLServer(ctx context.Context) error {
 		return nil // nolint:returnerrcheck
 	}
 
-	// If the flag has been set to disable the default SQL server, don't start
+	// If the flag has been set to disable the default test tenant, don't start
 	// it here.
-	if ts.params.DisableDefaultSQLServer || ts.cfg.DisableDefaultSQLServer {
+	if ts.params.DisableDefaultTestTenant || ts.cfg.DisableDefaultSQLServer {
 		return nil
 	}
 
@@ -551,18 +551,18 @@ func (ts *TestServer) maybeStartTestSQLServer(ctx context.Context) error {
 		return err
 	}
 
-	if len(ts.SQLServers) == 0 {
-		ts.SQLServers = make([]serverutils.TestTenantInterface, 1)
-		ts.SQLServers[0] = tenant
+	if len(ts.testTenants) == 0 {
+		ts.testTenants = make([]serverutils.TestTenantInterface, 1)
+		ts.testTenants[0] = tenant
 	} else {
-		// We restrict the creation of multiple default SQL servers because if
+		// We restrict the creation of multiple default tenants because if
 		// we allow for more than one to be created, it's not clear what we
 		// should return in ServingSQLAddr() as the default SQL address. Panic
 		// here to prevent more than one from being added. If you're hitting
 		// this panic it's likely that you're trying to expose multiple default
-		// SQL servers, in which case, you should evaluate what to do about
+		// test tenants, in which case, you should evaluate what to do about
 		// returning a default SQL address in ServingSQLAddr().
-		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.SQLServers))
+		return errors.AssertionFailedf("invalid number of test SQL servers %d", len(ts.testTenants))
 	}
 	return nil
 }
@@ -941,20 +941,20 @@ func (ts *TestServer) HostSQLAddr() string {
 }
 
 // ServingSQLAddr returns the server's SQL address. Should be used by clients.
-// If a SQL server is started, return the first SQL server's address.
+// If a test tenant is started, return the first test tenant's address.
 func (ts *TestServer) ServingSQLAddr() string {
-	if len(ts.SQLServers) == 0 {
+	if len(ts.testTenants) == 0 {
 		return ts.cfg.SQLAdvertiseAddr
 	}
-	if len(ts.SQLServers) != 1 {
-		// If the number of SQL servers is not equal to 1, it's not clear what
+	if len(ts.testTenants) != 1 {
+		// If the number of test tenants is not equal to 1, it's not clear what
 		// to return here. This isn't currently possible, but panic here to
-		// alert anyone down the road who changes the number of default SQL
-		// servers to the fact that they'll need to reconsider this function
+		// alert anyone down the road who changes the number of default test
+		// tenants to the fact that they'll need to reconsider this function
 		// along with their change.
-		panic(fmt.Sprintf("invalid number of test SQL servers %d", len(ts.SQLServers)))
+		panic(fmt.Sprintf("invalid number of test SQL servers %d", len(ts.testTenants)))
 	}
-	return ts.SQLServers[0].SQLAddr()
+	return ts.testTenants[0].SQLAddr()
 }
 
 // HTTPAddr returns the server's HTTP address. Should be used by clients.

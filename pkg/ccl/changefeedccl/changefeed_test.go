@@ -4851,11 +4851,11 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
-			// non-system SQL servers. Tracked with #76378.
-			DisableDefaultSQLServer: true,
-			UseDatabase:             "test",
-			Knobs:                   knobs,
-			ExternalIODir:           sinkDir,
+			// secondary tenants. Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			UseDatabase:              "test",
+			Knobs:                    knobs,
+			ExternalIODir:            sinkDir,
 		}})
 	defer tc.Stopper().Stop(context.Background())
 

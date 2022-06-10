@@ -715,7 +715,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 
 	// This test fails when run with the default test tenant. Disabling and
 	// tracking with #76378.
-	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultSQLServer: true})
+	hostServer, hostDB, hostKV := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
 	defer hostServer.Stopper().Stop(context.Background())
 
 	tenantID := serverutils.TestTenantID()

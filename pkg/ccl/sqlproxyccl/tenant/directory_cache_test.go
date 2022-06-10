@@ -474,9 +474,9 @@ func newTestDirectoryCache(
 			// We need to start the cluster insecure in order to not
 			// care about TLS settings for the RPC client connection.
 			Insecure: true,
-			// Test fails when run under a SQL server. More investigation
+			// Test fails when run within a tenant. More investigation
 			// is required here. Tracked with #76387.
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	})
 	clusterStopper := tc.Stopper()

@@ -228,10 +228,10 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Insecure: false,
-		// Need to disable the SQL server here because it appears as though
+		// Need to disable the test tenant here because it appears as though
 		// we're not able to establish the necessary connections from within
 		// it. More investigation required (tracked with #76378).
-		DisableDefaultSQLServer: true,
+		DisableDefaultTestTenant: true,
 	},
 	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
@@ -388,10 +388,10 @@ func TestProxyTLSClose(t *testing.T) {
 	sql, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: false,
-			// Need to disable the SQL server here because it appears as though
+			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
@@ -444,10 +444,10 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: false,
-			// Need to disable the SQL server here because it appears as though
+			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
@@ -507,12 +507,12 @@ func TestInsecureProxy(t *testing.T) {
 
 	sql, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Need to disable the SQL server here as the test below
+			// Need to disable the test tenant here as the test below
 			// complains about not being able to find the user. This may be
 			// because of the connection through the proxy server. More
 			// investigation is required (tracked with #76378).
-			DisableDefaultSQLServer: true,
-			Insecure:                false,
+			DisableDefaultTestTenant: true,
+			Insecure:                 false,
 		},
 	)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
@@ -629,10 +629,10 @@ func TestDenylistUpdate(t *testing.T) {
 	sql, sqlDB, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: false,
-			// Need to disable the SQL server here because it appears as though
+			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	)
 	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
@@ -710,10 +710,10 @@ func TestDirectoryConnect(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Insecure: true,
-			// Need to disable the SQL server here because it appears as though
+			// Need to disable the test tenant here because it appears as though
 			// we're not able to establish the necessary connections from within
 			// it. More investigation required (tracked with #76378).
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	)
 	srv.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
@@ -1006,8 +1006,8 @@ func TestConnectionMigration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
-	// Test must be run from the host cluster as it's altering tenants.
-	params.DisableDefaultSQLServer = true
+	// Test must be run from the system tenant as it's altering tenants.
+	params.DisableDefaultTestTenant = true
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	tenantID := serverutils.TestTenantID()

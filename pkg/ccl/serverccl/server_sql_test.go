@@ -183,7 +183,7 @@ func TestNonExistentTenant(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DisableDefaultSQLServer: true,
+			DisableDefaultTestTenant: true,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
