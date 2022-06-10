@@ -451,7 +451,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// Lease extensions for a currently held lease always go through, to
 		// keep the lease alive until the normal lease transfer mechanism can
 		// colocate it with the leader.
-		if !leaderInfo.iAmTheLeader && p.Request.IsLeaseRequest() {
+		if !leaderInfo.iAmTheLeader && p.Request.IsSingleRequestLeaseRequest() {
 			leaderKnownAndEligible := leaderInfo.leaderKnown && leaderInfo.leaderEligibleForLease
 			ownsCurrentLease := b.p.ownsValidLeaseRLocked(ctx, b.clock.NowAsClockTimestamp())
 			if leaderKnownAndEligible && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
@@ -619,7 +619,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// replays (though they could in principle also be handled like lease
 	// requests).
 	var lai uint64
-	if !p.Request.IsLeaseRequest() {
+	if !p.Request.IsSingleRequestLeaseRequest() {
 		b.assignedLAI++
 		lai = b.assignedLAI
 	}
@@ -674,7 +674,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// timestamps carried by lease requests, make sure to resurrect the old
 	// TestRejectedLeaseDoesntDictateClosedTimestamp and protect against that
 	// scenario.
-	if p.Request.IsLeaseRequest() {
+	if p.Request.IsSingleRequestLeaseRequest() {
 		return lai, hlc.Timestamp{}, nil
 	}
 
