@@ -158,7 +158,7 @@ func (c *connector) OpenTenantConnWithAuth(
 
 	// Perform user authentication for non-token-based auth methods. This will
 	// block until the server has authenticated the client.
-	if err := authenticate(clientConn, serverConn, throttleHook); err != nil {
+	if _, err := authenticate(clientConn, serverConn, throttleHook); err != nil {
 		return nil, true, err
 	}
 	log.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())

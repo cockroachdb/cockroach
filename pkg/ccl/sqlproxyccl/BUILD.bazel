@@ -16,6 +16,7 @@ go_library(
         "metrics.go",
         "proxy.go",
         "proxy_handler.go",
+        "query_cancel.go",
         "server.go",
         ":gen-errorcode-stringer",  # keep
     ],
@@ -39,6 +40,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/netutil/addr",
+        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
