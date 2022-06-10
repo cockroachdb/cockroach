@@ -30,15 +30,26 @@ func TestAuthenticateOK(t *testing.T) {
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
 	fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(cli), cli)
 
+	proxyBackendKeyData := &pgproto3.BackendKeyData{ProcessID: 1, SecretKey: 1}
+	crdbBackendKeyData := &pgproto3.BackendKeyData{ProcessID: 2, SecretKey: 2}
 	go func() {
-		err := be.Send(&pgproto3.ReadyForQuery{})
+		err := be.Send(crdbBackendKeyData)
 		require.NoError(t, err)
+		err = be.Send(&pgproto3.ReadyForQuery{})
+		require.NoError(t, err)
+		// First the frontend gets back the proxy's BackendKeyData.
 		beMsg, err := fe.Receive()
+		require.NoError(t, err)
+		require.Equal(t, beMsg, proxyBackendKeyData)
+		// Then the frontend gets ReadyForQuery.
+		beMsg, err = fe.Receive()
 		require.NoError(t, err)
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli, nilThrottleHook))
+	receivedCrdbBackendKeyData, err := authenticate(srv, cli, proxyBackendKeyData, nilThrottleHook)
+	require.NoError(t, err)
+	require.Equal(t, crdbBackendKeyData, receivedCrdbBackendKeyData)
 }
 
 func TestAuthenticateClearText(t *testing.T) {
@@ -80,7 +91,8 @@ func TestAuthenticateClearText(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli, nilThrottleHook))
+	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
+	require.NoError(t, err)
 }
 
 func TestAuthenticateThrottled(t *testing.T) {
@@ -144,10 +156,11 @@ func TestAuthenticateThrottled(t *testing.T) {
 			go server(t, sqlServer, &pgproto3.AuthenticationOk{})
 			go client(t, sqlClient)
 
-			err := authenticate(proxyToClient, proxyToServer, func(status throttler.AttemptStatus) error {
-				require.Equal(t, throttler.AttemptOK, status)
-				return throttledError
-			})
+			_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
+				func(status throttler.AttemptStatus) error {
+					require.Equal(t, throttler.AttemptOK, status)
+					return throttledError
+				})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "connection attempt throttled")
 
@@ -172,7 +185,7 @@ func TestAuthenticateError(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"})
 	}()
 
-	err := authenticate(srv, cli, nilThrottleHook)
+	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
 	require.Error(t, err)
 	codeErr := (*codeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
@@ -193,7 +206,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 		require.Error(t, err)
 	}()
 
-	err := authenticate(srv, cli, nilThrottleHook)
+	_, err := authenticate(srv, cli, nil /* proxyBackendKeyData */, nilThrottleHook)
 
 	srv.Close()
 
