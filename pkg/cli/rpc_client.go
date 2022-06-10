@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
@@ -29,14 +30,14 @@ import (
 // until the connection (and its associated goroutines) have terminated.
 func getClientGRPCConn(
 	ctx context.Context, cfg server.Config,
-) (*grpc.ClientConn, *hlc.Clock, func(), error) {
+) (*grpc.ClientConn, hlc.WallClock, func(), error) {
 	if ctx.Done() == nil {
 		return nil, nil, nil, errors.New("context must be cancellable")
 	}
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
-	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
+	clock := &timeutil.DefaultTimeSource{}
 	tracer := cfg.Tracer
 	if tracer == nil {
 		tracer = tracing.NewTracer()

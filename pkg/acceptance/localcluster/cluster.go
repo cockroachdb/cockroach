@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -272,11 +271,12 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		Insecure: true,
 	}
 	rpcCtx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   baseCtx,
-		Clock:    hlc.NewClockWithSystemTimeSource(0 /* maxOffset */),
-		Stopper:  c.stopper,
-		Settings: cluster.MakeTestingClusterSettings(),
+		TenantID:  roachpb.SystemTenantID,
+		Config:    baseCtx,
+		Clock:     &timeutil.DefaultTimeSource{},
+		MaxOffset: 0,
+		Stopper:   c.stopper,
+		Settings:  cluster.MakeTestingClusterSettings(),
 	})
 
 	n := &Node{
