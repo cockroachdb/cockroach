@@ -1474,7 +1474,7 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 				s.merge = true
 			}
 		}
-	} else if req.IsLeaseRequest() {
+	} else if req.IsSingleRequestLeaseRequest() {
 		// Make a deep copy since we're not allowed to hold on to request
 		// memory.
 		lr, _ := req.GetArg(roachpb.RequestLease)
