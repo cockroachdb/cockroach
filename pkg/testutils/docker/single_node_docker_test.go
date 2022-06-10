@@ -519,6 +519,7 @@ func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
 	// Run the binary which listens to the /cockroach folder until the
 	// initialization process has finished or timeout.
 	res, err = dn.execCommand(ctx, []string{
+		"sudo",
 		"./docker-fsnotify",
 		"/cockroach",
 		initSuccessFile,
