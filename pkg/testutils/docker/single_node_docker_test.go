@@ -80,6 +80,32 @@ func TestSingleNodeDocker(t *testing.T) {
 	}
 
 	fsnotifyPath := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))), "docker-fsnotify")
+	dockerFsnotifyBinPath := filepath.Join(fsnotifyPath, "docker-fsnotify-bin")
+	realDockerFsnotifyBinPath, err := filepath.EvalSymlinks(dockerFsnotifyBinPath)
+	if err != nil {
+		t.Fatalf("cannot get realDockerFsnotifyBinPath:%v\n", err)
+	}
+
+	// err = filepath.Walk(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))),
+	err = filepath.Walk(filepath.Dir(realDockerFsnotifyBinPath),
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			fmt.Println(path, info.Size(), info.Mode())
+			//fmt.Printf("%#v\n", info.Mode().String())
+			//if info.Mode().String() == "Lrwxrwxrwx" {
+			//	oriPath, err := filepath.EvalSymlinks(path)
+			//	if err != nil {
+			//		t.Errorf("cannot eval sym links:%v\n", err)
+			//	}
+			//	t.Log("actual file:", oriPath)
+			//}
+			return nil
+		})
+	if err != nil {
+		t.Fatal("show not happen", err)
+	}
 
 	var dockerTests = []singleNodeDockerTest{
 		{
