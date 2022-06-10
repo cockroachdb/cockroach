@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/kv",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
