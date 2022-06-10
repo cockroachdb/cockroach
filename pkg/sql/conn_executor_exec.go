@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -46,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -64,6 +68,27 @@ import (
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+var TraceFingerprint = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"trace.fingerprint",
+	"if set, trace the statement with the given fingerprint with probability == trace.fingerprint.probability",
+	"",
+)
+
+var TraceFingerprintProbability = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"trace.fingerprint.probability",
+	"traces stmts with fingerprint == trace.fingerprint with the given probability",
+	0,
+).WithPublic()
+
+var TraceFingerprintThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"trace.fingerprint.threshold",
+	"logs fingerprint-triggered traces if execution latency crosses the specified threshold",
+	0,
+).WithPublic()
 
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
@@ -676,11 +701,24 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.extraTxnState.firstStmtExecuted = true
 
 	var stmtThresholdSpan *tracing.Span
-	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
-	stmtTraceThreshold := TraceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
+	var shouldTrace bool
+	if toTraceHexFingerprint := TraceFingerprint.Get(&ex.planner.execCfg.Settings.SV); toTraceHexFingerprint != "" {
+		// XXX: Check to-trace-fingerprint registry, and probability. Below we
+		// assume success to get to the fingerprint, what if we want to trace
+		// failures? It's a bit annoying that this is part of the fingerprint.
+		stmtFingerprint := roachpb.ConstructStatementFingerprintID(
+			stmt.StmtNoConstants, false /* failed*/, p.curPlan.flags.IsSet(planFlagImplicitTxn),
+			p.SessionData().Database,
+		)
+		hexStmtFingerprint := hex.EncodeToString(sqlstatsutil.EncodeUint64ToBytes(uint64(stmtFingerprint)))
+		if hexStmtFingerprint == toTraceHexFingerprint &&
+			rand.Float64() < TraceFingerprintProbability.Get(&ex.planner.execCfg.Settings.SV) {
+			shouldTrace = true
+		}
+	}
+
 	var stmtCtx context.Context
-	// TODO(andrei): I think we should do this even if alreadyRecording == true.
-	if !alreadyRecording && stmtTraceThreshold > 0 {
+	if shouldTrace {
 		stmtCtx, stmtThresholdSpan = tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "trace-stmt-threshold", tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else {
 		stmtCtx = ctx
@@ -693,8 +731,9 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if stmtThresholdSpan != nil {
 		stmtDur := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
-		needRecording := stmtTraceThreshold < stmtDur
-		if needRecording {
+		traceThreshold := TraceFingerprintThreshold.Get(&ex.planner.execCfg.Settings.SV)
+		shouldLogTrace := traceThreshold < stmtDur
+		if shouldLogTrace {
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
@@ -702,7 +741,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ctx,
 				rec,
 				fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
-				stmtTraceThreshold,
+				traceThreshold,
 				stmtDur,
 			)
 		} else {
