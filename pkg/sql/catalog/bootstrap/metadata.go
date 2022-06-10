@@ -181,9 +181,6 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		add(catalogkeys.MakeDescMetadataKey(ms.codec, desc.GetID()), descValue)
-		if desc.GetID() > keys.MaxSystemConfigDescID {
-			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(uint32(desc.GetID()))))
-		}
 	}
 
 	// The splits slice currently has a split point for each of the object
