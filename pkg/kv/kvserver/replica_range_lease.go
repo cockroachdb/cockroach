@@ -52,10 +52,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -890,11 +892,48 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 				"another transfer to a different store is in progress")
 		}
 
+		// Verify that the lease transfer would be safe. This check is best-effort
+		// in that it can race with Raft leadership changes and log truncation. See
+		// propBuf.maybeRejectUnsafeProposalLocked for a non-racy version of this
+		// check, along with a full explanation of why it is important. We include
+		// both because rejecting a lease transfer in the propBuf after we have
+		// revoked our current lease is more disruptive than doing so here, before
+		// we have revoked our current lease.
+		raftStatus := r.raftStatusRLocked()
+		raftFirstIndex := r.raftFirstIndexRLocked()
+		snapStatus := raftutil.ReplicaMayNeedSnapshot(raftStatus, raftFirstIndex, nextLeaseHolder.ReplicaID)
+		if snapStatus != raftutil.NoSnapshotNeeded && !r.store.TestingKnobs().AllowLeaseTransfersWhenTargetMayNeedSnapshot {
+			r.store.metrics.LeaseTransferErrorCount.Inc(1)
+			log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
+				"need a snapshot: %s", nextLeaseHolder, snapStatus)
+			err := newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(nextLeaseHolder, snapStatus)
+			return nil, nil, err
+		}
+
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
 		return nil, transfer, nil
 	}
+
+	// Before transferring a lease, we ensure that the lease transfer is safe. If
+	// the leaseholder cannot guarantee this, we reject the lease transfer. To
+	// make such a claim, the leaseholder needs to become the Raft leader and
+	// probe the lease target's log. Doing so may take time, so we use a small
+	// exponential backoff loop with a maximum retry count before returning the
+	// rejection to the client. As configured, this retry loop should back off
+	// for about 6 seconds before returning an error.
+	retryOpts := retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     10,
+	}
+	if count := r.store.TestingKnobs().LeaseTransferRejectedRetryLoopCount; count != 0 {
+		retryOpts.MaxRetries = count
+	}
+	transferRejectedRetry := retry.StartWithCtx(ctx, retryOpts)
+	transferRejectedRetry.Next() // The first call to Next does not block.
 
 	// Loop while there's an extension in progress.
 	for {
@@ -902,6 +941,14 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		// If there isn't, request a transfer.
 		extension, transfer, err := initTransferHelper()
 		if err != nil {
+			if IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) && transferRejectedRetry.Next() {
+				// If the lease transfer was rejected because the target may need a
+				// snapshot, try again. After the backoff, we may have become the Raft
+				// leader (through maybeTransferRaftLeadershipToLeaseholderLocked) or
+				// may have learned more about the state of the lease target's log.
+				log.VEventf(ctx, 2, "retrying lease transfer to store %d after rejection", target)
+				continue
+			}
 			return err
 		}
 		if extension == nil {
@@ -987,6 +1034,17 @@ func newNotLeaseHolderError(
 		}
 	}
 	return err
+}
+
+// newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
+// indicating that a lease transfer failed because the current leaseholder could
+// not prove that the lease transfer target did not need a Raft snapshot.
+func newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
+	target roachpb.ReplicaDescriptor, snapStatus raftutil.ReplicaNeedsSnapshotStatus,
+) error {
+	err := errors.Errorf("refusing to transfer lease to %d because target may need a Raft snapshot: %s",
+		target, snapStatus)
+	return errors.Mark(err, errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
 }
 
 // checkRequestTimeRLocked checks that the provided request timestamp is not

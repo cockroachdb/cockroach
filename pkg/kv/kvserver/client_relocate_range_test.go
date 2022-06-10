@@ -43,6 +43,7 @@ func relocateAndCheck(
 	voterTargets []roachpb.ReplicationTarget,
 	nonVoterTargets []roachpb.ReplicationTarget,
 ) (retries int) {
+	t.Helper()
 	every := log.Every(1 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().

@@ -82,8 +82,21 @@ func IsIllegalReplicationChangeError(err error) bool {
 var errMarkReplicationChangeInProgress = errors.New("replication change in progress")
 
 // IsReplicationChangeInProgressError detects whether an error (assumed to have
-// been emitted a replication change) indicates that the replication change
+// been emitted by a replication change) indicates that the replication change
 // failed because another replication change was in progress on the range.
 func IsReplicationChangeInProgressError(err error) bool {
 	return errors.Is(err, errMarkReplicationChangeInProgress)
+}
+
+var errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot = errors.New(
+	"lease transfer rejected because the target may need a snapshot")
+
+// IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError detects whether an
+// error (assumed to have been emitted by a lease transfer request) indicates
+// that the lease transfer failed because the current leaseholder could not
+// prove that the lease transfer target did not need a Raft snapshot. In order
+// to prove this, the current leaseholder must also be the Raft leader, which is
+// periodically requested in maybeTransferRaftLeadershipToLeaseholderLocked.
+func IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err error) bool {
+	return errors.Is(err, errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
 }
