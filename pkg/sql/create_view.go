@@ -457,24 +457,33 @@ func serializeUserDefinedTypes(
 	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		var typRef tree.ResolvableTypeReference
 		switch n := expr.(type) {
-		case *tree.CastExpr, *tree.AnnotateTypeExpr:
-			texpr, err := tree.TypeCheck(ctx, n, semaCtx, types.Any)
-			if err != nil {
-				return false, expr, err
-			}
-			if !texpr.ResolvedType().UserDefined() {
-				return true, expr, nil
-			}
-
-			s := tree.Serialize(texpr)
-			parsedExpr, err := parser.ParseExpr(s)
-			if err != nil {
-				return false, expr, err
-			}
-			return false, parsedExpr, nil
+		case *tree.CastExpr:
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			typRef = n.Type
+		default:
+			return true, expr, nil
 		}
-		return true, expr, nil
+		resolver := tree.TypeReferenceResolver(nil)
+		if semaCtx != nil {
+			resolver = semaCtx.TypeResolver
+		}
+		var typ *types.T
+		typ, err = tree.ResolveType(ctx, typRef, resolver)
+		if err != nil {
+			return false, expr, err
+		}
+		if !typ.UserDefined() {
+			return true, expr, nil
+		}
+		s := tree.Serialize(expr)
+		parsedExpr, err := parser.ParseExpr(s)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, parsedExpr, nil
 	}
 
 	stmt, err := parser.ParseOne(viewQuery)
