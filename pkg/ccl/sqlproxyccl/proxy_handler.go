@@ -149,6 +149,9 @@ type proxyHandler struct {
 
 	// certManager keeps up to date the certificates used.
 	certManager *certmgr.CertManager
+
+	// cancelInfoMap keeps track of all the cancel request keys for this proxy.
+	cancelInfoMap *cancelInfoMap
 }
 
 const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure. Make
@@ -171,10 +174,11 @@ func newProxyHandler(
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	handler := proxyHandler{
-		stopper:      stopper,
-		metrics:      proxyMetrics,
-		ProxyOptions: options,
-		certManager:  certmgr.NewCertManager(ctx),
+		stopper:       stopper,
+		metrics:       proxyMetrics,
+		ProxyOptions:  options,
+		certManager:   certmgr.NewCertManager(ctx),
+		cancelInfoMap: makeCancelInfoMap(),
 	}
 
 	err := handler.setupIncomingCert(ctx)
@@ -366,6 +370,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		StartupMsg:        backendStartupMsg,
 		DialTenantLatency: handler.metrics.DialTenantLatency,
 		DialTenantRetries: handler.metrics.DialTenantRetries,
+		CancelInfo:        makeCancelInfo(incomingConn.LocalAddr(), incomingConn.RemoteAddr()),
 	}
 
 	// TLS options for the proxy are split into Insecure and SkipVerify.
@@ -381,7 +386,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	f := newForwarder(ctx, connector, handler.metrics, nil /* timeSource */)
 	defer f.Close()
 
-	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, f, fe.Conn,
+	crdbConnInfo, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, f, fe.Conn,
 		func(status throttler.AttemptStatus) error {
 			if err := handler.throttleService.ReportAttempt(
 				ctx, throttleTags, throttleTime, status,
@@ -401,7 +406,12 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		}
 		return err
 	}
+	crdbConn := crdbConnInfo.crdbConn
 	defer func() { _ = crdbConn.Close() }()
+
+	// Update the cancel info.
+	connector.CancelInfo.setNewBackend(crdbConnInfo.crdbBackendKeyData, crdbConn.RemoteAddr().(*net.TCPAddr))
+	handler.cancelInfoMap.addCancelInfo(connector.CancelInfo.proxySecretID(), connector.CancelInfo)
 
 	// Record the connection success and how long it took.
 	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connRecievedTime).Nanoseconds())
