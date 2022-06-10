@@ -125,6 +125,9 @@ var retiredSettings = map[string]struct{}{
 	"kv.bulk_ingest.buffer_increment":                                  {},
 	"schemachanger.backfiller.buffer_increment":                        {},
 	"kv.rangefeed.separated_intent_scan.enabled":                       {},
+
+	// removed as of 22.1.2 and 22.2.
+	"sql.ttl.range_batch_size": {},
 }
 
 // register adds a setting to the registry.
