@@ -6,6 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/ui",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_cmux//:cmux",
