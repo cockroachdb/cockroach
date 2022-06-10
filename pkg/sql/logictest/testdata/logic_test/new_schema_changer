@@ -1380,7 +1380,20 @@ statement ok
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
 
 statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE TYPE sc2.typ AS ENUM('a')
+
+# Cross-database type references are not allowed.
+statement error cross database type references are not supported: test.sc2.typ
+CREATE VIEW db1.sc1.v6 AS (SELECT 'a'::sc2.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
 DROP SCHEMA db1.sc1 CASCADE
+
+statement ok
+DROP SCHEMA sc2 CASCADE
 
 statement ok
 DROP DATABASE db1 CASCADE
@@ -1445,6 +1458,16 @@ CREATE TYPE db1.sc1.typ AS ENUM('a')
 
 statement ok
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4)
+
+statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE TYPE sc2.typ AS ENUM('a')
+
+# Cross-database type references are not allowed.
+statement error cross database type references are not supported: test.sc2.typ
+CREATE VIEW db1.sc1.v6 AS (SELECT 'a'::sc2.typ::string AS k, n2, n1 from db1.sc1.v4)
 
 # Confirm comments exist.
 query T
@@ -1515,6 +1538,9 @@ select count(*) from system.descriptor
 statement ok
 DROP DATABASE db1 CASCADE
 
+statement ok
+DROP SCHEMA sc2 CASCADE
+
 # No comments should be left after.
 query T
 SELECT comment FROM system.comments ORDER BY comment ASC
@@ -1531,12 +1557,12 @@ database_id  role_name      settings
 let $desc_count_post_drop
 select count(*) from system.descriptor
 
-# Excluding anything that needs GC, we should drop by 10 (2 types [array and
-# normal], 3 schemas, and 5 views)
+# Excluding anything that needs GC, we should drop by 13 (4 types [array and
+# normal], 4 schemas, and 5 views)
 query I
 select $desc_count_pre_drop-$desc_count_post_drop
 ----
-10
+13
 
 # Tests for computed column rewrites.
 statement ok

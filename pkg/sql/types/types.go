@@ -242,8 +242,15 @@ func (u UserDefinedTypeName) Basename() string {
 // FQName returns the fully qualified name.
 func (u UserDefinedTypeName) FQName() string {
 	var sb strings.Builder
-	// Note that cross-database type references are disabled, so we only
-	// format the qualified name with the schema.
+	// Even though cross-database type references are disabled, we still format
+	// the qualified name with the catalog. Consider the case where the current
+	// database is db1, and a statement like
+	// `CREATE VIEW db2.sc.v AS SELECT 'a'::db2.sc.typ`
+	// is executed. When parsing the inner view query, it's important to include
+	// the explicit catalog name, so the correct (non-cross-database) type is
+	// resolved.
+	sb.WriteString(u.Catalog)
+	sb.WriteString(".")
 	if u.ExplicitSchema {
 		sb.WriteString(u.Schema)
 		sb.WriteString(".")
