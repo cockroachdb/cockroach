@@ -406,10 +406,11 @@ gazelle_dependencies()
 #      https://github.com/protocolbuffers/protobuf/blob/main/protobuf_deps.bzl
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "071ccf561d127d5702910340cf038cb869aa239683544e1cca68a78ea865099e",
-    strip_prefix = "protobuf-e809d75ecb5770fdc531081eef306b3e672bcdd2",
+    sha256 = "6d4e7fe1cbd958dee69ce9becbf8892d567f082b6782d3973a118d0aa00807a8",
+    strip_prefix = "cockroachdb-protobuf-3f5d91f",
     urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/protobuf-e809d75ecb5770fdc531081eef306b3e672bcdd2.tar.gz",
+        # Code as of 3f5d91f2e169d890164d3401b8f4a9453fff5538 (crl-release-3.9, 3.9.2 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-protobuf-3f5d91f.tar.gz",
     ],
 )
 
