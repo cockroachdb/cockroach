@@ -2321,3 +2321,70 @@ top-k
       │    ├── [/10/2 - /10/2]
       │    └── [/10/4 - /10/4]
       └── key: (1-4)
+
+# Repro for #82730
+exec-ddl
+CREATE TABLE table1 (
+  col1_0 NAME,
+  col1_1 INT8,
+  col1_3 INT8,
+  col1_5 VARCHAR,
+  PRIMARY KEY (col1_0 ASC),
+  UNIQUE (col1_1 ASC, col1_3 ASC, col1_0 ASC) STORING(col1_5)
+                                                           PARTITION BY LIST (
+                                                            col1_1,
+                                                            col1_3
+                                                           ) (
+                                                              PARTITION table1_part_0 VALUES IN (
+                                                                                        (
+                                                                                          3916971026,
+                                                                                          NULL
+                                                                                        )
+                                                                                      ),
+                                                              PARTITION table1_part_1 VALUES IN (
+                                                                                        (
+                                                                                          1693608520,
+                                                                                          NULL
+                                                                                        )
+                                                                                      ),
+                                                              PARTITION table1_part_2 VALUES IN (
+                                                                                        (
+                                                                                          308654742,
+                                                                                          NULL
+                                                                                        )
+                                                                                      )
+                                                             )
+)
+----
+
+opt
+UPDATE table1 AS tab_41831
+     SET col1_5 = tab_41831.col1_5
+   WHERE tab_41831.col1_0 ILIKE tab_41831.col1_0
+ORDER BY tab_41831.col1_3 DESC
+   LIMIT 84
+----
+update table1 [as=tab_41831]
+ ├── columns: <none>
+ ├── fetch columns: col1_0:7 col1_1:8 col1_3:9 col1_5:10
+ ├── update-mapping:
+ │    └── col1_5:10 => col1_5:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── top-k
+      ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── internal-ordering: -9
+      ├── k: 84
+      ├── cardinality: [0 - 84]
+      ├── key: (7)
+      ├── fd: (7)-->(8-10)
+      └── select
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           ├── key: (7)
+           ├── fd: (7)-->(8-10)
+           ├── scan table1 [as=tab_41831]
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           │    ├── key: (7)
+           │    └── fd: (7)-->(8-10)
+           └── filters
+                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]

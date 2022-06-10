@@ -481,7 +481,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 		if cnt, ok := spans.Get(i).KeyCount(&keyCtx, keyPrefixLength); ok {
 			keyCount += int(cnt)
 			additionalScanBudget -= int(cnt)
-			if additionalScanBudget < 0 {
+			if additionalScanBudget < 0 && budgetExceededIndex == spans.Count() {
 				// Splitting any spans from this span on would lead to exceeding the max
 				// Scan count. Keep track of the index of this span.
 				budgetExceededIndex = i
@@ -579,6 +579,9 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			queue.PushBack(newScanOrSelect)
 			queueLength++
 		}
+	}
+	if queueLength == 0 {
+		return nil, false
 	}
 	var outCols opt.ColList
 	oddNumScans := (queueLength % 2) != 0
