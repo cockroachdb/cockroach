@@ -25,8 +25,8 @@ import {
   Metric,
   MetricProps,
   MetricsDataComponentProps,
+  QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
-import {} from "@cockroachlabs/cluster-ui";
 import {
   calculateXAxisDomain,
   calculateYAxisDomain,
@@ -193,8 +193,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     },
   );
 
-  // setNewTimeRange uses code from the TimeScaleDropdown component
-  // to set new start/end ranges in the query params and force a
+  // setNewTimeRange forces a
   // reload of the rest of the dashboard at new ranges via the props
   // `setMetricsFixedWindow` and `setTimeScale`.
   // TODO(davidh): centralize management of query params for time range
@@ -224,9 +223,6 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     const { pathname, search } = this.props.history.location;
     const urlParams = new URLSearchParams(search);
 
-    urlParams.set("start", moment.unix(start).format("X"));
-    urlParams.set("end", moment.unix(end).format("X"));
-
     this.props.history.push({
       pathname,
       search: urlParams.toString(),
@@ -252,10 +248,29 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // to a closure that holds a reference to this value.
   xAxisDomain: AxisDomain;
 
+  newTimeInfo(
+    newTimeInfo: QueryTimeInfo,
+    prevTimeInfo: QueryTimeInfo,
+  ): boolean {
+    if (newTimeInfo.start.compare(prevTimeInfo.start) !== 0) {
+      return true;
+    }
+    if (newTimeInfo.end.compare(prevTimeInfo.end) !== 0) {
+      return true;
+    }
+    if (newTimeInfo.sampleDuration.compare(prevTimeInfo.sampleDuration) !== 0) {
+      return true;
+    }
+
+    return false;
+  }
+
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
       !this.props.data?.results ||
-      (prevProps.data === this.props.data && this.u !== undefined)
+      (prevProps.data === this.props.data &&
+        this.u !== undefined &&
+        !this.newTimeInfo(this.props.timeInfo, prevProps.timeInfo))
     ) {
       return;
     }
