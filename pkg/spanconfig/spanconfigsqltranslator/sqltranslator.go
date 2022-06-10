@@ -366,8 +366,13 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 
 	records := make([]spanconfig.Record, 0)
 	if table.GetID() == keys.DescriptorTableID {
-		// We have some special handling for `system.descriptor` on account of
-		// it being the first non-empty table in every tenant's keyspace.
+		// We have named ranges preceding `system.descriptor`.
+		// Not doing anything special here would mean
+		// splitting on /Table/3 instead of /Table/0 which is benign since there's
+		// no data under /Table/{0-2}.
+		// We have named ranges(liveness, meta) before the first table in the
+		// system tenant keyspace, so we use the first table ID.
+		startKey := keys.TableDataMin
 		if !s.codec.ForSystemTenant() {
 			// We start the span at the tenant prefix. This effectively installs
 			// the tenant's split boundary at /Tenant/<id> instead of
@@ -375,34 +380,17 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// there's no data within [/Tenant/<id>/ - /Tenant/<id>/Table/3),
 			// but looking at range boundaries, it's slightly less confusing
 			// this way.
-			record, err := spanconfig.MakeRecord(
-				spanconfig.MakeTargetFromSpan(roachpb.Span{
-					Key:    s.codec.TenantPrefix(),
-					EndKey: tableEndKey,
-				}), tableSpanConfig)
-			if err != nil {
-				return nil, err
-			}
-			records = append(records, record)
-		} else {
-			// The same as above, except we have named ranges preceding
-			// `system.descriptor`. Not doing anything special here would mean
-			// splitting on /Table/3 instead of /Table/0 (pretty printed as
-			// /Table/SystemConfigSpan/Start), which is benign since there's no
-			// data under /Table/{0-2}. Still, doing it this way reduces the
-			// differences between the gossip-backed subsystem and this one --
-			// somewhat useful for understandability reasons and reducing the
-			// (tiny) re-splitting costs when switching between the two
-			// subsystems.
-			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
-				Key:    keys.TableDataMin,
+			startKey = s.codec.TenantPrefix()
+		}
+		record, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSpan(roachpb.Span{
+				Key:    startKey,
 				EndKey: tableEndKey,
 			}), tableSpanConfig)
-			if err != nil {
-				return nil, err
-			}
-			records = append(records, record)
+		if err != nil {
+			return nil, err
 		}
+		records = append(records, record)
 
 		return records, nil
 

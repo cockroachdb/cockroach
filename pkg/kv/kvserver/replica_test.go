@@ -1165,7 +1165,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}
 
 	// Write some arbitrary data in the system config span.
-	key := keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID)
+	key := keys.SystemSQLCodec.TablePrefix(keys.DeprecatedMaxSystemConfigDescID)
 	var val roachpb.Value
 	val.SetInt(42)
 	if err := storage.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, val, nil); err != nil {
@@ -6920,83 +6920,6 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsPError(pErr, "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", pErr)
 	}
-}
-
-// TestReplicaLoadSystemConfigSpanIntent verifies that intents on the SystemConfigSpan
-// cause an error, but trigger asynchronous cleanup.
-func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
-	scStartSddr, err := keys.Addr(keys.SystemDescriptorTableSpan.Key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	repl := tc.store.LookupReplica(scStartSddr)
-	if repl == nil {
-		t.Fatalf("no replica contains the SystemConfig span")
-	}
-
-	// Create a transaction and write an intent to the system descriptor span.
-	key := keys.SystemDescriptorTableSpan.Key
-	pushee := newTransaction("test", key, 1, repl.store.Clock())
-	pushee.Priority = enginepb.MinTxnPriority // low so it can be pushed
-	put := putArgs(key, []byte("foo"))
-	assignSeqNumsForReqs(pushee, &put)
-	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Abort the transaction so that the async intent resolution caused
-	// by loading the system config span doesn't waste any time in
-	// clearing the intent.
-	pusher := newTransaction("test", key, 1, repl.store.Clock())
-	pusher.Priority = enginepb.MaxTxnPriority // will push successfully
-	pushArgs := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
-	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Verify that the intent trips up loading the system.descriptor and
-	// system.zones spans.
-	if _, err := repl.loadSystemDescriptorAndZonesTableSpans(ctx); !errors.Is(err, errSystemConfigIntent) {
-		t.Fatal(err)
-	}
-
-	// In the loop, wait until the intent is aborted. Then write a "real" value
-	// there and verify that we can now load the data as expected.
-	v := roachpb.MakeValueFromString("foo")
-	testutils.SucceedsSoon(t, func() error {
-		if err := storage.MVCCPut(ctx, repl.store.Engine(), &enginepb.MVCCStats{},
-			key, repl.store.Clock().Now(), hlc.ClockTimestamp{}, v, nil); err != nil {
-			return err
-		}
-
-		cfg, err := repl.loadSystemDescriptorAndZonesTableSpans(ctx)
-		if err != nil {
-			return err
-		}
-
-		var found bool
-		for _, cur := range cfg.Values {
-			if !keys.SystemDescriptorTableSpan.ContainsKey(cur.Key) {
-				continue
-			}
-			if !v.EqualTagAndData(cur.Value) {
-				continue
-			}
-			found = true
-			break
-		}
-		if found {
-			return nil
-		}
-		return errors.New("recent write not found in gossiped system.descriptor and system.zones spans")
-	})
 }
 
 func TestReplicaDestroy(t *testing.T) {

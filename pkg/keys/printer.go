@@ -280,8 +280,6 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 }
 
 const strTable = "/Table/"
-const strSystemConfigSpan = "SystemConfigSpan"
-const strSystemConfigSpanStart = "Start"
 
 func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
 	input = mustShiftSlash(input)
@@ -313,13 +311,6 @@ func tableKeyParse(input string) (remainder string, output roachpb.Key) {
 	}
 	remainder = input[slashPos:] // `/something/else` -> `/else`
 	tableIDStr := input[:slashPos]
-	if tableIDStr == strSystemConfigSpan {
-		if remainder[1:] == strSystemConfigSpanStart {
-			remainder = ""
-		}
-		output = TableDataMin
-		return
-	}
 	tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
 	if err != nil {
 		panic(&ErrUglifyUnsupported{err})
@@ -612,9 +603,6 @@ func print(_ []encoding.Direction, key roachpb.Key) string {
 }
 
 func decodeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
-	if key.Equal(TableDataMin) {
-		return "/SystemConfigSpan/Start"
-	}
 	return encoding.PrettyPrintValue(valDirs, key, "/")
 }
 

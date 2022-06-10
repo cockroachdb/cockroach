@@ -1071,6 +1071,10 @@ func (s *adminServer) NonTableStats(
 			Key:    keys.TimeseriesKeyMax,
 			EndKey: keys.TableDataMin,
 		},
+		{
+			Key:    keys.TableDataMin,
+			EndKey: keys.SystemDescriptorTableSpan.Key,
+		},
 	}
 	for _, span := range spansForInternalUse {
 		nonTableStats, err := s.statsForSpan(ctx, span)

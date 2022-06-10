@@ -52,8 +52,5 @@ var (
 	// Meta1Span: needed to find other ranges.
 	// Meta2MaxSpan: between meta and system ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
-	// SystemDescriptorTableSpan, SystemZonesTableSpan cannot be split due to
-	// still being depended on in the "SystemConfigSpan" which is used for
-	// replication reports and opt catalog.
-	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan, SystemDescriptorTableSpan, SystemZonesTableSpan}
+	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan}
 )

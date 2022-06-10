@@ -351,7 +351,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		reservedStart = keys.MaxSystemConfigDescID + 1
+		reservedStart = keys.DeprecatedMaxSystemConfigDescID + 1
 	)
 
 	// Used in place of roachpb.RKeyMin in order to test the behavior of splits
@@ -570,8 +570,10 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.TableDataMin), keys.SystemDatabaseID},
 		{roachpb.RKey(keys.SystemConfigSplitKey), keys.SystemDatabaseID},
 
-		// Gossiped system tables should refer to the SystemDatabaseID.
-		{tkey(keys.ZonesTableID), keys.SystemDatabaseID},
+		{tkey(keys.ZonesTableID), keys.ZonesTableID},
+		{roachpb.RKey(keys.SystemZonesTableSpan.Key), keys.ZonesTableID},
+		{tkey(keys.DescriptorTableID), keys.DescriptorTableID},
+		{roachpb.RKey(keys.SystemDescriptorTableSpan.Key), keys.DescriptorTableID},
 
 		// Non-gossiped system tables should refer to themselves.
 		{tkey(keys.LeaseTableID), keys.LeaseTableID},
