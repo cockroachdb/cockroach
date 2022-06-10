@@ -1139,10 +1139,10 @@ SHOW CREATE TABLE enum_table_show
 ----
 enum_table_show  CREATE TABLE public.enum_table_show (
                  a INT8 NULL,
-                 b public.enum_type NULL,
+                 b test.public.enum_type NULL,
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
-                 INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                 INDEX i (a ASC) WHERE b IN ('foo':::test.public.enum_type, 'bar':::test.public.enum_type),
                  FAMILY fam_0_a_b_rowid (a, b, rowid)
 )
 

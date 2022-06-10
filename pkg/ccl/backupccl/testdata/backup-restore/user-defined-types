@@ -167,7 +167,7 @@ howdy hello false
 exec-sql
 INSERT INTO d.expr VALUES ('hi')
 ----
-pq: failed to satisfy CHECK constraint (x < 'hi':::public.greeting)
+pq: failed to satisfy CHECK constraint (x < 'hi':::d.public.greeting)
 
 # We should be able to use the restored types to create new tables.
 exec-sql
