@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -129,6 +130,7 @@ func NewSpanResolver(
 	distSender *kvcoord.DistSender,
 	nodeDescs kvcoord.NodeDescStore,
 	nodeDesc roachpb.NodeDescriptor,
+	clock *hlc.Clock,
 	rpcCtx *rpc.Context,
 	policy replicaoracle.Policy,
 ) SpanResolver {
@@ -139,6 +141,7 @@ func NewSpanResolver(
 			NodeDescs:  nodeDescs,
 			NodeDesc:   nodeDesc,
 			Settings:   st,
+			Clock:      clock,
 			RPCContext: rpcCtx,
 		}),
 		distSender: distSender,
