@@ -2,8 +2,8 @@ statement ok
 INSERT INTO system.users VALUES ('node', '', false);
 GRANT node TO root;
 
-# Any system table other than system.descriptor and system.zones
-# can have their ranges split.
+# System tables can have their ranges split. Previously system tables
+# with ID <= 10 could not be split.
 
 statement ok
 CREATE INDEX ON system.users ("username");
