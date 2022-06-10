@@ -574,7 +574,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		ContextOptions:  opts,
 		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
 		breakerClock: breakerClock{
-			clock: opts.Clock,
+			clock: opts.Clock.WallClock(),
 		},
 		RemoteClocks: newRemoteClockMonitor(
 			opts.Clock.WallClock(), opts.Clock.MaxOffset(), 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
