@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,6 +45,7 @@ type Config struct {
 	NodeDescs  kvcoord.NodeDescStore
 	NodeDesc   roachpb.NodeDescriptor // current node
 	Settings   *cluster.Settings
+	Clock      *hlc.Clock
 	RPCContext *rpc.Context
 }
 

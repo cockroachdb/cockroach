@@ -155,7 +155,7 @@ func newFollowerReadOracle(cfg replicaoracle.Config) replicaoracle.Oracle {
 	return &followerReadOracle{
 		logicalClusterID: cfg.RPCContext.LogicalClusterID,
 		st:               cfg.Settings,
-		clock:            cfg.RPCContext.Clock,
+		clock:            cfg.Clock,
 		closest:          replicaoracle.NewOracle(replicaoracle.ClosestChoice, cfg),
 		binPacking:       replicaoracle.NewOracle(replicaoracle.BinPackingChoice, cfg),
 	}

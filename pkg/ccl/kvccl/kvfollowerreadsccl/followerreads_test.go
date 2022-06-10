@@ -540,6 +540,7 @@ func TestOracle(t *testing.T) {
 				NodeDescs:  nodes,
 				Settings:   st,
 				RPCContext: rpcContext,
+				Clock:      clock,
 			})
 
 			res, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
