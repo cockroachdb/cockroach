@@ -147,18 +147,6 @@ func (ba *BatchRequest) UpdateTxn(o *Transaction) {
 	ba.Txn = clonedTxn
 }
 
-// IsLeaseRequest returns whether the batch consists of a single RequestLease
-// request. Note that TransferLease requests return false.
-// RequestLease requests are special because they're the only type of requests a
-// non-lease-holder can propose.
-func (ba *BatchRequest) IsLeaseRequest() bool {
-	if !ba.IsSingleRequest() {
-		return false
-	}
-	_, ok := ba.GetArg(RequestLease)
-	return ok
-}
-
 // AppliesTimestampCache returns whether the command is a write that applies the
 // timestamp cache (and closed timestamp), possibly pushing its write timestamp
 // into the future to avoid re-writing history.
@@ -226,6 +214,15 @@ func (ba *BatchRequest) IsSingleSkipsLeaseCheckRequest() bool {
 
 func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
 	return ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == m
+}
+
+// IsSingleRequestLeaseRequest returns true iff the batch contains a single
+// request, and that request is a RequestLease. Note that TransferLease requests
+// return false.
+// RequestLease requests are special because they're the only type of requests a
+// non-lease-holder can propose.
+func (ba *BatchRequest) IsSingleRequestLeaseRequest() bool {
+	return ba.isSingleRequestWithMethod(RequestLease)
 }
 
 // IsSingleTransferLeaseRequest returns true iff the batch contains a single

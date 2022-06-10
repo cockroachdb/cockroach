@@ -1208,7 +1208,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 						return nil
 					}
 					nudged := atomic.LoadInt64(&nudgeSeen)
-					if ba.IsLeaseRequest() && (nudged == 1) {
+					if ba.IsSingleRequestLeaseRequest() && (nudged == 1) {
 						return nil
 					}
 					log.Infof(ctx, "test rejecting request: %s", ba)
@@ -1374,7 +1374,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 						return nil
 					}
 					nudged := atomic.LoadInt64(&nudgeSeen)
-					if ba.IsLeaseRequest() && (nudged == 1) {
+					if ba.IsSingleRequestLeaseRequest() && (nudged == 1) {
 						return nil
 					}
 					log.Infof(ctx, "test rejecting request: %s", ba)
