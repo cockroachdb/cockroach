@@ -1712,10 +1712,13 @@ func newTester() *tester {
 	// Record successful connection and authentication.
 	originalAuthenticate := authenticate
 	te.restoreAuthenticate =
-		testutils.TestingHook(&authenticate, func(clientConn, crdbConn net.Conn, throttleHook func(status throttler.AttemptStatus) error) error {
-			err := originalAuthenticate(clientConn, crdbConn, throttleHook)
+		testutils.TestingHook(&authenticate, func(
+			clientConn, crdbConn net.Conn, proxyBackendKeyData *pgproto3.BackendKeyData,
+			throttleHook func(status throttler.AttemptStatus) error,
+		) (*pgproto3.BackendKeyData, error) {
+			keyData, err := originalAuthenticate(clientConn, crdbConn, proxyBackendKeyData, throttleHook)
 			te.setAuthenticated(err == nil)
-			return err
+			return keyData, err
 		})
 
 	// Capture any error sent to the client.
