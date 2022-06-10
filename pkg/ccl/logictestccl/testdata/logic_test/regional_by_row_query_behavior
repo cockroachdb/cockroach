@@ -1822,7 +1822,7 @@ CREATE TABLE public.regional_by_row_table (
                             a INT8 NOT NULL,
                             b INT8 NOT NULL,
                             j JSONB NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_table_a_idx (a ASC),
                             UNIQUE INDEX regional_by_row_table_b_key (b ASC),

@@ -1740,6 +1740,9 @@ func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
 func SimpleStmtVisit(stmt Statement, preFn SimpleVisitFn) (Statement, error) {
 	v := simpleVisitor{fn: preFn}
 	newStmt, changed := walkStmt(&v, stmt)
+	if v.err != nil {
+		return nil, v.err
+	}
 	if changed {
 		return newStmt, nil
 	}

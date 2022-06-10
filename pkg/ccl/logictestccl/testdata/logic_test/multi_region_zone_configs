@@ -702,8 +702,8 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as          CREATE TABLE public.regional_by_row_as (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            cr mr-zone-configs.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::mr-zone-configs.public.crdb_internal_region,
+                            crdb_region mr-zone-configs.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-zone-configs.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_as_i_idx (i ASC),
                             FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
