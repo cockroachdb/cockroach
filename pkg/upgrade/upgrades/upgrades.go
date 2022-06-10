@@ -103,12 +103,6 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		ensureCommentsHaveNonDroppedIndexes,
 	),
-	upgrade.NewTenantUpgrade(
-		"convert incompatible database privileges to default privileges",
-		toCV(clusterversion.RemoveIncompatibleDatabasePrivileges),
-		NoPrecondition,
-		runRemoveInvalidDatabasePrivileges,
-	),
 	upgrade.NewSystemUpgrade(
 		"populate RangeAppliedState.RaftAppliedIndexTerm for all ranges",
 		toCV(clusterversion.AddRaftAppliedIndexTermMigration),
