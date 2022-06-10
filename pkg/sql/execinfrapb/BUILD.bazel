@@ -51,6 +51,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",

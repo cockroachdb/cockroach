@@ -95,12 +95,13 @@ func newTestContextWithKnobs(
 	clock *hlc.Clock, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
 	return NewContext(context.Background(), ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   testutils.NewNodeTestBaseContext(),
-		Clock:    clock,
-		Stopper:  stopper,
-		Settings: cluster.MakeTestingClusterSettings(),
-		Knobs:    knobs,
+		TenantID:  roachpb.SystemTenantID,
+		Config:    testutils.NewNodeTestBaseContext(),
+		Clock:     clock.WallClock(),
+		MaxOffset: clock.MaxOffset(),
+		Stopper:   stopper,
+		Settings:  cluster.MakeTestingClusterSettings(),
+		Knobs:     knobs,
 	})
 }
 
@@ -177,11 +178,12 @@ func TestPingInterceptors(t *testing.T) {
 	recvMsg := "boom due to onHandlePing"
 	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
 	opts := ContextOptions{
-		TenantID: roachpb.SystemTenantID,
-		Config:   testutils.NewNodeTestBaseContext(),
-		Clock:    hlc.NewClockWithSystemTimeSource(500 * time.Millisecond /* maxOffset */),
-		Stopper:  stop.NewStopper(),
-		Settings: cluster.MakeTestingClusterSettings(),
+		TenantID:  roachpb.SystemTenantID,
+		Config:    testutils.NewNodeTestBaseContext(),
+		Clock:     &timeutil.DefaultTimeSource{},
+		MaxOffset: 500 * time.Millisecond,
+		Stopper:   stop.NewStopper(),
+		Settings:  cluster.MakeTestingClusterSettings(),
 		OnOutgoingPing: func(ctx context.Context, req *PingRequest) error {
 			if req.TargetNodeID == blockedTargetNodeID {
 				return errBoomSend

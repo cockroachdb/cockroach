@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -94,11 +93,12 @@ func TestSSLEnforcement(t *testing.T) {
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(ctx, rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   cfg,
-			Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
-			Stopper:  s.Stopper(),
-			Settings: s.ClusterSettings(),
+			TenantID:  roachpb.SystemTenantID,
+			Config:    cfg,
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: time.Nanosecond,
+			Stopper:   s.Stopper(),
+			Settings:  s.ClusterSettings(),
 		})
 	}
 
