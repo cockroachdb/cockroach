@@ -14,8 +14,10 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,11 +66,11 @@ type Registry struct {
 		syncutil.Mutex
 		// requests waiting for the right query to come along. The conditional
 		// requests are left in this map until they either are satisfied or
-		// expire (i.e. they never enter ongoing map).
+		// expire (i.e. they never enter unconditionalOngoing map).
 		requestFingerprints map[RequestID]Request
 		// ids of unconditional requests that this node is in the process of
 		// servicing.
-		ongoing map[RequestID]Request
+		unconditionalOngoing map[RequestID]Request
 
 		// epoch is observed before reading system.statement_diagnostics_requests, and then
 		// checked again before loading the tables contents. If the value changed in
@@ -94,6 +96,7 @@ type Registry struct {
 // information.
 type Request struct {
 	fingerprint         string
+	samplingProbability float64
 	minExecutionLatency time.Duration
 	expiresAt           time.Time
 }
@@ -209,6 +212,7 @@ func (r *Registry) addRequestInternalLocked(
 	ctx context.Context,
 	id RequestID,
 	queryFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAt time.Time,
 ) {
@@ -221,6 +225,7 @@ func (r *Registry) addRequestInternalLocked(
 	}
 	r.mu.requestFingerprints[id] = Request{
 		fingerprint:         queryFingerprint,
+		samplingProbability: samplingProbability,
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
 	}
@@ -244,7 +249,7 @@ func (r *Registry) findRequestLocked(requestID RequestID) bool {
 		}
 		return true
 	}
-	_, ok = r.mu.ongoing[requestID]
+	_, ok = r.mu.unconditionalOngoing[requestID]
 	return ok
 }
 
@@ -254,29 +259,48 @@ func (r *Registry) cancelRequest(requestID RequestID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.mu.requestFingerprints, requestID)
-	delete(r.mu.ongoing, requestID)
+	delete(r.mu.unconditionalOngoing, requestID)
 }
 
 // InsertRequest is part of the StmtDiagnosticsRequester interface.
 func (r *Registry) InsertRequest(
 	ctx context.Context,
 	stmtFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) error {
-	_, err := r.insertRequestInternal(ctx, stmtFingerprint, minExecutionLatency, expiresAfter)
+	_, err := r.insertRequestInternal(ctx, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAfter)
 	return err
 }
 
 func (r *Registry) insertRequestInternal(
 	ctx context.Context,
 	stmtFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
 	g, err := r.gossip.OptionalErr(48274)
 	if err != nil {
 		return 0, err
+	}
+
+	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs)
+	if !isSamplingProbabilitySupported && samplingProbability != 0 {
+		return 0, errors.New(
+			"sampling probability only supported after 22.2 version migrations have completed",
+		)
+	}
+	if samplingProbability < 0 || samplingProbability > 1 {
+		return 0, errors.AssertionFailedf(
+			"malformed input: expected sampling probability in range [0.0, 1.0], got %f",
+			samplingProbability)
+	}
+	if samplingProbability != 0 && minExecutionLatency.Nanoseconds() == 0 {
+		return 0, errors.AssertionFailedf(
+			"malformed input: got non-zero sampling probability %f and empty min exec latency",
+			samplingProbability)
 	}
 
 	var reqID RequestID
@@ -312,6 +336,10 @@ func (r *Registry) insertRequestInternal(
 		qargs := make([]interface{}, 2, 4)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
+		if samplingProbability != 0 {
+			insertColumns += ", sampling_probability"
+			qargs = append(qargs, samplingProbability) // sampling_probability
+		}
 		if minExecutionLatency != 0 {
 			insertColumns += ", min_execution_latency"
 			qargs = append(qargs, minExecutionLatency) // min_execution_latency
@@ -350,7 +378,7 @@ func (r *Registry) insertRequestInternal(
 	// waiting for the poller.
 	r.mu.Lock()
 	r.mu.epoch++
-	r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, minExecutionLatency, expiresAt)
+	r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
 	r.mu.Unlock()
 
 	// Notify all the other nodes that they have to poll.
@@ -433,15 +461,15 @@ func (r *Registry) RemoveOngoing(requestID RequestID, req Request) {
 			delete(r.mu.requestFingerprints, requestID)
 		}
 	} else {
-		delete(r.mu.ongoing, requestID)
+		delete(r.mu.unconditionalOngoing, requestID)
 	}
 }
 
 // ShouldCollectDiagnostics checks whether any data should be collected for the
 // given query, which is the case if the registry has a request for this
-// statement's fingerprint; in this case ShouldCollectDiagnostics will return
-// true again on this node for the same diagnostics request only for conditional
-// requests.
+// statement's fingerprint (and assuming probability conditions hold); in this
+// case ShouldCollectDiagnostics will return true again on this node for the
+// same diagnostics request only for conditional requests.
 //
 // If shouldCollect is true, RemoveOngoing needs to be called (which is inlined
 // by IsExecLatencyConditionMet when that returns false).
@@ -469,17 +497,21 @@ func (r *Registry) ShouldCollectDiagnostics(
 	}
 
 	if reqID == 0 {
-		return false, 0, req
+		return false, 0, Request{}
 	}
 
 	if !req.isConditional() {
-		if r.mu.ongoing == nil {
-			r.mu.ongoing = make(map[RequestID]Request)
+		if r.mu.unconditionalOngoing == nil {
+			r.mu.unconditionalOngoing = make(map[RequestID]Request)
 		}
-		r.mu.ongoing[reqID] = req
+		r.mu.unconditionalOngoing[reqID] = req
 		delete(r.mu.requestFingerprints, reqID)
 	}
-	return true, reqID, req
+
+	if req.samplingProbability == 0 || rand.Float64() < req.samplingProbability {
+		return true, reqID, req
+	}
+	return false, 0, Request{}
 }
 
 // InsertStatementDiagnostics inserts a trace into system.statement_diagnostics.
@@ -612,19 +644,25 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
+	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs)
+
 	// Loop until we run the query without straddling an epoch increment.
 	for {
 		r.mu.Lock()
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
+		var extraColumns string
+		if isSamplingProbabilitySupported {
+			extraColumns = ", sampling_probability"
+		}
 		it, err := r.ie.QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
 				User: username.RootUserName(),
 			},
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at
+			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at%s
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
 		)
 		if err != nil {
 			return err
@@ -657,14 +695,21 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		stmtFingerprint := string(*row[1].(*tree.DString))
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
+		var samplingProbability float64
+
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
 			minExecutionLatency = time.Duration(minExecLatency.Nanos())
 		}
 		if e, ok := row[3].(*tree.DTimestampTZ); ok {
 			expiresAt = e.Time
 		}
+		if isSamplingProbabilitySupported {
+			if prob, ok := row[4].(*tree.DFloat); ok {
+				samplingProbability = float64(*prob)
+			}
+		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, minExecutionLatency, expiresAt)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
 	}
 
 	// Remove all other requests.

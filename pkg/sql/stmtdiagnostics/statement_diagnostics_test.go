@@ -80,10 +80,11 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	var minExecutionLatency, expiresAfter time.Duration
+	var samplingProbability float64
 
 	// Ask to trace a particular query.
 	t.Run("basic", func(t *testing.T) {
-		reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -98,11 +99,11 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	// Verify that we can handle multiple requests at the same time.
 	t.Run("multiple", func(t *testing.T) {
-		id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
+		id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
-		id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", minExecutionLatency, expiresAfter)
+		id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
-		id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", minExecutionLatency, expiresAfter)
+		id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
 
 		// Run the queries in a different order.
@@ -121,7 +122,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	// Verify that EXECUTE triggers diagnostics collection (#66048).
 	t.Run("execute", func(t *testing.T) {
-		id, err := registry.InsertRequestInternal(ctx, "SELECT x + $1 FROM test", minExecutionLatency, expiresAfter)
+		id, err := registry.InsertRequestInternal(ctx, "SELECT x + $1 FROM test", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
 		_, err = db.Exec("PREPARE stmt AS SELECT x + $1 FROM test")
 		require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// condition is satisfied.
 	t.Run("conditional", func(t *testing.T) {
 		minExecutionLatency := 100 * time.Millisecond
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -154,7 +155,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	t.Run("conditional expired", func(t *testing.T) {
 		minExecutionLatency := 100 * time.Millisecond
 		reqID, err := registry.InsertRequestInternal(
-			ctx, "SELECT pg_sleep(_)", minExecutionLatency, time.Nanosecond,
+			ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, time.Nanosecond,
 		)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
@@ -172,7 +173,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// conditional, then the bundle is collected.
 	t.Run("conditional with concurrency", func(t *testing.T) {
 		minExecutionLatency := 100 * time.Millisecond
-		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep($1)", minExecutionLatency, expiresAfter)
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep($1)", samplingProbability, minExecutionLatency, expiresAfter)
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
@@ -222,7 +223,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 						// SucceedsSoon. Figure it out.
 						testutils.SucceedsSoon(t, func() error {
 							reqID, err := registry.InsertRequestInternal(
-								ctx, fprint, minExecutionLatency, expiresAfter,
+								ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter,
 							)
 							require.NoError(t, err)
 							checkNotCompleted(reqID)
@@ -257,7 +258,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 						minExecutionLatency = 100 * time.Millisecond
 					}
 					reqID, err := registry.InsertRequestInternal(
-						ctx, fprint, minExecutionLatency, expiresAfter,
+						ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter,
 					)
 					require.NoError(t, err)
 					checkNotCompleted(reqID)
@@ -287,6 +288,8 @@ func TestDiagnosticsRequest(t *testing.T) {
 			})
 		}
 	})
+
+	// XXX: Add subtest for non-zero probability.
 }
 
 // Test that a different node can service a diagnostics request.
@@ -302,10 +305,11 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	require.NoError(t, err)
 
 	var minExecutionLatency, expiresAfter time.Duration
+	var samplingProbability float64
 
 	// Ask to trace a particular query using node 0.
 	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
-	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
+	reqID, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
 	reqRow := db0.QueryRow(
 		`SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests
@@ -340,11 +344,11 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
 
 	// Verify that we can handle multiple requests at the same time.
-	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", minExecutionLatency, expiresAfter)
+	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)", samplingProbability, minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
-	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", minExecutionLatency, expiresAfter)
+	id2, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test", samplingProbability, minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
-	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", minExecutionLatency, expiresAfter)
+	id3, err := registry.InsertRequestInternal(ctx, "SELECT x FROM test WHERE x > _", samplingProbability, minExecutionLatency, expiresAfter)
 	require.NoError(t, err)
 
 	// Run the queries in a different order.

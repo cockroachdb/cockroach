@@ -487,16 +487,28 @@ type StmtDiagnosticsRequester interface {
 	// InsertRequest adds an entry to system.statement_diagnostics_requests for
 	// tracing a query with the given fingerprint. Once this returns, calling
 	// stmtdiagnostics.ShouldCollectDiagnostics() on the current node will
-	// return true for the given fingerprint.
+	// return true depending on the parameters below.
+	// - samplingProbability controls how likely we are to try and collect a
+	//  diagnostics report for a given execution. The semantics with
+	//  minExecutionLatency are as follows:
+	//  - If samplingProbability is zero, we're always sampling. This is for
+	//    compatibility with pre-22.2 versions where this parameter was not
+	//    available.
+	//  - If samplingProbability is non-zero, minExecutionLatency must be
+	//    non-zero. We'll sample stmt executions with the given probability
+	//    until:
+	//    (a) we capture one that exceeds minExecutionLatency, or
+	//    (b) we hit the expiresAfter point.
 	// - minExecutionLatency, if non-zero, determines the minimum execution
-	// latency of a query that satisfies the request. In other words, queries
-	// that ran faster than minExecutionLatency do not satisfy the condition
-	// and the bundle is not generated for them.
+	//   latency of a query that satisfies the request. In other words, queries
+	//   that ran faster than minExecutionLatency do not satisfy the condition
+	//   and the bundle is not generated for them.
 	// - expiresAfter, if non-zero, indicates for how long the request should
-	// stay active.
+	//   stay active.
 	InsertRequest(
 		ctx context.Context,
 		stmtFingerprint string,
+		samplingProbability float64,
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 	) error

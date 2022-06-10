@@ -204,8 +204,8 @@ type Context struct {
 	RangeProber RangeProber
 
 	// StmtDiagnosticsRequestInserter is used by the
-	// crdb_internal.request_statement_bundle builtin to insert a statement bundle
-	// request.
+	// crdb_internal.request_statement_bundle builtin to insert a statement
+	// bundle request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 
 	// CatalogBuiltins is used by various builtins which depend on looking up
