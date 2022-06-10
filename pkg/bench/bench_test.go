@@ -1200,6 +1200,75 @@ func BenchmarkIndexJoinColumnFamilies(b *testing.B) {
 	})
 }
 
+// BenchmarkLookupJoinEqColsAreKeyNoOrdering measures a lookup-join with 1000
+// rows when equality columns are key and ordering doesn't have to be
+// maintained.
+func BenchmarkLookupJoinEqColsAreKeyNoOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT)`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a`)
+		}
+	})
+}
+
+// BenchmarkLookupJoinEqColsAreKeyOrdering measures a lookup-join with 1000 rows
+// when equality columns are key and ordering needs to be maintained.
+func BenchmarkLookupJoinEqColsAreKeyOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT PRIMARY KEY)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT)`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a ORDER BY t1.a`)
+		}
+	})
+}
+
+// BenchmarkLookupJoinNoOrdering measures a lookup-join with 1000 rows and
+// ordering doesn't have to be maintained.
+func BenchmarkLookupJoinNoOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT, INDEX (a))`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000)`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a`)
+		}
+	})
+}
+
+// BenchmarkLookupJoinOrdering measures a lookup-join with 1000 rows when
+// ordering needs to be maintained.
+func BenchmarkLookupJoinOrdering(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		db.Exec(b, `CREATE TABLE t1 (a INT PRIMARY KEY)`)
+		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE t2 (a INT, INDEX (a))`)
+		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000)`)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a ORDER BY t1.a`)
+		}
+	})
+}
+
 func BenchmarkSortJoinAggregation(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
