@@ -87,7 +87,12 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"users"/4/1
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
-38 splits:
+43 splits:
+ /Table/3
+ /Table/4
+ /Table/5
+ /Table/6
+ /Table/8
  /Table/11
  /Table/12
  /Table/13

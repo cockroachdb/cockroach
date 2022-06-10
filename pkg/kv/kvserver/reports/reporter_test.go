@@ -486,7 +486,7 @@ func TestZoneChecker(t *testing.T) {
 		newRootZoneCfg *zonepb.ZoneConfig
 		newZoneKey     ZoneKey
 	}
-	// NB: IDs need to be beyond MaxSystemConfigDescID, otherwise special logic
+	// NB: IDs need to be beyond DeprecatedMaxSystemConfigDescID, otherwise special logic
 	// kicks in for mapping keys to zones. They also need to not overlap with any
 	// system table IDs.
 	dbID := int(bootstrap.TestingMinUserDescID())
