@@ -959,6 +959,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 			privStringBuilder.WriteString(priv.Kind.String())
 		}
 		privStringBuilder.WriteString(" ON ")
+		privStringBuilder.WriteString(strings.ToUpper(string(objectType)) + " ")
 		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
 		privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
