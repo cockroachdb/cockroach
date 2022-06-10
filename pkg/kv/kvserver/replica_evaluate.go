@@ -153,7 +153,6 @@ func evaluateBatch(
 	ui uncertainty.Interval,
 	readOnly bool,
 ) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
-
 	defer func() {
 		// Ensure that errors don't carry the WriteTooOld flag set. The client
 		// handles non-error responses with the WriteTooOld flag set, and errors

@@ -1440,6 +1440,25 @@ Replicas in this state will fail-fast all inbound requests.
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	// Replica read batch evaluation.
+	metaReplicaReadBatchEvaluationLatency = metric.Metadata{
+		Name: "kv.replica_read_batch_evaluate.latency",
+		Help: `Execution duration for evaluating a BatchRequest on the read-only path after latches have been acquired.
+
+A measurement is recorded regardless of outcome (i.e. also in case of an error). If internal retries occur, each instance is recorded separately.`,
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	// Replica read-write batch evaluation.
+	metaReplicaWriteBatchEvaluationLatency = metric.Metadata{
+		Name: "kv.replica_write_batch_evaluate.latency",
+		Help: `Execution duration for evaluating a BatchRequest on the read-write path after latches have been acquired.
+
+A measurement is recorded regardless of outcome (i.e. also in case of an error). If internal retries occur, each instance is recorded separately.
+Note that the measurement does not include the duration for replicating the evaluated command.`,
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1700,6 +1719,10 @@ type StoreMetrics struct {
 	// Replica circuit breaker.
 	ReplicaCircuitBreakerCurTripped *metric.Gauge
 	ReplicaCircuitBreakerCumTripped *metric.Counter
+
+	// Replica batch evaluation metrics.
+	ReplicaReadBatchEvaluationLatency  *metric.Histogram
+	ReplicaWriteBatchEvaluationLatency *metric.Histogram
 }
 
 type tenantMetricsRef struct {
@@ -2170,6 +2193,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Replica circuit breaker.
 		ReplicaCircuitBreakerCurTripped: metric.NewGauge(metaReplicaCircuitBreakerCurTripped),
 		ReplicaCircuitBreakerCumTripped: metric.NewCounter(metaReplicaCircuitBreakerCumTripped),
+
+		// Replica batch evaluation.
+		ReplicaReadBatchEvaluationLatency:  metric.NewLatency(metaReplicaReadBatchEvaluationLatency, histogramWindow),
+		ReplicaWriteBatchEvaluationLatency: metric.NewLatency(metaReplicaWriteBatchEvaluationLatency, histogramWindow),
 	}
 
 	{
