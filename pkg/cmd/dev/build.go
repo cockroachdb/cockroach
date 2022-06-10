@@ -89,6 +89,7 @@ var buildTargetMapping = map[string]string{
 	"label-merged-pr":  "//pkg/cmd/label-merged-pr:label-merged-pr",
 	"geos":             geosTarget,
 	"libgeos":          geosTarget,
+	"obsservice":       "//pkg/obsservice/cmd/obsservice",
 	"optgen":           "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":           "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"oss":              "//pkg/cmd/cockroach-oss:cockroach-oss",
@@ -412,7 +413,9 @@ func (d *dev) getBasicBuildArgs(
 
 	// Add --config=with_ui iff we're building a target that needs it.
 	for _, target := range buildTargets {
-		if target.fullName == buildTargetMapping["cockroach"] || target.fullName == buildTargetMapping["cockroach-oss"] {
+		if target.fullName == buildTargetMapping["cockroach"] ||
+			target.fullName == buildTargetMapping["cockroach-oss"] ||
+			target.fullName == buildTargetMapping["obsservice"] {
 			args = append(args, "--config=with_ui")
 			break
 		}

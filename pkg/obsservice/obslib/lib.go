@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -93,6 +95,14 @@ to trust the certificate presented by CockroachDB.`)
 	}
 }
 
+type noOIDCConfigured struct{}
+
+func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
+	return ui.OIDCUIConf{
+		Enabled: false,
+	}
+}
+
 // RunAsync runs an HTTP proxy server in a goroutine. The returned channel is
 // closed when the server terminates.
 //
@@ -114,10 +124,34 @@ func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
 			_ = listener.Close()
 		}()
 
+		nodeID := &base.NodeIDContainer{}
+		nodeID.Set(ctx, 123456)
+
 		// Create the HTTP mux. Requests will generally be forwarded to p.proxy,
 		// except the /debug/pprof ones which will be served locally.
 		mux := http.NewServeMux()
-		mux.Handle("/", p.proxy)
+		// TODO(davidh): Previously, the `/` handler was the proxy to CRDB.
+		// This is now broken because we've started serving the UI from the
+		// same endpoint. We should find some way to serve the UI *and*
+		// proxy to CRDB at the same time. Unclear how this should work at
+		// the moment.
+
+		// TODO(davidh): Ideally, the UI handler should probably be
+		// configured in `obsservice` and not hardcoded into `obslib`. This
+		// gives lib users a chance to do whatever they want with the UI.
+		mux.Handle("/", ui.Handler(ui.Config{
+			ExperimentalUseLogin: false,
+			LoginEnabled:         false,
+			NodeID:               nodeID,
+			GetUser: func(ctx context.Context) *string {
+				u := "Observability Service"
+				return &u
+			},
+			OIDC: &noOIDCConfigured{},
+		}))
+		mux.Handle("/_admin/", p.proxy)
+		mux.Handle("/_status/", p.proxy)
+		mux.Handle("/ts/", p.proxy)
 		// This seems to be the minimal set of handlers that we need to register in
 		// order to get all the pprof functionality. The pprof.Index handler handles
 		// some types of profiles itself.
