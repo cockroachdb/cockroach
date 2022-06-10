@@ -1022,6 +1022,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	c.mu.openChildren = nil
 	c.mu.recording.finishedChildren = nil
 	c.mu.tags = nil
+	c.mu.lazyTags = nil
 	c.mu.recording.logs.Discard()
 	c.mu.recording.structured.Discard()
 	c.mu.Unlock()

@@ -7156,10 +7156,7 @@ func TestEntries(t *testing.T) {
 				if _, pErr := tc.SendWrapped(args); pErr != nil {
 					t.Fatal(pErr)
 				}
-				idx, err := repl.GetLastIndex()
-				if err != nil {
-					t.Fatal(err)
-				}
+				idx := repl.GetLastIndex()
 				newIndexes = append(newIndexes, idx)
 			}
 			return newIndexes
@@ -7315,10 +7312,7 @@ func TestTerm(t *testing.T) {
 			if _, pErr := tc.SendWrapped(args); pErr != nil {
 				t.Fatal(pErr)
 			}
-			idx, err := tc.repl.GetLastIndex()
-			if err != nil {
-				t.Fatal(err)
-			}
+			idx := tc.repl.GetLastIndex()
 			indexes = append(indexes, idx)
 		}
 
@@ -7332,29 +7326,26 @@ func TestTerm(t *testing.T) {
 		repl.mu.Lock()
 		defer repl.mu.Unlock()
 
-		firstIndex, err := repl.raftFirstIndexLocked()
-		if err != nil {
-			t.Fatal(err)
-		}
+		firstIndex := repl.raftFirstIndexRLocked()
 		if firstIndex != indexes[5] {
 			t.Fatalf("expected firstIndex %d to be %d", firstIndex, indexes[4])
 		}
 
 		// Truncated logs should return an ErrCompacted error.
-		if _, err := tc.repl.raftTermRLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
+		if _, err := tc.repl.raftTermLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
 		}
-		if _, err := tc.repl.raftTermRLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
+		if _, err := tc.repl.raftTermLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
 		}
 
 		// FirstIndex-1 should return the term of firstIndex.
-		firstIndexTerm, err := tc.repl.raftTermRLocked(firstIndex)
+		firstIndexTerm, err := tc.repl.raftTermLocked(firstIndex)
 		if err != nil {
 			t.Errorf("expect no error, got %s", err)
 		}
 
-		term, err := tc.repl.raftTermRLocked(indexes[4])
+		term, err := tc.repl.raftTermLocked(indexes[4])
 		if err != nil {
 			t.Errorf("expect no error, got %s", err)
 		}
@@ -7362,21 +7353,18 @@ func TestTerm(t *testing.T) {
 			t.Errorf("expected firstIndex-1's term:%d to equal that of firstIndex:%d", term, firstIndexTerm)
 		}
 
-		lastIndex, err := repl.raftLastIndexLocked()
-		if err != nil {
-			t.Fatal(err)
-		}
+		lastIndex := repl.raftLastIndexRLocked()
 
 		// Last index should return correctly.
-		if _, err := tc.repl.raftTermRLocked(lastIndex); err != nil {
+		if _, err := tc.repl.raftTermLocked(lastIndex); err != nil {
 			t.Errorf("expected no error, got %s", err)
 		}
 
 		// Terms for after the last index should return ErrUnavailable.
-		if _, err := tc.repl.raftTermRLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
+		if _, err := tc.repl.raftTermLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
 			t.Errorf("expected ErrUnavailable, got %s", err)
 		}
-		if _, err := tc.repl.raftTermRLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
+		if _, err := tc.repl.raftTermLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
 			t.Errorf("expected ErrUnavailable, got %s", err)
 		}
 	})
@@ -9898,8 +9886,8 @@ func (q *testQuiescer) raftBasicStatusRLocked() raft.BasicStatus {
 	return q.status.BasicStatus
 }
 
-func (q *testQuiescer) raftLastIndexLocked() (uint64, error) {
-	return q.lastIndex, nil
+func (q *testQuiescer) raftLastIndexRLocked() uint64 {
+	return q.lastIndex
 }
 
 func (q *testQuiescer) hasRaftReadyRLocked() bool {

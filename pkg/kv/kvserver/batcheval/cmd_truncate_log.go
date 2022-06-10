@@ -58,10 +58,6 @@ func TruncateLog(
 		return result.Result{}, nil
 	}
 
-	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
-	if err != nil {
-		return result.Result{}, errors.Wrap(err, "getting first index")
-	}
 	// Have we already truncated this log? If so, just return without an error.
 	// Note that there may in principle be followers whose Raft log is longer
 	// than this node's, but to issue a truncation we also need the *term* for
@@ -70,6 +66,7 @@ func TruncateLog(
 	//
 	// TODO(tbg): think about synthesizing a valid term. Can we use the next
 	// existing entry's term?
+	firstIndex := cArgs.EvalCtx.GetFirstIndex()
 	if firstIndex >= args.Index {
 		if log.V(3) {
 			log.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",

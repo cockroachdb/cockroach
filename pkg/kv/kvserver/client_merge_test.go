@@ -726,8 +726,7 @@ func mergeCheckingTimestampCaches(
 			}
 			minLastIndex := uint64(math.MaxUint64)
 			for _, r := range lhsRepls {
-				lastIndex, err := r.GetLastIndex()
-				require.NoError(t, err)
+				lastIndex := r.GetLastIndex()
 				minLastIndex = min(minLastIndex, lastIndex)
 			}
 			// Truncate the log at index+1 (log entries < N are removed).
@@ -745,8 +744,7 @@ func mergeCheckingTimestampCaches(
 					// Loosely-coupled truncation requires an engine flush to advance
 					// guaranteed durability.
 					require.NoError(t, r.Engine().Flush())
-					firstIndex, err := r.GetFirstIndex()
-					require.NoError(t, err)
+					firstIndex := r.GetFirstIndex()
 					if firstIndex < truncIndex {
 						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
 					}
@@ -3974,10 +3972,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	// Truncate the logs of the LHS.
 	index := func() uint64 {
 		repl := store0.LookupReplica(roachpb.RKey(keyA))
-		index, err := repl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
+		index := repl.GetLastIndex()
 		truncArgs := &roachpb.TruncateLogRequest{
 			RequestHeader: roachpb.RequestHeader{Key: keyA},
 			Index:         index,
