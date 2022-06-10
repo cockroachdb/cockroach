@@ -366,8 +366,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 
 	records := make([]spanconfig.Record, 0)
 	if table.GetID() == keys.DescriptorTableID {
-		// We have some special handling for `system.descriptor` on account of
-		// it being the first non-empty table in every tenant's keyspace.
+		startKey := keys.TableDataMin
 		if !s.codec.ForSystemTenant() {
 			// We start the span at the tenant prefix. This effectively installs
 			// the tenant's split boundary at /Tenant/<id> instead of
@@ -375,61 +374,17 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// there's no data within [/Tenant/<id>/ - /Tenant/<id>/Table/3),
 			// but looking at range boundaries, it's slightly less confusing
 			// this way.
-			record, err := spanconfig.MakeRecord(
-				spanconfig.MakeTargetFromSpan(roachpb.Span{
-					Key:    s.codec.TenantPrefix(),
-					EndKey: tableEndKey,
-				}), tableSpanConfig)
-			if err != nil {
-				return nil, err
-			}
-			records = append(records, record)
-		} else {
-			// The same as above, except we have named ranges preceding
-			// `system.descriptor`. Not doing anything special here would mean
-			// splitting on /Table/3 instead of /Table/0 (pretty printed as
-			// /Table/SystemConfigSpan/Start), which is benign since there's no
-			// data under /Table/{0-2}. Still, doing it this way reduces the
-			// differences between the gossip-backed subsystem and this one --
-			// somewhat useful for understandability reasons and reducing the
-			// (tiny) re-splitting costs when switching between the two
-			// subsystems.
-			record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
-				Key:    keys.TableDataMin,
+			startKey = s.codec.TenantPrefix()
+		}
+		record, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSpan(roachpb.Span{
+				Key:    startKey,
 				EndKey: tableEndKey,
 			}), tableSpanConfig)
-			if err != nil {
-				return nil, err
-			}
-			records = append(records, record)
+		if err != nil {
+			return nil, err
 		}
-
-		return records, nil
-
-		// TODO(irfansharif): There's an attack vector here that we haven't
-		// addressed satisfactorily. By splitting only on start keys of span
-		// configs, a malicious tenant could augment their reconciliation
-		// process to install configs starting much later in their addressable
-		// keyspace. This could induce KV to consider a range boundary that
-		// starts at the previous tenant's keyspace (albeit the tail end of it)
-		// and ending within the malicious tenant's one -- that's no good. We
-		// could do two things:
-		// (i)  Have each tenant install a span config that demarcates the end of
-		//      its keyspace (in our example the previous tenant would defensively
-		//      prevent leaking its user data through this hard boundary);
-		// (ii) Have KV enforce these hard boundaries in with keyspans that
-		//      straddle tenant keyspaces.
-		//
-		// Doing (ii) feels saner, and we already do something similar when
-		// seeding `system.span_configurations` for newly created tenants. We
-		// could have secondary tenants still govern span configurations over
-		// their keyspace, but we'd always split on the tenant boundary. For
-		// malicious tenants, the config we'd apply over that range would be the
-		// fallback one KV already uses for missing spans. For non-malicious
-		// tenants, it could either be the config for (i) `system.descriptor` as
-		// done above, or (ii) whatever the tenant's RANGE DEFAULT is.
-		//
-		// See #73749.
+		records = append(records, record)
 	}
 
 	prevEndKey := tableStartKey

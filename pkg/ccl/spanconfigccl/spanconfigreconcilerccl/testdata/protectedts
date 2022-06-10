@@ -77,7 +77,6 @@ state limit=3
 state offset=51
 ----
 ...
-/Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
 # Release the cluster records.

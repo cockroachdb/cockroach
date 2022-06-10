@@ -514,6 +514,7 @@ func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster.WaitForFullReplication()
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -562,15 +563,9 @@ func TestRangeCount(t *testing.T) {
 
 	sysDBMap := getSystemTableRangeCount()
 	{
-		// The tables below sit on the SystemConfigRange. For technical reason,
-		// their range count comes back as zero. Let's just use the descriptor
-		// table to count this range as they're not picked up by the "non-table
-		// data" neither.
-		for _, table := range []string{"public.descriptor", "public.settings", "public.zones"} {
-			n, ok := sysDBMap[table]
-			require.True(t, ok, table)
-			require.Zero(t, n, table)
-		}
+		n, ok := sysDBMap["public.descriptor"]
+		require.True(t, ok, "public.descriptor in map")
+		require.Zero(t, n, "public.descriptor ranges")
 
 		sysDBMap["public.descriptor"] = 1
 	}

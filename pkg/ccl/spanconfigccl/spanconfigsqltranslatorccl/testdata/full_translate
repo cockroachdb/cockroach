@@ -28,7 +28,6 @@ full-translate
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
 /System{tse-/SystemSpanConfigKeys}         range system
-/Table/{SystemConfigSpan/Start-4}          database system (host)
 /Table/{4-5}                               database system (host)
 /Table/{5-6}                               database system (host)
 /Table/{6-7}                               database system (host)

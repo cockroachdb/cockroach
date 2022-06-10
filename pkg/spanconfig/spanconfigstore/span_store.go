@@ -110,26 +110,6 @@ func (s *spanConfigStore) forEachOverlapping(
 func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey, error) {
 	sp := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
 
-	// We don't want to split within the system config span while we're still
-	// also using it to disseminate zone configs.
-	//
-	// TODO(irfansharif): Once we've fully phased out the system config span, we
-	// can get rid of this special handling.
-	// TODO(richardjcai): Can we remove this?
-	if keys.SystemDescriptorTableSpan.Contains(sp) {
-		return nil, nil
-	}
-	if keys.SystemDescriptorTableSpan.ContainsKey(sp.Key) {
-		return roachpb.RKey(keys.SystemDescriptorTableSpan.EndKey), nil
-	}
-
-	if keys.SystemZonesTableSpan.Contains(sp) {
-		return nil, nil
-	}
-	if keys.SystemZonesTableSpan.ContainsKey(sp.Key) {
-		return roachpb.RKey(keys.SystemZonesTableSpan.EndKey), nil
-	}
-
 	// Generally split keys are going to be the start keys of span config entries.
 	// When computing a split key over ['b', 'z'), 'b' is not a valid split key;
 	// in the iteration below we'll find all entries overlapping with the given

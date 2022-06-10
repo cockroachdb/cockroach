@@ -122,34 +122,26 @@ func runTest(
 func getSystemDescriptorAndZonesSpans(
 	ctx context.Context, t *testing.T, codec keys.SQLCodec, kvDB *kv.DB,
 ) []roachpb.KeyValue {
-	var ba roachpb.BatchRequest
-	ba.Add(
-		roachpb.NewScan(
-			append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.Key...),
-			append(codec.TenantPrefix(), keys.SystemDescriptorTableSpan.EndKey...),
-			false, // forUpdate
-		),
+	scanSpanForRows := func(startKey, endKey roachpb.Key) (rows []roachpb.KeyValue) {
+		var ba roachpb.BatchRequest
+		ba.Add(
+			roachpb.NewScan(
+				append(codec.TenantPrefix(), startKey...),
+				append(codec.TenantPrefix(), endKey...),
+				false, // forUpdate
+			),
+		)
+		br, pErr := kvDB.NonTransactionalSender().Send(ctx, ba)
+		require.NoError(t, pErr.GoError())
+
+		rows = br.Responses[0].GetScan().Rows
+		return rows
+	}
+
+	return append(
+		scanSpanForRows(keys.SystemDescriptorTableSpan.Key, keys.SystemDescriptorTableSpan.EndKey),
+		scanSpanForRows(keys.SystemZonesTableSpan.Key, keys.SystemZonesTableSpan.EndKey)...,
 	)
-	br, pErr := kvDB.NonTransactionalSender().Send(ctx, ba)
-	require.NoError(t, pErr.GoError())
-
-	rows1 := br.Responses[0].GetScan().Rows
-
-	ba.Reset()
-
-	ba.Add(
-		roachpb.NewScan(
-			append(codec.TenantPrefix(), keys.SystemZonesTableSpan.Key...),
-			append(codec.TenantPrefix(), keys.SystemZonesTableSpan.EndKey...),
-			false, // forUpdate
-		),
-	)
-	br, pErr = kvDB.NonTransactionalSender().Send(ctx, ba)
-	require.NoError(t, pErr.GoError())
-
-	rows2 := br.Responses[0].GetScan().Rows
-
-	return append(rows1, rows2...)
 }
 
 type noopT struct{}

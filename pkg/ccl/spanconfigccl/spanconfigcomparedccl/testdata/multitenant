@@ -18,7 +18,6 @@ initialize tenant=11
 configs version=current offset=43
 ----
 ...
-/Table/44                                  database system (host)
 /Table/45                                  ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/46                                  database system (host)
 /Table/47                                  database system (host)
@@ -49,7 +48,7 @@ diff offset=48 limit=10
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,6 @@
+@@ -42,4 +45,6 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -80,7 +79,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,7 @@
+@@ -42,4 +45,7 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -102,7 +101,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,9 @@
+@@ -42,4 +45,9 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -125,7 +124,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,9 @@
+@@ -42,4 +45,9 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -145,7 +144,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,9 @@
+@@ -42,4 +45,9 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -168,7 +167,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,9 @@
+@@ -42,4 +45,9 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -188,7 +187,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,9 @@
+@@ -42,4 +45,9 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
@@ -208,7 +207,7 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
-@@ -42,4 +46,7 @@
+@@ -42,4 +45,7 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system

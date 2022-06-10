@@ -116,7 +116,6 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.RangeMetaKey(roachpb.RKey(makeKey(keys.Meta2Prefix, roachpb.Key("foo")))).AsRawKey(), `/Meta1/"foo"`, revertSupportUnknown},
 
 		// table
-		{keys.TableDataMin, "/Table/SystemConfigSpan/Start", revertSupportUnknown},
 		{tenSysCodec.TablePrefix(111), "/Table/111", revertMustSupport},
 		{makeKey(tenSysCodec.TablePrefix(42), encoding.EncodeUvarintAscending(nil, 1)), `/Table/42/1`, revertMustSupport},
 		{makeKey(tenSysCodec.TablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`, revertSupportUnknown},

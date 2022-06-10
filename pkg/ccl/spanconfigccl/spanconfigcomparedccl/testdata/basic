@@ -29,7 +29,7 @@ configs version=legacy offset=4 limit=3
 ----
 ...
 /System/"tse"                              database system (host)
-/Table/SystemConfigSpan/Start              database system (host)
+/Table/0                                   database system (host)
 /Table/11                                  database system (host)
 ...
 
@@ -37,8 +37,8 @@ configs version=current offset=4 limit=3
 ----
 ...
 /System/"tse"                              range system
-/Table/SystemConfigSpan/Start              database system (host)
 /Table/4                                   database system (host)
+/Table/5                                   database system (host)
 ...
 
 # Both subsystems observe splits for the tables created above.
@@ -46,7 +46,6 @@ configs version=current offset=4 limit=3
 configs version=current offset=41
 ----
 ...
-/Table/42                                  database system (host)
 /Table/43                                  database system (host)
 /Table/44                                  database system (host)
 /Table/45                                  ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
@@ -73,25 +72,25 @@ diff
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
-@@ -1,8 +1,12 @@
+@@ -1,8 +1,11 @@
 -/Min                                       ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 -/System/NodeLiveness                       ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 -/System/NodeLivenessMax                    database system (host)
 -/System/tsd                                database system (tenant)
 -/System/"tse"                              database system (host)
+-/Table/0                                   database system (host)
 +/Min                                       ttl_seconds=3600 num_replicas=5
 +/System/NodeLiveness                       ttl_seconds=600 num_replicas=5
 +/System/NodeLivenessMax                    range system
 +/System/tsd                                range default
 +/System/"tse"                              range system
- /Table/SystemConfigSpan/Start              database system (host)
 +/Table/4                                   database system (host)
 +/Table/5                                   database system (host)
 +/Table/6                                   database system (host)
 +/Table/8                                   database system (host)
  /Table/11                                  database system (host)
  /Table/12                                  database system (host)
-@@ -10,11 +14,11 @@
+@@ -10,11 +13,11 @@
  /Table/14                                  database system (host)
  /Table/15                                  database system (host)
 -/Table/16                                  database system (host)
@@ -107,21 +106,21 @@ diff
 +/Table/22                                  range system
  /Table/23                                  database system (host)
  /Table/24                                  database system (host)
-@@ -23,5 +27,5 @@
+@@ -23,5 +26,5 @@
  /Table/27                                  ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
  /Table/28                                  database system (host)
 -/Table/29                                  database system (host)
 +/Table/29                                  range system
  /NamespaceTable/30                         database system (host)
  /NamespaceTable/Max                        database system (host)
-@@ -32,5 +36,5 @@
+@@ -32,5 +35,5 @@
  /Table/36                                  database system (host)
  /Table/37                                  database system (host)
 -/Table/38                                  database system (host)
 +/Table/38                                  range system
  /Table/39                                  database system (host)
  /Table/40                                  database system (host)
-@@ -42,5 +46,5 @@
+@@ -42,5 +45,5 @@
  /Table/46                                  database system (host)
  /Table/47                                  database system (host)
 -/Table/50                                  range system
