@@ -577,7 +577,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			clock: opts.Clock,
 		},
 		RemoteClocks: newRemoteClockMonitor(
-			opts.Clock, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
+			opts.Clock.WallClock(), opts.Clock.MaxOffset(), 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
 		rpcCompression:   enableRPCCompression,
 		MasterCtx:        masterCtx,
 		metrics:          makeMetrics(),
@@ -1807,7 +1807,8 @@ func (rpcCtx *Context) runHeartbeat(
 // NewHeartbeatService returns a HeartbeatService initialized from the Context.
 func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	return &HeartbeatService{
-		clock:                                 rpcCtx.Clock,
+		clock:                                 rpcCtx.Clock.WallClock(),
+		maxOffset:                             rpcCtx.Clock.MaxOffset(),
 		remoteClockMonitor:                    rpcCtx.RemoteClocks,
 		clusterName:                           rpcCtx.ClusterName(),
 		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,

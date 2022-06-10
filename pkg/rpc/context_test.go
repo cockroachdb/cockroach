@@ -128,7 +128,8 @@ func TestHeartbeatCB(t *testing.T) {
 		serverCtx.NodeID.Set(context.Background(), serverNodeID)
 		s := newTestServer(t, serverCtx)
 		RegisterHeartbeatServer(s, &HeartbeatService{
-			clock:              clock,
+			clock:              clock.WallClock(),
+			maxOffset:          clock.MaxOffset(),
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          serverCtx.StorageClusterID,
 			nodeID:             serverCtx.NodeID,
@@ -661,7 +662,8 @@ func TestHeartbeatHealth(t *testing.T) {
 	heartbeat := &ManualHeartbeatService{
 		ready:              make(chan error),
 		stopper:            stopper,
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		settings:           serverCtx.Settings,
 		nodeID:             serverCtx.NodeID,
@@ -921,7 +923,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	}
 	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
@@ -1101,7 +1104,8 @@ func TestOffsetMeasurement(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              serverClock,
+		clock:              serverClock.WallClock(),
+		maxOffset:          serverClock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
@@ -1171,7 +1175,8 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 	heartbeat := &ManualHeartbeatService{
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		ready:              make(chan error),
 		stopper:            stopper,
@@ -1282,7 +1287,8 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 
 		s := newTestServer(t, nodeCtxs[i].ctx)
 		RegisterHeartbeatServer(s, &HeartbeatService{
-			clock:              clock,
+			clock:              clock.WallClock(),
+			maxOffset:          clock.MaxOffset(),
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 			clusterID:          nodeCtxs[i].ctx.StorageClusterID,
 			nodeID:             nodeCtxs[i].ctx.NodeID,
@@ -1475,7 +1481,8 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	const msgInterval = 10 * time.Millisecond
 	hss := &HeartbeatStreamService{
 		HeartbeatService: HeartbeatService{
-			clock:              clock,
+			clock:              clock.WallClock(),
+			maxOffset:          clock.MaxOffset(),
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          serverCtx.StorageClusterID,
 			nodeID:             serverCtx.NodeID,
@@ -1754,7 +1761,8 @@ func TestClusterIDMismatch(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
@@ -1827,7 +1835,8 @@ func TestClusterNameMismatch(t *testing.T) {
 
 			s := newTestServer(t, serverCtx)
 			RegisterHeartbeatServer(s, &HeartbeatService{
-				clock:                          clock,
+				clock:                          clock.WallClock(),
+				maxOffset:                      clock.MaxOffset(),
 				remoteClockMonitor:             serverCtx.RemoteClocks,
 				clusterID:                      serverCtx.StorageClusterID,
 				nodeID:                         serverCtx.NodeID,
@@ -1877,7 +1886,8 @@ func TestNodeIDMismatch(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), 1)
 	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
@@ -1950,7 +1960,8 @@ func TestVersionCheckBidirectional(t *testing.T) {
 			}
 			s := newTestServer(t, serverCtx)
 			RegisterHeartbeatServer(s, &HeartbeatService{
-				clock:              clock,
+				clock:              clock.WallClock(),
+				maxOffset:          clock.MaxOffset(),
 				remoteClockMonitor: serverCtx.RemoteClocks,
 				clusterID:          serverCtx.StorageClusterID,
 				nodeID:             serverCtx.NodeID,
@@ -1996,7 +2007,8 @@ func TestGRPCDialClass(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
@@ -2054,7 +2066,8 @@ func TestTestingKnobs(t *testing.T) {
 		},
 	))
 	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              clock,
+		clock:              clock.WallClock(),
+		maxOffset:          clock.MaxOffset(),
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,

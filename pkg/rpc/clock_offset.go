@@ -89,7 +89,8 @@ type latencyInfo struct {
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets and round-trip latency from this node to connected nodes.
 type RemoteClockMonitor struct {
-	clock     *hlc.Clock
+	clock     hlc.WallClock
+	maxOffset time.Duration
 	offsetTTL time.Duration
 
 	mu struct {
@@ -103,10 +104,14 @@ type RemoteClockMonitor struct {
 
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(
-	clock *hlc.Clock, offsetTTL time.Duration, histogramWindowInterval time.Duration,
+	clock hlc.WallClock,
+	maxOffset time.Duration,
+	offsetTTL time.Duration,
+	histogramWindowInterval time.Duration,
 ) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
 		clock:     clock,
+		maxOffset: maxOffset,
 		offsetTTL: offsetTTL,
 	}
 	r.mu.offsets = make(map[string]RemoteOffset)
@@ -177,7 +182,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		if !emptyOffset {
 			r.mu.offsets[addr] = offset
 		}
-	} else if oldOffset.isStale(r.offsetTTL, r.clock.PhysicalTime()) {
+	} else if oldOffset.isStale(r.offsetTTL, r.clock.Now()) {
 		// We have a measurement but it's old - if the incoming measurement is not empty,
 		// set it, otherwise delete the old measurement.
 		if !emptyOffset {
@@ -235,8 +240,8 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	//
 	// TODO(tschottdorf): disallow maxOffset == 0 but probably lots of tests to
 	// fix.
-	if maxOffset := r.clock.MaxOffset(); maxOffset != 0 {
-		now := r.clock.PhysicalTime()
+	if r.maxOffset != 0 {
+		now := r.clock.Now()
 
 		healthyOffsetCount := 0
 
@@ -250,7 +255,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 			}
 			offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))
 			offsets = append(offsets, float64(offset.Offset-offset.Uncertainty))
-			if offset.isHealthy(ctx, maxOffset) {
+			if offset.isHealthy(ctx, r.maxOffset) {
 				healthyOffsetCount++
 			}
 		}
@@ -271,10 +276,10 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
 			return errors.Errorf(
 				"clock synchronization error: this node is more than %s away from at least half of the known nodes (%d of %d are within the offset)",
-				maxOffset, healthyOffsetCount, numClocks)
+				r.maxOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Dev.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, maxOffset)
+			log.Dev.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, r.maxOffset)
 		}
 	}
 
