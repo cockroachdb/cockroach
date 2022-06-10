@@ -70,3 +70,46 @@ func (c *cancelInfo) proxyIP() net.IP {
 func (c *cancelInfo) proxySecretID() uint32 {
 	return c.proxyBackendKeyData.SecretKey
 }
+
+// setNewBackend atomically sets a new backend cancel key and address.
+func (c *cancelInfo) setNewBackend(
+	newBackendKeyData *pgproto3.BackendKeyData, newCrdbAddr *net.TCPAddr,
+) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.origBackendKeyData = newBackendKeyData
+	c.mu.crdbAddr = newCrdbAddr
+}
+
+// cancelInfoMap contains all the cancelInfo objects that this proxy instance
+// is aware of. It is safe for concurrent use, and is keyed by a secret that
+// is shared between the proxy and the client.
+type cancelInfoMap struct {
+	syncutil.RWMutex
+	m map[uint32]*cancelInfo
+}
+
+func makeCancelInfoMap() *cancelInfoMap {
+	return &cancelInfoMap{
+		m: make(map[uint32]*cancelInfo),
+	}
+}
+
+func (c *cancelInfoMap) addCancelInfo(proxySecretID uint32, info *cancelInfo) {
+	c.Lock()
+	defer c.Unlock()
+	c.m[proxySecretID] = info
+}
+
+func (c *cancelInfoMap) deleteCancelInfo(proxySecretID uint32) {
+	c.Lock()
+	defer c.Unlock()
+	delete(c.m, proxySecretID)
+}
+
+func (c *cancelInfoMap) getCancelInfo(proxySecretID uint32) (*cancelInfo, bool) {
+	c.RLock()
+	defer c.RUnlock()
+	i, ok := c.m[proxySecretID]
+	return i, ok
+}

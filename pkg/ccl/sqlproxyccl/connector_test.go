@@ -193,6 +193,10 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 			StartupMsg: &pgproto3.StartupMessage{
 				Parameters: make(map[string]string),
 			},
+			CancelInfo: makeCancelInfo(
+				&net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+				&net.TCPAddr{IP: net.IP{11, 22, 33, 44}},
+			),
 		}
 
 		var openCalled bool
@@ -209,8 +213,9 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 			func(
 				clientConn net.Conn,
 				crdbConn net.Conn,
+				proxyBackendKeyData *pgproto3.BackendKeyData,
 				throttleHook func(status throttler.AttemptStatus) error,
-			) (*cancelInfo, error) {
+			) (*pgproto3.BackendKeyData, error) {
 				return nil, errors.New("bar")
 			},
 		)()
@@ -228,11 +233,21 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 	})
 
 	t.Run("successful", func(t *testing.T) {
-		clientConn, _ := net.Pipe()
-		defer clientConn.Close()
+		clientPipeConn, _ := net.Pipe()
+		defer clientPipeConn.Close()
+		clientConn := &fakeTCPConn{
+			Conn:       clientPipeConn,
+			remoteAddr: &net.TCPAddr{IP: net.IP{11, 22, 33, 44}},
+			localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+		}
 
-		serverConn, _ := net.Pipe()
-		defer serverConn.Close()
+		serverPipeConn, _ := net.Pipe()
+		defer serverPipeConn.Close()
+		serverConn := &fakeTCPConn{
+			Conn:       serverPipeConn,
+			remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3, 4}},
+			localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+		}
 
 		f := &forwarder{}
 		c := &connector{
@@ -242,6 +257,10 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 					sessionRevivalTokenStartupParam: "foo",
 				},
 			},
+			CancelInfo: makeCancelInfo(
+				&net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
+				&net.TCPAddr{IP: net.IP{11, 22, 33, 44}},
+			),
 		}
 
 		var openCalled bool
@@ -259,19 +278,25 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		}
 
 		var authCalled bool
+		crdbBackendKeyData := &pgproto3.BackendKeyData{
+			ProcessID: 4,
+			SecretKey: 5,
+		}
 		defer testutils.TestingHook(
 			&authenticate,
 			func(
 				client net.Conn,
 				server net.Conn,
+				proxyBackendKeyData *pgproto3.BackendKeyData,
 				throttleHook func(status throttler.AttemptStatus) error,
-			) (*cancelInfo, error) {
+			) (*pgproto3.BackendKeyData, error) {
 				authCalled = true
 				require.Equal(t, clientConn, client)
 				require.NotNil(t, server)
 				require.Equal(t, reflect.ValueOf(dummyHook).Pointer(),
 					reflect.ValueOf(throttleHook).Pointer())
-				return nil, nil
+				require.Equal(t, proxyBackendKeyData, c.CancelInfo.proxyBackendKeyData)
+				return crdbBackendKeyData, nil
 			},
 		)()
 
@@ -281,6 +306,7 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, sentToClient)
 		require.Equal(t, serverConn, crdbConn)
+		require.Equal(t, crdbBackendKeyData, c.CancelInfo.mu.origBackendKeyData)
 	})
 }
 
@@ -803,4 +829,18 @@ func (r *testTenantDirectoryCache) ReportFailure(
 	ctx context.Context, tenantID roachpb.TenantID, addr string,
 ) error {
 	return r.reportFailureFn(ctx, tenantID, addr)
+}
+
+type fakeTCPConn struct {
+	net.Conn
+	remoteAddr *net.TCPAddr
+	localAddr  *net.TCPAddr
+}
+
+func (c *fakeTCPConn) RemoteAddr() net.Addr {
+	return c.remoteAddr
+}
+
+func (c *fakeTCPConn) LocalAddr() net.Addr {
+	return c.localAddr
 }
