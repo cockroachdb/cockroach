@@ -100,6 +100,8 @@ var histogramMetricsNames = map[string]struct{}{
 	"streaming.admit_latency":                   {},
 	"streaming.commit_latency":                  {},
 	"streaming.flush_hist_nanos":                {},
+	"kv.replica_read_batch_evaluate.latency":    {},
+	"kv.replica_write_batch_evaluate.latency":   {},
 }
 
 func allInternalTSMetricsNames() []string {
