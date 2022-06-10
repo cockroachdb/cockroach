@@ -10,7 +10,10 @@
 
 package fuzzystrmatch
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+)
 
 func TestSoundex(t *testing.T) {
 	tt := []struct {
@@ -39,11 +42,24 @@ func TestSoundex(t *testing.T) {
 		},
 		{
 			Source:   "🌞",
-			Expected: "000",
+			Expected: "",
 		},
 		{
 			Source:   "😄 🐃 🐯 🕣 💲 🏜 👞 🔠 🌟 📌",
 			Expected: "",
+		},
+		{
+			Source:   "zażółćx",
+			Expected: "Z200",
+		},
+		{
+			Source:   "K😋",
+			Expected: "K000",
+		},
+		// Regression test for #82640, just ensure we don't panic.
+		{
+			Source:   "l�qă�_��",
+			Expected: "L200",
 		},
 	}
 
@@ -53,6 +69,16 @@ func TestSoundex(t *testing.T) {
 			t.Fatalf("error convert string to its Soundex code with source=%q"+
 				" expected %s got %s", tc.Source, tc.Expected, got)
 		}
+	}
+
+	// Run some random test cases to make sure we don't panic.
+
+	for i := 0; i < 1000; i++ {
+		l := rand.Int31n(10)
+		b := make([]byte, l)
+		rand.Read(b)
+
+		soundex(string(b))
 	}
 }
 
