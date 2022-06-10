@@ -138,10 +138,12 @@ func Handler(cfg Config) http.Handler {
 			LoggedInUser:         cfg.GetUser(r.Context()),
 			Tag:                  buildInfo.Tag,
 			Version:              build.BinaryVersionPrefix(),
-			NodeID:               cfg.NodeID.String(),
 			OIDCAutoLogin:        oidcConf.AutoLogin,
 			OIDCLoginEnabled:     oidcConf.Enabled,
 			OIDCButtonText:       oidcConf.ButtonText,
+		}
+		if cfg.NodeID != nil {
+			args.NodeID = cfg.NodeID.String()
 		}
 		if uiConfigPath.MatchString(r.URL.Path) {
 			argBytes, err := json.Marshal(args)

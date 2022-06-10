@@ -137,10 +137,9 @@ type oidcAuthenticationConf struct {
 	autoLogin       bool
 }
 
-// GetUIConf is used to extract certain parts of the OIDC
-// configuration at run-time for embedding into the
-// Admin UI HTML in order to manage the login experience
-// the UI provides.
+// GetOIDCConf is used to extract certain parts of the OIDC
+// configuration at run-time for embedding into the DB Console in order
+// to manage the login experience the UI provides.
 func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 	return ui.OIDCUIConf{
 		ButtonText: s.conf.buttonText,

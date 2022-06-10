@@ -9,6 +9,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/obsservice/obslib/httpproxy",
         "//pkg/obsservice/obslib/migrations",
+        "//pkg/ui/distoss",
         "@com_github_spf13_cobra//:cobra",
     ],
 )

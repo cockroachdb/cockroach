@@ -62,6 +62,8 @@ const (
 
 type noOIDCConfigured struct{}
 
+var _ ui.OIDCUI = &noOIDCConfigured{}
+
 func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
 	return ui.OIDCUIConf{
 		Enabled: false,
