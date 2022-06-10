@@ -92,6 +92,16 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 	}
 }
 
+// RecordValue saves a new integer datapoint into the histogram.
+func (w *NamedHistogram) RecordValue(value int64) {
+	w.prometheusHistogram.Observe(float64(value))
+
+	w.mu.Lock()
+	// This value may be outside the range, in which case it will be dropped.
+	_ = w.mu.current.RecordValue(value)
+	w.mu.Unlock()
+}
+
 // tick resets the current histogram to a new "period". The old one's data
 // should be saved via the closure argument.
 func (w *NamedHistogram) tick(
