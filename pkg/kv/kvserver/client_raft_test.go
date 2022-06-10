@@ -1700,24 +1700,28 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			// Set to auto since we want the replication queue on.
 			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{},
+				},
+			},
 		})
+
 	defer tc.Stopper().Stop(ctx)
-	store := tc.GetFirstStoreFromServer(t, 0)
 
 	// Once we know our peers, trigger a scan.
+	store := tc.GetFirstStoreFromServer(t, 0)
 	if err := store.ForceReplicationScanAndProcess(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait until all ranges are upreplicated to all nodes.
-	var replicaCount int64
+	// Wait until all under-replicated ranges are up-replicated to all nodes.
 	testutils.SucceedsSoon(t, func() error {
 		var replicaCounts [numServers]int64
 		for i := range tc.Servers {
 			var err error
 			tc.GetFirstStoreFromServer(t, i).VisitReplicas(func(r *kvserver.Replica) bool {
 				replicaCounts[i]++
-				// Synchronize with the replica's raft processing goroutine.
 				r.RaftLock()
 				defer r.RaftUnlock()
 				if len(r.Desc().InternalReplicas) != 3 {
@@ -1738,29 +1742,34 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
 			}
 		}
-		replicaCount = replicaCounts[0]
 		return nil
 	})
 
-	var generated int64
-	var learnerApplied, raftApplied int64
-	for i := range tc.Servers {
-		m := tc.GetFirstStoreFromServer(t, i).Metrics()
-		generated += m.RangeSnapshotsGenerated.Count()
-		learnerApplied += m.RangeSnapshotsAppliedForInitialUpreplication.Count()
-		raftApplied += m.RangeSnapshotsAppliedByVoters.Count()
-	}
-	if generated == 0 {
-		t.Fatalf("expected at least 1 snapshot, but found 0")
-	}
-	// We upreplicate each range (once each for n2 and n3), so there should be
-	// exactly 2 * replica learner snaps, one per upreplication.
-	require.Equal(t, 2*replicaCount, learnerApplied)
-	// Ideally there would be zero raft snaps, but etcd/raft is picky about
-	// getting a snapshot at exactly the index it asked for.
-	if raftApplied > learnerApplied {
-		t.Fatalf("expected more learner snaps %d than raft snaps %d", learnerApplied, raftApplied)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		var generated int64
+		var learnerApplied, raftApplied int64
+		for i := range tc.Servers {
+			m := tc.GetFirstStoreFromServer(t, i).Metrics()
+			generated += m.RangeSnapshotsGenerated.Count()
+			learnerApplied += m.RangeSnapshotsAppliedForInitialUpreplication.Count()
+			raftApplied += m.RangeSnapshotsAppliedByVoters.Count()
+		}
+
+		if generated == 0 {
+			return errors.Newf("expected at least 1 snapshot, but found 0")
+		}
+		// We upreplicate each range (once each for n2 and n3), so there should be
+		// exactly 2 * replica learner snaps, one per upreplication.
+		if generated != learnerApplied {
+			return errors.Newf("expected %d actual %d", generated, learnerApplied)
+		}
+		// Ideally there would be zero raft snaps, but etcd/raft is picky about
+		// getting a snapshot at exactly the index it asked for.
+		if raftApplied > learnerApplied {
+			return errors.Newf("expected more learner snaps %d than raft snaps %d", learnerApplied, raftApplied)
+		}
+		return nil
+	})
 }
 
 // TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
