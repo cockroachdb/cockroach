@@ -277,7 +277,7 @@ func (ds *ServerImpl) setupFlow(
 	)
 	monitor.Start(ctx, parentMonitor, mon.BoundAccount{})
 
-	makeLeaf := func(req *execinfrapb.SetupFlowRequest) (*kv.Txn, error) {
+	makeLeaf := func() (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
 		if tis == nil {
 			// This must be a flow running for some bulk-io operation that doesn't use
@@ -310,7 +310,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.Mon = monitor
 		if localState.HasConcurrency {
 			var err error
-			leafTxn, err = makeLeaf(req)
+			leafTxn, err = makeLeaf()
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -332,7 +332,7 @@ func (ds *ServerImpl) setupFlow(
 		// It's important to populate evalCtx.Txn early. We'll write it again in the
 		// f.SetTxn() call below, but by then it will already have been captured by
 		// processors.
-		leafTxn, err = makeLeaf(req)
+		leafTxn, err = makeLeaf()
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -368,7 +368,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		ctx, req.Flow.FlowID, evalCtx, makeLeaf, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -429,7 +429,7 @@ func (ds *ServerImpl) setupFlow(
 	} else {
 		// If I haven't created the leaf already, do it now.
 		if leafTxn == nil {
-			leafTxn, err = makeLeaf(req)
+			leafTxn, err = makeLeaf()
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -454,6 +454,7 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *tree.EvalContext,
+	makeLeafTxn func() (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
 	localState LocalState,
@@ -466,6 +467,7 @@ func (ds *ServerImpl) newFlowContext(
 		ID:             id,
 		EvalCtx:        evalCtx,
 		Txn:            evalCtx.Txn,
+		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		CollectStats:   collectStats,

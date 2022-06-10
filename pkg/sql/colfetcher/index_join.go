@@ -98,6 +98,8 @@ type ColIndexJoin struct {
 
 	flowCtx *execinfra.FlowCtx
 	cf      *cFetcher
+	// txn is the transaction used by the index joiner.
+	txn *kv.Txn
 
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
@@ -147,7 +149,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 		s.streamerInfo.Streamer = kvstreamer.NewStreamer(
 			s.flowCtx.Cfg.DistSender,
 			s.flowCtx.Stopper(),
-			s.flowCtx.Txn,
+			s.txn,
 			s.flowCtx.EvalCtx.Settings,
 			row.GetWaitPolicy(s.cf.lockWaitPolicy),
 			s.streamerInfo.budgetLimit,
@@ -244,7 +246,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			} else {
 				err = s.cf.StartScan(
 					s.Ctx,
-					s.flowCtx.Txn,
+					s.txn,
 					spans,
 					nil,   /* bsHeader */
 					false, /* limitBatches */
@@ -399,7 +401,7 @@ func (s *ColIndexJoin) next() bool {
 // DrainMeta is part of the colexecop.MetadataSource interface.
 func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
-	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.flowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	meta := execinfrapb.GetProducerMeta()
@@ -493,7 +495,8 @@ func NewColIndexJoin(
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 
 	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
+		flowCtx.MakeLeafTxn != nil && row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
+	txn := flowCtx.Txn
 	if useStreamer {
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
@@ -502,6 +505,10 @@ func NewColIndexJoin(
 		// cFetcher, and we'll give the remaining three quarters to the streamer
 		// budget below.
 		memoryLimit = int64(math.Ceil(float64(memoryLimit) / 4.0))
+		txn, err = flowCtx.MakeLeafTxn()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -534,6 +541,7 @@ func NewColIndexJoin(
 		spanAssembler:    spanAssembler,
 		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
+		txn:              txn,
 		usesStreamer:     useStreamer,
 		limitHintHelper:  execinfra.MakeLimitHintHelper(spec.LimitHint, post),
 	}
