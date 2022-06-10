@@ -88,7 +88,7 @@ popd
 # Create the branch and commit on the CockroachDB repository.
 pushd "$COCKROACH_DIR"
 ./dev generate bazel --mirror
-git add go.mod go.sum DEPS.bzl
+git add go.mod go.sum DEPS.bzl build/bazelutil/distdir_files.bzl
 git add vendor
 git branch -D "$COCKROACH_BRANCH" || true
 git checkout -b "$COCKROACH_BRANCH"
