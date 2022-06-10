@@ -2654,48 +2654,20 @@ var builtins = map[string]builtinDefinition{
 	"to_timestamp": makeBuiltin(
 		tree.FunctionProperties{Category: categoryDateAndTime},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"timestamp", types.String}},
-			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, err := strconv.ParseFloat(string(tree.MustBeDString(args[0])), 64)
-				if err != nil {
-					return nil, pgerror.New(pgcode.AmbiguousFunction, "invalid input for type text")
-				}
-				return floatToTimestampTZ(ts)
-			},
-			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"timestamp", types.Int}},
-			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts := float64(tree.MustBeDInt(args[0]))
-				return floatToTimestampTZ(ts)
-			},
-			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ts := float64(tree.MustBeDFloat(args[0]))
-				return floatToTimestampTZ(ts)
-			},
-			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{{"timestamp", types.Decimal}},
-			ReturnType: tree.FixedReturnType(types.TimestampTZ),
-			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				decimal := tree.MustBeDDecimal(args[0]).Decimal
-				ts, err := decimal.Float64()
-				if err != nil {
-					return nil, err
+				if math.IsNaN(ts) {
+					return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "timestamp cannot be NaN")
 				}
-				return floatToTimestampTZ(ts)
+				if ts == math.Inf(1) {
+					return tree.MakeDTimestampTZ(pgdate.TimeInfinity, time.Microsecond)
+				}
+				if ts == math.Inf(-1) {
+					return tree.MakeDTimestampTZ(pgdate.TimeNegativeInfinity, time.Microsecond)
+				}
+				return tree.MakeDTimestampTZ(timeutil.Unix(0, int64(ts*float64(time.Second))), time.Microsecond)
 			},
 			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
 			Volatility: volatility.Immutable,
@@ -9644,17 +9616,4 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 		formattedStmt.WriteString("\n")
 	}
 	return formattedStmt.String(), nil
-}
-
-func floatToTimestampTZ(ts float64) (tree.Datum, error) {
-	if math.IsNaN(ts) {
-		return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "timestamp cannot be NaN")
-	}
-	if ts == math.Inf(1) {
-		return tree.MakeDTimestampTZ(pgdate.TimeInfinity, time.Microsecond)
-	}
-	if ts == math.Inf(-1) {
-		return tree.MakeDTimestampTZ(pgdate.TimeNegativeInfinity, time.Microsecond)
-	}
-	return tree.MakeDTimestampTZ(timeutil.Unix(0, int64(ts*float64(time.Second))), time.Microsecond)
 }
