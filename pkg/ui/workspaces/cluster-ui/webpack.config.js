@@ -151,6 +151,9 @@ module.exports = (env, argv) => {
     // dependencies, which allows browsers to cache those libraries between builds.
     externals: {
       protobufjs: "protobufjs",
+      // Importing protobufjs/minimal resolves to the protobufjs module, but webpack's
+      // "externals" checking appears to be based on string comparisons.
+      "protobufjs/minimal": "protobufjs/minimal",
       react: {
         commonjs: "react",
         commonjs2: "react",
