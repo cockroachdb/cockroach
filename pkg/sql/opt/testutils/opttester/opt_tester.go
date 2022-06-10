@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -283,6 +284,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
+	ot.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
 
 	return ot
 }
