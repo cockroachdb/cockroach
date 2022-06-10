@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -148,6 +149,14 @@ func (ds *ServerImpl) SetCancelDeadFlowsCallback(cb func(int)) {
 	ds.flowScheduler.TestingKnobs.CancelDeadFlowsCallback = cb
 }
 
+var cancelRunningQueriesAfterFlowDrainWait = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.drain.cancel_after_wait.enabled",
+	"determines whether queries that are still running on a node being drained "+
+		"are forcefully canceled after waiting the 'server.shutdown.query_wait' period",
+	false,
+)
+
 // Drain changes the node's draining state through gossip and drains the
 // server's flowRegistry. See flowRegistry.Drain for more details.
 func (ds *ServerImpl) Drain(
@@ -167,7 +176,8 @@ func (ds *ServerImpl) Drain(
 		// wait a minimum time for the draining state to be gossiped.
 		minWait = 0
 	}
-	ds.flowRegistry.Drain(flowWait, minWait, reporter)
+	cancelStillRunning := cancelRunningQueriesAfterFlowDrainWait.Get(&ds.Settings.SV)
+	ds.flowRegistry.Drain(flowWait, minWait, reporter, cancelStillRunning)
 }
 
 // setDraining changes the node's draining state through gossip to the provided

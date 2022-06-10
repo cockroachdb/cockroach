@@ -90,10 +90,6 @@ func (m *mockFlow) IsLocal() bool {
 	panic("not implemented")
 }
 
-func (m *mockFlow) HasInboundStreams() bool {
-	panic("not implemented")
-}
-
 func (m *mockFlow) IsVectorized() bool {
 	panic("not implemented")
 }
