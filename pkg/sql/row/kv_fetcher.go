@@ -63,6 +63,7 @@ func NewKVFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	spanIDs []int,
+	reqsScratch []roachpb.RequestUnion,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
 	batchBytesLimit rowinfra.BytesLimit,
@@ -72,7 +73,7 @@ func NewKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
-) (*KVFetcher, error) {
+) (*KVFetcher, []roachpb.RequestUnion, error) {
 	var sendFn sendFunc
 	// Avoid the heap allocation by allocating sendFn specifically in the if.
 	if bsHeader == nil {
@@ -99,12 +100,13 @@ func NewKVFetcher(
 		}
 	}
 
-	kvBatchFetcher, err := makeKVBatchFetcher(
+	kvBatchFetcher, newReqsScratch, err := makeKVBatchFetcher(
 		ctx,
 		kvBatchFetcherArgs{
 			sendFn:                     sendFn,
 			spans:                      spans,
 			spanIDs:                    spanIDs,
+			reqsScratch:                reqsScratch,
 			reverse:                    reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         firstBatchLimit,
@@ -117,7 +119,7 @@ func NewKVFetcher(
 			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
 		},
 	)
-	return newKVFetcher(&kvBatchFetcher), err
+	return newKVFetcher(&kvBatchFetcher), newReqsScratch, err
 }
 
 // NewKVStreamingFetcher returns a new KVFetcher that utilizes the provided

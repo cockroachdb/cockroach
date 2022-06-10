@@ -497,6 +497,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, nil, /* spanIDs */
 		rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionValues,
+		true, /* expectMultipleCalls */
 	); err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()

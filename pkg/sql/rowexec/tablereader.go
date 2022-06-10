@@ -212,6 +212,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 			ctx, tr.FlowCtx.Txn, tr.Spans, nil /* spanIDs */, bytesLimit,
 			tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionValues,
+			false, /* expectMultipleCalls */
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()

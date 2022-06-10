@@ -101,9 +101,13 @@ func (c *rowFetcherStatCollector) StartScan(
 	limitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
+	expectMultipleCalls bool,
 ) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartScan(ctx, txn, spans, spanIDs, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.fetcher.StartScan(
+		ctx, txn, spans, spanIDs, batchBytesLimit, limitHint, traceKV,
+		forceProductionKVBatchSize, expectMultipleCalls,
+	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }

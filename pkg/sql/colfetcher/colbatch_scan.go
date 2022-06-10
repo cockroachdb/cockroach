@@ -99,6 +99,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		s.batchBytesLimit,
 		s.limitHint,
 		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		false, /* expectMultipleCalls */
 	); err != nil {
 		colexecerror.InternalError(err)
 	}

@@ -311,6 +311,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		chunkSize, traceKV, false, /* forceProductionKVBatchSize */
+		true, /* expectMultipleCalls */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
@@ -811,6 +812,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		initBufferSize, traceKV, false, /* forceProductionKVBatchSize */
+		false, /* expectMultipleCalls */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, 0, err

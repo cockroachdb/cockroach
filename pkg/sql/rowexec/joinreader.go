@@ -85,13 +85,14 @@ type joinReader struct {
 	// strategies and span generators have separate accounts.
 	memAcc mon.BoundAccount
 
-	// accountedFor tracks the memory usage of scratchInputRows and
-	// groupingState that is currently registered with memAcc.
+	// accountedFor tracks the memory usage of scratchInputRows, groupingState,
+	// and streamerInfo.reqsScratch that is currently registered with memAcc.
 	accountedFor struct {
 		// scratchInputRows accounts only for the slice of scratchInputRows, not
 		// the actual rows.
-		scratchInputRows int64
-		groupingState    int64
+		scratchInputRows        int64
+		groupingState           int64
+		streamerInfoReqsScratch int64
 	}
 
 	// limitedMemMonitor is a limited memory monitor to account for the memory
@@ -131,6 +132,7 @@ type joinReader struct {
 	usesStreamer bool
 	streamerInfo struct {
 		*kvstreamer.Streamer
+		reqsScratch         []roachpb.RequestUnion
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
 		budgetLimit         int64
@@ -796,7 +798,7 @@ func (jr *joinReader) readInput() (
 					return jrStateUnknown, nil, meta
 				}
 
-				if err := jr.performMemoryAccounting(); err != nil {
+				if err := jr.performMemoryAccountingAfterReadingInput(); err != nil {
 					jr.MoveToDraining(err)
 					return jrStateUnknown, nil, meta
 				}
@@ -848,7 +850,7 @@ func (jr *joinReader) readInput() (
 		}
 	}
 
-	if err := jr.performMemoryAccounting(); err != nil {
+	if err := jr.performMemoryAccountingAfterReadingInput(); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
@@ -933,11 +935,18 @@ func (jr *joinReader) readInput() (
 	// joinReaderStrategy doesn't account for any memory used by the spans.
 	if jr.usesStreamer {
 		var kvBatchFetcher *row.TxnKVStreamer
-		kvBatchFetcher, err = row.NewTxnKVStreamer(
+		kvBatchFetcher, jr.streamerInfo.reqsScratch, err = row.NewTxnKVStreamer(
 			jr.Ctx, jr.streamerInfo.Streamer, spans, spanIDs, jr.keyLocking,
+			jr.streamerInfo.reqsScratch,
 		)
 		if err != nil {
 			jr.MoveToDraining(err)
+			return jrStateUnknown, nil, jr.DrainHelper()
+		}
+		oldReqsScratchAccountedFor := jr.accountedFor.streamerInfoReqsScratch
+		jr.accountedFor.streamerInfoReqsScratch = roachpb.RequestUnionSize * int64(cap(jr.streamerInfo.reqsScratch))
+		if err = jr.memAcc.Resize(jr.Ctx, oldReqsScratchAccountedFor, jr.accountedFor.streamerInfoReqsScratch); err != nil {
+			jr.MoveToDraining(addWorkmemHint(err))
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
 		err = jr.fetcher.StartScanFrom(jr.Ctx, kvBatchFetcher, jr.FlowCtx.TraceKV)
@@ -954,6 +963,7 @@ func (jr *joinReader) readInput() (
 		err = jr.fetcher.StartScan(
 			jr.Ctx, jr.txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
+			true, /* expectMultipleCalls */
 		)
 	}
 	if err != nil {
@@ -1021,6 +1031,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			if err := jr.fetcher.StartScan(
 				jr.Ctx, jr.txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
+				true, /* expectMultipleCalls */
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
@@ -1050,7 +1061,9 @@ func (jr *joinReader) emitRow() (
 	return nextState, rowToEmit, nil
 }
 
-func (jr *joinReader) performMemoryAccounting() error {
+func (jr *joinReader) performMemoryAccountingAfterReadingInput() error {
+	// Note that we can ignore fields in jr.accountedFor that are not changed
+	// when reading the input (e.g. streamerInfoReqsScratch).
 	oldSz := jr.accountedFor.scratchInputRows + jr.accountedFor.groupingState
 	jr.accountedFor.scratchInputRows = int64(cap(jr.scratchInputRows)) * int64(rowenc.EncDatumRowOverhead)
 	jr.accountedFor.groupingState = jr.groupingState.memUsage()
@@ -1113,6 +1126,7 @@ func (jr *joinReader) close() {
 			if jr.streamerInfo.Streamer != nil {
 				jr.streamerInfo.Streamer.Close(jr.Ctx)
 			}
+			jr.streamerInfo.reqsScratch = nil
 			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
 			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
 			if jr.streamerInfo.diskMonitor != nil {

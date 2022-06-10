@@ -204,6 +204,13 @@ type Fetcher struct {
 	// Buffered allocation of decoded datums.
 	alloc *tree.DatumAlloc
 
+	// reqsScratch is a scratch space that is reused between StartScan() calls
+	// when expectMultipleCalls is true. Its memory usage is tracked in
+	// reqsScratchAccountedFor and is registered with kvFetcherMemAcc (when it
+	// is non-nil).
+	reqsScratch             []roachpb.RequestUnion
+	reqsScratchAccountedFor int64
+
 	// Memory monitor and memory account for the bytes fetched by this fetcher.
 	mon             *mon.BytesMonitor
 	kvFetcherMemAcc *mon.BoundAccount
@@ -224,6 +231,7 @@ func (rf *Fetcher) Close(ctx context.Context) {
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
 	}
+	rf.reqsScratch = nil
 	if rf.mon != nil {
 		rf.kvFetcherMemAcc.Close(ctx)
 		rf.mon.Stop(ctx)
@@ -390,6 +398,10 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // argument that some number of rows will eventually satisfy the query and we
 // likely don't need to scan `spans` fully. The bytes limit, on the other hand,
 // is simply intended to protect against OOMs.
+//
+// expectMultipleCalls, if true, indicates the caller is likely to call this
+// method many times on the same Fetcher. This allows the Fetcher to reuse some
+// of the allocations.
 func (rf *Fetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -399,17 +411,20 @@ func (rf *Fetcher) StartScan(
 	rowLimitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
+	expectMultipleCalls bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
 
-	f, err := makeKVBatchFetcher(
+	var reqsScratch []roachpb.RequestUnion
+	f, reqsScratch, err := makeKVBatchFetcher(
 		ctx,
 		kvBatchFetcherArgs{
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
 			spans:                      spans,
 			spanIDs:                    spanIDs,
+			reqsScratch:                rf.reqsScratch,
 			reverse:                    rf.reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
@@ -424,6 +439,16 @@ func (rf *Fetcher) StartScan(
 	)
 	if err != nil {
 		return err
+	}
+	if expectMultipleCalls {
+		rf.reqsScratch = reqsScratch
+		if rf.kvFetcherMemAcc != nil {
+			oldAccountedFor := rf.reqsScratchAccountedFor
+			rf.reqsScratchAccountedFor = roachpb.RequestUnionSize * int64(cap(reqsScratch))
+			if err = rf.kvFetcherMemAcc.Resize(ctx, oldAccountedFor, rf.reqsScratchAccountedFor); err != nil {
+				return err
+			}
+		}
 	}
 	return rf.StartScanFrom(ctx, &f, traceKV)
 }
@@ -508,7 +533,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	// TODO(radu): we should commit the last txn. Right now the commit is a no-op
 	// on read transactions, but perhaps one day it will release some resources.
 
-	f, err := makeKVBatchFetcher(
+	f, _, err := makeKVBatchFetcher(
 		ctx,
 		kvBatchFetcherArgs{
 			sendFn:                     sendFn,

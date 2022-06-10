@@ -250,6 +250,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 					s.streamerInfo.Streamer,
 					spans,
 					rowinfra.NoRowLimit,
+					true, /* expectMultipleCalls */
 				)
 			} else {
 				err = s.cf.StartScan(
@@ -261,6 +262,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 					rowinfra.NoBytesLimit,
 					rowinfra.NoRowLimit,
 					s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+					true, /* expectMultipleCalls */
 				)
 			}
 			if err != nil {

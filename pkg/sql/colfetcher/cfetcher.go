@@ -283,6 +283,13 @@ type cFetcher struct {
 	// keys.
 	scratch []byte
 
+	// reqsScratch is a scratch space that is reused between StartScan() and
+	// StartScanStreaming() calls when expectMultipleCalls is true. Its memory
+	// usage is tracked in reqsScratchAccountedFor and is registered with
+	// kvFetcherMemAcc.
+	reqsScratch             []roachpb.RequestUnion
+	reqsScratchAccountedFor int64
+
 	accountingHelper colmem.SetAccountingHelper
 
 	// kvFetcherMemAcc is a memory account that will be used by the underlying
@@ -494,6 +501,13 @@ func (cf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
 	cf.machine.state[1] = stateInitFetch
 }
 
+func (cf *cFetcher) keepReqsScratch(ctx context.Context, reqsScratch []roachpb.RequestUnion) error {
+	cf.reqsScratch = reqsScratch
+	oldAccountedFor := cf.reqsScratchAccountedFor
+	cf.reqsScratchAccountedFor = roachpb.RequestUnionSize * int64(cap(reqsScratch))
+	return cf.kvFetcherMemAcc.Resize(ctx, oldAccountedFor, cf.reqsScratchAccountedFor)
+}
+
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //
@@ -502,6 +516,10 @@ func (cf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
 // spans slice after the fetcher has been closed (which happens when the fetcher
 // emits the first zero batch), and if the caller does, it becomes responsible
 // for the memory accounting.
+//
+// expectMultipleCalls, if true, indicates the caller is likely to call this
+// method many times on the same cFetcher. This allows the cFetcher to reuse
+// some of the allocations.
 func (cf *cFetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -511,6 +529,7 @@ func (cf *cFetcher) StartScan(
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 	forceProductionKVBatchSize bool,
+	expectMultipleCalls bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -544,11 +563,12 @@ func (cf *cFetcher) StartScan(
 		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
 	}
 
-	f, err := row.NewKVFetcher(
+	f, reqsScratch, err := row.NewKVFetcher(
 		ctx,
 		txn,
 		spans,
 		nil, /* spanIDs */
+		cf.reqsScratch,
 		bsHeader,
 		cf.reverse,
 		batchBytesLimit,
@@ -563,6 +583,11 @@ func (cf *cFetcher) StartScan(
 		return err
 	}
 	cf.setFetcher(f, limitHint)
+	if expectMultipleCalls {
+		if err = cf.keepReqsScratch(ctx, reqsScratch); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -574,18 +599,30 @@ func (cf *cFetcher) StartScan(
 // spans slice after the fetcher has been closed (which happens when the fetcher
 // emits the first zero batch), and if the caller does, it becomes responsible
 // for the memory accounting.
+//
+// expectMultipleCalls, if true, indicates the caller is likely to call this
+// method many times on the same cFetcher. This allows the cFetcher to reuse
+// some of the allocations.
 func (cf *cFetcher) StartScanStreaming(
 	ctx context.Context,
 	streamer *kvstreamer.Streamer,
 	spans roachpb.Spans,
 	limitHint rowinfra.RowLimit,
+	expectMultipleCalls bool,
 ) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength)
+	kvBatchFetcher, reqsScratch, err := row.NewTxnKVStreamer(
+		ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength, cf.reqsScratch,
+	)
 	if err != nil {
 		return err
 	}
 	f := row.NewKVStreamingFetcher(kvBatchFetcher)
 	cf.setFetcher(f, limitHint)
+	if expectMultipleCalls {
+		if err = cf.keepReqsScratch(ctx, reqsScratch); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1375,9 +1412,12 @@ func (cf *cFetcher) Release() {
 }
 
 func (cf *cFetcher) Close(ctx context.Context) {
-	if cf != nil && cf.fetcher != nil {
-		cf.bytesRead += cf.fetcher.GetBytesRead()
-		cf.fetcher.Close(ctx)
-		cf.fetcher = nil
+	if cf != nil {
+		cf.reqsScratch = nil
+		if cf.fetcher != nil {
+			cf.bytesRead += cf.fetcher.GetBytesRead()
+			cf.fetcher.Close(ctx)
+			cf.fetcher = nil
+		}
 	}
 }
