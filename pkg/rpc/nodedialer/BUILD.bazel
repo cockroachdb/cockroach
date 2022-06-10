@@ -36,6 +36,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
