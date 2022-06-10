@@ -1011,15 +1011,21 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 		return *r.mu.state.GCThreshold
 	}
 
-	threshold := gc.CalculateThreshold(st.Now.ToTimestamp(), r.mu.conf.TTL())
-	threshold.Forward(*r.mu.state.GCThreshold)
-
-	// If we have a protected timestamp record which precedes the implied
-	// threshold, use the threshold it implies instead.
-	if !c.earliestProtectionTimestamp.IsEmpty() && c.earliestProtectionTimestamp.Less(threshold) {
-		return c.earliestProtectionTimestamp.Prev()
+	gcTTL := r.mu.conf.TTL()
+	gcThreshold := gc.CalculateThreshold(c.readAt, gcTTL)
+	if !c.earliestProtectionTimestamp.IsEmpty() {
+		// We want to allow GC up to the timestamp preceding the earliest valid
+		// protection timestamp.
+		impliedGCThreshold := c.earliestProtectionTimestamp.Prev()
+		// If we have a protected timestamp record which precedes the gcThreshold,
+		// use the threshold it implies instead.
+		if impliedGCThreshold.Less(gcThreshold) {
+			gcThreshold = impliedGCThreshold
+		}
 	}
-	return threshold
+	gcThreshold.Forward(*r.mu.state.GCThreshold)
+
+	return gcThreshold
 }
 
 func (r *Replica) isRangefeedEnabled() (ret bool) {
@@ -2028,4 +2034,15 @@ func (r *Replica) LockRaftMuForTesting() (unlockFunc func()) {
 	return func() {
 		r.raftMu.Unlock()
 	}
+}
+
+// ReadProtectedTimestampsForTesting is for use only by tests to read and update
+// the Replicas' cached protected timestamp state.
+func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err error) {
+	var ts cachedProtectedTimestampState
+	defer r.maybeUpdateCachedProtectedTS(&ts)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ts, err = r.readProtectedTimestampsRLocked(ctx)
+	return err
 }
