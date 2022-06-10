@@ -131,6 +131,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		seedSpanCountTableMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"update system.statement_diagnostics_requests to support sampling probabilities",
+		toCV(clusterversion.SampledStmtDiagReqs),
+		NoPrecondition,
+		sampledStmtDiagReqsMigration,
+	),
 }
 
 func init() {

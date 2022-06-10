@@ -2150,6 +2150,7 @@ system         public        statement_diagnostics_requests   expires_at        
 system         public        statement_diagnostics_requests   id                                                                                                        1
 system         public        statement_diagnostics_requests   min_execution_latency                                                                                     6
 system         public        statement_diagnostics_requests   requested_at                                                                                              5
+system         public        statement_diagnostics_requests   sampling_probability                                                                                      8
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                                                  4
 system         public        statement_diagnostics_requests   statement_fingerprint                                                                                     3
 system         public        statement_statistics             agg_interval                                                                                              7

@@ -243,8 +243,9 @@ CREATE TABLE public.statement_diagnostics_requests (
 	requested_at TIMESTAMPTZ NOT NULL,
 	min_execution_latency INTERVAL NULL,
 	expires_at TIMESTAMPTZ NULL,
+	sampling_probability FLOAT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX completed_idx_v2 (completed ASC, id ASC) STORING (statement_fingerprint, min_execution_latency, expires_at)
+	INDEX completed_idx_v3 (completed ASC, id ASC) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability)
 );
 CREATE TABLE public.statement_diagnostics (
 	id INT8 NOT NULL DEFAULT unique_rowid(),

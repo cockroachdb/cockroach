@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -94,6 +95,7 @@ type Registry struct {
 // information.
 type Request struct {
 	fingerprint         string
+	samplingProbability float64
 	minExecutionLatency time.Duration
 	expiresAt           time.Time
 }
@@ -209,6 +211,7 @@ func (r *Registry) addRequestInternalLocked(
 	ctx context.Context,
 	id RequestID,
 	queryFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAt time.Time,
 ) {
@@ -221,6 +224,7 @@ func (r *Registry) addRequestInternalLocked(
 	}
 	r.mu.requestFingerprints[id] = Request{
 		fingerprint:         queryFingerprint,
+		samplingProbability: samplingProbability,
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
 	}
@@ -261,22 +265,41 @@ func (r *Registry) cancelRequest(requestID RequestID) {
 func (r *Registry) InsertRequest(
 	ctx context.Context,
 	stmtFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) error {
-	_, err := r.insertRequestInternal(ctx, stmtFingerprint, minExecutionLatency, expiresAfter)
+	_, err := r.insertRequestInternal(ctx, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAfter)
 	return err
 }
 
 func (r *Registry) insertRequestInternal(
 	ctx context.Context,
 	stmtFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
 	g, err := r.gossip.OptionalErr(48274)
 	if err != nil {
 		return 0, err
+	}
+
+	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs)
+	if !isSamplingProbabilitySupported && samplingProbability != 0 {
+		return 0, errors.New(
+			"sampling probability only supported after 22.2 version migrations have completed",
+		)
+	}
+	if samplingProbability < 0 || samplingProbability > 1 {
+		return 0, errors.AssertionFailedf(
+			"malformed input: expected sampling probability in range [0.0, 1.0], got %f",
+			samplingProbability)
+	}
+	if samplingProbability != 0 && minExecutionLatency.Nanoseconds() == 0 {
+		return 0, errors.AssertionFailedf(
+			"malformed input: got non-zero sampling probability %f and empty min exec latency",
+			samplingProbability)
 	}
 
 	var reqID RequestID
@@ -312,6 +335,10 @@ func (r *Registry) insertRequestInternal(
 		qargs := make([]interface{}, 2, 4)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
+		if samplingProbability != 0 {
+			insertColumns += ", sampling_probability"
+			qargs = append(qargs, samplingProbability) // sampling_probability
+		}
 		if minExecutionLatency != 0 {
 			insertColumns += ", min_execution_latency"
 			qargs = append(qargs, minExecutionLatency) // min_execution_latency
@@ -350,7 +377,7 @@ func (r *Registry) insertRequestInternal(
 	// waiting for the poller.
 	r.mu.Lock()
 	r.mu.epoch++
-	r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, minExecutionLatency, expiresAt)
+	r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
 	r.mu.Unlock()
 
 	// Notify all the other nodes that they have to poll.
@@ -612,19 +639,25 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
+	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs)
+
 	// Loop until we run the query without straddling an epoch increment.
 	for {
 		r.mu.Lock()
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
+		var extraColumns string
+		if isSamplingProbabilitySupported {
+			extraColumns = ", sampling_probability"
+		}
 		it, err := r.ie.QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.InternalExecutorOverride{
 				User: username.RootUserName(),
 			},
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at
+			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at%s
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
 		)
 		if err != nil {
 			return err
@@ -657,14 +690,21 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		stmtFingerprint := string(*row[1].(*tree.DString))
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
+		var samplingProbability float64
+
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
 			minExecutionLatency = time.Duration(minExecLatency.Nanos())
 		}
 		if e, ok := row[3].(*tree.DTimestampTZ); ok {
 			expiresAt = e.Time
 		}
+		if isSamplingProbabilitySupported {
+			if prob, ok := row[4].(*tree.DFloat); ok {
+				samplingProbability = float64(*prob)
+			}
+		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, minExecutionLatency, expiresAt)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
 	}
 
 	// Remove all other requests.
