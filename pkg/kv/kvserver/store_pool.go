@@ -645,6 +645,16 @@ func (sp *StorePool) IsUnknown(storeID roachpb.StoreID) (bool, error) {
 	return status == storeStatusUnknown, nil
 }
 
+// IsDraining returns true if the given store's status is `storeStatusDraining`
+// or an error if the store is not found in the pool.
+func (sp *StorePool) IsDraining(storeID roachpb.StoreID) (bool, error) {
+	status, err := sp.storeStatus(storeID)
+	if err != nil {
+		return false, err
+	}
+	return status == storeStatusDraining, nil
+}
+
 // IsLive returns true if the node is considered alive by the store pool or an error
 // if the store is not found in the pool.
 func (sp *StorePool) IsLive(storeID roachpb.StoreID) (bool, error) {

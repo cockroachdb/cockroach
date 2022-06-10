@@ -514,8 +514,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			replWithStats.repl.leaseholderStats,
 			true, /* forceDecisionWithoutStats */
 			transferLeaseOptions{
-				goal:                     qpsConvergence,
-				checkTransferLeaseSource: true,
+				goal:             qpsConvergence,
+				excludeLeaseRepl: false,
 			},
 		)
 
