@@ -108,11 +108,7 @@ export function timeScaleReducer(
     case SET_SCALE: {
       const { payload: scale } = action as PayloadAction<TimeScale>;
       state = _.cloneDeep(state);
-      if (scale.key === "Custom") {
-        state.metricsTime.isFixedWindow = true;
-      } else {
-        state.metricsTime.isFixedWindow = false;
-      }
+      state.metricsTime.isFixedWindow = scale.key === "Custom";
       state.scale = scale;
       state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
       return state;

@@ -31,8 +31,8 @@ import {
   TransactionsPageRootProps,
 } from "@cockroachlabs/cluster-ui";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
-import { setCombinedStatementsTimeScaleAction } from "src/redux/statements";
+import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
 import {
@@ -95,7 +95,7 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 const fingerprintsPageActions = {
   refreshData: refreshStatements,
   resetSQLStats: resetSQLStatsAction,
-  onTimeScaleChange: setCombinedStatementsTimeScaleAction,
+  onTimeScaleChange: setGlobalTimeScaleAction,
   // We use `null` when the value was never set and it will show all columns.
   // If the user modifies the selection and no columns are selected,
   // the function will save the value as a blank space, otherwise
@@ -139,7 +139,7 @@ const TransactionsPageConnected = withRouter(
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
-        timeScale: statementsTimeScaleLocalSetting.selector(state),
+        timeScale: globalTimeScaleLocalSetting.selector(state),
         error: selectLastError(state),
         filters: filtersLocalSetting.selector(state),
         lastReset: selectLastReset(state),

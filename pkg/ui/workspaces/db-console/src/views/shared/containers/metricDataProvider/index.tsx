@@ -37,6 +37,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { History } from "history";
 import { refreshSettings } from "src/redux/apiReducers";
+import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -248,13 +249,10 @@ class MetricsDataProvider extends React.Component<
 // timeInfoSelector converts the current global time window into a set of Long
 // timestamps, which can be sent with requests to the server.
 const timeInfoSelector = createSelector(
-  (state: AdminUIState) => state.timeScale,
-  tw => {
-    if (!_.isObject(tw.scale)) {
-      return null;
-    }
-
-    const [startMoment, endMoment] = toDateRange(tw.scale);
+  (state: AdminUIState) => state,
+  state => {
+    const scale = globalTimeScaleLocalSetting.selector(state);
+    const [startMoment, endMoment] = toDateRange(scale);
     const start = startMoment.valueOf();
     const end = endMoment.valueOf();
     const syncedScale = findClosestTimeScale(

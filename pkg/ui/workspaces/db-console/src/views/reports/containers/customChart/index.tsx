@@ -42,8 +42,8 @@ import {
   TimeWindow,
   TimeScale,
   setMetricsFixedWindow,
-  setTimeScale,
 } from "src/redux/timeScale";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -307,7 +307,7 @@ export class CustomChart extends React.Component<
             <div className="chart-group l-columns__left">
               {this.renderCharts()}
             </div>
-            <div className="l-columns__right"></div>
+            <div className="l-columns__right" />
           </div>
         </section>
         <section className="section">{this.renderChartTables()}</section>
@@ -326,7 +326,7 @@ const mapDispatchToProps = {
   refreshNodes,
   refreshMetricMetadata,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale,
+  setTimeScale: setGlobalTimeScaleAction,
 };
 
 export default withRouter(

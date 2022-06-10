@@ -83,8 +83,9 @@ export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
   const end = ts.fixedWindowEnd
     ? moment.utc(ts.fixedWindowEnd)
     : moment().utc();
-  const start = moment.utc(end).subtract(ts.windowSize);
-  return [start, end];
+  const endRounded = end.set({ millisecond: 0 });
+  const start = moment.utc(endRounded).subtract(ts.windowSize);
+  return [start, endRounded];
 };
 
 // toRoundedDateRange round the TimeScale selected, with the start

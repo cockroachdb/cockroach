@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 import { Action } from "redux";
 import _ from "lodash";
-import { PayloadAction } from "oss/src/interfaces/action";
+import { PayloadAction } from "src/interfaces/action";
 
 /**
  * SqlActivityState maintains a MetricQuerySet collection, along with some

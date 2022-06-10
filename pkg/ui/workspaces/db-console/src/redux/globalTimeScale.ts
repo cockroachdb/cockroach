@@ -14,7 +14,7 @@ import { TimeScale, defaultTimeScaleSelected } from "@cockroachlabs/cluster-ui";
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
 
-export const statementsTimeScaleLocalSetting = new LocalSetting<
+export const globalTimeScaleLocalSetting = new LocalSetting<
   AdminUIState,
   TimeScale
 >("timeScale/SQLActivity", localSettingsSelector, defaultTimeScaleSelected);

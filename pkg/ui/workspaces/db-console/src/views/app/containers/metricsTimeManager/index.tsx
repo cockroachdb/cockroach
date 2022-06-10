@@ -70,7 +70,6 @@ class MetricsTimeManager extends React.Component<
 
     // Fixed time ranges can't expire.
     if (props.timeScale.scale.fixedWindowEnd) {
-      // this.setWindow(props);
       return;
     }
 
