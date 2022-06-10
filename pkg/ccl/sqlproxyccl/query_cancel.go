@@ -13,6 +13,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 )
 
@@ -64,4 +65,37 @@ func (c *cancelInfo) proxyIP() net.IP {
 // cancelInfo.
 func (c *cancelInfo) proxySecretID() uint32 {
 	return c.proxyBackendKeyData.SecretKey
+}
+
+// cancelInfoMap contains all the cancelInfo objects that this proxy instance
+// is aware of. It is safe for concurrent use, and is keyed by a secret that
+// is shared between the proxy and the client.
+type cancelInfoMap struct {
+	syncutil.RWMutex
+	m map[uint32]*cancelInfo
+}
+
+func makeCancelInfoMap() *cancelInfoMap {
+	return &cancelInfoMap{
+		m: make(map[uint32]*cancelInfo),
+	}
+}
+
+func (c *cancelInfoMap) addCancelInfo(proxySecretID uint32, info *cancelInfo) {
+	c.Lock()
+	defer c.Unlock()
+	c.m[proxySecretID] = info
+}
+
+func (c *cancelInfoMap) deleteCancelInfo(proxySecretID uint32) {
+	c.Lock()
+	defer c.Unlock()
+	delete(c.m, proxySecretID)
+}
+
+func (c *cancelInfoMap) getCancelInfo(proxySecretID uint32) (*cancelInfo, bool) {
+	c.RLock()
+	defer c.RUnlock()
+	i, ok := c.m[proxySecretID]
+	return i, ok
 }

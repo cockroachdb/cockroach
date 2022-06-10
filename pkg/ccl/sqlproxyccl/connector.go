@@ -72,6 +72,10 @@ type connector struct {
 	// NOTE: This field is optional.
 	TLSConfig *tls.Config
 
+	// CancelInfo contains the data used to implement pgwire query cancellation.
+	// It is only populated after authenticating the connection.
+	CancelInfo *cancelInfo
+
 	// Testing knobs for internal connector calls. If specified, these will
 	// be called instead of the actual logic.
 	testingKnobs struct {
@@ -149,9 +153,11 @@ func (c *connector) OpenTenantConnWithAuth(
 
 	// Perform user authentication for non-token-based auth methods. This will
 	// block until the server has authenticated the client.
-	if _, err := authenticate(clientConn, serverConn, throttleHook); err != nil {
+	cancelInfo, err := authenticate(clientConn, serverConn, throttleHook)
+	if err != nil {
 		return nil, true, err
 	}
+	c.CancelInfo = cancelInfo
 	log.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())
 	return serverConn, false, nil
 }
