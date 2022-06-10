@@ -407,7 +407,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	if err := f.run(fe.Conn, crdbConn); err != nil {
 		// Don't send to the client here for the same reason below.
 		handler.metrics.updateForError(err)
-		return err
+		return errors.Wrap(err, "running forwarder")
 	}
 
 	// Block until an error is received, or when the stopper starts quiescing,

@@ -202,6 +202,8 @@ func (f *forwarder) Context() context.Context {
 //
 // Close implements the balancer.ConnectionHandle interface.
 func (f *forwarder) Close() {
+	// Cancelling the forwarder's context and connections will automatically
+	// cause the processors to exit, and close themselves.
 	f.ctxCancel()
 
 	// Whenever Close is called while both of the processors are suspended, the
@@ -389,7 +391,10 @@ func makeLogicalClockFn() func() uint64 {
 // cancellation of dials.
 var aLongTimeAgo = timeutil.Unix(1, 0)
 
-var errProcessorResumed = errors.New("processor has already been resumed")
+var (
+	errProcessorResumed = errors.New("processor has already been resumed")
+	errProcessorClosed  = errors.New("processor has been closed")
+)
 
 // processor must always be constructed through newProcessor.
 type processor struct {
@@ -402,6 +407,7 @@ type processor struct {
 	mu struct {
 		syncutil.Mutex
 		cond       *sync.Cond
+		closed     bool
 		resumed    bool
 		inPeek     bool
 		suspendReq bool // Indicates that a suspend has been requested.
@@ -424,13 +430,15 @@ func newProcessor(logicalClockFn func() uint64, src, dst *interceptor.PGConn) *p
 
 // resume starts the processor and blocks during the processing. When the
 // processing has been terminated, this returns nil if the processor can be
-// resumed again in the future. If an error (except errProcessorResumed) was
-// returned, the processor should not be resumed again, and the forwarder should
-// be closed.
-func (p *processor) resume(ctx context.Context) error {
+// resumed again in the future. If an error was returned, the processor should
+// not be resumed again, and the forwarder must be closed.
+func (p *processor) resume(ctx context.Context) (retErr error) {
 	enterResume := func() error {
 		p.mu.Lock()
 		defer p.mu.Unlock()
+		if p.mu.closed {
+			return errProcessorClosed
+		}
 		if p.mu.resumed {
 			return errProcessorResumed
 		}
@@ -441,6 +449,10 @@ func (p *processor) resume(ctx context.Context) error {
 	exitResume := func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
+		// If there's an error, close the processor.
+		if retErr != nil {
+			p.mu.closed = true
+		}
 		p.mu.resumed = false
 		p.mu.cond.Broadcast()
 	}
@@ -495,6 +507,9 @@ func (p *processor) resume(ctx context.Context) error {
 	}
 
 	if err := enterResume(); err != nil {
+		if errors.Is(err, errProcessorResumed) {
+			return nil
+		}
 		return err
 	}
 	defer exitResume()
@@ -524,6 +539,9 @@ func (p *processor) waitResumed(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if p.mu.closed {
+			return errProcessorClosed
+		}
 		p.mu.cond.Wait()
 	}
 	return nil
@@ -535,6 +553,11 @@ func (p *processor) waitResumed(ctx context.Context) error {
 func (p *processor) suspend(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// If the processor has been closed, it cannot be suspended at all.
+	if p.mu.closed {
+		return errProcessorClosed
+	}
 
 	defer func() {
 		if p.mu.suspendReq {
