@@ -3772,7 +3772,10 @@ func (n KVAdmissionControllerImpl) AdmitKVWork(
 		}
 		admissionEnabled := true
 		if ah.storeAdmissionQ != nil {
-			// TODO(sumeer): Plumb WriteBytes for ingest requests.
+			// TODO(sumeer): Plumb WriteBytes for ingest requests, and for all
+			// AddSSTableRequests, even if they are using IngestAsWrites. For the
+			// rest we don't know the size since have not evaluated yet. It will be
+			// known when AdmittedWorkDone is called, and so we can compensate then.
 			ah.storeWorkHandle, err = ah.storeAdmissionQ.Admit(
 				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 			if err != nil {
@@ -3803,8 +3806,10 @@ func (n KVAdmissionControllerImpl) AdmittedKVWorkDone(handle interface{}) {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
 	if ah.storeAdmissionQ != nil {
-		// TODO(sumeer): Plumb ingestedIntoL0Bytes and handle error return value.
-		_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, 0)
+		// TODO(sumeer): Plumb bytes to populate StoreWorkDoneInfo and handle
+		// error return value.
+		_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle,
+			admission.StoreWorkDoneInfo{ActualBytes: 0, ActualBytesIntoL0: 0})
 	}
 }
 

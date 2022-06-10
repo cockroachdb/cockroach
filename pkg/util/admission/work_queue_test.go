@@ -468,7 +468,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 	printQueue := func() string {
 		q.mu.Lock()
 		defer q.mu.Unlock()
-		return fmt.Sprintf("%s\nstats:%+v\nestimates:%+v", q.q.String(), q.mu.stats,
+		return fmt.Sprintf("%s\nstats:%+v\nestimates:%+v", q.regularQ.String(), q.mu.stats,
 			q.mu.estimates)
 	}
 

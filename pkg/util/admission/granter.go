@@ -94,6 +94,10 @@ type requester interface {
 	close()
 }
 
+type requesterClose interface {
+	close()
+}
+
 // grantKind represents the two kind of ways we grant admission: using a slot
 // or a token. The slot terminology is akin to a scheduler, where a scheduling
 // slot must be free for a thread to run. But unlike a scheduler, we don't
@@ -137,7 +141,6 @@ type granter interface {
 	tryGet(count int64) bool
 	// returnGrant is called for:
 	// - returning slots after use.
-	// - returning tokens when the work did not end up using all the tokens.
 	// - returning either slots or tokens when the grant raced with the work
 	//   being canceled, and the grantee did not end up doing any work.
 	//
@@ -147,19 +150,22 @@ type granter interface {
 	// when the goroutine doing the work noticed that it had been granted, there
 	// is a possibility that that raced with cancellation.
 	//
+	// DO NOT USE for adjustments to IO-related tokens when the work is
+	// completed.
+	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	returnGrant(count int64)
 	// tookWithoutPermission informs the granter that a slot or tokens were
-	// taken unilaterally, without permission. This is useful:
-	// - Slots: this is useful since KVWork is allowed to bypass admission
-	//   control for high priority internal activities (e.g. node liveness) and
-	//   for KVWork that generates other KVWork (like intent resolution of
-	//   discovered intents). Not bypassing for the latter could result in
-	//   single node or distributed deadlock, and since such work is typically
-	//   not a major (on average) consumer of resources, we consider bypassing
-	//   to be acceptable.
-	// - Tokens: this is useful when the initial estimated tokens for a unit of
-	//   work turned out to be an underestimate.
+	// taken unilaterally, without permission. This is used for KVWork is
+	// allowed to bypass admission control for high priority internal activities
+	// (e.g. node liveness) and for KVWork that generates other KVWork (like
+	// intent resolution of discovered intents). Not bypassing for the latter
+	// could result in single node or distributed deadlock, and since such work
+	// is typically not a major (on average) consumer of resources, we consider
+	// bypassing to be acceptable.
+	//
+	// DO NOT USE for adjustments to IO-related tokens when the work is
+	// completed.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
 	tookWithoutPermission(count int64)
@@ -320,30 +326,38 @@ const (
 	// chains, this is a signal to terminate.
 	grantFailDueToSharedResource
 	// grantFailLocal is returned when the granter is unable to grant due to a
-	// local constraint -- insufficient tokens or slots.
+	// (a) local constraint -- insufficient tokens or slots, or (b) no work is
+	// waiting.
 	grantFailLocal
 )
 
-// granterWithLockedCalls is an extension of the granter and requester
-// interfaces that is used as an internal implementation detail of the
-// GrantCoordinator. Note that an implementer of granterWithLockedCalls is
-// mainly passing things through to the GrantCoordinator where the main logic
-// lives. The *Locked() methods are where the differences in slots and tokens
-// are handled.
+// granterWithLockedCalls is an encapsulation of typically one
+// granter-requester pair, and for kvStoreTokenGranter of two
+// granter-requester pairs. It is used as an internal implementation detail of
+// the GrantCoordinator. An implementer of granterWithLockedCalls responds to
+// calls from its granter(s) by calling into the GrantCoordinator, which then
+// calls the various *Locked() methods. The demuxHandle is meant to be opaque
+// to the GrantCoordinator, and is used when this interface encapsulates
+// multiple granter-requester pairs. The *Locked() methods are where the
+// differences in slots and various kinds of tokens are handled.
 type granterWithLockedCalls interface {
-	granter
-	// tryGetLocked is the real implementation of tryGet in the granter interface.
-	// Additionally, it is also used when continuing a grant chain.
-	tryGetLocked(count int64) grantResult
-	// returnGrantLocked is the real implementation of returnGrant.
-	returnGrantLocked(count int64)
+	// tryGetLocked is the real implementation of tryGet from the granter
+	// interface.
+	tryGetLocked(count int64, demuxHandle int8) grantResult
+	// returnGrantLocked is the real implementation of returnGrant from the
+	// granter interface.
+	returnGrantLocked(count int64, demuxHandle int8)
 	// tookWithoutPermissionLocked is the real implementation of
-	// tookWithoutPermission.
-	tookWithoutPermissionLocked(count int64)
+	// tookWithoutPermission from the granter interface.
+	tookWithoutPermissionLocked(count int64, demuxHandle int8)
 
-	// getPairedRequester returns the requester implementation that this granter
-	// interacts with.
-	getPairedRequester() requester
+	// The following methods are for direct use by GrantCoordinator.
+
+	// requesterHasWaitingRequests returns whether some requester associated
+	// with the granter has waiting requests.
+	requesterHasWaitingRequests() bool
+	// tryGrant is used to attempt to grant to waiting requests.
+	tryGrantLocked(grantChainID grantChainID) grantResult
 }
 
 // slotGranter implements granterWithLockedCalls.
@@ -364,20 +378,17 @@ type slotGranter struct {
 }
 
 var _ granterWithLockedCalls = &slotGranter{}
-
-func (sg *slotGranter) getPairedRequester() requester {
-	return sg.requester
-}
+var _ granter = &slotGranter{}
 
 func (sg *slotGranter) grantKind() grantKind {
 	return slot
 }
 
 func (sg *slotGranter) tryGet(count int64) bool {
-	return sg.coord.tryGet(sg.workKind, count)
+	return sg.coord.tryGet(sg.workKind, count, 0)
 }
 
-func (sg *slotGranter) tryGetLocked(count int64) grantResult {
+func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
@@ -396,10 +407,10 @@ func (sg *slotGranter) tryGetLocked(count int64) grantResult {
 }
 
 func (sg *slotGranter) returnGrant(count int64) {
-	sg.coord.returnGrant(sg.workKind, count)
+	sg.coord.returnGrant(sg.workKind, count, 0)
 }
 
-func (sg *slotGranter) returnGrantLocked(count int64) {
+func (sg *slotGranter) returnGrantLocked(count int64, _ int8) {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
@@ -411,10 +422,10 @@ func (sg *slotGranter) returnGrantLocked(count int64) {
 }
 
 func (sg *slotGranter) tookWithoutPermission(count int64) {
-	sg.coord.tookWithoutPermission(sg.workKind, count)
+	sg.coord.tookWithoutPermission(sg.workKind, count, 0)
 }
 
-func (sg *slotGranter) tookWithoutPermissionLocked(count int64) {
+func (sg *slotGranter) tookWithoutPermissionLocked(count int64, _ int8) {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
@@ -424,6 +435,25 @@ func (sg *slotGranter) tookWithoutPermissionLocked(count int64) {
 
 func (sg *slotGranter) continueGrantChain(grantChainID grantChainID) {
 	sg.coord.continueGrantChain(sg.workKind, grantChainID)
+}
+
+func (sg *slotGranter) requesterHasWaitingRequests() bool {
+	return sg.requester.hasWaitingRequests()
+}
+
+func (sg *slotGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
+	res := sg.tryGetLocked(1, 0 /*arbitrary*/)
+	if res == grantSuccess {
+		slots := sg.requester.granted(grantChainID)
+		if slots == 0 {
+			// Did not accept grant
+			sg.returnGrantLocked(1, 0 /*arbitrary*/)
+			return grantFailLocal
+		} else if slots != 1 {
+			panic(errors.AssertionFailedf("unexpected count", slots))
+		}
+	}
+	return res
 }
 
 // tokenGranter implements granterWithLockedCalls.
@@ -443,10 +473,7 @@ type tokenGranter struct {
 }
 
 var _ granterWithLockedCalls = &tokenGranter{}
-
-func (tg *tokenGranter) getPairedRequester() requester {
-	return tg.requester
-}
+var _ granter = &tokenGranter{}
 
 func (tg *tokenGranter) refillBurstTokens(skipTokenEnforcement bool) {
 	tg.availableBurstTokens = tg.maxBurstTokens
@@ -458,10 +485,10 @@ func (tg *tokenGranter) grantKind() grantKind {
 }
 
 func (tg *tokenGranter) tryGet(count int64) bool {
-	return tg.coord.tryGet(tg.workKind, count)
+	return tg.coord.tryGet(tg.workKind, count, 0)
 }
 
-func (tg *tokenGranter) tryGetLocked(count int64) grantResult {
+func (tg *tokenGranter) tryGetLocked(count int64, _ int8) grantResult {
 	if tg.cpuOverload != nil && tg.cpuOverload.isOverloaded() {
 		return grantFailDueToSharedResource
 	}
@@ -473,10 +500,10 @@ func (tg *tokenGranter) tryGetLocked(count int64) grantResult {
 }
 
 func (tg *tokenGranter) returnGrant(count int64) {
-	tg.coord.returnGrant(tg.workKind, count)
+	tg.coord.returnGrant(tg.workKind, count, 0)
 }
 
-func (tg *tokenGranter) returnGrantLocked(count int64) {
+func (tg *tokenGranter) returnGrantLocked(count int64, _ int8) {
 	tg.availableBurstTokens += count
 	if tg.availableBurstTokens > tg.maxBurstTokens {
 		tg.availableBurstTokens = tg.maxBurstTokens
@@ -484,10 +511,10 @@ func (tg *tokenGranter) returnGrantLocked(count int64) {
 }
 
 func (tg *tokenGranter) tookWithoutPermission(count int64) {
-	tg.coord.tookWithoutPermission(tg.workKind, count)
+	tg.coord.tookWithoutPermission(tg.workKind, count, 0)
 }
 
-func (tg *tokenGranter) tookWithoutPermissionLocked(count int64) {
+func (tg *tokenGranter) tookWithoutPermissionLocked(count int64, _ int8) {
 	tg.availableBurstTokens -= count
 }
 
@@ -495,11 +522,34 @@ func (tg *tokenGranter) continueGrantChain(grantChainID grantChainID) {
 	tg.coord.continueGrantChain(tg.workKind, grantChainID)
 }
 
+func (tg *tokenGranter) requesterHasWaitingRequests() bool {
+	return tg.requester.hasWaitingRequests()
+}
+
+func (tg *tokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
+	res := tg.tryGetLocked(1, 0 /*arbitrary*/)
+	if res == grantSuccess {
+		tokens := tg.requester.granted(grantChainID)
+		if tokens == 0 {
+			// Did not accept grant
+			tg.returnGrantLocked(1, 0 /*arbitrary*/)
+			return grantFailLocal
+		} else if tokens > 1 {
+			tg.tookWithoutPermissionLocked(tokens-1, 0 /*arbitrary*/)
+		}
+	}
+	return res
+}
+
 // kvStoreTokenGranter implements granterWithLockedCalls. It is used for
 // grants to KVWork to a store, that is limited by IO tokens.
 type kvStoreTokenGranter struct {
-	coord     *GrantCoordinator
-	requester requester
+	coord            *GrantCoordinator
+	regularRequester requester
+	elasticRequester requester
+
+	// Tokens for L0.
+	// TODO(sumeer): add L0 to the names.
 	// There is no rate limiting in granting these tokens. That is, they are all
 	// burst tokens.
 	availableIOTokens int64
@@ -509,44 +559,145 @@ type kvStoreTokenGranter struct {
 	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
 	exhaustedStart                  time.Time
+
+	// Disk bandwidth tokens.
+	elasticDiskTokensAvailable int64
+	diskTokensUsed             [numWorkClasses]int64
+
+	atAdmittedDoneByteAddition   int64
+	atAdmittedDoneL0ByteAddition int64
 }
 
 var _ granterWithLockedCalls = &kvStoreTokenGranter{}
+var _ granterWithIOTokens = &kvStoreTokenGranter{}
 
-func (sg *kvStoreTokenGranter) getPairedRequester() requester {
-	return sg.requester
+type workClass int8
+
+const (
+	regularWorkClass workClass = iota
+	elasticWorkClass
+	numWorkClasses
+)
+
+type kvStoreTokenChildGranter struct {
+	workClass workClass
+	parent    *kvStoreTokenGranter
 }
 
-func (sg *kvStoreTokenGranter) grantKind() grantKind {
+type storeWriteDoneState struct {
+	tokens                       int64
+	atAdmittedDoneAccountedBytes int64
+	atAdmittedDoneL0Bytes        int64
+}
+
+type granterWithStoreWriteDone interface {
+	granter
+	storeWriteDone(doneState storeWriteDoneState)
+}
+
+var _ granterWithStoreWriteDone = &kvStoreTokenChildGranter{}
+
+func (cg *kvStoreTokenChildGranter) grantKind() grantKind {
 	return token
 }
 
-func (sg *kvStoreTokenGranter) tryGet(count int64) bool {
-	return sg.coord.tryGet(KVWork, count)
+func (cg *kvStoreTokenChildGranter) tryGet(count int64) bool {
+	return cg.parent.tryGet(cg.workClass, count)
 }
 
-func (sg *kvStoreTokenGranter) tryGetLocked(count int64) grantResult {
-	if sg.availableIOTokens > 0 {
-		sg.subtractTokens(count, false)
-		return grantSuccess
+func (cg *kvStoreTokenChildGranter) returnGrant(count int64) {
+	cg.parent.returnGrant(cg.workClass, count)
+}
+
+func (cg *kvStoreTokenChildGranter) tookWithoutPermission(count int64) {
+	cg.parent.tookWithoutPermission(cg.workClass, count)
+}
+
+func (cg *kvStoreTokenChildGranter) continueGrantChain(grantChainID grantChainID) {
+	panic("grant chains are not used for store tokens")
+}
+
+func (cg *kvStoreTokenChildGranter) storeWriteDone(doneState storeWriteDoneState) {
+	cg.parent.storeWriteDone(cg.workClass, doneState)
+}
+
+func (sg *kvStoreTokenGranter) storeWriteDone(workClass workClass, doneState storeWriteDoneState) {
+	// We don't bother with the *Locked dance through the GrantCoordinator here
+	// since the grant coordinator doesn't know when to call the tryGrant since
+	// it does not know whether tokens have become available. There is probably
+	// scope to improve the code abstractions in this file since they are
+	// getting strained, but we should wait till we have more completeness.
+	sg.coord.mu.Lock()
+	exhaustedFunc := func() bool {
+		return sg.availableIOTokens <= 0 ||
+			(workClass == elasticWorkClass && sg.elasticDiskTokensAvailable <= 0)
+	}
+	wasExhausted := exhaustedFunc()
+	ioTokensAtAdmittedDone := doneState.atAdmittedDoneL0Bytes + sg.atAdmittedDoneL0ByteAddition
+	additionalIOTokensToGet := doneState.tokens - ioTokensAtAdmittedDone
+	sg.subtractTokens(additionalIOTokensToGet, false)
+	diskTokensAtAdmittedDone :=
+		doneState.atAdmittedDoneAccountedBytes + sg.atAdmittedDoneByteAddition
+	additionalDiskTokensToGet := doneState.tokens - diskTokensAtAdmittedDone
+	if workClass == elasticWorkClass {
+		sg.elasticDiskTokensAvailable -= additionalDiskTokensToGet
+	}
+	sg.diskTokensUsed[workClass] += additionalDiskTokensToGet
+	isExhausted := exhaustedFunc()
+	if wasExhausted && !isExhausted {
+		sg.coord.tryGrant()
+	}
+	sg.coord.mu.Unlock()
+}
+
+func (sg *kvStoreTokenGranter) tryGet(workClass workClass, count int64) bool {
+	return sg.coord.tryGet(KVWork, count, int8(workClass))
+}
+
+func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grantResult {
+	wc := workClass(demuxHandle)
+	switch wc {
+	case regularWorkClass:
+		if sg.availableIOTokens > 0 {
+			sg.subtractTokens(count, false)
+			sg.diskTokensUsed[wc] += count
+			return grantSuccess
+		}
+	case elasticWorkClass:
+		if sg.elasticDiskTokensAvailable > 0 && sg.availableIOTokens > 0 {
+			sg.elasticDiskTokensAvailable -= count
+			sg.subtractTokens(count, false)
+			sg.diskTokensUsed[wc] += count
+			return grantSuccess
+		}
 	}
 	return grantFailLocal
 }
 
-func (sg *kvStoreTokenGranter) returnGrant(count int64) {
-	sg.coord.returnGrant(KVWork, count)
+func (sg *kvStoreTokenGranter) returnGrant(workClass workClass, count int64) {
+	sg.coord.returnGrant(KVWork, count, int8(workClass))
 }
 
-func (sg *kvStoreTokenGranter) returnGrantLocked(count int64) {
+func (sg *kvStoreTokenGranter) returnGrantLocked(count int64, demuxHandle int8) {
+	wc := workClass(demuxHandle)
 	sg.subtractTokens(-count, false)
+	if wc == elasticWorkClass {
+		sg.elasticDiskTokensAvailable += count
+	}
+	sg.diskTokensUsed[wc] -= count
 }
 
-func (sg *kvStoreTokenGranter) tookWithoutPermission(count int64) {
-	sg.coord.tookWithoutPermission(KVWork, count)
+func (sg *kvStoreTokenGranter) tookWithoutPermission(workClass workClass, count int64) {
+	sg.coord.tookWithoutPermission(KVWork, count, int8(workClass))
 }
 
-func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64) {
+func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
+	wc := workClass(demuxHandle)
 	sg.subtractTokens(count, false)
+	if wc == elasticWorkClass {
+		sg.elasticDiskTokensAvailable -= count
+	}
+	sg.diskTokensUsed[wc] += count
 }
 
 func (sg *kvStoreTokenGranter) subtractTokens(count int64, forceTickMetric bool) {
@@ -569,8 +720,34 @@ func (sg *kvStoreTokenGranter) subtractTokens(count int64, forceTickMetric bool)
 	}
 }
 
-func (sg *kvStoreTokenGranter) continueGrantChain(grantChainID grantChainID) {
-	sg.coord.continueGrantChain(KVWork, grantChainID)
+func (sg *kvStoreTokenGranter) requesterHasWaitingRequests() bool {
+	return sg.regularRequester.hasWaitingRequests() || sg.elasticRequester.hasWaitingRequests()
+}
+
+func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
+	// First try granting to regular requester.
+	for _, wc := range []workClass{regularWorkClass, elasticWorkClass} {
+		req := sg.regularRequester
+		if wc == elasticWorkClass {
+			req = sg.elasticRequester
+		}
+		if req.hasWaitingRequests() {
+			if sg.tryGetLocked(1, int8(wc)) == grantSuccess {
+				tookTokenCount := req.granted(grantChainID)
+				if tookTokenCount == 0 {
+					// Did not accept grant.
+					sg.returnGrantLocked(1, int8(wc))
+				} else {
+					// May have taken more.
+					if tookTokenCount > 1 {
+						sg.tookWithoutPermissionLocked(tookTokenCount-1, int8(wc))
+					}
+					return grantSuccess
+				}
+			}
+		}
+	}
+	return grantFailLocal
 }
 
 func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) (tokensUsed int64) {
@@ -586,6 +763,26 @@ func (sg *kvStoreTokenGranter) setAvailableIOTokensLocked(tokens int64) (tokensU
 	}
 	sg.startingIOTokens = tokens
 	return tokensUsed
+}
+
+func (sg *kvStoreTokenGranter) setAvailableElasticDiskTokensLocked(tokens int64) {
+	sg.elasticDiskTokensAvailable += tokens
+	if sg.elasticDiskTokensAvailable > tokens {
+		sg.elasticDiskTokensAvailable = tokens
+	}
+}
+
+func (sg *kvStoreTokenGranter) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
+	result := sg.diskTokensUsed
+	for i := workClass(0); i < numWorkClasses; i++ {
+		sg.diskTokensUsed[i] = 0
+	}
+	return result
+}
+
+func (sg *kvStoreTokenGranter) setAdmittedDoneByteAdditionLocked(bytes int64, l0Bytes int64) {
+	sg.atAdmittedDoneByteAddition = bytes
+	sg.atAdmittedDoneL0ByteAddition = l0Bytes
 }
 
 // GrantCoordinator is the top-level object that coordinates grants across
@@ -607,8 +804,9 @@ type GrantCoordinator struct {
 	// NB: Some granters can be nil.
 	granters [numWorkKinds]granterWithLockedCalls
 	// The WorkQueues behaving as requesters in each granterWithLockedCalls.
-	// This is kept separately only to service GetWorkQueue calls.
-	queues [numWorkKinds]requester
+	// This is kept separately only to service GetWorkQueue calls and to call
+	// close().
+	queues [numWorkKinds]requesterClose
 	// The cpu fields can be nil, and the IO field can be nil, since a
 	// GrantCoordinator typically handles one of these two resources.
 	cpuOverloadIndicator cpuOverloadIndicator
@@ -708,7 +906,8 @@ type makeRequesterFunc func(
 	opts workQueueOptions) requester
 
 type makeStoreRequesterFunc func(
-	_ log.AmbientContext, granter granter, settings *cluster.Settings,
+	_ log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+	settings *cluster.Settings,
 	opts workQueueOptions) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
@@ -759,8 +958,9 @@ func NewGrantCoordinators(
 		usedSlotsMetric: metrics.KVUsedSlots,
 	}
 	kvSlotAdjuster.granter = kvg
-	coord.queues[KVWork] = makeRequester(ambientCtx, KVWork, kvg, st, makeWorkQueueOptions(KVWork))
-	kvg.requester = coord.queues[KVWork]
+	requester := makeRequester(ambientCtx, KVWork, kvg, st, makeWorkQueueOptions(KVWork))
+	coord.queues[KVWork] = requester
+	kvg.requester = requester
 	coord.granters[KVWork] = kvg
 
 	tg := &tokenGranter{
@@ -770,9 +970,10 @@ func NewGrantCoordinators(
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	coord.queues[SQLKVResponseWork] = makeRequester(
+	requester = makeRequester(
 		ambientCtx, SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
-	tg.requester = coord.queues[SQLKVResponseWork]
+	coord.queues[SQLKVResponseWork] = requester
+	tg.requester = requester
 	coord.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
@@ -782,9 +983,10 @@ func NewGrantCoordinators(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	coord.queues[SQLSQLResponseWork] = makeRequester(ambientCtx,
+	requester = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
-	tg.requester = coord.queues[SQLSQLResponseWork]
+	coord.queues[SQLSQLResponseWork] = requester
+	tg.requester = requester
 	coord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
@@ -794,9 +996,10 @@ func NewGrantCoordinators(
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
-	coord.queues[SQLStatementLeafStartWork] = makeRequester(ambientCtx,
+	requester = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
-	sg.requester = coord.queues[SQLStatementLeafStartWork]
+	coord.queues[SQLStatementLeafStartWork] = requester
+	sg.requester = requester
 	coord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
@@ -806,9 +1009,10 @@ func NewGrantCoordinators(
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
-	coord.queues[SQLStatementRootStartWork] = makeRequester(ambientCtx,
+	requester = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
-	sg.requester = coord.queues[SQLStatementRootStartWork]
+	coord.queues[SQLStatementRootStartWork] = requester
+	sg.requester = requester
 	coord.granters[SQLStatementRootStartWork] = sg
 
 	metricStructs = appendMetricStructsForQueues(metricStructs, coord)
@@ -861,9 +1065,10 @@ func NewGrantCoordinatorSQL(
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
 		cpuOverload:          sqlNodeCPU,
 	}
-	coord.queues[SQLKVResponseWork] = makeRequester(ambientCtx,
+	requester := makeRequester(ambientCtx,
 		SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
-	tg.requester = coord.queues[SQLKVResponseWork]
+	coord.queues[SQLKVResponseWork] = requester
+	tg.requester = requester
 	coord.granters[SQLKVResponseWork] = tg
 
 	tg = &tokenGranter{
@@ -873,9 +1078,10 @@ func NewGrantCoordinatorSQL(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          sqlNodeCPU,
 	}
-	coord.queues[SQLSQLResponseWork] = makeRequester(ambientCtx,
+	requester = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
-	tg.requester = coord.queues[SQLSQLResponseWork]
+	coord.queues[SQLSQLResponseWork] = requester
+	tg.requester = requester
 	coord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
@@ -885,9 +1091,10 @@ func NewGrantCoordinatorSQL(
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
-	coord.queues[SQLStatementLeafStartWork] = makeRequester(ambientCtx,
+	requester = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
-	sg.requester = coord.queues[SQLStatementLeafStartWork]
+	coord.queues[SQLStatementLeafStartWork] = requester
+	sg.requester = requester
 	coord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
@@ -897,9 +1104,10 @@ func NewGrantCoordinatorSQL(
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
-	coord.queues[SQLStatementRootStartWork] = makeRequester(ambientCtx,
+	requester = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
-	sg.requester = coord.queues[SQLStatementRootStartWork]
+	coord.queues[SQLStatementRootStartWork] = requester
+	sg.requester = requester
 	coord.granters[SQLStatementRootStartWork] = sg
 
 	return coord, appendMetricStructsForQueues(metricStructs, coord)
@@ -1001,14 +1209,14 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 }
 
 // tryGet is called by granter.tryGet with the WorkKind.
-func (coord *GrantCoordinator) tryGet(workKind WorkKind, count int64) bool {
+func (coord *GrantCoordinator) tryGet(workKind WorkKind, count int64, demuxHandle int8) bool {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	// It is possible that a grant chain is active, and has not yet made its way
 	// to this workKind. So it may be more reasonable to queue. But we have some
 	// concerns about incurring the delay of multiple goroutine context switches
 	// so we ignore this case.
-	res := coord.granters[workKind].tryGetLocked(count)
+	res := coord.granters[workKind].tryGetLocked(count, demuxHandle)
 	switch res {
 	case grantSuccess:
 		// Grant chain may be active, but it did not get in the way of this grant,
@@ -1031,13 +1239,13 @@ func (coord *GrantCoordinator) tryGet(workKind WorkKind, count int64) bool {
 }
 
 // returnGrant is called by granter.returnGrant with the WorkKind.
-func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64) {
+func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64, demuxHandle int8) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	coord.granters[workKind].returnGrantLocked(count)
+	coord.granters[workKind].returnGrantLocked(count, demuxHandle)
 	if coord.grantChainActive {
 		if coord.grantChainIndex > workKind &&
-			coord.granters[workKind].getPairedRequester().hasWaitingRequests() {
+			coord.granters[workKind].requesterHasWaitingRequests() {
 			// There are waiting requests that will not be served by the grant chain.
 			// Better to terminate it and start afresh.
 			if !coord.tryTerminateGrantChain() {
@@ -1053,10 +1261,12 @@ func (coord *GrantCoordinator) returnGrant(workKind WorkKind, count int64) {
 
 // tookWithoutPermission is called by granter.tookWithoutPermission with the
 // WorkKind.
-func (coord *GrantCoordinator) tookWithoutPermission(workKind WorkKind, count int64) {
+func (coord *GrantCoordinator) tookWithoutPermission(
+	workKind WorkKind, count int64, demuxHandle int8,
+) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
-	coord.granters[workKind].tookWithoutPermissionLocked(count)
+	coord.granters[workKind].tookWithoutPermissionLocked(count, demuxHandle)
 }
 
 // continueGrantChain is called by granter.continueGrantChain with the
@@ -1150,33 +1360,21 @@ OuterLoop:
 			// remaining will be nil.
 			continue
 		}
-		req := granter.getPairedRequester()
-		for req.hasWaitingRequests() && !localDone {
-			// Get 1 token or slot.
-			res := granter.tryGetLocked(1)
+		for granter.requesterHasWaitingRequests() && !localDone {
+			chainID := noGrantChain
+			if grantBurstCount+1 == grantBurstLimit && coord.useGrantChains {
+				chainID = coord.grantChainID
+			}
+			res := granter.tryGrantLocked(chainID)
 			switch res {
 			case grantSuccess:
-				chainID := noGrantChain
-				if grantBurstCount+1 == grantBurstLimit && coord.useGrantChains {
-					chainID = coord.grantChainID
-				}
-				tookCount := req.granted(chainID)
-				if tookCount == 0 {
-					// Did not accept grant.
-					granter.returnGrantLocked(1)
-				} else {
-					// May have taken more.
-					if tookCount > 1 {
-						granter.tookWithoutPermissionLocked(tookCount - 1)
+				grantBurstCount++
+				if grantBurstCount == grantBurstLimit && coord.useGrantChains {
+					coord.grantChainActive = true
+					if startingChain {
+						coord.grantChainStartTime = timeutil.Now()
 					}
-					grantBurstCount++
-					if grantBurstCount == grantBurstLimit && coord.useGrantChains {
-						coord.grantChainActive = true
-						if startingChain {
-							coord.grantChainStartTime = timeutil.Now()
-						}
-						return
-					}
+					return
 				}
 			case grantFailDueToSharedResource:
 				break OuterLoop
@@ -1377,9 +1575,21 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	// Share the WorkQueue metrics across all stores.
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
 	opts.metrics = &sgc.workQueueMetrics
-	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, kvg, sgc.settings, opts)
+	granters := [numWorkClasses]granterWithStoreWriteDone{
+		&kvStoreTokenChildGranter{
+			workClass: regularWorkClass,
+			parent:    kvg,
+		},
+		&kvStoreTokenChildGranter{
+			workClass: elasticWorkClass,
+			parent:    kvg,
+		},
+	}
+	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, granters, sgc.settings, opts)
+	requesters := storeReq.getRequesters()
 	coord.queues[KVWork] = storeReq
-	kvg.requester = storeReq
+	kvg.regularRequester = requesters[regularWorkClass]
+	kvg.elasticRequester = requesters[elasticWorkClass]
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
 		storeID:     storeID,
@@ -1399,6 +1609,26 @@ func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID int32) *StoreWork
 		return granter.queues[KVWork].(*StoreWorkQueue)
 	}
 	return nil
+}
+
+// GetCompactionSlot is used before starting any compaction, whether it is a
+// regular or optional compaction. A regular compaction should set force=true.
+func (sgc *StoreGrantCoordinators) GetCompactionSlot(storeID int32, force bool) (bool, error) {
+	if unsafeGranter, ok := sgc.gcMap.Load(int64(storeID)); ok {
+		granter := (*GrantCoordinator)(unsafeGranter)
+		return granter.ioLoadListener.diskBandwidthLimiter.compactionLimiter.getCompactionSlot(force), nil
+	}
+	return true, errors.Errorf("unknown storeID %d", storeID)
+}
+
+// ReturnCompactionSlot is called when a compaction completes.
+func (sgc *StoreGrantCoordinators) ReturnCompactionSlot(storeID int32) error {
+	if unsafeGranter, ok := sgc.gcMap.Load(int64(storeID)); ok {
+		granter := (*GrantCoordinator)(unsafeGranter)
+		granter.ioLoadListener.diskBandwidthLimiter.compactionLimiter.returnCompactionSlot()
+		return nil
+	}
+	return errors.Errorf("unknown storeID %d", storeID)
 }
 
 func (sgc *StoreGrantCoordinators) close() {
@@ -1542,6 +1772,11 @@ type StoreMetrics struct {
 	*pebble.Metrics
 	WriteStallCount int64
 	*pebble.InternalIntervalMetrics
+
+	// TODO: populate. IntervalCompactionInfo should be folded into
+	// pebble.InternalIntervalMetrics.
+	IntervalDiskLoadInfo   IntervalDiskLoadInfo
+	IntervalCompactionInfo IntervalCompactionInfo
 }
 
 // granterWithIOTokens is used to abstract kvStoreTokenGranter for testing.
@@ -1556,6 +1791,15 @@ type granterWithIOTokens interface {
 	// that tokensUsed can be negative, though that will be rare, since it is
 	// possible for tokens to be returned.
 	setAvailableIOTokensLocked(tokens int64) (tokensUsed int64)
+	setAvailableElasticDiskTokensLocked(tokens int64)
+	// getDiskTokensUsed returns the disk tokens used since the last such call.
+	getDiskTokensUsedAndResetLocked() [numWorkClasses]int64
+	// setAdmittedDoneByteAddition supplies the adjustments to use when
+	// storeWriteDone is called. Note that this is not the adjustment to use at
+	// admission time -- that is handled by StoreWorkQueue and is not in scope
+	// of this granter. This asymmetry is due to the need to use all the
+	// functionality of WorkQueue at admission time.
+	setAdmittedDoneByteAdditionLocked(bytes int64, l0Bytes int64)
 }
 
 // storeAdmissionStats are stats maintained by a storeRequester. The non-test
@@ -1565,74 +1809,59 @@ type granterWithIOTokens interface {
 type storeAdmissionStats struct {
 	// Total admission requests.
 	admittedCount uint64
-	// Total admission requests that provided their byte size. The remaining
-	// provided a byte size of 0.
-	// INVARIANT: admittedWithBytesCount <= admittedCount
-	admittedWithBytesCount uint64
-	// Bytes mentioned at admission request time for the requests in
-	// admittedWithBytesCount.
+
+	// Bytes mentioned for the requests in admittedCount.
 	//
-	// TODO(sumeer): if these are a mix of regular Batch writes and ingestion
-	// requests, i.e., admittedAccountedBytes > ingestedAccountedBytes, then the two kinds of
-	// bytes are not actually comparable, since the Batch writes are
-	// uncompressed. We may need to fix this inaccuracy if it turns out to be an
-	// issue.
-	admittedAccountedBytes uint64
-	// Bytes mentioned at admission request time for the ingestion requests. Bytes
-	// in this field are also reflected in admittedAccountedBytes.
-	// INVARIANT: ingestedAccountedBytes <= admittedAccountedBytes
-	ingestedAccountedBytes uint64
-	// After execution of the ingestion requests, how many bytes were reported as
-	// ingested into L0. Bytes in this field are also reflected in admittedAccountedBytes.
-	//
-	// INVARIANT: ingestedAccountedL0Bytes <= ingestedAccountedBytes
-	ingestedAccountedL0Bytes uint64
+	// TODO(sumeer): since these are a mix of regular Batch writes and ingestion
+	// requests, and the two kinds of bytes are not actually comparable (the
+	// Batch writes are uncompressed), we may need to fix this inaccuracy if it
+	// turns out to be an issue.
+	atAdmitAccountedBytes          uint64
+	atAdmittedDoneAccountedBytes   uint64
+	atAdmittedDoneAccountedL0Bytes uint64
 }
 
 // storeRequestEstimates are estimates that the storeRequester should use for
 // its future requests.
 type storeRequestEstimates struct {
-	// Fraction of ingested bytes (via admission control) that went into L0.
-	// Calculated using storeAdmissionStats.
-	fractionOfIngestIntoL0 float64
 	// This estimate is used to adjust work bytes, to compensate for any
-	// observed under-counting.
-	// - For requests that do not provide a byte size, this is the value of
-	//   tokens they will use.
-	// - For requests that do provide a byte size, this adjustment is added to
-	//   compensate for other requests that are unobserved by admission control.
+	// observed under-counting at Admit time. Under-counting happens due to:
+	// - Requests unobserved by admission control.
+	// - Requests that do not provide their bytes at admission time.
 	// Must be > 0.
-	workByteAddition int64
+	atAdmitWorkByteAddition int64
 }
 
 // storeRequester is used to abstract *StoreWorkQueue for testing.
 type storeRequester interface {
-	requester
-	getStoreAdmissionStats() storeAdmissionStats
+	requesterClose
+	getRequesters() [numWorkClasses]requester
+	getStoreAdmissionStats() [numWorkClasses]storeAdmissionStats
 	setStoreRequestEstimates(estimates storeRequestEstimates)
 }
 
 type ioLoadListenerState struct {
 	// Cumulative.
-	cumAdmissionStats storeAdmissionStats
+	cumAdmissionStats [numWorkClasses]storeAdmissionStats
 	// Cumulative.
 	cumL0AddedBytes uint64
 	// Gauge.
 	curL0Bytes int64
 	// Cumulative.
 	cumWriteStallCount int64
+	// Cumulative incoming bytes is flushed+ingested bytes into the LSM (any
+	// level).
+	cumIncomingBytes uint64
 
 	// Exponentially smoothed per interval values.
 
-	smoothedIntL0CompactedBytes          int64   // bytes leaving L0
-	smoothedIntPerWorkUnaccountedL0Bytes float64 // smoothed unaccounted L0 bytes per req
-	// Used to guess how much of an incoming ingestion will likely go to L0
-	// to inform the number of tokens to request. The actual number of tokens
-	// is determined when the work is done, as then the L0 fraction is known
-	// precisely.
-	smoothedIntIngestedAccountedL0BytesFraction float64 // '1.0' means: all ingested bytes went to L0
+	smoothedIntL0CompactedBytes int64 // bytes leaving L0
 	// Smoothed history of byte tokens calculated based on compactions out of L0.
 	smoothedCompactionByteTokens float64
+	// smoothed unaccounted bytes per request.
+	smoothedIntPerWorkAtAdmitUnaccountedBytes          float64
+	smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes   float64
+	smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes float64
 
 	// Number of flush tokens, before multiplying by target fraction.
 	smoothedNumFlushTokens float64
@@ -1649,6 +1878,12 @@ type ioLoadListenerState struct {
 	// Used tokens can be negative if some tokens taken in one interval were
 	// returned in another, but that will be extremely rare.
 	tokensUsed int64
+
+	// elasticDiskTokens represents the tokens to give out until the next call
+	// to adjustTokens. They are parceled out in snall intervals.
+	// elasticDiskTokensAllocated represents what has been given out.
+	elasticDiskTokens          int64
+	elasticDiskTokensAllocated int64
 }
 
 // ioLoadListener adjusts tokens in kvStoreTokenGranter for IO, specifically due to
@@ -1670,6 +1905,8 @@ type ioLoadListener struct {
 	// Stats used to compute interval stats.
 	statsInitialized bool
 	adjustTokensResult
+
+	diskBandwidthLimiter diskBandwidthLimiter
 }
 
 const unlimitedTokens = math.MaxInt64
@@ -1739,43 +1976,56 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 			cumL0AddedBytes:    m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
 			curL0Bytes:         m.Levels[0].Size,
 			cumWriteStallCount: metrics.WriteStallCount,
-			// Reasonable starting fraction until we see some ingests.
-			smoothedIntIngestedAccountedL0BytesFraction: 0.5,
+			cumIncomingBytes:   cumIncomingBytes(m),
 			// No initial limit, i.e, the first interval is unlimited.
 			totalNumByteTokens: unlimitedTokens,
+			elasticDiskTokens:  unlimitedTokens,
 		}
 		return
 	}
 	io.adjustTokens(ctx, metrics)
 }
 
+func cumIncomingBytes(m *pebble.Metrics) uint64 {
+	var result uint64
+	for i := range m.Levels {
+		result += m.Levels[i].BytesFlushed + m.Levels[i].BytesIngested
+	}
+	return result
+}
+
 // allocateTokensTick gives out 1/ticksInAdjustmentInterval of the
 // totalNumByteTokens every 250ms.
 func (io *ioLoadListener) allocateTokensTick() {
-	var toAllocate int64
-	// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
-	// calculation.
-	if io.totalNumByteTokens >= unlimitedTokens-(ticksInAdjustmentInterval-1) {
-		toAllocate = io.totalNumByteTokens / ticksInAdjustmentInterval
-	} else {
-		// Round up so that we don't accumulate tokens to give in a burst on the
-		// last tick.
-		toAllocate = (io.totalNumByteTokens + ticksInAdjustmentInterval - 1) / ticksInAdjustmentInterval
-		if toAllocate < 0 {
-			panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
+	allocateFunc := func(total int64, allocated int64) (toAllocate int64) {
+		// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
+		// calculation.
+		if total >= unlimitedTokens-(ticksInAdjustmentInterval-1) {
+			toAllocate = total / ticksInAdjustmentInterval
+		} else {
+			// Round up so that we don't accumulate tokens to give in a burst on the
+			// last tick.
+			toAllocate = (total + ticksInAdjustmentInterval - 1) / ticksInAdjustmentInterval
+			if toAllocate < 0 {
+				panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
+			}
+			if toAllocate+allocated > total {
+				toAllocate = total - allocated
+			}
 		}
-		if toAllocate+io.tokensAllocated > io.totalNumByteTokens {
-			toAllocate = io.totalNumByteTokens - io.tokensAllocated
-		}
+		return toAllocate
 	}
-	// INVARIANT: toAllocate >= 0.
+	// INVARIANT: toAllocate* >= 0.
+	toAllocateIOTokens := allocateFunc(io.totalNumByteTokens, io.tokensAllocated)
+	toAllocateElasticDiskTokens := allocateFunc(io.elasticDiskTokens, io.elasticDiskTokensAllocated)
 	io.mu.Lock()
 	defer io.mu.Unlock()
-	io.tokensAllocated += toAllocate
+	io.tokensAllocated += toAllocateIOTokens
 	if io.tokensAllocated < 0 {
 		panic(errors.AssertionFailedf("tokens allocated is negative %d", io.tokensAllocated))
 	}
-	io.tokensUsed += io.mu.kvGranter.setAvailableIOTokensLocked(toAllocate)
+	io.tokensUsed += io.mu.kvGranter.setAvailableIOTokensLocked(toAllocateIOTokens)
+	io.mu.kvGranter.setAvailableElasticDiskTokensLocked(toAllocateElasticDiskTokens)
 }
 
 // adjustTokens computes a new value of totalNumByteTokens (and resets
@@ -1788,14 +2038,34 @@ func (io *ioLoadListener) allocateTokensTick() {
 // memtable counts, which we want to avoid as it can cause latency hiccups of
 // 100+ms for all write traffic.
 func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
+	io.mu.Lock()
+	diskTokensUsed := io.mu.kvGranter.getDiskTokensUsedAndResetLocked()
+	io.mu.Unlock()
+	intIncomingBytes := int64(cumIncomingBytes(metrics.Metrics)) -
+		int64(io.ioLoadListenerState.cumIncomingBytes)
+	intervalLSMInfo := intervalLSMInfo{
+		incomingBytes:     intIncomingBytes,
+		regularTokensUsed: diskTokensUsed[regularWorkClass],
+		elasticTokensUsed: diskTokensUsed[elasticWorkClass],
+	}
+	elasticTokens := io.diskBandwidthLimiter.adjust(
+		metrics.IntervalDiskLoadInfo, metrics.IntervalCompactionInfo, intervalLSMInfo)
+
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(),
 		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
+		cumIncomingBytes(metrics.Metrics),
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 		MinFlushUtilizationPercentage.Get(&io.settings.SV),
 	)
 	io.adjustTokensResult = res
+	io.elasticDiskTokens = elasticTokens
+	io.elasticDiskTokensAllocated = 0
 	io.kvRequester.setStoreRequestEstimates(res.requestEstimates)
+	io.mu.Lock()
+	io.mu.kvGranter.setAdmittedDoneByteAdditionLocked(
+		int64(res.smoothedIntPerWorkAtAdmitUnaccountedBytes),
+		int64(res.smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes))
 	if res.aux.shouldLog {
 		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
 	}
@@ -1805,18 +2075,14 @@ type adjustTokensAuxComputations struct {
 	shouldLog                        bool
 	curL0NumFiles, curL0NumSublevels int64
 
+	intIncomingBytes    int64
 	intL0AddedBytes     int64
 	intL0CompactedBytes int64
 
-	intAdmittedCount uint64
-
-	intAdmittedBytes, intIngestedBytes uint64
-	intIngestedAccountedL0Bytes        uint64
-	intAccountedL0Bytes                uint64
-	intUnaccountedL0Bytes              int64
-
-	intPerWorkUnaccountedL0Bytes float64
-	l0BytesIngestFraction        float64
+	intAdmittedCount                  uint64
+	intAtAdmitAccountedBytes          uint64
+	intAtAdmittedDoneAccountedBytes   uint64
+	intAtAdmittedDoneAccountedL0Bytes uint64
 
 	intFlushTokens      float64
 	intFlushUtilization float64
@@ -1826,10 +2092,11 @@ type adjustTokensAuxComputations struct {
 func (*ioLoadListener) adjustTokensInner(
 	ctx context.Context,
 	prev ioLoadListenerState,
-	cumAdmissionStats storeAdmissionStats,
+	cumAdmissionStats [numWorkClasses]storeAdmissionStats,
 	l0Metrics pebble.LevelMetrics,
 	cumWriteStallCount int64,
 	im *pebble.InternalIntervalMetrics,
+	cumIncomingBytes uint64,
 	threshNumFiles, threshNumSublevels int64,
 	minFlushUtilizationPercentage int64,
 ) adjustTokensResult {
@@ -1856,8 +2123,22 @@ func (*ioLoadListener) adjustTokensInner(
 	smoothedIntL0CompactedBytes := int64(alpha*float64(intL0CompactedBytes) + (1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
 	// Compute the deltas of the storeAdmissionStats.
 
+	// Estimation for unaccounted bytes.
+
 	// intAdmittedCount is the number of requests admitted since the last token adjustment.
-	intAdmittedCount := cumAdmissionStats.admittedCount - prev.cumAdmissionStats.admittedCount
+	var intAdmittedCount uint64
+	var intAtAdmitAccountedBytes uint64
+	var intAtAdmittedDoneAccountedBytes uint64
+	var intAtAdmittedDoneAccountedL0Bytes uint64
+	for i := workClass(0); i < numWorkClasses; i++ {
+		intAdmittedCount += cumAdmissionStats[i].admittedCount - prev.cumAdmissionStats[i].admittedCount
+		intAtAdmitAccountedBytes += cumAdmissionStats[i].atAdmitAccountedBytes -
+			prev.cumAdmissionStats[i].atAdmitAccountedBytes
+		intAtAdmittedDoneAccountedBytes += cumAdmissionStats[i].atAdmittedDoneAccountedBytes -
+			prev.cumAdmissionStats[i].atAdmittedDoneAccountedBytes
+		intAtAdmittedDoneAccountedL0Bytes += cumAdmissionStats[i].atAdmittedDoneAccountedL0Bytes -
+			prev.cumAdmissionStats[i].atAdmittedDoneAccountedL0Bytes
+	}
 	doLog := true
 	if intAdmittedCount <= 0 {
 		intAdmittedCount = 1
@@ -1866,80 +2147,64 @@ func (*ioLoadListener) adjustTokensInner(
 		// situation.
 		doLog = false
 	}
-
-	// intAdmittedBytes are the bytes admitted since the last token adjustment. This
-	// also includes any ingestions, i.e. intAdmittedBytes >= intIngestedAccountedBytes.
-	intAdmittedBytes := cumAdmissionStats.admittedAccountedBytes - prev.cumAdmissionStats.admittedAccountedBytes
-	// intIngestedAccountedBytes are the bytes ingested since the last token adjustment. Bytes
-	// tracked here are also tracked in intAdmittedBytes.
-	intIngestedAccountedBytes := cumAdmissionStats.ingestedAccountedBytes - prev.cumAdmissionStats.ingestedAccountedBytes
-	// intIngestedAccountedL0Bytes are the bytes ingested since the last token
-	// adjustment that requests reported as having been ingested into L0. Bytes
-	// tracked here are also tracked in intIngestedAccountedBytes.
-	intIngestedAccountedL0Bytes :=
-		cumAdmissionStats.ingestedAccountedL0Bytes - prev.cumAdmissionStats.ingestedAccountedL0Bytes
-
-	// intAccountedL0Bytes are the bytes that we expect to have entered L0 based
-	// on the requests tracked over the interval: the bytes ingested into L0 and
-	// all non-ingestion bytes (since regular writes flush to L0 before getting
-	// compacted down).
-	intAccountedL0Bytes := intIngestedAccountedL0Bytes + (intAdmittedBytes - intIngestedAccountedBytes)
-	// Bytes that were added to L0 based on LSM stats, but we don't know where
-	// they came from. The sum of the accounted and unaccounted L0 bytes is
-	// exactly the actual L0 growth observed over the interval.
-	intUnaccountedL0Bytes := intL0AddedBytes - int64(intAccountedL0Bytes)
-	if intUnaccountedL0Bytes < 0 {
-		// This could happen because of the different points in time the two stats
-		// a, b are collected, for which we are computing a-b. The compensation we
-		// do below is limited to exponential smoothing, which hopefully is good
-		// enough.
-		intUnaccountedL0Bytes = 0
-	}
-
-	// intPerWorkUnaccountedL0Bytes is the average unaccounted L0 bytes each request added
-	// since the last token adjustment round.
-	// INVARIANT: intPerWorkUnaccountedL0Bytes >= 0
-	intPerWorkUnaccountedL0Bytes := float64(intUnaccountedL0Bytes) / float64(intAdmittedCount)
-	var smoothedIntPerWorkUnaccountedL0Bytes float64
-	if intAdmittedCount > 1 && intL0AddedBytes > 0 {
-		// Track an exponentially smoothed estimate of unaccounted bytes added per
-		// work when there was some work actually admitted. Note we treat having
-		// admitted one item as the same as having admitted zero both because we
-		// clamp admitted to 1 and if we only admitted one thing, do we really
-		// want to use that for our estimate? The conjunction includes intL0AddedBytes
-		// > 0 (and not just intAdmittedCount), since we have seen situation where no
-		// bytes were added and intAdmittedCount > 1. This can happen since the stats
-		// from Pebble and those from the requester are not synchronized, and in
-		// that case we don't want to include this sample in the smoothing.
-		if prev.smoothedIntPerWorkUnaccountedL0Bytes == 0 {
-			smoothedIntPerWorkUnaccountedL0Bytes = intPerWorkUnaccountedL0Bytes
-		} else {
-			smoothedIntPerWorkUnaccountedL0Bytes = alpha*intPerWorkUnaccountedL0Bytes +
-				(1-alpha)*prev.smoothedIntPerWorkUnaccountedL0Bytes
+	intIncomingBytes := int64(cumIncomingBytes - prev.cumIncomingBytes)
+	unaccountedFunc := func(
+		intUnaccountedBytes int64, prevSmoothedIntPerWorkUnaccountedBytes float64, intAddedBytes int64,
+	) (adjustedIntUnaccountedBytes int64, smoothedIntPerWorkUnaccountedBytes float64) {
+		// Clamp the unaccounted bytes to >= 0. Negative values can happen because
+		// of the different points in time the two stats a, b are collected, for
+		// which we are computing a-b. The compensation we do below is limited to
+		// exponential smoothing, which hopefully is good enough.
+		if intUnaccountedBytes < 0 {
+			intUnaccountedBytes = 0
 		}
-	} else {
-		// We've not had work flow through admission control, so we don't have any
-		// reasonable interval data to update our previous estimates. Keep the old
-		// smoothed value around, as it is likely more useful for future admission
-		// control computations than smoothing down to zero over time.
-		smoothedIntPerWorkUnaccountedL0Bytes = prev.smoothedIntPerWorkUnaccountedL0Bytes
+		intPerWorkUnaccountedBytes := float64(intUnaccountedBytes) / float64(intAdmittedCount)
+		if intAdmittedCount > 1 && intAddedBytes > 0 {
+			// Track an exponentially smoothed estimate of unaccounted bytes added per
+			// work when there was some work actually admitted. Note we treat having
+			// admitted one item as the same as having admitted zero both because we
+			// clamp admitted to 1 and if we only admitted one thing, do we really
+			// want to use that for our estimate? The conjunction includes intAddedBytes
+			// > 0 (and not just intAdmittedCount), since we have seen situation where no
+			// bytes were added and intAdmittedCount > 1. This can happen since the stats
+			// from Pebble and those from the requester are not synchronized, and in
+			// that case we don't want to include this sample in the smoothing.
+			if prevSmoothedIntPerWorkUnaccountedBytes == 0 {
+				smoothedIntPerWorkUnaccountedBytes = intPerWorkUnaccountedBytes
+			} else {
+				smoothedIntPerWorkUnaccountedBytes = alpha*intPerWorkUnaccountedBytes +
+					(1-alpha)*prevSmoothedIntPerWorkUnaccountedBytes
+			}
+		} else {
+			// We've not had work flow through admission control, so we don't have any
+			// reasonable interval data to update our previous estimates. Keep the old
+			// smoothed value around, as it is likely more useful for future admission
+			// control computations than smoothing down to zero over time.
+			smoothedIntPerWorkUnaccountedBytes = prevSmoothedIntPerWorkUnaccountedBytes
+		}
+		return intAddedBytes, smoothedIntPerWorkUnaccountedBytes
 	}
-
-	var intIngestedAccountedL0BytesFraction float64
-	var smoothedIntIngestedAccountedL0BytesFraction float64
-	if intIngestedAccountedBytes > 0 {
-		intIngestedAccountedL0BytesFraction = float64(intIngestedAccountedL0Bytes) / float64(intIngestedAccountedBytes)
-		smoothedIntIngestedAccountedL0BytesFraction = alpha*intIngestedAccountedL0BytesFraction +
-			(1-alpha)*prev.smoothedIntIngestedAccountedL0BytesFraction
-	} else {
-		// No ingestion happened in this time interval, so don't update the
-		// estimate. This makes the assumption that future ingestions will have
-		// around the same ratio (or at least that the same ratio is a decent
-		// starting point), which may be incorrect but is likely on average better
-		// than assuming zero as the future starting point, which would be the
-		// result of smoothing out with additional zeroes.
-		smoothedIntIngestedAccountedL0BytesFraction = prev.smoothedIntIngestedAccountedL0BytesFraction
-	}
+	// Bytes that were added to the LSM or to L0 based on LSM stats, but we
+	// don't know where they came from.
+	intAtAdmitUnaccountedBytes := intIncomingBytes - int64(intAtAdmitAccountedBytes)
+	intAtAdmittedDoneUnaccountedBytes := intIncomingBytes - int64(intAtAdmittedDoneAccountedBytes)
+	intAtAdmittedDoneUnaccountedL0Bytes := intL0AddedBytes -
+		int64(intAtAdmittedDoneAccountedL0Bytes)
+	var smoothedIntPerWorkAtAdmitUnaccountedBytes float64
+	intAtAdmitUnaccountedBytes, smoothedIntPerWorkAtAdmitUnaccountedBytes = unaccountedFunc(
+		intAtAdmitUnaccountedBytes, prev.smoothedIntPerWorkAtAdmitUnaccountedBytes, intIncomingBytes)
+	var smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes float64
+	intAtAdmittedDoneUnaccountedBytes, smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes =
+		unaccountedFunc(
+			intAtAdmittedDoneUnaccountedBytes,
+			prev.smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes,
+			intIncomingBytes)
+	var smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes float64
+	intAtAdmittedDoneUnaccountedL0Bytes, smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes =
+		unaccountedFunc(
+			intAtAdmittedDoneUnaccountedL0Bytes,
+			prev.smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes,
+			intL0AddedBytes)
 
 	// Flush tokens:
 	//
@@ -2160,41 +2425,40 @@ func (*ioLoadListener) adjustTokensInner(
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
 		ioLoadListenerState: ioLoadListenerState{
-			cumAdmissionStats:                           cumAdmissionStats,
-			cumL0AddedBytes:                             cumL0AddedBytes,
-			curL0Bytes:                                  curL0Bytes,
-			cumWriteStallCount:                          cumWriteStallCount,
-			smoothedIntL0CompactedBytes:                 smoothedIntL0CompactedBytes,
-			smoothedIntPerWorkUnaccountedL0Bytes:        smoothedIntPerWorkUnaccountedL0Bytes,
-			smoothedIntIngestedAccountedL0BytesFraction: smoothedIntIngestedAccountedL0BytesFraction,
-			smoothedCompactionByteTokens:                smoothedCompactionByteTokens,
-			smoothedNumFlushTokens:                      smoothedNumFlushTokens,
-			flushUtilTargetFraction:                     flushUtilTargetFraction,
-			totalNumByteTokens:                          totalNumByteTokens,
-			tokensAllocated:                             0,
-			tokensUsed:                                  0,
+			cumAdmissionStats:                                  cumAdmissionStats,
+			cumL0AddedBytes:                                    cumL0AddedBytes,
+			curL0Bytes:                                         curL0Bytes,
+			cumWriteStallCount:                                 cumWriteStallCount,
+			cumIncomingBytes:                                   cumIncomingBytes,
+			smoothedIntL0CompactedBytes:                        smoothedIntL0CompactedBytes,
+			smoothedCompactionByteTokens:                       smoothedCompactionByteTokens,
+			smoothedIntPerWorkAtAdmitUnaccountedBytes:          smoothedIntPerWorkAtAdmitUnaccountedBytes,
+			smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes:   smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes,
+			smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes: smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes,
+			smoothedNumFlushTokens:                             smoothedNumFlushTokens,
+			flushUtilTargetFraction:                            flushUtilTargetFraction,
+			totalNumByteTokens:                                 totalNumByteTokens,
+			tokensAllocated:                                    0,
+			tokensUsed:                                         0,
+			// elasticDiskTokens* will be written in the caller.
 		},
 		requestEstimates: storeRequestEstimates{
-			workByteAddition:       max(1, int64(smoothedIntPerWorkUnaccountedL0Bytes)),
-			fractionOfIngestIntoL0: smoothedIntIngestedAccountedL0BytesFraction,
+			atAdmitWorkByteAddition: max(1, int64(smoothedIntPerWorkAtAdmitUnaccountedBytes)),
 		},
 		aux: adjustTokensAuxComputations{
-			shouldLog:                    doLog,
-			curL0NumFiles:                curL0NumFiles,
-			curL0NumSublevels:            curL0NumSublevels,
-			intL0AddedBytes:              intL0AddedBytes,
-			intL0CompactedBytes:          intL0CompactedBytes,
-			intAdmittedCount:             intAdmittedCount,
-			intAdmittedBytes:             intAdmittedBytes,
-			intIngestedBytes:             intIngestedAccountedBytes,
-			intIngestedAccountedL0Bytes:  intIngestedAccountedL0Bytes,
-			intAccountedL0Bytes:          intAccountedL0Bytes,
-			intUnaccountedL0Bytes:        intUnaccountedL0Bytes,
-			intPerWorkUnaccountedL0Bytes: intPerWorkUnaccountedL0Bytes,
-			l0BytesIngestFraction:        intIngestedAccountedL0BytesFraction,
-			intFlushTokens:               intFlushTokens,
-			intFlushUtilization:          intFlushUtilization,
-			intWriteStalls:               intWriteStalls,
+			shouldLog:                         doLog,
+			curL0NumFiles:                     curL0NumFiles,
+			curL0NumSublevels:                 curL0NumSublevels,
+			intIncomingBytes:                  intIncomingBytes,
+			intL0AddedBytes:                   intL0AddedBytes,
+			intL0CompactedBytes:               intL0CompactedBytes,
+			intAdmittedCount:                  intAdmittedCount,
+			intAtAdmitAccountedBytes:          intAtAdmitAccountedBytes,
+			intAtAdmittedDoneAccountedBytes:   intAtAdmittedDoneAccountedBytes,
+			intAtAdmittedDoneAccountedL0Bytes: intAtAdmittedDoneAccountedL0Bytes,
+			intFlushTokens:                    intFlushTokens,
+			intFlushUtilization:               intFlushUtilization,
+			intWriteStalls:                    intWriteStalls,
 		},
 	}
 }
@@ -2217,17 +2481,15 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	// NB: "≈" indicates smoothed quantities.
 	p.Printf("%d ssts, %d sub-levels, ", res.aux.curL0NumFiles, res.aux.curL0NumSublevels)
 	p.Printf("L0 growth %s: ", ib(res.aux.intL0AddedBytes))
-	// Writes to L0 that we expected because requests asked admission control for them.
-	// This is the "happy path".
-	p.Printf("%s acc-write + ", ib(int64(res.aux.intAccountedL0Bytes-res.aux.intIngestedAccountedL0Bytes)))
-	// Ingestion bytes that we expected to go to L0 based on the ingestion fraction
-	// when the respective ingestions were admitted.
-	p.Printf("%s acc-ingest + ", ib(int64(res.aux.intIngestedAccountedL0Bytes)))
+	// Writes + Ingests to L0 that we expected because requests asked admission
+	// control for them. This is the "happy path".
+	p.Printf("%s acc + ", ib(int64(res.aux.intAtAdmittedDoneAccountedL0Bytes)))
 	// The unhappy case - extra bytes that showed up in L0 but we didn't account
 	// for them with any request. If this is large, traffic patterns possibly changed
 	// recently.
 	p.Printf("%s unacc [≈%s/req, n=%d], ",
-		ib(res.aux.intUnaccountedL0Bytes), ib(int64(res.smoothedIntPerWorkUnaccountedL0Bytes)), res.aux.intAdmittedCount)
+		ib(res.aux.intL0AddedBytes-int64(res.aux.intAtAdmittedDoneAccountedL0Bytes)),
+		ib(int64(res.smoothedIntPerWorkAtAdmittedDoneUnaccountedL0Bytes)), res.aux.intAdmittedCount)
 	// How much got compacted out of L0 recently.
 	p.Printf("compacted %s [≈%s], ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
 	p.Printf("flush tokens %s with multiplier %.3f [≈%s]; ", ib(int64(res.aux.intFlushTokens)),
@@ -2239,12 +2501,16 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			n < unlimitedTokens/ticksInAdjustmentInterval {
 			p.Printf("(used %s)", ib(n))
 		}
-		p.Printf(" with L0 penalty: +%s/req, *%.2f/ingest",
-			ib(res.requestEstimates.workByteAddition), res.requestEstimates.fractionOfIngestIntoL0,
-		)
+		p.Printf(" with L0 penalty: +%s/req", ib(res.requestEstimates.atAdmitWorkByteAddition))
 	} else {
 		p.SafeString("all")
 	}
+	p.Printf(" LSM growth %s: ", ib(res.aux.intIncomingBytes))
+	p.Printf(" %s acc + ", ib(int64(res.aux.intAtAdmittedDoneAccountedBytes)))
+	p.Printf("%s unacc [≈%s/req, admit≈%s/req] ", ib(res.aux.intIncomingBytes-
+		int64(res.aux.intAtAdmittedDoneAccountedBytes)),
+		ib(int64(res.smoothedIntPerWorkAtAdmittedDoneUnaccountedBytes)),
+		ib(int64(res.smoothedIntPerWorkAtAdmitUnaccountedBytes)))
 }
 
 func (res adjustTokensResult) String() string {

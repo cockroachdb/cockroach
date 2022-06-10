@@ -1564,11 +1564,12 @@ type StoreWriteWorkInfo struct {
 
 // StoreWorkQueue is responsible for admission to a store.
 type StoreWorkQueue struct {
-	q  WorkQueue
-	mu struct {
+	queues   [numWorkClasses]WorkQueue
+	granters [numWorkClasses]granterWithStoreWriteDone
+	mu       struct {
 		syncutil.RWMutex
 		estimates storeRequestEstimates
-		stats     storeAdmissionStats
+		stats     [numWorkClasses]storeAdmissionStats
 	}
 }
 
@@ -1579,14 +1580,12 @@ type StoreWorkHandle struct {
 	tenantID roachpb.TenantID
 	// Equal to StoreWriteWorkInfo.WriteBytes.
 	writeBytes int64
-	// The writeTokens acquired by this request.
+	// The writeTokens acquired by this request. It is >= writeBytes.
 	writeTokens int64
-	// The part of writeTokens due to storeRequestEstimates.workByteAddition.
-	// workByteAdditionTokens <= writeTokens.
-	workByteAdditionTokens int64
 	// Equal to StoreWriteWorkInfo.IngestRequest.
 	ingestRequest    bool
 	admissionEnabled bool
+	workClass        workClass
 }
 
 // AdmissionEnabled indicates whether admission control is enabled. If it
@@ -1605,23 +1604,24 @@ func (q *StoreWorkQueue) Admit(
 	if info.IngestRequest && info.WriteBytes == 0 {
 		return StoreWorkHandle{}, errors.Errorf("IngestRequest must specify WriteBytes")
 	}
+	// For now, we compute a workClass based on priority.
+	workClass := regularWorkClass
+	if info.Priority < admissionpb.NormalPri {
+		workClass = elasticWorkClass
+	}
 	h := StoreWorkHandle{
 		tenantID:      info.TenantID,
 		writeBytes:    info.WriteBytes,
 		ingestRequest: info.IngestRequest,
+		workClass:     workClass,
 	}
 	q.mu.RLock()
 	estimates := q.mu.estimates
 	q.mu.RUnlock()
-	if h.ingestRequest {
-		h.writeTokens = int64(float64(h.writeBytes) * estimates.fractionOfIngestIntoL0)
-	} else {
-		h.writeTokens = h.writeBytes
-	}
-	h.writeTokens += estimates.workByteAddition
-	h.workByteAdditionTokens = estimates.workByteAddition
+	h.writeTokens = h.writeBytes
+	h.writeTokens += estimates.atAdmitWorkByteAddition
 	info.WorkInfo.requestedCount = h.writeTokens
-	enabled, err := q.q.Admit(ctx, info.WorkInfo)
+	enabled, err := q.queues[workClass].Admit(ctx, info.WorkInfo)
 	if err != nil {
 		return StoreWorkHandle{}, err
 	}
@@ -1629,73 +1629,81 @@ func (q *StoreWorkQueue) Admit(
 	return h, nil
 }
 
+type StoreWorkDoneInfo struct {
+	// For ingests, ActualBytes is the size of the sstables. For normal writes,
+	// it is the size of the batch. If StoreWriteWorkInfo.WriteBytes > 0, it
+	// must be equal to ActualBytes (that is the case where the bytes were known
+	// at admission time).
+	//
+	// ActualBytes should be set to 0 if unknown.
+	//
+	// TODO(sumeer): stop allowing ActualBytes to be 0 by properly integrating
+	// in the KV layer.
+	ActualBytes int64
+	// ActualBytesIntoL0 <= ActualBytes. For normal writes this is the equality
+	// relationship. For ingests, these are the (approximate) bytes that were
+	// ingested into L0.
+	ActualBytesIntoL0 int64
+}
+
 // AdmittedWorkDone indicates to the queue that the admitted work has
-// completed. ingestedIntoL0Bytes must be 0 unless
-// StoreWriteWorkInfo.IngestRequest was true. In the IngestRequest=true case,
-// it should provide an estimate of how many bytes were ingested into L0.
-func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, ingestedIntoL0Bytes int64) error {
+// completed.
+func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkDoneInfo) error {
 	if !h.admissionEnabled {
 		return nil
 	}
-	if !h.ingestRequest && ingestedIntoL0Bytes > 0 {
-		panic(errors.AssertionFailedf("ingested bytes for non-ingest request"))
+	if (h.writeBytes > 0 && h.writeBytes != doneInfo.ActualBytes) ||
+		doneInfo.ActualBytesIntoL0 > doneInfo.ActualBytes ||
+		(doneInfo.ActualBytesIntoL0 < doneInfo.ActualBytes && !h.ingestRequest) {
+		panic(errors.AssertionFailedf("inconsistent StoreWorkDoneInfo"))
 	}
 	{
 		q.mu.Lock()
-		q.mu.stats.admittedCount++
-		if h.writeBytes != 0 {
-			q.mu.stats.admittedWithBytesCount++
-			q.mu.stats.admittedAccountedBytes += uint64(h.writeBytes)
-			if h.ingestRequest {
-				q.mu.stats.ingestedAccountedBytes += uint64(h.writeBytes)
-				q.mu.stats.ingestedAccountedL0Bytes += uint64(ingestedIntoL0Bytes)
-			}
-		}
+		q.mu.stats[h.workClass].admittedCount++
+		q.mu.stats[h.workClass].atAdmitAccountedBytes += uint64(h.writeBytes)
+		q.mu.stats[h.workClass].atAdmittedDoneAccountedBytes += uint64(doneInfo.ActualBytes)
+		q.mu.stats[h.workClass].atAdmittedDoneAccountedL0Bytes += uint64(doneInfo.ActualBytesIntoL0)
 		q.mu.Unlock()
 	}
-	if !h.ingestRequest {
-		return nil
+	doneState := storeWriteDoneState{
+		tokens:                       h.writeTokens,
+		atAdmittedDoneAccountedBytes: doneInfo.ActualBytes,
+		atAdmittedDoneL0Bytes:        doneInfo.ActualBytesIntoL0,
 	}
-	var err error
-	if ingestedIntoL0Bytes > h.writeBytes {
-		err = errors.Errorf("ingested L0 bytes %d > write bytes %d", ingestedIntoL0Bytes,
-			h.writeBytes)
-		// Don't return here since want to make the shared accounting correct.
-		ingestedIntoL0Bytes = h.writeBytes
-	}
-	// writeTokens-workByteAdditionTokens was what we thought would land in L0.
-	// What actually landed in L0 is ingestedIntoL0Bytes. NB: tokensToAllocate
-	// can be negative.
-	tokensToAllocate := ingestedIntoL0Bytes - (h.writeTokens - h.workByteAdditionTokens)
-	if tokensToAllocate != 0 {
-		q.q.forceAllocateTokens(h.tenantID, tokensToAllocate)
-	}
-	return err
+	q.granters[h.workClass].storeWriteDone(doneState)
+	return nil
 }
 
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
 func (q *StoreWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
-	q.q.SetTenantWeights(tenantWeights)
-}
-
-func (q *StoreWorkQueue) hasWaitingRequests() bool {
-	return q.q.hasWaitingRequests()
-}
-
-func (q *StoreWorkQueue) granted(grantChainID grantChainID) int64 {
-	return q.q.granted(grantChainID)
+	for i := workClass(0); i < numWorkClasses; i++ {
+		q.queues[i].SetTenantWeights(tenantWeights)
+	}
 }
 
 func (q *StoreWorkQueue) close() {
-	q.q.close()
+	for i := workClass(0); i < numWorkClasses; i++ {
+		q.queues[i].close()
+	}
 }
 
-func (q *StoreWorkQueue) getStoreAdmissionStats() storeAdmissionStats {
+// getRequesters implements storeRequester.
+func (q *StoreWorkQueue) getRequesters() [numWorkClasses]requester {
+	var result [numWorkClasses]requester
+	for i := workClass(0); i < numWorkClasses; i++ {
+		result[i] = &q.queues[i]
+	}
+	return result
+}
+
+// getStoreAdmissionStats implements storeRequester.
+func (q *StoreWorkQueue) getStoreAdmissionStats() [numWorkClasses]storeAdmissionStats {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 	return q.mu.stats
 }
 
+// setStoreRequestEstimates implements storeRequester.
 func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	q.mu.Lock()
 	q.mu.estimates = estimates
@@ -1703,15 +1711,20 @@ func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimate
 }
 
 func makeStoreWorkQueue(
-	ambientCtx log.AmbientContext, granter granter, settings *cluster.Settings, opts workQueueOptions,
+	ambientCtx log.AmbientContext,
+	granters [numWorkClasses]granterWithStoreWriteDone,
+	settings *cluster.Settings,
+	opts workQueueOptions,
 ) storeRequester {
 	q := &StoreWorkQueue{}
-	initWorkQueue(&q.q, ambientCtx, KVWork, granter, settings, opts)
-	// Arbitrary initial values. These will be replaced before any meaningful
+	q.granters = granters
+	for i := workClass(0); i < numWorkClasses; i++ {
+		initWorkQueue(&q.queues[i], ambientCtx, KVWork, granters[i], settings, opts)
+	}
+	// Arbitrary initial value. This will be replaced before any meaningful
 	// token constraints are enforced.
 	q.mu.estimates = storeRequestEstimates{
-		fractionOfIngestIntoL0: 0.5,
-		workByteAddition:       1,
+		atAdmitWorkByteAddition: 1,
 	}
 	return q
 }
