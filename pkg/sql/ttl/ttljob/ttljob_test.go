@@ -45,8 +45,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type ttlServer interface {
+	JobRegistry() interface{}
+}
+
 type rowLevelTTLTestJobTestHelper struct {
-	server           serverutils.TestServerInterface
+	server           ttlServer
 	env              *jobstest.JobSchedulerTestEnv
 	cfg              *scheduledjobs.JobExecutionConfig
 	sqlDB            *sqlutils.SQLRunner
@@ -55,7 +59,7 @@ type rowLevelTTLTestJobTestHelper struct {
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T, testingKnobs *sql.TTLTestingKnobs,
+	t *testing.T, testingKnobs *sql.TTLTestingKnobs, testMultiTenant bool,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -65,33 +69,52 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
-	knobs := &jobs.TestingKnobs{
-		JobSchedulerEnv: th.env,
-		TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
-			th.executeSchedules = func() error {
-				defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-				return fn(context.Background(), 0 /* allSchedules */)
-			}
+	baseTestingKnobs := base.TestingKnobs{
+		JobsTestingKnobs: &jobs.TestingKnobs{
+			JobSchedulerEnv: th.env,
+			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
+				th.executeSchedules = func() error {
+					defer th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+					return fn(context.Background(), 0 /* allSchedules */)
+				}
+			},
+			CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
+				th.cfg = config
+			},
 		},
-
-		CaptureJobExecutionConfig: func(config *scheduledjobs.JobExecutionConfig) {
-			th.cfg = config
-		},
+		TTL: testingKnobs,
 	}
 
-	args := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: knobs,
-			TTL:              testingKnobs,
-		},
+	// As `ALTER TABLE ... SPLIT AT ...` is not supported in multi-tenancy, we
+	// do not run those tests.
+	if testMultiTenant {
+		tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DisableWebSessionAuthentication: true,
+			},
+		})
+		ts := tc.Server(0)
+		tenantServer, db := serverutils.StartTenant(
+			t, ts, base.TestTenantArgs{
+				TenantID:     serverutils.TestTenantID(),
+				TestingKnobs: baseTestingKnobs,
+			},
+		)
+		require.NotNil(t, th.cfg)
+		th.sqlDB = sqlutils.MakeSQLRunner(db)
+		th.kvDB = ts.DB()
+		th.server = tenantServer
+
+		return th, func() {
+			tc.Stopper().Stop(context.Background())
+		}
 	}
 
-	s, db, kvDB := serverutils.StartServer(t, args)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: baseTestingKnobs})
 	require.NotNil(t, th.cfg)
 	th.kvDB = kvDB
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
 	th.server = s
-
 	return th, func() {
 		s.Stopper().Stop(context.Background())
 	}
@@ -143,7 +166,7 @@ func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, nil /* SQLTestingKnobs */)
+	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, nil /* SQLTestingKnobs */, true /* testMultiTenant */)
 	defer cleanupFunc()
 
 	th.sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '1 minute')`)
@@ -213,7 +236,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				AOSTDuration:                      &tc.aostDuration,
 				MockDescriptorVersionDuringDelete: tc.mockDescriptorVersionDuringDelete,
 				OnDeleteLoopStart:                 onDeleteLoopStart,
-			})
+			}, false /* testMultiTenant */)
 			defer cleanupFunc()
 			sqlDB = th.sqlDB
 			sqlDB.Exec(t, createTable)
@@ -239,7 +262,6 @@ func TestRowLevelTTLJobDisabled(t *testing.T) {
 		return fmt.Sprintf(`CREATE TABLE t (
 	id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2%s);
-ALTER TABLE t SPLIT AT VALUES (1), (2);
 INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`, pauseStr)
 	}
 
@@ -265,7 +287,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 			var zeroDuration time.Duration
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
 				AOSTDuration: &zeroDuration,
-			})
+			}, true /* testMultiTenant */)
 			defer cleanupFunc()
 
 			th.sqlDB.Exec(t, tc.setup)
@@ -299,13 +321,14 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	}
 
 	type testCase struct {
-		desc              string
-		createTable       string
-		preSetup          []string
-		postSetup         []string
-		numExpiredRows    int
-		numNonExpiredRows int
-		numSplits         int
+		desc                string
+		createTable         string
+		preSetup            []string
+		postSetup           []string
+		numExpiredRows      int
+		numNonExpiredRows   int
+		numSplits           int
+		forceNonMultiTenant bool
 	}
 	// Add some basic one and three column row-level TTL tests.
 	testCases := []testCase{
@@ -332,8 +355,9 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				`CREATE TABLE tbl2 (id INT PRIMARY KEY)`,
 				`ALTER TABLE tbl2 SPLIT AT VALUES (1)`,
 			},
-			numExpiredRows:    1001,
-			numNonExpiredRows: 5,
+			numExpiredRows:      1001,
+			numNonExpiredRows:   5,
+			forceNonMultiTenant: true,
 		},
 		{
 			desc: "one column pk with statistics",
@@ -451,16 +475,17 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			t.Logf("test case: %#v", tc)
 
 			var zeroDuration time.Duration
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, &sql.TTLTestingKnobs{
-				AOSTDuration: &zeroDuration,
-				OnStatisticsError: func(err error) {
-					require.NoError(t, err, "error gathering statistics")
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+					OnStatisticsError: func(err error) {
+						require.NoError(t, err, "error gathering statistics")
+					},
 				},
-			})
+				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
+			)
 			defer cleanupFunc()
-
-			rangeBatchSize := 1 + rng.Intn(3)
-			t.Logf("range batch size: %d", rangeBatchSize)
 
 			for _, stmt := range tc.preSetup {
 				t.Logf("running pre statement: %s", stmt)
@@ -468,7 +493,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			}
 
 			th.sqlDB.Exec(t, tc.createTable)
-			th.sqlDB.Exec(t, `SET CLUSTER SETTING sql.ttl.range_batch_size = $1`, rangeBatchSize)
 
 			// Extract the columns from CREATE TABLE.
 			stmt, err := parser.ParseOne(tc.createTable)
@@ -510,16 +534,16 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				)
 			}
 
-			tbDesc := desctestutils.TestingGetPublicTableDescriptor(
-				th.kvDB,
-				keys.SystemSQLCodec,
-				"defaultdb",
-				createTableStmt.Table.Table(),
-			)
-			require.NotNil(t, tbDesc)
-
 			// Split the ranges by a random PK value.
 			if tc.numSplits > 0 {
+				tbDesc := desctestutils.TestingGetPublicTableDescriptor(
+					th.kvDB,
+					keys.SystemSQLCodec,
+					"defaultdb",
+					createTableStmt.Table.Table(),
+				)
+				require.NotNil(t, tbDesc)
+
 				for i := 0; i < tc.numSplits; i++ {
 					var values []interface{}
 					var placeholders []string

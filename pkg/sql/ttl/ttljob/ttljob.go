@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -83,13 +84,6 @@ var (
 		"sql.ttl.job.enabled",
 		"whether the TTL job is enabled",
 		true,
-	).WithPublic()
-	rangeBatchSize = settings.RegisterIntSetting(
-		settings.TenantWritable,
-		"sql.ttl.range_batch_size",
-		"amount of ranges to fetch at a time for a table during the TTL job",
-		100,
-		settings.PositiveInt,
 	).WithPublic()
 )
 
@@ -344,7 +338,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		ttlSettings.LabelMetrics,
 		relationName,
 	)
-	var rangeDesc roachpb.RangeDescriptor
 	var alloc tree.DatumAlloc
 	type rangeToProcess struct {
 		startPK, endPK tree.Datums
@@ -415,87 +408,56 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		})
 	}
 
+	// Iterate over every range to feed work for the goroutine processors.
 	if err := func() (retErr error) {
 		defer func() {
 			close(ch)
 			close(statsCloseCh)
 			retErr = errors.CombineErrors(retErr, g.Wait())
 		}()
+
+		ri := kvcoord.MakeRangeIterator(p.ExecCfg().DistSender)
 		done := false
-
-		batchSize := rangeBatchSize.Get(p.ExecCfg().SV())
-		for !done {
-			var ranges []kv.KeyValue
-
-			// Scan ranges up to rangeBatchSize.
-			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				metaStart := keys.RangeMetaKey(keys.MustAddr(rangeSpan.Key).Next())
-				metaEnd := keys.RangeMetaKey(keys.MustAddr(rangeSpan.EndKey))
-
-				kvs, err := txn.Scan(ctx, metaStart, metaEnd, batchSize)
+		ri.Seek(ctx, roachpb.RKey(entirePKSpan.Key), kvcoord.Ascending)
+		for ; ri.Valid() && !done; ri.Next(ctx) {
+			// Send range info to each goroutine worker.
+			rangeDesc := ri.Desc()
+			var nextRange rangeToProcess
+			// A single range can contain multiple tables or indexes.
+			// If this is the case, the rangeDesc.StartKey would be less than entirePKSpan.Key
+			// or the rangeDesc.EndKey would be greater than the entirePKSpan.EndKey, meaning
+			// the range contains the start or the end of the range respectively.
+			// Trying to decode keys outside the PK range will lead to a decoding error.
+			// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
+			// (by default, a 0 element startPK or endPK means the beginning or end).
+			if rangeDesc.StartKey.AsRawKey().Compare(entirePKSpan.Key) > 0 {
+				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
-					return err
+					return errors.Wrapf(
+						err,
+						"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
+						rangeDesc.RangeID,
+						rangeDesc.StartKey.AsRawKey(),
+						entirePKSpan.Key,
+					)
 				}
-				if len(kvs) < int(batchSize) {
-					done = true
-					if len(kvs) == 0 || !kvs[len(kvs)-1].Key.Equal(metaEnd.AsRawKey()) {
-						// Normally we need to scan one more KV because the ranges are addressed by
-						// the end key.
-						extraKV, err := txn.Scan(ctx, metaEnd, keys.Meta2Prefix.PrefixEnd(), 1 /* one result */)
-						if err != nil {
-							return err
-						}
-						kvs = append(kvs, extraKV[0])
-					}
-				}
-				ranges = kvs
-				return nil
-			}); err != nil {
-				return err
 			}
-
-			// Send these to each goroutine worker.
-			for _, r := range ranges {
-				if err := r.ValueProto(&rangeDesc); err != nil {
-					return err
+			if rangeDesc.EndKey.AsRawKey().Compare(entirePKSpan.EndKey) < 0 {
+				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
+				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
+				if err != nil {
+					return errors.Wrapf(
+						err,
+						"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
+						rangeDesc.RangeID,
+						rangeDesc.EndKey.AsRawKey(),
+						entirePKSpan.EndKey,
+					)
 				}
-				var nextRange rangeToProcess
-				// A single range can contain multiple tables or indexes.
-				// If this is the case, the rangeDesc.StartKey would be less than entirePKSpan.Key
-				// or the rangeDesc.EndKey would be greater than the entirePKSpan.EndKey, meaning
-				// the range contains the start or the end of the range respectively.
-				// Trying to decode keys outside the PK range will lead to a decoding error.
-				// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
-				// (by default, a 0 element startPK or endPK means the beginning or end).
-				if rangeDesc.StartKey.AsRawKey().Compare(entirePKSpan.Key) > 0 {
-					nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.StartKey.AsRawKey(),
-							entirePKSpan.Key,
-						)
-					}
-				}
-				if rangeDesc.EndKey.AsRawKey().Compare(entirePKSpan.EndKey) < 0 {
-					rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-					nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.EndKey.AsRawKey(),
-							entirePKSpan.EndKey,
-						)
-					}
-				} else {
-					done = true
-				}
-				ch <- nextRange
+			} else {
+				done = true
 			}
+			ch <- nextRange
 		}
 		return nil
 	}(); err != nil {
