@@ -1712,10 +1712,10 @@ func newTester() *tester {
 	// Record successful connection and authentication.
 	originalAuthenticate := authenticate
 	te.restoreAuthenticate =
-		testutils.TestingHook(&authenticate, func(clientConn, crdbConn net.Conn, throttleHook func(status throttler.AttemptStatus) error) error {
-			err := originalAuthenticate(clientConn, crdbConn, throttleHook)
+		testutils.TestingHook(&authenticate, func(clientConn, crdbConn net.Conn, throttleHook func(status throttler.AttemptStatus) error) (*cancelInfo, error) {
+			cInfo, err := originalAuthenticate(clientConn, crdbConn, throttleHook)
 			te.setAuthenticated(err == nil)
-			return err
+			return cInfo, err
 		})
 
 	// Capture any error sent to the client.
