@@ -1367,7 +1367,7 @@ ui-lint: pkg/ui/yarn.installed $(ESLINT_PLUGIN_CRDB) $(UI_PROTOS_OSS) $(UI_PROTO
 .PHONY: ui-test
 ui-test: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(info $(yellow)NOTE: consider using `./dev ui test` instead of `make ui-test`$(term-reset))
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start
+	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn test
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
