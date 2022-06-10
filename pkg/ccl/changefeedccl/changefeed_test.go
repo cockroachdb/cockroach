@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4819,6 +4820,71 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	})
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), useSysCfgInKV)
+}
+
+func TestChangefeedHandlesNodeUnavailable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	errCh := make(chan error, 1)
+	defaultServerArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
+				HandleDistChangefeedError: func(err error) error {
+					errCh <- err
+					return err
+				},
+			}},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		UseDatabase: "d",
+	}
+
+	// Node 2 will be special; we'll start draining the node right before
+	// we're about to start KV feed.
+	readyToStart := make(chan struct{})
+	node2Args := defaultServerArgs
+	node2Args.Knobs.DistSQL = &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
+		BeforeKVFeed: func(ctx context.Context) {
+			// Indicate we're ready to start; then wait until
+			// cancellation which should happen when this node is drained/quiesced
+			close(readyToStart)
+			<-ctx.Done()
+		},
+	}}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: defaultServerArgs,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			2: node2Args,
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+	sqlDB.Exec(t, `
+  CREATE TABLE foo (key INT PRIMARY KEY);
+  INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
+	ALTER TABLE foo SCATTER;
+  `)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO 'null://'`).Scan(&jobID)
+	<-readyToStart
+
+	n2 := tc.Server(2)
+	require.NoError(t, n2.DrainClients(context.Background()))
+	n2.Stopper().Quiesce(context.Background())
+	// n2.Stopper().Stop(context.Background())
+
+	// We expect dist flow to receive the error, and that error should be
+	// retryable.
+	err := <-errCh
+	isRetryable := changefeedbase.IsRetryableError(err)
+	require.True(t, isRetryable, err)
 }
 
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {

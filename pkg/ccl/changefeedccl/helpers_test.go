@@ -325,6 +325,7 @@ SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.vectorize=on;
+SET CLUSTER SETTING server.shutdown.query_wait='50ms';
 CREATE DATABASE d;
 `
 

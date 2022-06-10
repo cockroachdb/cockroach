@@ -329,6 +329,9 @@ func (ca *changeAggregator) startKVFeed(
 	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
 	ca.kvFeedDoneCh = make(chan struct{})
+	if ca.knobs.BeforeKVFeed != nil {
+		ca.knobs.BeforeKVFeed(ctx)
+	}
 	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
 		defer close(ca.kvFeedDoneCh)
 		// Trying to call MoveToDraining here is racy (`MoveToDraining called in

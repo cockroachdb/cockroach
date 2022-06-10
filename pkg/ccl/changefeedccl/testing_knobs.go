@@ -33,6 +33,8 @@ type TestingKnobs struct {
 	// ShouldSkipResolved is a filter returning true if the resolved span event should
 	// be skipped.
 	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
+	// BeforeKVFeed invoked before kvfeed created
+	BeforeKVFeed func(ctx context.Context)
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs     kvfeed.TestingKnobs
 	DistflowKnobs changefeeddist.TestingKnobs
