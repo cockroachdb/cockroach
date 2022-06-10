@@ -38,7 +38,8 @@ func TestAuthenticateOK(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli, nilThrottleHook))
+	_, err := authenticate(srv, cli, nilThrottleHook)
+	require.NoError(t, err)
 }
 
 func TestAuthenticateClearText(t *testing.T) {
@@ -80,7 +81,8 @@ func TestAuthenticateClearText(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli, nilThrottleHook))
+	_, err := authenticate(srv, cli, nilThrottleHook)
+	require.NoError(t, err)
 }
 
 func TestAuthenticateThrottled(t *testing.T) {
@@ -144,7 +146,7 @@ func TestAuthenticateThrottled(t *testing.T) {
 			go server(t, sqlServer, &pgproto3.AuthenticationOk{})
 			go client(t, sqlClient)
 
-			err := authenticate(proxyToClient, proxyToServer, func(status throttler.AttemptStatus) error {
+			_, err := authenticate(proxyToClient, proxyToServer, func(status throttler.AttemptStatus) error {
 				require.Equal(t, throttler.AttemptOK, status)
 				return throttledError
 			})
@@ -172,7 +174,7 @@ func TestAuthenticateError(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"})
 	}()
 
-	err := authenticate(srv, cli, nilThrottleHook)
+	_, err := authenticate(srv, cli, nilThrottleHook)
 	require.Error(t, err)
 	codeErr := (*codeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
@@ -193,7 +195,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 		require.Error(t, err)
 	}()
 
-	err := authenticate(srv, cli, nilThrottleHook)
+	_, err := authenticate(srv, cli, nilThrottleHook)
 
 	srv.Close()
 

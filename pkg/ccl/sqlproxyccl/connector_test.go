@@ -209,8 +209,8 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 				clientConn net.Conn,
 				crdbConn net.Conn,
 				throttleHook func(status throttler.AttemptStatus) error,
-			) error {
-				return errors.New("bar")
+			) (*cancelInfo, error) {
+				return nil, errors.New("bar")
 			},
 		)()
 
@@ -264,13 +264,13 @@ func TestConnector_OpenTenantConnWithAuth(t *testing.T) {
 				client net.Conn,
 				server net.Conn,
 				throttleHook func(status throttler.AttemptStatus) error,
-			) error {
+			) (*cancelInfo, error) {
 				authCalled = true
 				require.Equal(t, clientConn, client)
 				require.NotNil(t, server)
 				require.Equal(t, reflect.ValueOf(dummyHook).Pointer(),
 					reflect.ValueOf(throttleHook).Pointer())
-				return nil
+				return nil, nil
 			},
 		)()
 
