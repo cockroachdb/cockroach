@@ -52,7 +52,9 @@ import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store";
 import { StatementDetailsRequest } from "src/api/statementsApi";
 import {
+  getValidOption,
   TimeScale,
+  timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleToString,
   toRoundedDateRange,
@@ -216,6 +218,14 @@ export class StatementDetails extends React.Component<
       currentTab: searchParams.get("tab") || "overview",
     };
     this.activateDiagnosticsRef = React.createRef();
+
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.props.onTimeScaleChange(ts);
+    }
   }
 
   static defaultProps: Partial<StatementDetailsProps> = {
@@ -431,6 +441,7 @@ export class StatementDetails extends React.Component<
       <PageConfig>
         <PageConfigItem>
           <TimeScaleDropdown
+            options={timeScale1hMinOptions}
             currentScale={this.props.timeScale}
             setTimeScale={this.props.onTimeScaleChange}
           />
@@ -559,6 +570,7 @@ export class StatementDetails extends React.Component<
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown
+              options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.props.onTimeScaleChange}
             />
@@ -704,6 +716,7 @@ export class StatementDetails extends React.Component<
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown
+              options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.props.onTimeScaleChange}
             />
