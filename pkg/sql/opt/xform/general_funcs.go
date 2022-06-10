@@ -485,6 +485,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 				// Splitting any spans from this span on would lead to exceeding the max
 				// Scan count. Keep track of the index of this span.
 				budgetExceededIndex = i
+				break
 			}
 		}
 	}
@@ -579,6 +580,9 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			queue.PushBack(newScanOrSelect)
 			queueLength++
 		}
+	}
+	if queueLength == 0 {
+		return nil, false
 	}
 	var outCols opt.ColList
 	oddNumScans := (queueLength % 2) != 0
