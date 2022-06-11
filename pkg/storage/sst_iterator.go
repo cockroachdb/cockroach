@@ -31,9 +31,6 @@ type sstIterator struct {
 	// For allocation avoidance in SeekGE and NextKey.
 	keyBuf []byte
 
-	// roachpb.Verify k/v pairs on each call to Next.
-	verify bool
-
 	// For determining whether to trySeekUsingNext=true in SeekGE.
 	prevSeekKey  MVCCKey
 	seekGELastOp bool
@@ -63,7 +60,11 @@ func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sstIterator{sst: sst, verify: verify}, nil
+	iter := SimpleMVCCIterator(&sstIterator{sst: sst})
+	if verify {
+		iter = NewVerifyingMVCCIterator(iter)
+	}
+	return iter, nil
 }
 
 // Close implements the SimpleMVCCIterator interface.
@@ -106,9 +107,6 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 		r.iterValid = false
 		r.err = r.iter.Error()
 	}
-	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
-		r.verifyValue()
-	}
 	r.prevSeekKey.Key = append(r.prevSeekKey.Key[:0], r.mvccKey.Key...)
 	r.prevSeekKey.Timestamp = r.mvccKey.Timestamp
 	r.seekGELastOp = true
@@ -133,9 +131,6 @@ func (r *sstIterator) Next() {
 		r.iterValid = false
 		r.err = r.iter.Error()
 	}
-	if r.iterValid && r.err == nil && r.verify && r.mvccKey.IsValue() {
-		r.verifyValue()
-	}
 }
 
 // NextKey implements the SimpleMVCCIterator interface.
@@ -157,19 +152,6 @@ func (r *sstIterator) UnsafeKey() MVCCKey {
 // UnsafeValue implements the SimpleMVCCIterator interface.
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.value
-}
-
-// verifyValue verifies the checksum of the current value.
-func (r *sstIterator) verifyValue() {
-	mvccValue, ok, err := tryDecodeSimpleMVCCValue(r.value)
-	if !ok && err == nil {
-		mvccValue, err = decodeExtendedMVCCValue(r.value)
-	}
-	if err != nil {
-		r.err = err
-	} else {
-		r.err = mvccValue.Value.Verify(r.mvccKey.Key)
-	}
 }
 
 // HasPointAndRange implements SimpleMVCCIterator.
