@@ -16,6 +16,26 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type BatchTruncationHelper struct {
+	requests []roachpb.RequestUnion
+}
+
+func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion, scanDir ScanDirection) error {
+	if scanDir == Descending {
+		panic("unimplemented")
+	}
+	h.requests = requests
+	return nil
+}
+
+func (h *BatchTruncationHelper) Truncate(rs roachpb.RSpan) ([]roachpb.RequestUnion, []int, error) {
+	return Truncate(h.requests, rs)
+}
+
+func (h *BatchTruncationHelper) Next(k roachpb.RKey) (roachpb.RKey, error) {
+	return Next(h.requests, k)
+}
+
 var emptyHeader = roachpb.RequestHeader{}
 
 // Truncate restricts all requests to the given key range and returns new,

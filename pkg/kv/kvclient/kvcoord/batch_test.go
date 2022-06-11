@@ -12,12 +12,15 @@ package kvcoord
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 // TestBatchPrevNext tests prev() and next()
@@ -204,5 +207,93 @@ func TestBatchPrevNext(t *testing.T) {
 				t.Errorf("prev: expected %q, got %q", test.expBW, prev)
 			}
 		})
+	}
+}
+
+func BenchmarkTruncateNext(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	rng, _ := randutil.NewTestRand()
+	randomKey := func() []byte {
+		const keyLength = 8
+		res := make([]byte, keyLength)
+		for i := range res {
+			// Plus two is needed to skip local key space.
+			res[i] = byte(2 + rng.Intn(253))
+		}
+		return res
+	}
+	for _, numRequests := range []int{128, 16384} {
+		for _, numRanges := range []int{4, 64} {
+			splitPoints := make([][]byte, numRanges-1)
+			for i := range splitPoints {
+				splitPoints[i] = randomKey()
+			}
+			for i := range splitPoints {
+				for j := i + 1; j < len(splitPoints); j++ {
+					if bytes.Compare(splitPoints[i], splitPoints[j]) > 0 {
+						splitPoints[i], splitPoints[j] = splitPoints[j], splitPoints[i]
+					}
+				}
+			}
+			rangeSpans := make([]roachpb.RSpan, numRanges)
+			rangeSpans[0].Key = roachpb.RKeyMin
+			rangeSpans[numRanges-1].EndKey = roachpb.RKeyMax
+			for i := range splitPoints {
+				rangeSpans[i].EndKey = splitPoints[i]
+				rangeSpans[i+1].Key = splitPoints[i]
+			}
+			for _, requestType := range []string{"get", "scan"} {
+				b.Run(fmt.Sprintf(
+					"reqs=%d/ranges=%d/type=%s", numRequests, numRanges, requestType,
+				), func(b *testing.B) {
+					reqs := make([]roachpb.RequestUnion, numRequests)
+					// TODO: comment why we need a copy.
+					reqsCopy := make([]roachpb.RequestUnion, numRequests)
+					switch requestType {
+					case "get":
+						for i := 0; i < numRequests; i++ {
+							var get roachpb.GetRequest
+							get.Key = randomKey()
+							reqs[i].MustSetInner(&get)
+							reqsCopy[i].MustSetInner(&roachpb.GetRequest{})
+						}
+					case "scan":
+						for i := 0; i < numRequests; i++ {
+							var scan roachpb.ScanRequest
+							startKey := randomKey()
+							endKey := randomKey()
+							for bytes.Compare(startKey, endKey) == 0 {
+								endKey = randomKey()
+							}
+							if bytes.Compare(startKey, endKey) > 0 {
+								startKey, endKey = endKey, startKey
+							}
+							scan.Key = startKey
+							scan.EndKey = endKey
+							reqs[i].MustSetInner(&scan)
+							reqsCopy[i].MustSetInner(&roachpb.ScanRequest{})
+						}
+					}
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						b.StopTimer()
+						for j := 0; j < numRequests; j++ {
+							reqsCopy[j].MustSetInner(reqs[j].GetInner().ShallowCopy())
+						}
+						b.StartTimer()
+						var h BatchTruncationHelper
+						require.NoError(b, h.Init(reqsCopy, Ascending))
+						for _, rs := range rangeSpans {
+							_, _, err := h.Truncate(rs)
+							require.NoError(b, err)
+							_, err = h.Next(rs.EndKey)
+							require.NoError(b, err)
+						}
+					}
+				})
+			}
+		}
 	}
 }
