@@ -13,8 +13,24 @@ package kvcoord
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
+
+// BatchTruncationHelper is a utility struct that helps with truncating requests
+// to range boundaries as well as figuring out the next key to seek to for the
+// range iterator.
+type BatchTruncationHelper struct {
+	scanDir  ScanDirection
+	requests []roachpb.RequestUnion
+}
+
+// Init initializes the helper for the given requests.
+func (h *BatchTruncationHelper) Init(scanDir ScanDirection, requests []roachpb.RequestUnion) error {
+	h.scanDir = scanDir
+	h.requests = requests
+	return nil
+}
 
 var emptyHeader = roachpb.RequestHeader{}
 
@@ -24,13 +40,25 @@ var emptyHeader = roachpb.RequestHeader{}
 // removed. A mapping of response index to request index is returned. For
 // example, if
 //
-// reqs = Put[a], Put[c], Put[b],
-// rs = [a,bb],
+//   reqs = Put[a], Put[c], Put[b],
+//   rs = [a,bb],
+//   BatchTruncationHelper.Init(ScanDirection, reqs)
 //
-// then Truncate(reqs,rs) returns (Put[a], Put[b]) and positions [0,2].
-func Truncate(
-	reqs []roachpb.RequestUnion, rs roachpb.RSpan,
-) ([]roachpb.RequestUnion, []int, error) {
+// then BatchTruncationHelper.Truncate(rs) returns (Put[a], Put[b]) and
+// positions [0,2].
+//
+// It also returns the next seek key for the range iterator. With Ascending scan
+// direction, the next seek key is such that requests in [RKeyMin, seekKey)
+// range have been processed, with Descending scan direction, it is such that
+// requests in [seekKey, RKeyMax) range have been processed.
+//
+// Truncate returns the requests in an arbitrary order (meaning that positions
+// return value might not be ascending).
+//
+// NOTE: rs is assumed to be intersected with the current range boundaries.
+func (h *BatchTruncationHelper) Truncate(
+	rs roachpb.RSpan,
+) ([]roachpb.RequestUnion, []int, roachpb.RKey, error) {
 	truncateOne := func(args roachpb.Request) (hasRequest bool, changed bool, _ roachpb.RequestHeader, _ error) {
 		header := args.Header()
 		if !roachpb.IsRange(args) {
@@ -64,26 +92,26 @@ func Truncate(
 			local = true
 		}
 		if keyAddr.Less(rs.Key) {
-			// rs.Key can't be local because it contains range split points, which
-			// are never local.
+			// rs.Key can't be local because it contains range split points,
+			// which are never local.
 			changed = true
 			if !local {
 				header.Key = rs.Key.AsRawKey()
 			} else {
-				// The local start key should be truncated to the boundary of local keys which
-				// address to rs.Key.
+				// The local start key should be truncated to the boundary of
+				// local keys which address to rs.Key.
 				header.Key = keys.MakeRangeKeyPrefix(rs.Key)
 			}
 		}
 		if !endKeyAddr.Less(rs.EndKey) {
-			// rs.EndKey can't be local because it contains range split points, which
-			// are never local.
+			// rs.EndKey can't be local because it contains range split points,
+			// which are never local.
 			changed = true
 			if !local {
 				header.EndKey = rs.EndKey.AsRawKey()
 			} else {
-				// The local end key should be truncated to the boundary of local keys which
-				// address to rs.EndKey.
+				// The local end key should be truncated to the boundary of
+				// local keys which address to rs.EndKey.
 				header.EndKey = keys.MakeRangeKeyPrefix(rs.EndKey)
 			}
 		}
@@ -100,7 +128,7 @@ func Truncate(
 
 	var positions []int
 	var truncReqs []roachpb.RequestUnion
-	for pos, arg := range reqs {
+	for pos, arg := range h.requests {
 		inner := arg.GetInner()
 		hasRequest, changed, newHeader, err := truncateOne(inner)
 		if hasRequest {
@@ -116,26 +144,48 @@ func Truncate(
 			positions = append(positions, pos)
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	return truncReqs, positions, nil
+	var seekKey roachpb.RKey
+	var err error
+	if h.scanDir == Ascending {
+		// In next iteration, query next range.
+		// It's important that we use the EndKey of the current descriptor
+		// as opposed to the StartKey of the next one: if the former is stale,
+		// it's possible that the next range has since merged the subsequent
+		// one, and unless both descriptors are stale, the next descriptor's
+		// StartKey would move us to the beginning of the current range,
+		// resulting in a duplicate scan.
+		seekKey, err = h.next(rs.EndKey)
+	} else {
+		// In next iteration, query previous range.
+		// We use the StartKey of the current descriptor as opposed to the
+		// EndKey of the previous one since that doesn't have bugs when
+		// stale descriptors come into play.
+		seekKey, err = h.prev(rs.Key)
+	}
+	return truncReqs, positions, seekKey, err
 }
 
-// prev gives the right boundary of the union of all requests which don't
-// affect keys larger than the given key. Note that a right boundary is
-// exclusive, that is, the returned RKey is to be used as the exclusive
-// right endpoint in finding the next range to query.
+// prev gives the right boundary of the union of all requests which don't affect
+// keys larger than the given key. Note that a right boundary is exclusive, that
+// is, the returned RKey is to be used as the exclusive right endpoint in
+// finding the next range to query.
 //
-// Informally, a call `prev(reqs, k)` means: we've already executed the parts
-// of `reqs` that intersect `[k, KeyMax)`; please tell me how far to the
-// left the next relevant request begins.
-//
-// TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
-// 'keys' into 'roachpb'.
-func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
+// Informally, a call `prev(reqs, k)` means: we've already executed the parts of
+// `reqs` that intersect `[k, KeyMax)`; please tell me how far to the left the
+// next relevant request begins.
+func (h *BatchTruncationHelper) prev(k roachpb.RKey) (roachpb.RKey, error) {
+	if buildutil.CrdbTestBuild {
+		if h.scanDir != Descending {
+			return nil, errors.AssertionFailedf(
+				"unexpectedly called prev with the Ascending scan direction",
+			)
+		}
+	}
 	candidate := roachpb.RKeyMin
-	for _, union := range reqs {
+	for _, union := range h.requests {
 		inner := union.GetInner()
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
@@ -144,16 +194,18 @@ func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 		}
 		endKey := h.EndKey
 		if len(endKey) == 0 {
-			// If we have a point request for `x < k` then that request has not been
-			// satisfied (since the batch has only been executed for keys `>=k`). We
-			// treat `x` as `[x, x.Next())` which does the right thing below. This
-			// also works when `x > k` or `x=k` as the logic below will skip `x`.
+			// If we have a point request for `x < k` then that request has not
+			// been satisfied (since the batch has only been executed for keys
+			// `>=k`). We treat `x` as `[x, x.Next())` which does the right
+			// thing below. This also works when `x > k` or `x=k` as the logic
+			// below will skip `x`.
 			//
 			// Note that if the key is /Local/x/something, then instead of using
-			// /Local/x/something.Next() as the end key, we rely on AddrUpperBound to
-			// handle local keys. In particular, AddrUpperBound will turn it into
-			// `x\x00`, so we're looking at the key-range `[x, x.Next())`. This is
-			// exactly what we want as the local key is contained in that range.
+			// /Local/x/something.Next() as the end key, we rely on
+			// AddrUpperBound to handle local keys. In particular,
+			// AddrUpperBound will turn it into `x\x00`, so we're looking at the
+			// key-range `[x, x.Next())`. This is exactly what we want as the
+			// local key is contained in that range.
 			//
 			// See TestBatchPrevNext for test cases with commentary.
 			endKey = h.Key.Next()
@@ -191,20 +243,24 @@ func prev(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
 	return candidate, nil
 }
 
-// Next gives the left boundary of the union of all requests which don't affect
+// next gives the left boundary of the union of all requests which don't affect
 // keys less than the given key. Note that the left boundary is inclusive, that
 // is, the returned RKey is the inclusive left endpoint of the keys the request
 // should operate on next.
 //
-// Informally, a call `Next(reqs, k)` means: we've already executed the parts of
+// Informally, a call `next(reqs, k)` means: we've already executed the parts of
 // `reqs` that intersect `[KeyMin, k)`; please tell me how far to the right the
 // next relevant request begins.
-//
-// TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
-// 'keys' into 'proto'.
-func Next(reqs []roachpb.RequestUnion, k roachpb.RKey) (roachpb.RKey, error) {
+func (h *BatchTruncationHelper) next(k roachpb.RKey) (roachpb.RKey, error) {
+	if buildutil.CrdbTestBuild {
+		if h.scanDir != Ascending {
+			return nil, errors.AssertionFailedf(
+				"unexpectedly called Next with the Descending scan direction",
+			)
+		}
+	}
 	candidate := roachpb.RKeyMax
-	for _, union := range reqs {
+	for _, union := range h.requests {
 		inner := union.GetInner()
 		h := inner.Header()
 		addr, err := keys.Addr(h.Key)
