@@ -35,6 +35,12 @@ import (
 )
 
 const (
+	// replicateQueuePurgatoryCheckInterval is the interval at which replicas in
+	// the replicate queue purgatory are re-attempted. Note that these replicas
+	// may be re-attempted more frequently by the replicateQueue in case there are
+	// gossip updates that might affect allocation decisions.
+	replicateQueuePurgatoryCheckInterval = 1 * time.Minute
+
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
@@ -339,18 +345,23 @@ func (metrics *ReplicateQueueMetrics) trackRebalanceReplicaCount(targetType targ
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
-	metrics           ReplicateQueueMetrics
-	allocator         Allocator
-	updateChan        chan time.Time
+	metrics   ReplicateQueueMetrics
+	allocator Allocator
+	// purgCh is signalled every replicateQueuePurgatoryCheckInterval.
+	purgCh <-chan time.Time
+	// updateCh is signalled every time there is an update to the cluster's store
+	// descriptors.
+	updateCh          chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(store *Store, allocator Allocator) *replicateQueue {
 	rq := &replicateQueue{
-		metrics:    makeReplicateQueueMetrics(),
-		allocator:  allocator,
-		updateChan: make(chan time.Time, 1),
+		metrics:   makeReplicateQueueMetrics(),
+		allocator: allocator,
+		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
+		updateCh:  make(chan time.Time, 1),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -372,10 +383,9 @@ func newReplicateQueue(store *Store, allocator Allocator) *replicateQueue {
 			purgatory:          store.metrics.ReplicateQueuePurgatory,
 		},
 	)
-
 	updateFn := func() {
 		select {
-		case rq.updateChan <- timeutil.Now():
+		case rq.updateCh <- timeutil.Now():
 		default:
 		}
 	}
@@ -1627,9 +1637,13 @@ func (*replicateQueue) timer(_ time.Duration) time.Duration {
 	return replicateQueueTimerDuration
 }
 
-// purgatoryChan returns the replicate queue's store update channel.
 func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
-	return rq.updateChan
+	return rq.purgCh
+}
+
+// updateChan returns the replicate queue's store update channel.
+func (rq *replicateQueue) updateChan() <-chan time.Time {
+	return rq.updateCh
 }
 
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
