@@ -119,8 +119,6 @@ func (h *BatchTruncationHelper) Truncate(rs roachpb.RSpan) ([]roachpb.RequestUni
 			// range, so we adjust the original request according to the
 			// remaining part of its header and mark the request as "fully
 			// processed".
-			h.requests[i].GetInner().SetHeader(header)
-			truncReqs = append(truncReqs, h.requests[i])
 			h.positions[i] = -1
 		} else {
 			if !keys.IsLocal(header.EndKey) {
@@ -132,14 +130,14 @@ func (h *BatchTruncationHelper) Truncate(rs roachpb.RSpan) ([]roachpb.RequestUni
 			}
 			// There will be more parts from this request, so we make a copy and
 			// and update the header.
-			shallowCopy := h.requests[i].GetInner().ShallowCopy()
-			shallowCopy.SetHeader(header)
-			truncReqs = append(truncReqs, roachpb.RequestUnion{})
-			truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
 			// Adjust the start key of the header so that it contained only the
 			// unprocessed suffix of the request.
 			h.headers[i].Key = header.EndKey
 		}
+		shallowCopy := h.requests[i].GetInner().ShallowCopy()
+		shallowCopy.SetHeader(header)
+		truncReqs = append(truncReqs, roachpb.RequestUnion{})
+		truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
 		positions = append(positions, pos)
 	}
 	return truncReqs, positions, nil
