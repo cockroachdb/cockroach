@@ -48,7 +48,7 @@ type pebbleBatch struct {
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
 
-	iter              cloneableIter
+	iter              *pebble.Iterator
 	writeOnly         bool
 	iterUnused        bool
 	containsRangeKeys bool
@@ -221,13 +221,14 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		handle = p.db
 	}
 	if iter.inuse {
-		return newPebbleIterator(handle, p.iter, opts, StandardDurability, p.SupportsRangeKeys())
+		return newPebbleIteratorByCloning(p.iter, opts, StandardDurability, p.SupportsRangeKeys())
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability, p.SupportsRangeKeys())
+		iter.initReuseOrCreate(
+			handle, p.iter, !p.iterUnused, opts, StandardDurability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -261,13 +262,14 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		handle = p.db
 	}
 	if iter.inuse {
-		return newPebbleIterator(handle, p.iter, opts, StandardDurability, p.SupportsRangeKeys())
+		return newPebbleIteratorByCloning(p.iter, opts, StandardDurability, p.SupportsRangeKeys())
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.init(handle, p.iter, p.iterUnused, opts, StandardDurability, p.SupportsRangeKeys())
+		iter.initReuseOrCreate(
+			handle, p.iter, !p.iterUnused, opts, StandardDurability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
