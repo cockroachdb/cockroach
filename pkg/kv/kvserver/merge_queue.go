@@ -433,3 +433,7 @@ func (mq *mergeQueue) timer(time.Duration) time.Duration {
 func (mq *mergeQueue) purgatoryChan() <-chan time.Time {
 	return mq.purgChan
 }
+
+func (mq *mergeQueue) updateChan() <-chan time.Time {
+	return nil
+}
