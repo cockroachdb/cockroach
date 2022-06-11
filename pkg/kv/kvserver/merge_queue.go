@@ -178,7 +178,7 @@ type rangeMergePurgatoryError struct{ error }
 
 func (rangeMergePurgatoryError) PurgatoryErrorMarker() {}
 
-var _ purgatoryError = rangeMergePurgatoryError{}
+var _ PurgatoryError = rangeMergePurgatoryError{}
 
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
