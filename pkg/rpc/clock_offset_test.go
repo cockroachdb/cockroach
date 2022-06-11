@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const errOffsetGreaterThanMaxOffset = "clock synchronization error: this node is more than .+ away from at least half of the known nodes"
@@ -31,7 +32,7 @@ const errOffsetGreaterThanMaxOffset = "clock synchronization error: this node is
 func TestUpdateOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 
 	const key = "addr"
@@ -96,7 +97,7 @@ func TestUpdateOffset(t *testing.T) {
 func TestVerifyClockOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123), 50*time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), 50*time.Nanosecond /* maxOffset */)
 	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 
 	for idx, tc := range []struct {
@@ -161,7 +162,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	clock := hlc.NewClock(hlc.NewManualClock(123), 20*time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), 20*time.Nanosecond /* maxOffset */)
 	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 	monitor.mu.offsets = map[string]RemoteOffset{
 		"0": {
@@ -187,7 +188,7 @@ func TestClockOffsetMetrics(t *testing.T) {
 func TestLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	monitor := newRemoteClockMonitor(clock, time.Hour, 0)
 
 	// All test cases have to have at least 11 measurement values in order for

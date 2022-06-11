@@ -51,14 +51,14 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manualClock := hlc.NewManualClock(timeutil.Now().UnixNano())
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manualClock, 10 /* maxOffset */)
 	interval := time.Second * 5
 	live := true
 	testStart := clock.Now()
 
 	// Move time by the interval, so we run the job again.
-	manualClock.Increment(interval.Nanoseconds())
+	manualClock.Advance(interval)
 
 	desc := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{

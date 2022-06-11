@@ -7,11 +7,8 @@ go_library(
     srcs = [
         "doc.go",
         "hlc.go",
-        "hlc_clock_device_linux.go",
-        "hlc_clock_device_stub.go",
         "timestamp.go",
     ],
-    cgo = True,
     embed = [":hlc_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/hlc",
     visibility = ["//visibility:public"],

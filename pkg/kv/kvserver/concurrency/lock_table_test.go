@@ -182,7 +182,7 @@ func TestLockTableBasic(t *testing.T) {
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
-		manualClock := hlc.NewManualClock(123)
+		manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 		clock := hlc.NewClock(manualClock, 0 /* maxOffset */)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -219,7 +219,7 @@ func TestLockTableBasic(t *testing.T) {
 					d.ScanArgs(t, "ns", &delta)
 					timeDelta += time.Duration(delta)
 				}
-				manualClock.Increment(timeDelta.Nanoseconds())
+				manualClock.Advance(timeDelta)
 				return ""
 
 			case "new-txn":

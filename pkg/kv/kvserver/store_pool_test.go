@@ -25,13 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestStorePoolUpdateLocalStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ctx := context.Background()
 	// We're going to manually mark stores dead in this test.
@@ -84,7 +85,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	for _, store := range stores {
 		rs.RecordCount(1, store.Node.NodeID)
 	}
-	manual.Increment(int64(replicastats.MinStatsDuration + time.Second))
+	manual.Advance(replicastats.MinStatsDuration + time.Second)
 	replica.leaseholderStats = rs
 	replica.writeStats = rs
 
@@ -163,8 +164,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	stopper, _, _, sp, _ := storepool.CreateTestStorePool(ctx,
 		storepool.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */

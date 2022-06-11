@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -57,7 +58,7 @@ import (
 type LocalTestCluster struct {
 	AmbientCtx        log.AmbientContext
 	Cfg               kvserver.StoreConfig
-	Manual            *hlc.ManualClock
+	Manual            *timeutil.ManualTime
 	Clock             *hlc.Clock
 	Gossip            *gossip.Gossip
 	Eng               storage.Engine
@@ -111,7 +112,7 @@ func (ltc *LocalTestCluster) Stopper() *stop.Stopper {
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
-	manualClock := hlc.NewManualClock(123)
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manualClock, 50*time.Millisecond /* maxOffset */)
 	cfg := kvserver.TestStoreConfig(clock)
 	tr := cfg.AmbientCtx.Tracer

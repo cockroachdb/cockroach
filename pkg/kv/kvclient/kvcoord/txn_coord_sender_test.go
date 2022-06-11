@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -216,7 +217,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 						t.Fatal(pErr)
 					}
 					// Advance clock by 1ns.
-					s.Manual.Increment(1)
+					s.Manual.Advance(1)
 					if lastActive := txn.LastActive(); heartbeatTS.Less(lastActive) {
 						heartbeatTS = lastActive
 						return nil
@@ -847,7 +848,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 
-			manual := hlc.NewManualClock(origTS.WallTime)
+			manual := timeutil.NewManualTime(origTS.GoTime())
 			clock := hlc.NewClock(manual, 20*time.Nanosecond /* maxOffset */)
 
 			var senderFn kv.SenderFunc = func(
@@ -861,7 +862,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				} else if txn := pErr.GetTxn(); txn != nil {
 					// Update the manual clock to simulate an
 					// error updating a local hlc clock.
-					manual.Set(txn.WriteTimestamp.WallTime)
+					manual.AdvanceTo(txn.WriteTimestamp.GoTime())
 				}
 				return reply, pErr
 			}
@@ -987,8 +988,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	stopper := stop.NewStopper()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 
 	var expectedLockSpans []roachpb.Span
 
@@ -1299,14 +1299,14 @@ func TestTxnDurations(t *testing.T) {
 	defer cleanupFn()
 	const puts = 10
 
-	const incr int64 = 1000
+	const incr time.Duration = 1000
 	for i := 0; i < puts; i++ {
 		key := roachpb.Key(fmt.Sprintf("key-txn-durations-%d", i))
 		if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			if err := txn.Put(ctx, key, []byte("val")); err != nil {
 				return err
 			}
-			manual.Increment(incr)
+			manual.Advance(incr)
 			return nil
 		}); err != nil {
 			t.Fatal(err)
@@ -1325,7 +1325,7 @@ func TestTxnDurations(t *testing.T) {
 	}
 
 	// Metrics lose fidelity, so we can't compare incr directly.
-	if min, thresh := hist.Min(), incr-10; min < thresh {
+	if min, thresh := hist.Min(), (incr - 10).Nanoseconds(); min < thresh {
 		t.Fatalf("min %d < %d", min, thresh)
 	}
 }
@@ -1480,7 +1480,7 @@ func TestTxnCommitWait(t *testing.T) {
 
 			adv := futureOffset / 5
 			expWait -= adv
-			s.Manual.Increment(adv.Nanoseconds())
+			s.Manual.Advance(adv)
 		}
 		require.NoError(t, <-errC)
 		require.Equal(t, expMetric, metrics.CommitWaits.Count())
@@ -2251,7 +2251,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 1))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
@@ -2295,7 +2295,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		return br, nil
 	})
 
-	manual.Set(requests[0].expRequestTS.WallTime)
+	manual.AdvanceTo(requests[0].expRequestTS.GoTime())
 
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		for curReq = range requests {
@@ -2303,7 +2303,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 				return err
 			}
 		}
-		manual.Set(txn.ProvisionalCommitTimestamp().WallTime)
+		manual.AdvanceTo(txn.ProvisionalCommitTimestamp().GoTime())
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -2317,7 +2317,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	sender := &mockSender{}
@@ -2326,7 +2326,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Get); ok {
-			manual.Increment(100)
+			manual.Advance(100)
 			br := ba.CreateReply()
 			br.Txn = ba.Txn.Clone()
 			br.Txn.WriteTimestamp.Forward(clock.Now())
@@ -2461,8 +2461,7 @@ func TestAnchorKey(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -2679,7 +2678,7 @@ func TestTxnManualRefresh(t *testing.T) {
 			ctx context.Context,
 			t *testing.T,
 			db *kv.DB,
-			clock *hlc.ManualClock,
+			clock *timeutil.ManualTime,
 			reqCh <-chan req,
 		)
 	}
@@ -2688,7 +2687,7 @@ func TestTxnManualRefresh(t *testing.T) {
 			name: "no-op",
 			run: func(
 				ctx context.Context, t *testing.T, db *kv.DB,
-				clock *hlc.ManualClock, reqCh <-chan req,
+				clock *timeutil.ManualTime, reqCh <-chan req,
 			) {
 				txn := db.NewTxn(ctx, "test")
 				errCh := make(chan error)
@@ -2716,7 +2715,7 @@ func TestTxnManualRefresh(t *testing.T) {
 			name: "refresh occurs successfully due to read",
 			run: func(
 				ctx context.Context, t *testing.T, db *kv.DB,
-				clock *hlc.ManualClock, reqCh <-chan req,
+				clock *timeutil.ManualTime, reqCh <-chan req,
 			) {
 				txn := db.NewTxn(ctx, "test")
 				errCh := make(chan error)
@@ -2772,7 +2771,7 @@ func TestTxnManualRefresh(t *testing.T) {
 			name: "refresh occurs unsuccessfully due to read",
 			run: func(
 				ctx context.Context, t *testing.T, db *kv.DB,
-				clock *hlc.ManualClock, reqCh <-chan req,
+				clock *timeutil.ManualTime, reqCh <-chan req,
 			) {
 				txn := db.NewTxn(ctx, "test")
 				errCh := make(chan error)
@@ -2825,7 +2824,7 @@ func TestTxnManualRefresh(t *testing.T) {
 	}
 	run := func(t *testing.T, tc testCase) {
 		stopper := stop.NewStopper()
-		manual := hlc.NewManualClock(123)
+		manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 		clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 		ctx := context.Background()
 		defer stopper.Stop(ctx)

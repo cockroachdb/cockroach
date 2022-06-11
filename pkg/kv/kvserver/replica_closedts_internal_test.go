@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -559,7 +560,7 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			r.ts = test.sidetransportClosed
 			r.lai = test.sidetransportLAI
 			var tc testContext
-			tc.manualClock = hlc.NewManualClock(123) // required by StartWithStoreConfig
+			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123)) // required by StartWithStoreConfig
 			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			cfg.ClosedTimestampReceiver = &r
@@ -652,7 +653,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 
 			// Create a single range.
 			var tc testContext
-			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
 			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -691,7 +692,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 
 	// Create a single range.
 	var tc testContext
-	tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
 	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.DontCloseTimestamps = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -953,7 +954,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 
 				// Create a single range.
 				var tc testContext
-				tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+				tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
 				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 				cfg.TestingKnobs.DontCloseTimestamps = true
 				tc.StartWithStoreConfig(ctx, t, stopper, cfg)
@@ -1130,7 +1131,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 
 			// Create a single range.
 			var tc testContext
-			tc.manualClock = hlc.NewManualClock(1) // required by StartWithStoreConfig
+			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
 			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)

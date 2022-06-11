@@ -11,7 +11,7 @@
 //go:build !linux
 // +build !linux
 
-package hlc
+package ptp
 
 import (
 	"context"
@@ -20,17 +20,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// PTPClock reads the time from a ptp device. Only implemented on Linux.
-type PTPClock struct{}
+// Clock reads the time from a ptp device. Only implemented on Linux.
+type Clock struct{}
 
-var _ WallClock = PTPClock{}
-
-// MakePTPClock us not used on platforms other than Linux
-func MakePTPClock(_ context.Context, _ string) (PTPClock, error) {
-	return PTPClock{}, errors.New("clock device not supported on this platform")
+// MakeClock us not used on platforms other than Linux
+func MakeClock(_ context.Context, _ string) (Clock, error) {
+	return Clock{}, errors.New("clock device not supported on this platform")
 }
 
 // Now implements the hlc.WallClock interface.
-func (p PTPClock) Now() time.Time {
+func (p Clock) Now() time.Time {
 	panic(errors.New("clock device not supported on this platform"))
 }

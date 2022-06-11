@@ -77,15 +77,8 @@ func IsActive() (active bool, firstUse string) {
 
 // ApplyConfig applies the given configuration.
 //
-// The returned cleanup fn can be invoked by the caller to close
-// asynchronous processes.
-// NB: This is only useful in tests: for a long-running server process the
-// cleanup function should likely not be called, to ensure that the
-// file used to capture internal fd2 writes remains open up until the
-// process entirely terminates. This ensures that any Go runtime
-// assertion failures on the way to termination can be properly
-// captured.
-func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
+// The returned logShutdownFn can be used to gracefully shut down logging facilities.
+func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
@@ -107,14 +100,18 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 	// which is populated if fd2 capture is enabled, below.
 	fd2CaptureCleanupFn := func() {}
 
-	// cleanupFn is the returned cleanup function, whose purpose
+	closer := newBufferedSinkCloser()
+	// logShutdownFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
-	cleanupFn := func() {
+	logShutdownFn = func() {
 		// Reset the logging channels to default.
 		si := logging.stderrSinkInfoTemplate
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
+		if err := closer.Close(defaultCloserTimeout); err != nil {
+			fmt.Printf("# WARNING: %s\n", err.Error())
+		}
 		for _, l := range secLoggers {
 			logging.allLoggers.del(l)
 		}
@@ -123,10 +120,10 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		}
 	}
 
-	// Call the final value of cleanupFn immediately if returning with error.
+	// Call the final value of logShutdownFn immediately if returning with error.
 	defer func() {
 		if err != nil {
-			cleanupFn()
+			logShutdownFn()
 		}
 	}()
 
@@ -288,7 +285,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig.Buffering)
+		attachBufferWrapper(fileSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
@@ -305,7 +302,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig.Buffering)
+		attachBufferWrapper(fluentSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
@@ -318,7 +315,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig.Buffering)
+		attachBufferWrapper(httpSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
@@ -333,7 +330,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 
-	return cleanupFn, nil
+	return logShutdownFn, nil
 }
 
 // newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
@@ -403,9 +400,9 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 // attachBufferWrapper modifies s, wrapping its sink in a bufferedSink unless
 // bufConfig.IsNone().
 //
-// ctx needs to be canceled to stop the bufferedSink internal goroutines.
+// The provided closer needs to be closed to stop the bufferedSink internal goroutines.
 func attachBufferWrapper(
-	ctx context.Context, s *sinkInfo, bufConfig logconfig.CommonBufferSinkConfigWrapper,
+	s *sinkInfo, bufConfig logconfig.CommonBufferSinkConfigWrapper, closer *bufferedSinkCloser,
 ) {
 	if bufConfig.IsNone() {
 		return
@@ -416,7 +413,7 @@ func attachBufferWrapper(
 		uint64(*bufConfig.FlushTriggerSize),
 		uint64(*bufConfig.MaxBufferSize),
 		s.criticality /* crashOnAsyncFlushErr */)
-	bs.Start(ctx)
+	bs.Start(closer)
 	s.sink = bs
 }
 

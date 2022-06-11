@@ -99,49 +99,6 @@ type WallClock interface {
 	Now() time.Time
 }
 
-// ManualClock is a convenience type to facilitate
-// creating a hybrid logical clock whose physical clock
-// is manually controlled.
-//
-// ManualClock implements WallClock, so it can be used with
-// NewClock(NewManualClock(...),...).
-//
-// ManualClock is thread safe.
-type ManualClock struct {
-	nanos int64
-}
-
-var _ WallClock = &ManualClock{}
-
-// NewManualClock returns a new instance, initialized with
-// specified timestamp.
-func NewManualClock(nanos int64) *ManualClock {
-	if nanos == 0 {
-		panic("zero clock is forbidden")
-	}
-	return &ManualClock{nanos: nanos}
-}
-
-// Now implements the WallClock interface.
-func (m *ManualClock) Now() time.Time {
-	return timeutil.Unix(0, m.UnixNano())
-}
-
-// UnixNano returns the underlying manual clock's timestamp.
-func (m *ManualClock) UnixNano() int64 {
-	return atomic.LoadInt64(&m.nanos)
-}
-
-// Increment atomically increments the manual clock's timestamp.
-func (m *ManualClock) Increment(incr int64) {
-	atomic.AddInt64(&m.nanos, incr)
-}
-
-// Set atomically sets the manual clock's timestamp.
-func (m *ManualClock) Set(nanos int64) {
-	atomic.StoreInt64(&m.nanos, nanos)
-}
-
 // HybridManualClock is a convenience type to facilitate
 // creating a hybrid logical clock whose physical clock
 // ticks with the wall clock, but that can be moved arbitrarily
