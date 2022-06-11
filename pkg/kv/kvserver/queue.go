@@ -100,10 +100,10 @@ func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProc
 // the operations's timeout.
 const permittedRangeScanSlowdown = 10
 
-// a purgatoryError indicates a replica processing failure which indicates
-// the replica can be placed into purgatory for faster retries when the
-// failure condition changes.
-type purgatoryError interface {
+// PurgatoryError indicates a replica processing failure which indicates the
+// replica can be placed into purgatory for faster retries than the replica
+// scanner's interval.
+type PurgatoryError interface {
 	error
 	purgatoryErrorMarker() // dummy method for unique interface
 }
@@ -385,7 +385,7 @@ type queueConfig struct {
 //
 // A queueImpl can opt into a purgatory by returning a non-nil channel from the
 // `purgatoryChan` method. A replica is put into purgatory when the `process`
-// method returns an error with a `purgatoryError` as an entry somewhere in the
+// method returns an error with a `PurgatoryError` as an entry somewhere in the
 // `Cause` chain. A replica in purgatory is not processed again until the
 // channel is signaled, at which point every replica in purgatory is immediately
 // processed. This catchup is run without the `timer` rate limiting but shares
@@ -419,7 +419,7 @@ type baseQueue struct {
 		syncutil.Mutex                                    // Protects all variables in the mu struct
 		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
 		priorityQ      priorityQueue                      // The priority queue
-		purgatory      map[roachpb.RangeID]purgatoryError // Map of replicas to processing errors
+		purgatory      map[roachpb.RangeID]PurgatoryError // Map of replicas to processing errors
 		stopped        bool
 		// Some tests in this package disable queues.
 		disabled bool
@@ -992,8 +992,9 @@ func isBenign(err error) bool {
 	return errors.HasType(err, (*benignError)(nil))
 }
 
-func isPurgatoryError(err error) (purgatoryError, bool) {
-	var purgErr purgatoryError
+// IsPurgatoryError returns true iff the given error is a purgatory error.
+func IsPurgatoryError(err error) (PurgatoryError, bool) {
+	var purgErr PurgatoryError
 	return purgErr, errors.As(err, &purgErr)
 }
 
@@ -1089,7 +1090,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		// the failing replica to purgatory. Note that even if the item was
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
-		if purgErr, ok := isPurgatoryError(err); ok {
+		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
 			bq.mu.Unlock()
@@ -1111,7 +1112,7 @@ func (bq *baseQueue) finishProcessingReplica(
 // addToPurgatoryLocked adds the specified replica to the purgatory queue, which
 // holds replicas which have failed processing.
 func (bq *baseQueue) addToPurgatoryLocked(
-	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr purgatoryError,
+	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr PurgatoryError,
 ) {
 	bq.mu.AssertHeld()
 
@@ -1149,7 +1150,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	}
 
 	// Otherwise, create purgatory and start processing.
-	bq.mu.purgatory = map[roachpb.RangeID]purgatoryError{
+	bq.mu.purgatory = map[roachpb.RangeID]PurgatoryError{
 		repl.GetRangeID(): purgErr,
 	}
 
