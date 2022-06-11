@@ -274,3 +274,7 @@ func (*splitQueue) timer(_ time.Duration) time.Duration {
 func (sq *splitQueue) purgatoryChan() <-chan time.Time {
 	return sq.purgChan
 }
+
+func (sq *splitQueue) updateChan() <-chan time.Time {
+	return nil
+}

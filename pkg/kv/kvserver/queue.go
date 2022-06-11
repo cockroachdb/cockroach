@@ -270,6 +270,11 @@ type queueImpl interface {
 	// purgatory due to failures. If purgatoryChan returns nil, failing
 	// replicas are not sent to purgatory.
 	purgatoryChan() <-chan time.Time
+
+	// updateChan returns a channel that is signalled whenever there is an update
+	// to the cluster state that might impact the replicas in the queue's
+	// purgatory.
+	updateChan() <-chan time.Time
 }
 
 // queueProcessTimeoutFunc controls the timeout for queue processing for a
@@ -1153,51 +1158,14 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		ticker := time.NewTicker(purgatoryReportInterval)
 		for {
 			select {
-			case <-bq.impl.purgatoryChan():
-				func() {
-					// Acquire from the process semaphore, release when done.
-					bq.processSem <- struct{}{}
-					defer func() { <-bq.processSem }()
-
-					// Remove all items from purgatory into a copied slice.
-					bq.mu.Lock()
-					ranges := make([]*replicaItem, 0, len(bq.mu.purgatory))
-					for rangeID := range bq.mu.purgatory {
-						item := bq.mu.replicas[rangeID]
-						if item == nil {
-							log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
-						}
-						item.setProcessing()
-						ranges = append(ranges, item)
-						bq.removeFromPurgatoryLocked(item)
-					}
-					bq.mu.Unlock()
-
-					for _, item := range ranges {
-						repl, err := bq.getReplica(item.rangeID)
-						if err != nil || item.replicaID != repl.ReplicaID() {
-							continue
-						}
-						annotatedCtx := repl.AnnotateCtx(ctx)
-						if stopper.RunTask(
-							annotatedCtx, bq.processOpName(), func(ctx context.Context) {
-								err := bq.processReplica(ctx, repl)
-								bq.finishProcessingReplica(ctx, stopper, repl, err)
-							}) != nil {
-							return
-						}
-					}
-				}()
-
-				// Clean up purgatory, if empty.
-				bq.mu.Lock()
-				if len(bq.mu.purgatory) == 0 {
-					log.Infof(ctx, "purgatory is now empty")
-					bq.mu.purgatory = nil
-					bq.mu.Unlock()
+			case <-bq.impl.updateChan():
+				if bq.processReplicasInPurgatory(ctx, stopper) {
 					return
 				}
-				bq.mu.Unlock()
+			case <-bq.impl.purgatoryChan():
+				if bq.processReplicasInPurgatory(ctx, stopper) {
+					return
+				}
 			case <-ticker.C:
 				// Report purgatory status.
 				bq.mu.Lock()
@@ -1213,7 +1181,61 @@ func (bq *baseQueue) addToPurgatoryLocked(
 				return
 			}
 		}
-	})
+	},
+	)
+}
+
+// processReplicasInPurgatory processes replicas currently in the queue's
+// purgatory.
+func (bq *baseQueue) processReplicasInPurgatory(
+	ctx context.Context, stopper *stop.Stopper,
+) (purgatoryCleared bool) {
+	func() {
+		// Acquire from the process semaphore, release when done.
+		bq.processSem <- struct{}{}
+		defer func() { <-bq.processSem }()
+
+		// Remove all items from purgatory into a copied slice.
+		bq.mu.Lock()
+		ranges := make([]*replicaItem, 0, len(bq.mu.purgatory))
+		for rangeID := range bq.mu.purgatory {
+			item := bq.mu.replicas[rangeID]
+			if item == nil {
+				log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
+			}
+			item.setProcessing()
+			ranges = append(ranges, item)
+			bq.removeFromPurgatoryLocked(item)
+		}
+		bq.mu.Unlock()
+
+		for _, item := range ranges {
+			repl, err := bq.getReplica(item.rangeID)
+			if err != nil || item.replicaID != repl.ReplicaID() {
+				continue
+			}
+			annotatedCtx := repl.AnnotateCtx(ctx)
+			if stopper.RunTask(
+				annotatedCtx, bq.processOpName(), func(ctx context.Context) {
+					err := bq.processReplica(ctx, repl)
+					bq.finishProcessingReplica(ctx, stopper, repl, err)
+				},
+			) != nil {
+				return
+			}
+		}
+	}()
+
+	// Clean up purgatory, if empty.
+	bq.mu.Lock()
+	if len(bq.mu.purgatory) == 0 {
+		log.Infof(ctx, "purgatory is now empty")
+		bq.mu.purgatory = nil
+		bq.mu.Unlock()
+		return true /* purgatoryCleared */
+	}
+	bq.mu.Unlock()
+	return false /* purgatoryCleared */
 }
 
 // pop dequeues the highest priority replica, if any, in the queue. The
