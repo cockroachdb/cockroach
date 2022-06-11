@@ -518,6 +518,7 @@ ALL_TESTS = [
     "//pkg/util/tracing/service:service_test",
     "//pkg/util/tracing:tracing_test",
     "//pkg/util/treeprinter:treeprinter_test",
+    "//pkg/util/trigram:trigram_test",
     "//pkg/util/uint128:uint128_test",
     "//pkg/util/ulid:ulid_test",
     "//pkg/util/unique:unique_test",
