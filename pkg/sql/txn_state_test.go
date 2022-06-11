@@ -41,19 +41,17 @@ var noRewindExpected = CmdPos(-1)
 var emptyTxnID = uuid.UUID{}
 
 type testContext struct {
-	manualClock *hlc.ManualClock
-	clock       *hlc.Clock
-	mockDB      *kv.DB
-	mon         *mon.BytesMonitor
-	tracer      *tracing.Tracer
+	clock  *hlc.Clock
+	mockDB *kv.DB
+	mon    *mon.BytesMonitor
+	tracer *tracing.Tracer
 	// ctx is mimicking the spirit of a client connection's context
 	ctx      context.Context
 	settings *cluster.Settings
 }
 
 func makeTestContext(stopper *stop.Stopper) testContext {
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -63,9 +61,8 @@ func makeTestContext(stopper *stop.Stopper) testContext {
 	settings := cluster.MakeTestingClusterSettings()
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	return testContext{
-		manualClock: manual,
-		clock:       clock,
-		mockDB:      kv.NewDB(ambient, factory, clock, stopper),
+		clock:  clock,
+		mockDB: kv.NewDB(ambient, factory, clock, stopper),
 		mon: mon.NewMonitor(
 			"test root mon",
 			mon.MemoryResource,

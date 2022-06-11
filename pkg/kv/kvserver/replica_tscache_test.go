@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -36,8 +37,7 @@ func TestReadSummaryApplyForR1(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseTS := hlc.Timestamp{WallTime: 123}
-	manual := hlc.NewManualClock(baseTS.WallTime)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(baseTS.GoTime()), time.Nanosecond /* maxOffset */)
 	tc := tscache.New(clock)
 
 	r1desc := roachpb.RangeDescriptor{
@@ -75,8 +75,7 @@ func TestReadSummaryCollectForR1(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseTS := hlc.Timestamp{WallTime: 123}
-	manual := hlc.NewManualClock(baseTS.WallTime)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(baseTS.GoTime()), time.Nanosecond /* maxOffset */)
 	tc := tscache.New(clock)
 
 	r1desc := roachpb.RangeDescriptor{

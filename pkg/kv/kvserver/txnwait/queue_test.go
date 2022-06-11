@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,8 +170,7 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	cfg.RangeDesc = &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
 	}
-	manual := hlc.NewManualClock(123)
-	cfg.Clock = hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	cfg.Clock = hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
 	cfg.Stopper = stopper
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {

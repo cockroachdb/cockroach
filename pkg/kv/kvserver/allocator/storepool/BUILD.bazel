@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/shuffle",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

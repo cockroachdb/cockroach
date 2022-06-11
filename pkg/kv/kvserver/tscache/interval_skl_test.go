@@ -859,7 +859,7 @@ func TestIntervalSklFill2(t *testing.T) {
 // retention window, its page will never be evicted and it will never be subsumed
 // by the floor timestamp.
 func TestIntervalSklMinRetentionWindow(t *testing.T) {
-	manual := hlc.NewManualClock(200)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 200))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	const minRet = 500
@@ -875,7 +875,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 
 	// Add a large number of other values, forcing rotations. Continue until
 	// there are more pages than s.minPages.
-	manual.Increment(300)
+	manual.Advance(300)
 	for i := 0; s.pages.Len() <= s.minPages; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
 		s.Add(key, makeVal(clock.Now(), "2"))
@@ -893,7 +893,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 
 	// Increment the clock so that the original value is not in the minimum
 	// retention window. Rotate the pages and the back page should be evicted.
-	manual.Increment(300)
+	manual.Advance(300)
 	s.rotatePages(s.frontPage())
 
 	newVal := s.LookupTimestamp(origKey)
@@ -904,7 +904,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 
 	// Increment the clock again so that all the other values can be evicted.
 	// The pages should collapse back down to s.minPages.
-	manual.Increment(300)
+	manual.Advance(300)
 	s.rotatePages(s.frontPage())
 	require.Equal(t, s.pages.Len(), s.minPages)
 }
@@ -913,7 +913,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 // and subsumed by the floor timestamp, then the floor timestamp will continue
 // to carry the synthtic flag, if necessary.
 func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
-	manual := hlc.NewManualClock(200)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 200))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 
 	const minRet = 500
@@ -934,7 +934,7 @@ func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
 
 	// Increment the clock so that the original value is not in the minimum
 	// retention window. Rotate the pages and the back page should be evicted.
-	manual.Increment(600)
+	manual.Advance(600)
 	s.rotatePages(s.frontPage())
 
 	// The initial value's page was evicted, so it should no longer exist.
@@ -1212,8 +1212,7 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 // rotation loop for ranges that are too large to fit in a single page. Instead,
 // we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
-	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 200)), time.Nanosecond /* maxOffset */)
 
 	ts := clock.Now()
 	val := makeVal(ts, "1")

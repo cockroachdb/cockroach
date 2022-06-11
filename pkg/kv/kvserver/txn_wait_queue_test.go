@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -488,12 +489,12 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	var queryTxnCount int32
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	// Move the clock forward so that when the PushTxn is sent, the txn appears
 	// expired.
-	manual.Set(txnwait.TxnExpiration(txn).WallTime)
+	manual.MustAdvanceTo(txnwait.TxnExpiration(txn).GoTime())
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -442,7 +443,7 @@ func TestMVCCGCQueueMakeGCScoreRealistic(t *testing.T) {
 	{
 		irrelevantTTL := 24 * time.Hour * 365
 		ms, valSize := initialMS(), 1<<10
-		mc := hlc.NewManualClock(ms.LastUpdateNanos)
+		mc := timeutil.NewManualTime(timeutil.Unix(0, ms.LastUpdateNanos))
 		txn := newTransaction(
 			"txn", roachpb.Key("key"), roachpb.NormalUserPriority,
 			hlc.NewClock(mc, time.Millisecond /* maxOffset */))
@@ -473,7 +474,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 
 	const intentAgeThreshold = 2 * time.Hour
 
-	tc.manualClock.Increment(48 * 60 * 60 * 1e9) // 2d past the epoch
+	tc.manualClock.Advance(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
 	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
@@ -702,17 +703,17 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
-	manual.Set(3 * 24 * time.Hour.Nanoseconds())
+	manual.MustAdvanceTo(timeutil.Unix(0, 3*24*time.Hour.Nanoseconds()))
 
-	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
-	gcExpiration := testTime - kvserverbase.TxnCleanupThreshold.Nanoseconds()
+	testTime := manual.Now().Add(2 * time.Hour)
+	gcExpiration := testTime.Add(-kvserverbase.TxnCleanupThreshold)
 
 	type spec struct {
 		status      roachpb.TransactionStatus
-		orig        int64
-		hb          int64                     // last heartbeat (none if Timestamp{})
+		orig        time.Time
+		hb          time.Time                 // last heartbeat (zero if Timestamp{})
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
@@ -725,15 +726,15 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// Too young, should not touch.
 		"a": {
 			status:    roachpb.PENDING,
-			orig:      gcExpiration + 1,
+			orig:      gcExpiration.Add(1),
 			newStatus: roachpb.PENDING,
 		},
 		// Old and pending, but still heartbeat (so no Push attempted; it
 		// would not succeed).
 		"b": {
 			status:    roachpb.PENDING,
-			orig:      1, // immaterial
-			hb:        gcExpiration + 1,
+			orig:      timeutil.Unix(0, 1), // immaterial
+			hb:        gcExpiration.Add(1),
 			newStatus: roachpb.PENDING,
 		},
 		// Old, pending, and abandoned. Should push and abort it
@@ -741,7 +742,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// AbortSpan is also cleaned up.
 		"c": {
 			status:     roachpb.PENDING,
-			orig:       gcExpiration - 1,
+			orig:       gcExpiration.Add(-1),
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -749,15 +750,15 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// Staging and fresh, so no action.
 		"d": {
 			status:    roachpb.STAGING,
-			orig:      gcExpiration + 1,
+			orig:      gcExpiration.Add(1),
 			newStatus: roachpb.STAGING,
 		},
 		// Old and staging, but still heartbeat (so no Push attempted; it
 		// would not succeed).
 		"e": {
 			status:    roachpb.STAGING,
-			orig:      1, // immaterial
-			hb:        gcExpiration + 1,
+			orig:      timeutil.Unix(0, 1), // immaterial
+			hb:        gcExpiration.Add(1),
 			newStatus: roachpb.STAGING,
 		},
 		// Old, staging, and abandoned. Should push it and hit an indeterminate
@@ -765,7 +766,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// along with resolving the intent.
 		"f": {
 			status:     roachpb.STAGING,
-			orig:       gcExpiration - 1,
+			orig:       gcExpiration.Add(-1),
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -773,7 +774,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// Old and aborted, should delete.
 		"g": {
 			status:     roachpb.ABORTED,
-			orig:       gcExpiration - 1,
+			orig:       gcExpiration.Add(-1),
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -781,14 +782,14 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// Committed and fresh, so no action.
 		"h": {
 			status:    roachpb.COMMITTED,
-			orig:      gcExpiration + 1,
+			orig:      gcExpiration.Add(1),
 			newStatus: roachpb.COMMITTED,
 		},
 		// Committed and old. It has an intent (like all tests here), which is
 		// resolvable and hence we can GC.
 		"i": {
 			status:     roachpb.COMMITTED,
-			orig:       gcExpiration - 1,
+			orig:       gcExpiration.Add(-1),
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -797,7 +798,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		// resolution here will fail and consequently no GC is expected.
 		"j": {
 			status:      roachpb.COMMITTED,
-			orig:        gcExpiration - 1,
+			orig:        gcExpiration.Add(-1),
 			newStatus:   roachpb.COMMITTED,
 			failResolve: true,
 			expResolve:  true,
@@ -840,7 +841,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
-	manual.Set(testTime)
+	manual.MustAdvanceTo(testTime)
 
 	outsideKey := tc.repl.Desc().EndKey.Next().AsRawKey()
 	testIntents := []roachpb.Span{{Key: roachpb.Key("intent")}}
@@ -848,12 +849,12 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	txns := map[string]roachpb.Transaction{}
 	for strKey, test := range testCases {
 		baseKey := roachpb.Key(strKey)
-		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig), time.Nanosecond /* maxOffset */)
+		txnClock := hlc.NewClock(timeutil.NewManualTime(test.orig), time.Nanosecond /* maxOffset */)
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
 		txn.LockSpans = testIntents
-		if test.hb > 0 {
-			txn.LastHeartbeat = hlc.Timestamp{WallTime: test.hb}
+		if !test.hb.IsZero() {
+			txn.LastHeartbeat = hlc.Timestamp{WallTime: test.hb.UnixNano()}
 		}
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
@@ -904,7 +905,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 				if !sp.status.IsFinalized() {
 					tombstoneTimestamp, _ := tc.store.tsCache.GetMax(
 						txnTombstoneTSCacheKey, nil /* end */)
-					if min := (hlc.Timestamp{WallTime: sp.orig}); tombstoneTimestamp.Less(min) {
+					if min := (hlc.Timestamp{WallTime: sp.orig.UnixNano()}); tombstoneTimestamp.Less(min) {
 						return fmt.Errorf("%s: expected tscache entry for tombstone key to be >= %s, "+
 							"but found %s", strKey, min, tombstoneTimestamp)
 					}
@@ -971,7 +972,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	tc.manualClock.Set(48 * 60 * 60 * 1e9) // 2d past the epoch
+	tc.manualClock.MustAdvanceTo(timeutil.Unix(48*60*60, 0)) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
 	txns := []*roachpb.Transaction{
@@ -1103,7 +1104,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	ctx := context.Background()
 
 	var gcRequests int32
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tsc := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
@@ -1178,7 +1179,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not find span config for range %s", err)
 	}
-	tc.manualClock.Increment(conf.TTL().Nanoseconds() + 1)
+	tc.manualClock.Advance(conf.TTL() + 1)
 	mgcq := newMVCCGCQueue(tc.store)
 	processed, err := mgcq.process(ctx, tc.repl, confReader)
 	if err != nil {

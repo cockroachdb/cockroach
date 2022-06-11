@@ -121,7 +121,7 @@ func TestHeartbeatCB(t *testing.T) {
 		// don't talk to servers from unrelated tests by accident).
 		clusterID := uuid.MakeV4()
 
-		clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+		clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 		serverCtx := newTestContext(clusterID, clock, stopper)
 		serverCtx.rpcCompression = compression
 		const serverNodeID = 1
@@ -311,7 +311,7 @@ func TestInternalServerAddress(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	clock := hlc.NewClock(hlc.NewManualClock(1), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), 0 /* maxOffset */)
 
 	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 	serverCtx.Config.Addr = "127.0.0.1:9999"
@@ -645,7 +645,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	clock := hlc.NewClock(hlc.NewManualClock(1), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), 0 /* maxOffset */)
 
 	// Shared cluster ID by all RPC peers (this ensures that the peers
 	// don't talk to servers from unrelated tests by accident).
@@ -909,8 +909,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(hlc.NewManualClock(1), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), 0 /* maxOffset */)
 
 	serverCtx := newTestContext(clusterID, clock, stopper)
 	const serverNodeID = 1
@@ -1096,7 +1095,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	serverClock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	serverClock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 	serverCtx := newTestContext(clusterID, serverClock, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
@@ -1165,7 +1164,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	clock := hlc.NewClock(hlc.NewManualClock(1), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 1)), 0 /* maxOffset */)
 
 	serverCtx := newTestContext(clusterID, clock, stopper)
 	const serverNodeID = 1
@@ -1275,7 +1274,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	clusterID := uuid.MakeV4()
 
 	for i := range nodeCtxs {
-		clock := hlc.NewClock(hlc.NewManualClock(start.Add(nodeCtxs[i].offset).UnixNano()), maxOffset /* maxOffset */)
+		clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, start.Add(nodeCtxs[i].offset).UnixNano())), maxOffset /* maxOffset */)
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clusterID, clock, stopper)
 		nodeCtxs[i].ctx.Config.RPCHeartbeatInterval = maxOffset
@@ -1457,7 +1456,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 
 	// Construct server with server-side keepalive.
 	log.Infof(ctx, "constructing server")
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 	serverCtx := newTestContext(clusterID, clock, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
@@ -1683,7 +1682,7 @@ func TestGRPCDeadlinePropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clusterID := uuid.MakeV4()
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 
 	// Construct the server context.
 	const serverNodeID = 1
@@ -1749,7 +1748,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
@@ -1790,7 +1789,7 @@ func TestClusterIDMismatch(t *testing.T) {
 func TestClusterNameMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 
 	testData := []struct {
 		serverName             string
@@ -1873,7 +1872,7 @@ func TestNodeIDMismatch(t *testing.T) {
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
 
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 	serverCtx := newTestContext(clusterID, clock, stopper)
 	serverCtx.NodeID.Set(context.Background(), 1)
 	s := newTestServer(t, serverCtx)
@@ -1942,7 +1941,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 
-			clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+			clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 			serverCtx := newTestContext(clusterID, clock, stopper)
 			const serverNodeID = 1
 			serverCtx.NodeID.Set(context.Background(), serverNodeID)
@@ -1991,7 +1990,7 @@ func TestGRPCDialClass(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
@@ -2039,7 +2038,7 @@ func TestTestingKnobs(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	clusterID := uuid.MakeV4()
 
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 	serverCtx := newTestContext(clusterID, clock, stopper)
 	const serverNodeID = 1
 	serverCtx.NodeID.Set(context.Background(), serverNodeID)
@@ -2147,7 +2146,7 @@ func TestRunHeartbeatSetsHeartbeatStateWhenExitingBeforeFirstHeartbeat(t *testin
 	defer stopper.Stop(ctx)
 	clusterID := uuid.MakeV4()
 
-	clock := hlc.NewClock(hlc.NewManualClock(20), 0 /* maxOffset */)
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 20)), 0 /* maxOffset */)
 
 	// This test reaches into low-level implementation details to recreate
 	// the hazardous scenario seen in #41521. In that isse we saw a runHeartbeat()

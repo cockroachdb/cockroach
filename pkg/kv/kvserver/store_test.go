@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -257,8 +258,8 @@ func createTestStoreWithoutStart(
 
 func createTestStore(
 	ctx context.Context, t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
-) (*Store, *hlc.ManualClock) {
-	manual := hlc.NewManualClock(123)
+) (*Store, *timeutil.ManualTime) {
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	return store, manual
@@ -916,7 +917,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 
 	for _, test := range testCases {
 		func() {
-			manual := hlc.NewManualClock(123)
+			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
@@ -935,7 +936,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			pArgs := putArgs(test.key, []byte("value"))
 			assignSeqNumsForReqs(txn, &pArgs)
 			pReply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &pArgs)
-			test.check(manual.UnixNano(), store.NodeID(), pReply, pErr)
+			test.check(manual.Now().UnixNano(), store.NodeID(), pReply, pErr)
 		}()
 	}
 }
@@ -1275,15 +1276,15 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond) /* maxOffset */)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond /* maxOffset */))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
 			if !ok || pr.PusherTxn.Name != "test" {
 				return nil
 			}
-			if exp, act := manual.UnixNano(), pr.PushTo.WallTime; exp > act {
+			if exp, act := manual.Now().UnixNano(), pr.PushTo.WallTime; exp > act {
 				return roachpb.NewError(fmt.Errorf("expected PushTo > WallTime, but got %d < %d:\n%+v", act, exp, pr))
 			}
 			return nil
@@ -1313,7 +1314,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		manual.Increment(100)
+		manual.Advance(100)
 		// Now, try a put using the pusher's txn.
 		h.Txn = pusher
 		resultCh := make(chan *roachpb.Error, 1)
@@ -1896,9 +1897,9 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	store, manualClock := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	// Write three keys at time t0.
-	t0 := 1 * time.Second
-	manualClock.Set(t0.Nanoseconds())
-	h := roachpb.Header{Timestamp: makeTS(t0.Nanoseconds(), 0)}
+	t0 := timeutil.Unix(1, 0)
+	manualClock.MustAdvanceTo(t0)
+	h := roachpb.Header{Timestamp: makeTS(t0.UnixNano(), 0)}
 	for _, keyStr := range []string{"a", "b", "c"} {
 		key := roachpb.Key(keyStr)
 		putArgs := putArgs(key, []byte("value"))
@@ -1910,9 +1911,9 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	// Scan the span at t1 with max keys and verify the expected resume span.
 	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}
 	sArgs := scanArgs(span.Key, span.EndKey)
-	t1 := 2 * time.Second
-	manualClock.Set(t1.Nanoseconds())
-	h.Timestamp = makeTS(t1.Nanoseconds(), 0)
+	t1 := timeutil.Unix(2, 0)
+	manualClock.MustAdvanceTo(t1)
+	h.Timestamp = makeTS(t1.UnixNano(), 0)
 	h.MaxSpanRequestKeys = 2
 	reply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, sArgs)
 	if pErr != nil {
@@ -1929,18 +1930,18 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 
 	// Verify the timestamp cache has been set for "b".Next(), but not for "c".
 	rTS, _ := store.tsCache.GetMax(roachpb.Key("b").Next(), nil)
-	if a, e := rTS, makeTS(t1.Nanoseconds(), 0); a != e {
+	if a, e := rTS, makeTS(t1.UnixNano(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
 	}
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
-	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); lt.LessEq(a) {
+	if a, lt := rTS, makeTS(t1.UnixNano(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
 	}
 
 	// Reverse scan the span at t1 with max keys and verify the expected resume span.
-	t2 := 3 * time.Second
-	manualClock.Set(t2.Nanoseconds())
-	h.Timestamp = makeTS(t2.Nanoseconds(), 0)
+	t2 := timeutil.Unix(3, 0)
+	manualClock.MustAdvanceTo(t2)
+	h.Timestamp = makeTS(t2.UnixNano(), 0)
 	rsArgs := revScanArgs(span.Key, span.EndKey)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), h, rsArgs)
 	if pErr != nil {
@@ -1957,11 +1958,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 
 	// Verify the timestamp cache has been set for "a".Next(), but not for "a".
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("a").Next(), nil)
-	if a, e := rTS, makeTS(t2.Nanoseconds(), 0); a != e {
+	if a, e := rTS, makeTS(t2.UnixNano(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
 	}
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
-	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); lt.LessEq(a) {
+	if a, lt := rTS, makeTS(t2.UnixNano(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}
 
@@ -1969,9 +1970,9 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	// expected resume spans. The two Get requests that are evaluated should be
 	// accounted for in the timestamp cache, but the third request which is not
 	// evaluated due to the key limit should not be accounted for.
-	t3 := 4 * time.Second
-	manualClock.Set(t3.Nanoseconds())
-	h.Timestamp = makeTS(t3.Nanoseconds(), 0)
+	t3 := timeutil.Unix(4, 0)
+	manualClock.MustAdvanceTo(t3)
+	h.Timestamp = makeTS(t3.UnixNano(), 0)
 	ba := roachpb.BatchRequest{}
 	ba.Header = h
 	ba.Add(getArgsString("a"), getArgsString("b"), getArgsString("c"))
@@ -1991,11 +1992,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 
 	// Verify the timestamp cache has been set for "a" and "b", but not for "c".
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
-	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
+	require.Equal(t, makeTS(t3.UnixNano(), 0), rTS)
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("b"), nil)
-	require.Equal(t, makeTS(t3.Nanoseconds(), 0), rTS)
+	require.Equal(t, makeTS(t3.UnixNano(), 0), rTS)
 	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
-	require.Equal(t, makeTS(t2.Nanoseconds(), 0), rTS)
+	require.Equal(t, makeTS(t2.UnixNano(), 0), rTS)
 }
 
 // TestStoreScanIntents verifies that a scan across 10 intents resolves
@@ -2214,7 +2215,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manualClock.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
+	manualClock.Advance(txnwait.TxnLivenessThreshold + 1)
 
 	// Scan the range and verify empty result (expired txn is aborted,
 	// cleaning up intents).
@@ -2235,7 +2236,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var resolveCount int32
-	manual := hlc.NewManualClock(123)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
@@ -2267,7 +2268,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
+	manual.Advance(txnwait.TxnLivenessThreshold + 1)
 
 	// Query the range with a single scan, which should cause all intents
 	// to be resolved.
