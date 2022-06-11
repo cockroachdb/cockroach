@@ -155,7 +155,7 @@ type unsplittableRangeError struct{}
 func (unsplittableRangeError) Error() string         { return "could not find valid split key" }
 func (unsplittableRangeError) PurgatoryErrorMarker() {}
 
-var _ purgatoryError = unsplittableRangeError{}
+var _ PurgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(

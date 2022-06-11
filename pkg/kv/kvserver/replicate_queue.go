@@ -540,6 +540,15 @@ func (rq *replicateQueue) process(
 	return false, errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
 }
 
+// decommissionPurgatoryError wraps an error that occurs when attempting to
+// rebalance a range that has a replica on a decommissioning node to indicate
+// that the error should send the range to purgatory.
+type decommissionPurgatoryError struct{ error }
+
+func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
+
+var _ PurgatoryError = decommissionPurgatoryError{}
+
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
@@ -645,8 +654,12 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning voter %v unexpectedly not found in %v",
 				decommissioningVoterReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplaceVoters(
+		requeue, err := rq.addOrReplaceVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 	case allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
 		decommissioningNonVoterReplicas := rq.store.cfg.StorePool.DecommissioningReplicas(nonVoterReplicas)
 		if len(decommissioningNonVoterReplicas) == 0 {
@@ -658,8 +671,12 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning non-voter %v unexpectedly not found in %v",
 				decommissioningNonVoterReplicas[0], nonVoterReplicas)
 		}
-		return rq.addOrReplaceNonVoters(
+		requeue, err := rq.addOrReplaceNonVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 
 	// Remove decommissioning replicas.
 	//
@@ -667,9 +684,17 @@ func (rq *replicateQueue) processOneChange(
 	// has decommissioning replicas; in the common case we'll hit
 	// AllocatorReplaceDecommissioning{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDecommissioningVoter:
-		return rq.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget, dryRun)
+		requeue, err := rq.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 	case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
-		return rq.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget, dryRun)
+		requeue, err := rq.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 
 	// Remove dead replicas.
 	//
@@ -813,7 +838,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		_, _, err := rq.allocator.AllocateVoter(ctx, conf, oldPlusNewReplicas, remainingLiveNonVoters)
 		if err != nil {
 			// It does not seem possible to go to the next odd replica state. Note
-			// that AllocateVoter returns an allocatorError (a purgatoryError)
+			// that AllocateVoter returns an allocatorError (a PurgatoryError)
 			// when purgatory is requested.
 			return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 		}
