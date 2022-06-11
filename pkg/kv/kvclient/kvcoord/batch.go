@@ -11,13 +11,36 @@
 package kvcoord
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
 type BatchTruncationHelper struct {
-	requests []roachpb.RequestUnion
+	requests  []roachpb.RequestUnion
+	headers   []roachpb.RequestHeader
+	positions []int
+	isRange   []bool
+}
+
+var _ sort.Interface = &BatchTruncationHelper{}
+
+func (h *BatchTruncationHelper) Len() int {
+	return len(h.requests)
+}
+
+func (h *BatchTruncationHelper) Less(i, j int) bool {
+	return h.headers[i].Key.Compare(h.headers[j].Key) < 0
+}
+
+func (h *BatchTruncationHelper) Swap(i, j int) {
+	h.requests[i], h.requests[j] = h.requests[j], h.requests[i]
+	h.headers[i], h.headers[j] = h.headers[j], h.headers[i]
+	h.positions[i], h.positions[j] = h.positions[j], h.positions[i]
+	h.isRange[i], h.isRange[j] = h.isRange[j], h.isRange[i]
 }
 
 func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion, scanDir ScanDirection) error {
@@ -25,15 +48,111 @@ func (h *BatchTruncationHelper) Init(requests []roachpb.RequestUnion, scanDir Sc
 		panic("unimplemented")
 	}
 	h.requests = requests
+	h.headers = make([]roachpb.RequestHeader, len(requests))
+	h.positions = make([]int, len(requests))
+	h.isRange = make([]bool, len(requests))
+	for i := range requests {
+		req := requests[i].GetInner()
+		h.headers[i] = req.Header()
+		h.positions[i] = i
+		h.isRange[i] = roachpb.IsRange(req)
+		if !h.isRange[i] && len(h.headers[i].EndKey) > 0 {
+			return errors.Errorf("%T is not a range command, but EndKey is set", req)
+		}
+		if h.isRange[i] {
+			// We're dealing with a range-spanning request.
+			if l, r := keys.IsLocal(h.headers[i].Key), keys.IsLocal(h.headers[i].EndKey); l || r {
+				if !l || !r {
+					return errors.Errorf("local key mixed with global key in range")
+				}
+			}
+		}
+	}
+	sort.Sort(h)
 	return nil
 }
 
 func (h *BatchTruncationHelper) Truncate(rs roachpb.RSpan) ([]roachpb.RequestUnion, []int, error) {
-	return Truncate(h.requests, rs)
+	var truncReqs []roachpb.RequestUnion
+	var positions []int
+	for i, pos := range h.positions {
+		if pos < 0 {
+			continue
+		}
+		header := h.headers[i]
+		// TODO: check whether it's worth storing keyAddr explicitly.
+		keyAddr, err := keys.Addr(header.Key)
+		if err != nil {
+			return nil, nil, err
+		}
+		if rs.EndKey.Compare(keyAddr) <= 0 {
+			// All of the remaining requests start after this range, so we're
+			// done.
+			break
+		}
+		if !h.isRange[i] {
+			// This is a point request, and the key is contained within this
+			// range, so we include as is and mark it as "fully processed".
+			truncReqs = append(truncReqs, h.requests[i])
+			positions = append(positions, pos)
+			h.positions[i] = -1
+			continue
+		}
+		// We're dealing with a range-spanning request.
+		endKeyAddr, err := keys.Addr(header.EndKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		if buildutil.CrdbTestBuild {
+			// rs.Key can't be local because it contains range split points,
+			// which are never local.
+			if keyAddr.Less(rs.Key) {
+				return nil, nil, errors.AssertionFailedf(
+					"unexpectedly keyAddr %s is less than rs %s", keyAddr, rs,
+				)
+			}
+		}
+		// rs.EndKey can't be local because it contains range split points,
+		// which are never local.
+		if endKeyAddr.Compare(rs.EndKey) <= 0 {
+			// The last part of this request is fully contained within this
+			// range, so we adjust the original request according to the
+			// remaining part of its header and mark the request as "fully
+			// processed".
+			h.requests[i].GetInner().SetHeader(header)
+			truncReqs = append(truncReqs, h.requests[i])
+			h.positions[i] = -1
+		} else {
+			if !keys.IsLocal(header.EndKey) {
+				header.EndKey = rs.EndKey.AsRawKey()
+			} else {
+				// The local end key should be truncated to the boundary of
+				// local keys which address to rs.EndKey.
+				header.EndKey = keys.MakeRangeKeyPrefix(rs.EndKey)
+			}
+			// There will be more parts from this request, so we make a copy and
+			// and update the header.
+			shallowCopy := h.requests[i].GetInner().ShallowCopy()
+			shallowCopy.SetHeader(header)
+			truncReqs = append(truncReqs, roachpb.RequestUnion{})
+			truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
+			// Adjust the start key of the header so that it contained only the
+			// unprocessed suffix of the request.
+			h.headers[i].Key = header.EndKey
+		}
+		positions = append(positions, pos)
+	}
+	return truncReqs, positions, nil
 }
 
-func (h *BatchTruncationHelper) Next(k roachpb.RKey) (roachpb.RKey, error) {
-	return Next(h.requests, k)
+func (h *BatchTruncationHelper) Next() (roachpb.RKey, error) {
+	for i, pos := range h.positions {
+		if pos < 0 {
+			continue
+		}
+		return keys.Addr(h.headers[i].Key)
+	}
+	return roachpb.RKeyMax, nil
 }
 
 var emptyHeader = roachpb.RequestHeader{}

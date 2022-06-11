@@ -289,7 +289,7 @@ func BenchmarkTruncateNext(b *testing.B) {
 							for _, rs := range rangeSpans {
 								_, _, err := h.Truncate(rs)
 								require.NoError(b, err)
-								_, err = h.Next(rs.EndKey)
+								_, err = h.Next()
 								require.NoError(b, err)
 							}
 						}

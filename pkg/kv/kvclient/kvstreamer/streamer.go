@@ -443,6 +443,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	if !ri.Valid() {
 		return ri.Error()
 	}
+	if !ri.NeedAnother(rs) {
+		// TODO: fast path.
+	}
+	var helper kvcoord.BatchTruncationHelper
+	if err = helper.Init(reqs, scanDir); err != nil {
+		return err
+	}
 	firstScanRequest := true
 	streamerLocked := false
 	defer func() {
@@ -457,7 +464,8 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			return err
 		}
 		// Find all requests that touch the current range.
-		singleRangeReqs, positions, err := kvcoord.Truncate(reqs, singleRangeSpan)
+		//singleRangeReqs, positions, err := kvcoord.Truncate(reqs, singleRangeSpan)
+		singleRangeReqs, positions, err := helper.Truncate(singleRangeSpan)
 		if err != nil {
 			return err
 		}
@@ -531,7 +539,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		// one, and unless both descriptors are stale, the next descriptor's
 		// StartKey would move us to the beginning of the current range,
 		// resulting in a duplicate scan.
-		seekKey, err = kvcoord.Next(reqs, ri.Desc().EndKey)
+		seekKey, err = helper.Next()
 		rs.Key = seekKey
 		if err != nil {
 			return err
