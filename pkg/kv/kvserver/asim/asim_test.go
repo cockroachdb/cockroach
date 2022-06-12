@@ -12,125 +12,133 @@ package asim_test
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
-func TestStateUpdates(t *testing.T) {
-	s := asim.NewState()
-	s.AddNode()
-	require.Equal(t, 1, len(s.Nodes))
-	require.Equal(t, 1, len(s.Nodes[1].Stores))
-}
-
 func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
-	rwg := make([]asim.WorkloadGenerator, 1)
-	rwg[0] = &asim.RandomWorkloadGenerator{}
-	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
-	end := start.Add(25 * time.Second)
+	rwg := make([]workload.Generator, 1)
+	rwg[0] = &workload.RandomGenerator{}
+	start := state.TestingStartTime()
+	end := start.Add(1000 * time.Second)
 	interval := 10 * time.Second
-	exchange := asim.NewFixedDelayExhange(start, interval, interval)
-	s := asim.LoadConfig(asim.SingleRegionConfig)
-	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange)
+
+	exchange := state.NewFixedDelayExhange(start, interval, interval)
+	changer := state.NewReplicaChanger()
+	s := state.LoadConfig(state.ComplexConfig)
+
+	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, interval)
 	sim.RunSim(ctx)
 }
 
-func TestRangeMap(t *testing.T) {
-	m := asim.NewRangeMap()
+// testCreateWorkloadGenerator creates a simple uniform workload generator that
+// will generate load events at a rate of 500 per store. The read ratio is
+// fixed to 0.95.
+func testCreateWorkloadGenerator(start time.Time, stores int, keySpan int64) workload.Generator {
+	readRatio := 0.95
+	minWriteSize := 128
+	maxWriteSize := 256
+	workloadRate := float64(stores * 500)
+	r := rand.New(rand.NewSource(state.TestingWorkloadSeed()))
 
-	r1 := m.AddRange("b")
-	r2 := m.AddRange("f")
-	r3 := m.AddRange("x")
-
-	// Assert that the range is segmented into [minKey, EndKey) intervals.
-	require.Equal(t, roachpb.RKey("f"), r1.Desc.EndKey)
-	require.Equal(t, roachpb.RKey("x"), r2.Desc.EndKey)
-	require.Equal(t, roachpb.RKeyMax, r3.Desc.EndKey)
-
-	require.Equal(t, (*asim.Range)(nil), m.GetRange("a"))
-	require.Equal(t, r1.MinKey, m.GetRange("b").MinKey)
-	require.Equal(t, r1.MinKey, m.GetRange("c").MinKey)
-	require.Equal(t, r2.MinKey, m.GetRange("g").MinKey)
-	require.Equal(t, r3.MinKey, m.GetRange("z").MinKey)
-
-	require.Panics(t, func() { m.AddRange("b") }, "Adding a range with the same minKey twice should panic")
-	require.Panics(t, func() { m.AddRange("f") }, "Adding a range with the same minKey twice should panic")
-	require.Panics(t, func() { m.AddRange("x") }, "Adding a range with the same minKey twice should panic")
+	return workload.NewRandomGenerator(
+		start,
+		state.TestingWorkloadSeed(),
+		workload.NewUniformKeyGen(keySpan, r),
+		workloadRate,
+		readRatio,
+		maxWriteSize,
+		minWriteSize,
+	)
 }
 
-func TestAddReplica(t *testing.T) {
-	s := asim.NewState()
-	s.Ranges = asim.NewRangeMap()
-	rm := s.Ranges
-
-	r1 := rm.AddRange("b")
-	r2 := rm.AddRange("h")
-
-	n1 := s.AddNode()
-	n2 := s.AddNode()
-
-	// Add two replicas on s1, one on s2.
-	r1repl0 := s.AddReplica(r1, n1)
-	r2repl0 := s.AddReplica(r2, n1)
-	r1repl1 := s.AddReplica(r2, n2)
-
-	require.Equal(t, 0, r1repl0)
-	require.Equal(t, 0, r2repl0)
-	require.Equal(t, 1, r1repl1)
-
-	s1 := s.Nodes[n1].Stores[0]
-	s2 := s.Nodes[n2].Stores[0]
-
-	require.Len(t, s1.Replicas, 2)
-	require.Len(t, s2.Replicas, 1)
+// testPreGossipStores populates the state exchange with the existing state.
+// This is done at the time given, which should be before the test start time
+// minus the gossip delay and interval. This alleviates a cold start, where the
+// allocator for each store does not have information to make a decision for
+// the ranges it holds leases for.
+func testPreGossipStores(s state.State, exchange state.Exchange, at time.Time) {
+	storeDescriptors := s.StoreDescriptors()
+	exchange.Put(at, storeDescriptors...)
 }
 
-// TestWorkloadApply asserts that applying workload on a key, will be reflected
-// on the leaseholder for the range that key is contained within.
-func TestWorkloadApply(t *testing.T) {
+// TestAllocatorSimulatorSpeed tests that the simulation runs at a rate of at
+// least 5 simulated minutes per wall clock second (1:600) for a 12 node
+// cluster, with 6000 replicas. The workload is generating 6000 keys per second
+// with a uniform distribution.
+// NB: In practice, on a single thread N2 GCP VM, this completes with a minimum
+// run of 40ms, approximately 12x faster (1:14000) than what this test asserts.
+// The limit is set much higher due to --stress and inconsistent processor
+// speeds. The speedup is not linear w.r.t replica count.
+// TODO(kvoli,lidorcarmel): If this test flakes on CI --stress --race, decrease
+// the stores, or decrease replicasPerStore.
+func TestAllocatorSimulatorSpeed(t *testing.T) {
 	ctx := context.Background()
+	start := state.TestingStartTime()
 
-	s := asim.NewState()
-	s.Ranges = asim.NewRangeMap()
-	n1 := s.AddNode()
-	n2 := s.AddNode()
-	n3 := s.AddNode()
+	// Run each simulation for 5 minutes.
+	end := start.Add(5 * time.Minute)
+	interval := 10 * time.Second
+	changeDelay := 5 * time.Second
+	gossipDelay := 100 * time.Millisecond
+	preGossipStart := start.Add(-interval - gossipDelay)
 
-	r1 := s.Ranges.AddRange("100")
-	r2 := s.Ranges.AddRange("1000")
-	r3 := s.Ranges.AddRange("10000")
+	stores := 12
+	replsPerRange := 3
+	replicasPerStore := 500
+	// NB: We want 1000 replicas per store, so the number of ranges required
+	// will be 1/3 of the total replicas.
+	ranges := (replicasPerStore * stores) / replsPerRange
 
-	s.AddReplica(r1, n1)
-	s.AddReplica(r2, n2)
-	s.AddReplica(r3, n3)
+	rwg := make([]workload.Generator, 1)
+	rwg[0] = testCreateWorkloadGenerator(start, stores, int64(ranges))
 
-	applyLoadToStats := func(key int64, count int) {
-		for i := 0; i < count; i++ {
-			s.ApplyLoad(ctx, asim.LoadEvent{Key: key})
+	sample := func() int64 {
+		exchange := state.NewFixedDelayExhange(preGossipStart, interval, gossipDelay)
+		changer := state.NewReplicaChanger()
+		replicaDistribution := make([]float64, stores)
+
+		// NB: Here create half of the stores with equal replica counts, the
+		// other half have no replicas. This will lead to a flurry of activity
+		// rebalancing towards these stores, based on the replica count
+		// imbalance.
+		for i := 0; i < stores/2; i++ {
+			replicaDistribution[i] = 1.0 / float64(stores/2)
+		}
+		for i := stores / 2; i < stores; i++ {
+			replicaDistribution[i] = 0
+		}
+
+		s := state.NewTestStatReplDistribution(ranges, replicaDistribution, replsPerRange)
+		testPreGossipStores(s, exchange, preGossipStart)
+		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, changeDelay)
+
+		startTime := timeutil.Now()
+		sim.RunSim(ctx)
+		return timeutil.Since(startTime).Nanoseconds()
+	}
+
+	// We sample 5 runs and take the minimum. The minimum is the cleanest
+	// estimate here of performance, as any additional time over the minimum is
+	// noise in a run.
+	minRunTime := int64(math.MaxInt64)
+	samples := 5
+	for i := 0; i < samples; i++ {
+		if sampledRun := sample(); sampledRun < minRunTime {
+			minRunTime = sampledRun
 		}
 	}
 
-	applyLoadToStats(100, 100)
-	applyLoadToStats(1000, 1000)
-	applyLoadToStats(10000, 10000)
-
-	// Assert that the leaseholder replica load correctly matches the number of
-	// requests made.
-	require.Equal(t, float64(100), r1.Leaseholder.ReplicaLoad.Load().QueriesPerSecond)
-	require.Equal(t, float64(1000), r2.Leaseholder.ReplicaLoad.Load().QueriesPerSecond)
-	require.Equal(t, float64(10000), r3.Leaseholder.ReplicaLoad.Load().QueriesPerSecond)
-
-	expectedLoad := roachpb.StoreCapacity{QueriesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
-
-	// Assert that the store load is also updated upon request GetStoreLoad.
-	require.Equal(t, expectedLoad, s.Nodes[n1].Stores[0].Capacity())
-	expectedLoad.QueriesPerSecond *= 10
-	require.Equal(t, expectedLoad, s.Nodes[n2].Stores[0].Capacity())
-	expectedLoad.QueriesPerSecond *= 10
-	require.Equal(t, expectedLoad, s.Nodes[n3].Stores[0].Capacity())
+	fmt.Println(time.Duration(minRunTime).Seconds())
+	require.Less(t, minRunTime, time.Second.Nanoseconds())
 }

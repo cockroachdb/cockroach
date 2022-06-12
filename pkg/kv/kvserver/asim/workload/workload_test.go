@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package workload
 
 import (
 	"math"
@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,9 +39,9 @@ func summary(ops []LoadEvent, cycleLength int) summaryStats {
 	sizeSum := 0
 	distribution := make([]int, len(ops))
 	for i, op := range ops {
-		sizeSum += int(op.size)
+		sizeSum += int(op.Size)
 		distribution[i] = int(op.Key)
-		if op.isWrite {
+		if op.IsWrite {
 			writes++
 		} else {
 			reads++
@@ -63,7 +62,7 @@ func summary(ops []LoadEvent, cycleLength int) summaryStats {
 func TestRandWorkloadGenerator(t *testing.T) {
 	cycleLength := 100
 	testCases := []struct {
-		keyGenerator      keyGenerator
+		keyGenerator      KeyGenerator
 		rate              float64
 		readRatio         float64
 		maxSize           int
@@ -73,7 +72,7 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		expectedReadRatio float64
 	}{
 		{
-			keyGenerator:      newUniformGenerator(int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewUniformKeyGen(int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.75,
 			maxSize:           1000,
@@ -82,7 +81,7 @@ func TestRandWorkloadGenerator(t *testing.T) {
 			expectedQuartiles: [3]int{25, 49, 75},
 		},
 		{
-			keyGenerator:      newUniformGenerator(int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewUniformKeyGen(int64(cycleLength), rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.5,
 			maxSize:           1000,
@@ -91,7 +90,7 @@ func TestRandWorkloadGenerator(t *testing.T) {
 			expectedQuartiles: [3]int{25, 49, 75},
 		},
 		{
-			keyGenerator:      newZipfianGenerator(int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewZipfianKeyGen(int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.75,
 			maxSize:           1000,
@@ -100,7 +99,7 @@ func TestRandWorkloadGenerator(t *testing.T) {
 			expectedQuartiles: [3]int{1, 4, 20},
 		},
 		{
-			keyGenerator:      newZipfianGenerator(int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
+			keyGenerator:      NewZipfianKeyGen(int64(cycleLength), 1.1, 1, rand.New(rand.NewSource(testingSeed))),
 			rate:              10,
 			readRatio:         0.5,
 			maxSize:           1000,
@@ -110,9 +109,9 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		},
 	}
 
+	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
 	for _, tc := range testCases {
-		start := timeutil.Now().UTC()
-		workLoadGenerator := newRandomWorkloadGenerator(testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize)
+		workLoadGenerator := newRandomGenerator(start, testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize)
 		workLoadGenerator.lastRun = start
 		end := start.Add(tc.duration)
 

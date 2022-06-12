@@ -12,314 +12,14 @@ package asim
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/google/btree"
 )
 
-// Range spans keys greater or equal to MinKey and smaller than the MinKey of
-// the next range.
-type Range struct {
-	MinKey      string
-	Leaseholder *Replica
-	Desc        *roachpb.RangeDescriptor
-}
-
-// Less is part of the btree.Item interface.
-func (r *Range) Less(than btree.Item) bool {
-	return r.MinKey < than.(*Range).MinKey
-}
-
-// RangeMap (unlike a regular map) can return the Range responsible for a key.
-type RangeMap struct {
-	ranges      *btree.BTree
-	lastRangeID int
-}
-
-// nextRangeID returns the next available ID to assign to a new range, updating
-// it's counter. Calls to this method are monotonic.
-func (rm *RangeMap) nextRangeID() int {
-	rm.lastRangeID++
-	return rm.lastRangeID
-}
-
-// NewRangeMap returns a valid empty RangeMap.
-func NewRangeMap() *RangeMap {
-	return &RangeMap{ranges: btree.New(8)}
-}
-
-// AddRange adds a range to the RangeMap. The inserted range has it's end key
-// updated with it's successor min key if exists. Likewise, updating the
-// predecessor range's end key with it's own min key, if a predecessor exists.
-// This operation is the same as splitting a range at min key [start, end) into
-// [start,minKey) [minKey, end).
-func (rm *RangeMap) AddRange(minKey string) *Range {
-	r := &Range{MinKey: minKey, Desc: &roachpb.RangeDescriptor{RangeID: roachpb.RangeID(rm.nextRangeID())}}
-
-	endKey := roachpb.RKeyMax
-	// Find the sucessor range in the range map, to determine the endkey.
-	rm.ranges.AscendGreaterOrEqual(r, func(i btree.Item) bool {
-		// The min key already exists in the range map, we cannot return a new
-		// range. Instead crash here as this is a bug.
-		if !r.Less(i) {
-			panic(fmt.Sprintf("Range with minKey: %s already exists within the range map, unable to add new range", r.MinKey))
-		}
-
-		successorRange, _ := i.(*Range)
-		endKey = roachpb.RKey(successorRange.MinKey)
-
-		return false
-	})
-
-	// Find the predecessor range, to update it's endkey to the new range's min
-	// key.
-	rm.ranges.DescendLessOrEqual(r, func(i btree.Item) bool {
-		// The case where the min key already exists cannot occur here, as a
-		// panic will have fired in the above iteration.
-		predecessorRange, _ := i.(*Range)
-		predecessorRange.Desc.EndKey = roachpb.RKey(r.MinKey)
-		return false
-	})
-
-	r.Desc.EndKey = endKey
-	r.Desc.StartKey = roachpb.RKey(r.MinKey)
-	rm.ranges.ReplaceOrInsert(r)
-	return r
-}
-
-// GetRange returns the range that should own the key.
-// TODO: guarantee that we have a minimum key, otherwise we might return nil.
-func (rm *RangeMap) GetRange(key string) *Range {
-	keyToFind := &Range{MinKey: key}
-	var rng *Range
-
-	// If keyToFind equals to MinKey of the range, we found the right range, if
-	// the range is Less than keyToFind then this is the right range also.
-	rm.ranges.DescendLessOrEqual(keyToFind, func(i btree.Item) bool {
-		rng = i.(*Range)
-		return false
-	})
-	return rng
-}
-
-// Replica represents a replica of a range.
-type Replica struct {
-	spanConf    *roachpb.SpanConfig
-	rangeDesc   *roachpb.RangeDescriptor
-	replDesc    *roachpb.ReplicaDescriptor
-	ReplicaLoad ReplicaLoad
-	leaseHolder bool
-}
-
-// Store simulates a store within a node.
-type Store struct {
-	Replicas  map[int]*Replica
-	allocator allocatorimpl.Allocator
-	pacer     ReplicaPacer
-}
-
-// Node represents a node within the cluster.
-// TODO: add regions.
-type Node struct {
-	nodeDesc *roachpb.NodeDescriptor
-	Stores   []*Store
-}
-
-// NewNode constructs a valid node.
-func NewNode() *Node {
-	return &Node{Stores: make([]*Store, 0, 1)}
-}
-
-// State offers two ways to access replicas, one is by looking up the node,
-// then store, and then all replicas on that store - we use this, for example,
-// when running the allocator code for all replicas in a store. And another by
-// locating the range in the RangeMap - this is used when applying the load over
-// the key space.
-type State struct {
-	lastNodeID int
-	Nodes      map[int]*Node
-	Cluster    *ClusterInfo
-
-	// This is the entire key space.
-	Ranges *RangeMap
-}
-
-// NewState constructs a valid empty state.
-func NewState() *State {
-	return &State{Nodes: make(map[int]*Node)}
-}
-
-// AddNode adds a node with a single store to the cluster.
-func (s *State) AddNode() (nodeID int) {
-	s.lastNodeID++
-	nodeID = s.lastNodeID
-	n := NewNode()
-	n.nodeDesc = &roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)}
-	s.Nodes[nodeID] = n
-	s.AddStore(nodeID)
-	return nodeID
-}
-
-// nodeCountFn returns the total number of active nodes within the simulator.
-// TODO(kvoli,lidorcarmel): Update this function to account for cluster
-// membership.
-func (s *State) nodeCountFn() int {
-	return len(s.Nodes)
-}
-
-// nodeLivenessFn returns the liveness of the node associated with nodeID.
-// TODO(kvoli,lidorcarmel): Update this function to consider simulated
-// liveness.
-func (s *State) nodeLivenessFn(
-	nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration,
-) livenesspb.NodeLivenessStatus {
-	return livenesspb.NodeLivenessStatus_LIVE
-}
-
-// AddStore adds a store to an existing node.
-// TODO(lidorcarmel,kvoli): Add storeID parameter to support multi-store
-// configurations.
-func (s *State) AddStore(node int) {
-	allocator := allocatorimpl.MakeAllocator(
-		NewStorePool(s.nodeCountFn, s.nodeLivenessFn),
-		func(string) (time.Duration, bool) {
-			return 0, true
-		},
-		nil,
-	)
-	store := &Store{
-		allocator: allocator,
-		Replicas:  make(map[int]*Replica),
-	}
-	nextReplsFn := func() []*Replica {
-		repls := make([]*Replica, 0, 1)
-		for _, repl := range store.Replicas {
-			repls = append(repls, repl)
-		}
-		return repls
-	}
-
-	store.pacer = NewScannerReplicaPacer(
-		nextReplsFn,
-		defaultLoopInterval,
-		defaultMinInterInterval,
-		defaultMaxIterInterval,
-	)
-
-	s.Nodes[node].Stores = append(s.Nodes[node].Stores, store)
-}
-
-// AddReplica adds a new replica for a range to the first store on the node.
-// TODO: support multiple stores per node.
-func (s *State) AddReplica(r *Range, node int) int {
-	// The node doesn't exist, we are unable to add a replica to a store on
-	// that node.
-	if _, ok := s.Nodes[node]; !ok {
-		panic(fmt.Sprintf("No node: %d exists, unable to add a replica on range %s", node, r.Desc.RangeID.String()))
-	}
-
-	nodeImpl := s.Nodes[node]
-	// Initially we assume that there is one store per node.
-	desc := r.Desc.AddReplica(roachpb.NodeID(node), roachpb.StoreID(node), roachpb.VOTER_FULL)
-
-	repl := &Replica{
-		spanConf:    &roachpb.SpanConfig{},
-		rangeDesc:   r.Desc,
-		replDesc:    &desc,
-		ReplicaLoad: &ReplicaLoadCounter{},
-	}
-
-	store := nodeImpl.Stores[0]
-	// NB: The store map of replicas is the key value pair range id -> replica.
-	//     Adding more than one replica for a range, per store should fail.
-	if existing, ok := store.Replicas[int(r.Desc.RangeID)]; ok {
-		panic(fmt.Sprintf(
-			"replica for range %s already exists on node %d with"+
-				"replicaID %s, unable to add a replica",
-			r.Desc.RangeID,
-			node, existing.replDesc.ReplicaID,
-		))
-	}
-
-	store.Replicas[int(r.Desc.RangeID)] = repl
-
-	// We set the replica to be the leaseholder if one doesn't already
-	// exist.
-	if r.Leaseholder == nil {
-		r.Leaseholder = repl
-		repl.leaseHolder = true
-	}
-	return int(desc.ReplicaID)
-}
-
-func (s *State) storeDescriptors() []roachpb.StoreDescriptor {
-	storeDescriptors := make([]roachpb.StoreDescriptor, 0, 1)
-	// TODO(kvoli): storeID needs to be consistent.
-	for i, node := range s.Nodes {
-		for _, store := range node.Stores {
-			storeDesc := roachpb.StoreDescriptor{
-				StoreID:  roachpb.StoreID(i),
-				Node:     *node.nodeDesc,
-				Capacity: store.Capacity(),
-			}
-			storeDescriptors = append(storeDescriptors, storeDesc)
-		}
-	}
-	return storeDescriptors
-}
-
-// updateStorePools puts the current tick store descriptors into the state
-// exchange. It then updates the exchanged descriptors for each store's store
-// pool.
-func (s *Simulator) updateStorePools(tick time.Time) {
-	storeDescriptors := s.state.storeDescriptors()
-	s.exchange.Put(tick, storeDescriptors...)
-	for i, node := range s.state.Nodes {
-		for _, store := range node.Stores {
-			sp := store.allocator.StorePool
-			sp.DetailsMu.StoreDetails = s.exchange.Get(tick, roachpb.StoreID(i))
-		}
-	}
-}
-
-// ApplyAllocatorAction updates the state with allocator ops such as
-// moving/adding/removing replicas.
-func (s *State) ApplyAllocatorAction(
-	ctx context.Context, action allocatorimpl.AllocatorAction, priority float64,
-) {
-}
-
-// ApplyLoad updates the state replicas with the LoadEvent info. These events
-// are in the form of "key, read/write, size" and are incrementing counters such
-// as QPS for replicas. Note that this means we don't store which keys were
-// written and therefore reads never fail.
-func (s *State) ApplyLoad(ctx context.Context, le LoadEvent) {
-	r := s.Ranges.GetRange(fmt.Sprintf("%d", le.Key))
-	// NB: Reads may occur in practice across follower replicas, however these
-	// statistics are not currently considered in allocation decisions.
-	// Initially we ignore workload on followers.
-	// TODO(kvoli): Apply write/read load to followers.
-	leaseHolder := r.Leaseholder
-	leaseHolder.ReplicaLoad.ApplyLoad(le)
-}
-
-// RunAllocator runs the allocator code for some replicas as needed.
-func RunAllocator(
-	ctx context.Context,
-	allocator allocatorimpl.Allocator,
-	spanConf roachpb.SpanConfig,
-	desc *roachpb.RangeDescriptor,
-	tick time.Time,
-) (action allocatorimpl.AllocatorAction, priority float64) {
-	action, priority = allocator.ComputeAction(ctx, spanConf, desc)
-	return action, priority
-}
-
-// Simulator simulates an entire cluster, and runs the allocators of each store
+// Simulator simulates an entire cluster, and runs the allocator of each store
 // in that cluster.
 type Simulator struct {
 	curr     time.Time
@@ -327,26 +27,52 @@ type Simulator struct {
 	interval time.Duration
 
 	// The simulator can run multiple workload Generators in parallel.
-	generators []WorkloadGenerator
+	generators []workload.Generator
 
-	state    *State
-	exchange StateExchange
+	pacers map[state.StoreID]ReplicaPacer
+	rqs    map[state.StoreID]ReplicateQueue
+
+	state    state.State
+	changer  state.Changer
+	exchange state.Exchange
 }
 
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
 	start, end time.Time,
 	interval time.Duration,
-	wgs []WorkloadGenerator,
-	initialState *State,
-	exchange StateExchange,
+	wgs []workload.Generator,
+	initialState state.State,
+	exchange state.Exchange,
+	changer state.Changer,
+	changeDelay time.Duration,
 ) *Simulator {
+	pacers := make(map[state.StoreID]ReplicaPacer)
+	rqs := make(map[state.StoreID]ReplicateQueue)
+	for storeID := range initialState.Stores() {
+		rqs[storeID] = NewReplicateQueue(
+			storeID,
+			changer,
+			changeDelay,
+			initialState.MakeAllocator(storeID),
+		)
+		pacers[storeID] = NewScannerReplicaPacer(
+			initialState.NextReplicasFn(storeID),
+			defaultLoopInterval,
+			defaultMinInterInterval,
+			defaultMaxIterInterval,
+		)
+	}
+
 	return &Simulator{
 		curr:       start,
 		end:        end,
 		interval:   interval,
 		generators: wgs,
 		state:      initialState,
+		changer:    changer,
+		rqs:        rqs,
+		pacers:     pacers,
 		exchange:   exchange,
 	}
 }
@@ -380,47 +106,82 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		if done {
 			break
 		}
+		// Update the state with generated load.
+		s.tickWorkload(ctx, tick)
 
-		for _, generator := range s.generators {
-			for {
-				done, event := generator.GetNext(tick)
-				if done {
-					break
-				}
-				s.state.ApplyLoad(ctx, event)
-			}
-		}
+		// Update pending state changes.
+		s.changer.Tick(tick, s.state)
 
 		// Update each allocators view of the stores in the cluster.
-		s.updateStorePools(tick)
+		s.tickStateExchange(tick)
+
+		// Update the store clocks with the current tick time.
+		s.tickStoreClocks(tick)
 
 		// Done with config and load updates, the state is ready for the
 		// allocators.
 		stateForAlloc := s.state
 
-		for _, node := range stateForAlloc.Nodes {
-			for _, store := range node.Stores {
-				for {
-					r := store.pacer.Next(tick)
-					// No replicas to consider at this tick.
-					if r == nil {
-						break
-					}
+		// Simulate the replicate queue logic.
+		s.tickReplicateQueue(ctx, tick, stateForAlloc)
+	}
+}
 
-					// NB: Only the leaseholder replica for the range is
-					// considered in the allocator.
-					if !r.leaseHolder {
-						continue
-					}
-
-					// Run the real allocator code. Note that the input is from the
-					// "frozen" state which is not affected by rebalancing decisions.
-					action, priority := RunAllocator(ctx, store.allocator, *r.spanConf, r.rangeDesc, tick)
-
-					// The allocator ops are applied.
-					s.state.ApplyAllocatorAction(ctx, action, priority)
-				}
+// tickWorkload gets the next workload events and applies them to state.
+func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
+	for _, generator := range s.generators {
+		for {
+			done, event := generator.GetNext(tick)
+			if done {
+				break
 			}
+			// TODO(kvoli): When profiling, we see that the majority of time is
+			// spent iterating to find a range to apply load to for a load
+			// event. We should batch load for keys or find other ways to
+			// reduce time spent here.
+			s.state.ApplyLoad(event)
+		}
+	}
+}
+
+// tickStateExchange puts the current tick store descriptors into the state
+// exchange. It then updates the exchanged descriptors for each store's store
+// pool.
+func (s *Simulator) tickStateExchange(tick time.Time) {
+	storeDescriptors := s.state.StoreDescriptors()
+	s.exchange.Put(tick, storeDescriptors...)
+	for storeID := range s.state.Stores() {
+		s.state.UpdateStorePool(storeID, s.exchange.Get(tick, roachpb.StoreID(storeID)))
+	}
+}
+
+func (s *Simulator) tickStoreClocks(tick time.Time) {
+	s.state.TickClock(tick)
+}
+
+// tickReplicateQueue iterates over the next replicas for each store to
+// consider. It then enqueues each of these and ticks the replicate queue for
+// processing.
+func (s *Simulator) tickReplicateQueue(ctx context.Context, tick time.Time, state state.State) {
+	for storeID := range state.Stores() {
+		for {
+			r := s.pacers[storeID].Next(tick)
+			if r == nil {
+				// No replicas to consider at this tick.
+				break
+			}
+
+			// NB: Only the leaseholder replica for the range is
+			// considered in the allocator.
+			if !r.HoldsLease() {
+				continue
+			}
+
+			// Try adding the replica to the replicate queue.
+			s.rqs[storeID].MaybeAdd(ctx, r, state)
+
+			// Tick the replicate queue.
+			s.rqs[storeID].Tick(ctx, tick, state)
 		}
 	}
 }
