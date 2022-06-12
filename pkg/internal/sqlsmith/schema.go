@@ -81,7 +81,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 	table := s.tables[s.rnd.Intn(len(s.tables))]
 	indexes := s.indexes[*table.TableName]
 	var indexFlags tree.IndexFlags
-	if s.coin() {
+	if !s.disableIndexHints && s.coin() {
 		indexNames := make([]tree.Name, 0, len(indexes))
 		for _, index := range indexes {
 			if !index.Inverted {

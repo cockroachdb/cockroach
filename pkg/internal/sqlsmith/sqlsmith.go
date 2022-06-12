@@ -94,6 +94,7 @@ type Smither struct {
 	favorInterestingData       bool
 	unlikelyRandomNulls        bool
 	disableCrossJoins          bool
+	disableIndexHints          bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -390,6 +391,11 @@ var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither)
 // DisableCrossJoins causes the Smither to disable cross joins.
 var DisableCrossJoins = simpleOption("disable cross joins", func(s *Smither) {
 	s.disableCrossJoins = true
+})
+
+// DisableIndexHints causes the Smither to disable generation of index hints.
+var DisableIndexHints = simpleOption("disable index hints", func(s *Smither) {
+	s.disableIndexHints = true
 })
 
 // CompareMode causes the Smither to generate statements that have
