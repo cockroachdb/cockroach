@@ -25,6 +25,8 @@ func (s *Smither) makeSelectStmt(
 	desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
 	if s.canRecurse() {
+		s.EnterExpressionBlock()
+		defer s.LeaveExpressionBlock()
 		for {
 			expr, exprRefs, ok := s.selectStmtSampler.Next()(s, desiredTypes, refs, withTables)
 			if ok {
@@ -136,6 +138,8 @@ var (
 // valid to be used as a join reference.
 func makeTableExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
+		s.EnterExpressionBlock()
+		defer s.LeaveExpressionBlock()
 		for i := 0; i < retryCount; i++ {
 			expr, exprRefs, ok := s.tableExprSampler.Next()(s, refs, forJoin)
 			if ok {
@@ -549,6 +553,8 @@ func (s *Smither) makeSelectClause(
 	// Sometimes generate a SELECT with no FROM clause.
 	requireFrom := s.d6() != 1
 	for (requireFrom && len(clause.From.Tables) < 1) || s.canRecurse() {
+		s.EnterExpressionBlock()
+		defer s.LeaveExpressionBlock()
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
 			// Add a normal data source.
@@ -588,6 +594,8 @@ func (s *Smither) makeSelectClause(
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
 		if s.d6() <= 2 && s.canRecurse() {
+			s.EnterExpressionBlock()
+			defer s.LeaveExpressionBlock()
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
