@@ -1151,7 +1151,9 @@ func makeSetOp(
 
 func (s *Smither) makeWhere(refs colRefs) *tree.Where {
 	if s.coin() {
+		s.inWhereClause = true
 		where := makeBoolExpr(s, refs)
+		s.inWhereClause = false
 		return tree.NewWhere("WHERE", where)
 	}
 	return nil
