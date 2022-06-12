@@ -138,7 +138,11 @@ func runOneRoundCostFuzz(
 
 	// Initialize a smither that generates only INSERT, UPDATE, and DELETE
 	// statements with the MutationsOnly option.
-	mutatingSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly())
+	mutatingSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly(),
+		sqlsmith.FavorInterestingData(), sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
+		sqlsmith.SetComplexity(.05),
+		sqlsmith.SetScalarComplexity(.01),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,13 +154,15 @@ func runOneRoundCostFuzz(
 		sqlsmith.DisableConstantWhereClause(), sqlsmith.FavorInterestingData(),
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableIndexHints(),
-		sqlsmith.SetComplexity(.8),
-		sqlsmith.SetScalarComplexity(.3),
+		sqlsmith.SetComplexity(.3),
+		sqlsmith.SetScalarComplexity(.02),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer smither.Close()
+
+	_, _ = conn.Query("SET CLUSTER SETTING sql.optimizer.unconstrained_non_covering_index_scan.enabled = true")
 
 	t.Status("running costfuzz")
 	until := time.After(roundTimeout)
@@ -174,10 +180,10 @@ func runOneRoundCostFuzz(
 			t.Status("running costfuzz: ", i, " statements completed")
 		}
 
-		// Run 1000 mutations first so that the tables have rows. Run a mutation for
+		// Run 3000 mutations first so that the tables have rows. Run a mutation for
 		// a tenth of the iterations after that to continually change the state of
 		// the database.
-		if i < 1000 || i%10 == 0 {
+		if i < 3000 || i%10 == 0 {
 			runMutationStatement(conn, mutatingSmither, logStmt)
 			continue
 		}
