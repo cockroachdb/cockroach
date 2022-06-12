@@ -93,3 +93,53 @@ vectorized: true
       spans: [/41 - /49]
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVGPmkAQx9_7KSbzpMkaFtSXfdIqTWksWDBpm5Y0FCaGiCzHLnoXw3e_ABdPTeTuHue_8xt-M5xQPWQo0P61Xs0dFwZLJ9gEP1ZDCOyVvdjAEb743nfQ8POr7dswOMDfivMxwYQPYe4uz0kMUz4Ez1_aPnz-DQdkmMuE3GhPCsUfNJHhFEOGRSljUkqWTXxqm5zkEQVnmOZFpZs4ZBjLklCcUKc6IxToypEsDAsZJqSjNGvbaoay0q-Q0tGWUIxrdjHY7B-8if5n5FOUUGnwq_GoZ80aC5lV-1wJ2LF2raCImsqYmCNj2hBepQXMTLynY35E55tM8xcb89ZG_yt29HSpdGBwPBtYdw2sK4M3Lu2TKmSu6F2n5nXIkJItdX9TyaqMaV3KuP1MV3ot1wYJKd29jrvCybunRvASNnthqx-2emF-A4f1p-cAAAD___fw9W0=
+
+statement ok
+CREATE TABLE abc (
+    a INT,
+    b INT,
+    c INT,
+    INDEX (c, b)
+);
+
+query T
+EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
+----
+distribution: full
+vectorized: true
+·
+• top-k
+│ order: +c,+b
+│ k: 2
+│
+└── • filter
+    │ filter: (b >= 1) AND (b <= 3)
+    │
+    └── • scan
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.unconstrained_non_covering_index_scan.enabled = true;
+
+# The cluster setting should allow generation of an unconstrained index scan.
+query T
+EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
+----
+distribution: full
+vectorized: true
+·
+• limit
+│ count: 2
+│
+└── • filter
+    │ filter: (b >= 1) AND (b <= 3)
+    │
+    └── • index join
+        │ table: abc@abc_pkey
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_c_b_idx
+              spans: FULL SCAN

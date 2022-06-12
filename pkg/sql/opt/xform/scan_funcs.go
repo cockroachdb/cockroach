@@ -67,7 +67,10 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// operator that provides the columns missing from the index. Note that
 		// if ForceIndex=true, scanIndexIter only returns the one index that is
 		// being forced, so no need to check that here.
-		if !scanPrivate.Flags.ForceIndex {
+		// AllowUnconstrainedNonCoveringIndexScan allows all index access paths to
+		// be explored, even when non-covering and unconstrained, without forcing a
+		// particular index.
+		if !scanPrivate.Flags.ForceIndex && !scanPrivate.Flags.AllowUnconstrainedNonCoveringIndexScan {
 			return
 		}
 
