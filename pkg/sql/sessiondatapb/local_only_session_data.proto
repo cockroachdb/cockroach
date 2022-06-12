@@ -258,6 +258,9 @@ message LocalOnlySessionData {
   // perturb costs with an rng seeded to the given integer. This should only be
   // used in test scenarios and is very much a non-production setting.
   int64 testing_optimizer_random_cost_seed = 70;
+  // UnconstrainedNonCoveringIndexScanEnabled controls whether unconstrained
+  // non-covering index scan access paths are explored by the optimizer.
+  bool unconstrained_non_covering_index_scan_enabled = 71;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -3230,6 +3230,10 @@ func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float64) {
 	m.data.TrigramSimilarityThreshold = val
 }
 
+func (m *sessionDataMutator) SetUnconstrainedNonCoveringIndexScanEnabled(val bool) {
+	m.data.UnconstrainedNonCoveringIndexScanEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
