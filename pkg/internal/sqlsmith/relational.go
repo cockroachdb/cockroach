@@ -167,8 +167,10 @@ var joinTypes = []string{
 	tree.AstFull,
 	tree.AstLeft,
 	tree.AstRight,
-	tree.AstCross,
 	tree.AstInner,
+	// Please keep AstCross as the last item as the Smither.disableCrossJoins
+	// option depends on this in order to avoid cross joins.
+	tree.AstCross,
 }
 
 func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -181,14 +183,23 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 		return nil, nil, false
 	}
 
+	maxJoinType := len(joinTypes)
+	if s.disableCrossJoins {
+		maxJoinType = len(joinTypes) - 1
+	}
 	joinExpr := &tree.JoinTableExpr{
-		JoinType: joinTypes[s.rnd.Intn(len(joinTypes))],
+		JoinType: joinTypes[s.rnd.Intn(maxJoinType)],
 		Left:     left,
 		Right:    right,
 	}
 
 	if joinExpr.JoinType != tree.AstCross {
-		on := makeBoolExpr(s, refs)
+		var allRefs colRefs
+		allRefs = make(colRefs, 0, len(leftRefs)+len(rightRefs)+len(refs))
+		allRefs = append(allRefs, leftRefs...)
+		allRefs = append(allRefs, rightRefs...)
+		allRefs = append(allRefs, refs...)
+		on := makeBoolExpr(s, allRefs)
 		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
