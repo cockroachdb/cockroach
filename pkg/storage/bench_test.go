@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1615,6 +1616,41 @@ func runCheckSSTConflicts(
 	for i := 0; i < b.N; i++ {
 		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, false, hlc.Timestamp{}, math.MaxInt64, usePrefixSeek)
 		require.NoError(b, err)
+	}
+}
+
+func runSSTIterator(b *testing.B, numKeys int, verify bool) {
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	value := MVCCValue{Value: roachpb.MakeValueFromBytes(bytes.Repeat([]byte("a"), 128))}
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	sstFile := &MemFile{}
+	sstWriter := MakeIngestionSSTWriter(ctx, st, sstFile)
+
+	for i := 0; i < numKeys; i++ {
+		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
+		mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: 1}}
+		require.NoError(b, sstWriter.PutMVCC(mvccKey, value))
+	}
+	sstWriter.Close()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		iter, err := NewMemSSTIterator(sstFile.Bytes(), verify)
+		if err != nil {
+			b.Fatal(err)
+		}
+		for iter.SeekGE(NilKey); ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				b.Fatal(err)
+			} else if !ok {
+				iter.Close()
+				break
+			}
+			_ = iter.UnsafeKey()
+			_ = iter.UnsafeValue()
+		}
 	}
 }
 
