@@ -39,6 +39,12 @@ import (
 )
 
 const (
+	// replicateQueuePurgatoryCheckInterval is the interval at which replicas in
+	// the replicate queue purgatory are re-attempted. Note that these replicas
+	// may be re-attempted more frequently by the replicateQueue in case there are
+	// gossip updates that might affect allocation decisions.
+	replicateQueuePurgatoryCheckInterval = 1 * time.Minute
+
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
@@ -351,18 +357,24 @@ func (metrics *ReplicateQueueMetrics) trackRebalanceReplicaCount(
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
-	metrics           ReplicateQueueMetrics
-	allocator         allocatorimpl.Allocator
-	updateChan        chan time.Time
+	metrics   ReplicateQueueMetrics
+	allocator allocatorimpl.Allocator
+
+	// purgCh is signalled every replicateQueuePurgatoryCheckInterval.
+	purgCh <-chan time.Time
+	// updateCh is signalled every time there is an update to the cluster's store
+	// descriptors.
+	updateCh          chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replicateQueue {
 	rq := &replicateQueue{
-		metrics:    makeReplicateQueueMetrics(),
-		allocator:  allocator,
-		updateChan: make(chan time.Time, 1),
+		metrics:   makeReplicateQueueMetrics(),
+		allocator: allocator,
+		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
+		updateCh:  make(chan time.Time, 1),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -384,10 +396,9 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			purgatory:          store.metrics.ReplicateQueuePurgatory,
 		},
 	)
-
 	updateFn := func() {
 		select {
-		case rq.updateChan <- timeutil.Now():
+		case rq.updateCh <- timeutil.Now():
 		default:
 		}
 	}
@@ -529,6 +540,15 @@ func (rq *replicateQueue) process(
 	return false, errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
 }
 
+// decommissionPurgatoryError wraps an error that occurs when attempting to
+// rebalance a range that has a replica on a decommissioning node to indicate
+// that the error should send the range to purgatory.
+type decommissionPurgatoryError struct{ error }
+
+func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
+
+var _ PurgatoryError = decommissionPurgatoryError{}
+
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
@@ -634,8 +654,12 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning voter %v unexpectedly not found in %v",
 				decommissioningVoterReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplaceVoters(
+		requeue, err := rq.addOrReplaceVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 	case allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
 		decommissioningNonVoterReplicas := rq.store.cfg.StorePool.DecommissioningReplicas(nonVoterReplicas)
 		if len(decommissioningNonVoterReplicas) == 0 {
@@ -647,8 +671,12 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning non-voter %v unexpectedly not found in %v",
 				decommissioningNonVoterReplicas[0], nonVoterReplicas)
 		}
-		return rq.addOrReplaceNonVoters(
+		requeue, err := rq.addOrReplaceNonVoters(
 			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 
 	// Remove decommissioning replicas.
 	//
@@ -656,9 +684,17 @@ func (rq *replicateQueue) processOneChange(
 	// has decommissioning replicas; in the common case we'll hit
 	// AllocatorReplaceDecommissioning{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDecommissioningVoter:
-		return rq.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget, dryRun)
+		requeue, err := rq.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 	case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
-		return rq.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget, dryRun)
+		requeue, err := rq.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget, dryRun)
+		if err != nil {
+			return requeue, decommissionPurgatoryError{err}
+		}
+		return requeue, nil
 
 	// Remove dead replicas.
 	//
@@ -802,7 +838,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		_, _, err := rq.allocator.AllocateVoter(ctx, conf, oldPlusNewReplicas, remainingLiveNonVoters)
 		if err != nil {
 			// It does not seem possible to go to the next odd replica state. Note
-			// that AllocateVoter returns an allocatorError (a purgatoryError)
+			// that AllocateVoter returns an allocatorError (a PurgatoryError)
 			// when purgatory is requested.
 			return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 		}
@@ -1589,9 +1625,13 @@ func (*replicateQueue) timer(_ time.Duration) time.Duration {
 	return replicateQueueTimerDuration
 }
 
-// purgatoryChan returns the replicate queue's store update channel.
 func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
-	return rq.updateChan
+	return rq.purgCh
+}
+
+// updateChan returns the replicate queue's store update channel.
+func (rq *replicateQueue) updateChan() <-chan time.Time {
+	return rq.updateCh
 }
 
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
