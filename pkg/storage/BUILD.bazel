@@ -42,6 +42,7 @@ go_library(
         "store_properties.go",
         "temp_engine.go",
         "testing_knobs.go",
+        "verifying_iterator.go",
         ":gen-resourcelimitreached-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage",
