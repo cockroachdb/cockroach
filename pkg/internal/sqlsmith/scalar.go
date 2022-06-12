@@ -61,7 +61,17 @@ var (
 // TODO(mjibson): remove this and correctly pass around the Context.
 func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)) scalarExpr {
 	return func(s *Smither, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
-		return fn(s, t, refs)
+		needToFlagNonBoolExpr := s.inWhereClause && s.disableConstantWhereClause && t != types.Bool
+		var savedNonBoolExprStarted bool
+		if needToFlagNonBoolExpr {
+			savedNonBoolExprStarted = s.nonBoolExprStarted
+			s.nonBoolExprStarted = true
+		}
+		scalarExpressionMaker, ok := fn(s, t, refs)
+		if needToFlagNonBoolExpr {
+			s.nonBoolExprStarted = savedNonBoolExprStarted
+		}
+		return scalarExpressionMaker, ok
 	}
 }
 
