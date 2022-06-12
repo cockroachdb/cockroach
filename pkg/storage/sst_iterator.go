@@ -13,11 +13,51 @@ package storage
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 )
+
+// NewPebbleSSTIterator returns an `MVCCIterator` for the provided SST files.
+// The SSTs are merged during iteration. The file slice must be sorted in
+// reverse chronological order: a key in a file at a lower index will shadow the
+// same key contained within a file at a higher index.
+//
+// TODO(erikgrinaker): This currently has significant performance overhead
+// compared with sstIterator. This must be optimized, and then replace (or be
+// used in) NewSSTIterator and NewMemSSTIterator. It should also replace
+// MultiIterator.
+func NewPebbleSSTIterator(files ...sstable.ReadableFile) (MVCCIterator, error) {
+	return newPebbleSSTIterator(files, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		UpperBound: keys.MaxKey,
+	})
+}
+
+// NewPebbleMemSSTIterator returns an `MVCCIterator` for the provided SST data,
+// similarly to NewPebbleSSTIterator().
+func NewPebbleMemSSTIterator(sst []byte, verify bool) (MVCCIterator, error) {
+	return NewPebbleMultiMemSSTIterator([][]byte{sst}, verify)
+}
+
+// NewPebbleMultiMemSSTIterator returns an `MVCCIterator` for the provided SST
+// data, similarly to NewPebbleSSTIterator().
+func NewPebbleMultiMemSSTIterator(ssts [][]byte, verify bool) (MVCCIterator, error) {
+	files := make([]sstable.ReadableFile, 0, len(ssts))
+	for _, sst := range ssts {
+		files = append(files, vfs.NewMemFile(sst))
+	}
+	iter, err := NewPebbleSSTIterator(files...)
+	if err != nil {
+		return nil, err
+	}
+	if verify {
+		iter = NewVerifyingMVCCIterator(iter)
+	}
+	return iter, nil
+}
 
 type sstIterator struct {
 	sst  *sstable.Reader

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -30,6 +31,8 @@ type SSTWriter struct {
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
+
+	supportsRangeKeys bool // TODO(erikgrinaker): remove after 22.2
 }
 
 var _ Writer = &SSTWriter{}
@@ -98,8 +101,11 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	opts.BlockSize = 128 << 10
 
 	opts.MergerName = "nullptr"
-	sst := sstable.NewWriter(noopSyncCloser{f}, opts)
-	return SSTWriter{fw: sst, f: f}
+	return SSTWriter{
+		fw:                sstable.NewWriter(noopSyncCloser{f}, opts),
+		f:                 f,
+		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
+	}
 }
 
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
@@ -108,9 +114,11 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 func MakeIngestionSSTWriter(
 	ctx context.Context, cs *cluster.Settings, f writeCloseSyncer,
 ) SSTWriter {
+	opts := MakeIngestionWriterOptions(ctx, cs)
 	return SSTWriter{
-		fw: sstable.NewWriter(f, MakeIngestionWriterOptions(ctx, cs)),
-		f:  f,
+		fw:                sstable.NewWriter(f, opts),
+		f:                 f,
+		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
 	}
 }
 
@@ -128,10 +136,11 @@ func (fw *SSTWriter) Finish() error {
 }
 
 // ClearRawRange implements the Writer interface.
-//
-// TODO(erikgrinaker): This must clear range keys when SSTs support them.
 func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
-	return fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	if err := fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end}); err != nil {
+		return err
+	}
+	return fw.ExperimentalClearAllMVCCRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Writer interface.
@@ -145,22 +154,65 @@ func (fw *SSTWriter) ClearMVCCVersions(start, end MVCCKey) error {
 }
 
 // ExperimentalPutMVCCRangeKey implements the Writer interface.
-func (fw *SSTWriter) ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
-	panic("not implemented")
+func (fw *SSTWriter) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+	if !fw.supportsRangeKeys {
+		return errors.New("range keys not supported by SST writer")
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	// NB: all MVCC APIs currently assume all range keys are range tombstones.
+	if !value.IsTombstone() {
+		return errors.New("range keys can only be MVCC range tombstones")
+	}
+	valueRaw, err := EncodeMVCCValue(value)
+	if err != nil {
+		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
+	}
+	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey)) + int64(len(valueRaw))
+	return fw.fw.RangeKeySet(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		valueRaw)
 }
 
 // ExperimentalClearMVCCRangeKey implements the Writer interface.
-func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(MVCCRangeKey) error {
-	panic("not implemented")
+func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if !fw.supportsRangeKeys {
+		return nil // noop
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	fw.DataSize += int64(len(rangeKey.StartKey)) + int64(len(rangeKey.EndKey))
+	return fw.fw.RangeKeyUnset(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
 // ExperimentalClearAllMVCCRangeKeys implements the Writer interface.
-//
-// TODO(erikgrinaker): This must clear range keys when SSTs support them.
-func (fw *SSTWriter) ExperimentalClearAllMVCCRangeKeys(roachpb.Key, roachpb.Key) error {
-	return nil
+func (fw *SSTWriter) ExperimentalClearAllMVCCRangeKeys(start roachpb.Key, end roachpb.Key) error {
+	if !fw.supportsRangeKeys {
+		return nil // noop
+	}
+	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	fw.DataSize += int64(len(start)) + int64(len(end))
+	// TODO(erikgrinaker): Consider omitting this if there are no range key in the
+	// SST, to avoid dropping unnecessary range tombstones. However, this may not
+	// be safe, because the caller may want to ingest the SST including the range
+	// tombstone into an engine that does have range keys that should be cleared.
+	return fw.fw.RangeKeyDelete(EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
 }
 
+// clearRange clears all point keys in the given range by dropping a Pebble
+// range tombstone.
+//
+// NB: Does not clear range keys.
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
