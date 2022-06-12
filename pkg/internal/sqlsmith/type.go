@@ -67,7 +67,7 @@ func (s *Smither) isScalarType(t *types.T) bool {
 		scalarTypes = s.types.scalarTypes
 	}
 	for i := range scalarTypes {
-		if t.Identical(scalarTypes[i]) {
+		if t.Equivalent(scalarTypes[i]) {
 			return true
 		}
 	}
