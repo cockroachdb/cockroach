@@ -98,6 +98,20 @@ func newPebbleIteratorByCloning(
 	return p
 }
 
+// newPebbleSSTIterator creates a new Pebble iterator for the given SSTs.
+func newPebbleSSTIterator(files []sstable.ReadableFile, opts IterOptions) (*pebbleIterator, error) {
+	p := pebbleIterPool.Get().(*pebbleIterator)
+	p.reusable = false // defensive
+	p.init(nil, opts, StandardDurability, true /* supportsRangeKeys */)
+
+	var err error
+	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files); err != nil {
+		p.destroy()
+		return nil, err
+	}
+	return p, nil
+}
+
 // init resets this pebbleIterator for use with the specified arguments,
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
 // p.iter using p.options, to avoid redundant reconfiguration via SetOptions().

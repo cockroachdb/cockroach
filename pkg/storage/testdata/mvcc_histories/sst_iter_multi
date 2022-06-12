@@ -1,0 +1,202 @@
+# Writes a dataset across multiple SSTs, and iterate across it. The
+# final dataset will be:
+#
+# 4     o---------------o
+# 3 a3  x                   o---o       o---o
+# 2         x
+# 1 a1  b1                                  k1
+#   a   b   c   d   e   f   g   h   i   j   k
+#
+# The written SSTs will:
+# sst-0: Set up some initial point keys.
+# sst-1: Write a range key, and new values for existing point keys.
+# sst-2: Write additional range keys, one of which should merge with the range key in 1.
+# sst-3: Write a new range key that partially replaces one in 2 with different localTs.
+# sst-4: Clear the [h-j) span.
+#
+# TODO(erikgrinaker): Add overlapping range keys when it doesn't panic due to an
+# NPE in Pebble.
+run ok
+sst_put k=a ts=3 v=initial
+sst_put k=a ts=1 v=a1
+sst_put k=b ts=3
+sst_put k=b ts=1 v=initial
+sst_put k=c ts=2
+sst_put k=h ts=2 v=h2
+sst_put k=h ts=1 v=h1
+sst_put k=k ts=1 v=k1
+sst_finish
+sst_put_rangekey k=b end=d ts=4
+sst_put k=a ts=3 v=a3
+sst_put k=b ts=1 v=b1
+sst_finish
+sst_put_rangekey k=d end=f ts=4
+sst_put_rangekey k=g end=k ts=3
+sst_finish
+sst_put_rangekey k=i end=k ts=3 localTs=2
+sst_finish
+sst_clear_range k=h end=j
+sst_finish
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "a"/3.000000000,0 -> /BYTES/initial
+set: "a"/1.000000000,0 -> /BYTES/a1
+set: "b"/3.000000000,0 -> /<empty>
+set: "b"/1.000000000,0 -> /BYTES/initial
+set: "c"/2.000000000,0 -> /<empty>
+set: "h"/2.000000000,0 -> /BYTES/h2
+set: "h"/1.000000000,0 -> /BYTES/h1
+set: "k"/1.000000000,0 -> /BYTES/k1
+>> sst-1:
+set: "a"/3.000000000,0 -> /BYTES/a3
+set: "b"/1.000000000,0 -> /BYTES/b1
+rangekeyset: {b-d}/4.000000000,0 -> /<empty>
+>> sst-2:
+rangekeyset: {d-f}/4.000000000,0 -> /<empty>
+rangekeyset: {g-k}/3.000000000,0 -> /<empty>
+>> sst-3:
+rangekeyset: {i-k}/3.000000000,0 -> {localTs=2.000000000,0}/<empty>
+>> sst-4:
+rangedel: {h-j}
+rangekeydel: {h-j}
+
+# Iterate across the span.
+run ok
+sst_iter_new
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_scan: "a"/3.000000000,0=/BYTES/a3
+iter_scan: "a"/1.000000000,0=/BYTES/a1
+iter_scan: {b-f}/[4.000000000,0=/<empty>]
+iter_scan: "b"/3.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_scan: "b"/1.000000000,0=/BYTES/b1 {b-f}/[4.000000000,0=/<empty>]
+iter_scan: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty>]
+iter_scan: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: "k"/1.000000000,0=/BYTES/k1
+iter_scan: .
+
+# Iterate across the span in reverse.
+run ok
+sst_iter_new
+iter_seek_lt k=z
+iter_scan reverse
+----
+iter_seek_lt: "k"/1.000000000,0=/BYTES/k1
+iter_scan: "k"/1.000000000,0=/BYTES/k1
+iter_scan: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_scan: {g-h}/[3.000000000,0=/<empty>]
+iter_scan: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_scan: "b"/1.000000000,0=/BYTES/b1 {b-f}/[4.000000000,0=/<empty>]
+iter_scan: "b"/3.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_scan: {b-f}/[4.000000000,0=/<empty>]
+iter_scan: "a"/1.000000000,0=/BYTES/a1
+iter_scan: "a"/3.000000000,0=/BYTES/a3
+iter_scan: .
+
+# Iterate using NextKey.
+run ok
+sst_iter_new
+iter_seek_ge k=a
+iter_next_key
+iter_next_key
+iter_next_key
+iter_next_key
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_next_key: {b-f}/[4.000000000,0=/<empty>]
+iter_next_key: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_next_key: {g-h}/[3.000000000,0=/<empty>]
+iter_next_key: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+
+# Seek directly to all keys, forward and reverse.
+run ok
+sst_iter_new
+iter_seek_ge k=a
+iter_seek_ge k=b
+iter_seek_ge k=c
+iter_seek_ge k=d
+iter_seek_ge k=e
+iter_seek_ge k=f
+iter_seek_ge k=g
+iter_seek_ge k=h
+iter_seek_ge k=i
+iter_seek_ge k=j
+iter_seek_ge k=k
+iter_seek_ge k=l
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_ge: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_ge: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_ge: "k"/1.000000000,0=/BYTES/k1
+iter_seek_ge: .
+
+run ok
+sst_iter_new
+iter_seek_lt k=a
+iter_seek_lt k=b
+iter_seek_lt k=c
+iter_seek_lt k=d
+iter_seek_lt k=e
+iter_seek_lt k=f
+iter_seek_lt k=g
+iter_seek_lt k=h
+iter_seek_lt k=i
+iter_seek_lt k=j
+iter_seek_lt k=k
+iter_seek_lt k=l
+----
+iter_seek_lt: .
+iter_seek_lt: "a"/1.000000000,0=/BYTES/a1
+iter_seek_lt: "b"/1.000000000,0=/BYTES/b1 {b-f}/[4.000000000,0=/<empty>]
+iter_seek_lt: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_seek_lt: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_seek_lt: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_seek_lt: "c"/2.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_seek_lt: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_lt: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_lt: {g-h}/[3.000000000,0=/<empty>]
+iter_seek_lt: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_seek_lt: "k"/1.000000000,0=/BYTES/k1
+
+# Seek to specific versions, outside and inside range keys.
+run ok
+sst_iter_new
+iter_seek_ge k=a ts=4
+iter_seek_ge k=a ts=3
+iter_seek_ge k=a ts=2
+iter_seek_ge k=a ts=1
+iter_seek_ge k=a ts=0
+----
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+iter_seek_ge: "a"/1.000000000,0=/BYTES/a1
+iter_seek_ge: "a"/1.000000000,0=/BYTES/a1
+iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
+
+run ok
+sst_iter_new
+iter_seek_ge k=b ts=5
+iter_seek_ge k=b ts=4
+iter_seek_ge k=b ts=3
+iter_seek_ge k=b ts=2
+iter_seek_ge k=b ts=1
+iter_seek_ge k=b ts=0
+----
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: "b"/3.000000000,0=/<empty> {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: "b"/1.000000000,0=/BYTES/b1 {b-f}/[4.000000000,0=/<empty>]
+iter_seek_ge: {b-f}/[4.000000000,0=/<empty>]
