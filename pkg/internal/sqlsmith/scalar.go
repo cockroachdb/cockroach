@@ -178,7 +178,11 @@ func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	var datum tree.Datum
 	s.lock.Lock()
-	datum = randgen.RandDatumWithNullChance(s.rnd, typ, 6, s.favorInterestingData)
+	nullChance := 6
+	if s.unlikelyRandomNulls {
+		nullChance = 200 // A one out of 200 chance in generating a NULL.
+	}
+	datum = randgen.RandDatumWithNullChance(s.rnd, typ, nullChance, s.favorInterestingData)
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
 		datum = randgen.RandDatumSimple(s.rnd, typ)
 	}
