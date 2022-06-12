@@ -55,6 +55,11 @@ import (
 
 const retryCount = 20
 
+// maxExpressionDepth is the maximum depth of nested query expressions the
+// Smither is allowed to create (to prevent stack overflows and long query
+// compilation times).
+const maxExpressionDepth = 100
+
 // Smither is a sqlsmith generator.
 type Smither struct {
 	rnd              *rand.Rand
@@ -95,6 +100,7 @@ type Smither struct {
 	unlikelyRandomNulls        bool
 	disableCrossJoins          bool
 	disableIndexHints          bool
+	expressionDepth            int
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -147,6 +153,21 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 func (s *Smither) Close() {
 	if s.bulkSrv != nil {
 		s.bulkSrv.Close()
+	}
+}
+
+// EnterExpressionBlock records when we are entering a nested query expression
+// block.
+func (s *Smither) EnterExpressionBlock() {
+	s.expressionDepth++
+}
+
+// LeaveExpressionBlock records when we are leaving a nested query expression
+// block.
+func (s *Smither) LeaveExpressionBlock() {
+	s.expressionDepth--
+	if s.expressionDepth < 0 {
+		panic("Smither query block nesting level tracking error")
 	}
 }
 
