@@ -88,6 +88,7 @@ type Smither struct {
 	postgres           bool
 	ignoreFNs          []*regexp.Regexp
 	complexity         float64
+	scalarComplexity   float64
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -247,6 +248,18 @@ func SetComplexity(complexity float64) SmitherOption {
 		name: "set complexity (likelihood of making a deeper random tree)",
 		apply: func(s *Smither) {
 			s.complexity = complexity
+		},
+	}
+}
+
+// SetScalarComplexity configures the Smither's scalar complexity, in other
+// words the likelihood that within any given scalar expression the Smither will
+// recurse and create a deeper nested expression. The default is .2.
+func SetScalarComplexity(scalarComplexity float64) SmitherOption {
+	return option{
+		name: "set complexity (likelihood of making a deeper random tree)",
+		apply: func(s *Smither) {
+			s.scalarComplexity = scalarComplexity
 		},
 	}
 }

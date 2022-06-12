@@ -101,7 +101,7 @@ func makeScalarSample(
 			return expr
 		}
 	}
-	if s.canRecurse() {
+	if s.canRecurseScalar() {
 		for {
 			// No need for a retry counter here because makeConstExpr will eventually
 			// be called and it always succeeds.
