@@ -203,7 +203,13 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 		allRefs = append(allRefs, leftRefs...)
 		allRefs = append(allRefs, rightRefs...)
 		allRefs = append(allRefs, refs...)
+		savedInWhereClause := s.inWhereClause
+		savedNonBoolExprStarted := s.nonBoolExprStarted
+		s.inWhereClause = true
+		s.nonBoolExprStarted = false
 		on := makeBoolExpr(s, allRefs)
+		s.inWhereClause = savedInWhereClause
+		s.nonBoolExprStarted = savedNonBoolExprStarted
 		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
@@ -1170,9 +1176,13 @@ func makeSetOp(
 
 func (s *Smither) makeWhere(refs colRefs) *tree.Where {
 	if s.coin() {
+		savedInWhereClause := s.inWhereClause
+		savedNonBoolExprStarted := s.nonBoolExprStarted
 		s.inWhereClause = true
+		s.nonBoolExprStarted = false
 		where := makeBoolExpr(s, refs)
-		s.inWhereClause = false
+		s.inWhereClause = savedInWhereClause
+		s.nonBoolExprStarted = savedNonBoolExprStarted
 		return tree.NewWhere("WHERE", where)
 	}
 	return nil

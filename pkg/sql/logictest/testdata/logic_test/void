@@ -12,6 +12,14 @@ select row (''::void, 2::int)
 ("",2)
 
 query T
+select row ('':::void, 2::int)
+----
+("",2)
+
+statement error pq: incompatible type annotation for 'foo' as void, found type: string
+select row ('foo':::void, 2::int)
+
+query T
 SELECT ('this will disappear too'::text)::void
 ----
 ·

@@ -1816,6 +1816,14 @@ SELECT (('')::VOID) -- fully parenthesized
 SELECT '_'::VOID -- literals removed
 SELECT ''::VOID -- identifiers removed
 
+parse
+SELECT '':::void
+----
+SELECT '':::VOID -- normalized!
+SELECT ((''):::VOID) -- fully parenthesized
+SELECT '_':::VOID -- literals removed
+SELECT '':::VOID -- identifiers removed
+
 error
 SELECT ''::void[]
 ----
