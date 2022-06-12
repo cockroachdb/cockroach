@@ -148,7 +148,7 @@ func runOneRoundCostFuzz(
 	smither, err := sqlsmith.NewSmither(conn, rnd,
 		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFns(), sqlsmith.DisableLimits(),
 		sqlsmith.DisableConstantWhereClause(), sqlsmith.FavorInterestingData(),
-		sqlsmith.UnlikelyRandomNulls(),
+		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.SetComplexity(.8),
 		sqlsmith.SetScalarComplexity(.3),
 	)
