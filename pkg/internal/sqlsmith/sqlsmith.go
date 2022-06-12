@@ -91,6 +91,7 @@ type Smither struct {
 	scalarComplexity           float64
 	disableConstantWhereClause bool
 	inWhereClause              bool
+	favorInterestingData       bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -369,6 +370,13 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 // clauses in the form `WHERE TRUE` or `WHERE FALSE`.
 var DisableConstantWhereClause = simpleOption("disable constant where clause", func(s *Smither) {
 	s.disableConstantWhereClause = true
+})
+
+// FavorInterestingData causes the Smither to favor generation of scalar data
+// from a predetermined set of interesting values, as opposed to purely random
+// values.
+var FavorInterestingData = simpleOption("favor interesting data", func(s *Smither) {
+	s.favorInterestingData = true
 })
 
 // CompareMode causes the Smither to generate statements that have

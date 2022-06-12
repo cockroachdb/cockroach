@@ -378,7 +378,8 @@ func (o *randOp) run(ctx context.Context) (err error) {
 			if c.isNullable && o.config.nullPct > 0 {
 				nullPct = 100 / o.config.nullPct
 			}
-			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct)
+			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct, /* nullChance */
+				false /* favorInterestingData */)
 			params[k], err = DatumToGoSQL(d)
 			if err != nil {
 				return err

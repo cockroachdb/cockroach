@@ -45,7 +45,8 @@ func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 	if !nullOk {
 		nullDenominator = 0
 	}
-	return RandDatumWithNullChance(rng, typ, nullDenominator)
+	return RandDatumWithNullChance(rng, typ, nullDenominator, /* nullChance */
+		false /* favorInterestingData */)
 }
 
 // RandDatumWithNullChance generates a random Datum of the given type.
@@ -53,14 +54,20 @@ func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 // denominator. For example, a nullChance of 5 means that there's a 1/5 chance
 // that DNull will be returned. A nullChance of 0 means that DNull will not
 // be returned.
-// Note that if typ.Family is UNKNOWN, the datum will always be
-// DNull, regardless of the null flag.
-func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
+// Note that if typ.Family is UNKNOWN, the datum will always be DNull,
+// regardless of the null flag. If favorInterestingData is true, selection of
+// data values is highly biased towards randomly picking from a pre-determined
+// set of interesting values as opposed to purely random values.
+func RandDatumWithNullChance(
+	rng *rand.Rand, typ *types.T, nullChance int, favorInterestingData bool,
+) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
 	// Sometimes pick from a predetermined list of known interesting datums.
-	if rng.Intn(10) == 0 {
+	randomInt := rng.Intn(10)
+	if (favorInterestingData && randomInt < 9) ||
+		randomInt == 0 {
 		if special := randInterestingDatum(rng, typ); special != nil {
 			return special
 		}
@@ -161,7 +168,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		for i := range typ.TupleContents() {
-			tuple.D[i] = RandDatum(rng, typ.TupleContents()[i], true)
+			tuple.D[i] = RandDatumWithNullChance(
+				rng, typ.TupleContents()[i], nullChance, favorInterestingData,
+			)
 		}
 		// Calling ResolvedType causes the internal TupleContents types to be
 		// populated.
@@ -223,9 +232,11 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
-		return RandArray(rng, typ, 0)
+		return RandArrayPlus(rng, typ, 0 /* nullChance */, favorInterestingData)
 	case types.AnyFamily:
-		return RandDatumWithNullChance(rng, RandType(rng), nullChance)
+		return RandDatumWithNullChance(rng, RandType(rng), nullChance,
+			favorInterestingData,
+		)
 	case types.EnumFamily:
 		// If the input type is not hydrated with metadata, or doesn't contain
 		// any enum values, then return NULL.
@@ -252,13 +263,24 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 // RandArray generates a random DArray where the contents have nullChance
 // of being null.
 func RandArray(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
+	return RandArrayPlus(rng, typ, nullChance, false)
+}
+
+// RandArrayPlus generates a random DArray where the contents have nullChance of
+// being null, plus it favors generations of non-random interesting data if
+// favorInterestingData is true.
+func RandArrayPlus(
+	rng *rand.Rand, typ *types.T, nullChance int, favorInterestingData bool,
+) tree.Datum {
 	contents := typ.ArrayContents()
 	if contents.Family() == types.AnyFamily {
 		contents = RandArrayContentsType(rng)
 	}
 	arr := tree.NewDArray(contents)
 	for i := 0; i < rng.Intn(10); i++ {
-		if err := arr.Append(RandDatumWithNullChance(rng, contents, nullChance)); err != nil {
+		if err :=
+			arr.Append(
+				RandDatumWithNullChance(rng, contents, nullChance, favorInterestingData)); err != nil {
 			panic(err)
 		}
 	}
