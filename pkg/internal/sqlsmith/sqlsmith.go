@@ -269,7 +269,7 @@ var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 
 // SetComplexity configures the Smither's complexity, in other words the
 // likelihood that at any given node the Smither will recurse and create a
-// deeper query true. The default is .2.
+// deeper query tree. The default is .2.
 func SetComplexity(complexity float64) SmitherOption {
 	return option{
 		name: "set complexity (likelihood of making a deeper random tree)",
