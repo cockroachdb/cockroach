@@ -169,10 +169,10 @@ func runOneTLP(
 			t.Status("running TLP: ", i, " statements completed")
 		}
 
-		// Run 1000 mutations first so that the tables have rows. Run a mutation
+		// Run 3000 mutations first so that the tables have rows. Run a mutation
 		// for a fraction of iterations after that to continually change the
 		// state of the database.
-		if i < 1000 || i%10 == 0 {
+		if i < 3000 || i%10 == 0 {
 			runMutationStatement(conn, mutSmither, logStmt)
 			continue
 		}
