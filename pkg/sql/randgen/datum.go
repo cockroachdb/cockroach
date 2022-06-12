@@ -12,6 +12,7 @@ package randgen
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/bits"
 	"math/rand"
@@ -41,11 +42,19 @@ import (
 // Note that if typ.Family is UNKNOWN, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
-	nullDenominator := 10
+	nullChance := NullChance(nullOk)
+	return RandDatumWithNullChance(rng, typ, nullChance,
+		false /* favorCommonData */, false /* targetColumnIsUnique */)
+}
+
+// NullChance returns `n` representing a 1 out of `n` probability of generating
+// nulls, depending on whether `nullOk` is true.
+func NullChance(nullOk bool) (nullChance int) {
+	nullChance = 10
 	if !nullOk {
-		nullDenominator = 0
+		nullChance = 0
 	}
-	return RandDatumWithNullChance(rng, typ, nullDenominator)
+	return nullChance
 }
 
 // RandDatumWithNullChance generates a random Datum of the given type.
@@ -53,14 +62,32 @@ func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 // denominator. For example, a nullChance of 5 means that there's a 1/5 chance
 // that DNull will be returned. A nullChance of 0 means that DNull will not
 // be returned.
-// Note that if typ.Family is UNKNOWN, the datum will always be
-// DNull, regardless of the null flag.
-func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
+// Note that if typ.Family is UNKNOWN, the datum will always be DNull,
+// regardless of the null flag. If favorCommonData is true, selection of data
+// values from a pre-determined set of values as opposed to purely random values
+// will occur 40% of the time, unless targetColumnIsUnique is also true, in
+// which case the common data set is used 10% of the time. Selection of edge
+// case, or "interesting" data occurs 10% of the time.
+func RandDatumWithNullChance(
+	rng *rand.Rand, typ *types.T, nullChance int, favorCommonData, targetColumnIsUnique bool,
+) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
 	// Sometimes pick from a predetermined list of known interesting datums.
-	if rng.Intn(10) == 0 {
+	randomInt := rng.Intn(10)
+	// OIDs must be valid defined objects for their specific type, so random data
+	// errors out most of the time. Always pick interesting OIDs if common
+	// data is favored.
+	commonDataCutoff := 5
+	if targetColumnIsUnique {
+		commonDataCutoff = 8
+	}
+	if favorCommonData && (randomInt > commonDataCutoff || typ.Family() == types.OidFamily) {
+		if special := randCommonDatum(rng, typ); special != nil {
+			return special
+		}
+	} else if randomInt == 0 {
 		if special := randInterestingDatum(rng, typ); special != nil {
 			return special
 		}
@@ -160,8 +187,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return &tree.DJSON{JSON: j}
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
+		if nullChance == 0 {
+			nullChance = 10
+		}
 		for i := range typ.TupleContents() {
-			tuple.D[i] = RandDatum(rng, typ.TupleContents()[i], true)
+			tuple.D[i] = RandDatumWithNullChance(
+				rng, typ.TupleContents()[i], nullChance, favorCommonData, targetColumnIsUnique,
+			)
 		}
 		// Calling ResolvedType causes the internal TupleContents types to be
 		// populated.
@@ -223,9 +255,12 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
-		return RandArray(rng, typ, 0)
+		return RandArrayWithCommonDataChance(rng, typ, 0, /* nullChance */
+			favorCommonData, targetColumnIsUnique)
 	case types.AnyFamily:
-		return RandDatumWithNullChance(rng, RandType(rng), nullChance)
+		return RandDatumWithNullChance(rng, RandType(rng), nullChance,
+			favorCommonData, targetColumnIsUnique,
+		)
 	case types.EnumFamily:
 		// If the input type is not hydrated with metadata, or doesn't contain
 		// any enum values, then return NULL.
@@ -252,13 +287,27 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 // RandArray generates a random DArray where the contents have nullChance
 // of being null.
 func RandArray(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
+	return RandArrayWithCommonDataChance(rng, typ, nullChance,
+		false /* favorCommonData */, false /* targetColumnIsUnique */)
+}
+
+// RandArrayWithCommonDataChance generates a random DArray where the contents
+// have a 1 in `nullChance` chance of being null, plus it favors generation of
+// non-random data if favorCommonData is true. If both favorCommonData and
+// targetColumnIsUnique are true, the non-random data set is used only 10% of
+// the time.
+func RandArrayWithCommonDataChance(
+	rng *rand.Rand, typ *types.T, nullChance int, favorCommonData, targetColumnIsUnique bool,
+) tree.Datum {
 	contents := typ.ArrayContents()
 	if contents.Family() == types.AnyFamily {
 		contents = RandArrayContentsType(rng)
 	}
 	arr := tree.NewDArray(contents)
 	for i := 0; i < rng.Intn(10); i++ {
-		if err := arr.Append(RandDatumWithNullChance(rng, contents, nullChance)); err != nil {
+		if err :=
+			arr.Append(
+				RandDatumWithNullChance(rng, contents, nullChance, favorCommonData, targetColumnIsUnique)); err != nil {
 			panic(err)
 		}
 	}
@@ -282,26 +331,30 @@ func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 	}
 
 	special := specials[rng.Intn(len(specials))]
+	return adjustDatum(special, typ)
+}
+
+func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 	switch typ.Family() {
 	case types.IntFamily:
 		switch typ.Width() {
 		case 64:
-			return special
+			return datum
 		case 32:
-			return tree.NewDInt(tree.DInt(int32(tree.MustBeDInt(special))))
+			return tree.NewDInt(tree.DInt(int32(tree.MustBeDInt(datum))))
 		case 16:
-			return tree.NewDInt(tree.DInt(int16(tree.MustBeDInt(special))))
+			return tree.NewDInt(tree.DInt(int16(tree.MustBeDInt(datum))))
 		case 8:
-			return tree.NewDInt(tree.DInt(int8(tree.MustBeDInt(special))))
+			return tree.NewDInt(tree.DInt(int8(tree.MustBeDInt(datum))))
 		default:
 			panic(errors.AssertionFailedf("int with an unexpected width %d", typ.Width()))
 		}
 	case types.FloatFamily:
 		switch typ.Width() {
 		case 64:
-			return special
+			return datum
 		case 32:
-			return tree.NewDFloat(tree.DFloat(float32(*special.(*tree.DFloat))))
+			return tree.NewDFloat(tree.DFloat(float32(*datum.(*tree.DFloat))))
 		default:
 			panic(errors.AssertionFailedf("float with an unexpected width %d", typ.Width()))
 		}
@@ -311,13 +364,43 @@ func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 		// then the special datum will be valid for the provided type. Otherwise, the special type
 		// must be resized to match the width of the provided type.
 		if typ.Width() == 0 || typ.Width() == 64 {
-			return special
+			return datum
 		}
-		return &tree.DBitArray{BitArray: special.(*tree.DBitArray).ToWidth(uint(typ.Width()))}
+		return &tree.DBitArray{BitArray: datum.(*tree.DBitArray).ToWidth(uint(typ.Width()))}
 
 	default:
-		return special
+		return datum
 	}
+}
+
+// randCommonDatum returns a random Datum of type typ from a common set of
+// predetermined values. If there are no such Datums for a scalar type, it
+// panics. Otherwise, it returns nil if there are no such Datums. Note that it
+// pays attention to the width of the requested type for Int and Float type
+// families.
+func randCommonDatum(rng *rand.Rand, typ *types.T) tree.Datum {
+	var dataSet []tree.Datum
+	var ok bool
+	typeFamily := typ.Family()
+	switch typeFamily {
+	case types.GeographyFamily, types.GeometryFamily:
+		dataSet, ok = randInterestingDatums[typeFamily]
+	default:
+		dataSet, ok = randCommonDatums[typeFamily]
+	}
+
+	if !ok || len(dataSet) == 0 {
+		for _, sc := range types.Scalar {
+			// Panic if a scalar type doesn't have a common datum.
+			if sc == typ {
+				panic(errors.AssertionFailedf("no common datum for type %s found", typ.String()))
+			}
+		}
+		return nil
+	}
+
+	datum := dataSet[rng.Intn(len(dataSet))]
+	return adjustDatum(datum, typ)
 }
 
 const simpleRange = 10
@@ -640,5 +723,299 @@ var (
 		// NOTE(otan): we cannot support this as it does not work with colexec in tests.
 		tree.MinSupportedTime,
 		tree.MaxSupportedTime,
+	}
+
+	commonTimestampSpecials = func() []time.Time {
+		const secondsPerDay = 24 * 60 * 60
+		var res []time.Time
+		for _, i := range []int{
+			// Number of days since unix epoch
+			-10000, -1000, -100, -10, 0, 10, 100, 1000, 10000,
+		} {
+			for _, j := range []int{
+				// Adjustment in number of seconds
+				-81364, -10000, 0, 500, 12345, 100000,
+			} {
+				t := timeutil.Unix(int64(i*secondsPerDay+j), 0)
+				res = append(res, t)
+			}
+		}
+		return res
+	}()
+
+	// randCommonDatums is a collection of datums that can be sampled for cases
+	// where it's useful to pull data from a common, relatively small data set.
+	// For example, an inner equijoin between two tables on an integer column will
+	// only return rows if the join columns share some of the same data values.
+	randCommonDatums = map[types.Family][]tree.Datum{
+		types.BoolFamily: {
+			tree.DBoolTrue,
+			tree.DBoolFalse,
+		},
+		types.IntFamily: func() []tree.Datum {
+			var dataSet []tree.Datum
+			dataSet = make([]tree.Datum, 0, 256)
+			for i := -128; i < 128; i++ {
+				dataSet = append(dataSet, tree.NewDInt(tree.DInt(i)))
+			}
+			return dataSet
+		}(),
+		types.FloatFamily: func() []tree.Datum {
+			// 17 digits of precision
+			val := float64(1.2345678901234567e-50)
+			dataSet := make([]tree.Datum, 0, 256)
+			for i := 0; i < 100; i++ {
+				dataSet = append(dataSet, tree.NewDFloat(tree.DFloat(val)))
+				val *= 10
+			}
+			return dataSet
+		}(),
+		types.DecimalFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"0",
+				"1",
+				"1.1",
+				"1.11",
+				"1.2",
+				"-10.1",
+				".111",
+				"9.9",
+				"9.8",
+				"-9.8",
+				"99.8",
+				"12.01e10",
+				"-10.1e-10",
+				"1e3",
+			} {
+				d, err := tree.ParseDDecimal(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.DateFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int64{
+				0, -2400000, 2145000000, -100, -1000, -10000, 100, 1000, 1000, 10000,
+				10001, 10002, 10010, 10020, 10030, 11000, 11001, 12000, 20000, 20030,
+			} {
+				postgresDate, err := pgdate.MakeDateFromUnixEpoch(i)
+				if err == nil {
+					d := tree.NewDDate(postgresDate)
+					res = append(res, d)
+				}
+			}
+			return res
+		}(),
+		types.TimeFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int{
+				85400000000, 80400000000, 76400000000, 60000000000, 50000000000, 40000000000, 30000000000,
+				20000000000, 10000000000, 1000000000, 100000000, 99999999, 10000000, 100000010, 100000001,
+				100000100, 100001000, 100010000, 100100000, 101000000, 110000000,
+			} {
+				d := tree.MakeDTime(timeofday.TimeOfDay(i))
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.TimeTZFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int{
+				85400000000, 76400000000, 50000000000, 30000000000, 10000000000, 100000000, 99999999,
+				10000000, 100000010, 100000100, 100001000, 100010000, 100100000, 101000000, 110000000,
+			} {
+				for _, j := range []int32{
+					-15, -9, -6, 0, 8, 15,
+				} {
+					timeTZOffsetSecs := int32((time.Duration(j) * time.Hour) / time.Second)
+					d := tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(i), timeTZOffsetSecs)
+					res = append(res, d)
+				}
+			}
+			return res
+		}(),
+		types.TimestampFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(commonTimestampSpecials))
+			for i, t := range commonTimestampSpecials {
+				res[i] = tree.MustMakeDTimestamp(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.TimestampTZFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(commonTimestampSpecials))
+			for i, t := range commonTimestampSpecials {
+				res[i] = tree.MustMakeDTimestampTZ(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.IntervalFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, nanos := range []int64{
+				0, 999, 987654000, 10000000111, 1000000000000111000,
+			} {
+				for _, days := range []int64{
+					0, 1, 3, 5, 8,
+				} {
+					for _, months := range []int64{
+						0, 1, 12, 200 * 12,
+					} {
+						d := &tree.DInterval{Duration: duration.MakeDuration(nanos, days, months)}
+						res = append(res, d)
+					}
+				}
+			}
+			return res
+		}(),
+		types.Box2DFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, lowX := range []float64{
+				-1, 0.44, 10.999, 100000,
+			} {
+				for _, lowY := range []float64{
+					-9.99, 1.1, 15,
+				} {
+					for _, deltas := range []struct {
+						xDelta float64
+						yDelta float64
+					}{
+						{1.234e-10, 9.234e-10},
+						{1.0, 1.0},
+						{10.00000001, 100.000001},
+						{9.99e10, 8.88e10},
+						{300, 400},
+					} {
+						d := &tree.DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{
+							BoundingBox: geopb.BoundingBox{LoX: lowX, HiX: lowX + deltas.xDelta, LoY: lowY, HiY: lowY + deltas.yDelta}}}
+						res = append(res, d)
+					}
+				}
+			}
+			return res
+		}(),
+		types.StringFamily: {
+			tree.NewDString("a"),
+			tree.NewDString("a\n"),
+			tree.NewDString("aa"),
+			tree.NewDString(`Aa`),
+			tree.NewDString(`aab`),
+			tree.NewDString(`aaaaaa`),
+			tree.NewDString("a "),
+			tree.NewDString(" a"),
+			tree.NewDString("	a"),
+			tree.NewDString("a	"),
+			tree.NewDString("a	"),
+			tree.NewDString("\u0001"),
+			tree.NewDString("\ufffd"),
+			tree.NewDString("\u00e1"),
+			tree.NewDString("À"),
+			tree.NewDString("à"),
+			tree.NewDString("àá"),
+			tree.NewDString("À1                à\n"),
+		},
+		types.BytesFamily: {
+			tree.NewDBytes("a"),
+			tree.NewDBytes("a\n"),
+			tree.NewDBytes("aa"),
+			tree.NewDBytes(`Aa`),
+			tree.NewDBytes(`aab`),
+			tree.NewDBytes(`aaaaaa`),
+			tree.NewDBytes("a "),
+			tree.NewDBytes(" a"),
+			tree.NewDBytes("	a"),
+			tree.NewDBytes("a	"),
+			tree.NewDBytes("a	"),
+			tree.NewDBytes("\u0001"),
+			tree.NewDBytes("\ufffd"),
+			tree.NewDBytes("\u00e1"),
+			tree.NewDBytes("À"),
+			tree.NewDBytes("à"),
+			tree.NewDBytes("àá"),
+			tree.NewDBytes("À1                à\n"),
+		},
+		types.OidFamily: {
+			// TODO(msirek): Look up valid OIDs based on the type of OID. Need to
+			//               match on specific type instead of just type family.
+			tree.NewDOid(0),
+		},
+		types.UuidFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []byte{
+				0x01, 0x0a, 0x2b, 0x3c, 0xfe,
+			} {
+				for _, j := range []byte{
+					0x0e, 0xa0, 0x4d, 0x5e, 0xef,
+				} {
+					d := tree.NewDUuid(tree.DUuid{UUID: uuid.UUID{i, j, i, j, i, j, i, j,
+						i, j, i, j, i, j, i, j}})
+					res = append(res, d)
+				}
+			}
+			return res
+		}(),
+		types.INetFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []byte{
+				0x01, 0x0a, 0x2b, 0x3c, 0xfe,
+			} {
+				for _, j := range []byte{
+					0x0e, 0xa0, 0x4d, 0x5e, 0xef,
+				} {
+					ipv4AddrString := fmt.Sprintf("%d.%d.%d.%d", i, j, j, i)
+					ipv4Addr := tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: ipaddr.IPv4family,
+						Addr: ipaddr.Addr(uint128.FromBytes(ipaddr.ParseIP(ipv4AddrString)))}})
+					ipv6AddrString := fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", i, j, j, i, j, i, i, j)
+					ipv6Addr := tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: ipaddr.IPv6family,
+						Addr: ipaddr.Addr(uint128.FromBytes(ipaddr.ParseIP(ipv6AddrString)))}})
+					res = append(res, ipv4Addr)
+					res = append(res, ipv6Addr)
+				}
+			}
+			return res
+		}(),
+		types.JsonFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				`{}`,
+				`1`,
+				`{"test": "json"}`,
+				`{"a": 5, "b": [1, 2]}`,
+				`{"a": 5, "c": [1, 2]}`,
+				`[1, 2]`,
+				`{"cars": [
+					{"make": "Volkswagen", "model": "Rabbit", "trim": "S", "year": "2009"},
+					{"make": "Toyota", "model": "Camry", "trim": "LE", "year": "2002"},
+					{"make": "Ford", "model": "Focus", "trim": "SE", "year": "2011"},
+					{"make": "Buick", "model": "Grand National", "trim": "T-Type", "year": "1987"},
+					{"make": "Buick", "model": "Skylark", "trim": "Gran Sport", "year": "1966"},
+					{"make": "Porsche", "model": "911", "trim": "Turbo S", "year": "2022"},
+					{"make": "Chevrolet", "model": "Corvette", "trim": "C8", "year": "2022"}
+					]}`,
+			} {
+				d, err := tree.ParseDJSON(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.BitFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int64{
+				-123456789, -938456, -100, -1, 0, 1, 100, 2000, 100000, 10000000, 1000000000,
+				3, 4, 5, 6, 7, 8, 9,
+			} {
+				d, err := tree.NewDBitArrayFromInt(i, 64)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
 	}
 )

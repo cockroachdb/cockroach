@@ -196,9 +196,10 @@ func runMutationStatement(conn *gosql.DB, smither *sqlsmith.Smither, logStmt fun
 	stmt := smither.Generate()
 
 	// Ignore timeouts.
+	var err error
 	_ = runWithTimeout(func() error {
 		// Ignore errors. Log successful statements.
-		if _, err := conn.Exec(stmt); err == nil {
+		if _, err = conn.Exec(stmt); err == nil {
 			logStmt(stmt)
 		}
 		return nil
