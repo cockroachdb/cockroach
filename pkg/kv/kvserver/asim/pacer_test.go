@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,10 +22,11 @@ import (
 // correct pacing, given the desired loop interval time and max/min intervals
 // set.
 func TestScannerReplicaPacer(t *testing.T) {
-	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+	start := state.TestingStartTime()
 
-	makeTick := func(tick int64) time.Time {
-		return start.Add(time.Duration(tick) * time.Second)
+	createNextRepls := func(replicas int) func() []state.Replica {
+		s := state.NewTestStateReplCounts(map[state.StoreID]int{1: replicas}, 1 /* replsPerRange */)
+		return s.NextReplicasFn(state.StoreID(1))
 	}
 
 	testCases := []struct {
@@ -84,20 +86,15 @@ func TestScannerReplicaPacer(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		nextReplsFn := func() []*Replica {
-			repls := make([]*Replica, tc.replCount)
-			for i := range repls {
-				repls[i] = &Replica{}
-			}
-			return repls
-		}
+		nextReplsFn := createNextRepls(tc.replCount)
+
 		t.Run(tc.desc, func(t *testing.T) {
 			pacer := NewScannerReplicaPacer(nextReplsFn, tc.loopInterval, tc.minInterval, tc.maxInterval)
 			results := make([]int, 0, 1)
 			for _, tick := range tc.ticks {
 				replsThisTick := 0
 				for {
-					if repl := pacer.Next(makeTick(tick)); repl == nil {
+					if repl := pacer.Next(state.OffsetTick(start, tick)); repl == nil {
 						break
 					}
 

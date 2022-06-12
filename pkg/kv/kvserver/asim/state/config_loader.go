@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package state
 
 // SingleRegionConfig is a simple cluster config with a single region and 3
 // zones, all have the same number of nodes.
@@ -108,15 +108,16 @@ type ClusterInfo struct {
 
 // LoadConfig loads a predefined configuration which contains cluster
 // information such as regions, zones, etc.
-func LoadConfig(c ClusterInfo) *State {
-	s := NewState()
-	s.Cluster = &c
+func LoadConfig(c ClusterInfo) State {
+	s := newState()
+	s.clusterinfo = c
 	// TODO(lidor): load locality info to be used by the allocator. Do we need a
 	// NodeDescriptor and higher level localities? or can we simulate those?
 	for _, r := range c.Regions {
 		for _, z := range r.Zones {
 			for i := 0; i < z.NodeCount; i++ {
-				s.AddNode()
+				node := s.AddNode()
+				s.AddStore(node.NodeID())
 			}
 		}
 	}

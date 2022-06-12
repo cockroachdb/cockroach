@@ -37,16 +37,16 @@ This new service will run until the stopper is called and have access to
 gossip.
 
 `StorePool` will maintain a map of store IDs to store descriptors and a variety
-of heath statistic about the store. It will also maintain a `lastUpdatedTime`
+of heath statistic about the store. It will also maintain a `LastUpdatedTime`
 which will be set whenever a store descriptor is updated. When this happens,
 if the store was previously marked as dead, it will restored. To maintain this
 map, a callback from gossip for store descriptors will be added. When this
-`lastUpdatedTime` is longer than the `TimeUntilStoreDead`, the store is
+`LastUpdatedTime` is longer than the `TimeUntilStoreDead`, the store is
 considered dead and any replicas on this store may be removed. Note that that
 the work to remove replicas is performed elsewhere.
 
 Monitor will maintain a timespan `timeUntilNextDead` which is calculated by
-taking the nearest `lastUpdatedTime` for all the stores and adding
+taking the nearest `LastUpdatedTime` for all the stores and adding
 `TimeUntilStoreDead` and the store ID associated with the timeout.
 
 Monitor will trigger on `timeUntilNextDead` which when triggered checks to see
