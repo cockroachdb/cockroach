@@ -1885,6 +1885,15 @@ func typeCheckAndRequire(
 		return nil, err
 	}
 	if typ := typedExpr.ResolvedType(); !(typ.Family() == types.UnknownFamily || typ.Equivalent(required)) {
+		// A void literal is output as an empty string (see DVoid.Format), so type
+		// annotation of an empty string as VOID ('':::VOID) should succeed.
+		if required.Family() == types.VoidFamily && typ.Family() == types.StringFamily {
+			if str, ok := expr.(*StrVal); ok {
+				if str.s == "" {
+					return DVoidDatum, nil
+				}
+			}
+		}
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil

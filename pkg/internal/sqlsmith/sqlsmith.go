@@ -96,6 +96,7 @@ type Smither struct {
 	scalarComplexity           float64
 	disableConstantWhereClause bool
 	inWhereClause              bool
+	nonBoolExprStarted         bool
 	favorInterestingData       bool
 	unlikelyRandomNulls        bool
 	disableCrossJoins          bool
@@ -391,7 +392,7 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 })
 
 // DisableConstantWhereClause causes the Smither to disable generating WHERE
-// clauses in the form `WHERE TRUE` or `WHERE FALSE`.
+// clauses on ON clauses in the form `WHERE TRUE` or `WHERE FALSE`.
 var DisableConstantWhereClause = simpleOption("disable constant where clause", func(s *Smither) {
 	s.disableConstantWhereClause = true
 })

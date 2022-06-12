@@ -53,7 +53,7 @@ func (s *Smither) canRecurse() bool {
 // function should possibly invoke a function that creates new scalar expression
 // nodes.
 func (s *Smither) canRecurseScalar() bool {
-	if s.inWhereClause && s.disableConstantWhereClause {
+	if s.inWhereClause && s.disableConstantWhereClause && !s.nonBoolExprStarted {
 		return true
 	}
 	if s.expressionDepth >= maxExpressionDepth {
