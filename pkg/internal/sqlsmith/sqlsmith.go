@@ -93,6 +93,7 @@ type Smither struct {
 	inWhereClause              bool
 	favorInterestingData       bool
 	unlikelyRandomNulls        bool
+	disableCrossJoins          bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -384,6 +385,11 @@ var FavorInterestingData = simpleOption("favor interesting data", func(s *Smithe
 // values much less likely than generation of random non-null data.
 var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither) {
 	s.unlikelyRandomNulls = true
+})
+
+// DisableCrossJoins causes the Smither to disable cross joins.
+var DisableCrossJoins = simpleOption("disable cross joins", func(s *Smither) {
+	s.disableCrossJoins = true
 })
 
 // CompareMode causes the Smither to generate statements that have
