@@ -92,6 +92,7 @@ type Smither struct {
 	disableConstantWhereClause bool
 	inWhereClause              bool
 	favorInterestingData       bool
+	unlikelyRandomNulls        bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -377,6 +378,12 @@ var DisableConstantWhereClause = simpleOption("disable constant where clause", f
 // values.
 var FavorInterestingData = simpleOption("favor interesting data", func(s *Smither) {
 	s.favorInterestingData = true
+})
+
+// UnlikelyRandomNulls causes the Smither to make random generation of null
+// values much less likely than generation of random non-null data.
+var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither) {
+	s.unlikelyRandomNulls = true
 })
 
 // CompareMode causes the Smither to generate statements that have
