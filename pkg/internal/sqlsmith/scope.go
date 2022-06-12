@@ -50,6 +50,9 @@ func (s *Smither) canRecurse() bool {
 // function should possibly invoke a function that creates new scalar expression
 // nodes.
 func (s *Smither) canRecurseScalar() bool {
+	if s.inWhereClause && s.disableConstantWhereClause {
+		return true
+	}
 	return s.scalarComplexity > s.rnd.Float64()
 }
 

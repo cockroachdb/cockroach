@@ -78,17 +78,19 @@ type Smither struct {
 	scalarExprWeights, boolExprWeights []scalarExprWeight
 	scalarExprSampler, boolExprSampler *scalarExprSampler
 
-	disableWith        bool
-	disableImpureFns   bool
-	disableLimits      bool
-	disableWindowFuncs bool
-	simpleDatums       bool
-	avoidConsts        bool
-	outputSort         bool
-	postgres           bool
-	ignoreFNs          []*regexp.Regexp
-	complexity         float64
-	scalarComplexity   float64
+	disableWith                bool
+	disableImpureFns           bool
+	disableLimits              bool
+	disableWindowFuncs         bool
+	simpleDatums               bool
+	avoidConsts                bool
+	outputSort                 bool
+	postgres                   bool
+	ignoreFNs                  []*regexp.Regexp
+	complexity                 float64
+	scalarComplexity           float64
+	disableConstantWhereClause bool
+	inWhereClause              bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -361,6 +363,12 @@ var DisableWindowFuncs = simpleOption("disable window funcs", func(s *Smither) {
 // OutputSort adds a top-level ORDER BY on all columns.
 var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
+})
+
+// DisableConstantWhereClause causes the Smither to disable generating WHERE
+// clauses in the form `WHERE TRUE` or `WHERE FALSE`.
+var DisableConstantWhereClause = simpleOption("disable constant where clause", func(s *Smither) {
+	s.disableConstantWhereClause = true
 })
 
 // CompareMode causes the Smither to generate statements that have
