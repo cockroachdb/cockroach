@@ -1,0 +1,87 @@
+# Writing keys out of order or in duplicate fails.
+run error
+sst_put k=b ts=1 v=b1
+sst_put k=a ts=1 v=a1
+----
+>> at end:
+<no data>
+error: (*withstack.withStack:) pebble: keys must be added in order: "b"/1.000000000,0#0,SET, "a"/1.000000000,0#0,SET
+
+run error
+sst_put k=a ts=1 v=a1
+sst_put k=a ts=2 v=a2
+----
+>> at end:
+<no data>
+error: (*withstack.withStack:) pebble: keys must be added in order: "a"/1.000000000,0#0,SET, "a"/2.000000000,0#0,SET
+
+# TODO(erikgrinaker): Test timestamp ordering too, currently gives an NPE.
+run error
+sst_put_rangekey k=d end=f ts=1
+sst_put_rangekey k=a end=c ts=1
+----
+>> at end:
+<no data>
+error: (*withstack.withStack:) pebble: spans must be added in order: "d"/0,0 > "a"/0,0
+
+# Writing invalid range keys fails.
+run error
+sst_put_rangekey k=f end=c ts=1
+----
+>> at end:
+<no data>
+error: (*withstack.withStack:) invalid range key {f-c}/1.000000000,0: start key "f" is at or after end key "c"
+
+# Writing the same key multiple times uses the first key.
+#
+# TODO(erikgrinaker): Is this expected?
+run ok
+sst_put k=a ts=1 v=a1
+sst_put k=a ts=1 v=again
+sst_put_rangekey k=a end=c ts=3 localTs=2
+sst_put_rangekey k=a end=c ts=3 localTs=1
+----
+>> at end:
+>> sst-0:
+rangekey: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+data: "a"/1.000000000,0 -> /BYTES/a1
+
+# Writing abutting range keys will merge them, but not if the value (localTs) is
+# different.
+run ok
+sst_put_rangekey k=f end=g ts=3
+sst_put_rangekey k=g end=h ts=3
+sst_put_rangekey k=h end=j ts=3 localTs=2
+----
+>> at end:
+>> sst-0:
+rangekey: {f-h}/[3.000000000,0=/<empty>]
+rangekey: {h-j}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+>> sst-1:
+rangekey: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+data: "a"/1.000000000,0 -> /BYTES/a1
+
+# Clearing a span does not affect SST contents.
+#
+# TODO(erikgrinaker): Is this correct?
+run ok
+sst_put k=b ts=1 v=b1
+sst_put k=c ts=2 v=c2
+sst_put k=d ts=1 v=d1
+sst_put k=e ts=1 v=e1
+sst_put_rangekey k=a end=f ts=3
+sst_clear_range k=c end=e
+----
+>> at end:
+>> sst-0:
+rangekey: {a-f}/[3.000000000,0=/<empty>]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/2.000000000,0 -> /BYTES/c2
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/1.000000000,0 -> /BYTES/e1
+>> sst-1:
+rangekey: {f-h}/[3.000000000,0=/<empty>]
+rangekey: {h-j}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+>> sst-2:
+rangekey: {a-c}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+data: "a"/1.000000000,0 -> /BYTES/a1

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -41,6 +42,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
 // perform properly.
@@ -84,6 +87,13 @@ import (
 // clear				  k=<key> [ts=<int>[,<int>]]
 // clear_range    k=<key> end=<key>
 // clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
+//
+// sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
+// sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
+// sst_clear_range    k=<key> end=<key>
+// sst_clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
+// sst_finish
+// sst_iter_new
 //
 // Where `<key>` can be a simple string, or a string
 // prefixed by the following characters:
@@ -135,66 +145,100 @@ func TestMVCCHistories(t *testing.T) {
 			localTimestampsEnabled.Override(ctx, &engine.settings.SV, false)
 		}
 
+		e := newEvalCtx(ctx, engine)
+		defer e.close()
+
 		reportDataEntries := func(buf *redact.StringBuilder) error {
 			var hasData bool
 
+			reportIter := func(iter SimpleMVCCIterator) error {
+				defer iter.Close()
+				var rangeStart roachpb.Key
+				for iter.SeekGE(MVCCKey{Key: span.Key}); ; iter.Next() {
+					if ok, err := iter.Valid(); err != nil {
+						return err
+					} else if !ok {
+						break
+					}
+					hasData = true
+					hasPoint, hasRange := iter.HasPointAndRange()
+					if hasRange {
+						if bounds := iter.RangeBounds(); !bounds.Key.Equal(rangeStart) {
+							rangeStart = append(rangeStart[:0], bounds.Key...)
+							buf.Printf("rangekey: %s/[", iter.RangeBounds())
+							for i, rangeKV := range iter.RangeKeys() {
+								val, err := DecodeMVCCValue(rangeKV.Value)
+								if err != nil {
+									t.Fatal(err)
+								}
+								if i > 0 {
+									buf.Printf(" ")
+								}
+								buf.Printf("%s=%s", rangeKV.RangeKey.Timestamp, val)
+							}
+							buf.Printf("]\n")
+						}
+					}
+					if hasPoint {
+						key := iter.UnsafeKey()
+						value := iter.UnsafeValue()
+						if key.Timestamp.IsEmpty() {
+							// Meta is at timestamp zero.
+							meta := enginepb.MVCCMetadata{}
+							if err := protoutil.Unmarshal(value, &meta); err != nil {
+								buf.Printf("meta: %v -> error decoding proto from %v: %v\n", key, value, err)
+							} else {
+								buf.Printf("meta: %v -> %+v\n", key, &meta)
+							}
+						} else {
+							val, err := DecodeMVCCValue(value)
+							if err != nil {
+								buf.Printf("data: %v -> error decoding value %v: %v\n", key, value, err)
+							} else {
+								buf.Printf("data: %v -> %s\n", key, val)
+							}
+						}
+					}
+				}
+				return nil
+			}
+
+			// TODO(erikgrinaker): To keep existing test output stable, iterate over
+			// range keys first. Consider changing this to interleaving range keys.
 			iter := engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 				KeyTypes:   IterKeyTypeRangesOnly,
 				LowerBound: span.Key,
 				UpperBound: span.EndKey,
 			})
-			defer iter.Close()
-			iter.SeekGE(MVCCKey{Key: span.Key})
-			for {
-				if ok, err := iter.Valid(); err != nil {
-					return err
-				} else if !ok {
-					break
-				}
-				hasData = true
-				buf.Printf("rangekey: %s/[", iter.RangeBounds())
-				for i, rangeKV := range iter.RangeKeys() {
-					val, err := DecodeMVCCValue(rangeKV.Value)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if i > 0 {
-						buf.Printf(" ")
-					}
-					buf.Printf("%s=%s", rangeKV.RangeKey.Timestamp, val)
-				}
-				buf.Printf("]\n")
-				iter.Next()
+			if err := reportIter(iter); err != nil {
+				return err
 			}
 
-			err = engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
-				hasData = true
-				if r.Key.Timestamp.IsEmpty() {
-					// Meta is at timestamp zero.
-					meta := enginepb.MVCCMetadata{}
-					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-						buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
-					} else {
-						buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
-					}
-				} else {
-					val, err := DecodeMVCCValue(r.Value)
-					if err != nil {
-						buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
-					} else {
-						buf.Printf("data: %v -> %s\n", r.Key, val)
-					}
-				}
-				return nil
+			iter = engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsOnly,
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
 			})
+			if err := reportIter(iter); err != nil {
+				return err
+			}
+
+			for i, sst := range e.ssts {
+				buf.Printf(">> sst-%d:\n", i)
+				iter, err = NewPebbleMemSSTIterator(sst, false)
+				if err != nil {
+					return err
+				}
+				if err := reportIter(iter); err != nil {
+					return err
+				}
+			}
+
 			if !hasData {
 				buf.SafeString("<no data>\n")
 			}
-			return err
+			return nil
 		}
-
-		e := newEvalCtx(ctx, engine)
-		defer e.close()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			// We'll be overriding cmd/cmdargs below, because the
@@ -393,6 +437,13 @@ func TestMVCCHistories(t *testing.T) {
 				}
 				// End of script.
 
+				// Flush any unfinished SSTs.
+				if foundErr == nil {
+					foundErr = e.finishSST()
+				} else {
+					e.closeSST()
+				}
+
 				if !trace {
 					// If we were not tracing, no results were printed yet. Do it now.
 					if txnChange || dataChange {
@@ -501,6 +552,13 @@ var commands = map[string]cmd{
 	"iter_next_key":       {typReadOnly, cmdIterNextKey},
 	"iter_prev":           {typReadOnly, cmdIterPrev},
 	"iter_scan":           {typReadOnly, cmdIterScan},
+
+	"sst_put":            {typDataUpdate, cmdSSTPut},
+	"sst_put_rangekey":   {typDataUpdate, cmdSSTPutRangeKey},
+	"sst_clear_range":    {typDataUpdate, cmdSSTClearRange},
+	"sst_clear_rangekey": {typDataUpdate, cmdSSTClearRangeKey},
+	"sst_finish":         {typDataUpdate, cmdSSTFinish},
+	"sst_iter_new":       {typReadOnly, cmdSSTIterNew},
 }
 
 func cmdTxnAdvance(e *evalCtx) error {
@@ -1106,6 +1164,55 @@ func cmdIterScan(e *evalCtx) error {
 	}
 }
 
+func cmdSSTPut(e *evalCtx) error {
+	key := e.getKey()
+	ts := e.getTs(nil)
+	var val roachpb.Value
+	if e.hasArg("v") {
+		val = e.getVal()
+	}
+	return e.sst().PutMVCC(MVCCKey{Key: key, Timestamp: ts}, MVCCValue{Value: val})
+}
+
+func cmdSSTPutRangeKey(e *evalCtx) error {
+	var rangeKey MVCCRangeKey
+	rangeKey.StartKey, rangeKey.EndKey = e.getKeyRange()
+	rangeKey.Timestamp = e.getTs(nil)
+	var value MVCCValue
+	value.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	return e.sst().ExperimentalPutMVCCRangeKey(rangeKey, value)
+}
+
+func cmdSSTClearRange(e *evalCtx) error {
+	start, end := e.getKeyRange()
+	return e.sst().ClearRawRange(start, end)
+}
+
+func cmdSSTClearRangeKey(e *evalCtx) error {
+	var rangeKey MVCCRangeKey
+	rangeKey.StartKey, rangeKey.EndKey = e.getKeyRange()
+	rangeKey.Timestamp = e.getTs(nil)
+
+	return e.sst().ExperimentalClearMVCCRangeKey(rangeKey)
+}
+
+func cmdSSTFinish(e *evalCtx) error {
+	return e.finishSST()
+}
+
+func cmdSSTIterNew(e *evalCtx) error {
+	if e.iter != nil {
+		e.iter.Close()
+	}
+	iter, err := NewPebbleMultiMemSSTIterator(e.ssts, sstIterVerify)
+	if err != nil {
+		return err
+	}
+	e.iter = iter
+	return nil
+}
+
 func printIter(e *evalCtx) {
 	e.results.buf.Printf("%s:", e.td.Cmd)
 	defer e.results.buf.Printf("\n")
@@ -1215,6 +1322,7 @@ type evalCtx struct {
 		traceIntentWrites bool
 	}
 	ctx        context.Context
+	st         *cluster.Settings
 	engine     Engine
 	iter       MVCCIterator
 	t          *testing.T
@@ -1222,11 +1330,15 @@ type evalCtx struct {
 	txns       map[string]*roachpb.Transaction
 	txnCounter uint128.Uint128
 	ms         *enginepb.MVCCStats
+	sstWriter  *SSTWriter
+	sstFile    *MemFile
+	ssts       [][]byte
 }
 
 func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
 	return &evalCtx{
 		ctx:        ctx,
+		st:         cluster.MakeTestingClusterSettings(),
 		engine:     engine,
 		txns:       make(map[string]*roachpb.Transaction),
 		txnCounter: uint128.FromInts(0, 1),
@@ -1419,6 +1531,39 @@ func (e *evalCtx) newTxn(
 	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn
 	return txn, nil
+}
+
+func (e *evalCtx) sst() *SSTWriter {
+	if e.sstWriter == nil {
+		e.sstFile = &MemFile{}
+		w := MakeIngestionSSTWriter(e.ctx, e.st, e.sstFile)
+		e.sstWriter = &w
+	}
+	return e.sstWriter
+}
+
+func (e *evalCtx) finishSST() error {
+	if e.sstWriter == nil {
+		return nil
+	}
+	err := e.sstWriter.Finish()
+	if err == nil && e.sstWriter.DataSize > 0 {
+		// NewPebbleSSTIterator expects newest SSTs first, so prepend
+		// the SST.
+		e.ssts = append([][]byte{e.sstFile.Bytes()}, e.ssts...)
+	}
+	e.sstFile = nil
+	e.sstWriter = nil
+	return err
+}
+
+func (e *evalCtx) closeSST() {
+	if e.sstWriter == nil {
+		return
+	}
+	e.sstWriter.Close()
+	e.sstFile = nil
+	e.sstWriter = nil
 }
 
 func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {

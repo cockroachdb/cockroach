@@ -2297,7 +2297,7 @@ func scanIntentKeys(t *testing.T, r Reader) []roachpb.Key {
 
 // scanIter scans all point/range keys from the iterator, and returns a combined
 // slice of MVCCRangeKeyValue and MVCCKeyValue in order.
-func scanIter(t *testing.T, iter MVCCIterator) []interface{} {
+func scanIter(t *testing.T, iter SimpleMVCCIterator) []interface{} {
 	t.Helper()
 
 	iter.SeekGE(MVCCKey{Key: keys.LocalMax})
@@ -2321,8 +2321,8 @@ func scanIter(t *testing.T, iter MVCCIterator) []interface{} {
 		}
 		if hasPoint {
 			keys = append(keys, MVCCKeyValue{
-				Key:   iter.Key(),
-				Value: iter.Value(),
+				Key:   iter.UnsafeKey().Clone(),
+				Value: append([]byte{}, iter.UnsafeValue()...),
 			})
 		}
 		iter.Next()
