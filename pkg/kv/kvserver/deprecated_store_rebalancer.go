@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -108,7 +109,7 @@ func (sr *StoreRebalancer) deprecatedChooseLeaseToTransfer(
 			if raftStatus == nil {
 				raftStatus = sr.getRaftStatusFn(replWithStats.repl)
 			}
-			if allocatorimpl.ReplicaIsBehind(raftStatus, candidate.ReplicaID) {
+			if raftutil.ReplicaIsBehind(raftStatus, candidate.ReplicaID) {
 				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader for r%d; raftStatus: %v",
 					candidate, desc.RangeID, raftStatus)
 				continue
@@ -297,7 +298,7 @@ func (sr *StoreRebalancer) deprecatedChooseRangeToRebalance(
 				if raftStatus == nil {
 					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
 				}
-				if allocatorimpl.ReplicaIsBehind(raftStatus, replica.ReplicaID) {
+				if raftutil.ReplicaIsBehind(raftStatus, replica.ReplicaID) {
 					continue
 				}
 			}
