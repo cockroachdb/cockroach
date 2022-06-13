@@ -23,7 +23,6 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.ColumnType) scop.Op {
 					return &scop.SetAddedColumnType{
 						ColumnType: *protoutil.Clone(this).(*scpb.ColumnType),
@@ -43,13 +42,15 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
 				revertible(false),
 				emit(func(this *scpb.ColumnType) scop.Op {
-					return &scop.RemoveDroppedColumnType{
-						TableID:  this.TableID,
-						ColumnID: this.ColumnID,
+					if ids := referencedTypeIDs(this); len(ids) > 0 {
+						return &scop.RemoveDroppedColumnType{
+							TableID:  this.TableID,
+							ColumnID: this.ColumnID,
+						}
 					}
+					return nil
 				}),
 				emit(func(this *scpb.ColumnType) scop.Op {
 					if ids := referencedTypeIDs(this); len(ids) > 0 {

@@ -63,7 +63,6 @@ func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
 	// Before we can mutate the descriptor, get rid of any synthetic descriptor.
-	m.sd.RemoveSyntheticDescriptor(op.DescID)
 	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err
@@ -73,23 +72,6 @@ func (m *visitor) MarkDescriptorAsDropped(
 	if tableDesc, ok := desc.(*tabledesc.Mutable); ok && tableDesc.IsTable() {
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
-	return nil
-}
-
-func (m *visitor) MarkDescriptorAsDroppedSynthetically(
-	ctx context.Context, op scop.MarkDescriptorAsDroppedSynthetically,
-) error {
-	if co := m.s.MaybeCheckedOutDescriptor(op.DescID); co != nil {
-		return errors.AssertionFailedf("cannot mark already checked-out descriptor %q (%d) as synthetic",
-			co.GetName(), co.GetID())
-	}
-	desc, err := m.s.GetDescriptor(ctx, op.DescID)
-	if err != nil {
-		return err
-	}
-	mut := desc.NewBuilder().BuildCreatedMutable()
-	mut.SetDropped()
-	m.sd.AddSyntheticDescriptor(mut)
 	return nil
 }
 

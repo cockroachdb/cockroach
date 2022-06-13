@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Option configures the TestState.
@@ -36,7 +38,8 @@ var _ Option = (optionFunc)(nil)
 func WithNamespace(c nstree.Catalog) Option {
 	return optionFunc(func(state *TestState) {
 		_ = c.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
-			state.catalog.UpsertNamespaceEntry(e, e.GetID())
+			state.committed.UpsertNamespaceEntry(e, e.GetID())
+			state.uncommitted.UpsertNamespaceEntry(e, e.GetID())
 			return nil
 		})
 	})
@@ -45,8 +48,10 @@ func WithNamespace(c nstree.Catalog) Option {
 // WithDescriptors sets the TestState descriptors to the provided value.
 // This function also scrubs any volatile timestamps from the descriptor.
 func WithDescriptors(c nstree.Catalog) Option {
+	modifTime := hlc.Timestamp{WallTime: defaultOverriddenCreatedAt.UnixNano()}
 	return optionFunc(func(state *TestState) {
 		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			pb := desc.DescriptorProto()
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
 				mut := table.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
 				for _, idx := range mut.AllIndexes() {
@@ -54,9 +59,12 @@ func WithDescriptors(c nstree.Catalog) Option {
 						idx.IndexDesc().CreatedAtNanos = defaultOverriddenCreatedAt.UnixNano()
 					}
 				}
-				desc = mut.ImmutableCopy()
+				mut.ModificationTime = modifTime
+				pb = mut.DescriptorProto()
 			}
-			state.catalog.UpsertDescriptorEntry(desc)
+			b := descbuilder.NewBuilderWithMVCCTimestamp(pb, modifTime)
+			state.committed.UpsertDescriptorEntry(b.BuildImmutable())
+			state.uncommitted.UpsertDescriptorEntry(b.BuildExistingMutable())
 			return nil
 		})
 	})

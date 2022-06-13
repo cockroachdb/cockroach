@@ -45,13 +45,14 @@ func (n *createExtensionNode) startExec(params runParams) error {
 	switch n.CreateExtension.Name {
 	case "postgis",
 		"pg_trgm",
+		"fuzzystrmatch",
+		"pgcrypto",
 		"uuid-ossp":
 		telemetry.Inc(sqltelemetry.CreateExtensionCounter(n.CreateExtension.Name))
 		return nil
 	case "postgis_raster",
 		"postgis_topology",
 		"postgis_sfcgal",
-		"fuzzystrmatch",
 		"address_standardizer",
 		"address_standardizer_data_us",
 		"postgis_tiger_geocoder":
@@ -85,7 +86,6 @@ func (n *createExtensionNode) startExec(params runParams) error {
 		"pageinspect",
 		"passwordcheck",
 		"pg_buffercache",
-		"pgcrypto",
 		"pg_freespacemap",
 		"pg_prewarm",
 		"pgrowlocks",

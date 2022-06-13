@@ -21,7 +21,6 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_BACKFILL_ONLY,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.MakeAddedIndexBackfilling{
 						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
@@ -30,7 +29,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_BACKFILLED,
-				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					return &scop.BackfillIndex{
 						TableID:       this.TableID,
@@ -87,7 +85,6 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_VALIDATED,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.SecondaryIndex) scop.Op {
 					// Most of this logic is taken from MakeMutationComplete().
 					return &scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly{
@@ -97,7 +94,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
-				minPhase(scop.PostCommitPhase),
 				revertible(false),
 			),
 			equiv(scpb.Status_MERGE_ONLY),

@@ -50,6 +50,8 @@ func TestCompare(t *testing.T) {
 				"CREATE EXTENSION IF NOT EXISTS postgis",
 				"CREATE EXTENSION IF NOT EXISTS postgis_topology",
 				"CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;",
+				"CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";",
+				"CREATE EXTENSION IF NOT EXISTS pg_trgm;",
 			},
 		},
 		"cockroach1": {

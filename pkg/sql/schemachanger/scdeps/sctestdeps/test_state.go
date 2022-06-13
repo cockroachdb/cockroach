@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/redact"
 )
 
@@ -35,7 +38,20 @@ import (
 // dependencies, like scbuild.Dependencies or scexec.Dependencies, for the
 // purpose of facilitating end-to-end testing of the declarative schema changer.
 type TestState struct {
-	catalog, synthetic      nstree.MutableCatalog
+
+	// committed and uncommitted mock the catalog as it is persisted in the KV
+	// layer:
+	// - committed represents the catalog as it is visible outside the schema
+	//   change transactions;
+	// - uncommitted is the catalog such as it is in the schema change statement
+	//   transaction before it commits.
+	// If we're in a transaction (via WithTxn) and no schema changes have taken
+	// place yet, uncommitted is the same as committed, however executing a schema
+	// change statement will probably alter the contents of uncommitted and these
+	// will not be reflected in committed until the transaction commits, i.e. the
+	// WithTxn method returns.
+	committed, uncommitted nstree.MutableCatalog
+
 	comments                map[descmetadata.CommentKey]string
 	currentDatabase         string
 	phase                   scop.Phase
@@ -91,19 +107,32 @@ func (s *TestState) SideEffectLog() string {
 // WithTxn simulates the execution of a transaction.
 func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
-	defer s.synthetic.Clear()
 	defer func() {
-		if len(s.createdJobsInCurrentTxn) == 0 {
-			return
+		u := s.uncommitted
+		s.committed, s.uncommitted = nstree.MutableCatalog{}, nstree.MutableCatalog{}
+		_ = u.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+			s.committed.UpsertNamespaceEntry(e, e.GetID())
+			s.uncommitted.UpsertNamespaceEntry(e, e.GetID())
+			return nil
+		})
+		_ = u.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
+			d = descbuilder.NewBuilderWithMVCCTimestamp(d.DescriptorProto(), s.mvccTimestamp()).BuildImmutable()
+			s.committed.UpsertDescriptorEntry(d)
+			s.uncommitted.UpsertDescriptorEntry(d.NewBuilder().BuildExistingMutable())
+			return nil
+		})
+		s.LogSideEffectf("commit transaction #%d", s.txnCounter)
+		if len(s.createdJobsInCurrentTxn) > 0 {
+			s.LogSideEffectf("notified job registry to adopt jobs: %v", s.createdJobsInCurrentTxn)
 		}
-		s.LogSideEffectf(
-			"notified job registry to adopt jobs: %v", s.createdJobsInCurrentTxn,
-		)
 		s.createdJobsInCurrentTxn = nil
 	}()
-	defer s.LogSideEffectf("commit transaction #%d", s.txnCounter)
 	s.LogSideEffectf("begin transaction #%d", s.txnCounter)
 	fn(s)
+}
+
+func (s *TestState) mvccTimestamp() hlc.Timestamp {
+	return hlc.Timestamp{WallTime: defaultOverriddenCreatedAt.UnixNano() + int64(s.txnCounter)}
 }
 
 // IncrementPhase sets the state to the next phase.

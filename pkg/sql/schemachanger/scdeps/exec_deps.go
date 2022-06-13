@@ -204,16 +204,6 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	return "", errors.Newf("unknown descriptor type : %s\n", objectDesc.DescriptorType())
 }
 
-// AddSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
-func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
-	d.descsCollection.AddSyntheticDescriptor(desc)
-}
-
-// RemoveSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
-func (d *txnDeps) RemoveSyntheticDescriptor(id descpb.ID) {
-	d.descsCollection.RemoveSyntheticDescriptor(id)
-}
-
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,

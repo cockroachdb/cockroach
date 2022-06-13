@@ -5,7 +5,7 @@ CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256), money int)
 ops
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-PreCommitPhase stage 1 of 1 with 4 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
@@ -39,6 +39,9 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
         - 3
         TableID: 104
       IsSecondaryIndex: true
+PreCommitPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+  ops:
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -175,7 +178,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-PreCommitPhase stage 1 of 1 with 4 MutationType ops
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
@@ -213,6 +216,9 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
         - 3
         TableID: 104
       IsSecondaryIndex: true
+PreCommitPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+  ops:
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true

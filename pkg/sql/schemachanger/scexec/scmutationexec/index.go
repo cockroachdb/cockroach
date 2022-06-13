@@ -255,11 +255,8 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 func (m *visitor) RemoveDroppedIndexPartialPredicate(
 	ctx context.Context, op scop.RemoveDroppedIndexPartialPredicate,
 ) error {
-	if desc, err := m.s.GetDescriptor(ctx, op.TableID); err != nil || desc.Dropped() {
-		return err
-	}
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	mut, err := FindMutation(tbl, MakeIndexIDMutationSelector(op.IndexID))
