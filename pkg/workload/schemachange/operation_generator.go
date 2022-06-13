@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -744,7 +746,18 @@ func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (str
 func (og *operationGenerator) addForeignKeyConstraint(
 	ctx context.Context, tx pgx.Tx,
 ) (string, error) {
+	// First validate if we even support foreign key constraints on the active
+	// version, since we need builtins.
+	fkConstraintsEnabled, err := isFkConstraintsEnabled(ctx, tx)
+	if err != nil {
+		return "", err
+	}
+	if !fkConstraintsEnabled {
+		// Generate DDL that will always fail.
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return "ALTER TABLE shipments ADD CONSTRAINT fk_customers_2 FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE", nil
 
+	}
 	parentTable, parentColumn, err := og.randParentColumnForFkRelation(ctx, tx, og.randIntn(100) >= og.params.fkParentInvalidPct)
 	if err != nil {
 		return "", err
@@ -2330,10 +2343,15 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 		if !uniqueConstraintViolation {
 			generatedErrors.add(og.expectedExecErrors)
 		}
-
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		fkConstraintsEnabled, err := isFkConstraintsEnabled(ctx, tx)
+		if err != nil {
+			return "", err
+		}
+		if fkConstraintsEnabled {
+			fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+		}
 		if err != nil {
 			return "", err
 		}
@@ -3140,4 +3158,31 @@ func (og *operationGenerator) typeFromTypeName(
 		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
+}
+
+// Check if the test is running with a mixed version cluster, with a version
+// less than or equal to the target version number. This can be used to detect
+// in mixed version environments if certain errors should be encountered.
+func isClusterVersionLessThan(
+	ctx context.Context, tx pgx.Tx, targetVersion roachpb.Version,
+) (bool, error) {
+	var clusterVersionStr string
+	row := tx.QueryRow(ctx, `SHOW CLUSTER SETTING version`)
+	if err := row.Scan(&clusterVersionStr); err != nil {
+		return false, err
+	}
+	clusterVersion, err := roachpb.ParseVersion(clusterVersionStr)
+	if err != nil {
+		return false, err
+	}
+	return clusterVersion.LessEq(targetVersion), nil
+}
+
+// isFkConstraintsEnabled detects if server side builtins for validating
+// foreign key constraints are available.
+func isFkConstraintsEnabled(ctx context.Context, tx pgx.Tx) (bool, error) {
+	fkConstraintDisabledVersion, err := isClusterVersionLessThan(ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.Start22_2))
+	return !fkConstraintDisabledVersion, err
 }
