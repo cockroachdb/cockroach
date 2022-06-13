@@ -1445,6 +1445,12 @@ message ExternalStorage {
     // AssumeRole if non-empty, is the email of the service account that should
     // be assumed in order to access this storage.
     string assume_role = 6;
+
+    // TemporaryToken is a temporary credentials token that could be used to
+    // access the storage. This token is only used for "specified" auth mode and
+    // if Credentials is not supplied. Currently only OAuth 2.0 tokens are
+    // supported.
+    string temporary_token = 7;
   }
   message Azure {
     string container = 1;

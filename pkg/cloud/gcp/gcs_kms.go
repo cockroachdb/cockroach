@@ -20,6 +20,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -39,16 +40,18 @@ func init() {
 }
 
 type kmsURIParams struct {
-	credentials string
-	auth        string
-	assumeRole  string
+	credentials    string
+	auth           string
+	assumeRole     string
+	temporaryToken string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 	params := kmsURIParams{
-		credentials: kmsURI.Query().Get(CredentialsParam),
-		auth:        kmsURI.Query().Get(cloud.AuthParam),
-		assumeRole:  kmsURI.Query().Get(AssumeRoleParam),
+		credentials:    kmsURI.Query().Get(CredentialsParam),
+		auth:           kmsURI.Query().Get(cloud.AuthParam),
+		assumeRole:     kmsURI.Query().Get(AssumeRoleParam),
+		temporaryToken: kmsURI.Query().Get(TemporaryTokenParam),
 	}
 
 	return params
@@ -74,22 +77,46 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 
 	switch kmsURIParams.auth {
 	case "", cloud.AuthParamSpecified:
-		if kmsURIParams.credentials == "" {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				CredentialsParam,
-			)
-		}
+		if temporaryTokenEnabled.Get(&env.ClusterSettings().SV) {
+			if kmsURIParams.credentials == "" {
+				if kmsURIParams.temporaryToken == "" {
+					return nil, errors.Errorf(
+						"%s or %s must be set if %q is %q",
+						CredentialsParam,
+						TemporaryTokenParam,
+						cloud.AuthParam,
+						cloud.AuthParamSpecified,
+					)
+				}
 
-		// Credentials are passed in base64 encoded, so decode the credentials first.
-		credentialsJSON, err := base64.StdEncoding.DecodeString(kmsURIParams.credentials)
-		if err != nil {
-			return nil, err
-		}
+				// Create a static token source directly from TemporaryToken.
+				token := &oauth2.Token{AccessToken: kmsURIParams.temporaryToken}
+				credentialsOpt = append(credentialsOpt, option.WithTokenSource(oauth2.StaticTokenSource(token)))
+			} else {
+				authOption, err := createAuthOption(kmsURIParams.credentials)
+				if err != nil {
+					return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+				}
+				credentialsOpt = append(credentialsOpt, authOption)
+			}
+		} else {
+			if kmsURIParams.credentials == "" {
+				return nil, errors.Errorf(
+					"%s is set to '%s', but %s is not set",
+					cloud.AuthParam,
+					cloud.AuthParamSpecified,
+					CredentialsParam,
+				)
+			}
 
-		credentialsOpt = append(credentialsOpt, option.WithCredentialsJSON(credentialsJSON))
+			// Credentials are passed in base64 encoded, so decode the credentials first.
+			credentialsJSON, err := base64.StdEncoding.DecodeString(kmsURIParams.credentials)
+			if err != nil {
+				return nil, err
+			}
+
+			credentialsOpt = append(credentialsOpt, option.WithCredentialsJSON(credentialsJSON))
+		}
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
