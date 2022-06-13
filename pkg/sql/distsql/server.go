@@ -296,6 +296,10 @@ func (ds *ServerImpl) setupFlow(
 	var evalCtx *tree.EvalContext
 	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
+		// If we're running on the gateway, then we'll reuse already existing
+		// eval context. This is the case even if the query is distributed -
+		// this allows us to avoid an unnecessary deserialization of the eval
+		// context proto.
 		evalCtx = localState.EvalContext
 		// We're about to mutate the evalCtx and we want to restore its original
 		// state once the flow cleans up. Note that we could have made a copy of
@@ -308,7 +312,7 @@ func (ds *ServerImpl) setupFlow(
 			evalCtx.Txn = origTxn
 		}
 		evalCtx.Mon = monitor
-		if localState.HasConcurrency {
+		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf()
 			if err != nil {
