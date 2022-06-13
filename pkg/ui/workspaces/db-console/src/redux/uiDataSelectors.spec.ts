@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import { dismissReleaseNotesSignupForm } from "./uiDataSelectors";
 import { UIData, UIDataStatus } from "src/redux/uiData";
 
@@ -22,7 +21,7 @@ describe("uiDataSelectors", () => {
         error: null,
         data: undefined,
       };
-      assert.isFalse(selector(uiData));
+      expect(selector(uiData)).toBe(false);
     });
 
     it("returns `true` if uiData status is VALID and data = true", () => {
@@ -31,7 +30,7 @@ describe("uiDataSelectors", () => {
         error: null,
         data: true,
       };
-      assert.isTrue(selector(uiData));
+      expect(selector(uiData)).toBe(true);
     });
 
     it("returns `true` if uiData status is UNINITIALIZED", () => {
@@ -40,11 +39,11 @@ describe("uiDataSelectors", () => {
         error: null,
         data: undefined,
       };
-      assert.isTrue(selector(uiData));
+      expect(selector(uiData)).toBe(true);
     });
 
     it("returns `true` if uiData state is undefined", () => {
-      assert.isTrue(selector(undefined));
+      expect(selector(undefined)).toBe(true);
     });
   });
 });

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get, isString, isNumber } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackPaginate";
 
@@ -25,7 +24,7 @@ describe("trackPaginate", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)(testPage);
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send the right event", () => {
@@ -37,8 +36,8 @@ describe("trackPaginate", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(isString(event));
-    assert.isTrue(event === expected);
+    expect(isString(event)).toBe(true);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
@@ -49,7 +48,7 @@ describe("trackPaginate", () => {
     const sent = spy.getCall(0).args[0];
     const selectedPage = get(sent, "properties.selectedPage");
 
-    assert.isTrue(isNumber(selectedPage));
-    assert.isTrue(selectedPage === testPage);
+    expect(isNumber(selectedPage)).toBe(true);
+    expect(selectedPage === testPage).toBe(true);
   });
 });
