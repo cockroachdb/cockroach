@@ -113,8 +113,8 @@ describe("selectStatements", () => {
     const result = selectStatements(state, props);
 
     expect(result.length).toBe(1);
-    expect(result[0].label).toEqual(stmtA.key.key_data.query);
-    expect(result[0].stats.count.toNumber()).toEqual(sumCount);
+    expect(result[0].label).toBe(stmtA.key.key_data.query);
+    expect(result[0].stats.count.toNumber()).toBe(sumCount);
   });
 
   it("coalesces statements with differing node ids", () => {
