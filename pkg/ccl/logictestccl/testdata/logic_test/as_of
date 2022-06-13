@@ -30,6 +30,15 @@ statement ok
 ROLLBACK
 
 statement ok
+SET enable_implicit_transaction_for_batch_statements = true
+
+statement error pgcode 0A000 cannot specify AS OF SYSTEM TIME with different timestamps
+SELECT * from t AS OF SYSTEM TIME '-1μs'; SELECT * from t AS OF SYSTEM TIME '-2μs'
+
+statement ok
+RESET enable_implicit_transaction_for_batch_statements
+
+statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO TRUE
 
 statement error pgcode 3D000 pq: database "test" does not exist
