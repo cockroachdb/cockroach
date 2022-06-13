@@ -228,6 +228,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		cfg.DefaultSpanConfig,
 		cfg.Settings,
 		nil,
+		nil,
 	)
 	cfg.SystemConfigProvider = systemconfigwatcher.New(
 		keys.SystemSQLCodec,

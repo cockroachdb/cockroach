@@ -583,6 +583,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				fallbackConf,
 				cfg.Settings,
 				spanConfigKnobs,
+				registry,
 			)
 		}
 
