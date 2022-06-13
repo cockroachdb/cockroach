@@ -306,6 +306,13 @@ func (desc *wrapper) validateInboundTableRef(
 		// descriptor is for a sequence. In this case, they refer to the columns
 		// in the referenced descriptor instead.
 		for _, colID := range by.ColumnIDs {
+			// Skip this check if the column ID is zero. This can happen due to
+			// bugs in 20.2.
+			//
+			// TODO(ajwerner): Make sure that a migration in 22.2 fixes this issue.
+			if colID == 0 {
+				continue
+			}
 			col, _ := backReferencedTable.FindColumnWithID(colID)
 			if col == nil {
 				return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
