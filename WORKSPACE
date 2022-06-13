@@ -158,15 +158,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.17.10.darwin-amd64.tar.gz", "84979d5985c70cee6f303050a7e811440aad7f304efdf28665b200f096b01945"),
-        "darwin_arm64": ("go1.17.10.darwin-arm64.tar.gz", "32098bea40117ea1ec23e7124cd188db6bdddd0ea41e2ec9bea3ba35a487e39c"),
-        "freebsd_amd64": ("go1.17.10.freebsd-amd64.tar.gz", "33794d96f58608fdc023c5114ae9baeeb4111a74720c8830ff25029debe508f0"),
-        "linux_amd64": ("go1.17.10.linux-amd64.tar.gz", "87fc728c9c731e2f74e4a999ef53cf07302d7ed3504b0839027bd9c10edaa3fd"),
-        "linux_arm64": ("go1.17.10.linux-arm64.tar.gz", "649141201efa7195403eb1301b95dc79c5b3e65968986a391da1370521701b0c"),
-        "windows_amd64": ("go1.17.10.windows-amd64.zip", "ba9198a29fa5c4f322212d21569e8507165c3b34e1ed1f1f9cf6dfb71ddcdeb2"),
+        "darwin_amd64": ("go1.17.11.darwin-amd64.tar.gz", "4f924c534230de8f0e1c7369f611c0310efd21fc2d9438b13bc2703af9dda25a"),
+        "darwin_arm64": ("go1.17.11.darwin-arm64.tar.gz", "b8e1ab009c2ff8dea462c7a1263d1f3f38e90ab5262e74c76d70e41a4db320be"),
+        "freebsd_amd64": ("go1.17.11.freebsd-amd64.tar.gz", "da78bcd5efa24cfa8ca3ccf0d222f7d66b755c4200d404869984ebdcfc7b6aa7"),
+        "linux_amd64": ("go1.17.11.linux-amd64.tar.gz", "d69a4fe2694f795d8e525c72b497ededc209cb7185f4c3b62d7a98dd6227b3fe"),
+        "linux_arm64": ("go1.17.11.linux-arm64.tar.gz", "adefa7412c6798f9cad02d1e8336fc2242f5bade30c5b32781759181e01961b7"),
+        "windows_amd64": ("go1.17.11.windows-amd64.zip", "88e60b92069d8e0932ca5d8bd8227d1693b9570fa2afbedadcc680749c428d54"),
     },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
-    version = "1.17.10",
+    version = "1.17.11",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -237,7 +237,7 @@ seed_yarn_cache(name = "yarn_cache")
 
 # Install external dependencies for NPM packages in pkg/ui/ as separate bazel
 # repositories, to avoid version conflicts between those packages.
-# Unfortunately Bazel's rules_nodejs does not support yarn workspaces, so 
+# Unfortunately Bazel's rules_nodejs does not support yarn workspaces, so
 # packages have isolated dependencies and must be installed as isolated
 # Bazel repositories.
 yarn_install(
