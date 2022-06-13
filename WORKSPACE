@@ -150,22 +150,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.17.6.darwin-amd64.tar.gz", "874bc6f95e07697380069a394a21e05576a18d60f4ba178646e1ebed8f8b1f89"),
-        "darwin_arm64": ("go1.17.6.darwin-arm64.tar.gz", "dc54f3f4099e2be9e9c33bf926a7dc3ad64f34717142f7abcaff9ae44bc03d0c"),
-        "freebsd_386": ("go1.17.6.freebsd-386.tar.gz", "d5fbe0292fc0ae734041d54a5614712fa50337c76927df7bc749c27a543ed6a2"),
-        "freebsd_amd64": ("go1.17.6.freebsd-amd64.tar.gz", "2b759b0eb1fc25bc1da5612ac13f60c4bf4cd6f3c7e4f3fe3476f454d08de318"),
-        "linux_386": ("go1.17.6.linux-386.tar.gz", "06c50fb0d44bb03dd4ea8795f9448379c5825d2765307b51f66905084c3ba541"),
-        "linux_amd64": ("go1.17.6.linux-amd64.tar.gz", "231654bbf2dab3d86c1619ce799e77b03d96f9b50770297c8f4dff8836fc8ca2"),
-        "linux_arm64": ("go1.17.6.linux-arm64.tar.gz", "82c1a033cce9bc1b47073fd6285233133040f0378439f3c4659fe77cc534622a"),
-        "linux_armv6l": ("go1.17.6.linux-armv6l.tar.gz", "9ac723e6b41cb7c3651099a09332a8a778b69aa63a5e6baaa47caf0d818e2d6d"),
-        "linux_ppc64le": ("go1.17.6.linux-ppc64le.tar.gz", "adc35c920b8c0253d4dd001f8979e0db4c6111a60cd5e0785a8bee95dba1fcaa"),
-        "linux_s390x": ("go1.17.6.linux-s390x.tar.gz", "ccb2d4509db846be7055d1105b28154e72cd43162c4ef79c38a936a3e6f26e1d"),
-        "windows_386": ("go1.17.6.windows-386.zip", "3809c4e40482ff047200c8b1e22a43a2c9c79b53ef540668d2b00f7228f093aa"),
-        "windows_amd64": ("go1.17.6.windows-amd64.zip", "5bf8f87aec7edfc08e6bc845f1c30dba6de32b863f89ae46553ff4bbcc1d4954"),
-        "windows_arm64": ("go1.17.6.windows-arm64.zip", "c794af7c7fe32207df2c30a39cad1cca2e382c82a4e9493499fc2feab5967ca0"),
+        "darwin_amd64": ("go1.17.11.darwin-amd64.tar.gz", "4f924c534230de8f0e1c7369f611c0310efd21fc2d9438b13bc2703af9dda25a"),
+        "darwin_arm64": ("go1.17.11.darwin-arm64.tar.gz", "b8e1ab009c2ff8dea462c7a1263d1f3f38e90ab5262e74c76d70e41a4db320be"),
+        "freebsd_amd64": ("go1.17.11.freebsd-amd64.tar.gz", "da78bcd5efa24cfa8ca3ccf0d222f7d66b755c4200d404869984ebdcfc7b6aa7"),
+        "linux_amd64": ("go1.17.11.linux-amd64.tar.gz", "d69a4fe2694f795d8e525c72b497ededc209cb7185f4c3b62d7a98dd6227b3fe"),
+        "linux_arm64": ("go1.17.11.linux-arm64.tar.gz", "adefa7412c6798f9cad02d1e8336fc2242f5bade30c5b32781759181e01961b7"),
+        "windows_amd64": ("go1.17.11.windows-amd64.zip", "88e60b92069d8e0932ca5d8bd8227d1693b9570fa2afbedadcc680749c428d54"),
     },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
-    version = "1.17.6",
+    version = "1.17.11",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
