@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { assert } from "chai";
 import { shallow, mount } from "enzyme";
 import { MemoryRouter as Router } from "react-router-dom";
 
@@ -26,7 +25,7 @@ describe("<ClusterNodeTotals>", () => {
         />
       </Router>,
     );
-    assert.isTrue(wrapper.html() === "");
+    expect(wrapper.html() === "").toBe(true);
   });
 
   it("renders", () => {
@@ -49,7 +48,7 @@ describe("<ClusterNodeTotals>", () => {
         />
       </Router>,
     );
-    assert.isTrue(wrapper.find(ClusterNodeTotalsComponent).exists());
+    expect(wrapper.find(ClusterNodeTotalsComponent).exists()).toBe(true);
   });
 
   it("renders dead nodes", () => {
@@ -72,6 +71,6 @@ describe("<ClusterNodeTotals>", () => {
         />
       </Router>,
     );
-    assert.isTrue(wrapper.find(SummaryStatBreakdown).exists());
+    expect(wrapper.find(SummaryStatBreakdown).exists()).toBe(true);
   });
 });
