@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -5354,5 +5355,343 @@ func TestWillOverflow(t *testing.T) {
 			willOverflow(c.b, c.a) != c.overflow {
 			t.Errorf("%d: overflow recognition error", i)
 		}
+	}
+}
+
+func TestMVCCExportToSSTResourceLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+
+	limits := dataLimits{
+		minKey:          0,
+		maxKey:          1000,
+		minTimestamp:    hlc.Timestamp{WallTime: 100000},
+		maxTimestamp:    hlc.Timestamp{WallTime: 200000},
+		tombstoneChance: 0.01,
+	}
+	generateData(t, engine, limits, (limits.maxKey-limits.minKey)*10)
+
+	// Outer loop runs tests on subsets of mvcc dataset.
+	for _, query := range []queryLimits{
+		{
+			minKey:       0,
+			maxKey:       1000,
+			minTimestamp: hlc.Timestamp{WallTime: 100000},
+			maxTimestamp: hlc.Timestamp{WallTime: 200000},
+			latest:       false,
+		},
+		{
+			minKey:       200,
+			maxKey:       800,
+			minTimestamp: hlc.Timestamp{WallTime: 100000},
+			maxTimestamp: hlc.Timestamp{WallTime: 200000},
+			latest:       false,
+		},
+		{
+			minKey:       0,
+			maxKey:       1000,
+			minTimestamp: hlc.Timestamp{WallTime: 150000},
+			maxTimestamp: hlc.Timestamp{WallTime: 175000},
+			latest:       false,
+		},
+		{
+			minKey:       0,
+			maxKey:       1000,
+			minTimestamp: hlc.Timestamp{WallTime: 100000},
+			maxTimestamp: hlc.Timestamp{WallTime: 200000},
+			latest:       true,
+		},
+	} {
+		t.Run(fmt.Sprintf("minKey=%d,maxKey=%d,minTs=%v,maxTs=%v,latest=%t", query.minKey, query.maxKey, query.minTimestamp, query.maxTimestamp, query.latest),
+			func(t *testing.T) {
+				matchingData := exportAllData(t, engine, query)
+				// Inner loop exercises various thresholds to see that we always progress and respect soft
+				// and hard limits.
+				for _, resources := range []resourceLimits{
+					// soft threshold under version count, high threshold above
+					{softThreshold: 5, hardThreshold: 20},
+					// soft threshold above version count
+					{softThreshold: 15, hardThreshold: 30},
+					// low threshold to check we could always progress
+					{softThreshold: 0, hardThreshold: 0},
+					// equal thresholds to check we force breaks mid keys
+					{softThreshold: 15, hardThreshold: 15},
+					// very high hard thresholds to eliminate mid key breaking completely
+					{softThreshold: 5, hardThreshold: math.MaxInt64},
+					// very high thresholds to eliminate breaking completely
+					{softThreshold: math.MaxInt64, hardThreshold: math.MaxInt64},
+				} {
+					t.Run(fmt.Sprintf("softThreshold=%d,hardThreshold=%d", resources.softThreshold, resources.hardThreshold),
+						func(t *testing.T) {
+							assertDataEqual(t, engine, matchingData, query, resources)
+						})
+				}
+			})
+	}
+}
+
+type countingResourceLimiter struct {
+	softCount int64
+	hardCount int64
+	count     int64
+}
+
+func (l *countingResourceLimiter) IsExhausted() ResourceLimitReached {
+	l.count++
+	if l.count > l.hardCount {
+		return ResourceLimitReachedHard
+	}
+	if l.count > l.softCount {
+		return ResourceLimitReachedSoft
+	}
+	return ResourceLimitNotReached
+}
+
+var _ ResourceLimiter = &countingResourceLimiter{}
+
+type queryLimits struct {
+	minKey       int64
+	maxKey       int64
+	minTimestamp hlc.Timestamp
+	maxTimestamp hlc.Timestamp
+	latest       bool
+}
+
+func testKey(id int64) roachpb.Key {
+	return []byte(fmt.Sprintf("key-%08d", id))
+}
+
+type dataLimits struct {
+	minKey          int64
+	maxKey          int64
+	minTimestamp    hlc.Timestamp
+	maxTimestamp    hlc.Timestamp
+	tombstoneChance float64
+}
+
+type resourceLimits struct {
+	softThreshold int64
+	hardThreshold int64
+}
+
+func exportAllData(t *testing.T, engine Engine, limits queryLimits) []MVCCKey {
+	st := cluster.MakeTestingClusterSettings()
+	sstFile := &MemFile{}
+	_, _, err := MVCCExportToSST(context.Background(), st, engine, MVCCExportOptions{
+		StartKey:           MVCCKey{Key: testKey(limits.minKey), Timestamp: limits.minTimestamp},
+		EndKey:             testKey(limits.maxKey),
+		StartTS:            limits.minTimestamp,
+		EndTS:              limits.maxTimestamp,
+		ExportAllRevisions: !limits.latest,
+	}, sstFile)
+	require.NoError(t, err, "Failed to export expected data")
+	return sstToKeys(t, sstFile.Data())
+}
+
+func sstToKeys(t *testing.T, data []byte) []MVCCKey {
+	var results []MVCCKey
+	it, err := NewMemSSTIterator(data, false)
+	require.NoError(t, err, "Failed to read exported data")
+	defer it.Close()
+	for it.SeekGE(MVCCKey{Key: []byte{}}); ; {
+		ok, err := it.Valid()
+		require.NoError(t, err, "Failed to advance iterator while preparing data")
+		if !ok {
+			break
+		}
+		results = append(results, MVCCKey{
+			Key:       append(roachpb.Key(nil), it.UnsafeKey().Key...),
+			Timestamp: it.UnsafeKey().Timestamp,
+		})
+		it.Next()
+	}
+	return results
+}
+
+func assertDataEqual(
+	t *testing.T, engine Engine, data []MVCCKey, query queryLimits, resources resourceLimits,
+) {
+	var (
+		err       error
+		key       = MVCCKey{Key: testKey(query.minKey), Timestamp: query.minTimestamp}
+		dataIndex = 0
+	)
+	for {
+		// Export chunk
+		limiter := countingResourceLimiter{softCount: resources.softThreshold, hardCount: resources.hardThreshold}
+		sstFile := &MemFile{}
+		st := cluster.MakeTestingClusterSettings()
+		_, key, err = MVCCExportToSST(context.Background(), st, engine, MVCCExportOptions{
+			StartKey:           key,
+			EndKey:             testKey(query.maxKey),
+			StartTS:            query.minTimestamp,
+			EndTS:              query.maxTimestamp,
+			ExportAllRevisions: !query.latest,
+			StopMidKey:         true,
+			ResourceLimiter:    &limiter,
+		}, sstFile)
+		require.NoError(t, err, "Failed to export to Sst")
+
+		chunk := sstToKeys(t, sstFile.Data())
+		require.LessOrEqual(t, len(chunk), len(data)-dataIndex, "Remaining test data")
+		for _, key := range chunk {
+			require.True(t, key.Equal(data[dataIndex]), "Returned key is not equal")
+			dataIndex++
+		}
+		require.LessOrEqual(t, limiter.count-1, resources.hardThreshold, "Fragment size")
+
+		// Last chunk check.
+		if len(key.Key) == 0 {
+			break
+		}
+		require.GreaterOrEqual(t, limiter.count-1, resources.softThreshold, "Fragment size")
+		if resources.hardThreshold == math.MaxInt64 {
+			require.True(t, key.Timestamp.IsEmpty(), "Should never break mid key on high hard thresholds")
+		}
+	}
+	require.Equal(t, dataIndex, len(data), "Not all expected data was consumed")
+}
+
+func generateData(t *testing.T, engine Engine, limits dataLimits, totalEntries int64) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := int64(0); i < totalEntries; i++ {
+		key := testKey(limits.minKey + rand.Int63n(limits.maxKey-limits.minKey))
+		timestamp := limits.minTimestamp.Add(rand.Int63n(limits.maxTimestamp.WallTime-limits.minTimestamp.WallTime), 0)
+		size := 256
+		if rng.Float64() < limits.tombstoneChance {
+			size = 0
+		}
+		value := MVCCValue{Value: roachpb.MakeValueFromBytes(randutil.RandBytes(rng, size))}
+		require.NoError(t, engine.PutMVCC(MVCCKey{Key: key, Timestamp: timestamp}, value), "Write data to test storage")
+	}
+	require.NoError(t, engine.Flush(), "Flush engine data")
+}
+
+func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test function uses a fixed time and key range to produce SST.
+	// Use varying inserted keys for values and intents to putting them in and out of ranges.
+	checkReportedErrors := func(data []testValue, expectedIntentIndices []int) func(*testing.T) {
+		return func(t *testing.T) {
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
+
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			require.NoError(t, fillInData(ctx, engine, data))
+
+			destination := &MemFile{}
+			_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
+				StartKey:           MVCCKey{Key: key(10)},
+				EndKey:             key(20000),
+				StartTS:            ts(999),
+				EndTS:              ts(2000),
+				ExportAllRevisions: true,
+				TargetSize:         0,
+				MaxSize:            0,
+				MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
+				StopMidKey:         false,
+			}, destination)
+			if len(expectedIntentIndices) == 0 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				e := (*roachpb.WriteIntentError)(nil)
+				if !errors.As(err, &e) {
+					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
+				}
+				require.Equal(t, len(expectedIntentIndices), len(e.Intents))
+				for i, dataIdx := range expectedIntentIndices {
+					requireTxnForValue(t, data[dataIdx], e.Intents[i])
+				}
+			}
+		}
+	}
+
+	// Export range is fixed to k:["00010", "10000"), ts:(999, 2000] for all tests.
+	testDataCount := int(MaxIntentsPerWriteIntentError.Default() + 1)
+	testData := make([]testValue, testDataCount*2)
+	expectedErrors := make([]int, testDataCount)
+	for i := 0; i < testDataCount; i++ {
+		testData[i*2] = value(key(i*2+11), "value", ts(1000))
+		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
+		expectedErrors[i] = i*2 + 1
+	}
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerWriteIntentError.Default()]))
+}
+
+// TestMVCCExportToSSTSplitMidKey verifies that split mid key in exports will
+// omit resume timestamps where they are unnecessary e.g. when we split at the
+// new key. In this case we can safely use the SST as is without the need to
+// merge with the remaining versions of the key.
+func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+
+	const keyValueSize = 11
+
+	var testData = []testValue{
+		value(key(1), "value1", ts(1000)),
+		value(key(2), "value2", ts(1000)),
+		value(key(2), "value3", ts(2000)),
+		value(key(3), "value4", ts(2000)),
+	}
+	require.NoError(t, fillInData(ctx, engine, testData))
+
+	for _, test := range []struct {
+		exportAll    bool
+		stopMidKey   bool
+		useMaxSize   bool
+		resumeCount  int
+		resumeWithTs int
+	}{
+		{false, false, false, 3, 0},
+		{true, false, false, 3, 0},
+		{false, true, false, 3, 0},
+		// No resume timestamps since we fall under max size criteria
+		{true, true, false, 3, 0},
+		{true, true, true, 4, 1},
+	} {
+		t.Run(
+			fmt.Sprintf("exportAll=%t,stopMidKey=%t,useMaxSize=%t",
+				test.exportAll, test.stopMidKey, test.useMaxSize),
+			func(t *testing.T) {
+				resumeKey := MVCCKey{Key: key(1)}
+				resumeWithTs := 0
+				resumeCount := 0
+				var maxSize uint64 = 0
+				if test.useMaxSize {
+					maxSize = keyValueSize * 2
+				}
+				for !resumeKey.Equal(MVCCKey{}) {
+					dest := &MemFile{}
+					_, resumeKey, _ = MVCCExportToSST(
+						ctx, st, engine, MVCCExportOptions{
+							StartKey:           resumeKey,
+							EndKey:             key(3).Next(),
+							StartTS:            hlc.Timestamp{},
+							EndTS:              hlc.Timestamp{WallTime: 9999},
+							ExportAllRevisions: test.exportAll,
+							TargetSize:         1,
+							MaxSize:            maxSize,
+							StopMidKey:         test.stopMidKey,
+						}, dest)
+					if !resumeKey.Timestamp.IsEmpty() {
+						resumeWithTs++
+					}
+					resumeCount++
+				}
+				require.Equal(t, test.resumeCount, resumeCount)
+				require.Equal(t, test.resumeWithTs, resumeWithTs)
+			})
 	}
 }
