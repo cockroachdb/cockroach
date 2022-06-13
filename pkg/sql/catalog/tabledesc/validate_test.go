@@ -2490,6 +2490,40 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
+		{ // 14
+			// This case deals with a bug in version 21.1 and prior when
+			// ALTER TABLE ... ADD COLUMN ... DEFAULT nextval(...) would set the
+			// backreference ID to be 0 because it set up the backreference before
+			// calling AllocateIDs.
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
+					Increment: 1,
+				},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 52, ColumnIDs: []descpb.ColumnID{0}},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "bar",
+				ID:                      52,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "primary",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{Name: "a", ID: 1, Type: types.Int},
+				},
+				DependsOn: []descpb.ID{51},
+			}},
+		},
 	}
 
 	for i, test := range tests {
