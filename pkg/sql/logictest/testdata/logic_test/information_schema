@@ -1409,6 +1409,7 @@ system         public              database_role_settings                 BASE T
 system         public              tenant_usage                           BASE TABLE   YES                 1
 system         public              sql_instances                          BASE TABLE   YES                 1
 system         public              span_configurations                    BASE TABLE   YES                 1
+system         public              pg_notifications                       BASE TABLE   YES                 1
 system         public              tenant_settings                        BASE TABLE   YES                 1
 
 statement ok
@@ -1514,6 +1515,10 @@ system              public             630200280_30_1_not_null                  
 system              public             630200280_30_2_not_null                                                                                         system         public        namespace                        CHECK            NO             NO
 system              public             630200280_30_3_not_null                                                                                         system         public        namespace                        CHECK            NO             NO
 system              public             primary                                                                                                         system         public        namespace                        PRIMARY KEY      NO             NO
+system              public             630200280_48_1_not_null                                                                                         system         public        pg_notifications                 CHECK            NO             NO
+system              public             630200280_48_2_not_null                                                                                         system         public        pg_notifications                 CHECK            NO             NO
+system              public             630200280_48_3_not_null                                                                                         system         public        pg_notifications                 CHECK            NO             NO
+system              public             primary                                                                                                         system         public        pg_notifications                 PRIMARY KEY      NO             NO
 system              public             630200280_31_1_not_null                                                                                         system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_2_not_null                                                                                         system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_3_not_null                                                                                         system         public        protected_ts_meta                CHECK            NO             NO
@@ -1814,6 +1819,9 @@ system              public             630200280_46_1_not_null                  
 system              public             630200280_47_1_not_null                                                                                         start_key IS NOT NULL
 system              public             630200280_47_2_not_null                                                                                         end_key IS NOT NULL
 system              public             630200280_47_3_not_null                                                                                         config IS NOT NULL
+system              public             630200280_48_1_not_null                                                                                         chan_name IS NOT NULL
+system              public             630200280_48_2_not_null                                                                                         message IS NOT NULL
+system              public             630200280_48_3_not_null                                                                                         node_id IS NOT NULL
 system              public             630200280_4_1_not_null                                                                                          username IS NOT NULL
 system              public             630200280_4_3_not_null                                                                                          isRole IS NOT NULL
 system              public             630200280_50_1_not_null                                                                                         tenant_id IS NOT NULL
@@ -1861,6 +1869,7 @@ system         public        migrations                       patch             
 system         public        namespace                        name                                                                                                      system              public             primary
 system         public        namespace                        parentID                                                                                                  system              public             primary
 system         public        namespace                        parentSchemaID                                                                                            system              public             primary
+system         public        pg_notifications                 chan_name                                                                                                 system              public             primary
 system         public        protected_ts_meta                singleton                                                                                                 system              public             check_singleton
 system         public        protected_ts_meta                singleton                                                                                                 system              public             primary
 system         public        protected_ts_records             id                                                                                                        system              public             primary
@@ -2061,6 +2070,9 @@ system         public        namespace                        id                
 system         public        namespace                        name                                                                                                      3
 system         public        namespace                        parentID                                                                                                  1
 system         public        namespace                        parentSchemaID                                                                                            2
+system         public        pg_notifications                 chan_name                                                                                                 1
+system         public        pg_notifications                 message                                                                                                   2
+system         public        pg_notifications                 node_id                                                                                                   3
 system         public        protected_ts_meta                num_records                                                                                               3
 system         public        protected_ts_meta                num_spans                                                                                                 4
 system         public        protected_ts_meta                singleton                                                                                                 1
@@ -3043,6 +3055,14 @@ NULL     root     system         public              migrations                 
 NULL     root     system         public              migrations                             UPDATE          YES           NO
 NULL     admin    system         public              namespace                              SELECT          YES           YES
 NULL     root     system         public              namespace                              SELECT          YES           YES
+NULL     admin    system         public              pg_notifications                       DELETE          YES           NO
+NULL     admin    system         public              pg_notifications                       INSERT          YES           NO
+NULL     admin    system         public              pg_notifications                       SELECT          YES           YES
+NULL     admin    system         public              pg_notifications                       UPDATE          YES           NO
+NULL     root     system         public              pg_notifications                       DELETE          YES           NO
+NULL     root     system         public              pg_notifications                       INSERT          YES           NO
+NULL     root     system         public              pg_notifications                       SELECT          YES           YES
+NULL     root     system         public              pg_notifications                       UPDATE          YES           NO
 NULL     admin    system         public              protected_ts_meta                      SELECT          YES           YES
 NULL     root     system         public              protected_ts_meta                      SELECT          YES           YES
 NULL     admin    system         public              protected_ts_records                   SELECT          YES           YES
@@ -3769,6 +3789,14 @@ NULL     root     system         public              span_configurations        
 NULL     root     system         public              span_configurations                    INSERT          YES           NO
 NULL     root     system         public              span_configurations                    SELECT          YES           YES
 NULL     root     system         public              span_configurations                    UPDATE          YES           NO
+NULL     admin    system         public              pg_notifications                       DELETE          YES           NO
+NULL     admin    system         public              pg_notifications                       INSERT          YES           NO
+NULL     admin    system         public              pg_notifications                       SELECT          YES           YES
+NULL     admin    system         public              pg_notifications                       UPDATE          YES           NO
+NULL     root     system         public              pg_notifications                       DELETE          YES           NO
+NULL     root     system         public              pg_notifications                       INSERT          YES           NO
+NULL     root     system         public              pg_notifications                       SELECT          YES           YES
+NULL     root     system         public              pg_notifications                       UPDATE          YES           NO
 NULL     admin    system         public              tenant_settings                        DELETE          YES           NO
 NULL     admin    system         public              tenant_settings                        INSERT          YES           NO
 NULL     admin    system         public              tenant_settings                        SELECT          YES           YES

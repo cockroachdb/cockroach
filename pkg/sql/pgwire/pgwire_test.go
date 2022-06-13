@@ -2037,3 +2037,170 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestListenNotify(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mustSucceed := func(_ gosql.Result, err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	var err error
+	var connector driver.Connector
+	connector, err = pq.NewConnector(pgURL.String())
+	require.NoError(t, err)
+
+	listenerNotifChan := make(chan *pq.Notification, 1024)
+	listenerConnector := pq.ConnectorWithNotificationHandler(connector,
+		func(notification *pq.Notification) {
+			listenerNotifChan <- notification
+		})
+	listenDb, notifyDb := gosql.OpenDB(listenerConnector), gosql.OpenDB(connector)
+	defer listenDb.Close()
+	defer notifyDb.Close()
+
+	mustSucceed(listenDb.Exec("SET CLUSTER SETTING kv.rangefeed.enabled=true"))
+	mustSucceed(listenDb.Exec("LISTEN foo"))
+	testutils.RunTrueAndFalse(t, "sameconn", func(t *testing.T, sameconn bool) {
+		d := listenDb
+		ch := listenerNotifChan
+		if !sameconn {
+			d = notifyDb
+		}
+		// Test notifications both on same and different connection.
+		mustSucceed(d.Exec("NOTIFY foo"))
+		testutils.SucceedsSoon(t, func() error {
+			// Connections don't receive notifications until they do something.
+			mustSucceed(listenDb.Exec("SELECT 1"))
+			if len(ch) == 0 {
+				return errors.New("")
+			}
+			return nil
+		})
+		notif := <-ch
+		require.Equal(t, "foo", notif.Channel)
+		require.Equal(t, "", notif.Extra)
+		mustSucceed(d.Exec("NOTIFY foo, 'bar'"))
+		testutils.SucceedsSoon(t, func() error {
+			// Connections don't receive notifications until they do something.
+			mustSucceed(listenDb.Exec("SELECT 1"))
+			if len(ch) == 0 {
+				return errors.New("")
+			}
+			return nil
+		})
+		notif = <-ch
+		require.Equal(t, "foo", notif.Channel)
+		require.Equal(t, "bar", notif.Extra)
+	})
+
+	// Test that notifications don't get sent until a transaction is committed.
+	t.Run("don't notify until commit", func(t *testing.T) {
+		tx, err := notifyDb.Begin()
+		require.NoError(t, err)
+		mustSucceed(tx.Exec("NOTIFY foo"))
+		mustSucceed(listenDb.Exec("SELECT 1"))
+		require.Equal(t, 0, len(listenerNotifChan),
+			"expected not to be notified until end of txn")
+		require.NoError(t, tx.Rollback())
+		mustSucceed(listenDb.Exec("SELECT 1"))
+		require.Equal(t, 0, len(listenerNotifChan),
+			"expected not to be notified after rolled back txn")
+		tx, err = notifyDb.Begin()
+		require.NoError(t, err)
+		mustSucceed(tx.Exec("NOTIFY foo"))
+		mustSucceed(listenDb.Exec("SELECT 1"))
+		require.Equal(t, 0, len(listenerNotifChan),
+			"expected not to be notified until end of txn")
+		require.NoError(t, tx.Commit())
+		testutils.SucceedsSoon(t,
+			func() error {
+				mustSucceed(listenDb.Exec("SELECT 1"))
+				if len(listenerNotifChan) == 0 {
+					// Wait until we get a notification after commit.
+					return errors.New("")
+				}
+				notif := <-listenerNotifChan
+				require.Equal(t, "foo", notif.Channel)
+				return nil
+			})
+	})
+
+	t.Run("don't receive until commit", func(t *testing.T) {
+		// Test that notifications don't get received until txn is complete.
+		tx, err := listenDb.Begin()
+		require.NoError(t, err)
+		mustSucceed(notifyDb.Exec("NOTIFY foo"))
+		mustSucceed(tx.Exec("SELECT 1"))
+		require.Equal(t, 0, len(listenerNotifChan),
+			"expected not to be notified until end of txn")
+		require.NoError(t, tx.Commit())
+		testutils.SucceedsSoon(t,
+			func() error {
+				mustSucceed(listenDb.Exec("SELECT 1"))
+				if len(listenerNotifChan) == 0 {
+					// Wait until we get a notification after commit.
+					return errors.New("")
+				}
+				notif := <-listenerNotifChan
+				require.Equal(t, "foo", notif.Channel)
+				return nil
+			})
+	})
+
+	t.Run("Unlisten unlistens to things", func(t *testing.T) {
+		mustSucceed(listenDb.Exec("UNLISTEN *"))
+		mustSucceed(notifyDb.Exec("NOTIFY foo"))
+		require.Equal(t, 0, len(listenerNotifChan),
+			"expected not to be notified")
+	})
+
+	t.Run("overflowing max pending on a channel drops messages", func(t *testing.T) {
+		mustSucceed(listenDb.Exec("SET CLUSTER SETTING sql.pg_notifications.max_pending=2"))
+		// The max_pending number only is applied for new listeners.
+		mustSucceed(listenDb.Exec("UNLISTEN *"))
+		mustSucceed(listenDb.Exec("LISTEN foo"))
+		mustSucceed(listenDb.Exec("LISTEN bar"))
+		// We should get at least 2 foos and 1 bar. Many times it won't be exactly 2
+		// because there's no easy way to wait until we've guaranteed to be notified
+		// about the 2 foos, since rangefeeds are async. So we have to try in a
+		// retry loop, and if we were fast instead of slow, the retry loop might let
+		// 1 notification in the first time and 2 the second. But it's close enough
+		// and a pretty good test since we're sending so many notifications up front.
+		for i := 0; i < 50; i++ {
+			mustSucceed(notifyDb.Exec("NOTIFY foo"))
+		}
+		mustSucceed(notifyDb.Exec("NOTIFY bar"))
+		for i := 0; i < 50; i++ {
+			mustSucceed(notifyDb.Exec("NOTIFY foo"))
+		}
+		// This is racy - because of
+		testutils.SucceedsSoon(t,
+			func() error {
+				mustSucceed(listenDb.Exec("SELECT 1"))
+				if len(listenerNotifChan) < 3 {
+					// Wait until we get a notification after commit.
+					return errors.New("")
+				}
+				notifs := make(map[string]int)
+				for i := 0; i < 3; i++ {
+					notifs[(<-listenerNotifChan).Channel]++
+				}
+				// 10 is an arbitrary constant that's much smaller than the number of
+				// messages we sent, but larger than the max channel size of 2. See the
+				// comment above for rationale.
+				if notifs["foo"] >= 10 {
+					require.Fail(t, "Expected notifications to be limited by max pending setting")
+				}
+				require.Equal(t, 1, notifs["bar"])
+				return nil
+			})
+	})
+}

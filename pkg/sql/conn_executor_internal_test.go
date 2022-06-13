@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -332,6 +333,7 @@ func startConnExecutor(
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gw, st),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
+		PgListenerRegistry:      notify.NewRegistry(st, stopper, clock, nil),
 	}
 
 	s := NewServer(cfg, pool)

@@ -3443,6 +3443,7 @@ A write probe will effectively probe reads as well.</p>
 </span></td></tr>
 <tr><td><a name="pg_my_temp_schema"></a><code>pg_my_temp_schema() &rarr; oid</code></td><td><span class="funcdesc"><p>Returns the OID of the current session’s temporary schema, or zero if it has none (because it has not created any temporary tables).</p>
 </span></td></tr>
+<tr><td><a name="pg_notify"></a><code>pg_notify(channel: <a href="string.html">string</a>, message: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td></td></tr>
 <tr><td><a name="pg_relation_is_updatable"></a><code>pg_relation_is_updatable(reloid: oid, include_triggers: <a href="bool.html">bool</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>Returns the update events the relation supports.</p>
 </span></td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>

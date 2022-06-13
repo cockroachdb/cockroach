@@ -919,6 +919,27 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"pg_notify": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"channel", types.String}, {"message", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				_, err := ctx.Planner.QueryRowEx(ctx.Context, "notify",
+					sessiondata.NoSessionDataOverride,
+					fmt.Sprintf("NOTIFY %s, '%s'",
+						tree.MustBeDString(args[0]),
+						tree.MustBeDString(args[1]),
+					))
+				return tree.DNull, err
+			},
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"format_type": makeBuiltin(tree.FunctionProperties{NullableArgs: true, DistsqlBlocklist: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},

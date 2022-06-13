@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pgnotify",
+    srcs = ["notify.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotify",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_jackc_pgconn//:pgconn"],
+)

@@ -373,6 +373,10 @@ const (
 	// MVCCRangeTombstones enables the use of MVCC range tombstones.
 	MVCCRangeTombstones
 
+	// PGNotificationsTable is for the migration that adds the pg_notifications
+	// system table.
+	PGNotificationsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -657,7 +661,10 @@ var versionsSingleton = keyedVersions{
 		Key:     MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
-
+	{
+		Key:     PGNotificationsTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

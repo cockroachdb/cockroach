@@ -22,6 +22,7 @@ public  lease                            table  NULL  NULL
 public  locations                        table  NULL  NULL
 public  migrations                       table  NULL  NULL
 public  namespace                        table  NULL  NULL
+public  pg_notifications                 table  NULL  NULL
 public  protected_ts_meta                table  NULL  NULL
 public  protected_ts_records             table  NULL  NULL
 public  rangelog                         table  NULL  NULL
@@ -134,6 +135,7 @@ SELECT id FROM system.descriptor
 45
 46
 47
+48
 50
 100
 101
@@ -375,6 +377,14 @@ system  public  migrations                       root    SELECT  true
 system  public  migrations                       root    UPDATE  true
 system  public  namespace                        admin   SELECT  true
 system  public  namespace                        root    SELECT  true
+system  public  pg_notifications                 admin   DELETE  true
+system  public  pg_notifications                 admin   INSERT  true
+system  public  pg_notifications                 admin   SELECT  true
+system  public  pg_notifications                 admin   UPDATE  true
+system  public  pg_notifications                 root    DELETE  true
+system  public  pg_notifications                 root    INSERT  true
+system  public  pg_notifications                 root    SELECT  true
+system  public  pg_notifications                 root    UPDATE  true
 system  public  protected_ts_meta                admin   SELECT  true
 system  public  protected_ts_meta                root    SELECT  true
 system  public  protected_ts_records             admin   SELECT  true
@@ -805,7 +815,6 @@ system  public  zones                            root    DELETE  true
 system  public  zones                            root    INSERT  true
 system  public  zones                            root    SELECT  true
 system  public  zones                            root    UPDATE  true
-
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system

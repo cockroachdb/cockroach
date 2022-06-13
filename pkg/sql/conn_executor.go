@@ -1659,6 +1659,10 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
 		}
+		for _, notif := range ex.planner.execCfg.PgListenerRegistry.DrainNotifications(
+			ctx, ex.sessionID.Uint128) {
+			ex.clientComm.SendNotification(ctx, notif)
+		}
 		ex.extraTxnState.savepoints.clear()
 		ex.onTxnFinish(ctx, ev)
 	case txnRestart:
@@ -1791,6 +1795,7 @@ func (ex *connExecutor) run(
 		}
 	}()
 
+	defer ex.server.cfg.PgListenerRegistry.UnlistenAll(ex.sessionID.Uint128)
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -2764,6 +2769,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
+	p.notificationSender = ex.clientComm
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
 	p.createdSequences = ex.getCreatedSequencesAccessor()
@@ -2773,6 +2779,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
 	p.schemaResolver.descCollection = p.Descriptors()
 	p.schemaResolver.authAccessor = p
+	p.sessionLifetimeContext = ctx
 }
 
 func (ex *connExecutor) resetPlanner(
