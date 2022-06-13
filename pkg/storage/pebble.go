@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -937,17 +936,6 @@ func (p *Pebble) Close() {
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
 	return p.closed
-}
-
-// ExportMVCCToSst is part of the engine.Reader interface.
-func (p *Pebble) ExportMVCCToSst(
-	ctx context.Context, exportOptions ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	r := wrapReader(p)
-	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, p.settings, r, exportOptions, dest)
-	r.Free()
-	return summary, k.Key, k.Timestamp, err
 }
 
 // MVCCGet implements the Engine interface.
@@ -1867,17 +1855,6 @@ func (p *pebbleReadOnly) Closed() bool {
 	return p.closed
 }
 
-// ExportMVCCToSst is part of the engine.Reader interface.
-func (p *pebbleReadOnly) ExportMVCCToSst(
-	ctx context.Context, exportOptions ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	r := wrapReader(p)
-	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, p.parent.settings, r, exportOptions, dest)
-	r.Free()
-	return summary, k.Key, k.Timestamp, err
-}
-
 func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
 	return mvccGetHelper(key, p)
 }
@@ -2150,17 +2127,6 @@ func (p *pebbleSnapshot) Closed() bool {
 	return p.closed
 }
 
-// ExportMVCCToSst is part of the engine.Reader interface.
-func (p *pebbleSnapshot) ExportMVCCToSst(
-	ctx context.Context, exportOptions ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	r := wrapReader(p)
-	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, p.parent.settings, r, exportOptions, dest)
-	r.Free()
-	return summary, k.Key, k.Timestamp, err
-}
-
 // Get implements the Reader interface.
 func (p *pebbleSnapshot) MVCCGet(key MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
@@ -2284,173 +2250,6 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
-}
-
-func pebbleExportToSst(
-	ctx context.Context, cs *cluster.Settings, reader Reader, options ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, MVCCKey, error) {
-	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "pebbleExportToSst")
-	defer span.Finish()
-	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
-	defer sstWriter.Close()
-
-	var rows RowCounter
-	iter := NewMVCCIncrementalIterator(
-		reader,
-		MVCCIncrementalIterOptions{
-			EndKey:       options.EndKey,
-			StartTime:    options.StartTS,
-			EndTime:      options.EndTS,
-			IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
-		})
-	defer iter.Close()
-	var curKey roachpb.Key // only used if exportAllRevisions
-	var resumeKey roachpb.Key
-	var resumeTS hlc.Timestamp
-	paginated := options.TargetSize > 0
-	trackKeyBoundary := paginated || options.ResourceLimiter != nil
-	firstIteration := true
-	for iter.SeekGE(options.StartKey); ; {
-		ok, err := iter.Valid()
-		if err != nil {
-			return roachpb.BulkOpSummary{}, MVCCKey{}, err
-		}
-		if !ok {
-			break
-		}
-		unsafeKey := iter.UnsafeKey()
-		if unsafeKey.Key.Compare(options.EndKey) >= 0 {
-			break
-		}
-
-		if iter.NumCollectedIntents() > 0 {
-			break
-		}
-
-		isNewKey := !options.ExportAllRevisions || !unsafeKey.Key.Equal(curKey)
-		if trackKeyBoundary && options.ExportAllRevisions && isNewKey {
-			curKey = append(curKey[:0], unsafeKey.Key...)
-		}
-
-		if options.ResourceLimiter != nil {
-			// Don't check resources on first iteration to ensure we can make some progress regardless
-			// of starvation. Otherwise operations could spin indefinitely.
-			if firstIteration {
-				firstIteration = false
-			} else {
-				// In happy day case we want to only stop at key boundaries as it allows callers to use
-				// produced sst's directly. But if we can't find key boundary within reasonable number of
-				// iterations we would split mid key.
-				// To achieve that we use soft and hard thresholds in limiter. Once soft limit is reached
-				// we would start searching for key boundary and return as soon as it is reached. If we
-				// can't find it before hard limit is reached and caller requested mid key stop we would
-				// immediately return.
-				limit := options.ResourceLimiter.IsExhausted()
-				// We can stop at key once any threshold is reached or force stop at hard limit if midkey
-				// split is allowed.
-				if limit >= ResourceLimitReachedSoft && isNewKey || limit == ResourceLimitReachedHard && options.StopMidKey {
-					// Reached iteration limit, stop with resume span
-					resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
-					if !isNewKey {
-						resumeTS = unsafeKey.Timestamp
-					}
-					break
-				}
-			}
-		}
-
-		unsafeValue := iter.UnsafeValue()
-		skip := false
-		if unsafeKey.IsValue() {
-			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
-			if !ok && err == nil {
-				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
-			}
-			if err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
-			}
-
-			// Export only the inner roachpb.Value, not the MVCCValue header.
-			unsafeValue = mvccValue.Value.RawBytes
-
-			// Skip tombstone records when start time is zero (non-incremental)
-			// and we are not exporting all versions.
-			skipTombstones := !options.ExportAllRevisions && options.StartTS.IsEmpty()
-			skip = skipTombstones && mvccValue.IsTombstone()
-		}
-
-		if !skip {
-			if err := rows.Count(unsafeKey.Key); err != nil {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
-			}
-			curSize := rows.BulkOpSummary.DataSize
-			reachedTargetSize := curSize > 0 && uint64(curSize) >= options.TargetSize
-			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
-			reachedMaxSize := options.MaxSize > 0 && newSize > int64(options.MaxSize)
-			// When paginating we stop writing in two cases:
-			// - target size is reached and we wrote all versions of a key
-			// - maximum size reached and we are allowed to stop mid key
-			if paginated && (isNewKey && reachedTargetSize || options.StopMidKey && reachedMaxSize) {
-				// Allocate the right size for resumeKey rather than using curKey.
-				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
-				if options.StopMidKey && !isNewKey {
-					resumeTS = unsafeKey.Timestamp
-				}
-				break
-			}
-			if reachedMaxSize {
-				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: newSize, maxSize: options.MaxSize}
-			}
-			if unsafeKey.Timestamp.IsEmpty() {
-				// This should never be an intent since the incremental iterator returns
-				// an error when encountering intents.
-				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
-				}
-			} else {
-				if err := sstWriter.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
-					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
-				}
-			}
-			rows.BulkOpSummary.DataSize = newSize
-		}
-
-		if options.ExportAllRevisions {
-			iter.Next()
-		} else {
-			iter.NextKey()
-		}
-	}
-
-	// First check if we encountered an intent while iterating the data.
-	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
-	// to collect all matching intents before returning them in an error to the caller.
-	if iter.NumCollectedIntents() > 0 {
-		for uint64(iter.NumCollectedIntents()) < options.MaxIntents {
-			iter.NextKey()
-			// If we encounter other errors during intent collection, we return our original write intent failure.
-			// We would find this new error again upon retry.
-			ok, _ := iter.Valid()
-			if !ok {
-				break
-			}
-		}
-		err := iter.TryGetIntentError()
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
-	}
-
-	if rows.BulkOpSummary.DataSize == 0 {
-		// If no records were added to the sstable, skip completing it and return a
-		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
-	}
-
-	if err := sstWriter.Finish(); err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
-	}
-
-	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
 }
 
 // pebbleFindRangeKeySpan returns the minimum span within the given bounds that

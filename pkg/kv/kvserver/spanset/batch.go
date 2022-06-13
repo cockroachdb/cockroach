@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -410,13 +409,6 @@ func (s spanSetReader) Close() {
 
 func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
-}
-
-// ExportMVCCToSst is part of the storage.Reader interface.
-func (s spanSetReader) ExportMVCCToSst(
-	ctx context.Context, exportOptions storage.ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	return s.r.ExportMVCCToSst(ctx, exportOptions, dest)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {

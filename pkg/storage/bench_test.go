@@ -106,30 +106,20 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 	}
 }
 
-func BenchmarkExportToSst(b *testing.B) {
+func BenchmarkMVCCExportToSST(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
 	exportAllRevisions := []bool{false, true}
-	engineMakers := []struct {
-		name   string
-		create engineMaker
-	}{
-		{"pebble", setupMVCCPebble},
-	}
 
-	for _, engineImpl := range engineMakers {
-		b.Run(engineImpl.name, func(b *testing.B) {
-			for _, numKey := range numKeys {
-				b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
-					for _, numRevision := range numRevisions {
-						b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
-							for _, exportAllRevisionsVal := range exportAllRevisions {
-								b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-									runExportToSst(b, engineImpl.create, numKey, numRevision, exportAllRevisionsVal)
-								})
-							}
+	for _, numKey := range numKeys {
+		b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
+			for _, numRevision := range numRevisions {
+				b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
+					for _, exportAllRevisionsVal := range exportAllRevisions {
+						b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
+							runMVCCExportToSST(b, numKey, numRevision, exportAllRevisionsVal)
 						})
 					}
 				})
@@ -1497,13 +1487,14 @@ func runBatchApplyBatchRepr(
 	b.StopTimer()
 }
 
-func runExportToSst(
-	b *testing.B, emk engineMaker, numKeys int, numRevisions int, exportAllRevisions bool,
-) {
+func runMVCCExportToSST(b *testing.B, numKeys int, numRevisions int, exportAllRevisions bool) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
-	engine := emk(b, dir)
+	engine := setupMVCCPebble(b, dir)
 	defer engine.Close()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 
 	batch := engine.NewUnindexedBatch(true /* writeOnly */)
 	for i := 0; i < numKeys; i++ {
@@ -1532,7 +1523,7 @@ func runExportToSst(
 	for i := 0; i < b.N; i++ {
 		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
 		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
-		_, _, _, err := engine.ExportMVCCToSst(context.Background(), ExportOptions{
+		_, _, err := MVCCExportToSST(ctx, st, engine, ExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
 			EndKey:             roachpb.KeyMax,
 			StartTS:            startTS,

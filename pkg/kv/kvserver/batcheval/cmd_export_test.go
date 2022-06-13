@@ -546,6 +546,7 @@ const (
 
 func assertEqualKVs(
 	ctx context.Context,
+	st *cluster.Settings,
 	e storage.Engine,
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
@@ -572,16 +573,15 @@ func assertEqualKVs(
 
 		// Run the actual code path used when exporting MVCCs to SSTs.
 		var kvs []storage.MVCCKeyValue
-		var resumeTs hlc.Timestamp
-		for start := startKey; start != nil; {
+		start := storage.MVCCKey{Key: startKey}
+		for start.Key != nil {
 			var sst []byte
 			var summary roachpb.BulkOpSummary
 			maxSize := uint64(0)
 			prevStart := start
-			prevTs := resumeTs
 			sstFile := &storage.MemFile{}
-			summary, start, resumeTs, err = e.ExportMVCCToSst(ctx, storage.ExportOptions{
-				StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeTs},
+			summary, start, err = storage.MVCCExportToSST(ctx, st, e, storage.ExportOptions{
+				StartKey:           start,
 				EndKey:             endKey,
 				StartTS:            startTime,
 				EndTS:              endTime,
@@ -594,7 +594,7 @@ func assertEqualKVs(
 			sst = sstFile.Data()
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.
-			if start != nil {
+			if start.Key != nil {
 				dataSize := uint64(summary.DataSize)
 				require.Truef(t, targetSize <= dataSize, "%d > %d",
 					targetSize, summary.DataSize)
@@ -628,8 +628,8 @@ func assertEqualKVs(
 				if dataSizeWhenExceeded == maxSize {
 					maxSize--
 				}
-				_, _, _, err = e.ExportMVCCToSst(ctx, storage.ExportOptions{
-					StartKey:           storage.MVCCKey{Key: prevStart, Timestamp: prevTs},
+				_, _, err = storage.MVCCExportToSST(ctx, st, e, storage.ExportOptions{
+					StartKey:           prevStart,
 					EndKey:             endKey,
 					StartTS:            startTime,
 					EndTS:              endTime,
@@ -668,12 +668,10 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 
 	ctx := context.Background()
 
+	st := cluster.MakeTestingClusterSettings()
 	mkEngine := func(t *testing.T) (e storage.Engine, cleanup func()) {
 		dir, cleanupDir := testutils.TempDir(t)
-		e, err := storage.Open(ctx,
-			storage.Filesystem(dir),
-			storage.CacheSize(0),
-			storage.Settings(cluster.MakeTestingClusterSettings()))
+		e, err := storage.Open(ctx, storage.Filesystem(dir), storage.CacheSize(0), storage.Settings(st))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -785,11 +783,11 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			{"kv (randLowerTime, randUpperTime]", keyMin, keyMax, timestamps[tsLowerBound], timestamps[tsUpperBound]},
 		} {
 			t.Run(fmt.Sprintf("%s, latest", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportLatest, stopAtKeys, targetSize))
+				assertEqualKVs(ctx, st, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportLatest, stopAtKeys, targetSize))
 			t.Run(fmt.Sprintf("%s, all", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtKeys, targetSize))
+				assertEqualKVs(ctx, st, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtKeys, targetSize))
 			t.Run(fmt.Sprintf("%s, all, split rows", s.name),
-				assertEqualKVs(ctx, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtTimestamps, targetSize))
+				assertEqualKVs(ctx, st, e, s.keyMin, s.keyMax, s.tsMin, s.tsMax, exportAll, stopAtTimestamps, targetSize))
 		}
 	}
 	// Exercise min to max time and key ranges.
