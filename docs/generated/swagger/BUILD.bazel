@@ -21,6 +21,7 @@ genrule(
 
 go_path(
     name = "swagger_go_path",
+    tags = ["no-remote-cache"],
     deps = [
         "//pkg/server",
     ],
