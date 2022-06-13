@@ -28,7 +28,6 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				// Back-reference removal must precede forward-reference removal,

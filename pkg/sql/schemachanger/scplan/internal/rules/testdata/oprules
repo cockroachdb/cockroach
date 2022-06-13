@@ -11,10 +11,6 @@ joinTargetNode(element, target, node):
 toAbsent(target1, target2):
     - $target1[TargetStatus] = ABSENT
     - $target2[TargetStatus] = ABSENT
-toAbsentInDropped(target1, node1, target2, node2):
-    - toAbsent($target1, $target2)
-    - $node1[CurrentStatus] = DROPPED
-    - $node2[CurrentStatus] = DROPPED
 toAbsentInAbsent(target1, node1, target2, node2):
     - toAbsent($target1, $target2)
     - $node1[CurrentStatus] = ABSENT

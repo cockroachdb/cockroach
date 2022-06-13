@@ -131,13 +131,6 @@ type CreateGcJobForIndex struct {
 	StatementForDropJob
 }
 
-// MarkDescriptorAsDroppedSynthetically marks a descriptor as dropped within
-// a transaction by injecting a synthetic descriptor.
-type MarkDescriptorAsDroppedSynthetically struct {
-	mutationOp
-	DescID descpb.ID
-}
-
 // MarkDescriptorAsDropped marks a descriptor as dropped.
 type MarkDescriptorAsDropped struct {
 	mutationOp
@@ -227,8 +220,7 @@ type MakeDroppedColumnDeleteOnly struct {
 	ColumnID descpb.ColumnID
 }
 
-// RemoveDroppedColumnType unsets a column drop mutation's type and computed
-// expr.
+// RemoveDroppedColumnType unsets a column type and computed expr.
 type RemoveDroppedColumnType struct {
 	mutationOp
 	TableID  descpb.ID

@@ -18,11 +18,10 @@ import (
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
 func NewMutationVisitor(
-	s MutationVisitorStateUpdater, nr NameResolver, sd SyntheticDescriptors, clock Clock,
+	s MutationVisitorStateUpdater, nr NameResolver, clock Clock,
 ) scop.MutationVisitor {
 	return &visitor{
 		nr:    nr,
-		sd:    sd,
 		s:     s,
 		clock: clock,
 	}
@@ -33,7 +32,6 @@ var _ scop.MutationVisitor = (*visitor)(nil)
 type visitor struct {
 	clock Clock
 	nr    NameResolver
-	sd    SyntheticDescriptors
 	s     MutationVisitorStateUpdater
 }
 
