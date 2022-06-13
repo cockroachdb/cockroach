@@ -359,6 +359,10 @@ is changed, either for another tenant or for all tenants.
 Events in this category are generated when a table has been
 marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
 
+{{site.data.alerts.callout_danger}}
+**This is an experimental feature**. The interface and output are subject to change.
+{{site.data.alerts.end}}
+
 Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
