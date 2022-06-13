@@ -1397,6 +1397,12 @@ message ExternalStorage {
     string billing_project = 4;
 
     string credentials = 5;
+
+    // BearerToken is a temporary bearer token that could be used to access the
+    // storage. This token is only used for "specified" auth mode and if
+    // Credentials is not supplied. Currently only OAuth 2.0 tokens are
+    // supported.
+    string bearer_token = 7;
   }
   message Azure {
     string container = 1;
@@ -1719,7 +1725,7 @@ message AddSSTableRequest {
   // could pick an MVCC timestamp that's guaranteed to not collide with
   // existing keys, see: https://github.com/cockroachdb/cockroach/issues/73047.
   // However, this would always lead to inaccurate MVCC stats.
-  bool disallow_conflicts = 7; 
+  bool disallow_conflicts = 7;
 
   // DisallowShadowing implies DisallowConflicts, and additionally rejects
   // writing above keys that have an existing/visible value (but will write
