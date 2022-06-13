@@ -18,3 +18,7 @@ yarn \
   --no-progress \
   --mutex network \
   install
+
+# The aria-query contains some useless files with a space in them.
+# Remove them instead of confusing our build.
+find $moduleDir/node_modules/aria-query -name '* *' -delete || true

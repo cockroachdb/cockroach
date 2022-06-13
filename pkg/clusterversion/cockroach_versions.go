@@ -116,7 +116,7 @@ type Key int
 // primarily a means to remove legacy state from the cluster. For example, a
 // migration might scan the cluster for an outdated type of table descriptor and
 // rewrite it into a new format. Migrations are tricky to get right and they have
-// their own documentation in ./pkg/migration, which you should peruse should you
+// their own documentation in ./pkg/upgrade, which you should peruse should you
 // feel that a migration is necessary for your use case.
 //
 // Phasing out Versions and Migrations
@@ -372,6 +372,11 @@ const (
 	RemoveGrantPrivilege
 	// MVCCRangeTombstones enables the use of MVCC range tombstones.
 	MVCCRangeTombstones
+	// UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
+	// by IDs rather than by their names. For example, a column's DEFAULT (or
+	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
+	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
+	UpgradeSequenceToBeReferencedByID
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -656,6 +661,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
+	},
+	{
+		Key:     UpgradeSequenceToBeReferencedByID,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
 	},
 
 	// *************************************************

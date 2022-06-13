@@ -269,10 +269,6 @@ yarn_install(
     package_json = "//pkg/ui/workspaces/db-console:package.json",
     yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
     strict_visibility = False,
-    patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
-    post_install_patches = [
-      "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.db-console.patch",
-    ],
     symlink_node_modules = True,
 )
 
@@ -290,10 +286,6 @@ yarn_install(
     package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
     strict_visibility = False,
     yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
-    patch_args = [ "-p0", "--remove-empty-files", "--silent" ],
-    post_install_patches = [
-      "//pkg/ui:patches/aria-query/remove-filenames-with-spaces.cluster-ui.patch",
-    ],
     symlink_node_modules = True,
 )
 
