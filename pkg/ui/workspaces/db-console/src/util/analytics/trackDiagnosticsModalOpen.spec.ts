@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get, isString } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackDiagnosticsModalOpen";
 
@@ -23,7 +22,7 @@ describe("trackDiagnosticsModalOpen", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)("some statement");
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send a track call with the correct event", () => {
@@ -35,8 +34,8 @@ describe("trackDiagnosticsModalOpen", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(isString(event));
-    assert.isTrue(event === expected);
+    expect(isString(event)).toBe(true);
+    expect(event === expected).toBe(true);
   });
 
   it("send the correct payload", () => {
@@ -48,7 +47,7 @@ describe("trackDiagnosticsModalOpen", () => {
     const sent = spy.getCall(0).args[0];
     const fingerprint = get(sent, "properties.fingerprint");
 
-    assert.isTrue(isString(fingerprint));
-    assert.isTrue(fingerprint === statement);
+    expect(isString(fingerprint)).toBe(true);
+    expect(fingerprint === statement).toBe(true);
   });
 });

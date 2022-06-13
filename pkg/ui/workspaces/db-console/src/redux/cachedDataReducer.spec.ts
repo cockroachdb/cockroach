@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import _ from "lodash";
 import { Action } from "redux";
 import moment from "moment";
@@ -47,23 +46,25 @@ describe("basic cachedDataReducer", function () {
 
     describe("actions", function () {
       it("requestData() creates the correct action type.", function () {
-        assert.equal(testReducerObj.requestData().type, testReducerObj.REQUEST);
+        expect(testReducerObj.requestData().type).toEqual(
+          testReducerObj.REQUEST,
+        );
       });
 
       it("receiveData() creates the correct action type.", function () {
-        assert.equal(
-          testReducerObj.receiveData(null).type,
+        expect(testReducerObj.receiveData(null).type).toEqual(
           testReducerObj.RECEIVE,
         );
       });
 
       it("errorData() creates the correct action type.", function () {
-        assert.equal(testReducerObj.errorData(null).type, testReducerObj.ERROR);
+        expect(testReducerObj.errorData(null).type).toEqual(
+          testReducerObj.ERROR,
+        );
       });
 
       it("invalidateData() creates the correct action type.", function () {
-        assert.equal(
-          testReducerObj.invalidateData().type,
+        expect(testReducerObj.invalidateData().type).toEqual(
           testReducerObj.INVALIDATE,
         );
       });
@@ -81,7 +82,7 @@ describe("basic cachedDataReducer", function () {
 
       it("should have the correct default value.", function () {
         expected = new CachedDataReducerState<Response>();
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch requestData", function () {
@@ -89,7 +90,7 @@ describe("basic cachedDataReducer", function () {
         expected = new CachedDataReducerState<Response>();
         expected.inFlight = true;
         expected.requestedAt = testMoment;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch receiveData", function () {
@@ -103,7 +104,7 @@ describe("basic cachedDataReducer", function () {
         expected.data = expectedResponse;
         expected.setAt = testMoment;
         expected.lastError = null;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch errorData", function () {
@@ -112,13 +113,13 @@ describe("basic cachedDataReducer", function () {
         state = reducer(state, testReducerObj.errorData(e, null));
         expected = new CachedDataReducerState<Response>();
         expected.lastError = e;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch invalidateData", function () {
         state = reducer(state, testReducerObj.invalidateData());
         expected = new CachedDataReducerState<Response>();
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
     });
 
@@ -159,7 +160,7 @@ describe("basic cachedDataReducer", function () {
             expected.requestedAt = testMoment;
             expected.setAt = testMoment;
             expected.lastError = null;
-            assert.deepEqual(state.cachedData.test, expected);
+            expect(state.cachedData.test).toEqual(expected);
           });
       });
     });
@@ -177,12 +178,12 @@ describe("basic cachedDataReducer", function () {
           "duplicatenamespace",
         );
       } catch (e) {
-        assert(_.isError(e));
+        expect(_.isError(e)).toBeTruthy();
         return;
       }
-      assert.fail(
-        "Expected to fail after registering a duplicate actionNamespace.",
-      );
+      // expected to throw an error after using a duplicate actionNamespace
+      // if no error is throw, fail
+      expect(false).toBe(true);
     });
   });
 });
@@ -217,11 +218,10 @@ describe("keyed cachedDataReducer", function () {
         const request = new Request("testRequestRequest");
         const requestAction =
           testReducerObj.cachedDataReducer.requestData(request);
-        assert.equal(
-          requestAction.type,
+        expect(requestAction.type).toEqual(
           testReducerObj.cachedDataReducer.REQUEST,
         );
-        assert.deepEqual(requestAction.payload, { request });
+        expect(requestAction.payload).toEqual({ request });
       });
 
       it("receiveData() creates the correct action type.", function () {
@@ -231,11 +231,10 @@ describe("keyed cachedDataReducer", function () {
           response,
           request,
         );
-        assert.equal(
-          receiveAction.type,
+        expect(receiveAction.type).toEqual(
           testReducerObj.cachedDataReducer.RECEIVE,
         );
-        assert.deepEqual(receiveAction.payload, { request, data: response });
+        expect(receiveAction.payload).toEqual({ request, data: response });
       });
 
       it("errorData() creates the correct action type.", function () {
@@ -245,19 +244,20 @@ describe("keyed cachedDataReducer", function () {
           error,
           request,
         );
-        assert.equal(errorAction.type, testReducerObj.cachedDataReducer.ERROR);
-        assert.deepEqual(errorAction.payload, { request, data: error });
+        expect(errorAction.type).toEqual(
+          testReducerObj.cachedDataReducer.ERROR,
+        );
+        expect(errorAction.payload).toEqual({ request, data: error });
       });
 
       it("invalidateData() creates the correct action type.", function () {
         const request = new Request("testInvalidateRequest");
         const invalidateAction =
           testReducerObj.cachedDataReducer.invalidateData(request);
-        assert.equal(
-          invalidateAction.type,
+        expect(invalidateAction.type).toEqual(
           testReducerObj.cachedDataReducer.INVALIDATE,
         );
-        assert.deepEqual(invalidateAction.payload, { request });
+        expect(invalidateAction.payload).toEqual({ request });
       });
     });
 
@@ -277,7 +277,7 @@ describe("keyed cachedDataReducer", function () {
 
       it("should have the correct default value.", function () {
         expected = new KeyedCachedDataReducerState<Response>();
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch requestData", function () {
@@ -289,7 +289,7 @@ describe("keyed cachedDataReducer", function () {
         expected[id] = new CachedDataReducerState<Response>();
         expected[id].requestedAt = testMoment;
         expected[id].inFlight = true;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch receiveData", function () {
@@ -308,7 +308,7 @@ describe("keyed cachedDataReducer", function () {
         expected[id].data = expectedResponse;
         expected[id].lastError = null;
         expected[id].setAt = testMoment;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch errorData", function () {
@@ -321,7 +321,7 @@ describe("keyed cachedDataReducer", function () {
         expected = new KeyedCachedDataReducerState<Response>();
         expected[id] = new CachedDataReducerState<Response>();
         expected[id].lastError = e;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch invalidateData", function () {
@@ -331,7 +331,7 @@ describe("keyed cachedDataReducer", function () {
         );
         expected = new KeyedCachedDataReducerState<Response>();
         expected[id] = new CachedDataReducerState<Response>();
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
     });
   });
@@ -388,11 +388,10 @@ describe("PaginatedCachedDataReducer", function () {
         const request = new Request("testRequestRequest", undefined, undefined);
         const requestAction =
           testReducerObj.cachedDataReducer.requestData(request);
-        assert.equal(
-          requestAction.type,
+        expect(requestAction.type).toEqual(
           testReducerObj.cachedDataReducer.REQUEST,
         );
-        assert.deepEqual(requestAction.payload, { request });
+        expect(requestAction.payload).toEqual({ request });
       });
 
       it("receiveData() creates the correct action type.", function () {
@@ -402,11 +401,10 @@ describe("PaginatedCachedDataReducer", function () {
           response,
           request,
         );
-        assert.equal(
-          receiveAction.type,
+        expect(receiveAction.type).toEqual(
           testReducerObj.cachedDataReducer.RECEIVE,
         );
-        assert.deepEqual(receiveAction.payload, { request, data: response });
+        expect(receiveAction.payload).toEqual({ request, data: response });
       });
 
       it("errorData() creates the correct action type.", function () {
@@ -416,19 +414,20 @@ describe("PaginatedCachedDataReducer", function () {
           error,
           request,
         );
-        assert.equal(errorAction.type, testReducerObj.cachedDataReducer.ERROR);
-        assert.deepEqual(errorAction.payload, { request, data: error });
+        expect(errorAction.type).toEqual(
+          testReducerObj.cachedDataReducer.ERROR,
+        );
+        expect(errorAction.payload).toEqual({ request, data: error });
       });
 
       it("invalidateData() creates the correct action type.", function () {
         const request = new Request("testRequestRequest", 5, undefined);
         const invalidateAction =
           testReducerObj.cachedDataReducer.invalidateData(request);
-        assert.equal(
-          invalidateAction.type,
+        expect(invalidateAction.type).toEqual(
           testReducerObj.cachedDataReducer.INVALIDATE,
         );
-        assert.deepEqual(invalidateAction.payload, { request });
+        expect(invalidateAction.payload).toEqual({ request });
       });
     });
 
@@ -448,7 +447,7 @@ describe("PaginatedCachedDataReducer", function () {
 
       it("should have the correct default value.", function () {
         expected = new PaginatedCachedDataReducerState<Response>();
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch requestData", function () {
@@ -459,7 +458,7 @@ describe("PaginatedCachedDataReducer", function () {
         expected = new PaginatedCachedDataReducerState<Response>();
         expected.requestedAt = testMoment;
         expected.inFlight = true;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch receiveData", function () {
@@ -478,7 +477,7 @@ describe("PaginatedCachedDataReducer", function () {
         expected.data[id] = expectedResponse;
         expected.lastError = null;
         expected.setAt = testMoment;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch errorData", function () {
@@ -489,7 +488,7 @@ describe("PaginatedCachedDataReducer", function () {
         );
         expected = new PaginatedCachedDataReducerState<Response>();
         expected.lastError = e;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch invalidateData", function () {
@@ -499,7 +498,7 @@ describe("PaginatedCachedDataReducer", function () {
         );
         expected = new PaginatedCachedDataReducerState<Response>();
         expected.valid = false;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch cleanData", function () {
@@ -511,7 +510,7 @@ describe("PaginatedCachedDataReducer", function () {
         expected.requestedAt = undefined;
         console.log("state", JSON.stringify(state, undefined, 2));
         console.log("expected", JSON.stringify(expected, undefined, 2));
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
 
       it("should correctly dispatch receiveCompleted", function () {
@@ -521,7 +520,7 @@ describe("PaginatedCachedDataReducer", function () {
         expected.inFlight = false;
         expected.setAt = testMoment;
         expected.lastError = null;
-        assert.deepEqual(state, expected);
+        expect(state).toEqual(expected);
       });
     });
 
@@ -557,7 +556,7 @@ describe("PaginatedCachedDataReducer", function () {
           .refresh(request, s => s[id])(mockDispatch, () => state, undefined)
           .then(() => {
             Object.keys(state.data).forEach(k => {
-              assert.isTrue(expectedPageTokens.some(t => t === k));
+              expect(expectedPageTokens.some(t => t === k)).toBe(true);
             });
           });
       });
