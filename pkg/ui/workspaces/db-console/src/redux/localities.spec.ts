@@ -8,7 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { selectLocalityTree, LocalityTier, selectNodeLocalities } from "./localities";
+import {
+  selectLocalityTree,
+  LocalityTier,
+  selectNodeLocalities,
+} from "./localities";
 
 function makeStateWithLocalities(localities: LocalityTier[][]) {
   const nodes = localities.map((locality, i) => {
@@ -38,8 +42,8 @@ describe("selectLocalityTree", function () {
 
     const tree = selectLocalityTree(state);
 
-    assert.isEmpty(tree.tiers);
-    assert.isEmpty(tree.localities);
+    expect(tree.tiers).toEqual([]);
+    expect(tree.localities).toEqual({});
 
     expect(tree.nodes.length).toBe(1);
   });
@@ -52,24 +56,25 @@ describe("selectLocalityTree", function () {
 
     const tree = selectLocalityTree(state);
 
-    assert.isEmpty(tree.tiers);
-    assert.isEmpty(tree.nodes);
+    expect(tree.tiers).toEqual([]);
+    expect(tree.nodes).toEqual([]);
 
-    assert.hasAllKeys(tree.localities, ["region"]);
+    expect(Object.keys(tree.localities)).toContain("region");
     const regions = tree.localities.region;
 
-    assert.hasAllKeys(regions, ["us-east-1", "us-east-2"]);
+    expect(Object.keys(regions)).toContain("us-east-1");
+    expect(Object.keys(regions)).toContain("us-east-2");
 
     const usEast1 = regions["us-east-1"];
 
-    assert.isEmpty(usEast1.localities);
+    expect(usEast1.localities).toEqual({});
     expect(usEast1.tiers).toEqual([{ key: "region", value: "us-east-1" }]);
 
     expect(usEast1.nodes.length).toBe(1);
 
     const usEast2 = regions["us-east-2"];
 
-    assert.isEmpty(usEast2.localities);
+    expect(usEast2.localities).toEqual({});
     expect(usEast2.tiers).toEqual([{ key: "region", value: "us-east-2" }]);
 
     expect(usEast2.nodes.length).toBe(1);
@@ -90,7 +95,9 @@ describe("selectNodeLocalities", function () {
     const result = selectNodeLocalities.resultFunc(state.cachedData.nodes.data);
     expect(result.size).toEqual(2);
     result.forEach((v, k) => {
-      expect(v).toEqual(localities[k].map(l => `${l.key}=${l.value}`).join(", "));
+      expect(v).toEqual(
+        localities[k].map(l => `${l.key}=${l.value}`).join(", "),
+      );
     });
   });
 

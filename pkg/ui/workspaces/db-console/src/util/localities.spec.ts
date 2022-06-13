@@ -168,10 +168,15 @@ describe("getChildLocalities", function () {
       };
 
       const children = getChildLocalities(locality);
+      const findChild = (children: LocalityTree[], value: string) =>
+        children.find(child => child.tiers.find(t => t.value === value));
 
       expect(children.length).toBe(2);
-      assert.deepInclude(children, usEast);
-      assert.deepInclude(children, usWest);
+
+      const east = findChild(children, "us-east");
+      const west = findChild(children, "us-west");
+      expect(east).toEqual(usEast);
+      expect(west).toEqual(usWest);
     });
   });
 });
@@ -259,7 +264,9 @@ describe("getLocality", function () {
 
       const tree = getLocality(localityTree, tiers);
 
-      expect(tree).toEqual(localityTree.localities.region["us-east"].localities.zone["us-east-1"]);
+      expect(tree).toEqual(
+        localityTree.localities.region["us-east"].localities.zone["us-east-1"],
+      );
     });
 
     it("returns null if the first tier key does not exist", function () {

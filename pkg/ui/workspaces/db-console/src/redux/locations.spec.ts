@@ -85,7 +85,9 @@ describe("selectLocations", function () {
     const state = makeStateWithLocations(locationData);
     state.cachedData.locations.valid = false;
 
-    expect(selectLocations(state).map(climbOutOfTheMorass)).toEqual(locationData);
+    expect(selectLocations(state).map(climbOutOfTheMorass)).toEqual(
+      locationData,
+    );
   });
 
   it("returns an empty array if location data is null", function () {
@@ -123,7 +125,9 @@ describe("selectLocationTree", function () {
     const locations = tiers.map(tier => ({ locality_key: tier }));
     const state = makeStateWithLocations(locations);
 
-    assert.hasAllKeys(selectLocationTree(state), tiers);
+    tiers.forEach(tier =>
+      expect(Object.keys(selectLocationTree(state))).toContain(tier),
+    );
   });
 
   it("makes a key for each locality value in each tier", function () {
@@ -141,9 +145,12 @@ describe("selectLocationTree", function () {
 
     const tree = selectLocationTree(state);
 
-    assert.hasAllKeys(tree, ["city", "data-center"]);
-    assert.hasAllKeys(tree.city, cities);
-    assert.hasAllKeys(tree["data-center"], dataCenters);
+    expect(Object.keys(tree)).toContain("city");
+    expect(Object.keys(tree)).toContain("data-center");
+    cities.forEach(city => expect(Object.keys(tree.city)).toContain(city));
+    dataCenters.forEach(dc =>
+      expect(Object.keys(tree["data-center"])).toContain(dc),
+    );
   });
 
   it("returns each location under its key and value", function () {
