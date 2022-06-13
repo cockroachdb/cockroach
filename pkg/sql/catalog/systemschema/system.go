@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -30,32 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
-
-// ShouldSplitAtDesc determines whether a specific descriptor should be
-// considered for a split. Only plain tables are considered for split.
-func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
-	var desc descpb.Descriptor
-	if err := rawDesc.GetProto(&desc); err != nil {
-		return false
-	}
-	switch t := desc.GetUnion().(type) {
-	case *descpb.Descriptor_Table:
-		if t.Table.IsView() && !t.Table.MaterializedView() {
-			return false
-		}
-		return true
-	case *descpb.Descriptor_Database:
-		return false
-	case *descpb.Descriptor_Type:
-		return false
-	case *descpb.Descriptor_Schema:
-		return false
-	default:
-		panic(errors.AssertionFailedf("unexpected descriptor type %#v", &desc))
-	}
-}
 
 // sql CREATE commands and full schema for each system table.
 // These strings are *not* used at runtime, but are checked by the
