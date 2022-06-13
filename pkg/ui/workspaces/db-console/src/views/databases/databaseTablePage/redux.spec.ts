@@ -26,7 +26,6 @@ import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import { makeTimestamp } from "src/views/databases/utils";
-import { assertDeepStrictEqual } from "src/test-utils";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -85,22 +84,21 @@ class TestDriver {
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
-      assertDeepStrictEqual(
+      expect(this.properties().indexStats.lastReset).toEqual(
         expected.indexStats.lastReset,
-        this.properties().indexStats.lastReset,
       );
     }
     delete this.properties().indexStats.lastReset;
     delete expected.indexStats.lastReset;
-    assertDeepStrictEqual(expected, this.properties());
+    expect(this.properties()).toEqual(expected);
   }
 
   assertTableDetails(expected: DatabaseTablePageDataDetails) {
-    assertDeepStrictEqual(expected, this.properties().details);
+    expect(this.properties().details).toEqual(expected);
   }
 
   assertTableStats(expected: DatabaseTablePageDataStats) {
-    assertDeepStrictEqual(expected, this.properties().stats);
+    expect(this.properties().stats).toEqual(expected);
   }
 
   assertIndexStats(
@@ -109,22 +107,18 @@ class TestDriver {
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
-      assertDeepStrictEqual(
-        expected.stats[0].lastUsed,
+      expect(expected.stats[0].lastUsed).toEqual(
         this.properties().indexStats.stats[0].lastUsed,
       );
     }
     delete this.properties().indexStats.stats[0].lastUsed;
     delete expected.stats[0].lastUsed;
-    assertDeepStrictEqual(
-      expected.lastReset,
-      this.properties().indexStats.lastReset,
-    );
+    expect(expected.lastReset).toEqual(this.properties().indexStats.lastReset);
     delete this.properties().indexStats.lastReset;
     delete expected.lastReset;
 
     // Assert objects without moments are equal.
-    assertDeepStrictEqual(expected, this.properties().indexStats);
+    expect(this.properties().indexStats).toEqual(expected);
   }
 
   async refreshSettings() {
