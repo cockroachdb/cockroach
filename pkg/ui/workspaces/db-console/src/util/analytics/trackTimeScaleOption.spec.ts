@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackTimeScaleSelected";
 
@@ -25,7 +24,7 @@ describe("trackTimeScaleSelected", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)(scale);
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send the right event", () => {
@@ -37,7 +36,7 @@ describe("trackTimeScaleSelected", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(event === expected);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
@@ -48,6 +47,6 @@ describe("trackTimeScaleSelected", () => {
     const sent = spy.getCall(0).args[0];
     const timeScale = get(sent, "properties.timeScale");
 
-    assert.isTrue(timeScale === scale);
+    expect(timeScale === scale).toBe(true);
   });
 });

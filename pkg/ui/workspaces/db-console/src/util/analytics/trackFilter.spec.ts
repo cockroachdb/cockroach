@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackFilter";
 
@@ -26,7 +25,7 @@ describe("trackFilter", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)(filter, filterValue);
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send a track call with the correct event", () => {
@@ -38,7 +37,7 @@ describe("trackFilter", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(event === expected);
+    expect(event === expected).toBe(true);
   });
 
   it("send the correct payload", () => {
@@ -49,6 +48,6 @@ describe("trackFilter", () => {
     const sent = spy.getCall(0).args[0];
     const selectedFilter = get(sent, "properties.selectedFilter");
 
-    assert.isTrue(selectedFilter === filterValue);
+    expect(selectedFilter === filterValue).toBe(true);
   });
 });

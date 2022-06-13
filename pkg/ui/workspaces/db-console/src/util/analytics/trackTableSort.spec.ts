@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get, isString } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackTableSort";
 
@@ -23,7 +22,7 @@ describe("trackTableSort", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)();
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send the right event", () => {
@@ -35,8 +34,8 @@ describe("trackTableSort", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(isString(event));
-    assert.isTrue(event === expected);
+    expect(isString(event)).toBe(true);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
@@ -51,19 +50,13 @@ describe("trackTableSort", () => {
     const columnName = get(sent, "properties.columnName");
     const direction = get(sent, "properties.sortDirection");
 
-    assert.isTrue(isString(table), "Table name is a string");
-    assert.isTrue(table === tableName, "Table name matches given table name");
+    expect(isString(table)).toBe(true);
+    expect(table === tableName).toBe(true);
 
-    assert.isTrue(isString(columnName), "Column name is a string");
-    assert.isTrue(
-      title === columnName,
-      "Column name matches given column name",
-    );
+    expect(isString(columnName)).toBe(true);
+    expect(title === columnName).toBe(true);
 
-    assert.isTrue(isString(direction), "Sort direction is a string");
-    assert.isTrue(
-      direction === "asc",
-      "Sort direction matches the sort setting ascending property",
-    );
+    expect(isString(direction)).toBe(true);
+    expect(direction === "asc").toBe(true);
   });
 });

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { get, isString, isNumber } from "lodash";
-import { assert } from "chai";
 import { createSandbox } from "sinon";
 import { track } from "./trackSearch";
 
@@ -25,7 +24,7 @@ describe("trackSearch", () => {
   it("should only call track once", () => {
     const spy = sandbox.spy();
     track(spy)(testSearchResults);
-    assert.isTrue(spy.calledOnce);
+    expect(spy.calledOnce).toBe(true);
   });
 
   it("should send the right event", () => {
@@ -37,8 +36,8 @@ describe("trackSearch", () => {
     const sent = spy.getCall(0).args[0];
     const event = get(sent, "event");
 
-    assert.isTrue(isString(event));
-    assert.isTrue(event === expected);
+    expect(isString(event)).toBe(true);
+    expect(event === expected).toBe(true);
   });
 
   it("should send the correct payload", () => {
@@ -49,7 +48,7 @@ describe("trackSearch", () => {
     const sent = spy.getCall(0).args[0];
     const numberOfResults = get(sent, "properties.numberOfResults");
 
-    assert.isTrue(isNumber(numberOfResults));
-    assert.isTrue(numberOfResults === testSearchResults);
+    expect(isNumber(numberOfResults)).toBe(true);
+    expect(numberOfResults === testSearchResults).toBe(true);
   });
 });

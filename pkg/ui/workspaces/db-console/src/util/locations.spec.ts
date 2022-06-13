@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
-
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { findMostSpecificLocation, findOrCalculateLocation } from "./locations";
@@ -25,7 +23,7 @@ describe("findMostSpecificLocation", function () {
 
     const location = findMostSpecificLocation(locations, nycLocality);
 
-    assert.equal(location, null);
+    expect(location).toEqual(null);
   });
 
   it("returns the location of a locality", function () {
@@ -42,7 +40,7 @@ describe("findMostSpecificLocation", function () {
 
     const location = findMostSpecificLocation(locations, nycLocality);
 
-    assert.deepEqual(location, locations.region["us-east-1"]);
+    expect(location).toEqual(locations.region["us-east-1"]);
   });
 
   it("finds the most specific location for a locality", function () {
@@ -67,7 +65,7 @@ describe("findMostSpecificLocation", function () {
 
     const location = findMostSpecificLocation(locations, nycLocality);
 
-    assert.deepEqual(location, locations.city.nyc);
+    expect(location).toEqual(locations.city.nyc);
   });
 });
 
@@ -93,7 +91,7 @@ describe("findOrCalculateLocation", function () {
 
       const location = findOrCalculateLocation(locations, locality);
 
-      assert.deepEqual(location, locations.city.nyc);
+      expect(location).toEqual(locations.city.nyc);
     });
   });
 
@@ -128,7 +126,7 @@ describe("findOrCalculateLocation", function () {
 
         const location = findOrCalculateLocation(locations, locality);
 
-        assert.equal(location, null);
+        expect(location).toEqual(null);
       });
     });
 
@@ -152,7 +150,7 @@ describe("findOrCalculateLocation", function () {
 
         const location = findOrCalculateLocation(locations, locality);
 
-        assert.equal(location, null);
+        expect(location).toEqual(null);
       });
     });
 
@@ -186,8 +184,8 @@ describe("findOrCalculateLocation", function () {
 
         const location = findOrCalculateLocation(locations, locality);
 
-        assert.equal(location.latitude, locations.city.nyc.latitude);
-        assert.equal(location.longitude, locations.city.nyc.longitude);
+        expect(location.latitude).toEqual(locations.city.nyc.latitude);
+        expect(location.longitude).toEqual(locations.city.nyc.longitude);
       });
     });
   });
