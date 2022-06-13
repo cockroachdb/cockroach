@@ -1513,9 +1513,7 @@ func doRestorePlan(
 		}
 	}
 
-	// Validate that the table coverage of the backup matches that of the restore.
-	// This prevents FULL CLUSTER backups to be restored as anything but full
-	// cluster restores and vice-versa.
+	// Validate that the backup is a full cluster backup if a full cluster restore was requested.
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors && mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
 		return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 	}
@@ -1586,7 +1584,7 @@ func doRestorePlan(
 	)
 	if err != nil {
 		return errors.Wrap(err,
-			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
+			"failed to resolve targets in the BACKUP location specified by the RESTORE statement, "+
 				"use SHOW BACKUP to find correct targets")
 	}
 
@@ -1944,9 +1942,9 @@ func renameTargetDatabaseDescriptor(
 	sqlDescs []catalog.Descriptor, restoreDBs []catalog.DatabaseDescriptor, newDBName string,
 ) error {
 	if len(restoreDBs) != 1 {
-		return errors.NewAssertionErrorWithWrappedErrf(errors.Newf(
-			"expected restoreDBs to have a single entry but found %d entries when renaming the target"+
-				" database", len(restoreDBs)), "assertion failed")
+		return errors.AssertionFailedf(
+			"expected restoreDBs to have 1 entry but found %d entries when renaming the target database",
+			len(restoreDBs))
 	}
 
 	for _, desc := range sqlDescs {
@@ -1959,8 +1957,7 @@ func renameTargetDatabaseDescriptor(
 	}
 	db, ok := restoreDBs[0].(*dbdesc.Mutable)
 	if !ok {
-		return errors.NewAssertionErrorWithWrappedErrf(errors.Newf(
-			"expected db desc but found %T", db), "assertion failed")
+		return errors.AssertionFailedf("expected *dbdesc.Mutable but found %T", db)
 	}
 	db.SetName(newDBName)
 	return nil

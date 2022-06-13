@@ -2137,7 +2137,7 @@ table_name from [SHOW TABLES FROM restore] ORDER BY schema_name, table_name`, tc
 			sqlDB.Exec(t, `CREATE DATABASE d2`)
 
 			// We must properly qualify the table name when restoring as well.
-			sqlDB.ExpectErr(t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: table "d.tb1" does not exist`, `RESTORE TABLE d.tb1 FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+			sqlDB.ExpectErr(t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE statement, use SHOW BACKUP to find correct targets: table "d.tb1" does not exist`, `RESTORE TABLE d.tb1 FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
 
 			sqlDB.Exec(t, `RESTORE TABLE d.sc.tb1 FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
 
@@ -3926,14 +3926,14 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 
 		sqlDB.Exec(t, "DROP TABLE db.a")
 		sqlDB.ExpectErr(
-			t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: table "db.a" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time`,
+			t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE statement, use SHOW BACKUP to find correct targets: table "db.a" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time`,
 			fmt.Sprintf(`RESTORE TABLE db.a FROM $1 AS OF SYSTEM TIME %s`, preGC),
 			backupPath,
 		)
 
 		sqlDB.Exec(t, "DROP DATABASE db")
 		sqlDB.ExpectErr(
-			t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE stmt, use SHOW BACKUP to find correct targets: database "db" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time`,
+			t, `pq: failed to resolve targets in the BACKUP location specified by the RESTORE statement, use SHOW BACKUP to find correct targets: database "db" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time`,
 			fmt.Sprintf(`RESTORE DATABASE db FROM $1 AS OF SYSTEM TIME %s`, preGC),
 			backupPath,
 		)
@@ -6605,8 +6605,8 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	resetStateVars()
 
 	tenant10.Exec(t, `
-CREATE DATABASE baz; 
-CREATE TABLE baz.bar(i int primary key, v string); 
+CREATE DATABASE baz;
+CREATE TABLE baz.bar(i int primary key, v string);
 INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
 	var id2 int
 	tenant10.QueryRow(t, "SELECT 'baz.bar'::regclass::int").Scan(&id2)
