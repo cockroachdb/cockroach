@@ -26,9 +26,11 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
