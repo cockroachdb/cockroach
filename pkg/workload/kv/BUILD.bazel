@@ -1,15 +1,19 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kv",
     srcs = [
+        "dynamic.go",
         "kv.go",
         "zipfian.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/kv",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
@@ -18,4 +22,14 @@ go_library(
         "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_spf13_pflag//:pflag",
     ],
+)
+
+go_test(
+    name = "kv_test",
+    srcs = [
+        "dynamic_test.go",
+        "kv_test.go",
+    ],
+    embed = [":kv"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

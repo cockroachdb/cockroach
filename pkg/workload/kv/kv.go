@@ -24,7 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -61,6 +64,11 @@ const (
 	)`
 )
 
+var kvTypes = []*types.T{
+	types.Int,
+	types.Bytes,
+}
+
 type kv struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
@@ -81,6 +89,14 @@ type kv struct {
 	shards                               int
 	targetCompressionRatio               float64
 	enum                                 bool
+	dynamic                              bool
+	hotkey                               bool
+	readSkew                             int64
+	dynamicInterval                      string
+	periodic                             bool
+	shuffle                              bool
+	shuffleChunk                         int64
+	initKeys                             int64
 }
 
 func init() {
@@ -143,6 +159,22 @@ var kvMeta = workload.Meta{
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.flags.BoolVar(&g.enum, `enum`, false,
 			`Inject an enum column and use it`)
+		g.flags.BoolVar(&g.dynamic, `dynamic`, false,
+			`Use a dynamic key distribution function (hotkey,periodic or shuffle)`)
+		g.flags.BoolVar(&g.hotkey, `hotkey`, false,
+			`Pick keys in a moving hotkey instead of randomly. --dynamic must also be set.`)
+		g.flags.BoolVar(&g.periodic, `periodic`, false,
+			`Pick keys in a periodic distribution instead of randomly. --dynamic must also be set. A value for --periodic must also be set.`)
+		g.flags.BoolVar(&g.shuffle, `shuffle`, false,
+			`Pick keys in a shuffled distribution instead of randomly. --dynamic must also be set. A value for --periodic must also be set. A value for --shuffle-chunk must also be set.`)
+		g.flags.StringVar(&g.dynamicInterval, `dynamic-interval`, "1m",
+			`The interval to wait before moving the distribution for --shuffle or --periodic.`)
+		g.flags.Int64Var(&g.shuffleChunk, `shuffle-chunk`, 1000,
+			`The size of a key span that is shuffled together, remaining in the original order. --shuffle must be set.`)
+		g.flags.Int64Var(&g.initKeys, `num-keys`, 0,
+			`The range of keys to initialize with a random block size specified by [--min-block-bytes, --max-block-bytes], for the keys in range [0, --keys-init].`)
+		g.flags.Int64Var(&g.readSkew, `read-skew`, 100,
+			`The skew applied to the length of reads that trail the current write in a moving hotspot workload. A skew of 1 means that the range of keys read will be equal to the read-percent/(1 - read-percent). A skew of 100, 100 * read-percent/(1-read-percent).`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -188,20 +220,39 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 	}
 }
 
+// splitFinder returns the ith split point, given the workload type.and number
+// of splits.
+func (w *kv) splitFinder(i int) int {
+	splits := int64(w.splits)
+	rangeMin := int64(0)
+	rangeMax := w.cycleLength
+
+	if w.sequential || w.dynamic {
+		// sequential and dynamic can generate keys in the range [0, cycleLength)
+	} else if w.zipfian {
+		// zipfian can generate keys in the range [0, math.MaxInt64)
+		rangeMax = math.MaxInt64
+	} else {
+		// default can generate keys in the range [math.MinInt64, math.MaxInt64)
+		rangeMax = math.MaxInt64
+		rangeMin = math.MinInt64
+	}
+
+	stride := rangeMax/(splits+1) - rangeMin/(splits+1)
+	splitPoint := int(rangeMin + int64(i+1)*stride)
+	return splitPoint
+}
+
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
-	table := workload.Table{
-		Name: `kv`,
-		// TODO(dan): Support initializing kv with data.
-		Splits: workload.Tuples(
-			w.splits,
-			func(splitIdx int) []interface{} {
-				stride := (float64(w.cycleLength) - float64(math.MinInt64)) / float64(w.splits+1)
-				splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
-				return []interface{}{splitPoint}
-			},
-		),
-	}
+	table := workload.Table{Name: `kv`}
+	table.Splits = workload.Tuples(
+		w.splits,
+		// TODO(kvoli): Support initializing kv with data on different schemas.
+		func(splitIdx int) []interface{} {
+			return []interface{}{w.splitFinder(splitIdx)}
+		},
+	)
 	if w.shards > 0 {
 		schema := shardedKvSchema
 		if w.secondaryIndex {
@@ -224,6 +275,32 @@ func (w *kv) Tables() []workload.Table {
 			table.Schema = kvSchema
 		}
 	}
+	if w.initKeys > 0 {
+		table.InitialRows = workload.BatchedTuples{
+			NumBatches: (int(w.initKeys) + w.batchSize - 1) / w.batchSize,
+			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+				rowBegin, rowEnd := batchIdx*w.batchSize, (batchIdx+1)*w.batchSize
+				if rowEnd > int(w.initKeys) {
+					rowEnd = int(w.initKeys)
+				}
+				cb.Reset(kvTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
+				keyCol := cb.ColVec(0).Int64()
+				valCol := cb.ColVec(1).Bytes()
+				// coldata.Bytes only allows appends so we have to reset it
+				valCol.Reset()
+				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+					block := randomBlock(w, rand.New(rand.NewSource(timeutil.Now().Unix())))
+					var payload []byte
+					*a, payload = a.Alloc(len(block), 0 /* extraCap */)
+					copy(payload, block)
+					rowOffset := rowIdx - rowBegin
+					keyCol[rowOffset] = int64(rowIdx)
+					valCol.Set(rowOffset, payload)
+				}
+			},
+		}
+	}
+
 	return []workload.Table{table}
 }
 
@@ -357,12 +434,27 @@ func (w *kv) Ops(
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
-		if w.sequential {
-			op.g = newSequentialGenerator(seq)
-		} else if w.zipfian {
-			op.g = newZipfianGenerator(seq)
+		if w.dynamic {
+			var g keyGenerator
+			if w.shuffle {
+				g = shuffleGenerator(seq, nil)
+			} else if w.periodic {
+				g = periodicKeyGenerator(seq, nil)
+			} else {
+				g = movingHotKeyGenerator(seq, nil)
+			}
+			if g == nil {
+				return workload.QueryLoad{}, errors.Errorf("Unable to initialize workload key generator")
+			}
+			op.g = g
 		} else {
-			op.g = newHashGenerator(seq)
+			if w.sequential {
+				op.g = newSequentialGenerator(seq)
+			} else if w.zipfian {
+				op.g = newZipfianGenerator(seq)
+			} else {
+				op.g = newHashGenerator(seq)
+			}
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close

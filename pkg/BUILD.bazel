@@ -531,6 +531,7 @@ ALL_TESTS = [
     "//pkg/workload/cli:cli_test",
     "//pkg/workload/faker:faker_test",
     "//pkg/workload/histogram:histogram_test",
+    "//pkg/workload/kv:kv_test",
     "//pkg/workload/movr:movr_test",
     "//pkg/workload/tpcc:tpcc_test",
     "//pkg/workload/workloadimpl:workloadimpl_test",
