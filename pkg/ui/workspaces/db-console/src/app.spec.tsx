@@ -458,7 +458,6 @@ describe("Routing to", () => {
   describe("'/debug/chart' path", () => {
     it("routes to <CustomChart> component", () => {
       navigateToPath("/debug/chart");
-      // assert.lengthOf(appWrapper.find(Debug), 1);
       expect(appWrapper.find(CustomChart).length).toBe(1);
     });
   });
