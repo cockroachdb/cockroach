@@ -12,7 +12,6 @@ package gcp
 
 import (
 	"context"
-	"encoding/base64"
 	"hash/crc32"
 	"net/url"
 	"strings"
@@ -42,6 +41,7 @@ type kmsURIParams struct {
 	credentials string
 	auth        string
 	assumeRole  string
+	bearerToken string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
@@ -49,6 +49,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 		credentials: kmsURI.Query().Get(CredentialsParam),
 		auth:        kmsURI.Query().Get(cloud.AuthParam),
 		assumeRole:  kmsURI.Query().Get(AssumeRoleParam),
+		bearerToken: kmsURI.Query().Get(BearerTokenParam),
 	}
 
 	return params
@@ -75,21 +76,24 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	switch kmsURIParams.auth {
 	case "", cloud.AuthParamSpecified:
 		if kmsURIParams.credentials == "" {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				CredentialsParam,
-			)
-		}
+			if kmsURIParams.bearerToken == "" {
+				return nil, errors.Errorf(
+					"%s or %s must be set if %q is %q",
+					CredentialsParam,
+					BearerTokenParam,
+					cloud.AuthParam,
+					cloud.AuthParamSpecified,
+				)
+			}
 
-		// Credentials are passed in base64 encoded, so decode the credentials first.
-		credentialsJSON, err := base64.StdEncoding.DecodeString(kmsURIParams.credentials)
-		if err != nil {
-			return nil, err
+			credentialsOpt = append(credentialsOpt, createAuthOptionFromBearerToken(kmsURIParams.bearerToken))
+		} else {
+			authOption, err := createAuthOptionFromServiceAccountKey(kmsURIParams.credentials)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+			}
+			credentialsOpt = append(credentialsOpt, authOption)
 		}
-
-		credentialsOpt = append(credentialsOpt, option.WithCredentialsJSON(credentialsJSON))
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
