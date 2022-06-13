@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { assert } from "chai";
 import { mount, shallow } from "enzyme";
 import _ from "lodash";
 import Long from "long";
@@ -54,7 +53,7 @@ describe("<EventBox>", function () {
   describe("refresh", function () {
     it("refreshes events when mounted.", function () {
       makeEventBox([], spy);
-      assert.isTrue(spy.called);
+      expect(spy.called).toBe(true);
     });
   });
 
@@ -83,11 +82,11 @@ describe("<EventBox>", function () {
         .children();
       const event1Props: any = eventRows.first().props();
       const event2Props: any = eventRows.at(1).props();
-      assert.lengthOf(eventRows, 3); // 3rd row is "more events" link
-      assert.isDefined(event1Props.event);
-      assert.deepEqual(event1Props.event, eventsResponse.events[0]);
-      assert.isDefined(event2Props.event);
-      assert.deepEqual(event2Props.event, eventsResponse.events[1]);
+      expect(eventRows.length).toBe(3); // 3rd row is "more events" link
+      expect(event1Props.event).toBeDefined();
+      expect(event1Props.event).toEqual(eventsResponse.events[0]);
+      expect(event2Props.event).toBeDefined();
+      expect(event2Props.event).toEqual(eventsResponse.events[1]);
     });
   });
 });
@@ -101,13 +100,13 @@ describe("<EventRow>", function () {
       });
 
       const provider = makeEvent(e);
-      assert.isTrue(
+      expect(
         provider
           .find("div.events__message > span")
           .text()
           .includes("created database"),
-      );
-      assert.isTrue(provider.find(ToolTipWrapper).exists());
+      ).toBe(true);
+      expect(provider.find(ToolTipWrapper).exists()).toBe(true);
     });
 
     it("correctly renders an unknown event", function () {
@@ -117,10 +116,10 @@ describe("<EventRow>", function () {
       });
       const provider = makeEvent(e);
 
-      assert.isTrue(
+      expect(
         provider.find("div.events__message > span").text().includes("unknown"),
-      );
-      assert.isTrue(provider.find(ToolTipWrapper).exists());
+      ).toBe(true);
+      expect(provider.find(ToolTipWrapper).exists()).toBe(true);
     });
   });
 });
@@ -134,7 +133,7 @@ describe("getEventInfo", function () {
       const eventContent = shallow(
         getEventInfo(event).content as React.ReactElement<any>,
       );
-      assert.notMatch(eventContent.text(), /Unknown event type/);
+      expect(eventContent.text()).not.toMatch(/Unknown event type/);
     });
   });
 });

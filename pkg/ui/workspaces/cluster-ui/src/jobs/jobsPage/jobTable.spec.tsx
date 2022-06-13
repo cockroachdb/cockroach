@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 import React from "react";
-import { assert } from "chai";
 import { shallow } from "enzyme";
 import { earliestRetainedTime } from "./jobsPage.fixture";
 import { JobTable, JobTableProps } from "./jobTable";
@@ -41,7 +40,7 @@ describe("<JobTable>", () => {
         isUsedFilter={jobTableProps.isUsedFilter}
       />,
     );
-    assert.equal(jobTable.state().pagination.current, 2);
+    expect(jobTable.state().pagination.current).toEqual(2);
     jobTable.setProps({
       jobs: {
         jobs: [{}, {}],
@@ -49,6 +48,6 @@ describe("<JobTable>", () => {
         toJSON: toJSON,
       },
     });
-    assert.equal(jobTable.state().pagination.current, 1);
+    expect(jobTable.state().pagination.current).toEqual(1);
   });
 });
