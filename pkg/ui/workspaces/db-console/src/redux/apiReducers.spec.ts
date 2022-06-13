@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert } from "chai";
 import {
   generateTableID,
   databaseRequestToID,
@@ -20,18 +19,15 @@ describe("table id generator", function () {
   it("generates encoded db/table id", function () {
     const db = "&a.a.a/a.a/";
     const table = "/a.a/a.a.a&";
-    assert.equal(
-      generateTableID(db, table),
+    expect(generateTableID(db, table)).toEqual(
       encodeURIComponent(db) + "/" + encodeURIComponent(table),
     );
-    assert.equal(
+    expect(
       decodeURIComponent(generateTableID(db, table).split("/")[0]),
-      db,
-    );
-    assert.equal(
+    ).toEqual(db);
+    expect(
       decodeURIComponent(generateTableID(db, table).split("/")[1]),
-      table,
-    );
+    ).toEqual(table);
   });
 });
 
@@ -40,7 +36,7 @@ describe("request to string functions", function () {
     const database = "testDatabase";
     const databaseRequest =
       new protos.cockroach.server.serverpb.DatabaseDetailsRequest({ database });
-    assert.equal(databaseRequestToID(databaseRequest), database);
+    expect(databaseRequestToID(databaseRequest)).toEqual(database);
   });
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
@@ -50,8 +46,7 @@ describe("request to string functions", function () {
         database,
         table,
       });
-    assert.equal(
-      tableRequestToID(tableRequest),
+    expect(tableRequestToID(tableRequest)).toEqual(
       generateTableID(database, table),
     );
   });
