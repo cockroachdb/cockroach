@@ -735,6 +735,17 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{
+			{Process, "Spanconfig"},
+		},
+		Charts: []chartDescription{
+			{
+				Title:   "KVSubscriber",
+				Metrics: []string{"spanconfig.kvsubscriber.time_since_partial_update"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{KVTransactionLayer, "Clocks"}}, Charts: []chartDescription{
 			{
 				Title:   "Roundtrip Latency",

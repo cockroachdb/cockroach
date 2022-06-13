@@ -22,9 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+var durationSinceLastPartialUpdate = metric.Metadata{
+	Name:        "spanconfig.kvsubscriber.time_since_partial_update",
+	Help:        "The duration since the KVSubscriber handled a partial update of spanconfig state",
+	Measurement: "KVSubscriber",
+	Unit:        metric.Unit_NANOSECONDS,
+}
 
 // KVSubscriber is used to subscribe to global span configuration changes. It's
 // a concrete implementation of the spanconfig.KVSubscriber interface.
@@ -86,6 +95,7 @@ type KVSubscriber struct {
 	mu struct { // serializes between Start and external threads
 		syncutil.RWMutex
 		lastUpdated hlc.Timestamp
+		metrics     KVSubscriberMetrics
 		// internal is the internal spanconfig.Store maintained by the
 		// KVSubscriber. A read-only view over this store is exposed as part of
 		// the interface. When re-subscribing, a fresh spanconfig.Store is
@@ -98,6 +108,23 @@ type KVSubscriber struct {
 }
 
 var _ spanconfig.KVSubscriber = &KVSubscriber{}
+
+// KVSubscriberMetrics are the metrics associated with an instance of the
+// KVSubscriber.
+type KVSubscriberMetrics struct {
+	// TimeSinceLastPartialUpdate is the duration since the last partial update
+	// performed by the KVSubscriber.
+	TimeSinceLastPartialUpdate *metric.Gauge
+}
+
+func makeKVSubscriberMetrics() KVSubscriberMetrics {
+	return KVSubscriberMetrics{TimeSinceLastPartialUpdate: metric.NewGauge(durationSinceLastPartialUpdate)}
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (k *KVSubscriberMetrics) MetricStruct() {}
+
+var _ metric.Struct = &KVSubscriberMetrics{}
 
 // spanConfigurationsTableRowSize is an estimate of the size of a single row in
 // the system.span_configurations table (size of start/end key, and size of a
@@ -115,6 +142,7 @@ func New(
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
+	registry *metric.Registry,
 ) *KVSubscriber {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
@@ -148,6 +176,8 @@ func New(
 		rfCacheKnobs,
 	)
 	s.mu.internal = spanConfigStore
+	s.mu.metrics = makeKVSubscriberMetrics()
+	registry.AddMetricStruct(&s.mu.metrics)
 	return s
 }
 
@@ -276,6 +306,8 @@ func (s *KVSubscriber) handlePartialUpdate(
 		// avoid this mutex.
 		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}
+	timeSinceLastUpdate := timeutil.Unix(0, ts.WallTime).Sub(timeutil.Unix(0, s.mu.lastUpdated.WallTime)).Nanoseconds()
+	s.mu.metrics.TimeSinceLastPartialUpdate.Update(timeSinceLastUpdate)
 	s.mu.lastUpdated = ts
 	handlers := s.mu.handlers
 	s.mu.Unlock()
