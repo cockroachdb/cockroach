@@ -1523,6 +1523,15 @@ message ExportRequest {
   // large history being broken up into target_file_size chunks and prevent
   // blowing up on memory usage. This option is only allowed together with
   // return_sst since caller should reconstruct full tables.
+  //
+  // NB: If the result contains MVCC range tombstones, this can cause MVCC range
+  // tombstones in two subsequent SSTs to overlap. For example, given the range
+  // tombstone [a-f)@5, if we return a resume key at c@3 then the response will
+  // contain a truncated MVCC range tombstone [a-c\0)@5 which covers the point
+  // keys at c, but resuming from c@3 will contain the MVCC range tombstone
+  // [c-f)@5 which overlaps with the MVCC range tombstone in the previous
+  // response for the interval [c-c\0)@5. AddSSTable will allow this overlap
+  // during ingestion.
   bool split_mid_key = 13;
 
   // Return the exported SST data in the response.
@@ -1577,7 +1586,8 @@ message BulkOpSummary {
   reserved 4;
   // EntryCounts contains the number of keys processed for each tableID/indexID
   // pair, stored under the key (tableID << 32) | indexID. This EntryCount key
-  // generation logic is also available in the BulkOpSummaryID helper.
+  // generation logic is also available in the BulkOpSummaryID helper. It does
+  // not take MVCC range tombstones into account.
   map<uint64, int64> entry_counts = 5;
 }
 
