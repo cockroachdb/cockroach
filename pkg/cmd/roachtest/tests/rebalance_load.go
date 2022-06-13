@@ -38,16 +38,8 @@ func registerRebalanceLoad(r registry.Registry) {
 	// clusters start with 20+ ranges in them, the number of new ranges in kv's
 	// table is small enough that it typically won't trigger rebalancing of
 	// leases in the cluster based on lease count alone. We let kv generate a lot
-	// of load against the ranges such that when
-	// kv.allocator.stat_based_rebalancing.enabled is set to true, we'd expect
-	// load-based rebalancing to distribute the load evenly across the nodes in
-	// the cluster. Without that setting, the fact that the kv table has so few
-	// ranges means that they probabilistically won't have their leases evenly
-	// spread across all the nodes (they'll often just end up staying on n1).
-	//
-	// In other words, this test should always pass with
-	// kv.allocator.stat_based_rebalancing.enabled set to true, while it should
-	// usually (but not always) fail with it set to false.
+	// of load against the ranges such that we'd expect load-based rebalancing to
+	// distribute the load evenly across the nodes in the cluster.
 	rebalanceLoadRun := func(
 		ctx context.Context,
 		t test.Test,
@@ -57,18 +49,15 @@ func registerRebalanceLoad(r registry.Registry) {
 		concurrency int,
 		mixedVersion bool,
 	) {
+		startOpts := option.DefaultStartOpts()
 		roachNodes := c.Range(1, c.Spec().NodeCount-1)
 		appNode := c.Node(c.Spec().NodeCount)
 		numStores := len(roachNodes)
 		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
 			numStores *= c.Spec().SSDs
-		}
-		splits := numStores - 1 // n-1 splits => n ranges => 1 lease per store
-
-		startOpts := option.DefaultStartOpts()
-		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
 			startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
 		}
+		splits := numStores - 1 // n-1 splits => n ranges => 1 lease per store
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
