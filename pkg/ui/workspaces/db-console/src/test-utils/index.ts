@@ -9,4 +9,3 @@
 // licenses/APL.txt.
 
 export * from "./connectedMount";
-export * from "./assertDeepStrictEqual";
