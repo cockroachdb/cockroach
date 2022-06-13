@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/prometheus/common/model"
