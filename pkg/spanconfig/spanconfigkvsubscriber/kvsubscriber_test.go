@@ -83,6 +83,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		roachpb.SpanConfig{},
 		cluster.MakeTestingClusterSettings(),
 		nil,
+		nil,
 	)
 	m := &manualStore{
 		spanAndConfigs: []spanAndSpanConfig{sp42Cfg, sp43Cfg},
