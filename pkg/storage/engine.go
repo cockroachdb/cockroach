@@ -13,7 +13,6 @@ package storage
 import (
 	"bytes"
 	"context"
-	"io"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -469,48 +468,6 @@ const (
 	MVCCKeyIterKind
 )
 
-// ExportOptions contains options provided to export operation.
-type ExportOptions struct {
-	// StartKey determines start of the exported interval (inclusive).
-	// StartKey.Timestamp is either empty which represent starting from a potential
-	// intent and continuing to versions or non-empty, which represents starting
-	// from a particular version.
-	StartKey MVCCKey
-	// EndKey determines the end of exported interval (exclusive).
-	EndKey roachpb.Key
-	// StartTS and EndTS determine exported time range as (startTS, endTS].
-	StartTS, EndTS hlc.Timestamp
-	// If ExportAllRevisions is true export every revision of a key for the interval,
-	// otherwise only the latest value within the interval is exported.
-	ExportAllRevisions bool
-	// If TargetSize is positive, it indicates that the export should produce SSTs
-	// which are roughly target size. Specifically, it will return an SST such that
-	// the last key is responsible for meeting or exceeding the targetSize. If the
-	// resumeKey is non-nil then the data size of the returned sst will be greater
-	// than or equal to the targetSize.
-	TargetSize uint64
-	// If MaxSize is positive, it is an absolute maximum on byte size for the
-	// returned sst. If it is the case that the versions of the last key will lead
-	// to an SST that exceeds maxSize, an error will be returned. This parameter
-	// exists to prevent creating SSTs which are too large to be used.
-	MaxSize uint64
-	// MaxIntents specifies the number of intents to collect and return in a
-	// WriteIntentError. The caller will likely resolve the returned intents and
-	// retry the call, which would be quadratic, so this significantly reduces the
-	// overall number of scans. 0 disables batching and returns the first intent,
-	// pass math.MaxUint64 to collect all.
-	MaxIntents uint64
-	// If StopMidKey is false, once function reaches targetSize it would continue
-	// adding all versions until it reaches next key or end of range. If true, it
-	// would stop immediately when targetSize is reached and return the next versions
-	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
-	StopMidKey bool
-	// ResourceLimiter limits how long iterator could run until it exhausts allocated
-	// resources. Export queries limiter in its iteration loop to break out once
-	// resources are exhausted.
-	ResourceLimiter ResourceLimiter
-}
-
 // Reader is the read interface to an engine's data. Certain implementations
 // of Reader guarantee consistency of the underlying engine state across the
 // different iterators created by NewMVCCIterator, NewEngineIterator:
@@ -536,24 +493,6 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// ExportMVCCToSst exports changes to the keyrange [StartKey, EndKey) over the
-	// interval (StartTS, EndTS].
-	// Deletions are included if all revisions are requested or if the StartTS
-	// is non-zero.
-	// This function looks at MVCC versions and intents, and returns an error if an
-	// intent is found.
-	// exportOptions determine ranges as well as additional export options. See
-	// struct definition for details.
-	//
-	// Data is written to dest as it is collected. If error is returned content of
-	// dest is undefined.
-	//
-	// Returns summary containing number of exported bytes, resumeKey and resumeTS
-	// that allow resuming export if it was cut short because it reached limits or
-	// an error if export failed for some reason.
-	ExportMVCCToSst(
-		ctx context.Context, exportOptions ExportOptions, dest io.Writer,
-	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, resumeTS hlc.Timestamp, _ error)
 	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//

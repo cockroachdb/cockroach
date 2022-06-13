@@ -12,7 +12,6 @@ package storage
 
 import (
 	"context"
-	"io"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -139,13 +138,6 @@ func (p *pebbleBatch) Close() {
 // Closed implements the Batch interface.
 func (p *pebbleBatch) Closed() bool {
 	return p.closed
-}
-
-// ExportMVCCToSst is part of the engine.Reader interface.
-func (p *pebbleBatch) ExportMVCCToSst(
-	ctx context.Context, exportOptions ExportOptions, dest io.Writer,
-) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
-	panic("unimplemented")
 }
 
 // Get implements the Batch interface.
