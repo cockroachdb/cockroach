@@ -28,7 +28,9 @@ describe("metrics reducer", function () {
     });
 
     it("receiveMetrics() creates the correct action type.", function () {
-      expect(metrics.receiveMetrics("id", null, null).type).toEqual(metrics.RECEIVE);
+      expect(metrics.receiveMetrics("id", null, null).type).toEqual(
+        metrics.RECEIVE,
+      );
     });
 
     it("errorMetrics() creates the correct action type.", function () {
@@ -40,7 +42,9 @@ describe("metrics reducer", function () {
     });
 
     it("fetchMetricsComplete() creates the correct action type.", function () {
-      expect(metrics.fetchMetricsComplete().type).toEqual(metrics.FETCH_COMPLETE);
+      expect(metrics.fetchMetricsComplete().type).toEqual(
+        metrics.FETCH_COMPLETE,
+      );
     });
   });
 
@@ -109,8 +113,8 @@ describe("metrics reducer", function () {
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
       expect(_.keys(state.queries).length).toBe(1);
-      expect(state.queries[componentID].data).toEqual(null);
-      expect(state.queries[componentID].request).toEqual(null);
+      expect(state.queries[componentID].data).not.toBeDefined();
+      expect(state.queries[componentID].request).not.toBeDefined();
       expect(state.queries[componentID].nextRequest).not.toBeDefined();
       expect(state.queries[componentID].error).not.toBeDefined();
     });
@@ -236,48 +240,50 @@ describe("metrics reducer", function () {
           requestAction.payload.data,
         );
 
-        return expectSaga(metrics.queryMetricsSaga)
-          // Stub out calls to batchAndSendRequests.
-          .provide([[matchers.call.fn(metrics.batchAndSendRequests), null]])
-          // Dispatch six requests, with delays inserted in order to trigger
-          // batch sends.
-          .dispatch(requestAction)
-          .dispatch(requestAction)
-          .dispatch(requestAction)
-          .delay(0)
-          .dispatch(requestAction)
-          .delay(0)
-          .dispatch(requestAction)
-          .dispatch(requestAction)
-          .run()
-          .then(result => {
-            const { effects } = result;
-            // Verify the order of call dispatches.
-            expect(effects.call).toEqual([
-              delay(0),
-              call(metrics.batchAndSendRequests, [
-                requestAction.payload,
-                requestAction.payload,
-                requestAction.payload,
-              ]),
-              delay(0),
-              call(metrics.batchAndSendRequests, [requestAction.payload]),
-              delay(0),
-              call(metrics.batchAndSendRequests, [
-                requestAction.payload,
-                requestAction.payload,
-              ]),
-            ]);
-            // Verify that all beginAction puts were dispatched.
-            expect(effects.put).toEqual([
-              put(beginAction),
-              put(beginAction),
-              put(beginAction),
-              put(beginAction),
-              put(beginAction),
-              put(beginAction),
-            ]);
-          });
+        return (
+          expectSaga(metrics.queryMetricsSaga)
+            // Stub out calls to batchAndSendRequests.
+            .provide([[matchers.call.fn(metrics.batchAndSendRequests), null]])
+            // Dispatch six requests, with delays inserted in order to trigger
+            // batch sends.
+            .dispatch(requestAction)
+            .dispatch(requestAction)
+            .dispatch(requestAction)
+            .delay(0)
+            .dispatch(requestAction)
+            .delay(0)
+            .dispatch(requestAction)
+            .dispatch(requestAction)
+            .run()
+            .then(result => {
+              const { effects } = result;
+              // Verify the order of call dispatches.
+              expect(effects.call).toEqual([
+                delay(0),
+                call(metrics.batchAndSendRequests, [
+                  requestAction.payload,
+                  requestAction.payload,
+                  requestAction.payload,
+                ]),
+                delay(0),
+                call(metrics.batchAndSendRequests, [requestAction.payload]),
+                delay(0),
+                call(metrics.batchAndSendRequests, [
+                  requestAction.payload,
+                  requestAction.payload,
+                ]),
+              ]);
+              // Verify that all beginAction puts were dispatched.
+              expect(effects.put).toEqual([
+                put(beginAction),
+                put(beginAction),
+                put(beginAction),
+                put(beginAction),
+                put(beginAction),
+                put(beginAction),
+              ]);
+            })
+        );
       });
     });
 
