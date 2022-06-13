@@ -1860,6 +1860,7 @@ copy_options ::=
 	| 'CSV'
 	| 'DELIMITER' string_or_placeholder
 	| 'NULL' string_or_placeholder
+	| 'HEADER'
 
 db_object_name_component ::=
 	name

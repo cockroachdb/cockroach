@@ -402,7 +402,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`COPY t FROM STDIN OIDS`, 41608, `oids`, ``},
 		{`COPY t FROM STDIN FREEZE`, 41608, `freeze`, ``},
-		{`COPY t FROM STDIN HEADER`, 41608, `header`, ``},
 		{`COPY t FROM STDIN ENCODING 'utf-8'`, 41608, `encoding`, ``},
 		{`COPY t FROM STDIN QUOTE 'x'`, 41608, `quote`, ``},
 		{`COPY t FROM STDIN FORCE QUOTE *`, 41608, `quote`, ``},

@@ -30,6 +30,7 @@ type CopyOptions struct {
 	Delimiter   Expr
 	Null        Expr
 	Escape      *StrVal
+	Header      bool
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -97,6 +98,10 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("ESCAPE ")
 		ctx.FormatNode(o.Escape)
 	}
+	if o.Header {
+		maybeAddSep()
+		ctx.WriteString("HEADER")
+	}
 }
 
 // IsDefault returns true if this struct has default value.
@@ -136,6 +141,9 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 			return pgerror.Newf(pgcode.Syntax, "escape option specified multiple times")
 		}
 		o.Escape = other.Escape
+	}
+	if other.Header {
+		o.Header = true
 	}
 	return nil
 }

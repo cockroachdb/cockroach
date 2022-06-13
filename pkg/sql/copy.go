@@ -67,6 +67,8 @@ type copyMachine struct {
 	textDelim   []byte
 	null        string
 	binaryState binaryState
+	// csvExpectHeader is true if we are expecting a header for the CSV input.
+	csvExpectHeader bool
 	// forceNotNull disables converting values matching the null string to
 	// NULL. The spec says this is only supported for CSV, and also must specify
 	// which columns it applies to.
@@ -121,10 +123,11 @@ func newCopyMachine(
 		conn: conn,
 		// TODO(georgiah): Currently, insertRows depends on Table and Columns,
 		//  but that dependency can be removed by refactoring it.
-		table:   &n.Table,
-		columns: n.Columns,
-		format:  n.Options.CopyFormat,
-		txnOpt:  txnOpt,
+		table:           &n.Table,
+		columns:         n.Columns,
+		format:          n.Options.CopyFormat,
+		txnOpt:          txnOpt,
+		csvExpectHeader: n.Options.Header,
 		// The planner will be prepared before use.
 		p:              planner{execCfg: execCfg, alloc: &tree.DatumAlloc{}},
 		execInsertPlan: execInsertPlan,
@@ -147,9 +150,16 @@ func newCopyMachine(
 		c.delimiter = ','
 	}
 
+	if n.Options.Header && c.format != tree.CopyFormatCSV {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "HEADER only supported with CSV format")
+	}
+
 	if n.Options.Delimiter != nil {
 		if c.format == tree.CopyFormatBinary {
-			return nil, errors.Newf("DELIMITER unsupported in BINARY format")
+			return nil, pgerror.Newf(
+				pgcode.Syntax,
+				"DELIMITER unsupported in BINARY format",
+			)
 		}
 		fn, err := c.p.TypeAsString(ctx, n.Options.Delimiter, "COPY")
 		if err != nil {
@@ -160,13 +170,19 @@ func newCopyMachine(
 			return nil, err
 		}
 		if len(delim) != 1 || !utf8.ValidString(delim) {
-			return nil, errors.Newf("delimiter must be a single-byte character")
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"delimiter must be a single-byte character",
+			)
 		}
 		c.delimiter = delim[0]
 	}
 	if n.Options.Null != nil {
 		if c.format == tree.CopyFormatBinary {
-			return nil, errors.Newf("NULL unsupported in BINARY format")
+			return nil, pgerror.Newf(
+				pgcode.Syntax,
+				"NULL unsupported in BINARY format",
+			)
 		}
 		fn, err := c.p.TypeAsString(ctx, n.Options.Null, "COPY")
 		if err != nil {
@@ -469,6 +485,13 @@ func (c *copyMachine) readCSVData(ctx context.Context, final bool) (brk bool, er
 		if quoteCharsSeen%2 == 0 {
 			break
 		}
+	}
+
+	// If we are using COPY FROM and expecting a header, PostgreSQL ignores
+	// the header row in all circumstances. Do the same.
+	if c.csvExpectHeader {
+		c.csvExpectHeader = false
+		return false, nil
 	}
 
 	c.csvInput.Write(fullLine)
