@@ -53,12 +53,6 @@ var upgrades = []upgrade.Upgrade{
 		alterSystemTableStatisticsAddAvgSize,
 	),
 	upgrade.NewTenantUpgrade(
-		"update system.statement_diagnostics_requests table to support conditional stmt diagnostics",
-		toCV(clusterversion.AlterSystemStmtDiagReqs),
-		NoPrecondition,
-		alterSystemStmtDiagReqs,
-	),
-	upgrade.NewTenantUpgrade(
 		"seed system.span_configurations with configs for existing tenants",
 		toCV(clusterversion.SeedTenantSpanConfigs),
 		NoPrecondition,

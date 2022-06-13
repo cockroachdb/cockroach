@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "upgrades",
     srcs = [
-        "alter_statement_diagnostics_requests.go",
         "alter_table_protected_timestamp_records.go",
         "alter_table_statistics_avg_size.go",
         "comment_on_index_migration.go",
@@ -62,7 +61,6 @@ go_test(
     name = "upgrades_test",
     size = "large",
     srcs = [
-        "alter_statement_diagnostics_requests_test.go",
         "alter_table_protected_timestamp_records_test.go",
         "alter_table_statistics_avg_size_test.go",
         "builtins_test.go",
