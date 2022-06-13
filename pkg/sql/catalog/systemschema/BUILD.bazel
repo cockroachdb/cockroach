@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "systemschema",
@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
@@ -20,24 +19,5 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/log",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_test(
-    name = "systemschema_test",
-    size = "small",
-    srcs = ["system_test.go"],
-    embed = [":systemschema"],
-    deps = [
-        "//pkg/roachpb",
-        "//pkg/security/username",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/dbdesc",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/schemadesc",
-        "//pkg/sql/catalog/tabledesc",
-        "//pkg/sql/catalog/typedesc",
-        "@com_github_stretchr_testify//require",
     ],
 )

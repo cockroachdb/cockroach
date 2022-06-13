@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -69,9 +71,9 @@ func sqlKV(tableID uint32, indexID, descID uint64) roachpb.KeyValue {
 func descriptor(descID uint32) roachpb.KeyValue {
 	id := descpb.ID(descID)
 	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-	v := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: id}).BuildImmutable()
+	v := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &descpb.TableDescriptor{ID: id}}}
 	kv := roachpb.KeyValue{Key: k}
-	if err := kv.Value.SetProto(v.DescriptorProto()); err != nil {
+	if err := kv.Value.SetProto(v); err != nil {
 		panic(err)
 	}
 	return kv
@@ -652,4 +654,32 @@ func TestSystemConfigMask(t *testing.T) {
 	}}
 	res := mask.Apply(entries)
 	require.Equal(t, exp, res)
+}
+
+func TestShouldSplitAtDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tbl1 := descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &descpb.TableDescriptor{}}}
+	tbl2 := descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &descpb.TableDescriptor{ViewQuery: "SELECT"}}}
+	tbl3 := descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &descpb.TableDescriptor{ViewQuery: "SELECT", IsMaterializedView: true}}}
+	db := descpb.Descriptor{Union: &descpb.Descriptor_Database{Database: &descpb.DatabaseDescriptor{
+		Name:              "db",
+		ID:                42,
+		Privileges:        catpb.NewBaseDatabasePrivilegeDescriptor(username.AdminRoleName()),
+		DefaultPrivileges: catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE),
+	}}}
+	typ := descpb.Descriptor{Union: &descpb.Descriptor_Type{Type: &descpb.TypeDescriptor{}}}
+	schema := descpb.Descriptor{Union: &descpb.Descriptor_Schema{Schema: &descpb.SchemaDescriptor{}}}
+	for inner, should := range map[*descpb.Descriptor]bool{
+		&tbl1:   true,
+		&tbl2:   false,
+		&tbl3:   true,
+		&db:     false,
+		&typ:    false,
+		&schema: false,
+	} {
+		var rawDesc roachpb.Value
+		require.NoError(t, rawDesc.SetProto(inner))
+		require.Equal(t, should, config.ShouldSplitAtDesc(&rawDesc))
+	}
 }
