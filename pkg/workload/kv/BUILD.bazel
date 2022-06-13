@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "kv",
     srcs = [
+        "dynamic.go",
         "kv.go",
         "zipfian.go",
     ],
@@ -26,7 +27,10 @@ go_library(
 
 go_test(
     name = "kv_test",
-    srcs = ["kv_test.go"],
+    srcs = [
+        "dynamic_test.go",
+        "kv_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":kv"],
     deps = ["@com_github_stretchr_testify//require"],
