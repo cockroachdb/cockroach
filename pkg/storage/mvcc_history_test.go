@@ -77,6 +77,7 @@ var sstIterVerify = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-ite
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis [emitOnSeekGE]] [maskBelow=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
@@ -624,6 +625,7 @@ var commands = map[string]cmd{
 	"del":            {typDataUpdate, cmdDelete},
 	"del_range":      {typDataUpdate, cmdDeleteRange},
 	"del_range_ts":   {typDataUpdate, cmdDeleteRangeTombstone},
+	"export":         {typReadOnly, cmdExport},
 	"get":            {typReadOnly, cmdGet},
 	"increment":      {typDataUpdate, cmdIncrement},
 	"initput":        {typDataUpdate, cmdInitPut},
@@ -1060,6 +1062,83 @@ func cmdPut(e *evalCtx) error {
 		}
 		return nil
 	})
+}
+
+func cmdExport(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	opts := MVCCExportOptions{
+		StartKey:           MVCCKey{Key: key, Timestamp: e.getTsWithName("kTs")},
+		EndKey:             endKey,
+		StartTS:            e.getTsWithName("startTs"),
+		EndTS:              e.getTs(nil),
+		ExportAllRevisions: e.hasArg("allRevisions"),
+		StopMidKey:         e.hasArg("stopMidKey"),
+	}
+	if e.hasArg("maxIntents") {
+		e.scanArg("maxIntents", &opts.MaxIntents)
+	}
+	if e.hasArg("targetSize") {
+		e.scanArg("targetSize", &opts.TargetSize)
+	}
+	if e.hasArg("maxSize") {
+		e.scanArg("maxSize", &opts.MaxSize)
+	}
+
+	sstFile := &MemFile{}
+	summary, resume, err := MVCCExportToSST(e.ctx, e.st, e.engine, opts, sstFile)
+	if err != nil {
+		return err
+	}
+
+	e.results.buf.Printf("export: %s", &summary)
+	if resume.Key != nil {
+		e.results.buf.Printf(" resume=%s", resume)
+	}
+	e.results.buf.Printf("\n")
+
+	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	var rangeStart roachpb.Key
+	for iter.SeekGE(NilKey); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasRange {
+			if rangeBounds := iter.RangeBounds(); !rangeBounds.Key.Equal(rangeStart) {
+				rangeStart = append(rangeStart[:0], rangeBounds.Key...)
+				e.results.buf.Printf("export: %s/[", rangeBounds)
+				for i, rangeKV := range iter.RangeKeys() {
+					val, err := DecodeMVCCValue(rangeKV.Value)
+					if err != nil {
+						return err
+					}
+					if i > 0 {
+						e.results.buf.Printf(" ")
+					}
+					e.results.buf.Printf("%s=%s", rangeKV.RangeKey.Timestamp, val)
+				}
+				e.results.buf.Printf("]\n")
+			}
+		}
+		if hasPoint {
+			key := iter.UnsafeKey()
+			value := iter.UnsafeValue()
+			mvccValue, err := DecodeMVCCValue(value)
+			if err != nil {
+				return err
+			}
+			e.results.buf.Printf("export: %v -> %s\n", key, mvccValue)
+		}
+	}
+
+	return nil
 }
 
 func cmdScan(e *evalCtx) error {
