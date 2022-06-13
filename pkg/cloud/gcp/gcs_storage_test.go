@@ -18,6 +18,7 @@ import (
 	"os"
 	"testing"
 
+	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
@@ -86,6 +87,42 @@ func TestPutGoogleCloud(t *testing.T) {
 				"listing-test",
 				cloud.AuthParam,
 				cloud.AuthParamImplicit,
+			),
+			username.RootUserName(), nil, nil, testSettings,
+		)
+	})
+
+	t.Run("auth-specified-temporary-token", func(t *testing.T) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+
+		ctx := context.Background()
+		source, err := google.JWTConfigFromJSON([]byte(credentials), gcs.ScopeReadWrite)
+		require.NoError(t, err, "creating GCS oauth token source from specified credentials")
+		ts := source.TokenSource(ctx)
+
+		token, err := ts.Token()
+		require.NoError(t, err, "getting token")
+
+		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
+			bucket,
+			"backup-test-specified",
+			TemporaryTokenParam,
+			token.AccessToken,
+		)
+		uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				TemporaryTokenParam,
+				token.AccessToken,
 			),
 			username.RootUserName(), nil, nil, testSettings,
 		)

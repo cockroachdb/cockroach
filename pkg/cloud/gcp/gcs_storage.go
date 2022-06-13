@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -45,6 +46,12 @@ const (
 	CredentialsParam = "CREDENTIALS"
 	// AssumeRoleParam is the email of the service account to assume.
 	AssumeRoleParam = "ASSUME_ROLE"
+	// TemporaryTokenParam is the query parameter for a temporary credentials
+	// token. There is no refresh mechanism associated with this token, so it is
+	// up to the user to ensure that its TTL is longer than the duration of the
+	// job or query that is using the token. The job or query may irrecoverably
+	// fail if one of its temporary tokens expire before completion.
+	TemporaryTokenParam = "TEMPORARY_TOKEN"
 )
 
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
@@ -66,6 +73,7 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		Credentials:    uri.Query().Get(CredentialsParam),
 		AssumeRole:     uri.Query().Get(AssumeRoleParam),
+		TemporaryToken: uri.Query().Get(TemporaryTokenParam),
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	return conf, nil
@@ -124,18 +132,28 @@ func makeGCSStorage(
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
-		if conf.Credentials == "" {
-			return nil, errors.Errorf(
-				"%s must be set if %q is %q",
-				CredentialsParam,
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-			)
-		}
+		var authOption option.ClientOption
+		var err error
 
-		authOption, err := createAuthOption(conf.Credentials)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+		if conf.Credentials == "" {
+			if conf.TemporaryToken == "" {
+				return nil, errors.Errorf(
+					"%s or %s must be set if %q is %q",
+					CredentialsParam,
+					TemporaryTokenParam,
+					cloud.AuthParam,
+					cloud.AuthParamSpecified,
+				)
+			}
+
+			// Create a static token source directly from TemporaryToken.
+			token := &oauth2.Token{AccessToken: conf.TemporaryToken}
+			authOption = option.WithTokenSource(oauth2.StaticTokenSource(token))
+		} else {
+			authOption, err = createAuthOption(conf.Credentials)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+			}
 		}
 		credentialsOpt = append(credentialsOpt, authOption)
 	}

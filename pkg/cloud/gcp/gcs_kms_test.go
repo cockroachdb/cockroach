@@ -17,6 +17,7 @@ import (
 	"os"
 	"testing"
 
+	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2/google"
 	_ "google.golang.org/api/impersonate"
 )
 
@@ -69,7 +71,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.NoSettings,
+			Settings:         cluster.MakeTestingClusterSettings(),
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -88,7 +90,33 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.NoSettings,
+			Settings:         cluster.MakeTestingClusterSettings(),
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+		})
+	})
+
+	t.Run("auth-specified-temporary-token", func(t *testing.T) {
+		// Fetch the base64 encoded JSON credentials.
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+
+		ctx := context.Background()
+		source, err := google.JWTConfigFromJSON([]byte(credentials), kms.DefaultAuthScopes()...)
+		require.NoError(t, err, "creating GCS oauth token source from specified credentials")
+		ts := source.TokenSource(ctx)
+
+		token, err := ts.Token()
+		require.NoError(t, err, "getting token")
+		q.Set(TemporaryTokenParam, token.AccessToken)
+
+		// Set AUTH to specified.
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+
+		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
+		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
+			Settings:         cluster.MakeTestingClusterSettings(),
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -156,7 +184,7 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 
 	uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 	_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
-		Settings:         cluster.NoSettings,
+		Settings:         cluster.MakeTestingClusterSettings(),
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err,
 		"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag"),
