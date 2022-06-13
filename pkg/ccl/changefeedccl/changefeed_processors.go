@@ -1388,7 +1388,7 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
 	if !cf.isSinkless() {
 		description = fmt.Sprintf("job %d", cf.spec.JobID)
 	}
-	if frontierChanged {
+	if frontierChanged && cf.slowLogEveryN.ShouldProcess(now) {
 		log.Infof(cf.Ctx, "%s new resolved timestamp %s is behind by %s",
 			description, frontier, resolvedBehind)
 	}
