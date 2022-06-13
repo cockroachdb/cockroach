@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import assert from "assert";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import { RouteComponentProps } from "react-router-dom";
@@ -93,19 +92,19 @@ class TestDriver {
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
-      assert(
+      expect(
         this.properties().details.lastRead.isSame(expected.details.lastRead),
-      );
-      assert(
+      ).toBe(true);
+      expect(
         this.properties().details.lastReset.isSame(expected.details.lastReset),
-      );
+      ).toBe(true);
     }
     // Assert objects without moments are equal.
     delete this.properties().details.lastRead;
     delete expected.details.lastRead;
     delete this.properties().details.lastReset;
     delete expected.details.lastReset;
-    assert.deepStrictEqual(this.properties(), expected);
+    expect(this.properties()).toEqual(expected);
   }
 
   async refreshIndexStats() {

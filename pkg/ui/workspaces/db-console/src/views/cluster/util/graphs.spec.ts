@@ -9,34 +9,34 @@
 // licenses/APL.txt.
 
 import { ComputeByteAxisDomain } from "@cockroachlabs/cluster-ui";
-import assert from "assert";
 
 describe("ComputeByteAxisDomain", () => {
   it("should compute an IEC-based domain", () => {
     const domain = ComputeByteAxisDomain([0, 1000000]);
-    assert.deepEqual(domain.ticks, [256000, 512000, 768000]);
-    assert.equal(domain.tickFormat(256000), "250");
-    assert.equal(domain.guideFormat(256000), "250.00 KiB");
-    assert.equal(domain.label, "KiB");
+    expect(domain.ticks).toEqual([256000, 512000, 768000]);
+    expect(domain.tickFormat(256000)).toBe("250");
+    expect(domain.guideFormat(256000)).toBe("250.00 KiB");
+    expect(domain.label).toBe("KiB");
   });
   // This test is here to demonstrate some of the issues that arise
   // when reusing a tick formatter with different ranges of data than
   // it was created with
   it("will produce odd data when extent changes but same tickformat is used", () => {
     const originalDomain = ComputeByteAxisDomain([0, 1000000]);
-    assert.deepEqual(originalDomain.ticks, [256000, 512000, 768000]);
-    assert.equal(originalDomain.tickFormat(256000), "250");
-    assert.equal(originalDomain.guideFormat(256000), "250.00 KiB");
-    assert.equal(originalDomain.label, "KiB");
+    expect(originalDomain.ticks).toEqual([256000, 512000, 768000]);
+    expect(originalDomain.tickFormat(256000)).toBe("250");
+    expect(originalDomain.guideFormat(256000)).toBe("250.00 KiB");
+    expect(originalDomain.label).toBe("KiB");
+
     const newDomain = ComputeByteAxisDomain([0, 1000000000]);
-    assert.deepEqual(newDomain.ticks, [262144000, 524288000, 786432000]);
-    assert.equal(newDomain.tickFormat(262144000), "250");
-    assert.equal(newDomain.guideFormat(262144000), "250.00 MiB");
-    assert.equal(newDomain.label, "MiB");
+    expect(newDomain.ticks).toEqual([262144000, 524288000, 786432000]);
+    expect(newDomain.tickFormat(262144000)).toBe("250");
+    expect(newDomain.guideFormat(262144000)).toBe("250.00 MiB");
+    expect(newDomain.label).toBe("MiB");
     // Now trying new domain with old ticks
     // The `m` in this case is "milli" meaning `10^-3`
     // see: https://github.com/d3/d3-format#locale_formatPrefix
-    assert.equal(newDomain.tickFormat(256000), "0.2441");
-    assert.equal(newDomain.guideFormat(256000), "0.24 MiB");
+    expect(newDomain.tickFormat(256000)).toBe("0.2441");
+    expect(newDomain.guideFormat(256000)).toBe("0.24 MiB");
   });
 });

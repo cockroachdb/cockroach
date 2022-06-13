@@ -27,7 +27,6 @@ import { databaseNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import { makeTimestamp } from "src/views/databases/utils";
-import { assertDeepStrictEqual } from "src/test-utils";
 
 function fakeRouteComponentProps(
   key: string,
@@ -69,26 +68,26 @@ class TestDriver {
   }
 
   assertProperties(expected: DatabaseDetailsPageData) {
-    assertDeepStrictEqual(expected, this.properties());
+    expect(this.properties()).toEqual(expected);
   }
 
   assertTableDetails(
     name: string,
     expected: DatabaseDetailsPageDataTableDetails,
   ) {
-    assertDeepStrictEqual(expected, this.findTable(name).details);
+    expect(this.findTable(name).details).toEqual(expected);
   }
 
   assertTableRoles(name: string, expected: string[]) {
-    assertDeepStrictEqual(expected, this.findTable(name).details.roles);
+    expect(this.findTable(name).details.roles).toEqual(expected);
   }
 
   assertTableGrants(name: string, expected: string[]) {
-    assertDeepStrictEqual(expected, this.findTable(name).details.grants);
+    expect(this.findTable(name).details.grants).toEqual(expected);
   }
 
   assertTableStats(name: string, expected: DatabaseDetailsPageDataTableStats) {
-    assertDeepStrictEqual(expected, this.findTable(name).stats);
+    expect(this.findTable(name).stats).toEqual(expected);
   }
 
   async refreshDatabaseDetails() {
