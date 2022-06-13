@@ -181,10 +181,6 @@ const (
 	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
-	// AlterSystemStmtDiagReqs adds the migration for
-	// system.statement_diagnostics_requests table to support collecting stmt
-	// bundles when the query latency exceeds the user provided threshold.
-	AlterSystemStmtDiagReqs
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
 	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
@@ -436,10 +432,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
-	},
-	{
-		Key:     AlterSystemStmtDiagReqs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
 	},
 	{
 		Key:     MVCCAddSSTable,
