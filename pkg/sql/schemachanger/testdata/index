@@ -13,7 +13,7 @@ CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #106
   ...
      formatVersion: 3
@@ -41,7 +41,6 @@ upsert descriptor #106
   +      name: crdb_internal_index_2_name_placeholder
   +      partitioning: {}
   +      sharded: {}
-  +      storeColumnNames: []
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -64,7 +63,6 @@ upsert descriptor #106
   +      name: crdb_internal_index_3_name_placeholder
   +      partitioning: {}
   +      sharded: {}
-  +      storeColumnNames: []
   +      useDeletePreservingEncoding: true
   +      version: 4
   +    mutationId: 1
@@ -94,9 +92,13 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    currentStatuses:
+  +    - PUBLIC
+  +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -109,17 +111,34 @@ upsert descriptor #106
   +    - 0
   +    - 1
   +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          kind: KEY_SUFFIX
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
   +    - elementProto:
   +        secondaryIndex:
   +          embeddedIndex:
   +            indexId: 2
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
-  +            - 1
   +            sourceIndexId: 1
   +            tableId: 106
   +            temporaryIndexId: 3
@@ -140,12 +159,6 @@ upsert descriptor #106
   +        temporaryIndex:
   +          embeddedIndex:
   +            indexId: 3
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 2
-  +            keySuffixColumnIds:
-  +            - 1
   +            sourceIndexId: 1
   +            tableId: 106
   +          isUsingSecondaryEncoding: true
@@ -153,6 +166,25 @@ upsert descriptor #106
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 3
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 3
+  +          kind: KEY_SUFFIX
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -180,8 +212,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -212,8 +244,8 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   -    - BACKFILL_ONLY
   +    - DELETE_ONLY
        - ABSENT
@@ -244,8 +276,8 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   -    - DELETE_ONLY
   +    - MERGE_ONLY
        - ABSENT
@@ -284,14 +316,14 @@ begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
   +    - PUBLIC
   +    - PUBLIC
        - WRITE_ONLY
-       jobId: "1"
+       - PUBLIC
   ...
            statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
            statementTag: CREATE INDEX
@@ -321,7 +353,6 @@ upsert descriptor #106
   +    name: idx1
   +    partitioning: {}
   +    sharded: {}
-  +    storeColumnNames: []
   +    version: 4
   +  modificationTime: {}
      mutations:
@@ -344,7 +375,6 @@ upsert descriptor #106
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      storeColumnNames: []
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
@@ -368,10 +398,10 @@ upsert descriptor #106
        - PUBLIC
   -    - WRITE_ONLY
   +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
-       storeColumnNames: []
+       sharded: {}
        version: 4
   -  modificationTime:
   -    wallTime: "1640995200000000009"
@@ -404,7 +434,11 @@ upsert descriptor #106
   -    currentStatuses:
   -    - PUBLIC
   -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -416,17 +450,34 @@ upsert descriptor #106
   -    - 0
   -    - 1
   -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          kind: KEY_SUFFIX
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
   -    - elementProto:
   -        secondaryIndex:
   -          embeddedIndex:
   -            indexId: 2
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 2
-  -            keySuffixColumnIds:
-  -            - 1
   -            sourceIndexId: 1
   -            tableId: 106
   -            temporaryIndexId: 3
@@ -447,12 +498,6 @@ upsert descriptor #106
   -        temporaryIndex:
   -          embeddedIndex:
   -            indexId: 3
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 2
-  -            keySuffixColumnIds:
-  -            - 1
   -            sourceIndexId: 1
   -            tableId: 106
   -          isUsingSecondaryEncoding: true
@@ -460,10 +505,29 @@ upsert descriptor #106
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 3
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 3
+  -          kind: KEY_SUFFIX
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
-       storeColumnNames: []
+       sharded: {}
        version: 4
   -  modificationTime:
   -    wallTime: "1640995200000000010"
@@ -487,7 +551,6 @@ upsert descriptor #106
   -      name: crdb_internal_index_3_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      storeColumnNames: []
   -      useDeletePreservingEncoding: true
   -      version: 4
   -    mutationId: 1

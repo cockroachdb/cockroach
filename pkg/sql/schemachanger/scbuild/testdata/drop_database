@@ -734,6 +734,42 @@ DROP DATABASE db1 CASCADE
   details:
     arrayTypeId: 116
     typeId: 115
+- [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    indexId: 1
+    kind: STORED
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    indexId: 1
+    kind: STORED
+    ordinal: 1
+    tableId: 109
+- [[IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 110
+- [[IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    indexId: 1
+    kind: STORED
+    tableId: 110
+- [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    indexId: 1
+    kind: STORED
+    ordinal: 1
+    tableId: 110
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
   details:
     comment: t1_pkey is good
@@ -935,13 +971,6 @@ DROP DATABASE db1 CASCADE
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      storingColumnIds:
-      - 2
-      - 3
       tableId: 109
 - [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
@@ -949,13 +978,6 @@ DROP DATABASE db1 CASCADE
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      storingColumnIds:
-      - 2
-      - 3
       tableId: 110
 - [[Schema:{DescID: 105}, ABSENT], PUBLIC]
   details:

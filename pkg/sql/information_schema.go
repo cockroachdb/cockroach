@@ -1068,15 +1068,15 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 
 var (
 	indexDirectionNA   = tree.NewDString("N/A")
-	indexDirectionAsc  = tree.NewDString(descpb.IndexDescriptor_ASC.String())
-	indexDirectionDesc = tree.NewDString(descpb.IndexDescriptor_DESC.String())
+	indexDirectionAsc  = tree.NewDString(catpb.IndexColumn_ASC.String())
+	indexDirectionDesc = tree.NewDString(catpb.IndexColumn_DESC.String())
 )
 
-func dStringForIndexDirection(dir descpb.IndexDescriptor_Direction) tree.Datum {
+func dStringForIndexDirection(dir catpb.IndexColumn_Direction) tree.Datum {
 	switch dir {
-	case descpb.IndexDescriptor_ASC:
+	case catpb.IndexColumn_ASC:
 		return indexDirectionAsc
-	case descpb.IndexDescriptor_DESC:
+	case catpb.IndexColumn_DESC:
 		return indexDirectionDesc
 	}
 	panic("unreachable")

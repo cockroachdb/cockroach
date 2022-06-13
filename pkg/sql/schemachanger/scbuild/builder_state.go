@@ -11,6 +11,7 @@
 package scbuild
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -256,23 +257,35 @@ func (b *builderState) IndexPartitioningDescriptor(
 	index *scpb.Index, partBy *tree.PartitionBy,
 ) catpb.PartitioningDescriptor {
 	b.ensureDescriptor(index.TableID)
-	desc := b.descCache[index.TableID].desc
+	bd := b.descCache[index.TableID]
+	desc := bd.desc
 	tbl, ok := desc.(catalog.TableDescriptor)
 	if !ok {
 		panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
 			desc.GetID(), desc.DescriptorType()))
 	}
 	var oldNumImplicitColumns int
-	scpb.ForEachIndexPartitioning(b, func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
+
+	scpb.ForEachIndexPartitioning(bd.ers, func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
 		if p.TableID != index.TableID || p.IndexID != index.IndexID {
 			return
 		}
 		oldNumImplicitColumns = int(p.PartitioningDescriptor.NumImplicitColumns)
 	})
-	oldKeyColumnNames := make([]string, len(index.KeyColumnIDs))
-	for i, colID := range index.KeyColumnIDs {
+
+	var keyColumns []*scpb.IndexColumn
+	scpb.ForEachIndexColumn(bd.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
+		if e.IndexID == index.IndexID && e.Kind == scpb.IndexColumn_KEY {
+			keyColumns = append(keyColumns, e)
+		}
+	})
+	sort.Slice(keyColumns, func(i, j int) bool {
+		return keyColumns[i].Ordinal < keyColumns[j].Ordinal
+	})
+	oldKeyColumnNames := make([]string, len(keyColumns))
+	for i, ic := range keyColumns {
 		scpb.ForEachColumnName(b, func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
-			if cn.TableID != index.TableID || cn.ColumnID != colID {
+			if cn.TableID != index.TableID || cn.ColumnID != ic.ColumnID {
 				return
 			}
 			oldKeyColumnNames[i] = cn.Name

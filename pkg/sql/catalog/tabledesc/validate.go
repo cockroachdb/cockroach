@@ -216,7 +216,7 @@ func (desc *wrapper) ValidateCrossReferences(
 
 		for i := 0; i < pk.NumKeyColumns(); i++ {
 			dir := pk.GetKeyColumnDirection(i)
-			if dir != descpb.IndexDescriptor_ASC {
+			if dir != catpb.IndexColumn_ASC {
 				vea.Report(unimplemented.NewWithIssuef(
 					76912,
 					`non-ascending ordering on PRIMARY KEYs are not supported`,

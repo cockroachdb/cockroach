@@ -346,6 +346,45 @@ DROP TABLE defaultdb.shipments CASCADE;
     - 2
     referencedTableId: 105
     tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    indexId: 1
+    kind: STORED
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    indexId: 1
+    kind: STORED
+    ordinal: 1
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 4
+    indexId: 1
+    kind: STORED
+    ordinal: 2
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 5
+    indexId: 1
+    kind: STORED
+    ordinal: 3
+    tableId: 109
+- [[IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 6
+    indexId: 1
+    kind: STORED
+    ordinal: 4
+    tableId: 109
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC]
   details:
     comment: pkey is good
@@ -404,16 +443,6 @@ DROP TABLE defaultdb.shipments CASCADE;
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      storingColumnIds:
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
       tableId: 109
 - [[Sequence:{DescID: 110}, ABSENT], PUBLIC]
   details:

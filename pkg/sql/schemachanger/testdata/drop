@@ -255,6 +255,9 @@ upsert descriptor #108
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    jobId: "1"
@@ -289,6 +292,9 @@ upsert descriptor #108
   +    - 22
   +    - 23
   +    - 24
+  +    - 25
+  +    - 26
+  +    - 27
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -526,18 +532,41 @@ upsert descriptor #108
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 1
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          kind: STORED
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 1
+  +          kind: STORED
+  +          ordinal: 1
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 3
-  +            storingColumnIds:
-  +            - 1
-  +            - 2
   +            tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -604,6 +633,9 @@ upsert descriptor #108
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    jobId: "1"
@@ -638,6 +670,9 @@ upsert descriptor #108
   -    - 22
   -    - 23
   -    - 24
+  -    - 25
+  -    - 26
+  -    - 27
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -875,18 +910,41 @@ upsert descriptor #108
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 1
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          kind: STORED
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 1
+  -          kind: STORED
+  -          ordinal: 1
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 3
-  -            storingColumnIds:
-  -            - 1
-  -            - 2
   -            tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -2287,12 +2345,12 @@ upsert descriptor #115
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 75
-  +    - 76
-  +    - 77
-  +    - 78
-  +    - 79
   +    - 80
+  +    - 81
+  +    - 82
+  +    - 83
+  +    - 84
+  +    - 85
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2387,6 +2445,9 @@ upsert descriptor #116
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    jobId: "1"
@@ -2396,11 +2457,6 @@ upsert descriptor #116
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 81
-  +    - 82
-  +    - 83
-  +    - 84
-  +    - 85
   +    - 86
   +    - 87
   +    - 88
@@ -2421,6 +2477,14 @@ upsert descriptor #116
   +    - 103
   +    - 104
   +    - 105
+  +    - 106
+  +    - 107
+  +    - 108
+  +    - 109
+  +    - 110
+  +    - 111
+  +    - 112
+  +    - 113
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -2661,18 +2725,41 @@ upsert descriptor #116
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 1
+  +          kind: STORED
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 1
+  +          kind: STORED
+  +          ordinal: 1
+  +          tableId: 116
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2729,6 +2816,9 @@ upsert descriptor #117
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    jobId: "1"
@@ -2763,6 +2853,9 @@ upsert descriptor #117
   +    - 48
   +    - 49
   +    - 50
+  +    - 51
+  +    - 52
+  +    - 53
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3003,18 +3096,41 @@ upsert descriptor #117
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 1
+  +          kind: STORED
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 1
+  +          kind: STORED
+  +          ordinal: 1
+  +          tableId: 117
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -3069,6 +3185,8 @@ upsert descriptor #118
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    - ABSENT
@@ -3079,9 +3197,6 @@ upsert descriptor #118
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 51
-  +    - 52
-  +    - 53
   +    - 54
   +    - 55
   +    - 56
@@ -3103,6 +3218,11 @@ upsert descriptor #118
   +    - 72
   +    - 73
   +    - 74
+  +    - 75
+  +    - 76
+  +    - 77
+  +    - 78
+  +    - 79
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3316,17 +3436,30 @@ upsert descriptor #118
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 1
+  +          kind: STORED
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -3392,14 +3525,6 @@ upsert descriptor #119
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 106
-  +    - 107
-  +    - 108
-  +    - 109
-  +    - 110
-  +    - 111
-  +    - 112
-  +    - 113
   +    - 114
   +    - 115
   +    - 116
@@ -3407,6 +3532,14 @@ upsert descriptor #119
   +    - 118
   +    - 119
   +    - 120
+  +    - 121
+  +    - 122
+  +    - 123
+  +    - 124
+  +    - 125
+  +    - 126
+  +    - 127
+  +    - 128
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3607,14 +3740,6 @@ upsert descriptor #120
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 121
-  +    - 122
-  +    - 123
-  +    - 124
-  +    - 125
-  +    - 126
-  +    - 127
-  +    - 128
   +    - 129
   +    - 130
   +    - 131
@@ -3625,6 +3750,14 @@ upsert descriptor #120
   +    - 136
   +    - 137
   +    - 138
+  +    - 139
+  +    - 140
+  +    - 141
+  +    - 142
+  +    - 143
+  +    - 144
+  +    - 145
+  +    - 146
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -3859,14 +3992,6 @@ upsert descriptor #121
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 139
-  +    - 140
-  +    - 141
-  +    - 142
-  +    - 143
-  +    - 144
-  +    - 145
-  +    - 146
   +    - 147
   +    - 148
   +    - 149
@@ -3877,6 +4002,14 @@ upsert descriptor #121
   +    - 154
   +    - 155
   +    - 156
+  +    - 157
+  +    - 158
+  +    - 159
+  +    - 160
+  +    - 161
+  +    - 162
+  +    - 163
+  +    - 164
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4112,14 +4245,6 @@ upsert descriptor #122
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 157
-  +    - 158
-  +    - 159
-  +    - 160
-  +    - 161
-  +    - 162
-  +    - 163
-  +    - 164
   +    - 165
   +    - 166
   +    - 167
@@ -4130,6 +4255,14 @@ upsert descriptor #122
   +    - 172
   +    - 173
   +    - 174
+  +    - 175
+  +    - 176
+  +    - 177
+  +    - 178
+  +    - 179
+  +    - 180
+  +    - 181
+  +    - 182
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4352,13 +4485,13 @@ upsert descriptor #123
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 175
-  +    - 176
-  +    - 177
-  +    - 178
-  +    - 179
-  +    - 180
-  +    - 181
+  +    - 183
+  +    - 184
+  +    - 185
+  +    - 186
+  +    - 187
+  +    - 188
+  +    - 189
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4453,13 +4586,13 @@ upsert descriptor #124
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 182
-  +    - 183
-  +    - 184
-  +    - 185
-  +    - 186
-  +    - 187
-  +    - 188
+  +    - 190
+  +    - 191
+  +    - 192
+  +    - 193
+  +    - 194
+  +    - 195
+  +    - 196
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4578,14 +4711,6 @@ upsert descriptor #125
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 189
-  +    - 190
-  +    - 191
-  +    - 192
-  +    - 193
-  +    - 194
-  +    - 195
-  +    - 196
   +    - 197
   +    - 198
   +    - 199
@@ -4599,6 +4724,14 @@ upsert descriptor #125
   +    - 207
   +    - 208
   +    - 209
+  +    - 210
+  +    - 211
+  +    - 212
+  +    - 213
+  +    - 214
+  +    - 215
+  +    - 216
+  +    - 217
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4960,12 +5093,12 @@ upsert descriptor #115
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 75
-  -    - 76
-  -    - 77
-  -    - 78
-  -    - 79
   -    - 80
+  -    - 81
+  -    - 82
+  -    - 83
+  -    - 84
+  -    - 85
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -5064,6 +5197,9 @@ upsert descriptor #116
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    jobId: "1"
@@ -5073,11 +5209,6 @@ upsert descriptor #116
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 81
-  -    - 82
-  -    - 83
-  -    - 84
-  -    - 85
   -    - 86
   -    - 87
   -    - 88
@@ -5098,6 +5229,14 @@ upsert descriptor #116
   -    - 103
   -    - 104
   -    - 105
+  -    - 106
+  -    - 107
+  -    - 108
+  -    - 109
+  -    - 110
+  -    - 111
+  -    - 112
+  -    - 113
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -5338,18 +5477,41 @@ upsert descriptor #116
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 1
+  -          kind: STORED
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 1
+  -          kind: STORED
+  -          ordinal: 1
+  -          tableId: 116
+  -      metadata:
+  -        sourceElementId: 7
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -5410,6 +5572,9 @@ upsert descriptor #117
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    jobId: "1"
@@ -5444,6 +5609,9 @@ upsert descriptor #117
   -    - 48
   -    - 49
   -    - 50
+  -    - 51
+  -    - 52
+  -    - 53
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -5684,18 +5852,41 @@ upsert descriptor #117
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 1
+  -          kind: STORED
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 1
+  -          kind: STORED
+  -          ordinal: 1
+  -          tableId: 117
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5754,6 +5945,8 @@ upsert descriptor #118
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    - ABSENT
@@ -5764,9 +5957,6 @@ upsert descriptor #118
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 51
-  -    - 52
-  -    - 53
   -    - 54
   -    - 55
   -    - 56
@@ -5788,6 +5978,11 @@ upsert descriptor #118
   -    - 72
   -    - 73
   -    - 74
+  -    - 75
+  -    - 76
+  -    - 77
+  -    - 78
+  -    - 79
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -6001,17 +6196,30 @@ upsert descriptor #118
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 1
+  -          kind: STORED
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 118
   -      metadata:
   -        sourceElementId: 3

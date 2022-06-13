@@ -13,6 +13,7 @@ package cockroach.sql.schemachanger.scpb;
 option go_package = "scpb";
 
 import "sql/catalog/catpb/catalog.proto";
+import "sql/catalog/catpb/index.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 
@@ -89,6 +90,7 @@ message ElementProto {
   IndexPartitioning index_partitioning = 41 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
   SecondaryIndexPartial secondary_index_partial = 42 [(gogoproto.moretags) = "parent:\"SecondaryIndex\""];
   IndexComment index_comment = 43 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
+  IndexColumn index_column = 44 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex, Column\""];
 
   // Constraint elements.
   ConstraintName constraint_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
@@ -184,15 +186,6 @@ message ColumnFamily {
 message Index {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  repeated uint32 key_column_ids = 3 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  enum Direction {
-    ASC = 0;
-    DESC = 1;
-  }
-  repeated Direction key_column_directions = 4;
-  repeated uint32 key_suffix_column_ids = 5 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  repeated uint32 storing_column_ids = 6 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  repeated uint32 composite_column_ids = 7 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
 
   bool is_unique = 10;
   bool is_inverted = 11;
@@ -214,6 +207,8 @@ message Index {
   bool is_concurrently = 20;
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+
+  reserved 3, 4, 5, 6, 7;
 }
 
 message PrimaryIndex {
@@ -451,4 +446,19 @@ message DatabaseRegionConfig {
 message DatabaseRoleSetting {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string role_name = 2;
+}
+
+// IndexColumn models column membership in an index.
+message IndexColumn {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  uint32 column_id = 3  [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  uint32 ordinal = 4;
+  enum Kind {
+    KEY = 0;
+    KEY_SUFFIX = 1;
+    STORED = 2;
+  }
+  Kind kind = 5;
+  sql.catalog.catpb.IndexColumn.Direction direction = 6;
 }

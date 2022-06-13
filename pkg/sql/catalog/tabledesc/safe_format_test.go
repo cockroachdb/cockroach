@@ -208,9 +208,9 @@ func TestSafeMessage(t *testing.T) {
 								KeySuffixColumnIDs: []descpb.ColumnID{1},
 								StoreColumnIDs:     []descpb.ColumnID{5},
 								KeyColumnNames:     []string{"j_str", "j"},
-								KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-									descpb.IndexDescriptor_ASC,
-									descpb.IndexDescriptor_DESC,
+								KeyColumnDirections: []catpb.IndexColumn_Direction{
+									catpb.IndexColumn_ASC,
+									catpb.IndexColumn_DESC,
 								},
 								StoreColumnNames: []string{"c"},
 							},

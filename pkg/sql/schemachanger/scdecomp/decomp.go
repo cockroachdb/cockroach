@@ -410,19 +410,37 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			TableID:             tbl.GetID(),
 			IndexID:             idx.GetID(),
 			IsUnique:            idx.IsUnique(),
-			KeyColumnIDs:        cpy.KeyColumnIDs,
-			KeySuffixColumnIDs:  cpy.KeySuffixColumnIDs,
-			StoringColumnIDs:    cpy.StoreColumnIDs,
-			CompositeColumnIDs:  cpy.CompositeColumnIDs,
 			IsInverted:          idx.GetType() == descpb.IndexDescriptor_INVERTED,
 			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
 			ConstraintID:        idx.GetConstraintID(),
 		}
-		index.KeyColumnDirections = make([]scpb.Index_Direction, len(index.KeyColumnIDs))
-		for i := 0; i < idx.NumKeyColumns(); i++ {
-			if idx.GetKeyColumnDirection(i) == descpb.IndexDescriptor_DESC {
-				index.KeyColumnDirections[i] = scpb.Index_DESC
-			}
+		for i, c := range cpy.KeyColumnIDs {
+			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{
+				TableID:   tbl.GetID(),
+				IndexID:   idx.GetID(),
+				ColumnID:  c,
+				Ordinal:   uint32(i),
+				Kind:      scpb.IndexColumn_KEY,
+				Direction: cpy.KeyColumnDirections[i],
+			})
+		}
+		for i, c := range cpy.KeySuffixColumnIDs {
+			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{
+				TableID:  tbl.GetID(),
+				IndexID:  idx.GetID(),
+				ColumnID: c,
+				Ordinal:  uint32(i),
+				Kind:     scpb.IndexColumn_KEY_SUFFIX,
+			})
+		}
+		for i, c := range cpy.StoreColumnIDs {
+			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{
+				TableID:  tbl.GetID(),
+				IndexID:  idx.GetID(),
+				ColumnID: c,
+				Ordinal:  uint32(i),
+				Kind:     scpb.IndexColumn_STORED,
+			})
 		}
 		if idx.IsSharded() {
 			index.Sharding = &cpy.Sharded

@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -95,7 +95,7 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 	indexCols := make([]opt.OrderingColumn, len(primary.IndexDesc().KeyColumnIDs))
 	var notNullIndexCols opt.ColSet
 	for i, colID := range primary.IndexDesc().KeyColumnIDs {
-		if primary.GetKeyColumnDirection(i) == descpb.IndexDescriptor_ASC {
+		if primary.GetKeyColumnDirection(i) == catpb.IndexColumn_ASC {
 			indexCols[i] = opt.OrderingColumn(colID)
 		} else {
 			indexCols[i] = opt.OrderingColumn(-colID)

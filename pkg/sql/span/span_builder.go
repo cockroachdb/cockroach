@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -86,7 +88,7 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 	endInclusive bool,
 ) (_ roachpb.Span, containsNull bool, err error) {
 
-	isDesc := s.keyAndPrefixCols[prefixLen-1].Direction == descpb.IndexDescriptor_DESC
+	isDesc := s.keyAndPrefixCols[prefixLen-1].Direction == catpb.IndexColumn_DESC
 	if isDesc {
 		startDatum, endDatum = endDatum, startDatum
 		startInclusive, endInclusive = endInclusive, startInclusive
@@ -272,7 +274,9 @@ func (s *Builder) encodeConstraintKey(
 			containsNull = true
 		}
 
-		dir, err := s.keyAndPrefixCols[i].Direction.ToEncodingDirection()
+		dir, err := catalogkeys.IndexColumnEncodingDirection(
+			s.keyAndPrefixCols[i].Direction,
+		)
 		if err != nil {
 			return nil, false, err
 		}

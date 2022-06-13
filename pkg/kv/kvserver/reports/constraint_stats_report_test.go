@@ -403,7 +403,7 @@ func (idx index) toIndexDescriptor(id int) descpb.IndexDescriptor {
 		for i := 0; i < neededCols; i++ {
 			idxDesc.KeyColumnIDs = append(idxDesc.KeyColumnIDs, descpb.ColumnID(i))
 			idxDesc.KeyColumnNames = append(idxDesc.KeyColumnNames, fmt.Sprintf("col%d", i))
-			idxDesc.KeyColumnDirections = append(idxDesc.KeyColumnDirections, descpb.IndexDescriptor_ASC)
+			idxDesc.KeyColumnDirections = append(idxDesc.KeyColumnDirections, catpb.IndexColumn_ASC)
 		}
 		idxDesc.Partitioning.NumColumns = uint32(len(idx.partitions[0].start))
 		for _, p := range idx.partitions {

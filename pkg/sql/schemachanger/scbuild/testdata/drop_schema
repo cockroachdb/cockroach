@@ -710,6 +710,24 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   details:
     arrayTypeId: 113
     typeId: 112
+- [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 107
+- [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    indexId: 1
+    kind: STORED
+    tableId: 107
+- [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    indexId: 1
+    kind: STORED
+    ordinal: 1
+    tableId: 107
 - [[IndexComment:{DescID: 107, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
   details:
     comment: t1_pkey is good
@@ -875,13 +893,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      storingColumnIds:
-      - 2
-      - 3
       tableId: 107
 - [[Schema:{DescID: 104}, ABSENT], PUBLIC]
   details:
