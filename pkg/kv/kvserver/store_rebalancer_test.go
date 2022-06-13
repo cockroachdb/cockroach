@@ -455,6 +455,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 			Expiration: &hlc.MaxTimestamp,
 			Replica:    repl.mu.state.Desc.InternalReplicas[0],
 		}
+		repl.mu.state.TruncatedState = &roachpb.RaftTruncatedState{}
 		for _, storeID := range r.nonVoters {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -517,6 +518,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
+		status.RaftState = raft.StateLeader
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
 			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -786,6 +788,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 					Progress: make(map[uint64]tracker.Progress),
 				}
 				status.Lead = uint64(r.ReplicaID())
+				status.RaftState = raft.StateLeader
 				status.Commit = 1
 				for _, replica := range r.Desc().InternalReplicas {
 					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -1064,6 +1067,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 					Progress: make(map[uint64]tracker.Progress),
 				}
 				status.Lead = uint64(r.ReplicaID())
+				status.RaftState = raft.StateLeader
 				status.Commit = 1
 				for _, replica := range r.Desc().InternalReplicas {
 					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -1312,6 +1316,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 					Progress: make(map[uint64]tracker.Progress),
 				}
 				status.Lead = uint64(r.ReplicaID())
+				status.RaftState = raft.StateLeader
 				status.Commit = 1
 				for _, replica := range r.Desc().InternalReplicas {
 					status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
@@ -1394,6 +1399,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 			Progress: make(map[uint64]tracker.Progress),
 		}
 		status.Lead = uint64(r.ReplicaID())
+		status.RaftState = raft.StateLeader
 		status.Commit = 1
 		for _, replica := range r.Desc().InternalReplicas {
 			match := uint64(1)

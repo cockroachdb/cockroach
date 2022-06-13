@@ -1474,6 +1474,9 @@ func writeErrFields(
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
 	msgBuilder.writeTerminatedString(pgErr.Severity)
 
+	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverityNonLocalized)
+	msgBuilder.writeTerminatedString(pgErr.Severity)
+
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
 	msgBuilder.writeTerminatedString(pgErr.Code)
 
