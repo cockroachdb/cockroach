@@ -184,36 +184,6 @@ Please perform the following steps:
 			}
 		}
 	}
-	d.log.Println("doctor: running patch check")
-	{
-		stdout, err := d.exec.CommandContextSilent(ctx, "patch", "-v")
-		stdoutStr := strings.TrimSpace(string(stdout))
-		if err != nil {
-			log.Println("Failed to run `patch`. `patch` v2.7+ is required.")
-			printStdoutAndErr(stdoutStr, err)
-			failureStr := "Please install GNU `patch`."
-			if runtime.GOOS == "darwin" {
-				failureStr += "\nYou can install GNU patch with: `brew install gpatch`"
-			}
-			failures = append(failures, failureStr)
-		} else {
-			firstLine := strings.Split(stdoutStr, "\n")[0]
-			fields := strings.Fields(firstLine)
-			ver := fields[len(fields)-1]
-			d.log.Printf("got version %s", ver)
-			if ver < "2.7" {
-				failureStr := fmt.Sprintf("The installed version of `patch` is too old: %s", ver)
-				if runtime.GOOS == "darwin" {
-					failureStr += `
-You can install a more recent version of ` + "`patch` with: `brew install gpatch`" + `
-If you have already installed the package with brew but this check is still
-failing, you may have to update your $PATH so that ` + "`which path`" + ` returns
-the homebrew-installed path rather than /usr/bin/patch.`
-				}
-				failures = append(failures, failureStr)
-			}
-		}
-	}
 
 	const binDir = "bin"
 	const submodulesMarkerPath = binDir + "/.submodules-initialized"
