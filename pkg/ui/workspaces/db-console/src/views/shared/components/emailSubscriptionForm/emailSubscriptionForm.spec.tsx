@@ -10,19 +10,15 @@
 
 import React from "react";
 import { mount, ReactWrapper } from "enzyme";
-import sinon, { SinonSpy } from "sinon";
 
 import { EmailSubscriptionForm } from "./index";
 
-const sandbox = sinon.createSandbox();
-
 describe("EmailSubscriptionForm", () => {
   let wrapper: ReactWrapper;
-  let onSubmitHandler: SinonSpy;
+  const onSubmitHandler = jest.fn();
 
   beforeEach(() => {
-    sandbox.reset();
-    onSubmitHandler = sandbox.spy();
+    onSubmitHandler.mockReset();
     wrapper = mount(<EmailSubscriptionForm onSubmit={onSubmitHandler} />);
   });
 
@@ -34,7 +30,7 @@ describe("EmailSubscriptionForm", () => {
       const buttonComponent = wrapper.find(`button`).first();
       buttonComponent.simulate("click");
 
-      onSubmitHandler.calledOnceWith(emailAddress);
+      expect(onSubmitHandler).toHaveBeenCalledWith(emailAddress);
     });
   });
 
@@ -49,7 +45,7 @@ describe("EmailSubscriptionForm", () => {
     it("doesn't call onSubmit callback", () => {
       const buttonComponent = wrapper.find(`button`).first();
       buttonComponent.simulate("click");
-      expect(onSubmitHandler.notCalled).toBe(true);
+      expect(onSubmitHandler).not.toHaveBeenCalled();
     });
 
     it("submit button is disabled", () => {

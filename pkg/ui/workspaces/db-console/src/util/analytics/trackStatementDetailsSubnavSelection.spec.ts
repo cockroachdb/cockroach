@@ -9,42 +9,35 @@
 // licenses/APL.txt.
 
 import { get } from "lodash";
-import { createSandbox } from "sinon";
 import { track } from "./trackStatementDetailsSubnavSelection";
-
-const sandbox = createSandbox();
 
 describe("trackSubnavSelection", () => {
   const subNavKey = "subnav-test";
 
-  afterEach(() => {
-    sandbox.reset();
-  });
-
   it("should only call track once", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     track(spy)(subNavKey);
-    expect(spy.calledOnce).toBe(true);
+    expect(spy).toHaveBeenCalled();
   });
 
   it("should send a track call with the correct event", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
     const expected = "SubNavigation Selection";
 
     track(spy)(subNavKey);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const event = get(sent, "event");
 
     expect(event === expected).toBe(true);
   });
 
   it("send the correct payload", () => {
-    const spy = sandbox.spy();
+    const spy = jest.fn();
 
     track(spy)(subNavKey);
 
-    const sent = spy.getCall(0).args[0];
+    const sent = spy.mock.calls[0][0];
     const selection = get(sent, "properties.selection");
 
     expect(selection === subNavKey).toBe(true);
