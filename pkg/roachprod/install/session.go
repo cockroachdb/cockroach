@@ -116,11 +116,10 @@ func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte,
 	case <-ctx.Done():
 		s.Close()
 		err = ctx.Err()
-		break
+		return nil, err
 	case <-commandFinished:
-		break
+		return b, err
 	}
-	return b, err
 }
 
 func (s *remoteSession) Run(ctx context.Context, cmd string) error {
@@ -143,12 +142,10 @@ func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 	select {
 	case <-ctx.Done():
 		s.Close()
-		err = ctx.Err()
-		break
+		return ctx.Err()
 	case <-commandFinished:
-		break
+		return err
 	}
-	return err
 }
 
 func (s *remoteSession) Start(cmd string) error {
@@ -244,13 +241,10 @@ func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, 
 	select {
 	case <-ctx.Done():
 		s.Close()
-		err = ctx.Err()
-		break
+		return nil, ctx.Err()
 	case <-commandFinished:
-		break
+		return b, err
 	}
-
-	return b, err
 }
 
 func (s *localSession) Run(ctx context.Context, cmd string) error {
@@ -273,12 +267,10 @@ func (s *localSession) Run(ctx context.Context, cmd string) error {
 	select {
 	case <-ctx.Done():
 		s.Close()
-		err = ctx.Err()
-		break
+		return ctx.Err()
 	case <-commandFinished:
-		break
+		return err
 	}
-	return err
 }
 
 func (s *localSession) Start(cmd string) error {
