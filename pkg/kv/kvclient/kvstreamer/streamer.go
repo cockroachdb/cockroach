@@ -456,9 +456,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	// within a single range.
 	var truncationHelper kvcoord.BatchTruncationHelper
 	// The streamer can process the responses in an arbitrary order, so we don't
-	// require the helper to preserve the order of requests.
+	// require the helper to preserve the order of requests and allow it to
+	// reorder the reqs slice too.
 	const mustPreserveOrder = false
-	if err = truncationHelper.Init(scanDir, reqs, mustPreserveOrder); err != nil {
+	const canReorderRequestsSlice = true
+	if err = truncationHelper.Init(
+		scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
+	); err != nil {
 		return err
 	}
 	var reqsKeysScratch []roachpb.Key
