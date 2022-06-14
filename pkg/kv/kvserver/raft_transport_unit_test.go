@@ -66,9 +66,13 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		return addr, nil
 	}
 
+	// Pulling the tracer from AmbientCtx is temporary until
+	// #74291 is resolved
+	ctxWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	tp := NewRaftTransport(
-		log.MakeTestingAmbientCtxWithNewTracer(),
+		ctxWithTracer,
 		cluster.MakeTestingClusterSettings(),
+		ctxWithTracer.Tracer,
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
 		stopper,

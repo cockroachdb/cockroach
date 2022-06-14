@@ -1152,6 +1152,12 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
 }
 
+// Tracer returns the tracer embedded within StoreConfig
+// This is temporary until #74291 is resolved
+func (sc *StoreConfig) Tracer() *tracing.Tracer {
+	return sc.AmbientCtx.Tracer
+}
+
 // NewStore returns a new instance of a store.
 func NewStore(
 	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
