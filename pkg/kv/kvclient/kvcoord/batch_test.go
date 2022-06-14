@@ -209,9 +209,10 @@ func TestBatchPrevNext(t *testing.T) {
 				ba.Add(args)
 			}
 			const mustPreserveOrder = false
-			ascHelper, err := MakeBatchTruncationHelper(Ascending, ba.Requests, mustPreserveOrder)
+			const canReorderRequestsSlice = false
+			ascHelper, err := MakeBatchTruncationHelper(Ascending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
-			descHelper, err := MakeBatchTruncationHelper(Descending, ba.Requests, mustPreserveOrder)
+			descHelper, err := MakeBatchTruncationHelper(Descending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
 			if _, _, next, err := ascHelper.Truncate(
 				roachpb.RSpan{
@@ -366,104 +367,139 @@ func TestTruncate(t *testing.T) {
 				// preserves the ordering.
 				continue
 			}
-			for i, test := range testCases {
-				goldenOriginal := roachpb.BatchRequest{}
-				for _, ks := range test.keys {
-					if len(ks[1]) > 0 {
-						goldenOriginal.Add(&roachpb.ResolveIntentRangeRequest{
-							RequestHeader: roachpb.RequestHeader{
-								Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1]),
-							},
-							IntentTxn: enginepb.TxnMeta{ID: uuid.MakeV4()},
-						})
-					} else {
-						goldenOriginal.Add(&roachpb.GetRequest{
-							RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0])},
-						})
+			for _, canReorderRequestsSlice := range []bool{false, true} {
+				if isLegacy && canReorderRequestsSlice {
+					// This config is meaningless because truncateLegacy()
+					// doesn't reorder the original requests slice.
+					continue
+				}
+
+				for i, test := range testCases {
+					goldenOriginal := roachpb.BatchRequest{}
+					for _, ks := range test.keys {
+						if len(ks[1]) > 0 {
+							goldenOriginal.Add(&roachpb.ResolveIntentRangeRequest{
+								RequestHeader: roachpb.RequestHeader{
+									Key: roachpb.Key(ks[0]), EndKey: roachpb.Key(ks[1]),
+								},
+								IntentTxn: enginepb.TxnMeta{ID: uuid.MakeV4()},
+							})
+						} else {
+							goldenOriginal.Add(&roachpb.GetRequest{
+								RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(ks[0])},
+							})
+						}
 					}
-				}
 
-				original := roachpb.BatchRequest{Requests: make([]roachpb.RequestUnion, len(goldenOriginal.Requests))}
-				for i, request := range goldenOriginal.Requests {
-					original.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
-				}
+					original := roachpb.BatchRequest{Requests: make([]roachpb.RequestUnion, len(goldenOriginal.Requests))}
+					for i, request := range goldenOriginal.Requests {
+						original.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
+					}
 
-				var truncationHelper BatchTruncationHelper
-				if !isLegacy {
-					var err error
-					truncationHelper, err = MakeBatchTruncationHelper(Ascending, original.Requests, mustPreserveOrder)
+					var truncationHelper BatchTruncationHelper
+					if !isLegacy {
+						var err error
+						truncationHelper, err = MakeBatchTruncationHelper(
+							Ascending, original.Requests, mustPreserveOrder, canReorderRequestsSlice,
+						)
+						if err != nil {
+							t.Errorf("%d: Init failure: %v", i, err)
+							continue
+						}
+						// We need to truncate all requests up to the start of
+						// the test range since this is assumed by Truncate().
+						truncateKey := roachpb.RKey(test.from)
+						if truncateKey.Less(roachpb.RKey(test.desc[0])) {
+							truncateKey = roachpb.RKey(test.desc[0])
+						}
+						_, _, _, err = truncationHelper.Truncate(
+							roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: truncateKey},
+						)
+						if err != nil || test.err != "" {
+							if !testutils.IsError(err, test.err) {
+								t.Errorf("%d: %v (expected: %q)", i, err, test.err)
+							}
+							continue
+						}
+					}
+					desc := &roachpb.RangeDescriptor{
+						StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),
+					}
+					if len(desc.StartKey) == 0 {
+						desc.StartKey = roachpb.RKey(test.from)
+					}
+					if len(desc.EndKey) == 0 {
+						desc.EndKey = roachpb.RKey(test.to)
+					}
+					rs := roachpb.RSpan{Key: roachpb.RKey(test.from), EndKey: roachpb.RKey(test.to)}
+					rs, err := rs.Intersect(desc)
 					if err != nil {
-						t.Errorf("%d: Init failure: %v", i, err)
+						t.Errorf("%d: intersection failure: %v", i, err)
 						continue
 					}
-					// We need to truncate all requests up to the start of the
-					// test range since this is assumed by Truncate().
-					truncateKey := roachpb.RKey(test.from)
-					if truncateKey.Less(roachpb.RKey(test.desc[0])) {
-						truncateKey = roachpb.RKey(test.desc[0])
-					}
-					_, _, _, err = truncationHelper.Truncate(
-						roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: truncateKey},
-					)
-					if err != nil || test.err != "" {
-						if !testutils.IsError(err, test.err) {
-							t.Errorf("%d: %v (expected: %q)", i, err, test.err)
+					reqs, pos, err := truncateLegacy(original.Requests, rs)
+					if isLegacy {
+						if err != nil || test.err != "" {
+							if !testutils.IsError(err, test.err) {
+								t.Errorf("%d: %v (expected: %q)", i, err, test.err)
+							}
+							continue
 						}
+					} else {
+						reqs, pos, _, err = truncationHelper.Truncate(rs)
+					}
+					if err != nil {
+						t.Errorf("%d: truncation failure: %v", i, err)
 						continue
 					}
-				}
-				desc := &roachpb.RangeDescriptor{
-					StartKey: roachpb.RKey(test.desc[0]), EndKey: roachpb.RKey(test.desc[1]),
-				}
-				if len(desc.StartKey) == 0 {
-					desc.StartKey = roachpb.RKey(test.from)
-				}
-				if len(desc.EndKey) == 0 {
-					desc.EndKey = roachpb.RKey(test.to)
-				}
-				rs := roachpb.RSpan{Key: roachpb.RKey(test.from), EndKey: roachpb.RKey(test.to)}
-				rs, err := rs.Intersect(desc)
-				if err != nil {
-					t.Errorf("%d: intersection failure: %v", i, err)
-					continue
-				}
-				reqs, pos, err := truncateLegacy(original.Requests, rs)
-				if isLegacy {
-					if err != nil || test.err != "" {
-						if !testutils.IsError(err, test.err) {
-							t.Errorf("%d: %v (expected: %q)", i, err, test.err)
+					if !isLegacy && !mustPreserveOrder {
+						// Truncate can return results in an arbitrary order, so
+						// we need to restore the order according to positions.
+						scratch := &requestsWithPositions{reqs: reqs, positions: pos}
+						sort.Sort(scratch)
+					}
+					var numReqs int
+					for j, arg := range reqs {
+						req := arg.GetInner()
+						if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
+							t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
+								h.Key, h.EndKey, roachpb.RKey(test.expKeys[j][0]), roachpb.RKey(test.expKeys[j][1]))
+						} else if len(h.Key) != 0 {
+							numReqs++
 						}
-						continue
 					}
-				} else {
-					reqs, pos, _, err = truncationHelper.Truncate(rs)
-				}
-				if err != nil {
-					t.Errorf("%d: truncation failure: %v", i, err)
-					continue
-				}
-				if !isLegacy && !mustPreserveOrder {
-					// Truncate can return results in an arbitrary order, so we
-					// need to restore the order according to positions.
-					scratch := &requestsWithPositions{reqs: reqs, positions: pos}
-					sort.Sort(scratch)
-				}
-				var numReqs int
-				for j, arg := range reqs {
-					req := arg.GetInner()
-					if h := req.Header(); !bytes.Equal(h.Key, roachpb.Key(test.expKeys[j][0])) || !bytes.Equal(h.EndKey, roachpb.Key(test.expKeys[j][1])) {
-						t.Errorf("%d.%d: range mismatch: actual [%q,%q), wanted [%q,%q)", i, j,
-							h.Key, h.EndKey, roachpb.RKey(test.expKeys[j][0]), roachpb.RKey(test.expKeys[j][1]))
-					} else if len(h.Key) != 0 {
-						numReqs++
+					if num := len(pos); numReqs != num {
+						t.Errorf("%d: counted %d requests, but truncation indicated %d", i, numReqs, num)
 					}
-				}
-				if num := len(pos); numReqs != num {
-					t.Errorf("%d: counted %d requests, but truncation indicated %d", i, numReqs, num)
-				}
-				if !reflect.DeepEqual(original, goldenOriginal) {
-					t.Errorf("%d: truncation mutated original:\nexpected: %s\nactual: %s",
-						i, goldenOriginal, original)
+					if isLegacy || !canReorderRequestsSlice {
+						if !reflect.DeepEqual(original, goldenOriginal) {
+							t.Errorf("%d: truncation mutated original:\nexpected: %s\nactual: %s",
+								i, goldenOriginal, original)
+						}
+					} else {
+						// Modifying the order of requests in a BatchRequest is
+						// ok, but we want to make sure that each request hasn't
+						// been modified "deeply", so we try different
+						// permutations of the original requests.
+						matched := make([]bool, len(original.Requests))
+						var matchedCount int
+						for _, goldenReq := range goldenOriginal.Requests {
+							for j, origReq := range original.Requests {
+								if matched[j] {
+									continue
+								}
+								if reflect.DeepEqual(goldenReq, origReq) {
+									matched[j] = true
+									matchedCount++
+									break
+								}
+							}
+						}
+						if matchedCount != len(matched) {
+							t.Errorf("%d: truncation mutated original:\nexpected: %s\nactual: %s",
+								i, goldenOriginal, original)
+						}
+					}
 				}
 			}
 		}
@@ -525,7 +561,10 @@ func TestTruncateLoop(t *testing.T) {
 		for _, scanDir := range []ScanDirection{Ascending, Descending} {
 			for _, mustPreserveOrder := range []bool{false, true} {
 				t.Run(fmt.Sprintf("run=%d/%s/order=%t", numRuns, scanDir, mustPreserveOrder), func(t *testing.T) {
-					helper, err := MakeBatchTruncationHelper(scanDir, requests, mustPreserveOrder)
+					const canReorderRequestsSlice = false
+					helper, err := MakeBatchTruncationHelper(
+						scanDir, requests, mustPreserveOrder, canReorderRequestsSlice,
+					)
 					require.NoError(t, err)
 					for i := 0; i < len(ranges); i++ {
 						curRangeRS := ranges[i]
@@ -658,7 +697,10 @@ func BenchmarkTruncateLoop(b *testing.B) {
 							}
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
-								h, err := MakeBatchTruncationHelper(scanDir, reqs, mustPreserveOrder)
+								const canReorderRequestsSlice = false
+								h, err := MakeBatchTruncationHelper(
+									scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
+								)
 								require.NoError(b, err)
 								for _, rs := range rangeSpans {
 									_, _, _, err := h.Truncate(rs)

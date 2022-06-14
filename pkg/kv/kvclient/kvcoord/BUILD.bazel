@@ -55,6 +55,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
