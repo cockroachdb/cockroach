@@ -10,7 +10,6 @@
 
 import { shallow } from "enzyme";
 import React from "react";
-import * as sinon from "sinon";
 import uPlot from "uplot";
 import _ from "lodash";
 
@@ -41,7 +40,7 @@ describe("<LineGraph>", function () {
       subtitle: "Test Subtitle",
       legend: false,
       xAxis: true,
-      data: { results: [], toJSON: sinon.spy },
+      data: { results: [], toJSON: jest.fn() },
       timeInfo: {
         start: new Long(12345),
         end: new Long(2346),
@@ -55,7 +54,7 @@ describe("<LineGraph>", function () {
         location: {
           pathname: "",
           search: "",
-          state: sinon.spy,
+          state: jest.fn(),
           hash: "",
         },
         push: () => {},
@@ -63,8 +62,8 @@ describe("<LineGraph>", function () {
         go: () => {},
         goBack: () => {},
         goForward: () => {},
-        block: sinon.spy,
-        listen: sinon.spy,
+        block: jest.fn(),
+        listen: jest.fn(),
         createHref: () => {
           return "";
         },
@@ -107,10 +106,10 @@ describe("<LineGraph>", function () {
     // test setup
     const wrapper = linegraph({
       ...mockProps,
-      data: { results: [{}], toJSON: sinon.spy },
+      data: { results: [{}], toJSON: jest.fn() },
     });
     const instance = wrapper.instance() as unknown as LineGraph;
-    const mockFn = sinon.spy();
+    const mockFn = jest.fn();
     const mockMetrics = [
       {
         key: ".0",
@@ -145,7 +144,7 @@ describe("<LineGraph>", function () {
         ),
     );
     instance.u = new uPlot(mockOptions);
-    const setDataSpy = sinon.spy(instance.u, "setData");
+    const setDataSpy = jest.spyOn(instance.u, "setData");
     // run test
     wrapper.setProps({
       data: {
@@ -165,7 +164,7 @@ describe("<LineGraph>", function () {
         ],
       },
     });
-    expect(setDataSpy.called).toBe(true);
+    expect(setDataSpy).toHaveBeenCalled();
   });
 });
 
