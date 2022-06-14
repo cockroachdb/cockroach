@@ -79,6 +79,53 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
+  stderr:
+    format: crdb-v2-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: TMPDIR
+  max-group-size: 100MiB
+
+# Test the default config with an http server.
+yaml
+sinks:
+ http-servers: {local: {channels: SESSIONS, address: localhost:5170}}
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      dir: TMPDIR
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      buffered-writes: true
+      format: crdb-v2
+      redact: false
+      redactable: true
+      exit-on-error: true
+  http-servers:
+    s1:
+      channels: {INFO: [SESSIONS]}
+      address: localhost:5170
+      method: POST
+      unsafe-tls: false
+      timeout: 0s
+      disable-keep-alives: false
+      format: json-compact
+      redact: false
+      redactable: true
+      exit-on-error: false
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 1.0MiB
+        max-buffer-size: 50MiB
   stderr:
     format: crdb-v2-tty
     redact: false
