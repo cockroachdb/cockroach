@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -1329,4 +1330,59 @@ func InitProviders() map[string]string {
 	}
 
 	return providersState
+}
+
+// InitGrafana spins up a promethius and grafana instance on the provided nodes
+func InitGrafana(
+	ctx context.Context, l *logger.Logger, clusterName string, grafanaURL string,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	nodes := c.TargetNodes()
+
+	ips, err := IP(ctx, l, clusterName, true)
+	if err != nil {
+		return err
+	}
+
+	var promCfg prometheus.Config
+	promCfg.WithPrometheusNode(nodes[0])
+	if err := promCfg.WithCluster(nodes, ips); err != nil {
+		return err
+	}
+	if err := promCfg.WithNodeExporter(nodes, ips); err != nil {
+		return err
+	}
+	promCfg.WithGrafanaDashboard(grafanaURL)
+
+	promNodeClusterName := strings.Split(clusterName, ":")[0] + ":" + fmt.Sprint(nodes[0])
+	promC, err := newCluster(l, promNodeClusterName)
+	if err != nil {
+		return err
+	}
+	_, err = prometheus.Init(ctx, l, c, promC, promCfg)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	nodes := c.TargetNodes()
+	if err := prometheus.StopPrometheus(ctx, c, l, nodes); err != nil {
+		return err
+	}
+	return nil
 }

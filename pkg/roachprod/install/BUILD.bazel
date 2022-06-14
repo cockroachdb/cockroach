@@ -33,6 +33,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/httputil",
         "//pkg/util/log",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_alessio_shellescape//:shellescape",

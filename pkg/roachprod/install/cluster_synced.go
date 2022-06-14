@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -749,6 +750,35 @@ func (c *SyncedCluster) RunWithDetails(
 	return results, nil
 }
 
+var roachprodRetryOptions = retry.Options{
+	InitialBackoff: 10 * time.Second,
+	Multiplier:     2,
+	MaxBackoff:     5 * time.Minute,
+	MaxRetries:     10,
+}
+
+// repeatRun is the same function as c.Run but with an automatic retry loop.
+func (c *SyncedCluster) RepeatRun(
+	ctx context.Context, l *logger.Logger, stdout, stderr io.Writer, nodes Nodes, title,
+	cmd string,
+) error {
+	var lastError error
+	for attempt, r := 0, retry.StartWithCtx(ctx, roachprodRetryOptions); r.Next(); {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		attempt++
+		l.Printf("attempt %d - %s", attempt, title)
+		lastError = c.Run(ctx, l, stdout, stderr, nodes, title, cmd)
+		if lastError != nil {
+			l.Printf("error - retrying: %s", lastError)
+			continue
+		}
+		return nil
+	}
+	return errors.Wrapf(lastError, "all attempts failed for %s", title)
+}
+
 // Wait TODO(peter): document
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
@@ -1193,6 +1223,33 @@ func formatProgress(p float64) string {
 		i = 0
 	}
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
+}
+
+// PutString into the specified file on the remote(s).
+func (c *SyncedCluster) PutString(
+	ctx context.Context, l *logger.Logger, content string, dest string, mode os.FileMode,
+) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "syncedCluster.PutString")
+	}
+
+	temp, err := ioutil.TempFile("", filepath.Base(dest))
+	if err != nil {
+		return errors.Wrap(err, "cluster.PutString")
+	}
+	if _, err := temp.WriteString(content); err != nil {
+		return errors.Wrap(err, "cluster.PutString")
+	}
+	temp.Close()
+	src := temp.Name()
+
+	if err := os.Chmod(src, mode); err != nil {
+		return errors.Wrap(err, "cluster.PutString")
+	}
+	// NB: we intentionally don't remove the temp files. This is because roachprod
+	// will symlink them when running locally.
+
+	return errors.Wrap(c.Put(ctx, l, src, dest), "syncedCluster.PutString")
 }
 
 // Put TODO(peter): document
