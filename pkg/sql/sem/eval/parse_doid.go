@@ -30,14 +30,17 @@ var pgSignatureRegexp = regexp.MustCompile(`^\s*([\w\."]+)\s*\((?:(?:\s*[\w"]+\s
 // ParseDOid parses and returns an Oid family datum.
 func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 	// If it is an integer in string form, convert it as an int.
-	if val, err := tree.ParseDInt(strings.TrimSpace(s)); err == nil {
-		tmpOid := tree.NewDOid(*val)
-		oid, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
+	if _, err := tree.ParseDInt(strings.TrimSpace(s)); err == nil {
+		tmpOid, err := tree.ParseDOidAsInt(s)
 		if err != nil {
-			oid = tmpOid
-			*oid = tree.MakeDOid(*val, t)
+			return nil, err
 		}
-		return oid, nil
+		oidRes, err := ctx.Planner.ResolveOIDFromOID(ctx.Ctx(), t, tmpOid)
+		if err != nil {
+			oidRes = tmpOid
+			*oidRes = tree.MakeDOid(tmpOid.Oid, t)
+		}
+		return oidRes, nil
 	}
 
 	switch t.Oid() {
@@ -78,12 +81,12 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid non-overload regproc %s", funcDef.Name)
 		}
-		return tree.NewDOidWithTypeAndName(tree.DInt(overload.Oid), t, funcDef.Name), nil
+		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
 	case oid.T_regtype:
 		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
 		if err == nil {
 			return tree.NewDOidWithTypeAndName(
-				tree.DInt(parsedTyp.Oid()), t, parsedTyp.SQLStandardName(),
+				parsedTyp.Oid(), t, parsedTyp.SQLStandardName(),
 			), nil
 		}
 
@@ -130,9 +133,8 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		if err != nil {
 			return nil, err
 		}
-		return tree.NewDOidWithTypeAndName(
-			tree.DInt(id), t, tn.ObjectName.String(),
-		), nil
+		// tree.ID is a uint32, so this type conversion is safe.
+		return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
 
 	default:
 		return ctx.Planner.ResolveOIDFromString(ctx.Ctx(), t, tree.NewDString(s))

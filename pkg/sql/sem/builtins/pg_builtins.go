@@ -494,12 +494,12 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{"oid", types.Int},
+				{"oid", types.Oid},
 				{"name", types.String},
 			},
 			ReturnType: tree.FixedReturnType(typ),
 			Fn: func(_ *eval.Context, d tree.Datums) (tree.Datum, error) {
-				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
+				return tree.NewDOidWithName(tree.MustBeDOid(d[0]).Oid, typ, string(tree.MustBeDString(d[1]))), nil
 			},
 			Info:       notUsableInfo,
 			Volatility: volatility.Immutable,

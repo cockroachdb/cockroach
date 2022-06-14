@@ -488,12 +488,12 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 				castCtx := cCtx.PGString()
 
 				_ = addRow(
-					h.CastOid(src, tgt),          //oid
-					tree.NewDOid(tree.DInt(src)), //cast source
-					tree.NewDOid(tree.DInt(tgt)), //casttarget
-					tree.DNull,                   //castfunc
-					tree.NewDString(castCtx),     //castcontext
-					tree.DNull,                   //castmethod
+					h.CastOid(src, tgt),      //oid
+					tree.NewDOid(src),        //cast source
+					tree.NewDOid(tgt),        //casttarget
+					tree.DNull,               //castfunc
+					tree.NewDString(castCtx), //castcontext
+					tree.DNull,               //castmethod
 				)
 			}
 		})
@@ -839,7 +839,7 @@ func populateTableConstraints(
 	namespaceOid := h.NamespaceOid(db.GetID(), scName)
 	tblOid := tableOid(table.GetID())
 	for conName, con := range conInfo {
-		oid := tree.DNull
+		conoid := tree.DNull
 		contype := tree.DNull
 		conindid := oidZero
 		confrelid := oidZero
@@ -873,7 +873,7 @@ func populateTableConstraints(
 					continue
 				}
 			}
-			oid = h.PrimaryKeyConstraintOid(db.GetID(), scName, table.GetID(), con.Index)
+			conoid = h.PrimaryKeyConstraintOid(db.GetID(), scName, table.GetID(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 
@@ -884,7 +884,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(tabledesc.PrimaryKeyString(table))
 
 		case descpb.ConstraintTypeFK:
-			oid = h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
+			conoid = h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
 			contype = conTypeFK
 			// Foreign keys don't have a single linked index. Pick the first one
 			// that matches on the referenced table.
@@ -932,7 +932,7 @@ func populateTableConstraints(
 			contype = conTypeUnique
 			f := tree.NewFmtCtx(tree.FmtSimple)
 			if con.Index != nil {
-				oid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
+				conoid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
 				conindid = h.IndexOid(table.GetID(), con.Index.ID)
 				var err error
 				if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
@@ -953,7 +953,7 @@ func populateTableConstraints(
 					f.WriteString(fmt.Sprintf(" WHERE (%s)", pred))
 				}
 			} else if con.UniqueWithoutIndexConstraint != nil {
-				oid = h.UniqueWithoutIndexConstraintOid(
+				conoid = h.UniqueWithoutIndexConstraintOid(
 					db.GetID(), scName, table.GetID(), con.UniqueWithoutIndexConstraint,
 				)
 				f.WriteString("UNIQUE WITHOUT INDEX (")
@@ -981,7 +981,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(f.CloseAndGetString())
 
 		case descpb.ConstraintTypeCheck:
-			oid = h.CheckConstraintOid(db.GetID(), scName, table.GetID(), con.CheckConstraint)
+			conoid = h.CheckConstraintOid(db.GetID(), scName, table.GetID(), con.CheckConstraint)
 			contype = conTypeCheck
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
@@ -1000,7 +1000,7 @@ func populateTableConstraints(
 		}
 
 		if err := addRow(
-			oid,                  // oid
+			conoid,               // oid
 			dNameOrNull(conName), // conname
 			namespaceOid,         // connamespace
 			contype,              // contype
@@ -1563,10 +1563,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				// Database comments are exported in pg_shdescription.
 				continue
 			case keys.SchemaCommentType:
-				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
+				// for this, but it's not ideal. The backing column for objId should be
+				// changed to use the OID type.
+				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
 			case keys.ColumnCommentType, keys.TableCommentType:
-				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
+				// for this, but it's not ideal. The backing column for objId should be
+				// changed to use the OID type.
+				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case keys.ConstraintCommentType:
 				tableDesc, err := p.Descriptors().GetImmutableTableByID(
@@ -1715,7 +1721,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typOID := tree.NewDOid(tree.DInt(catid.TypeIDToOID(typDesc.GetID())))
+			typOID := tree.NewDOid(catid.TypeIDToOID(typDesc.GetID()))
 			for i := 0; i < typDesc.NumEnumMembers(); i++ {
 				if err := addRow(
 					h.EnumEntryOid(typOID, typDesc.GetMemberPhysicalRepresentation(i)),
@@ -2096,15 +2102,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			switch params.Length() {
 			case 1:
 				leftType = oidZero
-				rightType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+				rightType = tree.NewDOid(params.Types()[0].Oid())
 			case 2:
-				leftType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
-				rightType = tree.NewDOid(tree.DInt(params.Types()[1].Oid()))
+				leftType = tree.NewDOid(params.Types()[0].Oid())
+				rightType = tree.NewDOid(params.Types()[1].Oid())
 			default:
 				panic(errors.AssertionFailedf("unexpected operator %s with %d params",
 					opName, params.Length()))
 			}
-			returnType := tree.NewDOid(tree.DInt(returnTyper(nil).Oid()))
+			returnType := tree.NewDOid(returnTyper(nil).Oid())
 			err := addRow(
 				h.OperatorOid(opName, leftType, rightType, returnType), // oid
 
@@ -2210,7 +2216,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 
 			for i, placeholderType := range placeholderTypes {
 				paramTypes.Array[i] = tree.NewDOidWithName(
-					tree.DInt(placeholderType.Oid()),
+					placeholderType.Oid(),
 					placeholderType,
 					placeholderType.SQLStandardName(),
 				)
@@ -2292,13 +2298,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 							} else {
 								retOid = fixedRetType.Oid()
 							}
-							retType = tree.NewDOid(tree.DInt(retOid))
+							retType = tree.NewDOid(retOid)
 						}
 
 						argTypes := builtin.Types
 						dArgTypes := tree.NewDArray(types.Oid)
 						for _, argType := range argTypes.Types() {
-							if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
+							if err := dArgTypes.Append(tree.NewDOid(argType.Oid())); err != nil {
 								return err
 							}
 						}
@@ -2321,12 +2327,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 								}
 								argmodes = ary
 							}
-							variadicType = tree.NewDOid(tree.DInt(v.VarType.Oid()))
+							variadicType = tree.NewDOid(v.VarType.Oid())
 						case tree.HomogeneousType:
 							argmodes = proArgModeVariadic
 							argType := types.Any
 							oid := argType.Oid()
-							variadicType = tree.NewDOid(tree.DInt(oid))
+							variadicType = tree.NewDOid(oid)
 						default:
 							argmodes = tree.DNull
 							variadicType = oidZero
@@ -2508,7 +2514,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html`,
 				opts := table.GetSequenceOpts()
 				return addRow(
 					tableOid(table.GetID()),                 // seqrelid
-					tree.NewDOid(tree.DInt(oid.T_int8)),     // seqtypid
+					tree.NewDOid(oid.T_int8),                // seqtypid
 					tree.NewDInt(tree.DInt(opts.Start)),     // seqstart
 					tree.NewDInt(tree.DInt(opts.Increment)), // seqincrement
 					tree.NewDInt(tree.DInt(opts.MaxValue)),  // seqmax
@@ -2804,14 +2810,14 @@ var (
 )
 
 func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
-	// We re-use the type ID to OID logic, as type IDs and table IDs share the
-	// same ID space.
+	// We re-use the type ID to OID logic, as type IDs and table IDs do not share
+	// the same ID space.
 	if !table.IsVirtualTable() {
-		return tree.NewDOid(tree.DInt(catid.TypeIDToOID(table.GetID())))
+		return tree.NewDOid(catid.TypeIDToOID(table.GetID()))
 	}
 	// Virtual table OIDs start at max UInt32, so doing OID math would overflow.
 	// As such, just use the virtual table ID.
-	return tree.NewDOid(tree.DInt(table.GetID()))
+	return tree.NewDOid(oid.Oid(table.GetID()))
 }
 
 func addPGTypeRowForTable(
@@ -2877,22 +2883,22 @@ func addPGTypeRow(
 			// IntVector needs a special case because it's a special snowflake
 			// type that behaves in some ways like a scalar type and in others
 			// like an array type.
-			typElem = tree.NewDOid(tree.DInt(oid.T_int2))
-			typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
+			typElem = tree.NewDOid(oid.T_int2)
+			typArray = tree.NewDOid(oid.T__int2vector)
 		case oid.T_oidvector:
 			// Same story as above for OidVector.
-			typElem = tree.NewDOid(tree.DInt(oid.T_oid))
-			typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
+			typElem = tree.NewDOid(oid.T_oid)
+			typArray = tree.NewDOid(oid.T__oidvector)
 		case oid.T_anyarray:
 			// AnyArray does not use a prefix or element type.
 		default:
 			builtinPrefix = "array_"
-			typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
+			typElem = tree.NewDOid(typ.ArrayContents().Oid())
 		}
 	case types.VoidFamily:
 		// void does not have an array type.
 	default:
-		typArray = tree.NewDOid(tree.DInt(types.CalcArrayOid(typ)))
+		typArray = tree.NewDOid(types.CalcArrayOid(typ))
 	}
 	if typ.Family() == types.EnumFamily {
 		builtinPrefix = "enum_"
@@ -2904,20 +2910,20 @@ func addPGTypeRow(
 	typname := typ.PGName()
 	typDelim := tree.NewDString(typ.Delimiter())
 	return addRow(
-		tree.NewDOid(tree.DInt(typ.Oid())), // oid
-		tree.NewDName(typname),             // typname
-		nspOid,                             // typnamespace
-		owner,                              // typowner
-		typLen(typ),                        // typlen
-		typByVal(typ),                      // typbyval (is it fixedlen or not)
-		typType,                            // typtype
-		cat,                                // typcategory
-		tree.DBoolFalse,                    // typispreferred
-		tree.DBoolTrue,                     // typisdefined
-		typDelim,                           // typdelim
-		oidZero,                            // typrelid
-		typElem,                            // typelem
-		typArray,                           // typarray
+		tree.NewDOid(typ.Oid()), // oid
+		tree.NewDName(typname),  // typname
+		nspOid,                  // typnamespace
+		owner,                   // typowner
+		typLen(typ),             // typlen
+		typByVal(typ),           // typbyval (is it fixedlen or not)
+		typType,                 // typtype
+		cat,                     // typcategory
+		tree.DBoolFalse,         // typispreferred
+		tree.DBoolTrue,          // typisdefined
+		typDelim,                // typdelim
+		oidZero,                 // typrelid
+		typElem,                 // typelem
+		typArray,                // typarray
 
 		// regproc references
 		h.RegProc(builtinPrefix+"in"),   // typinput
@@ -3274,6 +3280,7 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 		if err != nil {
 			return err
 		}
+		h := makeOidHasher()
 
 		for _, row := range rows {
 			statisticsID := tree.MustBeDInt(row[0])
@@ -3281,15 +3288,19 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			tableID := tree.MustBeDInt(row[2])
 			columnIDs := tree.MustBeDArray(row[3])
 
+			// The statisticsID is generated from unique_rowid() so it won't fit in a
+			// uint32.
+			h.writeUInt64(uint64(statisticsID))
+			statisticsOID := h.getOid()
 			if err := addRow(
-				tree.NewDOid(statisticsID), // oid
-				tree.NewDOid(tableID),      // stxrelid
-				&name,                      // stxname
-				tree.DNull,                 // stxnamespace
-				tree.DNull,                 // stxowner
-				tree.DNull,                 // stxstattarget
-				columnIDs,                  // stxkeys
-				tree.DNull,                 // stxkind
+				statisticsOID,                // oid
+				tableOid(descpb.ID(tableID)), // stxrelid
+				&name,                        // stxname
+				tree.DNull,                   // stxnamespace
+				tree.DNull,                   // stxowner
+				tree.DNull,                   // stxstattarget
+				columnIDs,                    // stxkeys
+				tree.DNull,                   // stxkind
 			); err != nil {
 				return err
 			}
@@ -3332,7 +3343,7 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 					tree.NewDString(scName),                 // schemaname
 					tree.NewDString(table.GetName()),        // sequencename
 					getOwnerName(table),                     // sequenceowner
-					tree.NewDOid(tree.DInt(oid.T_int8)),     // data_type
+					tree.NewDOid(oid.T_int8),                // data_type
 					tree.NewDInt(tree.DInt(opts.Start)),     // start_value
 					tree.NewDInt(tree.DInt(opts.MinValue)),  // min_value
 					tree.NewDInt(tree.DInt(opts.MaxValue)),  // max_value
@@ -4023,7 +4034,7 @@ var pgCatalogAvailableExtensionVersionsTable = virtualSchemaTable{
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
 func typOid(typ *types.T) tree.Datum {
-	return tree.NewDOid(tree.DInt(typ.Oid()))
+	return tree.NewDOid(typ.Oid())
 }
 
 func typLen(typ *types.T) *tree.DInt {
@@ -4145,8 +4156,8 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 						aggregateKind := tree.NewDString("n")
 						aggNumDirectArgs := zeroVal
 						if params.Length() != 0 {
-							argType := tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
-							returnType := tree.NewDOid(tree.DInt(oid.T_bool))
+							argType := tree.NewDOid(params.Types()[0].Oid())
+							returnType := tree.NewDOid(oid.T_bool)
 							switch name {
 							// Cases to determine sort operator.
 							case "max", "bool_or":
@@ -4314,7 +4325,7 @@ func (h oidHasher) writeTypeTag(tag oidTypeTag) {
 func (h oidHasher) getOid() *tree.DOid {
 	i := h.h.Sum32()
 	h.h.Reset()
-	return tree.NewDOid(tree.DInt(i))
+	return tree.NewDOid(oid.Oid(i))
 }
 
 func (h oidHasher) writeDB(dbID descpb.ID) {
@@ -4488,11 +4499,11 @@ func (h oidHasher) DBSchemaRoleOid(
 }
 
 func tableOid(id descpb.ID) *tree.DOid {
-	return tree.NewDOid(tree.DInt(id))
+	return tree.NewDOid(oid.Oid(id))
 }
 
 func dbOid(id descpb.ID) *tree.DOid {
-	return tree.NewDOid(tree.DInt(id))
+	return tree.NewDOid(oid.Oid(id))
 }
 
 func stringOid(s string) *tree.DOid {

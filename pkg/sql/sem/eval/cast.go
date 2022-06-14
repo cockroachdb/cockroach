@@ -911,13 +911,14 @@ func performIntToOidCast(
 	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 	// store OIDs as signed 32-bit integers, so we implement the cast
 	// by converting to a uint32 first. This matches Postgres behavior.
-	if v > math.MaxUint32 || v < math.MinInt32 {
-		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", v)
+	dOid, err := tree.IntToOid(v)
+	if err != nil {
+		return nil, err
 	}
-	o := oid.Oid(v)
+	o := dOid.Oid
 	switch t.Oid() {
 	case oid.T_oid:
-		return tree.NewDOidWithType(v, t), nil
+		return tree.NewDOidWithType(o, t), nil
 	case oid.T_regtype:
 		// Mapping an dOid to a regtype is easy: we have a hardcoded map.
 		var name string
@@ -932,7 +933,7 @@ func performIntToOidCast(
 		} else if v == 0 {
 			return tree.WrapAsZeroOid(t), nil
 		}
-		return tree.NewDOidWithTypeAndName(v, t, name), nil
+		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
 	case oid.T_regproc, oid.T_regprocedure:
 		// Mapping an dOid to a regproc is easy: we have a hardcoded map.
@@ -941,18 +942,18 @@ func performIntToOidCast(
 			if v == 0 {
 				return tree.WrapAsZeroOid(t), nil
 			}
-			return tree.NewDOidWithType(v, t), nil
+			return tree.NewDOidWithType(o, t), nil
 		}
-		return tree.NewDOidWithTypeAndName(v, t, name), nil
+		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
 	default:
 		if v == 0 {
 			return tree.WrapAsZeroOid(t), nil
 		}
 
-		dOid, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(v))
+		dOid, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
 		if err != nil {
-			dOid = tree.NewDOidWithType(v, t)
+			dOid = tree.NewDOidWithType(o, t)
 		}
 		return dOid, nil
 	}

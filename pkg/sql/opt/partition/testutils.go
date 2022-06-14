@@ -54,9 +54,10 @@ func ParseDatumPath(evalCtx *eval.Context, str string, typs []types.Family) []tr
 		case types.BytesFamily:
 			val = tree.NewDBytes(tree.DBytes(valStr))
 		case types.OidFamily:
-			dInt, err := tree.ParseDInt(valStr)
+			var dInt *tree.DInt
+			dInt, err = tree.ParseDInt(valStr)
 			if err == nil {
-				val = tree.NewDOid(*dInt)
+				val, err = tree.IntToOid(*dInt)
 			}
 		case types.UuidFamily:
 			val, err = tree.ParseDUuidFromString(valStr)

@@ -22,9 +22,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+var updateBehindNanos = metric.Metadata{
+	Name: "spanconfig.kvsubscriber.update_behind_nanos",
+	Help: "Latency between realtime and the last update received by the KVSubscriber; " +
+		"represents the staleness of the KVSubscriber, where a flat line means there are no updates being received",
+	Measurement: "Nanoseconds",
+	Unit:        metric.Unit_NANOSECONDS,
+}
 
 // KVSubscriber is used to subscribe to global span configuration changes. It's
 // a concrete implementation of the spanconfig.KVSubscriber interface.
@@ -86,6 +96,7 @@ type KVSubscriber struct {
 	mu struct { // serializes between Start and external threads
 		syncutil.RWMutex
 		lastUpdated hlc.Timestamp
+		metrics     Metrics
 		// internal is the internal spanconfig.Store maintained by the
 		// KVSubscriber. A read-only view over this store is exposed as part of
 		// the interface. When re-subscribing, a fresh spanconfig.Store is
@@ -98,6 +109,24 @@ type KVSubscriber struct {
 }
 
 var _ spanconfig.KVSubscriber = &KVSubscriber{}
+
+// Metrics are the Metrics associated with an instance of the
+// KVSubscriber.
+type Metrics struct {
+	// UpdateBehindNanos is the latency between realtime and the last update
+	// received by the KVSubscriber. This metric should be interpreted as a
+	// measure of the KVSubscribers' staleness.
+	UpdateBehindNanos *metric.Gauge
+}
+
+func makeKVSubscriberMetrics() Metrics {
+	return Metrics{UpdateBehindNanos: metric.NewGauge(updateBehindNanos)}
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (k *Metrics) MetricStruct() {}
+
+var _ metric.Struct = &Metrics{}
 
 // spanConfigurationsTableRowSize is an estimate of the size of a single row in
 // the system.span_configurations table (size of start/end key, and size of a
@@ -115,6 +144,7 @@ func New(
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
 	knobs *spanconfig.TestingKnobs,
+	registry *metric.Registry,
 ) *KVSubscriber {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
@@ -148,6 +178,10 @@ func New(
 		rfCacheKnobs,
 	)
 	s.mu.internal = spanConfigStore
+	s.mu.metrics = makeKVSubscriberMetrics()
+	if registry != nil {
+		registry.AddMetricStruct(&s.mu.metrics)
+	}
 	return s
 }
 
@@ -257,13 +291,19 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	}
 	s.mu.Lock()
 	s.mu.internal = freshStore
-	s.mu.lastUpdated = ts
+	s.setLastUpdatedLocked(ts)
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
 		handler.invoke(ctx, keys.EverythingSpan)
 	}
+}
+
+func (s *KVSubscriber) setLastUpdatedLocked(ts hlc.Timestamp) {
+	nanos := timeutil.Since(ts.GoTime()).Nanoseconds()
+	s.mu.metrics.UpdateBehindNanos.Update(nanos)
+	s.mu.lastUpdated = ts
 }
 
 func (s *KVSubscriber) handlePartialUpdate(
@@ -276,7 +316,7 @@ func (s *KVSubscriber) handlePartialUpdate(
 		// avoid this mutex.
 		s.mu.internal.Apply(ctx, false /* dryrun */, ev.(*bufferEvent).Update)
 	}
-	s.mu.lastUpdated = ts
+	s.setLastUpdatedLocked(ts)
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
