@@ -948,11 +948,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
+
+	var stmtDiagnosticsRegistryKnobs *stmtdiagnostics.TestingKnobs
+	if stmtKnobs := cfg.TestingKnobs.StmtDiagnosticsRegistryKnobs; stmtKnobs != nil {
+		stmtDiagnosticsRegistryKnobs = stmtKnobs.(*stmtdiagnostics.TestingKnobs)
+	}
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
 		cfg.gossip,
 		cfg.Settings,
+		stmtDiagnosticsRegistryKnobs,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 

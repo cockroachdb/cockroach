@@ -153,11 +153,13 @@ func (bundle *diagnosticsBundle) insert(
 	ast tree.Statement,
 	stmtDiagRecorder *stmtdiagnostics.Registry,
 	diagRequestID stmtdiagnostics.RequestID,
+	req stmtdiagnostics.Request,
 ) {
 	var err error
 	bundle.diagID, err = stmtDiagRecorder.InsertStatementDiagnostics(
 		ctx,
 		diagRequestID,
+		req,
 		fingerprint,
 		tree.AsString(ast),
 		bundle.zip,
