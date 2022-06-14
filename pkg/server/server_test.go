@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -702,6 +703,51 @@ func TestPersistHLCUpperBound(t *testing.T) {
 	}
 }
 
+func TestServeBundleJS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	linkInFakeUI := func() {
+		ui.HaveUI = true
+	}
+	unlinkFakeUI := func() {
+		ui.HaveUI = false
+	}
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		// This test server argument has the same effect as setting the environment variable
+		// `COCKROACH_EXPERIMENTAL_REQUIRE_WEB_SESSION` to false, or not setting it.
+		// In test servers, web sessions are required by default.
+		DisableWebSessionAuthentication: true,
+	})
+	defer s.Stopper().Stop(ctx)
+	u, err := url.Parse(s.AdminURL())
+	require.NoError(t, err)
+	u.Path = path.Join(u.Path, "bundle.js")
+	bundleURL := u.String()
+	tsrv := s.(*TestServer)
+
+	client, err := tsrv.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+
+	t.Run("short build", func(t *testing.T) {
+		resp, err := client.Get(bundleURL)
+		require.NoError(t, err)
+		require.Equal(t, 501, resp.StatusCode)
+	})
+
+	t.Run("non-short build", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
+		resp, err := client.Get(bundleURL)
+		require.NoError(t, err)
+		require.Equal(t, 200, resp.StatusCode)
+	})
+}
+
 func TestServeIndexHTML(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -720,7 +766,12 @@ func TestServeIndexHTML(t *testing.T) {
 			window.dataFromServer = %s;
 		</script>
 
-		<script src="bundle.js" type="text/javascript"></script>
+		<div id="bundleFailure"></div>
+
+		<script src="bundle.js" type="text/javascript" onerror="
+     document.getElementById('bundleFailure').innerHTML = &#34;\nWeb UI unavailable.\n\u003chr\u003e\n\u003cem\u003e%s\u003c/em\u003e&#34;
+		">
+		</script>
 	</body>
 </html>
 `
@@ -758,12 +809,16 @@ func TestServeIndexHTML(t *testing.T) {
 			require.NoError(t, err)
 
 			respString := string(respBytes)
-			expected := fmt.Sprintf(`<!DOCTYPE html>
-<title>CockroachDB</title>
-Binary built without web UI.
-<hr>
-<em>%s</em>`,
-				build.GetInfo().Short())
+			expected := fmt.Sprintf(
+				htmlTemplate,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":""}`,
+					build.GetInfo().Tag,
+					build.BinaryVersionPrefix(),
+					1,
+				),
+				build.GetInfo().Short(),
+			)
 			require.Equal(t, expected, respString)
 		})
 
@@ -787,6 +842,7 @@ Binary built without web UI.
 					build.BinaryVersionPrefix(),
 					1,
 				),
+				build.GetInfo().Short(),
 			)
 			require.Equal(t, expected, respString)
 		})
@@ -842,7 +898,7 @@ Binary built without web UI.
 				require.NoError(t, err)
 
 				respString := string(respBytes)
-				expected := fmt.Sprintf(htmlTemplate, testCase.json)
+				expected := fmt.Sprintf(htmlTemplate, testCase.json, build.GetInfo().Short())
 				require.Equal(t, expected, respString)
 			})
 		}
