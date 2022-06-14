@@ -17,7 +17,6 @@
 package ui
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"html/template"
@@ -54,15 +53,21 @@ var indexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE htm
 		<div id="react-layout"></div>
 
 		<script>
-			window.dataFromServer = {{.}};
+			window.dataFromServer = {{.Data}};
 		</script>
 
-		<script src="bundle.js" type="text/javascript"></script>
+		<div id="bundleFailure"></div>
+
+		<script src="bundle.js" type="text/javascript" onerror="
+			document.getElementById('bundleFailure').innerHTML = {{.BundleFailureHTML}}
+		">
+
+		</script>
 	</body>
 </html>
 `))
 
-type indexHTMLArgs struct {
+type indexDataArgs struct {
 	ExperimentalUseLogin bool
 	LoginEnabled         bool
 	LoggedInUser         *string
@@ -72,6 +77,11 @@ type indexHTMLArgs struct {
 	OIDCAutoLogin        bool
 	OIDCLoginEnabled     bool
 	OIDCButtonText       string
+}
+
+type indexHTMLArgs struct {
+	Data              indexDataArgs
+	BundleFailureHTML string
 }
 
 // OIDCUIConf is a variable that stores data required by the
@@ -91,14 +101,6 @@ type OIDCUIConf struct {
 type OIDCUI interface {
 	GetOIDCConf() OIDCUIConf
 }
-
-// bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
-// without the web UI.
-var bareIndexHTML = []byte(fmt.Sprintf(`<!DOCTYPE html>
-<title>CockroachDB</title>
-Binary built without web UI.
-<hr>
-<em>%s</em>`, build.GetInfo().Short()))
 
 // Config contains the configuration parameters for Handler.
 type Config struct {
@@ -134,28 +136,38 @@ func Handler(cfg Config) http.Handler {
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !HaveUI {
-			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(bareIndexHTML))
-			return
-		}
-
 		if r.URL.Path != "/" {
+			if !HaveUI {
+				// Only return this error for a path. We always want to render
+				// index.html itself, to support webpack proxying on development
+				// short-builds.
+				http.Error(w, "", http.StatusNotImplemented)
+				return
+			}
 			fileHandlerChain.ServeHTTP(w, r)
 			return
 		}
 
 		oidcConf := cfg.OIDC.GetOIDCConf()
 
+		bundleFailureHTML := fmt.Sprintf(`
+Web UI unavailable.
+<hr>
+<em>%s</em>`, buildInfo.Short())
+
 		if err := indexHTMLTemplate.Execute(w, indexHTMLArgs{
-			ExperimentalUseLogin: cfg.ExperimentalUseLogin,
-			LoginEnabled:         cfg.LoginEnabled,
-			LoggedInUser:         cfg.GetUser(r.Context()),
-			Tag:                  buildInfo.Tag,
-			Version:              build.BinaryVersionPrefix(),
-			NodeID:               cfg.NodeID.String(),
-			OIDCAutoLogin:        oidcConf.AutoLogin,
-			OIDCLoginEnabled:     oidcConf.Enabled,
-			OIDCButtonText:       oidcConf.ButtonText,
+			Data: indexDataArgs{
+				ExperimentalUseLogin: cfg.ExperimentalUseLogin,
+				LoginEnabled:         cfg.LoginEnabled,
+				LoggedInUser:         cfg.GetUser(r.Context()),
+				Tag:                  buildInfo.Tag,
+				Version:              build.BinaryVersionPrefix(),
+				NodeID:               cfg.NodeID.String(),
+				OIDCAutoLogin:        oidcConf.AutoLogin,
+				OIDCLoginEnabled:     oidcConf.Enabled,
+				OIDCButtonText:       oidcConf.ButtonText,
+			},
+			BundleFailureHTML: bundleFailureHTML,
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)
