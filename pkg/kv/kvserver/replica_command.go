@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -2670,6 +2671,15 @@ var followerSnapshotsEnabled = func() *settings.BoolSetting {
 	return s
 }()
 
+// followerSnapshotsEnabled is used to enable or disable follower snapshots.
+var traceSnapshotThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.trace.snapshot.enable_threshold",
+	"enables tracing on all snapshots; snapshots with a duration longer than "+
+		"this threshold will have their trace logged (set to 0 to disable); "+
+		"note that enabling this may have a negative performance impact;", 0,
+).WithPublic()
+
 // followerSendSnapshot receives a delegate snapshot request and generates the
 // snapshot from this replica. The entire process of generating and transmitting
 // the snapshot is handled, and errors are propagated back to the leaseholder.
@@ -2680,6 +2690,22 @@ func (r *Replica) followerSendSnapshot(
 	stream DelegateSnapshotResponseStream,
 ) (retErr error) {
 	ctx = r.AnnotateCtx(ctx)
+	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
+	if sendThreshold > 0 {
+		traceCtx, sp := r.AnnotateCtxWithSpan(ctx, "trace-snapshot-threshold")
+		ctx = traceCtx
+		sp.SetRecordingType(tracingpb.RecordingVerbose)
+		sendStart := timeutil.Now()
+		defer func() {
+			sendDur := timeutil.Since(sendStart)
+			if sendThreshold > 0 && sendDur > sendThreshold {
+				rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
+				log.TraceAboveThreshold(ctx, rec, "snapshot", sendThreshold, sendDur)
+			} else {
+				sp.Finish()
+			}
+		}()
+	}
 
 	// TODO(amy): when delegating to different senders, check raft applied state
 	// to determine if this follower replica is fit to send.
