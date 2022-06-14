@@ -170,21 +170,18 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructArrayFlatten(s.node, &subqueryPrivate)
 
 	case *tree.IndirectionExpr:
-		expr := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		out = b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
 
-		if len(t.Indirection) != 1 {
-			panic(unimplementedWithIssueDetailf(32552, "ind", "multidimensional indexing is not supported"))
+		for _, subscript := range t.Indirection {
+			if subscript.Slice {
+				panic(unimplementedWithIssueDetailf(32551, "", "array slicing is not supported"))
+			}
+
+			out = b.factory.ConstructIndirection(
+				out,
+				b.buildScalar(subscript.Begin.(tree.TypedExpr), inScope, nil, nil, colRefs),
+			)
 		}
-
-		subscript := t.Indirection[0]
-		if subscript.Slice {
-			panic(unimplementedWithIssueDetailf(32551, "", "array slicing is not supported"))
-		}
-
-		out = b.factory.ConstructIndirection(
-			expr,
-			b.buildScalar(subscript.Begin.(tree.TypedExpr), inScope, nil, nil, colRefs),
-		)
 
 	case *tree.IfErrExpr:
 		cond := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)

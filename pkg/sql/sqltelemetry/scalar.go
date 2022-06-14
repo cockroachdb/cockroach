@@ -72,6 +72,10 @@ var ArrayFlattenCounter = telemetry.GetCounterOnce("sql.plan.ops.array.flatten")
 // array subscript expression x[...].
 var ArraySubscriptCounter = telemetry.GetCounterOnce("sql.plan.ops.array.ind")
 
+// JSONBSubscriptCounter is to be incremented upon type checking an
+// JSONB subscript expression x[...].
+var JSONBSubscriptCounter = telemetry.GetCounterOnce("sql.plan.ops.jsonb.subscript")
+
 // IfErrCounter is to be incremented upon type checking an
 // IFERROR(...) expression or analogous.
 var IfErrCounter = telemetry.GetCounterOnce("sql.plan.ops.iferr")

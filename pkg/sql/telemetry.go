@@ -74,6 +74,9 @@ func init() {
 	tree.OnTypeCheckArraySubscript = func() {
 		telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
 	}
+	tree.OnTypeCheckJSONBSubscript = func() {
+		telemetry.Inc(sqltelemetry.JSONBSubscriptCounter)
+	}
 	tree.OnTypeCheckArrayFlatten = func() {
 		telemetry.Inc(sqltelemetry.ArrayFlattenCounter)
 	}
