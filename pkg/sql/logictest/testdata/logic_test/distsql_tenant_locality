@@ -31,4 +31,12 @@ SELECT start_pretty, lease_holder FROM crdb_internal.ranges WHERE start_pretty L
 
 # TODO(harding): Once locality-aware distribution is implemented, run queries in
 # the secondary tenant.
-#user root
+user root
+
+# Check sql instance locality in the secondary tenant.
+query IT
+SELECT id, locality FROM system.sql_instances
+----
+1  region=test
+2  region=test1
+3  region=test2
