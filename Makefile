@@ -369,9 +369,6 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	@# Also some linux distributions (that are used as development env) don't support some of
 	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
-	@# We remove this broken dependency again in pkg/ui/workspaces/db-console/webpack.config.js.
-	@# See the comment there for details.
-	rm -rf pkg/ui/workspaces/db-console/node_modules/@types/node
 	touch $@
 
 vendor/modules.txt: | bin/.submodules-initialized
@@ -1380,9 +1377,9 @@ ui-test-debug: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
 
 .SECONDARY: pkg/ui/assets.ccl.installed pkg/ui/assets.oss.installed
-pkg/ui/assets.ccl.installed: $(UI_JS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
-pkg/ui/assets.oss.installed: $(UI_JS_OSS)
-pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.config.js $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
+pkg/ui/assets.ccl.installed: $(UI_PROTOS_CCL) $(shell find pkg/ui/workspaces/db-console/ccl -type f)
+pkg/ui/assets.oss.installed: $(UI_PROTOS_OSS)
+pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.config.js $(CLUSTER_UI_JS) $(shell find pkg/ui/workspaces/db-console/src pkg/ui/workspaces/db-console/styl -type f) | bin/.bootstrap
 	find pkg/ui/dist$*/assets -mindepth 1 -not -name .gitkeep -delete
 	export NODE_OPTIONS=--max-old-space-size=5000
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.config.js --env.dist=$*
