@@ -22,22 +22,21 @@ message GetSpanStatisticsRequest {
   util.hlc.Timestamp end   = 2 [(gogoproto.nullable) = false];
 }
 
+message SpanStatistics {
+
+  message SpanPretty {
+    string start_key = 1;
+    string end_key = 2;
+  }
+
+  SpanPretty pretty = 1;
+  roachpb.Span span = 2;
+  uint64 batch_requests = 3;
+}
+
 message Sample {
   util.hlc.Timestamp sample_time = 1;
   repeated SpanStatistics span_stats = 2;
-}
-
-message SpanStatistics {
-
-  // needed for pretty keys
-  message Span {
-    string startKey = 1;
-    string endKey = 2;
-  }
-
-  Span span = 1;
-  roachpb.Span sp = 2;
-  uint64 qps = 3;
 }
 
 message GetSpanStatisticsResponse {

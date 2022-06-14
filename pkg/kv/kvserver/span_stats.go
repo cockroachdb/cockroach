@@ -11,10 +11,7 @@
 package kvserver
 
 import (
-	"context"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -45,44 +42,21 @@ func (s *Store) SetBucketBoundaries() error {
 	return nil
 }
 
-// TODO: get rid of dependency on serverpb
-// use go types instead.
 
-func (s *Store) GetSpanStats(
-	ctx context.Context,
-	start hlc.Timestamp,
-	end hlc.Timestamp,
-) ([]*serverpb.SpanStatistics, error) {
+// TODO: use start and end times. Currently assuming the request only cares about the current active histogram.
+func (s *Store) VisitSpanStatsBuckets(visitor func(span *roachpb.Span, batchRequests uint64)) {
 
-	// for now, assume that the requested time window
-	// corresponds to the current s.spanStatsHistogram
-
-	tenantID, _ := roachpb.TenantFromContext(ctx) // XXX: unused tenantId
-	_ = tenantID
-
-	sample := make([]*serverpb.SpanStatistics, 0)
+	// TODO: acquire mutex lock?
 	it := s.spanStatsHistogram.tree.Iterator()
 
 	for {
 		i, next := it.Next()
-
 		if next == false {
 			break
 		}
-
 		bucket := i.(*spanStatsHistogramBucket)
-		sample = append(sample, &serverpb.SpanStatistics{
-			Sp: &roachpb.Span{Key: bucket.sp.Key, EndKey: bucket.sp.EndKey},
-			Span: &serverpb.SpanStatistics_Span{StartKey: bucket.sp.Key.String(), EndKey: bucket.sp.EndKey.String()},
-			Qps: bucket.counter,
-		})
+		visitor(&bucket.sp, bucket.counter)
 	}
-
-	// clone for llrb trees is not implemented.
-	//copy := s.spanStatsHistogram.tree.Clone()
-	//_ = copy
-	// XXX: construct the return type with the copy.
-	return sample, nil
 }
 
 type tenantShardedSpanStats struct {
@@ -112,16 +86,9 @@ func (s *spanStatsHistogram) addBucket(startKey, endKey roachpb.Key) error {
 }
 
 func newSpanStatsHistogram() *spanStatsHistogram {
-	// install boundaries.
-	// for now, just use ranges
-
-	tree := interval.NewTree(interval.ExclusiveOverlapper)
-
 	return &spanStatsHistogram{
-		tree: tree,
+		tree: interval.NewTree(interval.ExclusiveOverlapper),
 	}
-	// XXX: needs to be initialized with a set of boundaries
-	// XXX: want to be able to reset/reconfigure boundaries
 }
 
 type spanStatsHistogramBucket struct {

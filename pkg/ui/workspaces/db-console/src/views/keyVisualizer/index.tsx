@@ -2,7 +2,10 @@ import React from "react";
 import { CanvasHeight, XAxisLabelPadding } from "./constants";
 import { GetSamplesResponse, SpanStatistics } from "./interfaces";
 import { KeyVisualizer } from "./keyVisualizer";
-import { SpanDetailTooltip, SpanDetailTooltipProps } from "oss/src/views/keyVisualizer/spanDetailTooltip";
+import {
+  SpanDetailTooltip,
+  SpanDetailTooltipProps,
+} from "oss/src/views/keyVisualizer/spanDetailTooltip";
 
 interface KeyVisualizerPageState {
   response: GetSamplesResponse;
@@ -33,11 +36,13 @@ export default class KeyVisualizerPage extends React.Component<
     for (const sample of response.samples) {
       for (const stat of sample.spanStats) {
         // hack to deal with qps -> batchRequests transition
-        if ((stat as any).qps === undefined) {
+        // hack to deal with `0` values being left out by json marshaller.
+        if (stat.batchRequests === undefined) {
           stat.batchRequests = 0;
         } else {
-          // hack to deal with `0` values being left out by json marshaller.
-          stat.batchRequests = parseInt((stat as any).qps);
+
+          // hack to deal with json marshaller encoding integers as strings.
+          stat.batchRequests = parseInt(String(stat.batchRequests));
         }
 
         // maintain highest batch request value
@@ -67,7 +72,7 @@ export default class KeyVisualizerPage extends React.Component<
   }
 
   componentDidMount() {
-    fetch("http://localhost:8080/_status/v1/key-visualizer")
+    fetch("http://localhost:3000/_status/v1/key-visualizer")
       .then(res => res.json())
       .then(response => this.processResponse(response));
   }

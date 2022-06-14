@@ -5,7 +5,7 @@ export interface Sample {
 
 export interface SpanStatistics {
   // pretty
-  span: { startKey: string; endKey: string };
+  pretty: { startKey: string; endKey: string };
   batchRequests: number;
 }
 
@@ -21,7 +21,12 @@ export interface KeyVisualizerProps {
 
   highestTemp: number;
 
-  setTooltipDetails: (x: number, y: number, time: string, spanStats: SpanStatistics) => void;
+  setTooltipDetails: (
+    x: number,
+    y: number,
+    time: string,
+    spanStats: SpanStatistics,
+  ) => void;
 
   setShowTooltip: (show: boolean) => void;
 }

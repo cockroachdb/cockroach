@@ -30,17 +30,17 @@ function drawBucket(
 
       const index = i * 4 + j * 4 * CanvasWidth;
 
-      if (j === y || i === x) {
-        pixels[index] = 100; // red
-        pixels[index + 1] = 100; // green
-        pixels[index + 2] = 100; // blue
-        pixels[index + 3] = 255; // alpha
-      } else {
+      // if (j === y || i === x) {
+      //   pixels[index] = 100; // red
+      //   pixels[index + 1] = 100; // green
+      //   pixels[index + 2] = 100; // blue
+      //   pixels[index + 3] = 255; // alpha
+      // } else {
         pixels[index] = color[0] * 255; // red
         pixels[index + 1] = color[1] * 255; // green
         pixels[index + 2] = color[2] * 255; // blue
         pixels[index + 3] = 255; // alpha
-      }
+      // }
     }
   }
 }
@@ -155,13 +155,13 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
       this.xPanOffset +
       (sampleIndex * CanvasWidth * this.xZoomFactor) / nSamples;
     const y =
-      this.props.yOffsetForKey[bucket.span.startKey] * this.yZoomFactor +
+      this.props.yOffsetForKey[bucket.pretty.startKey] * this.yZoomFactor +
       this.yPanOffset;
 
     const width =
       ((CanvasWidth - YAxisLabelPadding) * this.xZoomFactor) / nSamples;
     const height =
-      this.props.yOffsetForKey[bucket.span.endKey] * this.yZoomFactor -
+      this.props.yOffsetForKey[bucket.pretty.endKey] * this.yZoomFactor -
       y +
       this.yPanOffset;
 
@@ -267,7 +267,9 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
               mouseY >= y &&
               mouseY <= y + height
             ) {
-              const timeString = new Date(sample.sampleTime.wallTime / 1e6).toUTCString();
+              const timeString = new Date(
+                sample.sampleTime.wallTime / 1e6,
+              ).toUTCString();
               this.props.setTooltipDetails(mouseX, mouseY, timeString, bucket);
               break iterate_samples;
             }

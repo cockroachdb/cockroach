@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,8 +56,6 @@ func (s *spanStatsServer) RegisterGateway(
 	return serverpb.RegisterSpanStatsHandler(ctx, mux, conn)
 }
 
-//func (s *spanStatsServer) SetSpanBoundarie
-
 // GetSpanStatistics implements the SpanStatsServer interface.
 func (s *spanStatsServer) GetSpanStatistics(
 	ctx context.Context, req *serverpb.GetSpanStatisticsRequest,
@@ -64,30 +63,62 @@ func (s *spanStatsServer) GetSpanStatistics(
 
 	res := serverpb.GetSpanStatisticsResponse{Samples: make([]*serverpb.Sample, 0)}
 
+	type uniqueStat struct {
+		sp            *roachpb.Span
+		startPretty   string
+		endPretty     string
+		batchRequests uint64
+	}
+
+	uniqueStats := make(map[string]uniqueStat)
+
 	if err := s.server.node.stores.VisitStores(func(st *kvserver.Store) error {
-		// XXX: make sure this works for multiple stores.
-		// TODO: combine samples across stores.
 
-		sample, err := st.GetSpanStats(ctx, req.Start, req.End)
-		if err != nil {
-			return err
-		}
-
-		//c := hlc.NewClock(hlc.UnixNano,0)
-		t := hlc.Timestamp{WallTime: time.Now().UnixNano()}
-		res.Samples = append(res.Samples, &serverpb.Sample{SampleTime: &t, SpanStats: sample})
+		// visit the spanStatHistogram buckets on this store
+		// accumulate each bucket's value.
+		st.VisitSpanStatsBuckets(func(span *roachpb.Span, batchRequests uint64) {
+			spanAsString := span.String()
+			if stat, ok := uniqueStats[spanAsString]; ok {
+				stat.batchRequests += batchRequests
+			} else {
+				uniqueStats[spanAsString] = uniqueStat{
+					sp:            span,
+					startPretty:   span.Key.String(),
+					endPretty:     span.EndKey.String(),
+					batchRequests: batchRequests,
+				}
+			}
+		})
 
 		return nil
 	}); err != nil {
 		return nil, err
 	}
+
+	// convert uniqueStats into a `GetSpanStatisticsResponse`
+	stats := make([]*serverpb.SpanStatistics, 0)
+
+	for _, value := range uniqueStats {
+		stats = append(stats, &serverpb.SpanStatistics{
+			Pretty: &serverpb.SpanStatistics_SpanPretty{
+				StartKey: value.startPretty,
+				EndKey:   value.endPretty,
+			},
+			Span:          value.sp,
+			BatchRequests: value.batchRequests,
+		})
+	}
+
+	t := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	res.Samples = append(res.Samples, &serverpb.Sample{SampleTime: &t, SpanStats: stats})
+
 	return &res, nil
 }
 
 func loadSamples(ctx context.Context) []*serverpb.Sample {
+	readPath := "./key-visualizer-read/"
 	samples := make([]*serverpb.Sample, 0)
-
-	fileNames, err := ioutil.ReadDir("./key-visualizer-read/")
+	fileNames, err := ioutil.ReadDir(readPath)
 
 	if err != nil {
 		log.Fatal(ctx, "could not read key-visualizer-data/")
@@ -99,7 +130,7 @@ func loadSamples(ctx context.Context) []*serverpb.Sample {
 			continue
 		}
 
-		file, err := os.Open(fmt.Sprintf("./key-visualizer-read/%s", fName))
+		file, err := os.Open(fmt.Sprintf("%s%s", readPath, fName))
 
 		if err != nil {
 			fmt.Println(err)
@@ -130,11 +161,11 @@ func buildKeyspace(samples []*serverpb.Sample) []string {
 	for _, sample := range samples {
 		for _, stat := range sample.SpanStats {
 
-			start := string(stat.Sp.Key)
-			end := string(stat.Sp.EndKey)
+			start := string(stat.Span.Key)
+			end := string(stat.Span.EndKey)
 
-			prettyForEncoded[start]	= stat.Span.StartKey
-			prettyForEncoded[end]	= stat.Span.EndKey
+			prettyForEncoded[start] = stat.Pretty.StartKey
+			prettyForEncoded[end] = stat.Pretty.EndKey
 
 			uniqueKeys[start] = true
 			uniqueKeys[end] = true
@@ -142,7 +173,7 @@ func buildKeyspace(samples []*serverpb.Sample) []string {
 	}
 
 	uniqueKeysSlice := []string{}
-	for key :=  range uniqueKeys {
+	for key := range uniqueKeys {
 		uniqueKeysSlice = append(uniqueKeysSlice, key)
 	}
 
@@ -163,7 +194,7 @@ func (s *spanStatsServer) GetSamples(ctx context.Context, req *serverpb.GetSampl
 
 	res := serverpb.GetSamplesResponse{
 		Samples: samples,
-		Keys: keys,
+		Keys:    keys,
 	}
 
 	return &res, nil

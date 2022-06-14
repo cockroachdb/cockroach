@@ -1,5 +1,5 @@
-import React from "react"
-import {SpanStatistics} from "oss/src/views/keyVisualizer/interfaces";
+import React from "react";
+import { SpanStatistics } from "oss/src/views/keyVisualizer/interfaces";
 
 export interface SpanDetailTooltipProps {
   x: number;
@@ -8,9 +8,7 @@ export interface SpanDetailTooltipProps {
   spanStats: SpanStatistics;
 }
 
-export const SpanDetailTooltip: React.FunctionComponent<SpanDetailTooltipProps> = (
-  props
-) => {
+export const SpanDetailTooltip: React.FunctionComponent<SpanDetailTooltipProps> = props => {
   return (
     <div
       style={{
@@ -24,8 +22,8 @@ export const SpanDetailTooltip: React.FunctionComponent<SpanDetailTooltipProps> 
       }}
     >
       <p>time: {props.time}</p>
-      <p>start key: {props.spanStats?.span.startKey}</p>
-      <p>end key: {props.spanStats?.span.endKey}</p>
+      <p>start key: {props.spanStats?.pretty.startKey}</p>
+      <p>end key: {props.spanStats?.pretty.endKey}</p>
       <p>batch reqs: {props.spanStats?.batchRequests}</p>
     </div>
   );

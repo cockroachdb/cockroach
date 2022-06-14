@@ -906,6 +906,7 @@ type Store struct {
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
+	// established histogram per store.
 	spanStatsHistogram *spanStatsHistogram // XXX: Add commentary
 
 	// The unquiesced subset of replicas.
