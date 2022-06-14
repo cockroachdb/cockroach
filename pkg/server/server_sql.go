@@ -993,6 +993,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	*cfg.collectionFactory = *collectionFactory
 	cfg.internalExecutorFactory = ieFactory
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
+
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
