@@ -746,6 +746,8 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
+	ctx, sp := t.AnnotateCtxWithSpan(ctx, "storage.RaftTransport: sending snapshot")
+	defer sp.Finish()
 	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent, recordBytesSent)
 }
 

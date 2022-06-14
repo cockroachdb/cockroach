@@ -272,17 +272,38 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
 
+	// These stopwatches allow us to time the various components of Receive().
+	// - totalTimeStopwatch measures the total time spent within this function.
+	// - batchStopwatch records the time taken to read data out of the gRPC
+	//   stream's batch into memory
+	// - msstwStopwatch measures the time it takes to write the data from the
+	//   snapshot into SSTs
+	// - recvStopwatch records the amount of time spent waiting on the gRPC stream
+	//   and receiving the data from the stream. NB: this value encapsulates wait
+	//   time due to sender-side rate limiting
+	totalTimeStopwatch := timeutil.NewStopWatch()
+	batchStopwatch := timeutil.NewStopWatch()
+	msstwStopwatch := timeutil.NewStopWatch()
+	recvStopwatch := timeutil.NewStopWatch()
+	totalTimeStopwatch.Start()
+
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
+	msstwStopwatch.Start()
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
 	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
 	if err != nil {
 		return noSnap, err
 	}
 	defer msstw.Close()
+	msstwStopwatch.Stop()
+
+	log.Event(ctx, "waiting for snapshot batches to begin")
 
 	for {
+		recvStopwatch.Start()
 		req, err := stream.Recv()
+		recvStopwatch.Stop()
 		if err != nil {
 			return noSnap, err
 		}
@@ -293,6 +314,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 		if req.KVBatch != nil {
 			recordBytesReceived(int64(len(req.KVBatch)))
+			batchStopwatch.Start()
 			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
@@ -306,21 +328,29 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				if err != nil {
 					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
 				}
+				batchStopwatch.Stop()
+				msstwStopwatch.Start()
 				if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
 					return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
 				}
+				msstwStopwatch.Stop()
+				batchStopwatch.Start()
 			}
+			batchStopwatch.Stop()
 		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key ranges, but
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
+			msstwStopwatch.Start()
 			dataSize, err := msstw.Finish(ctx)
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
 			msstw.Close()
+			msstwStopwatch.Stop()
+			log.Eventf(ctx, "all data received from snapshot and all SSTs were finalized")
 
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
@@ -337,6 +367,22 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				snapType:          header.Type,
 				raftAppliedIndex:  header.State.RaftAppliedIndex,
 			}
+
+			totalTimeStopwatch.Stop()
+			totalTime := totalTimeStopwatch.Elapsed().Seconds()
+			msstwDuration := msstwStopwatch.Elapsed().Seconds()
+			batchDuration := batchStopwatch.Elapsed().Seconds()
+			recvDuration := recvStopwatch.Elapsed().Seconds()
+
+			log.Eventf(
+				ctx,
+				"Breakdown of time spent receiving snapshot. Total time taken: %.9f. "+
+					"Time writing with msstw: %.9f (%.2f%%). Time reading from batch: %.9f (%.2f%%). Time waiting on & receiving from net: %.9f (%.2f%%).",
+				totalTime,
+				msstwDuration, msstwDuration/totalTime*100,
+				batchDuration, batchDuration/totalTime*100,
+				recvDuration, recvDuration/totalTime*100,
+			)
 
 			kvSS.status = redact.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
@@ -362,6 +408,22 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// CRDB, as of VersionUnreplicatedTruncatedState).
 	bytesSent := int64(0)
 
+	// These stopwatches allow us to time the various components of Send().
+	// - totalTimeStopwatch measures the total time spent within this function.
+	// - iterStopwatch measures how long it takes to read from the snapshot via
+	//   iter.Next().
+	// - sendStopwatch measure the time it takes to send the snapshot batch data
+	//   over the network, excluding waits due to rate limiting.
+	// - rateLimitStopwatch records the amount of time spent waiting in order to
+	//   enforce the snapshot rate limit
+	totalTimeStopwatch := timeutil.NewStopWatch()
+	iterStopwatch := timeutil.NewStopWatch()
+	sendStopwatch := timeutil.NewStopWatch()
+	rateLimitStopwatch := timeutil.NewStopWatch()
+
+	log.Event(ctx, "beginning to send batches of snapshot bytes")
+	totalTimeStopwatch.Start()
+
 	// Iterate over all keys using the provided iterator and stream out batches
 	// of key-values.
 	kvs := 0
@@ -371,6 +433,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			b.Close()
 		}
 	}()
+
+	iterStopwatch.Start()
 	for iter := snap.Iter; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return 0, err
@@ -380,6 +444,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		kvs++
 		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
+		iterStopwatch.Stop()
 		if b == nil {
 			b = kvSS.newBatch()
 		}
@@ -388,7 +453,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 
 		if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
-			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
+			if err := kvSS.sendBatch(ctx, stream, b, rateLimitStopwatch, sendStopwatch); err != nil {
 				return 0, err
 			}
 			bytesSent += bLen
@@ -396,26 +461,52 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			b.Close()
 			b = nil
 		}
+		iterStopwatch.Start()
 	}
 	if b != nil {
-		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
+		if err := kvSS.sendBatch(ctx, stream, b, rateLimitStopwatch, sendStopwatch); err != nil {
 			return 0, err
 		}
 		bytesSent += int64(b.Len())
 		recordBytesSent(int64(b.Len()))
 	}
 
+	totalTimeStopwatch.Stop()
+	totalTime := totalTimeStopwatch.Elapsed().Seconds()
+	iterDuration := iterStopwatch.Elapsed().Seconds()
+	sendDuration := sendStopwatch.Elapsed().Seconds()
+	ratelimitDuration := rateLimitStopwatch.Elapsed().Seconds()
+	log.Eventf(ctx, "finished sending snapshot batches, sent a total of %d bytes", bytesSent)
+	log.Eventf(
+		ctx,
+		"Breakdown of time spent sending snapshot. Total time taken: %.9fs. "+
+			"Time reading from snap: %.9fs (%.2f%%). Time sending on net: %.9fs (%.2f%%). Time waiting on rate limiting: %.9fs (%.2f%%).",
+		totalTime,
+		iterDuration, iterDuration/totalTime*100,
+		sendDuration, sendDuration/totalTime*100,
+		ratelimitDuration, ratelimitDuration/totalTime*100,
+	)
 	kvSS.status = redact.Sprintf("kv pairs: %d", kvs)
 	return bytesSent, nil
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
-	ctx context.Context, stream outgoingSnapshotStream, batch storage.Batch,
+	ctx context.Context,
+	stream outgoingSnapshotStream,
+	batch storage.Batch,
+	limitStopwatch *timeutil.StopWatch,
+	sendStopwatch *timeutil.StopWatch,
 ) error {
-	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
+	limitStopwatch.Start()
+	err := kvSS.limiter.WaitN(ctx, 1)
+	limitStopwatch.Stop()
+	if err != nil {
 		return err
 	}
-	return stream.Send(&kvserverpb.SnapshotRequest{KVBatch: batch.Repr()})
+	sendStopwatch.Start()
+	res := stream.Send(&kvserverpb.SnapshotRequest{KVBatch: batch.Repr()})
+	sendStopwatch.Stop()
+	return res
 }
 
 // Status implements the snapshotStrategy interface.
@@ -439,6 +530,8 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
+	ctx, sp := s.AnnotateCtxWithSpan(ctx, "reserveSnapshot")
+	defer sp.Finish()
 	return s.throttleSnapshot(
 		ctx, s.snapshotApplySem, header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
@@ -449,6 +542,8 @@ func (s *Store) reserveSnapshot(
 func (s *Store) reserveSendSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest, rangeSize int64,
 ) (_cleanup func(), _err error) {
+	ctx, sp := s.AnnotateCtxWithSpan(ctx, "reserveSendSnapshot")
+	defer sp.Finish()
 	sem := s.initialSnapshotSendSem
 	if req.Type == kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
 		sem = s.raftSnapshotSendSem
@@ -495,6 +590,7 @@ func (s *Store) throttleSnapshot(
 			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
 				fn()
 			}
+			log.Event(ctx, "acquired spot in the snapshot semaphore")
 		case <-queueCtx.Done():
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
@@ -791,8 +887,9 @@ func (s *Store) receiveSnapshot(
 			s.metrics.RangeSnapshotUnknownRcvdBytes.Inc(inc)
 		}
 	}
-
+	ctx, sp := s.AnnotateCtxWithSpan(ctx, "receive snapshot data")
 	inSnap, err := ss.Receive(ctx, stream, *header, recordBytesReceived)
+	sp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
 	if err != nil {
 		return err
 	}
@@ -1191,6 +1288,7 @@ func sendSnapshot(
 	if err := stream.Send(&kvserverpb.SnapshotRequest{Header: &header}); err != nil {
 		return err
 	}
+	log.Event(ctx, "sent SNAPSHOT_REQUEST message to server")
 	// Wait until we get a response from the server. The recipient may queue us
 	// (only a limited number of snapshots are allowed concurrently) or flat-out
 	// reject the snapshot. After the initial message exchange, we'll go and send
@@ -1206,7 +1304,8 @@ func sendSnapshot(
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
 			to, snap, resp.Message)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
-	// This is the response we're expecting. Continue with snapshot sending.
+		// This is the response we're expecting. Continue with snapshot sending.
+		log.Event(ctx, "received SnapshotResponse_ACCEPTED message from server")
 	default:
 		err := errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
 			to, snap, resp.Status)

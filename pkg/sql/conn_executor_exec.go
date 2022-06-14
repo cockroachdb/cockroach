@@ -697,7 +697,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
-			logTraceAboveThreshold(
+			log.LogTraceAboveThreshold(
 				ctx,
 				rec,
 				fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
@@ -2269,26 +2269,4 @@ func (ex *connExecutor) recordTransactionFinish(
 		transactionFingerprintID,
 		recordedTxnStats,
 	)
-}
-
-// logTraceAboveThreshold logs a span's recording if the duration is above a
-// given threshold. It is used when txn or stmt threshold tracing is enabled.
-// This function assumes that sp is non-nil and threshold tracing was enabled.
-func logTraceAboveThreshold(
-	ctx context.Context, r tracingpb.Recording, opName string, threshold, elapsed time.Duration,
-) {
-	if elapsed < threshold {
-		return
-	}
-	if r == nil {
-		log.Warning(ctx, "missing trace when threshold tracing was enabled")
-		return
-	}
-	dump := r.String()
-	if len(dump) == 0 {
-		return
-	}
-	// Note that log lines larger than 65k are truncated in the debug zip (see
-	// #50166).
-	log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump)
 }

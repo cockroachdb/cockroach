@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -257,7 +258,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 	}
 
 	if ts.recordingThreshold > 0 {
-		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(sp.RecordingType()), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
+		log.LogTraceAboveThreshold(ts.Ctx, sp.GetRecording(sp.RecordingType()), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
 	}
 
 	sp.Finish()
