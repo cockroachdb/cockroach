@@ -189,6 +189,9 @@ PostCommitPhase stage 7 of 7 with 10 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
@@ -196,9 +199,6 @@ PostCommitPhase stage 7 of 7 with 10 MutationType ops
     *scop.SetIndexName
       IndexID: 2
       Name: foo_pkey
-      TableID: 104
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
@@ -458,6 +458,9 @@ PostCommitPhase stage 7 of 7 with 8 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
@@ -465,9 +468,6 @@ PostCommitPhase stage 7 of 7 with 8 MutationType ops
     *scop.SetIndexName
       IndexID: 2
       Name: foo_pkey
-      TableID: 104
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
@@ -770,6 +770,9 @@ PostCommitPhase stage 7 of 7 with 10 MutationType ops
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
   ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
@@ -777,9 +780,6 @@ PostCommitPhase stage 7 of 7 with 10 MutationType ops
     *scop.SetIndexName
       IndexID: 2
       Name: foo_pkey
-      TableID: 104
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
@@ -1035,6 +1035,9 @@ PostCommitPhase stage 7 of 7 with 8 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
@@ -1042,9 +1045,6 @@ PostCommitPhase stage 7 of 7 with 8 MutationType ops
     *scop.SetIndexName
       IndexID: 2
       Name: foo_pkey
-      TableID: 104
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
       TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
@@ -1408,6 +1408,9 @@ PostCommitPhase stage 7 of 7 with 15 MutationType ops
     [[PrimaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 107, Name: bar_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 104
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
@@ -1416,6 +1419,9 @@ PostCommitPhase stage 7 of 7 with 15 MutationType ops
       IndexID: 2
       Name: foo_pkey
       TableID: 104
+    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+      IndexID: 1
+      TableID: 107
     *scop.SetIndexName
       IndexID: 1
       Name: crdb_internal_index_1_name_placeholder
@@ -1424,9 +1430,6 @@ PostCommitPhase stage 7 of 7 with 15 MutationType ops
       IndexID: 2
       Name: bar_pkey
       TableID: 107
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
-      TableID: 104
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
         Authorization:
@@ -1438,9 +1441,6 @@ PostCommitPhase stage 7 of 7 with 15 MutationType ops
           SubWorkID: 1
       IndexID: 2
       TableID: 104
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
-      IndexID: 1
-      TableID: 107
     *scop.MakeAddedPrimaryIndexPublic
       EventBase:
         Authorization:

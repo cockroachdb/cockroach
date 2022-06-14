@@ -250,7 +250,6 @@ ElementState:
         width: 64
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -285,7 +284,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -320,7 +318,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: true
     tableId: 108
   Status: PUBLIC
@@ -365,7 +362,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -392,7 +388,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -419,7 +414,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -446,7 +440,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -466,7 +459,6 @@ ElementState:
       usesSequenceIds: []
       usesTypeIds: []
     indexId: 2
-    isRelationBeingDropped: false
     tableId: 108
   Status: PUBLIC
 - ConstraintName:

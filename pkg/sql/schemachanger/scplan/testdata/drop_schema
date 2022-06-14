@@ -471,10 +471,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  to:   [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: SameStagePrecedence
-  rule: dependents removed after index no longer public
+  rule: dependents removed right after index no longer public
 - from: [Schema:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
