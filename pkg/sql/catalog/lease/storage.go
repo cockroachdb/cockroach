@@ -101,9 +101,9 @@ func (s storage) acquire(
 			return err
 		}
 
-		nodeID := s.nodeIDContainer.SQLInstanceID()
-		if nodeID == 0 {
-			panic("zero nodeID")
+		instanceID := s.nodeIDContainer.SQLInstanceID()
+		if instanceID == 0 {
+			panic("SQL instance ID not set")
 		}
 		// If there was a previous iteration of the loop, we'd know because the
 		// desc and expiration is non-empty. In this case, we may have successfully
@@ -114,7 +114,7 @@ func (s storage) acquire(
 			prevExpirationTS := storedLeaseExpiration(expiration)
 			deleteLease := fmt.Sprintf(
 				`DELETE FROM system.public.lease WHERE "descID" = %d AND version = %d AND "nodeID" = %d AND expiration = %s`,
-				desc.GetID(), desc.GetVersion(), nodeID, &prevExpirationTS,
+				desc.GetID(), desc.GetVersion(), instanceID, &prevExpirationTS,
 			)
 			if _, err := s.internalExecutor.Exec(
 				ctx, "lease-delete-after-ambiguous", txn, deleteLease,
@@ -152,7 +152,7 @@ func (s storage) acquire(
 		ts := storedLeaseExpiration(expiration)
 		insertLease := fmt.Sprintf(
 			`INSERT INTO system.public.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
-			desc.GetID(), desc.GetVersion(), nodeID, &ts,
+			desc.GetID(), desc.GetVersion(), instanceID, &ts,
 		)
 		count, err := s.internalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
 		if err != nil {
@@ -203,9 +203,9 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 	// NodeUnavailableErrors.
 	for r := retry.Start(retryOptions); r.Next(); {
 		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
-		nodeID := s.nodeIDContainer.SQLInstanceID()
-		if nodeID == 0 {
-			panic("zero nodeID")
+		instanceID := s.nodeIDContainer.SQLInstanceID()
+		if instanceID == 0 {
+			panic("SQL instance ID not set")
 		}
 		const deleteLease = `DELETE FROM system.public.lease ` +
 			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
@@ -214,7 +214,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 			"lease-release",
 			nil, /* txn */
 			deleteLease,
-			lease.id, lease.version, nodeID, &lease.expiration,
+			lease.id, lease.version, instanceID, &lease.expiration,
 		)
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)

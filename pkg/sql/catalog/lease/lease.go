@@ -1241,11 +1241,9 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 	if m.testingKnobs.DisableDeleteOrphanedLeases {
 		return
 	}
-	// TODO(asubiotto): clear up the nodeID naming here and in the table below,
-	// tracked as https://github.com/cockroachdb/cockroach/issues/48271.
-	nodeID := m.storage.nodeIDContainer.SQLInstanceID()
-	if nodeID == 0 {
-		panic("zero nodeID")
+	instanceID := m.storage.nodeIDContainer.SQLInstanceID()
+	if instanceID == 0 {
+		panic("SQL instance ID not set")
 	}
 
 	// Run as async worker to prevent blocking the main server Start method.
@@ -1261,7 +1259,7 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// Read orphaned leases.
 		sqlQuery := fmt.Sprintf(`
 SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
-`, timeThreshold, nodeID)
+`, timeThreshold, instanceID)
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()
 		retryOptions.Closer = m.stopper.ShouldQuiesce()
