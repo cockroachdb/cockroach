@@ -256,8 +256,8 @@ var opWeights = []int{
 	setColumnNotNull:        1,
 	setColumnType:           0, // Disabled and tracked with #66662.
 	survive:                 1,
-	insertRow:               1, // Temporarily reduced because of #80820
-	validate:                2, // validate twice more often
+	insertRow:               10, // Temporarily reduced because of #80820
+	validate:                2,  // validate twice more often
 }
 
 // adjustOpWeightsForActiveVersion adjusts the weights for the active cockroach
