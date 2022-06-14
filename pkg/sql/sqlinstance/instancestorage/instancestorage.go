@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -42,6 +43,7 @@ type instancerow struct {
 	instanceID base.SQLInstanceID
 	addr       string
 	sessionID  sqlliveness.SessionID
+	locality   roachpb.Locality
 	timestamp  hlc.Timestamp
 }
 
@@ -67,11 +69,14 @@ func NewStorage(db *kv.DB, codec keys.SQLCodec, slReader sqlliveness.Reader) *St
 
 // CreateInstance allocates a unique instance identifier for the SQL pod and
 // associates it with its SQL address and session information.
+// TODO(harding): add locality info here? This seems to be where the system.sql_instances
+// table is populated.
 func (s *Storage) CreateInstance(
 	ctx context.Context,
 	sessionID sqlliveness.SessionID,
 	sessionExpiration hlc.Timestamp,
 	addr string,
+	locality roachpb.Locality,
 ) (instanceID base.SQLInstanceID, _ error) {
 	if len(addr) == 0 {
 		return base.SQLInstanceID(0), errors.New("no address information for instance")
@@ -92,7 +97,7 @@ func (s *Storage) CreateInstance(
 			return err
 		}
 		instanceID = s.getAvailableInstanceID(ctx, rows)
-		row, err := s.rowcodec.encodeRow(instanceID, addr, sessionID, s.codec, s.tableID)
+		row, err := s.rowcodec.encodeRow(instanceID, addr, sessionID, locality, s.codec, s.tableID)
 		if err != nil {
 			log.Warningf(ctx, "failed to encode row for instance id %d: %v", instanceID, err)
 			return err
@@ -162,7 +167,7 @@ func (s *Storage) getInstanceData(
 	if row.Value == nil {
 		return instancerow{}, sqlinstance.NonExistentInstanceError
 	}
-	_, addr, sessionID, timestamp, _, err := s.rowcodec.decodeRow(row)
+	_, addr, sessionID, locality, timestamp, _, err := s.rowcodec.decodeRow(row)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
@@ -171,6 +176,7 @@ func (s *Storage) getInstanceData(
 		addr:       addr,
 		sessionID:  sessionID,
 		timestamp:  timestamp,
+		locality:   locality,
 	}
 	return instanceData, nil
 }
@@ -204,7 +210,7 @@ func (s *Storage) getAllInstanceRows(
 		return nil, err
 	}
 	for i := range rows {
-		instanceID, addr, sessionID, timestamp, _, err := s.rowcodec.decodeRow(rows[i])
+		instanceID, addr, sessionID, locality, timestamp, _, err := s.rowcodec.decodeRow(rows[i])
 		if err != nil {
 			log.Warningf(ctx, "failed to decode row %v: %v", rows[i].Key, err)
 			return nil, err
@@ -214,6 +220,7 @@ func (s *Storage) getAllInstanceRows(
 			addr:       addr,
 			sessionID:  sessionID,
 			timestamp:  timestamp,
+			locality:   locality,
 		}
 		instances = append(instances, curInstance)
 	}

@@ -48,6 +48,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

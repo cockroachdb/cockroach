@@ -2132,6 +2132,7 @@ system         pg_extension  spatial_ref_sys                  srid              
 system         pg_extension  spatial_ref_sys                  srtext                                                                                                    4
 system         public        sql_instances                    addr                                                                                                      2
 system         public        sql_instances                    id                                                                                                        1
+system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3
 system         public        sqlliveness                      expiration                                                                                                2
 system         public        sqlliveness                      session_id                                                                                                1

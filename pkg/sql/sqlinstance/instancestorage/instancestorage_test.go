@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -73,9 +74,10 @@ func TestStorage(t *testing.T) {
 		const id = base.SQLInstanceID(1)
 		const sessionID = sqlliveness.SessionID("session_id")
 		const addr = "addr"
+		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		const expiration = time.Minute
 		{
-			instanceID, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr)
+			instanceID, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr, locality)
 			require.NoError(t, err)
 			require.Equal(t, id, instanceID)
 		}
@@ -88,10 +90,15 @@ func TestStorage(t *testing.T) {
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
 		addresses := [...]string{"addr1", "addr2", "addr3"}
 		sessionIDs := [...]sqlliveness.SessionID{"session1", "session2", "session3"}
+		localities := [...]roachpb.Locality{
+			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
+			{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
+			{Tiers: []roachpb.Tier{{Key: "region", Value: "region3"}}},
+		}
 		{
 			for index, addr := range addresses {
 				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				instanceID, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, addr)
+				instanceID, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, addr, localities[index])
 				require.NoError(t, err)
 				err = slStorage.Insert(ctx, sessionIDs[index], sessionExpiry)
 				if err != nil {
@@ -111,6 +118,7 @@ func TestStorage(t *testing.T) {
 				require.Equal(t, instanceIDs[index], instance.InstanceID)
 				require.Equal(t, sessionIDs[index], instance.SessionID)
 				require.Equal(t, addresses[index], instance.InstanceAddr)
+				require.Equal(t, localities[index], instance.Locality)
 			}
 		}
 
@@ -125,6 +133,7 @@ func TestStorage(t *testing.T) {
 				require.Equal(t, instanceIDs[index+1], instance.InstanceID)
 				require.Equal(t, sessionIDs[index+1], instance.SessionID)
 				require.Equal(t, addresses[index+1], instance.InstanceAddr)
+				require.Equal(t, localities[index+1], instance.Locality)
 
 			}
 		}
@@ -135,8 +144,9 @@ func TestStorage(t *testing.T) {
 			var instanceID base.SQLInstanceID
 			newSessionID := sqlliveness.SessionID("session4")
 			newAddr := "addr4"
+			newLocality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
 			newSessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instanceID, err = storage.CreateInstance(ctx, newSessionID, newSessionExpiry, newAddr)
+			instanceID, err = storage.CreateInstance(ctx, newSessionID, newSessionExpiry, newAddr, newLocality)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[0], instanceID)
 			var instances []sqlinstance.InstanceInfo
@@ -149,10 +159,12 @@ func TestStorage(t *testing.T) {
 				if index == 0 {
 					require.Equal(t, newSessionID, instance.SessionID)
 					require.Equal(t, newAddr, instance.InstanceAddr)
+					require.Equal(t, newLocality, instance.Locality)
 					continue
 				}
 				require.Equal(t, sessionIDs[index], instance.SessionID)
 				require.Equal(t, addresses[index], instance.InstanceAddr)
+				require.Equal(t, localities[index], instance.Locality)
 			}
 		}
 
@@ -162,8 +174,9 @@ func TestStorage(t *testing.T) {
 			var instanceID base.SQLInstanceID
 			newSessionID := sqlliveness.SessionID("session5")
 			newAddr := "addr5"
+			newLocality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region5"}}}
 			newSessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instanceID, err = storage.CreateInstance(ctx, newSessionID, newSessionExpiry, newAddr)
+			instanceID, err = storage.CreateInstance(ctx, newSessionID, newSessionExpiry, newAddr, newLocality)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[0], instanceID)
 			var instances []sqlinstance.InstanceInfo
@@ -176,10 +189,12 @@ func TestStorage(t *testing.T) {
 				if index == 0 {
 					require.Equal(t, newSessionID, instance.SessionID)
 					require.Equal(t, newAddr, instance.InstanceAddr)
+					require.Equal(t, newLocality, instance.Locality)
 					continue
 				}
 				require.Equal(t, sessionIDs[index], instance.SessionID)
 				require.Equal(t, addresses[index], instance.InstanceAddr)
+				require.Equal(t, localities[index], instance.Locality)
 			}
 		}
 	})
@@ -209,14 +224,19 @@ func TestSQLAccess(t *testing.T) {
 	const (
 		sessionID       = sqlliveness.SessionID("session")
 		addr            = "addr"
+		localityStr     = "region=test1,zone=test2"
 		expiration      = time.Minute
-		expectedNumCols = 3
+		expectedNumCols = 4
 	)
-	instanceID, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr)
+	var locality roachpb.Locality
+	if err := locality.Set(localityStr); err != nil {
+		t.Fatal(err)
+	}
+	instanceID, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), addr, locality)
 	require.NoError(t, err)
 
 	// Query the table through SQL and verify the query completes successfully.
-	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, session_id FROM \"%s\".sql_instances", dbName))
+	rows := tDB.Query(t, fmt.Sprintf("SELECT id, addr, session_id, locality FROM \"%s\".sql_instances", dbName))
 	defer rows.Close()
 	columns, err := rows.Columns()
 	require.NoError(t, err)
@@ -224,12 +244,14 @@ func TestSQLAccess(t *testing.T) {
 	var parsedInstanceID base.SQLInstanceID
 	var parsedSessionID sqlliveness.SessionID
 	var parsedAddr string
+	var parsedLocality string
 	rows.Next()
-	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSessionID)
+	err = rows.Scan(&parsedInstanceID, &parsedAddr, &parsedSessionID, &parsedLocality)
 	require.NoError(t, err)
 	require.Equal(t, instanceID, parsedInstanceID)
 	require.Equal(t, sessionID, parsedSessionID)
 	require.Equal(t, addr, parsedAddr)
+	require.Equal(t, localityStr, parsedLocality)
 
 	// Verify that the table only contains one row as expected.
 	hasAnotherRow := rows.Next()
@@ -268,6 +290,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 		addr            = "addr"
 		expiration      = time.Minute
 	)
+	locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test-region"}}}
 	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 	err := slStorage.Insert(ctx, sessionID, sessionExpiry)
 	if err != nil {
@@ -292,7 +315,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instanceID, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr)
+			instanceID, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addr, locality)
 			require.NoError(t, err)
 			if len(state.freeInstances) > 0 {
 				_, free := state.freeInstances[instanceID]
@@ -352,6 +375,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, addr, instanceInfo.InstanceAddr)
 				require.Equal(t, sessionID, instanceInfo.SessionID)
+				require.Equal(t, locality, instanceInfo.Locality)
 				_, live := state.liveInstances[i]
 				require.True(t, live)
 			}

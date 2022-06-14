@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "upgrades",
     srcs = [
+        "alter_sql_instances_locality.go",
         "alter_statement_diagnostics_requests.go",
         "alter_table_protected_timestamp_records.go",
         "alter_table_statistics_avg_size.go",
@@ -66,6 +67,7 @@ go_test(
     name = "upgrades_test",
     size = "large",
     srcs = [
+        "alter_sql_instances_locality_test.go",
         "alter_statement_diagnostics_requests_test.go",
         "alter_table_protected_timestamp_records_test.go",
         "alter_table_statistics_avg_size_test.go",
@@ -112,6 +114,7 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",

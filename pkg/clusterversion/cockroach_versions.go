@@ -378,6 +378,10 @@ const (
 	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
 	UpgradeSequenceToBeReferencedByID
 
+	// AlterSystemSqlInstancesAddLocality adds a locality column to the
+	// system.sql_instances table.
+	AlterSystemSqlInstancesAddLocality
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -665,6 +669,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
+	},
+	{
+		Key:     AlterSystemSqlInstancesAddLocality,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 
 	// *************************************************
