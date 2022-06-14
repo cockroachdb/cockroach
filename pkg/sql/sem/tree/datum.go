@@ -759,10 +759,11 @@ func (d *DInt) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
-		if thisInt > math.MaxUint32 || thisInt < math.MinInt32 {
-			return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", thisInt)
+		o, err := IntToOid(thisInt)
+		if err != nil {
+			return 0, err
 		}
-		thisInt = DInt(uint32(thisInt))
+		thisInt = DInt(o.Oid)
 		v = DInt(t.Oid)
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
@@ -4883,25 +4884,34 @@ type DOid struct {
 	name string
 }
 
+// IntToOid is a helper that turns a DInt into a *DOid and checks that the value
+// is in range.
+func IntToOid(i DInt) (*DOid, error) {
+	if i > math.MaxUint32 || i < math.MinInt32 {
+		return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", i)
+	}
+	return NewDOid(oid.Oid(i)), nil
+}
+
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
-func MakeDOid(d DInt, semanticType *types.T) DOid {
-	return DOid{Oid: oid.Oid(d), semanticType: semanticType, name: ""}
+func MakeDOid(d oid.Oid, semanticType *types.T) DOid {
+	return DOid{Oid: d, semanticType: semanticType, name: ""}
 }
 
 // NewDOidWithType constructs a DOid with the given type and no name.
-func NewDOidWithType(d DInt, semanticType *types.T) *DOid {
-	oid := DOid{Oid: oid.Oid(d), semanticType: semanticType}
+func NewDOidWithType(d oid.Oid, semanticType *types.T) *DOid {
+	oid := DOid{Oid: d, semanticType: semanticType}
 	return &oid
 }
 
 // NewDOidWithTypeAndName constructs a DOid with the given type and name.
-func NewDOidWithTypeAndName(d DInt, semanticType *types.T, name string) *DOid {
-	oid := DOid{Oid: oid.Oid(d), semanticType: semanticType, name: name}
+func NewDOidWithTypeAndName(d oid.Oid, semanticType *types.T, name string) *DOid {
+	oid := DOid{Oid: d, semanticType: semanticType, name: name}
 	return &oid
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
-func NewDOid(d DInt) *DOid {
+func NewDOid(d oid.Oid) *DOid {
 	// TODO(yuzefovich): audit the callers of NewDOid to see whether any want to
 	// create a DOid with a semantic type different from types.Oid.
 	oid := MakeDOid(d, types.Oid)
@@ -4934,9 +4944,9 @@ func MustBeDOid(e Expr) *DOid {
 
 // NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
 // and a string.
-func NewDOidWithName(d DInt, typ *types.T, name string) *DOid {
+func NewDOidWithName(d oid.Oid, typ *types.T, name string) *DOid {
 	return &DOid{
-		Oid:          oid.Oid(d),
+		Oid:          d,
 		semanticType: typ,
 		name:         name,
 	}
@@ -4976,10 +4986,11 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 		// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 		// compare OIDs to signed 32-bit integers, so we implement the comparison
 		// by converting to a uint32 first. This matches Postgres behavior.
-		if *t > math.MaxUint32 || *t < math.MinInt32 {
-			return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "OID out of range: %d", *t)
+		o, err := IntToOid(*t)
+		if err != nil {
+			return 0, err
 		}
-		v = oid.Oid(*t)
+		v = o.Oid
 	default:
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
@@ -5308,7 +5319,7 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	case types.CollatedStringFamily:
 		return NewDCollatedString("", t.Locale(), collationEnv)
 	case types.OidFamily:
-		return NewDOidWithName(DInt(t.Oid()), t, t.SQLStandardName()), nil
+		return NewDOidWithName(t.Oid(), t, t.SQLStandardName()), nil
 	case types.UnknownFamily:
 		return DNull, nil
 	case types.UuidFamily:

@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -68,11 +69,7 @@ func ParseAndRequireString(
 		if t.Oid() != oid.T_oid && s == ZeroOidValue {
 			d = WrapAsZeroOid(t)
 		} else {
-			i, err := ParseDInt(s)
-			if err != nil {
-				return nil, false, err
-			}
-			d = NewDOid(*i)
+			d, err = ParseDOidAsInt(s)
 		}
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
@@ -106,6 +103,16 @@ func ParseAndRequireString(
 	}
 	d, err = AdjustValueToType(t, d)
 	return d, dependsOnContext, err
+}
+
+// ParseDOidAsInt parses the input and returns it as an OID. If the input
+// is not formatted as an int, an error is returned.
+func ParseDOidAsInt(s string) (*DOid, error) {
+	i, err := strconv.ParseInt(strings.TrimSpace(s), 0, 64)
+	if err != nil {
+		return nil, MakeParseError(s, types.Oid, err)
+	}
+	return IntToOid(DInt(i))
 }
 
 // FormatBitArrayToType formats bit arrays such that they fill the total width

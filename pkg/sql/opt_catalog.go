@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -102,21 +103,21 @@ type optSchema struct {
 
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
+	return cat.StableID(os.PostgresDescriptorID())
+}
+
+// PostgresDescriptorID is part of the cat.Object interface.
+func (os *optSchema) PostgresDescriptorID() catid.DescID {
 	switch os.schema.SchemaKind() {
 	case catalog.SchemaUserDefined, catalog.SchemaTemporary:
 		// User defined schemas and the temporary schema have real ID's, so use
 		// them here.
-		return cat.StableID(os.schema.GetID())
+		return os.schema.GetID()
 	default:
 		// Virtual schemas and the public schema don't, so just fall back to the
 		// parent database's ID.
-		return cat.StableID(os.database.GetID())
+		return os.database.GetID()
 	}
-}
-
-// PostgresDescriptorID is part of the cat.Object interface.
-func (os *optSchema) PostgresDescriptorID() cat.StableID {
-	return os.ID()
 }
 
 // Equals is part of the cat.Object interface.
@@ -574,8 +575,8 @@ func (ov *optView) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (ov *optView) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ov.desc.GetID())
+func (ov *optView) PostgresDescriptorID() catid.DescID {
+	return ov.desc.GetID()
 }
 
 // Equals is part of the cat.Object interface.
@@ -637,8 +638,8 @@ func (os *optSequence) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (os *optSequence) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(os.desc.GetID())
+func (os *optSequence) PostgresDescriptorID() catid.DescID {
+	return os.desc.GetID()
 }
 
 // Equals is part of the cat.Object interface.
@@ -1029,8 +1030,8 @@ func (ot *optTable) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (ot *optTable) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ot.desc.GetID())
+func (ot *optTable) PostgresDescriptorID() catid.DescID {
+	return ot.desc.GetID()
 }
 
 // isStale checks if the optTable object needs to be refreshed because the stats,
@@ -2009,8 +2010,8 @@ func (ot *optVirtualTable) ID() cat.StableID {
 }
 
 // PostgresDescriptorID is part of the cat.Object interface.
-func (ot *optVirtualTable) PostgresDescriptorID() cat.StableID {
-	return cat.StableID(ot.desc.GetID())
+func (ot *optVirtualTable) PostgresDescriptorID() catid.DescID {
+	return ot.desc.GetID()
 }
 
 // Equals is part of the cat.Object interface.
