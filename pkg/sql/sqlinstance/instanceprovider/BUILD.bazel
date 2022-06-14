@@ -13,6 +13,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/roachpb",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness",

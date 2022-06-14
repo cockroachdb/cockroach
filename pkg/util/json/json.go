@@ -389,6 +389,33 @@ func (b *ObjectBuilder) Build() JSON {
 	return jsonObject(sorter.pairs)
 }
 
+// BuildUnsorted creates a JSON object that uniqueifies the keys, but leaves
+// the keys in their original order instead of sorting them by key.
+func (b *ObjectBuilder) BuildUnsorted() JSON {
+	if b.pairs == nil {
+		panic(errors.AssertionFailedf(msgModifyAfterBuild))
+	}
+	orders := make([]int, len(b.pairs))
+	for i := range orders {
+		orders[i] = i
+	}
+	sorter := pairSorter{
+		pairs:        b.pairs,
+		orders:       orders,
+		hasNonUnique: false,
+	}
+	b.pairs = nil
+	// Uniqueify the objects, but then sort back into the original order.
+	sort.Sort(&sorter)
+	sorter.unique()
+	orderSorter := pairOrderSorter{
+		pairs:  sorter.pairs,
+		orders: sorter.orders,
+	}
+	sort.Sort(&orderSorter)
+	return jsonObject(orderSorter.pairs)
+}
+
 // pairSorter sorts and uniqueifies JSON pairs. In order to keep
 // the last one for pairs with the same key while sort.Sort is
 // not stable, pairSorter uses []int orders to maintain order and
@@ -438,6 +465,23 @@ func (s *pairSorter) unique() {
 		}
 	}
 	s.pairs = s.pairs[:top+1]
+}
+
+type pairOrderSorter struct {
+	pairs  []jsonKeyValuePair
+	orders []int
+}
+
+func (s *pairOrderSorter) Len() int {
+	return len(s.pairs)
+}
+
+func (s *pairOrderSorter) Less(i, j int) bool {
+	return s.orders[i] > s.orders[j]
+}
+
+func (s *pairOrderSorter) Swap(i, j int) {
+	s.pairs[i], s.orders[i], s.pairs[j], s.orders[j] = s.pairs[j], s.orders[j], s.pairs[i], s.orders[i]
 }
 
 // jsonObject represents a JSON object as a sorted-by-key list of key-value
