@@ -556,6 +556,7 @@ func (s *Smither) makeSelectClause(
 	var fromRefs colRefs
 	// Sometimes generate a SELECT with no FROM clause.
 	requireFrom := s.d6() != 1
+	hasJoinTable := false
 	for (requireFrom && len(clause.From.Tables) < 1) || s.canRecurse() {
 		s.EnterExpressionBlock()
 		defer s.LeaveExpressionBlock()
@@ -567,6 +568,9 @@ func (s *Smither) makeSelectClause(
 				return nil, nil, nil, false
 			}
 			from = source
+			if _, ok := source.(*tree.JoinTableExpr); ok {
+				hasJoinTable = true
+			}
 			fromRefs = append(fromRefs, sourceRefs...)
 		} else {
 			// Add a CTE reference.
@@ -593,7 +597,7 @@ func (s *Smither) makeSelectClause(
 	ctx := emptyCtx
 
 	if len(clause.From.Tables) > 0 {
-		clause.Where = s.makeWhere(fromRefs)
+		clause.Where = s.makeWhere(fromRefs, hasJoinTable)
 		orderByRefs = fromRefs
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
@@ -686,7 +690,7 @@ func (s *Smither) makeOrderedAggregate() (
 		From: tree.From{
 			Tables: tree.TableExprs{tableExpr},
 		},
-		Where:   s.makeWhere(tableColRefs),
+		Where:   s.makeWhere(tableColRefs, false /* hasJoinTable */),
 		GroupBy: groupBy,
 		Having:  s.makeHaving(idxRefs),
 	}, selectRefs, idxRefs, true
@@ -814,7 +818,7 @@ func (s *Smither) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
 
 	del := &tree.Delete{
 		Table:     table,
-		Where:     s.makeWhere(tableRefs),
+		Where:     s.makeWhere(tableRefs, false /* hasJoinTable */),
 		OrderBy:   s.makeOrderBy(tableRefs),
 		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
@@ -862,7 +866,7 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 
 	update := &tree.Update{
 		Table:     table,
-		Where:     s.makeWhere(tableRefs),
+		Where:     s.makeWhere(tableRefs, false /* hasJoinTable */),
 		OrderBy:   s.makeOrderBy(tableRefs),
 		Limit:     makeLimit(s),
 		Returning: &tree.NoReturningClause{},
@@ -1172,8 +1176,16 @@ func makeSetOp(
 	}, leftRefs, true
 }
 
-func (s *Smither) makeWhere(refs colRefs) *tree.Where {
-	if s.coin() {
+func (s *Smither) makeWhere(refs colRefs, hasJoinTable bool) *tree.Where {
+	var generateWhere bool
+	if s.lowProbWhereWithJoinTables && hasJoinTable {
+		// One out of 5 chance of generating a WHERE clause with join tables.
+		whereChance := 5
+		generateWhere = s.rnd.Intn(whereChance) == 0
+	} else {
+		generateWhere = s.coin()
+	}
+	if generateWhere {
 		savedInWhereClause := s.inWhereClause
 		savedNonBoolExprStarted := s.nonBoolExprStarted
 		s.inWhereClause = true

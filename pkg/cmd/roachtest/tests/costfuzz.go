@@ -153,7 +153,8 @@ func runOneRoundCostFuzz(
 		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFns(), sqlsmith.DisableLimits(),
 		sqlsmith.DisableConstantWhereClause(), sqlsmith.FavorInterestingData(),
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
-		sqlsmith.DisableIndexHints(),
+		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(),
+		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
 		sqlsmith.SetComplexity(.3),
 		sqlsmith.SetScalarComplexity(.02),
 	)
