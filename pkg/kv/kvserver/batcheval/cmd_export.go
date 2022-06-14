@@ -182,18 +182,19 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, resumeTS, err := reader.ExportMVCCToSst(ctx, storage.ExportOptions{
-			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
-			EndKey:             args.EndKey,
-			StartTS:            args.StartTime,
-			EndTS:              h.Timestamp,
-			ExportAllRevisions: exportAllRevisions,
-			TargetSize:         targetSize,
-			MaxSize:            maxSize,
-			MaxIntents:         maxIntents,
-			StopMidKey:         args.SplitMidKey,
-			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
-		}, destFile)
+		summary, resume, err := storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
+			storage.MVCCExportOptions{
+				StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
+				EndKey:             args.EndKey,
+				StartTS:            args.StartTime,
+				EndTS:              h.Timestamp,
+				ExportAllRevisions: exportAllRevisions,
+				TargetSize:         targetSize,
+				MaxSize:            maxSize,
+				MaxIntents:         maxIntents,
+				StopMidKey:         args.SplitMidKey,
+				ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
+			}, destFile)
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
 				err = errors.WithHintf(err,
@@ -211,20 +212,20 @@ func evalExport(
 		}
 
 		span := roachpb.Span{Key: start}
-		if resume != nil {
-			span.EndKey = resume
+		if resume.Key != nil {
+			span.EndKey = resume.Key
 		} else {
 			span.EndKey = args.EndKey
 		}
 		exported := roachpb.ExportResponse_File{
 			Span:     span,
-			EndKeyTS: resumeTS,
+			EndKeyTS: resume.Timestamp,
 			Exported: summary,
 			SST:      data,
 		}
 		reply.Files = append(reply.Files, exported)
-		start = resume
-		resumeKeyTS = resumeTS
+		start = resume.Key
+		resumeKeyTS = resume.Timestamp
 
 		if h.TargetBytes > 0 {
 			curSizeOfExportedSSTs += summary.DataSize
@@ -255,9 +256,9 @@ func evalExport(
 			// the next SST. In the worst case this could lead to us exceeding our
 			// TargetBytes by SST target size + overage.
 			if reply.NumBytes == h.TargetBytes {
-				if resume != nil {
+				if resume.Key != nil {
 					reply.ResumeSpan = &roachpb.Span{
-						Key:    resume,
+						Key:    resume.Key,
 						EndKey: args.EndKey,
 					}
 					reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
