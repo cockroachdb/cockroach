@@ -53,6 +53,13 @@ const (
 	Descending
 )
 
+func (d ScanDirection) String() string {
+	if d == Ascending {
+		return "asc"
+	}
+	return "desc"
+}
+
 // Key returns the current key. The iterator must be valid.
 func (ri *RangeIterator) Key() roachpb.RKey {
 	if !ri.Valid() {
