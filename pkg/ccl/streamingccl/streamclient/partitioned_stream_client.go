@@ -65,7 +65,7 @@ func (p *partitionedStreamClient) Create(
 
 	row := conn.QueryRowContext(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantID.ToUint64())
 	if row.Err() != nil {
-		return streamID, errors.Wrapf(row.Err(), "Error in creating replication stream for tenant %s", tenantID.String())
+		return streamID, errors.Wrapf(row.Err(), "error creating replication stream for tenant %s", tenantID.String())
 	}
 
 	err = row.Scan(&streamID)
@@ -85,7 +85,7 @@ func (p *partitionedStreamClient) Heartbeat(
 		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
 	if row.Err() != nil {
 		return streampb.StreamReplicationStatus{},
-			errors.Wrapf(row.Err(), "Error in sending heartbeats to replication stream %d", streamID)
+			errors.Wrapf(row.Err(), "error sending heartbeat to replication stream %d", streamID)
 	}
 
 	var rawStatus []byte
@@ -121,7 +121,7 @@ func (p *partitionedStreamClient) Plan(
 
 	row := conn.QueryRowContext(ctx, `SELECT crdb_internal.replication_stream_spec($1)`, streamID)
 	if row.Err() != nil {
-		return nil, errors.Wrap(row.Err(), "Error in planning a replication stream")
+		return nil, errors.Wrapf(row.Err(), "error planning replication stream %d", streamID)
 	}
 
 	var rawSpec []byte
@@ -207,7 +207,7 @@ func (p *partitionedStreamClient) Complete(ctx context.Context, streamID streami
 	}
 	row := conn.QueryRowContext(ctx, `SELECT crdb_internal.complete_replication_stream($1)`, streamID)
 	if row.Err() != nil {
-		return errors.Wrap(row.Err(), "Error in completing a replication stream")
+		return errors.Wrapf(row.Err(), "error completing replication stream %d", streamID)
 	}
 	return nil
 }
