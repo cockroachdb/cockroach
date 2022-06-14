@@ -885,6 +885,28 @@ var getProvidersCmd = &cobra.Command{
 	},
 }
 
+var startGrafanaCmd = &cobra.Command{
+	Use:   `start-grafana <cluster> [<grafanaConfigURL>]`,
+	Short: `spins up a promethius and grafana instance on an each roachprod node.`,
+	Long: `by default, the prom and grafana instances on the lowest numbered node in the cluster
+and will scrape from all nodes provided`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return roachprod.InitGrafana(context.Background(), roachprodLibraryLogger, args[0], args[1])
+	},
+}
+
+var stopGrafanaCmd = &cobra.Command{
+	Use:   `stop-grafana <cluster>`,
+	Short: `spins down promethius and grafana instances`,
+	Long: fmt.Sprintf(`spins down the promethius and grafana instances on provided roachprod node and
+dumps the promethius data into %s`, config.ClustersDir),
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0])
+	},
+}
+
 func main() {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	var loggerError error
@@ -935,6 +957,8 @@ func main() {
 		cachedHostsCmd,
 		versionCmd,
 		getProvidersCmd,
+		startGrafanaCmd,
+		stopGrafanaCmd,
 	)
 	setBashCompletionFunction()
 

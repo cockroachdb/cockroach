@@ -11,74 +11,53 @@
 package prometheus
 
 import (
-	"context"
-	"io/ioutil"
+	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	logger "github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/golang/mock/gomock"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
-func nilLogger() *logger.Logger {
-	lcfg := logger.Config{
-		Stdout: ioutil.Discard,
-		Stderr: ioutil.Discard,
-	}
-	l, err := lcfg.NewLogger("" /* path */)
-	if err != nil {
-		panic(err)
-	}
-	return l
+type clusterSpec struct {
+	nodes install.Nodes
+	ips   []string
 }
 
 func TestMakeYAMLConfig(t *testing.T) {
-	ctx := context.Background()
 	testCases := []struct {
-		desc string
-
-		mockCluster   func(ctrl *gomock.Controller) Cluster
-		scrapeConfigs []ScrapeConfig
-
-		expected string
+		desc                  string
+		useWorkloadHelpers    bool
+		cluster               *clusterSpec
+		workloadScrapeConfigs []ScrapeConfig
+		expected              string
 	}{
 		{
-			desc: "multiple scrape nodes",
-			mockCluster: func(ctrl *gomock.Controller) Cluster {
-				c := NewMockCluster(ctrl)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{1}).
-					Return([]string{"127.0.0.1"}, nil)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{3, 4, 5}).
-					Return([]string{"127.0.0.3", "127.0.0.4", "127.0.0.5"}, nil)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{6}).
-					Return([]string{"127.0.0.6"}, nil)
-				return c
-			},
-			scrapeConfigs: []ScrapeConfig{
+			desc:               "multiple scrape nodes",
+			useWorkloadHelpers: false,
+			workloadScrapeConfigs: []ScrapeConfig{
 				{
-					JobName:     "workload1",
+					JobName:     "workload0",
 					MetricsPath: "/b",
 					ScrapeNodes: []ScrapeNode{
 						{
-							Nodes: option.NodeListOption([]int{1}),
+							Nodes: install.Nodes{1},
+							IPs:   []string{"127.0.0.1"},
 							Port:  2002,
 						},
 						{
-							Nodes: option.NodeListOption([]int{3, 4, 5}),
+							Nodes: install.Nodes{3, 4, 5},
+							IPs:   []string{"127.0.0.3", "127.0.0.4", "127.0.0.5"},
 							Port:  2003,
 						},
 					},
 				},
 				{
-					JobName:     "workload2",
+					JobName:     "workload1",
 					MetricsPath: "/c",
 					ScrapeNodes: []ScrapeNode{
 						{
-							Nodes: option.NodeListOption([]int{6}),
+							Nodes: install.Nodes{6},
+							IPs:   []string{"127.0.0.6"},
 							Port:  2009,
 						},
 					},
@@ -88,7 +67,7 @@ func TestMakeYAMLConfig(t *testing.T) {
   scrape_interval: 10s
   scrape_timeout: 5s
 scrape_configs:
-- job_name: workload1
+- job_name: workload0
   static_configs:
   - targets:
     - 127.0.0.1:2002
@@ -96,7 +75,7 @@ scrape_configs:
     - 127.0.0.4:2003
     - 127.0.0.5:2003
   metrics_path: /b
-- job_name: workload2
+- job_name: workload1
   static_configs:
   - targets:
     - 127.0.0.6:2009
@@ -104,47 +83,33 @@ scrape_configs:
 `,
 		},
 		{
-			desc: "using make commands",
-			mockCluster: func(ctrl *gomock.Controller) Cluster {
-				c := NewMockCluster(ctrl)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{3, 4, 5}).
-					Return([]string{"127.0.0.3", "127.0.0.4", "127.0.0.5"}, nil)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{6}).
-					Return([]string{"127.0.0.6"}, nil)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{8}).
-					Return([]string{"127.0.0.8"}, nil)
-				c.EXPECT().
-					ExternalIP(ctx, nilLogger(), []int{9}).
-					Return([]string{"127.0.0.9"}, nil)
-				return c
+			desc:               "using make commands",
+			useWorkloadHelpers: true,
+			cluster: &clusterSpec{
+				nodes: install.Nodes{8, 9},
+				ips:   []string{"127.0.0.8", "127.0.0.9"},
 			},
-			scrapeConfigs: func() (sc []ScrapeConfig) {
-				sc = append(sc, MakeWorkloadScrapeConfig(
-					"workload",
-					[]ScrapeNode{
+			workloadScrapeConfigs: []ScrapeConfig{
+				{
+					ScrapeNodes: []ScrapeNode{
 						{
-							Nodes: option.NodeListOption([]int{3, 4, 5}),
+							Nodes: install.Nodes{3, 4, 5},
+							IPs:   []string{"127.0.0.3", "127.0.0.4", "127.0.0.5"},
 							Port:  2005,
 						},
 						{
-							Nodes: option.NodeListOption([]int{6}),
+							Nodes: install.Nodes{6},
+							IPs:   []string{"127.0.0.6"},
 							Port:  2009,
 						},
 					},
-				))
-				sc = append(sc, MakeInsecureCockroachScrapeConfig(
-					option.NodeListOption([]int{8, 9}),
-				)...)
-				return sc
-			}(),
+				},
+			},
 			expected: `global:
   scrape_interval: 10s
   scrape_timeout: 5s
 scrape_configs:
-- job_name: workload
+- job_name: workload0
   static_configs:
   - targets:
     - 127.0.0.3:2005
@@ -172,14 +137,30 @@ scrape_configs:
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			var promCfg Config
+			for i, workloadConfig := range tc.workloadScrapeConfigs {
+				if tc.useWorkloadHelpers {
+					if len(workloadConfig.ScrapeNodes) == 1 {
+						err := promCfg.WithWorkload(
+							"workload"+fmt.Sprint(i),
+							workloadConfig.ScrapeNodes[0].Nodes,
+							workloadConfig.ScrapeNodes[0].Port,
+							workloadConfig.ScrapeNodes[0].IPs)
+						require.NoError(t, err)
+					} else {
+						promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs,
+							MakeWorkloadScrapeConfig("workload"+fmt.Sprint(i), workloadConfig.ScrapeNodes))
+					}
+				} else {
+					promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, workloadConfig)
+				}
 
+			}
+			if tc.cluster != nil {
+				require.NoError(t, promCfg.WithCluster(tc.cluster.nodes, tc.cluster.ips))
+			}
 			cfg, err := makeYAMLConfig(
-				ctx,
-				nilLogger(),
-				tc.mockCluster(ctrl),
-				tc.scrapeConfigs,
+				promCfg.ScrapeConfigs,
 			)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, cfg)
