@@ -199,19 +199,19 @@ deprules
     - joinOnIndexID($index-name, $index, $table-id, $index-id)
     - joinTargetNode($index-name, $index-name-target, $index-name-node)
     - joinTargetNode($index, $index-target, $index-node)
-- name: dependents removed after index no longer public
-  from: child-node
+- name: dependents removed right after index no longer public
+  from: index-node
   kind: SameStagePrecedence
-  to: index-node
+  to: child-node
   query:
-    - $child[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - joinOnIndexID($child, $index, $table-id, $index-id)
-    - toAbsent($child-target, $index-target)
-    - $child-node[CurrentStatus] = ABSENT
+    - $child[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
+    - joinOnIndexID($index, $child, $table-id, $index-id)
+    - toAbsent($index-target, $child-target)
     - $index-node[CurrentStatus] = VALIDATED
-    - joinTargetNode($child, $child-target, $child-node)
+    - $child-node[CurrentStatus] = ABSENT
     - joinTargetNode($index, $index-target, $index-node)
+    - joinTargetNode($child, $child-target, $child-node)
 - name: dependents removed before index
   from: dependent-node
   kind: Precedence
@@ -354,36 +354,6 @@ deprules
     - $column-node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-target, $dependent-node)
     - joinTargetNode($column, $column-target, $column-node)
-- name: column type removed right before column when not dropping relation
-  from: column-type-node
-  kind: SameStagePrecedence
-  to: column-node
-  query:
-    - $column-type[Type] = '*scpb.ColumnType'
-    - $column[Type] = '*scpb.Column'
-    - joinOnColumnID($column-type, $column, $table-id, $col-id)
-    - $column-type-target[TargetStatus] = ABSENT
-    - $column-target[TargetStatus] = ABSENT
-    - $column-type-node[CurrentStatus] = ABSENT
-    - $column-node[CurrentStatus] = ABSENT
-    - columnTypeIsNotBeingDropped(*scpb.ColumnType)($column-type)
-    - joinTargetNode($column-type, $column-type-target, $column-type-node)
-    - joinTargetNode($column, $column-target, $column-node)
-- name: partial predicate removed right before secondary index when not dropping relation
-  from: partial-predicate-node
-  kind: SameStagePrecedence
-  to: index-node
-  query:
-    - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
-    - $index[Type] = '*scpb.SecondaryIndex'
-    - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - $partial-predicate-target[TargetStatus] = ABSENT
-    - $index-target[TargetStatus] = ABSENT
-    - $partial-predicate-node[CurrentStatus] = ABSENT
-    - $index-node[CurrentStatus] = ABSENT
-    - secondaryIndexPartialIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
-    - joinTargetNode($partial-predicate, $partial-predicate-target, $partial-predicate-node)
-    - joinTargetNode($index, $index-target, $index-node)
 - name: column depends on primary index
   from: index-node
   kind: Precedence

@@ -652,6 +652,12 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: dependents removed after index no longer public
 - from: [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+- from: [IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT]
+  to:   [Table:{DescID: 107}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
@@ -660,10 +666,59 @@ DROP TABLE defaultdb.shipments CASCADE;
   rule: dependents removed after index no longer public
 - from: [IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+- from: [IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT]
+  to:   [Table:{DescID: 107}, DROPPED]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  rule: dependent element removal before descriptor drop
+- from: [Namespace:{DescID: 107, Name: shipments, ReferencedDescID: 100}, ABSENT]
+  to:   [Table:{DescID: 107}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 100}, ABSENT]
+  to:   [Sequence:{DescID: 108}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [Namespace:{DescID: 109, Name: v1, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT]
+  to:   [Table:{DescID: 107}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
+  to:   [Sequence:{DescID: 108}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [Owner:{DescID: 107}, ABSENT]
+  to:   [Table:{DescID: 107}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [Owner:{DescID: 108}, ABSENT]
+  to:   [Sequence:{DescID: 108}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [Owner:{DescID: 109}, ABSENT]
+  to:   [View:{DescID: 109}, DROPPED]
+  kind: Precedence
+  rule: dependent element removal before descriptor drop
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  to:   [IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependents removed right after index no longer public
+- from: [PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  to:   [IndexName:{DescID: 107, Name: shipments_pkey, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: dependents removed right after index no longer public
+- from: [SequenceOwner:{DescID: 107, ColumnID: 2, ReferencedDescID: 108}, ABSENT]
+  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: SameStagePrecedence
   rule: dependents removed after index no longer public
 - from: [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
@@ -1021,6 +1076,13 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       TypeIDs:
       - 112
       - 113
+      TableID: 112
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967295
+      TableID: 112
+    *scop.RemoveDroppedColumnType
+      ColumnID: 4294967294
+      TableID: 112
     *scop.RemoveCheckConstraint
       ConstraintID: 2
       TableID: 114
@@ -1038,6 +1100,26 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
 PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
   ops:
+      - 110
+      - 111
+    *scop.MarkDescriptorAsDropped
+      DescID: 112
+    *scop.RemoveAllTableComments
+      TableID: 112
+    *scop.RemoveDroppedColumnType
+      ColumnID: 1
+      TableID: 112
+    *scop.RemoveDroppedColumnType
+      ColumnID: 3
+      TableID: 112
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 112
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 112
+      TypeIDs:
+      - 110
+      - 111
     *scop.SetJobStateOnDescriptor
       DescriptorID: 112
       Initialize: true
