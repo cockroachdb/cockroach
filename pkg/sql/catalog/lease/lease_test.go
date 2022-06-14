@@ -112,13 +112,13 @@ SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version,
 	var prefix string
 	for rows.Next() {
 		var (
-			version int
-			nodeID  int
+			version    int
+			instanceID int
 		)
-		if err := rows.Scan(&version, &nodeID); err != nil {
+		if err := rows.Scan(&version, &instanceID); err != nil {
 			t.Fatal(err)
 		}
-		fmt.Fprintf(&buf, "%s/%d/%d", prefix, version, nodeID)
+		fmt.Fprintf(&buf, "%s/%d/%d", prefix, version, instanceID)
 		prefix = " "
 	}
 	if err := rows.Err(); err != nil {
