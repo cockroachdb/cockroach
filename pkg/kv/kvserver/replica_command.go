@@ -41,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -2670,6 +2672,16 @@ var followerSnapshotsEnabled = func() *settings.BoolSetting {
 	return s
 }()
 
+// traceSnapshotThreshold is used to enable or disable snapshot tracing
+var traceSnapshotThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.trace.snapshot.enable_threshold",
+	"enables tracing and gathers timing information on all snapshots;"+
+		"snapshots with a duration longer than this threshold will have their "+
+		"trace logged (set to 0 to disable); note that enabling this may have "+
+		"a negative performance impact;", 0,
+).WithPublic()
+
 // followerSendSnapshot receives a delegate snapshot request and generates the
 // snapshot from this replica. The entire process of generating and transmitting
 // the snapshot is handled, and errors are propagated back to the leaseholder.
@@ -2680,6 +2692,26 @@ func (r *Replica) followerSendSnapshot(
 	stream DelegateSnapshotResponseStream,
 ) (retErr error) {
 	ctx = r.AnnotateCtx(ctx)
+	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
+	if sendThreshold > 0 {
+		traceCtx, sp := tracing.EnsureChildSpan(ctx, r.store.cfg.Tracer(),
+			"overarching span for snapshots activities")
+		ctx = traceCtx
+		sp.SetRecordingType(tracingpb.RecordingVerbose)
+		sendStart := timeutil.Now()
+		defer func() {
+			sendDur := timeutil.Since(sendStart)
+			if sendThreshold > 0 && sendDur > sendThreshold {
+				rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
+				dump := rec.String()
+				// Note that log lines larger than 65k are truncated in the debug zip (see
+				// #50166).
+				log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", "snapshot", sendDur, sendThreshold, dump)
+			} else {
+				sp.Finish()
+			}
+		}()
+	}
 
 	// TODO(amy): when delegating to different senders, check raft applied state
 	// to determine if this follower replica is fit to send.
