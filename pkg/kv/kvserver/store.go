@@ -1393,6 +1393,11 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
+// AnnotateCtxWithSpan is a convenience wrapper; see AmbientContext.
+func (s *Store) AnnotateCtxWithSpan(ctx context.Context, opName string) (context.Context, *tracing.Span) {
+	return s.cfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
+}
+
 // SetDraining (when called with 'true') causes incoming lease transfers to be
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
