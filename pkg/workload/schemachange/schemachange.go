@@ -163,6 +163,10 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 
+	err = adjustOpWeightsForCockroachVersion(ctx, pool, opWeights)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
 	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
