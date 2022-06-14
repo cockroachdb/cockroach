@@ -885,6 +885,46 @@ var getProvidersCmd = &cobra.Command{
 	},
 }
 
+var grafanaStartCmd = &cobra.Command{
+	Use:   `grafana-start <cluster>`,
+	Short: `spins up a prometheus and grafana instances on the last node in the cluster`,
+	Long: `spins up a prometheus and grafana instances on the highest numbered node in the cluster
+and will scrape from all nodes in the cluster`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
+			grafanaConfig, nil)
+	}),
+}
+
+var grafanaStopCmd = &cobra.Command{
+	Use:   `grafana-stop <cluster>`,
+	Short: `spins down prometheus and grafana instances on the last node in the cluster`,
+	Long:  `spins down the prometheus and grafana instances on the last node in the cluster`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0], grafanaDumpDir)
+	}),
+}
+
+var grafanaURLCmd = &cobra.Command{
+	Use:   `grafanaurl <cluster>`,
+	Short: `returns a url to the grafana dashboard`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		urls, err := roachprod.GrafanaURL(context.Background(), roachprodLibraryLogger, args[0],
+			grafanaurlOpen)
+		if err != nil {
+			return err
+		}
+		for _, url := range urls {
+			fmt.Println(url)
+		}
+		fmt.Println("username: admin; pwd: admin")
+		return nil
+	}),
+}
+
 func main() {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	var loggerError error
@@ -935,6 +975,9 @@ func main() {
 		cachedHostsCmd,
 		versionCmd,
 		getProvidersCmd,
+		grafanaStartCmd,
+		grafanaStopCmd,
+		grafanaURLCmd,
 	)
 	setBashCompletionFunction()
 

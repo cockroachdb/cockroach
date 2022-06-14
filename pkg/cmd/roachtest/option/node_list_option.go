@@ -16,6 +16,8 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 // A NodeListOption is a slice of roachprod node identifiers. The first node is
@@ -115,4 +117,13 @@ func (n NodeListOption) String() string {
 		appendRange(start, end)
 	}
 	return buf.String()
+}
+
+// InstallNodes converts the NodeListOption to install.Nodes
+func (n NodeListOption) InstallNodes() install.Nodes {
+	installNodes := make(install.Nodes, 0, len(n))
+	for _, i := range n {
+		installNodes = append(installNodes, install.Node(i))
+	}
+	return installNodes
 }

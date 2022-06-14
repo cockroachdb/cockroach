@@ -39,6 +39,9 @@ var (
 	destroyAllLocal       bool
 	extendLifetime        time.Duration
 	wipePreserveCerts     bool
+	grafanaConfig         string
+	grafanaurlOpen        bool
+	grafanaDumpDir        string
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -231,6 +234,19 @@ func initFlags() {
 
 	cachedHostsCmd.Flags().StringVar(&cachedHostsCluster,
 		"cluster", "", "print hosts matching cluster")
+
+	// TODO (msbutler): this flag should instead point to a relative file path that's check into
+	// the repo, not some random URL.
+	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
+		"grafana-config", "", "URL to grafana json config")
+
+	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
+		"open", false, "open the grafana dashboard url on the browser")
+
+	grafanaStopCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
+		"the absolute path, on the machine running roachprod, to dump prometheus data to.\n"+
+			"In the dump-dir, the 'prometheus-docker-run.sh' script spins up a prometheus UI accessible on \n"+
+			" 0.0.0.0:9090. If dump-dir is empty, no data will get dumped.")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
