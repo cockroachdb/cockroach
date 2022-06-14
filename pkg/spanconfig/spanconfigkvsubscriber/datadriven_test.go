@@ -167,6 +167,7 @@ func TestDataDriven(t *testing.T) {
 					ErrorInjectionCh: injectedErrCh,
 				},
 			},
+			nil, /* registry */
 		)
 
 		kvSubscriber.Subscribe(func(ctx context.Context, span roachpb.Span) {
