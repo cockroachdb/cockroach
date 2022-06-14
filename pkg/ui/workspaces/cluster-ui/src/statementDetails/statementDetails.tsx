@@ -583,8 +583,9 @@ export class StatementDetails extends React.Component<
       total_count,
       implicit_txn,
     } = this.props.statementDetails.statement.metadata;
-    const { statement_statistics_per_aggregated_ts } =
-      this.props.statementDetails;
+    const {
+      statement_statistics_per_aggregated_ts,
+    } = this.props.statementDetails;
 
     const nodes: string[] = unique(
       (stats.nodes || []).map(node => node.toString()),
@@ -605,6 +606,7 @@ export class StatementDetails extends React.Component<
         available until the statement is sampled.
       </div>
     );
+    const noSamples = statementSampled ? "" : " (no samples)";
 
     const db = databases ? (
       <Text>{databases}</Text>
@@ -621,24 +623,27 @@ export class StatementDetails extends React.Component<
           : 0,
     );
 
-    const executionAndPlanningTimeseries: AlignedData =
-      generateExecuteAndPlanningTimeseries(statsPerAggregatedTs);
+    const executionAndPlanningTimeseries: AlignedData = generateExecuteAndPlanningTimeseries(
+      statsPerAggregatedTs,
+    );
     const executionAndPlanningOps: Partial<Options> = {
       axes: [{}, { label: "Time Spent" }],
       series: [{}, { label: "Execution" }, { label: "Planning" }],
       width: 735,
     };
 
-    const rowsProcessedTimeseries: AlignedData =
-      generateRowsProcessedTimeseries(statsPerAggregatedTs);
+    const rowsProcessedTimeseries: AlignedData = generateRowsProcessedTimeseries(
+      statsPerAggregatedTs,
+    );
     const rowsProcessedOps: Partial<Options> = {
       axes: [{}, { label: "Rows" }],
       series: [{}, { label: "Rows Read" }, { label: "Rows Written" }],
       width: 735,
     };
 
-    const execRetriesTimeseries: AlignedData =
-      generateExecRetriesTimeseries(statsPerAggregatedTs);
+    const execRetriesTimeseries: AlignedData = generateExecRetriesTimeseries(
+      statsPerAggregatedTs,
+    );
     const execRetriesOps: Partial<Options> = {
       axes: [{}, { label: "Retries" }],
       series: [{}, { label: "Retries" }],
@@ -646,8 +651,9 @@ export class StatementDetails extends React.Component<
       width: 735,
     };
 
-    const execCountTimeseries: AlignedData =
-      generateExecCountTimeseries(statsPerAggregatedTs);
+    const execCountTimeseries: AlignedData = generateExecCountTimeseries(
+      statsPerAggregatedTs,
+    );
     const execCountOps: Partial<Options> = {
       axes: [{}, { label: "Execution Counts" }],
       series: [{}, { label: "Execution Counts" }],
@@ -655,8 +661,9 @@ export class StatementDetails extends React.Component<
       width: 735,
     };
 
-    const contentionTimeseries: AlignedData =
-      generateContentionTimeseries(statsPerAggregatedTs);
+    const contentionTimeseries: AlignedData = generateContentionTimeseries(
+      statsPerAggregatedTs,
+    );
     const contentionOps: Partial<Options> = {
       axes: [{}, { label: "Contention" }],
       series: [{}, { label: "Contention" }],
@@ -783,7 +790,7 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
-                title="Contention"
+                title={`Contention${noSamples}`}
                 alignedData={contentionTimeseries}
                 uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}
