@@ -31,12 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
@@ -48,6 +50,10 @@ const (
 	// IntersectingSnapshotMsg is part of the error message returned from
 	// canAcceptSnapshotLocked and is exposed here so testing can rely on it.
 	IntersectingSnapshotMsg = "snapshot intersects existing range"
+
+	// tagSnapshotTiming is the tracing span tag that the *snapshotTimingTag
+	// lives under.
+	tagSnapshotTiming = "snapshot_timing_tag"
 )
 
 // incomingSnapshotStream is the minimal interface on a GRPC stream required
@@ -269,6 +275,65 @@ func (msstw *multiSSTWriter) Close() {
 	msstw.currSST.Close()
 }
 
+// snapshotTimingTag represents a lazy tracing span tag containing information
+// on how long individual parts of a snapshot take. Individual stopwatches can
+// be added to a snapshotTimingTag.
+type snapshotTimingTag struct {
+	mu struct {
+		syncutil.Mutex
+		stopwatches map[string]*timeutil.StopWatch
+	}
+}
+
+// newSnapshotTimingTag creates a new snapshotTimingTag.
+func newSnapshotTimingTag() *snapshotTimingTag {
+	tag := snapshotTimingTag{}
+	tag.mu.stopwatches = make(map[string]*timeutil.StopWatch)
+	return &tag
+}
+
+// addStopwatch adds the given stopwatch to the tag's map of stopwatches.
+func (tag *snapshotTimingTag) addStopwatch(name string) {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	tag.mu.stopwatches[name] = timeutil.NewStopWatch()
+}
+
+// start begins the stopwatch corresponding to name if the stopwatch
+// exists and shouldRecord is true.
+func (tag *snapshotTimingTag) start(name string) {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	if stopwatch, ok := tag.mu.stopwatches[name]; ok {
+		stopwatch.Start()
+	}
+}
+
+// stop ends the stopwatch corresponding to name if the stopwatch
+// exists and shouldRecord is true.
+func (tag *snapshotTimingTag) stop(name string) {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	if stopwatch, ok := tag.mu.stopwatches[name]; ok {
+		stopwatch.Stop()
+	}
+}
+
+// Render implements the tracing.LazyTag interface. It returns a map of each
+// stopwatch's name to the stopwatch's elapsed time.
+func (tag *snapshotTimingTag) Render() []attribute.KeyValue {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	tags := make([]attribute.KeyValue, 0, len(tag.mu.stopwatches))
+	for name, stopwatch := range tag.mu.stopwatches {
+		tags = append(tags, attribute.KeyValue{
+			Key:   attribute.Key(name),
+			Value: attribute.StringValue(string(humanizeutil.Duration(stopwatch.Elapsed()))),
+		})
+	}
+	return tags
+}
+
 // Receive implements the snapshotStrategy interface.
 //
 // NOTE: This function assumes that the point and range (e.g. MVCC range
@@ -294,6 +359,23 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
 
+	// These stopwatches allow us to time the various components of Receive().
+	// - totalTime Stopwatch measures the total time spent within this function.
+	// - sst Stopwatch measures the time it takes to write the data from the
+	//   snapshot into SSTs
+	// - recv Stopwatch records the amount of time spent waiting on the gRPC stream
+	//   and receiving the data from the stream. NB: this value encapsulates wait
+	//   time due to sender-side rate limiting
+	timingTag := newSnapshotTimingTag()
+	timingTag.addStopwatch("totalTime")
+	timingTag.addStopwatch("sst")
+	timingTag.addStopwatch("recv")
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
+		sp.SetLazyTag(tagSnapshotTiming, timingTag)
+	}
+
+	timingTag.start("totalTime")
+
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
@@ -303,8 +385,12 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	}
 	defer msstw.Close()
 
+	log.Event(ctx, "waiting for snapshot batches to begin")
+
 	for {
+		timingTag.start("recv")
 		req, err := stream.Recv()
+		timingTag.stop("recv")
 		if err != nil {
 			return noSnap, err
 		}
@@ -319,6 +405,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
 			}
+
+			timingTag.start("sst")
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
 				switch batchReader.BatchType() {
@@ -355,17 +443,21 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					return noSnap, errors.AssertionFailedf("unexpected batch entry type %d", batchReader.BatchType())
 				}
 			}
+			timingTag.stop("sst")
 		}
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key spans, but
 			// we must still construct SSTs with range deletion tombstones to remove
 			// the data.
+			timingTag.start("sst")
 			dataSize, err := msstw.Finish(ctx)
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
 			msstw.Close()
+			timingTag.stop("sst")
+			log.Eventf(ctx, "all data received from snapshot and all SSTs were finalized")
 
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
@@ -382,6 +474,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				snapType:          header.Type,
 				raftAppliedIndex:  header.State.RaftAppliedIndex,
 			}
+
+			timingTag.stop("totalTime")
 
 			kvSS.status = redact.Sprintf("ssts: %d", len(kvSS.scratch.SSTs()))
 			return inSnap, nil
@@ -408,6 +502,27 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	var bytesSent int64
 	var kvs, rangeKVs int
 
+	// These stopwatches allow us to time the various components of Send().
+	// - totalTimeStopwatch measures the total time spent within this function.
+	// - iterStopwatch measures how long it takes to read from the snapshot via
+	//   iter.Next().
+	// - sendStopwatch measure the time it takes to send the snapshot batch data
+	//   over the network, excluding waits due to rate limiting.
+	// - rateLimitStopwatch records the amount of time spent waiting in order to
+	//   enforce the snapshot rate limit
+	timingTag := newSnapshotTimingTag()
+	timingTag.addStopwatch("totalTime")
+	timingTag.addStopwatch("iter")
+	timingTag.addStopwatch("send")
+	timingTag.addStopwatch("rateLimit")
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
+		log.Eventf(ctx, "found span %s", sp.OperationName())
+		sp.SetLazyTag(tagSnapshotTiming, timingTag)
+	}
+
+	log.Event(ctx, "beginning to send batches of snapshot bytes")
+	timingTag.start("totalTime")
+
 	// Iterate over all keys (point keys and range keys) and stream out batches of
 	// key-values.
 	var b storage.Batch
@@ -418,7 +533,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}()
 
 	flushBatch := func() error {
-		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
+		if err := kvSS.sendBatch(ctx, stream, b, timingTag); err != nil {
 			return err
 		}
 		bLen := int64(b.Len())
@@ -438,6 +553,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	err := rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+			timingTag.start("iter")
+			defer timingTag.stop("iter")
+
 			var err error
 			switch keyType {
 			case storage.IterKeyTypePointsOnly:
@@ -493,17 +611,29 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 	}
 
+	timingTag.stop("totalTime")
+	log.Eventf(ctx, "finished sending snapshot batches, sent a total of %d bytes", bytesSent)
+
 	kvSS.status = redact.Sprintf("kvs=%d rangeKVs=%d", kvs, rangeKVs)
 	return bytesSent, nil
 }
 
 func (kvSS *kvBatchSnapshotStrategy) sendBatch(
-	ctx context.Context, stream outgoingSnapshotStream, batch storage.Batch,
+	ctx context.Context,
+	stream outgoingSnapshotStream,
+	batch storage.Batch,
+	timerTag *snapshotTimingTag,
 ) error {
-	if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
+	timerTag.start("rateLimit")
+	err := kvSS.limiter.WaitN(ctx, 1)
+	timerTag.stop("rateLimit")
+	if err != nil {
 		return err
 	}
-	return stream.Send(&kvserverpb.SnapshotRequest{KVBatch: batch.Repr()})
+	timerTag.start("send")
+	res := stream.Send(&kvserverpb.SnapshotRequest{KVBatch: batch.Repr()})
+	timerTag.stop("send")
+	return res
 }
 
 // Status implements the snapshotStrategy interface.
@@ -527,6 +657,8 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSnapshot")
+	defer sp.Finish()
 	return s.throttleSnapshot(
 		ctx, s.snapshotApplySem, header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
@@ -537,6 +669,8 @@ func (s *Store) reserveSnapshot(
 func (s *Store) reserveSendSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest, rangeSize int64,
 ) (_cleanup func(), _err error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSendSnapshot")
+	defer sp.Finish()
 	sem := s.initialSnapshotSendSem
 	if req.Type == kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
 		sem = s.raftSnapshotSendSem
@@ -583,6 +717,7 @@ func (s *Store) throttleSnapshot(
 			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
 				fn()
 			}
+			log.Event(ctx, "acquired spot in the snapshot semaphore")
 		case <-queueCtx.Done():
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
@@ -879,8 +1014,9 @@ func (s *Store) receiveSnapshot(
 			s.metrics.RangeSnapshotUnknownRcvdBytes.Inc(inc)
 		}
 	}
-
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "receive snapshot data")
 	inSnap, err := ss.Receive(ctx, stream, *header, recordBytesReceived)
+	sp.Finish() // Ensure that the tracing span is closed, even if ss.Receive errors
 	if err != nil {
 		return err
 	}
@@ -1107,6 +1243,7 @@ func snapshotRateLimit(
 func SendEmptySnapshot(
 	ctx context.Context,
 	st *cluster.Settings,
+	tracer *tracing.Tracer,
 	cc *grpc.ClientConn,
 	now hlc.Timestamp,
 	desc roachpb.RangeDescriptor,
@@ -1248,6 +1385,7 @@ func SendEmptySnapshot(
 	return sendSnapshot(
 		ctx,
 		st,
+		tracer,
 		stream,
 		noopStorePool{},
 		header,
@@ -1267,6 +1405,7 @@ func (n noopStorePool) Throttle(storepool.ThrottleReason, string, roachpb.StoreI
 func sendSnapshot(
 	ctx context.Context,
 	st *cluster.Settings,
+	tracer *tracing.Tracer,
 	stream outgoingSnapshotStream,
 	storePool SnapshotStorePool,
 	header kvserverpb.SnapshotRequest_Header,
@@ -1281,11 +1420,15 @@ func sendSnapshot(
 		// hooked up to anything.
 		recordBytesSent = func(inc int64) {}
 	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, tracer, "sending snapshot")
+	defer sp.Finish()
+
 	start := timeutil.Now()
 	to := header.RaftMessageRequest.ToReplica
 	if err := stream.Send(&kvserverpb.SnapshotRequest{Header: &header}); err != nil {
 		return err
 	}
+	log.Event(ctx, "sent SNAPSHOT_REQUEST message to server")
 	// Wait until we get a response from the server. The recipient may queue us
 	// (only a limited number of snapshots are allowed concurrently) or flat-out
 	// reject the snapshot. After the initial message exchange, we'll go and send
@@ -1301,7 +1444,8 @@ func sendSnapshot(
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
 			to, snap, resp.Message)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
-	// This is the response we're expecting. Continue with snapshot sending.
+		// This is the response we're expecting. Continue with snapshot sending.
+		log.Event(ctx, "received SnapshotResponse_ACCEPTED message from server")
 	default:
 		err := errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
 			to, snap, resp.Status)
@@ -1342,6 +1486,7 @@ func sendSnapshot(
 		log.Fatalf(ctx, "unknown snapshot strategy: %s", header.Strategy)
 	}
 
+	// Record timings for snapshot send if kv.trace.snapshot.enable_threshold is enabled
 	numBytesSent, err := ss.Send(ctx, stream, header, snap, recordBytesSent)
 	if err != nil {
 		return err

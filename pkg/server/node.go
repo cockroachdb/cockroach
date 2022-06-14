@@ -1344,6 +1344,7 @@ func (n *Node) ResetQuorum(
 	if err := kvserver.SendEmptySnapshot(
 		ctx,
 		n.storeCfg.Settings,
+		n.storeCfg.Tracer(),
 		conn,
 		n.storeCfg.Clock.Now(),
 		desc,

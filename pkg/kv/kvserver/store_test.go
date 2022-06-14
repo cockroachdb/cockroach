@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -2881,6 +2882,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	tr := tracing.NewTracer()
 
 	header := kvserverpb.SnapshotRequest_Header{
 		State: kvserverpb.ReplicaState{
@@ -2895,7 +2897,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		expectedErr := errors.New("")
 		c := fakeSnapshotStream{nil, expectedErr}
 		err := sendSnapshot(
-			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
+			ctx, st, tr, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
 		)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
@@ -2913,7 +2915,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(
-			ctx, st, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
+			ctx, st, tr, c, sp, header, nil /* snap */, newBatch, nil /* sent */, nil, /* recordBytesSent */
 		)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
