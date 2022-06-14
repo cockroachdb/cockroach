@@ -348,6 +348,17 @@ GROUP BY name;
 		}
 		// Next validate the uniqueness of both constraints and index expressions.
 		for constraintIdx, constraint := range constraints {
+			nonTupleConstraint := constraint[0]
+			if len(nonTupleConstraint) > 2 &&
+				nonTupleConstraint[0] == '(' &&
+				nonTupleConstraint[len(nonTupleConstraint)-1] == ')' {
+				nonTupleConstraint = nonTupleConstraint[1 : len(nonTupleConstraint)-1]
+			}
+			hasNullsQuery := strings.Builder{}
+			hasNullsQuery.WriteString("SELECT num_nulls(")
+			hasNullsQuery.WriteString(nonTupleConstraint)
+			hasNullsQuery.WriteString(") > 0 FROM (VALUES(")
+
 			tupleSelectQuery := strings.Builder{}
 			tupleSelectQuery.WriteString("SELECT array[(")
 			tupleSelectQuery.WriteString(constraint[0])
@@ -361,7 +372,7 @@ GROUP BY name;
 			}
 			collector := newExprColumnCollector(colInfo)
 			t.Walk(collector)
-			query.WriteString("SELECT EXISTS ( SELECT * FROM ")
+			query.WriteString("SELECT COUNT (*) > 0 FROM (SELECT * FROM ")
 			query.WriteString(tableName.String())
 			query.WriteString(" WHERE ")
 			query.WriteString(constraint[0])
@@ -370,30 +381,23 @@ GROUP BY name;
 			query.WriteString(constraint[0])
 			query.WriteString(" FROM (VALUES( ")
 			colIdx := 0
-			nullValueEncountered := false
 			for col := range collector.columnsObserved {
 				value := columnsToValues[col]
 				if colIdx != 0 {
 					query.WriteString(",")
 					columns.WriteString(",")
 					tupleSelectQuery.WriteString(",")
-				}
-				if value == "NULL" {
-					nullValueEncountered = true
-					break
+					hasNullsQuery.WriteString(",")
 				}
 				query.WriteString(value)
 				columns.WriteString(col)
+				hasNullsQuery.WriteString(value)
 				tupleSelectQuery.WriteString(value)
 				colIdx++
 			}
-			// Row is not comparable to others for unique constraints, since it has a
-			// NULL value.
-			// TODO (fqazi): In the future for check constraints we should evaluate
-			// things for them.
-			if nullValueEncountered {
-				continue
-			}
+			hasNullsQuery.WriteString(") ) AS T(")
+			hasNullsQuery.WriteString(columns.String())
+			hasNullsQuery.WriteString(")")
 			tupleSelectQuery.WriteString(") ) AS T(")
 			tupleSelectQuery.WriteString(columns.String())
 			tupleSelectQuery.WriteString(")")
@@ -404,24 +408,53 @@ GROUP BY name;
 			if err != nil {
 				return false, nil, err
 			}
-			exists, err := og.scanBool(ctx, evalTxn, query.String())
-			if err != nil {
+			// Detect if any null values exist.
+			handleEvalTxnError := func(err error) (bool, error) {
+				// No choice but to rollback, expression is malformed.
+				rollbackErr := evalTxn.Rollback(ctx)
+				if rollbackErr != nil {
+					return false, err
+				}
 				var pgErr *pgconn.PgError
 				if !errors.As(err, &pgErr) {
-					return false, nil, err
+					return false, err
 				}
 				// Only accept known error types for generated expressions.
 				if !isValidGenerationError(pgErr.Code) {
-					return false, nil, err
+					return false, err
 				}
 				generatedCodes = append(generatedCodes,
 					codesWithConditions{
 						{code: pgcode.MakeCode(pgErr.Code), condition: true},
 					}...,
 				)
+				return true, nil
+			}
+			hasNullValues, err := og.scanBool(ctx, evalTxn, hasNullsQuery.String())
+			if err != nil {
+				skipConstraint, err := handleEvalTxnError(err)
+				if err != nil {
+					return false, generatedCodes, err
+				}
+				if skipConstraint {
+					continue
+				}
+			}
+			// Skip if any null values exist in the expression
+			if hasNullValues {
 				continue
 			}
-			err = evalTxn.Rollback(ctx)
+			exists, err := og.scanBool(ctx, evalTxn, query.String())
+			if err != nil {
+				skipConstraint, err := handleEvalTxnError(err)
+				if err != nil {
+					return false, generatedCodes, err
+				}
+				if skipConstraint {
+					continue
+				}
+			}
+			err = evalTxn.Commit(ctx)
 			if err != nil {
 				return false, nil, err
 			}
@@ -1118,6 +1151,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	}
 	// If the parent and child are the same table, then any rows in an existing
 	// insert may satisfy the same constraint.
+	var parentAndChildSameQueryColumns []string
 	if parentAndChildAreSameTable {
 		colsInfo, err := og.getTableColumns(ctx, tx, childTableName, false)
 		if err != nil {
@@ -1145,20 +1179,20 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 					return false, err
 				}
 			}
-			matches, err := og.scanBool(ctx, tx,
-				fmt.Sprintf("SELECT %s = %s", parentValueInSameInsert, childValue))
-			if err != nil {
-				return false, err
-			}
-			if matches {
-				return false, err
-			}
+			parentAndChildSameQueryColumns = append(parentAndChildSameQueryColumns,
+				fmt.Sprintf("%s = %s", parentValueInSameInsert, childValue))
 		}
 	}
+	checkSharedParentChildRows := ""
+	if len(parentAndChildSameQueryColumns) > 0 {
+		checkSharedParentChildRows = fmt.Sprintf("true = ANY (ARRAY [%s]) OR",
+			strings.Join(parentAndChildSameQueryColumns, ","))
+	}
 	return og.scanBool(ctx, tx, fmt.Sprintf(`
-	    SELECT count(*) = 0 from %s.%s
+	    SELECT %s count(*) = 0 from %s.%s
 	    WHERE %s = (%s)
-	`, parentTableSchema, parentTableName, parentColumn, childValue))
+	`,
+		checkSharedParentChildRows, parentTableSchema, parentTableName, parentColumn, childValue))
 }
 
 func (og *operationGenerator) columnIsInDroppingIndex(
