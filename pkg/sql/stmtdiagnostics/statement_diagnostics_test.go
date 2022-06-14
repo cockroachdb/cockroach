@@ -39,8 +39,8 @@ import (
 func TestDiagnosticsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params := base.TestServerArgs{}
-	s, db, _ := serverutils.StartServer(t, params)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
@@ -72,6 +72,16 @@ func TestDiagnosticsRequest(t *testing.T) {
 		// diagnosticsID is NULL when the request hasn't been completed yet.
 		require.True(t, diagnosticsID.Valid == expectedCompleted)
 		return nil
+	}
+	setCollectUntilExpiration := func(v bool) {
+		_, err := db.Exec(
+			fmt.Sprintf("SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled = %t", v))
+		require.NoError(t, err)
+	}
+	setPollInterval := func(d time.Duration) {
+		_, err := db.Exec(
+			fmt.Sprintf("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '%s'", d))
+		require.NoError(t, err)
 	}
 
 	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
@@ -300,8 +310,127 @@ func TestDiagnosticsRequest(t *testing.T) {
 			if completed {
 				return nil
 			}
-			return errors.New("expected to capture stmt bundle")
+			return errors.New("expected to capture diagnostic bundle")
 		})
+	})
+
+	t.Run("sampling without latency threshold disallowed", func(t *testing.T) {
+		samplingProbability, expiresAfter := 0.5, time.Second
+		_, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
+			samplingProbability, 0 /* minExecutionLatency */, expiresAfter)
+		testutils.IsError(err, "empty min exec latency")
+	})
+
+	t.Run("continuous capture disabled without sampling probability", func(t *testing.T) {
+		// We validate that continuous captures is disabled when a sampling
+		// probability of 0.0 is used. We know that it's disabled given the
+		// diagnostic request is marked as completed despite us not getting to
+		// the expiration point +1h from now (we don't mark continuous captures
+		// as completed until they've expired).
+		samplingProbability, minExecutionLatency, expiresAfter := 0.0, time.Microsecond, time.Hour
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
+			samplingProbability, minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		setCollectUntilExpiration(true)
+		defer setCollectUntilExpiration(false)
+
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.Exec("SELECT pg_sleep(0.01)") // run the query
+			require.NoError(t, err)
+			completed, _ := isCompleted(reqID)
+			if completed {
+				return nil
+			}
+			return errors.New("expected request to have been completed")
+		})
+	})
+
+	t.Run("continuous capture disabled without expiration timestamp", func(t *testing.T) {
+		// We don't mark continuous captures as completed until they've expired,
+		// so we require an explicit expiration set. See previous test case for
+		// some commentary.
+		samplingProbability, minExecutionLatency, expiresAfter := 0.999, time.Microsecond, 0*time.Hour
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
+			samplingProbability, minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		setCollectUntilExpiration(true)
+		defer setCollectUntilExpiration(false)
+
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.Exec("SELECT pg_sleep(0.01)") // run the query
+			require.NoError(t, err)
+			completed, _ := isCompleted(reqID)
+			if completed {
+				return nil
+			}
+			return errors.New("expected request to have been completed")
+		})
+	})
+
+	t.Run("continuous capture", func(t *testing.T) {
+		samplingProbability, minExecutionLatency, expiresAfter := 0.9999, time.Microsecond, time.Hour
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)",
+			samplingProbability, minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		setCollectUntilExpiration(true)
+		defer setCollectUntilExpiration(false)
+
+		var firstDiagnosticID int64
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.Exec("SELECT pg_sleep(0.01)") // run the query
+			require.NoError(t, err)
+			completed, diagnosticID := isCompleted(reqID)
+			if !diagnosticID.Valid {
+				return errors.New("expected to capture diagnostic bundle")
+			}
+			require.False(t, completed) // should not be marked as completed
+			if firstDiagnosticID == 0 {
+				firstDiagnosticID = diagnosticID.Int64
+			}
+			if firstDiagnosticID == diagnosticID.Int64 {
+				return errors.New("waiting to capture second bundle")
+			}
+			return nil
+		})
+
+		require.NoError(t, registry.CancelRequest(ctx, reqID))
+	})
+
+	t.Run("continuous capture until expiration", func(t *testing.T) {
+		samplingProbability, minExecutionLatency, expiresAfter := 0.9999, time.Microsecond, 100*time.Millisecond
+		reqID, err := registry.InsertRequestInternal(
+			ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, expiresAfter,
+		)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		setCollectUntilExpiration(true)
+		defer setCollectUntilExpiration(false)
+
+		// Sleep until expiration (and then some), and then run the query.
+		time.Sleep(expiresAfter + 100*time.Millisecond)
+
+		setPollInterval(10 * time.Millisecond)
+		defer setPollInterval(stmtdiagnostics.PollingInterval.Default())
+
+		// We should not find the request and a subsequent executions should not
+		// capture anything.
+		testutils.SucceedsSoon(t, func() error {
+			if found := registry.TestingFindRequest(stmtdiagnostics.RequestID(reqID)); found {
+				return errors.New("expected expired request to no longer be tracked")
+			}
+			return nil
+		})
+
+		_, err = db.Exec("SELECT pg_sleep(0.01)") // run the query
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
 	})
 }
 
