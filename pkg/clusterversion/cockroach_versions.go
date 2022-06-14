@@ -381,6 +381,10 @@ const (
 	// Previously, SSTs containing these could error.
 	AddSSTableTombstones
 
+	// AlterSystemSQLInstancesAddLocality adds a locality column to the
+	// system.sql_instances table.
+	AlterSystemSQLInstancesAddLocality
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -672,6 +676,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AddSSTableTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
+	},
+	{
+		Key:     AlterSystemSQLInstancesAddLocality,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 
 	// *************************************************

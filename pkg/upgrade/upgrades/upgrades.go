@@ -137,6 +137,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		sampledStmtDiagReqsMigration,
 	),
+	upgrade.NewTenantUpgrade(
+		"add column locality to table system.sql_instances",
+		toCV(clusterversion.AlterSystemSQLInstancesAddLocality),
+		NoPrecondition,
+		alterSystemSQLInstancesAddLocality,
+	),
 }
 
 func init() {

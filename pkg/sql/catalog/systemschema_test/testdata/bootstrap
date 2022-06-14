@@ -346,6 +346,7 @@ CREATE TABLE public.sql_instances (
 	id INT8 NOT NULL,
 	addr STRING NULL,
 	session_id BYTES NULL,
+	locality STRING NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC)
 );
 CREATE TABLE public.span_configurations (
