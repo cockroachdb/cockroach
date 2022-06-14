@@ -15,6 +15,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog",

@@ -188,6 +188,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"UNIQUE WITHOUT INDEX constraint on the column",
 				)
 			}
+			if t.ColumnDef.PrimaryKey.IsPrimaryKey {
+				return pgerror.Newf(pgcode.InvalidColumnDefinition,
+					"multiple primary keys for table %q are not allowed", tn.Object())
+			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
 				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
