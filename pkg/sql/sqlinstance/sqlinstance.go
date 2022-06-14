@@ -19,16 +19,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/errors"
 )
 
-// InstanceInfo exposes information on a SQL instance such as ID, network address and
-// the associated sqlliveness.SessionID.
+// InstanceInfo exposes information on a SQL instance such as ID, network
+// address, the associated sqlliveness.SessionID, and the instance's locality.
 type InstanceInfo struct {
 	InstanceID   base.SQLInstanceID
 	InstanceAddr string
 	SessionID    sqlliveness.SessionID
+	Locality     roachpb.Locality
 }
 
 // AddressResolver exposes API for retrieving the instance address and all live instances for a tenant.
