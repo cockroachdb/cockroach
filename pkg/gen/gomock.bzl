@@ -6,7 +6,6 @@ GOMOCK_SRCS = [
   "//pkg/kv/kvclient/rangecache/rangecachemock:mocks_generated.go",
   "//pkg/kv/kvclient/rangefeed:mocks_generated_test.go",
   "//pkg/roachpb/roachpbmock:mocks_generated.go",
-  "//pkg/roachprod/prometheus:mocks_generated_test.go",
   "//pkg/security/certmgr:mocks_generated_test.go",
   "//pkg/sql/schemachanger/scexec:mocks_generated_test.go",
   "//pkg/util/log:mocks_generated_test.go",
