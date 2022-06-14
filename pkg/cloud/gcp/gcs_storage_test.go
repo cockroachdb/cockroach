@@ -48,6 +48,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		if credentials == "" {
 			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
 		}
+		fmt.Println("test_debug: json=", credentials)
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
 			bucket,
