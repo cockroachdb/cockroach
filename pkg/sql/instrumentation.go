@@ -374,7 +374,7 @@ func (ih *instrumentationHelper) Finish(
 			bundle = buildStatementBundle(
 				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
 			)
-			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
+			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest)
 			ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID, ih.diagRequest)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}

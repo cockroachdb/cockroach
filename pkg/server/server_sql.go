@@ -993,10 +993,16 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	*cfg.collectionFactory = *collectionFactory
 	cfg.internalExecutorFactory = ieFactory
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
+
+	var stmtDiagnosticsRegistryKnobs *stmtdiagnostics.TestingKnobs
+	if stmtKnobs := cfg.TestingKnobs.StmtDiagnosticsRegistryKnobs; stmtKnobs != nil {
+		stmtDiagnosticsRegistryKnobs = stmtKnobs.(*stmtdiagnostics.TestingKnobs)
+	}
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
 		cfg.db,
 		cfg.Settings,
+		stmtDiagnosticsRegistryKnobs,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
