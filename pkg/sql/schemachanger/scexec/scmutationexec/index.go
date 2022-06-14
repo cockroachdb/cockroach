@@ -217,6 +217,7 @@ func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 		return errors.AssertionFailedf("index being dropped (%d) does not match existing primary index (%d).", op.IndexID, tbl.PrimaryIndex.ID)
 	}
 	desc := tbl.GetPrimaryIndex().IndexDescDeepCopy()
+	tbl.PrimaryIndex = descpb.IndexDescriptor{}
 	return enqueueDropIndexMutation(tbl, &desc)
 }
 

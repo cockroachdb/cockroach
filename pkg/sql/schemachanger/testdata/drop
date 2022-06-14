@@ -376,7 +376,6 @@ upsert descriptor #108
   +              oid: 20
   +              width: 64
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -408,7 +407,6 @@ upsert descriptor #108
   +              family: StringFamily
   +              oid: 25
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -441,7 +439,6 @@ upsert descriptor #108
   +              family: IntFamily
   +              oid: 20
   +              width: 64
-  +          isRelationBeingDropped: true
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -485,7 +482,6 @@ upsert descriptor #108
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -519,7 +515,6 @@ upsert descriptor #108
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -725,7 +720,6 @@ upsert descriptor #108
   -              oid: 20
   -              width: 64
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -757,7 +751,6 @@ upsert descriptor #108
   -              family: StringFamily
   -              oid: 25
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -790,7 +783,6 @@ upsert descriptor #108
   -              family: IntFamily
   -              oid: 20
   -              width: 64
-  -          isRelationBeingDropped: true
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -834,7 +826,6 @@ upsert descriptor #108
   -              family: DecimalFamily
   -              oid: 1700
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -868,7 +859,6 @@ upsert descriptor #108
   -              family: OidFamily
   -              oid: 26
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -2507,7 +2497,6 @@ upsert descriptor #116
   +              family: IntFamily
   +              oid: 20
   +              width: 64
-  +          isRelationBeingDropped: true
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2541,7 +2530,6 @@ upsert descriptor #116
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2574,7 +2562,6 @@ upsert descriptor #116
   +              oid: 20
   +              width: 64
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2620,7 +2607,6 @@ upsert descriptor #116
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2654,7 +2640,6 @@ upsert descriptor #116
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 116
   +      metadata:
   +        sourceElementId: 7
@@ -2849,7 +2834,6 @@ upsert descriptor #117
   +              family: IntFamily
   +              oid: 20
   +              width: 64
-  +          isRelationBeingDropped: true
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2883,7 +2867,6 @@ upsert descriptor #117
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2916,7 +2899,6 @@ upsert descriptor #117
   +              oid: 20
   +              width: 64
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2962,7 +2944,6 @@ upsert descriptor #117
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -2996,7 +2977,6 @@ upsert descriptor #117
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 117
   +      metadata:
   +        sourceElementId: 3
@@ -3189,7 +3169,6 @@ upsert descriptor #118
   +              family: IntFamily
   +              oid: 20
   +              width: 64
-  +          isRelationBeingDropped: true
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -3221,7 +3200,6 @@ upsert descriptor #118
   +            type:
   +              family: TimestampTZFamily
   +              oid: 1184
-  +          isRelationBeingDropped: true
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -3275,7 +3253,6 @@ upsert descriptor #118
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -3309,7 +3286,6 @@ upsert descriptor #118
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 118
   +      metadata:
   +        sourceElementId: 3
@@ -3489,7 +3465,6 @@ upsert descriptor #119
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 119
   +      metadata:
   +        sourceElementId: 9
@@ -3523,7 +3498,6 @@ upsert descriptor #119
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 119
   +      metadata:
   +        sourceElementId: 9
@@ -3557,7 +3531,6 @@ upsert descriptor #119
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 119
   +      metadata:
   +        sourceElementId: 9
@@ -3707,7 +3680,6 @@ upsert descriptor #120
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3741,7 +3713,6 @@ upsert descriptor #120
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3775,7 +3746,6 @@ upsert descriptor #120
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3809,7 +3779,6 @@ upsert descriptor #120
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 120
   +      metadata:
   +        sourceElementId: 10
@@ -3960,7 +3929,6 @@ upsert descriptor #121
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -3994,7 +3962,6 @@ upsert descriptor #121
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -4028,7 +3995,6 @@ upsert descriptor #121
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -4062,7 +4028,6 @@ upsert descriptor #121
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 121
   +      metadata:
   +        sourceElementId: 11
@@ -4212,7 +4177,6 @@ upsert descriptor #122
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -4246,7 +4210,6 @@ upsert descriptor #122
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -4280,7 +4243,6 @@ upsert descriptor #122
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -4314,7 +4276,6 @@ upsert descriptor #122
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 122
   +      metadata:
   +        sourceElementId: 11
@@ -4682,7 +4643,6 @@ upsert descriptor #125
   +              family: StringFamily
   +              oid: 25
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4716,7 +4676,6 @@ upsert descriptor #125
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4750,7 +4709,6 @@ upsert descriptor #125
   +              visibleType: 7
   +              width: 256
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4784,7 +4742,6 @@ upsert descriptor #125
   +              family: DecimalFamily
   +              oid: 1700
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -4818,7 +4775,6 @@ upsert descriptor #125
   +              family: OidFamily
   +              oid: 26
   +          isNullable: true
-  +          isRelationBeingDropped: true
   +          tableId: 125
   +      metadata:
   +        sourceElementId: 13
@@ -5184,7 +5140,6 @@ upsert descriptor #116
   -              family: IntFamily
   -              oid: 20
   -              width: 64
-  -          isRelationBeingDropped: true
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -5218,7 +5173,6 @@ upsert descriptor #116
   -              visibleType: 7
   -              width: 256
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -5251,7 +5205,6 @@ upsert descriptor #116
   -              oid: 20
   -              width: 64
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -5297,7 +5250,6 @@ upsert descriptor #116
   -              family: DecimalFamily
   -              oid: 1700
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -5331,7 +5283,6 @@ upsert descriptor #116
   -              family: OidFamily
   -              oid: 26
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 116
   -      metadata:
   -        sourceElementId: 7
@@ -5530,7 +5481,6 @@ upsert descriptor #117
   -              family: IntFamily
   -              oid: 20
   -              width: 64
-  -          isRelationBeingDropped: true
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5564,7 +5514,6 @@ upsert descriptor #117
   -              visibleType: 7
   -              width: 256
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5597,7 +5546,6 @@ upsert descriptor #117
   -              oid: 20
   -              width: 64
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5643,7 +5591,6 @@ upsert descriptor #117
   -              family: DecimalFamily
   -              oid: 1700
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5677,7 +5624,6 @@ upsert descriptor #117
   -              family: OidFamily
   -              oid: 26
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 117
   -      metadata:
   -        sourceElementId: 3
@@ -5874,7 +5820,6 @@ upsert descriptor #118
   -              family: IntFamily
   -              oid: 20
   -              width: 64
-  -          isRelationBeingDropped: true
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
@@ -5906,7 +5851,6 @@ upsert descriptor #118
   -            type:
   -              family: TimestampTZFamily
   -              oid: 1184
-  -          isRelationBeingDropped: true
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
@@ -5960,7 +5904,6 @@ upsert descriptor #118
   -              family: DecimalFamily
   -              oid: 1700
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3
@@ -5994,7 +5937,6 @@ upsert descriptor #118
   -              family: OidFamily
   -              oid: 26
   -          isNullable: true
-  -          isRelationBeingDropped: true
   -          tableId: 118
   -      metadata:
   -        sourceElementId: 3

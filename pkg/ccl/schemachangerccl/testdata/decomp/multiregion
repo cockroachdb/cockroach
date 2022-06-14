@@ -182,7 +182,6 @@ ElementState:
         width: 64
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
   Status: PUBLIC
@@ -209,7 +208,6 @@ ElementState:
         width: 64
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
   Status: PUBLIC
@@ -236,7 +234,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
   Status: PUBLIC
@@ -263,7 +260,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
   Status: PUBLIC
@@ -428,7 +424,6 @@ ElementState:
         width: 64
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
   Status: PUBLIC
@@ -455,7 +450,6 @@ ElementState:
         width: 64
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
   Status: PUBLIC
@@ -482,7 +476,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
   Status: PUBLIC
@@ -509,7 +502,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
   Status: PUBLIC
@@ -694,7 +686,6 @@ ElementState:
         width: 64
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -721,7 +712,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -751,7 +741,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -778,7 +767,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC
@@ -805,7 +793,6 @@ ElementState:
         width: 0
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
   Status: PUBLIC

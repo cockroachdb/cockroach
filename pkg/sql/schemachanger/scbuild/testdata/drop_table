@@ -188,7 +188,6 @@ DROP TABLE defaultdb.shipments CASCADE;
       type:
         family: UuidFamily
         oid: 2950
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   details:
@@ -198,7 +197,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: StringFamily
         oid: 25
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   details:
@@ -208,7 +206,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: StringFamily
         oid: 25
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -218,7 +215,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -228,7 +224,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC]
   details:
@@ -239,7 +234,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         oid: 20
         width: 64
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC]
   details:
@@ -250,7 +244,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         oid: 20
         width: 64
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6}, ABSENT], PUBLIC]
   details:
@@ -270,7 +263,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         udtMetadata:
           arrayTypeOid: 100108
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 109
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -281,7 +273,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         oid: 20
         width: 64
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   details:
@@ -291,7 +282,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: StringFamily
         oid: 25
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -301,7 +291,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -311,7 +300,6 @@ DROP TABLE defaultdb.shipments CASCADE;
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is important}, ABSENT], PUBLIC]
   details:

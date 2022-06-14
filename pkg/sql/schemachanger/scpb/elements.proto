@@ -163,12 +163,7 @@ message ColumnType {
   Expression compute_expr = 6;
   bool is_virtual = 7;
 
-  // Spec fields.
-  // These fields only make sense if the element is for PUBLIC -> ABSENT.
-  //
-  // TODO(postamar): remove this when we can have more expressive rule defs
-  //  See the dep rules for how this is used, and why it's not ideal.
-  bool is_relation_being_dropped = 10;
+  reserved 10;
 }
 
 message ColumnFamily {
@@ -234,12 +229,7 @@ message SecondaryIndexPartial {
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // Spec fields.
-  // These fields only make sense if the element is for PUBLIC -> ABSENT.
-  //
-  // TODO(postamar): remove this when we can have more expressive rule defs
-  //  See the dep rules for how this is used, and why it's not ideal.
-  bool is_relation_being_dropped = 10;
+  reserved 10;
 }
 
 // SchemaParent models the schema to parent database relationship.

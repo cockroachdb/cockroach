@@ -164,25 +164,25 @@ func init() {
 	)
 
 	registerDepRule(
-		"dependents removed after index no longer public",
+		"dependents removed right after index no longer public",
 		scgraph.SameStagePrecedence,
-		"child", "index",
+		"index", "child",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.el.Type(
+					(*scpb.PrimaryIndex)(nil),
+					(*scpb.SecondaryIndex)(nil),
+				),
+				to.el.Type(
 					(*scpb.IndexName)(nil),
 					(*scpb.IndexPartitioning)(nil),
 					(*scpb.SecondaryIndexPartial)(nil),
 					(*scpb.IndexComment)(nil),
 				),
-				to.el.Type(
-					(*scpb.PrimaryIndex)(nil),
-					(*scpb.SecondaryIndex)(nil),
-				),
 				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
 				toAbsent(from.target, to.target),
-				currentStatus(from.node, scpb.Status_ABSENT),
-				currentStatus(to.node, scpb.Status_VALIDATED),
+				currentStatus(from.node, scpb.Status_VALIDATED),
+				currentStatus(to.node, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -382,68 +382,6 @@ func init() {
 		},
 	)
 
-}
-
-// Special cases for removal of column types and index partial predicates,
-// which hold references to other descriptors.
-//
-// When the whole table is dropped, we can (and in fact, should) remove these
-// right away in-txn. However, when only the column (or the index) is
-// dropped but the table remains, we need to wait until the column is
-// DELETE_ONLY, which happens post-commit because of the need to uphold the
-// 2-version invariant.
-//
-// We distinguish the two cases using a flag in ColumnType and
-// SecondaryIndexPartial which is set iff the parent relation is dropped. This
-// is a dirty hack, ideally we should be able to express the _absence_ of a
-// target as a query clause.
-//
-// Note that DEFAULT and ON UPDATE expressions are column-dependent elements
-// which also hold references to other descriptors. The rule prior to this one
-// ensures that they transition to ABSENT before scpb.ColumnType does.
-//
-// TODO(postamar): express this rule in a saner way
-func init() {
-
-	registerDepRule(
-		"column type removed right before column when not dropping relation",
-		scgraph.SameStagePrecedence,
-		"column-type", "column",
-		func(from, to nodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.el.Type((*scpb.ColumnType)(nil)),
-				to.el.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from.el, to.el, "table-id", "col-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
-				rel.Filter("columnTypeIsNotBeingDropped", from.el)(func(
-					ct *scpb.ColumnType,
-				) bool {
-					return !ct.IsRelationBeingDropped
-				}),
-			}
-		},
-	)
-
-	registerDepRule(
-		"partial predicate removed right before secondary index when not dropping relation",
-		scgraph.SameStagePrecedence,
-		"partial-predicate", "index",
-		func(from, to nodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.el.Type((*scpb.SecondaryIndexPartial)(nil)),
-				to.el.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToAbsent),
-				currentStatusEq(from.node, to.node, scpb.Status_ABSENT),
-				rel.Filter("secondaryIndexPartialIsNotBeingDropped", from.el)(func(
-					ip *scpb.SecondaryIndexPartial,
-				) bool {
-					return !ip.IsRelationBeingDropped
-				}),
-			}
-		},
-	)
 }
 
 // These rules ensure that columns and indexes containing these columns

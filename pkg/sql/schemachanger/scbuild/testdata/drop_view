@@ -50,7 +50,6 @@ DROP VIEW defaultdb.v1
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 105
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -60,7 +59,6 @@ DROP VIEW defaultdb.v1
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 105
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -70,7 +68,6 @@ DROP VIEW defaultdb.v1
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 105
 - [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
@@ -343,7 +340,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 105
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -353,7 +349,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 105
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -363,7 +358,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 105
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -375,7 +369,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 106
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   details:
@@ -387,7 +380,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 106
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -397,7 +389,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 106
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -407,7 +398,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 106
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -419,7 +409,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 107
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   details:
@@ -431,7 +420,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 107
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -441,7 +429,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 107
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -451,7 +438,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 107
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -463,7 +449,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 108
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   details:
@@ -475,7 +460,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 108
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -485,7 +469,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 108
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -495,7 +478,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 108
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
   details:
@@ -505,7 +487,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: StringFamily
         oid: 25
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   details:
@@ -517,7 +498,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   details:
@@ -529,7 +509,6 @@ DROP VIEW defaultdb.v1 CASCADE
         visibleType: 7
         width: 256
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   details:
@@ -539,7 +518,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: OidFamily
         oid: 26
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
   details:
@@ -549,7 +527,6 @@ DROP VIEW defaultdb.v1 CASCADE
         family: DecimalFamily
         oid: 1700
     isNullable: true
-    isRelationBeingDropped: true
     tableId: 111
 - [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
