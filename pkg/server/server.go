@@ -464,7 +464,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper,
 	)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
