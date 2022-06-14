@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"runtime"
 	"sort"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4111,4 +4113,225 @@ func ComputeStatsForRange(
 
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
+}
+
+// MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
+// interval (StartTS, EndTS] as a Pebble SST. Deletions are included if all
+// revisions are requested or if the StartTS is non-zero. This function looks at
+// MVCC versions and intents, and returns an error if an intent is found.
+// MVCCExportOptions determine ranges as well as additional export options, see
+// struct definition for details.
+//
+// Data is written to dest as it is collected. If an error is returned then
+// dest contents are undefined.
+//
+// Returns an export summary and a resume key that allows resuming the export if
+// it reached a limit.
+func MVCCExportToSST(
+	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, MVCCKey, error) {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "MVCCExportToSST")
+	defer span.Finish()
+	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
+	defer sstWriter.Close()
+
+	var rows RowCounter
+	iter := NewMVCCIncrementalIterator(
+		reader,
+		MVCCIncrementalIterOptions{
+			EndKey:       opts.EndKey,
+			StartTime:    opts.StartTS,
+			EndTime:      opts.EndTS,
+			IntentPolicy: MVCCIncrementalIterIntentPolicyAggregate,
+		})
+	defer iter.Close()
+	var curKey roachpb.Key // only used if exportAllRevisions
+	var resumeKey roachpb.Key
+	var resumeTS hlc.Timestamp
+	paginated := opts.TargetSize > 0
+	trackKeyBoundary := paginated || opts.ResourceLimiter != nil
+	firstIteration := true
+	for iter.SeekGE(opts.StartKey); ; {
+		ok, err := iter.Valid()
+		if err != nil {
+			return roachpb.BulkOpSummary{}, MVCCKey{}, err
+		}
+		if !ok {
+			break
+		}
+		unsafeKey := iter.UnsafeKey()
+		if unsafeKey.Key.Compare(opts.EndKey) >= 0 {
+			break
+		}
+
+		if iter.NumCollectedIntents() > 0 {
+			break
+		}
+
+		isNewKey := !opts.ExportAllRevisions || !unsafeKey.Key.Equal(curKey)
+		if trackKeyBoundary && opts.ExportAllRevisions && isNewKey {
+			curKey = append(curKey[:0], unsafeKey.Key...)
+		}
+
+		if opts.ResourceLimiter != nil {
+			// Don't check resources on first iteration to ensure we can make some progress regardless
+			// of starvation. Otherwise operations could spin indefinitely.
+			if firstIteration {
+				firstIteration = false
+			} else {
+				// In happy day case we want to only stop at key boundaries as it allows callers to use
+				// produced sst's directly. But if we can't find key boundary within reasonable number of
+				// iterations we would split mid key.
+				// To achieve that we use soft and hard thresholds in limiter. Once soft limit is reached
+				// we would start searching for key boundary and return as soon as it is reached. If we
+				// can't find it before hard limit is reached and caller requested mid key stop we would
+				// immediately return.
+				limit := opts.ResourceLimiter.IsExhausted()
+				// We can stop at key once any threshold is reached or force stop at hard limit if midkey
+				// split is allowed.
+				if limit >= ResourceLimitReachedSoft && isNewKey || limit == ResourceLimitReachedHard && opts.StopMidKey {
+					// Reached iteration limit, stop with resume span
+					resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
+					if !isNewKey {
+						resumeTS = unsafeKey.Timestamp
+					}
+					break
+				}
+			}
+		}
+
+		unsafeValue := iter.UnsafeValue()
+		skip := false
+		if unsafeKey.IsValue() {
+			mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
+			if !ok && err == nil {
+				mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
+			}
+			if err != nil {
+				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding mvcc value %s", unsafeKey)
+			}
+
+			// Export only the inner roachpb.Value, not the MVCCValue header.
+			unsafeValue = mvccValue.Value.RawBytes
+
+			// Skip tombstone records when start time is zero (non-incremental)
+			// and we are not exporting all versions.
+			skipTombstones := !opts.ExportAllRevisions && opts.StartTS.IsEmpty()
+			skip = skipTombstones && mvccValue.IsTombstone()
+		}
+
+		if !skip {
+			if err := rows.Count(unsafeKey.Key); err != nil {
+				return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "decoding %s", unsafeKey)
+			}
+			curSize := rows.BulkOpSummary.DataSize
+			reachedTargetSize := curSize > 0 && uint64(curSize) >= opts.TargetSize
+			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
+			reachedMaxSize := opts.MaxSize > 0 && newSize > int64(opts.MaxSize)
+			// When paginating we stop writing in two cases:
+			// - target size is reached and we wrote all versions of a key
+			// - maximum size reached and we are allowed to stop mid key
+			if paginated && (isNewKey && reachedTargetSize || opts.StopMidKey && reachedMaxSize) {
+				// Allocate the right size for resumeKey rather than using curKey.
+				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
+				if opts.StopMidKey && !isNewKey {
+					resumeTS = unsafeKey.Timestamp
+				}
+				break
+			}
+			if reachedMaxSize {
+				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: newSize, maxSize: opts.MaxSize}
+			}
+			if unsafeKey.Timestamp.IsEmpty() {
+				// This should never be an intent since the incremental iterator returns
+				// an error when encountering intents.
+				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+				}
+			} else {
+				if err := sstWriter.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
+					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
+				}
+			}
+			rows.BulkOpSummary.DataSize = newSize
+		}
+
+		if opts.ExportAllRevisions {
+			iter.Next()
+		} else {
+			iter.NextKey()
+		}
+	}
+
+	// First check if we encountered an intent while iterating the data.
+	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
+	// to collect all matching intents before returning them in an error to the caller.
+	if iter.NumCollectedIntents() > 0 {
+		for uint64(iter.NumCollectedIntents()) < opts.MaxIntents {
+			iter.NextKey()
+			// If we encounter other errors during intent collection, we return our original write intent failure.
+			// We would find this new error again upon retry.
+			ok, _ := iter.Valid()
+			if !ok {
+				break
+			}
+		}
+		err := iter.TryGetIntentError()
+		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+	}
+
+	if rows.BulkOpSummary.DataSize == 0 {
+		// If no records were added to the sstable, skip completing it and return a
+		// nil slice – the export code will discard it anyway (based on 0 DataSize).
+		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
+	}
+
+	if err := sstWriter.Finish(); err != nil {
+		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+	}
+
+	return rows.BulkOpSummary, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
+}
+
+// MVCCExportOptions contains options for MVCCExportToSST.
+type MVCCExportOptions struct {
+	// StartKey determines start of the exported interval (inclusive).
+	// StartKey.Timestamp is either empty which represent starting from a potential
+	// intent and continuing to versions or non-empty, which represents starting
+	// from a particular version.
+	StartKey MVCCKey
+	// EndKey determines the end of exported interval (exclusive).
+	EndKey roachpb.Key
+	// StartTS and EndTS determine exported time range as (startTS, endTS].
+	StartTS, EndTS hlc.Timestamp
+	// If ExportAllRevisions is true export every revision of a key for the interval,
+	// otherwise only the latest value within the interval is exported.
+	ExportAllRevisions bool
+	// If TargetSize is positive, it indicates that the export should produce SSTs
+	// which are roughly target size. Specifically, it will return an SST such that
+	// the last key is responsible for meeting or exceeding the targetSize. If the
+	// resumeKey is non-nil then the data size of the returned sst will be greater
+	// than or equal to the targetSize.
+	TargetSize uint64
+	// If MaxSize is positive, it is an absolute maximum on byte size for the
+	// returned sst. If it is the case that the versions of the last key will lead
+	// to an SST that exceeds maxSize, an error will be returned. This parameter
+	// exists to prevent creating SSTs which are too large to be used.
+	MaxSize uint64
+	// MaxIntents specifies the number of intents to collect and return in a
+	// WriteIntentError. The caller will likely resolve the returned intents and
+	// retry the call, which would be quadratic, so this significantly reduces the
+	// overall number of scans. 0 disables batching and returns the first intent,
+	// pass math.MaxUint64 to collect all.
+	MaxIntents uint64
+	// If StopMidKey is false, once function reaches targetSize it would continue
+	// adding all versions until it reaches next key or end of range. If true, it
+	// would stop immediately when targetSize is reached and return the next versions
+	// timestamp in resumeTs so that subsequent operation can pass it to firstKeyTs.
+	StopMidKey bool
+	// ResourceLimiter limits how long iterator could run until it exhausts allocated
+	// resources. Export queries limiter in its iteration loop to break out once
+	// resources are exhausted.
+	ResourceLimiter ResourceLimiter
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -182,7 +183,8 @@ func assertExportedErrs(
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
-	_, _, _, err := e.ExportMVCCToSst(context.Background(), ExportOptions{
+	st := cluster.MakeTestingClusterSettings()
+	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: startKey},
 		EndKey:             endKey,
 		StartTS:            startTime,
@@ -219,7 +221,8 @@ func assertExportedKVs(
 ) {
 	const big = 1 << 30
 	sstFile := &MemFile{}
-	_, _, _, err := e.ExportMVCCToSst(context.Background(), ExportOptions{
+	st := cluster.MakeTestingClusterSettings()
+	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: startKey},
 		EndKey:             endKey,
 		StartTS:            startTime,
