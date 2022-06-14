@@ -636,8 +636,9 @@ CREATE TABLE system.sql_instances (
     id           INT NOT NULL,
     addr         STRING,
     session_id   BYTES,
+    locality     STRING,
     CONSTRAINT "primary" PRIMARY KEY (id),
-    FAMILY "primary" (id, addr, session_id)
+    FAMILY "primary" (id, addr, session_id, locality)
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -2269,7 +2270,7 @@ var (
 
 	// SQLInstancesTable is the descriptor for the sqlinstances table
 	// It stores information about all the SQL instances for a tenant
-	// and their associated session and address information.
+	// and their associated session, locality, and address information.
 	SQLInstancesTable = registerSystemTable(
 		SQLInstancesTableSchema,
 		systemTable(
@@ -2279,13 +2280,14 @@ var (
 				{Name: "id", ID: 1, Type: types.Int, Nullable: false},
 				{Name: "addr", ID: 2, Type: types.String, Nullable: true},
 				{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+				{Name: "locality", ID: 4, Type: types.String, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:            "primary",
 					ID:              0,
-					ColumnNames:     []string{"id", "addr", "session_id"},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					ColumnNames:     []string{"id", "addr", "session_id", "locality"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
 					DefaultColumnID: 0,
 				},
 			},

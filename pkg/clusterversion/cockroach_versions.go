@@ -373,6 +373,10 @@ const (
 	// RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
 	RemoveGrantPrivilege
 
+	// AlterSystemSqlInstancesAddLocality adds a locality column to the
+	// system.sql_instances table.
+	AlterSystemSqlInstancesAddLocality
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -653,7 +657,10 @@ var versionsSingleton = keyedVersions{
 		Key:     RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
-
+	{
+		Key:     AlterSystemSqlInstancesAddLocality,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
