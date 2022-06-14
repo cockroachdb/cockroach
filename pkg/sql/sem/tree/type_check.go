@@ -600,34 +600,57 @@ func (expr *CastExpr) TypeCheck(
 func (expr *IndirectionExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	for i, t := range expr.Indirection {
-		if t.Slice {
-			return nil, unimplemented.NewWithIssuef(32551, "ARRAY slicing in %s", expr)
-		}
-		if i > 0 {
-			return nil, unimplemented.NewWithIssueDetailf(32552, "ind", "multidimensional indexing: %s", expr)
-		}
-
-		beginExpr, err := typeCheckAndRequire(ctx, semaCtx, t.Begin, types.Int, "ARRAY subscript")
-		if err != nil {
-			return nil, err
-		}
-		t.Begin = beginExpr
-	}
-
 	subExpr, err := expr.Expr.TypeCheck(ctx, semaCtx, types.MakeArray(desired))
 	if err != nil {
 		return nil, err
 	}
 	typ := subExpr.ResolvedType()
-	if typ.Family() != types.ArrayFamily {
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array", typ)
-	}
 	expr.Expr = subExpr
-	expr.typ = typ.ArrayContents()
 
-	if OnTypeCheckArraySubscript != nil {
-		OnTypeCheckArraySubscript()
+	switch typ.Family() {
+	case types.ArrayFamily:
+		expr.typ = typ.ArrayContents()
+		for i, t := range expr.Indirection {
+			if t.Slice {
+				return nil, unimplemented.NewWithIssuef(32551, "ARRAY slicing in %s", expr)
+			}
+			if i > 0 {
+				return nil, unimplemented.NewWithIssueDetailf(32552, "ind", "multidimensional indexing: %s", expr)
+			}
+
+			beginExpr, err := typeCheckAndRequire(ctx, semaCtx, t.Begin, types.Int, "ARRAY subscript")
+			if err != nil {
+				return nil, err
+			}
+			t.Begin = beginExpr
+		}
+
+		if OnTypeCheckArraySubscript != nil {
+			OnTypeCheckArraySubscript()
+		}
+	case types.JsonFamily:
+		expr.typ = typ
+		for _, t := range expr.Indirection {
+			if t.Slice {
+				return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot reference a slice with JSON")
+			}
+			beginExpr, err := t.Begin.TypeCheck(ctx, semaCtx, types.Any)
+			if err != nil {
+				return nil, err
+			}
+			switch beginExpr.ResolvedType().Family() {
+			case types.IntFamily, types.StringFamily:
+			default:
+				return nil, pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"unexpected JSON reference type: %s",
+					beginExpr.ResolvedType().SQLString(),
+				)
+			}
+			t.Begin = beginExpr
+		}
+	default:
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array or json object", typ)
 	}
 	return expr, nil
 }

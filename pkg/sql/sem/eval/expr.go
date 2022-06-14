@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -275,20 +276,6 @@ func (e *evaluator) EvalIndexedVar(iv *tree.IndexedVar) (tree.Datum, error) {
 
 func (e *evaluator) EvalIndirectionExpr(expr *tree.IndirectionExpr) (tree.Datum, error) {
 	var subscriptIdx int
-	for i, t := range expr.Indirection {
-		if t.Slice || i > 0 {
-			return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
-		}
-
-		d, err := t.Begin.(tree.TypedExpr).Eval(e)
-		if err != nil {
-			return nil, err
-		}
-		if d == tree.DNull {
-			return d, nil
-		}
-		subscriptIdx = int(tree.MustBeDInt(d))
-	}
 
 	d, err := expr.Expr.(tree.TypedExpr).Eval(e)
 	if err != nil {
@@ -298,17 +285,74 @@ func (e *evaluator) EvalIndirectionExpr(expr *tree.IndirectionExpr) (tree.Datum,
 		return d, nil
 	}
 
-	// Index into the DArray, using 1-indexing.
-	arr := tree.MustBeDArray(d)
+	switch d.ResolvedType().Family() {
+	case types.ArrayFamily:
+		for i, t := range expr.Indirection {
+			if t.Slice || i > 0 {
+				return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+			}
 
-	// VECTOR types use 0-indexing.
-	if arr.FirstIndex() == 0 {
-		subscriptIdx++
+			d, err := t.Begin.(tree.TypedExpr).Eval(e)
+			if err != nil {
+				return nil, err
+			}
+			if d == tree.DNull {
+				return d, nil
+			}
+			subscriptIdx = int(tree.MustBeDInt(d))
+		}
+
+		// Index into the DArray, using 1-indexing.
+		arr := tree.MustBeDArray(d)
+
+		// VECTOR types use 0-indexing.
+		if arr.FirstIndex() == 0 {
+			subscriptIdx++
+		}
+		if subscriptIdx < 1 || subscriptIdx > arr.Len() {
+			return tree.DNull, nil
+		}
+		return arr.Array[subscriptIdx-1], nil
+	case types.JsonFamily:
+		j := tree.MustBeDJSON(d)
+
+		for _, t := range expr.Indirection {
+			if t.Slice {
+				return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+			}
+
+			d, err := t.Begin.(tree.TypedExpr).Eval(e)
+			if err != nil {
+				return nil, err
+			}
+			if d == tree.DNull {
+				return d, nil
+			}
+			switch d.ResolvedType().Family() {
+			case types.StringFamily:
+				ret, err := j.JSON.FetchValKeyOrIdx(string(tree.MustBeDString(d)))
+				if err != nil {
+					return nil, err
+				}
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDJSON(ret), nil
+			case types.IntFamily:
+				ret, err := j.JSON.FetchValIdx(int(tree.MustBeDInt(d)))
+				if err != nil {
+					return nil, err
+				}
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDJSON(ret), nil
+			default:
+				return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+			}
+		}
 	}
-	if subscriptIdx < 1 || subscriptIdx > arr.Len() {
-		return tree.DNull, nil
-	}
-	return arr.Array[subscriptIdx-1], nil
+	return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
 }
 
 func (e *evaluator) EvalDefaultVal(expr *tree.DefaultVal) (tree.Datum, error) {
