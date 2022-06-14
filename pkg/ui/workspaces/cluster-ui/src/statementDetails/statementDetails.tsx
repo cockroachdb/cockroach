@@ -603,6 +603,7 @@ export class StatementDetails extends React.Component<
         available until the statement is sampled.
       </div>
     );
+    const noSamples = statementSampled ? "" : " (no samples)";
 
     const db = databases ? (
       <Text>{databases}</Text>
@@ -781,7 +782,7 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
-                title="Contention"
+                title={`Contention${noSamples}`}
                 alignedData={contentionTimeseries}
                 uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}
