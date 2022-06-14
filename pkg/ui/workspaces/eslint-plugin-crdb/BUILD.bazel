@@ -18,7 +18,7 @@ ts_project(
 )
 
 js_library(
-    name = "eslint-rules",
+    name = "eslint-plugin-crdb",
     package_name = "@cockroachlabs/eslint-plugin-crdb",
     srcs = [
         "package.json",
