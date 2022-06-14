@@ -2391,6 +2391,7 @@ partition ::=
 
 single_set_clause ::=
 	column_name '=' a_expr
+	| column_name array_subscripts '=' a_expr
 
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr

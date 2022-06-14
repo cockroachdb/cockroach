@@ -272,7 +272,26 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 				}
 			}
 		} else {
-			addCol(set.Expr, mb.targetColList[n])
+			expr := set.Expr
+			arr := &tree.Array{}
+			if len(set.Subscripts) > 0 {
+				for _, t := range set.Subscripts {
+					if t.Slice {
+						panic(pgerror.Newf(pgcode.DatatypeMismatch, "cannot reference a slice with JSON"))
+					}
+					arr.Exprs = append(arr.Exprs, t.Begin)
+				}
+				expr = &tree.FuncExpr{
+					Func: tree.WrapFunction("json_set"),
+					Exprs: tree.Exprs{
+						&tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{string(set.Names[0])}},
+						arr,
+						expr,
+						tree.DBoolTrue,
+					},
+				}
+			}
+			addCol(expr, mb.targetColList[n])
 			n++
 		}
 	}

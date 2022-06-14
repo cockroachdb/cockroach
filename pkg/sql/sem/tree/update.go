@@ -75,9 +75,10 @@ func (node *UpdateExprs) Format(ctx *FmtCtx) {
 
 // UpdateExpr represents an update expression.
 type UpdateExpr struct {
-	Tuple bool
-	Names NameList
-	Expr  Expr
+	Tuple      bool
+	Names      NameList
+	Subscripts ArraySubscripts
+	Expr       Expr
 }
 
 // Format implements the NodeFormatter interface.
