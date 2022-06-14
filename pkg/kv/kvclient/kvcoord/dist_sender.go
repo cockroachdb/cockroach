@@ -1321,6 +1321,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		canParallelize = canParallelize && !isExpensive
 	}
 
+	// In several places that handle writes (kvserver.maybeStripInFlightWrites,
+	// storage.replayTransactionalWrite, possibly others) we rely on requests
+	// being in the original order, so the helper must preserve the order if the
+	// batch is not a read-only.
+	mustPreserveOrder := !ba.IsReadOnly()
+	truncationHelper, err := MakeBatchTruncationHelper(scanDir, ba.Requests, mustPreserveOrder)
+	if err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	// Iterate over the ranges that the batch touches. The iteration is done in
 	// key order - the order of requests in the batch is not relevant for the
 	// iteration. Each iteration sends for evaluation one sub-batch to one range.
@@ -1340,33 +1349,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		responseCh := make(chan response, 1)
 		responseChs = append(responseChs, responseCh)
 
-		// Determine next seek key, taking a potentially sparse batch into
-		// consideration.
-		var err error
-		nextRS := rs
-		if scanDir == Descending {
-			// In next iteration, query previous range.
-			// We use the StartKey of the current descriptor as opposed to the
-			// EndKey of the previous one since that doesn't have bugs when
-			// stale descriptors come into play.
-			seekKey, err = prev(ba.Requests, ri.Desc().StartKey)
-			nextRS.EndKey = seekKey
-		} else {
-			// In next iteration, query next range.
-			// It's important that we use the EndKey of the current descriptor
-			// as opposed to the StartKey of the next one: if the former is stale,
-			// it's possible that the next range has since merged the subsequent
-			// one, and unless both descriptors are stale, the next descriptor's
-			// StartKey would move us to the beginning of the current range,
-			// resulting in a duplicate scan.
-			seekKey, err = Next(ba.Requests, ri.Desc().EndKey)
-			nextRS.Key = seekKey
-		}
-		if err != nil {
-			responseCh <- response{pErr: roachpb.NewError(err)}
-			return
-		}
-
 		// Truncate the request to range descriptor.
 		curRangeRS, err := rs.Intersect(ri.Token().Desc())
 		if err != nil {
@@ -1375,7 +1357,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 		curRangeBatch := ba
 		var positions []int
-		curRangeBatch.Requests, positions, err = Truncate(ba.Requests, curRangeRS)
+		curRangeBatch.Requests, positions, seekKey, err = truncationHelper.Truncate(curRangeRS)
 		if len(positions) == 0 && err == nil {
 			// This shouldn't happen in the wild, but some tests exercise it.
 			err = errors.Newf("truncation resulted in empty batch on %s: %s", rs, ba)
@@ -1383,6 +1365,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		if err != nil {
 			responseCh <- response{pErr: roachpb.NewError(err)}
 			return
+		}
+		nextRS := rs
+		if scanDir == Ascending {
+			nextRS.Key = seekKey
+		} else {
+			nextRS.EndKey = seekKey
 		}
 
 		lastRange := !ri.NeedAnother(rs)
@@ -1451,13 +1439,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			}
 		}
 
-		// The iteration is complete if the iterator's current range
-		// encompasses the remaining span, OR if the next span has
-		// inverted. This can happen if this method is invoked
-		// re-entrantly due to ranges being split or merged. In that case
-		// the batch request has all the original requests but the span is
-		// a sub-span of the original, causing next() and prev() methods
-		// to potentially return values which invert the span.
+		// The iteration is complete if the iterator's current range encompasses
+		// the remaining span, OR if the next span has inverted. This can happen
+		// if this method is invoked re-entrantly due to ranges being split or
+		// merged. In that case the batch request has all the original requests
+		// but the span is a sub-span of the original, causing Truncate() to
+		// potentially return the next seek key which inverts the span.
 		if lastRange || !nextRS.Key.Less(nextRS.EndKey) {
 			return
 		}

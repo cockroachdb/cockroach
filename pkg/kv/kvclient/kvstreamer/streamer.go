@@ -450,6 +450,17 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			s.mu.Unlock()
 		}
 	}()
+	// TODO(yuzefovich): reuse truncation helpers between different Enqueue()
+	// calls.
+	// TODO(yuzefovich): introduce a fast path when all requests are contained
+	// within a single range.
+	// The streamer can process the responses in an arbitrary order, so we don't
+	// require the helper to preserve the order of requests.
+	const mustPreserveOrder = false
+	truncationHelper, err := kvcoord.MakeBatchTruncationHelper(scanDir, reqs, mustPreserveOrder)
+	if err != nil {
+		return err
+	}
 	var reqsKeysScratch []roachpb.Key
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Truncate the request span to the current range.
@@ -458,10 +469,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			return err
 		}
 		// Find all requests that touch the current range.
-		singleRangeReqs, positions, err := kvcoord.Truncate(reqs, singleRangeSpan)
+		var singleRangeReqs []roachpb.RequestUnion
+		var positions []int
+		singleRangeReqs, positions, seekKey, err = truncationHelper.Truncate(singleRangeSpan)
 		if err != nil {
 			return err
 		}
+		rs.Key = seekKey
 		var subRequestIdx []int32
 		if !s.hints.SingleRowLookup {
 			for i, pos := range positions {
@@ -527,22 +541,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		}
 
 		requestsToServe = append(requestsToServe, r)
-
-		// Determine next seek key, taking potentially sparse requests into
-		// consideration.
-		//
-		// In next iteration, query next range.
-		// It's important that we use the EndKey of the current descriptor
-		// as opposed to the StartKey of the next one: if the former is stale,
-		// it's possible that the next range has since merged the subsequent
-		// one, and unless both descriptors are stale, the next descriptor's
-		// StartKey would move us to the beginning of the current range,
-		// resulting in a duplicate scan.
-		seekKey, err = kvcoord.Next(reqs, ri.Desc().EndKey)
-		rs.Key = seekKey
-		if err != nil {
-			return err
-		}
 	}
 
 	if streamerLocked {
