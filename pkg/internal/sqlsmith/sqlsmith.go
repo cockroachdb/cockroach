@@ -101,6 +101,7 @@ type Smither struct {
 	unlikelyRandomNulls        bool
 	disableCrossJoins          bool
 	disableIndexHints          bool
+	lowProbWhereWithJoinTables bool
 	expressionDepth            int
 
 	bulkSrv     *httptest.Server
@@ -418,6 +419,13 @@ var DisableCrossJoins = simpleOption("disable cross joins", func(s *Smither) {
 // DisableIndexHints causes the Smither to disable generation of index hints.
 var DisableIndexHints = simpleOption("disable index hints", func(s *Smither) {
 	s.disableIndexHints = true
+})
+
+// LowProbabilityWhereClauseWithJoinTables causes the Smither to generate WHERE
+// clauses much less frequently in the presence of join tables. The default is
+// to generate WHERE clauses 50% of the time.
+var LowProbabilityWhereClauseWithJoinTables = simpleOption("low probability where clause with join tables", func(s *Smither) {
+	s.lowProbWhereWithJoinTables = true
 })
 
 // CompareMode causes the Smither to generate statements that have
