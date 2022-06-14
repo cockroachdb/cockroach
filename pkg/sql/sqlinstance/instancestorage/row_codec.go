@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -50,6 +51,7 @@ func (d *rowCodec) encodeRow(
 	instanceID base.SQLInstanceID,
 	addr string,
 	sessionID sqlliveness.SessionID,
+	locality roachpb.Locality,
 	codec keys.SQLCodec,
 	tableID descpb.ID,
 ) (kv kv.KeyValue, err error) {
@@ -63,6 +65,15 @@ func (d *rowCodec) encodeRow(
 	sessionDatum := tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
 	sessionColDiff := valueside.MakeColumnIDDelta(d.columns[1].GetID(), d.columns[2].GetID())
 	valueBuf, err = valueside.Encode(valueBuf, sessionColDiff, sessionDatum, []byte(nil))
+	if err != nil {
+		return kv, err
+	}
+	// Preserve the ordering of locality.Tiers, even though we convert it to json.
+	builder := json.NewObjectBuilder(1)
+	builder.Add("Tiers", json.FromString(locality.String()))
+	localityDatum := tree.NewDJSON(builder.Build())
+	localityColDiff := valueside.MakeColumnIDDelta(d.columns[2].GetID(), d.columns[3].GetID())
+	valueBuf, err = valueside.Encode(valueBuf, localityColDiff, localityDatum, []byte(nil))
 	if err != nil {
 		return kv, err
 	}
@@ -80,6 +91,7 @@ func (d *rowCodec) decodeRow(
 	instanceID base.SQLInstanceID,
 	addr string,
 	sessionID sqlliveness.SessionID,
+	locality roachpb.Locality,
 	timestamp hlc.Timestamp,
 	tombstone bool,
 	_ error,
@@ -91,26 +103,26 @@ func (d *rowCodec) decodeRow(
 		row := make([]rowenc.EncDatum, 1)
 		_, _, err := rowenc.DecodeIndexKey(d.codec, types, row, nil, kv.Key)
 		if err != nil {
-			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, false, errors.Wrap(err, "failed to decode key")
+			return base.SQLInstanceID(0), "", "", roachpb.Locality{}, hlc.Timestamp{}, false, errors.Wrap(err, "failed to decode key")
 		}
 		if err := row[0].EnsureDecoded(types[0], &alloc); err != nil {
-			return base.SQLInstanceID(0), "", "", hlc.Timestamp{}, false, err
+			return base.SQLInstanceID(0), "", "", roachpb.Locality{}, hlc.Timestamp{}, false, err
 		}
 		instanceID = base.SQLInstanceID(tree.MustBeDInt(row[0].Datum))
 	}
 	if !kv.Value.IsPresent() {
-		return instanceID, "", "", hlc.Timestamp{}, true, nil
+		return instanceID, "", "", roachpb.Locality{}, hlc.Timestamp{}, true, nil
 	}
 	timestamp = kv.Value.Timestamp
 	// The rest of the columns are stored as a family.
 	bytes, err := kv.Value.GetTuple()
 	if err != nil {
-		return instanceID, "", "", hlc.Timestamp{}, false, err
+		return instanceID, "", "", roachpb.Locality{}, hlc.Timestamp{}, false, err
 	}
 
 	datums, err := d.decoder.Decode(&alloc, bytes)
 	if err != nil {
-		return instanceID, "", "", hlc.Timestamp{}, false, err
+		return instanceID, "", "", roachpb.Locality{}, hlc.Timestamp{}, false, err
 	}
 
 	if addrVal := datums[1]; addrVal != tree.DNull {
@@ -119,8 +131,25 @@ func (d *rowCodec) decodeRow(
 	if sessionIDVal := datums[2]; sessionIDVal != tree.DNull {
 		sessionID = sqlliveness.SessionID(tree.MustBeDBytes(sessionIDVal))
 	}
+	locality = roachpb.Locality{}
+	if localityVal := datums[3]; localityVal != tree.DNull {
+		localityJ := tree.MustBeDJSON(localityVal)
+		v, err := localityJ.FetchValKey("Tiers")
+		if err != nil {
+			return instanceID, "", "", roachpb.Locality{}, hlc.Timestamp{}, false, err
+		}
+		if v != nil {
+			vStr, err := v.AsText()
+			if err != nil {
+				return instanceID, "", "", roachpb.Locality{}, hlc.Timestamp{}, false, err
+			}
+			if err := locality.Set(*vStr); err != nil {
+				return instanceID, "", "", roachpb.Locality{}, hlc.Timestamp{}, false, err
+			}
+		}
+	}
 
-	return instanceID, addr, sessionID, timestamp, false, nil
+	return instanceID, addr, sessionID, locality, timestamp, false, nil
 }
 
 func makeTablePrefix(codec keys.SQLCodec, tableID descpb.ID) roachpb.Key {
