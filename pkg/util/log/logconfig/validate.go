@@ -39,6 +39,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	bt, bf := true, false
 	zeroDuration := time.Duration(0)
 	zeroByteSize := ByteSize(0)
+	defaultBufferedStaleness := 5 * time.Second
 
 	baseCommonSinkConfig := CommonSinkConfig{
 		Filter:      logpb.Severity_INFO,
@@ -48,10 +49,6 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		Criticality: &bf,
 		// Buffering is configured to "NONE". This is different from a zero value
 		// which buffers infinitely.
-		//
-		// TODO(andrei,alexb): Enable buffering by default for some sinks once the
-		// shutdown of the bufferedSink is improved. Note that baseFileDefaults
-		// below does not inherit the buffering settings from here.
 		Buffering: CommonBufferSinkConfigWrapper{
 			CommonBufferSinkConfig: CommonBufferSinkConfig{
 				MaxStaleness:     &zeroDuration,
@@ -84,11 +81,25 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	baseFluentDefaults := FluentDefaults{
 		CommonSinkConfig: CommonSinkConfig{
 			Format: func() *string { s := DefaultFluentFormat; return &s }(),
+			Buffering: CommonBufferSinkConfigWrapper{
+				CommonBufferSinkConfig: CommonBufferSinkConfig{
+					MaxStaleness:     &defaultBufferedStaleness,
+					FlushTriggerSize: &zeroByteSize,
+					MaxBufferSize:    &zeroByteSize,
+				},
+			},
 		},
 	}
 	baseHTTPDefaults := HTTPDefaults{
 		CommonSinkConfig: CommonSinkConfig{
 			Format: func() *string { s := DefaultHTTPFormat; return &s }(),
+			Buffering: CommonBufferSinkConfigWrapper{
+				CommonBufferSinkConfig: CommonBufferSinkConfig{
+					MaxStaleness:     &defaultBufferedStaleness,
+					FlushTriggerSize: &zeroByteSize,
+					MaxBufferSize:    &zeroByteSize,
+				},
+			},
 		},
 		UnsafeTLS:         &bf,
 		DisableKeepAlives: &bf,

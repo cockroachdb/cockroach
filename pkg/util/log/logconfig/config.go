@@ -60,6 +60,11 @@ fluent-defaults:
     format: ` + DefaultFluentFormat + `
     redactable: true
     exit-on-error: false
+    buffering:
+      max-staleness: 5s
+http-defaults:
+    buffering:
+      max-staleness: 5s	
 sinks:
   stderr:
     filter: NONE

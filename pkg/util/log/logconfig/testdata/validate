@@ -99,7 +99,10 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
-      buffering: NONE
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 0B
+        max-buffer-size: 0B
   stderr:
     filter: NONE
 capture-stray-errors:
@@ -171,7 +174,10 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: true
-      buffering: NONE
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 0B
+        max-buffer-size: 0B
   stderr:
     filter: NONE
 capture-stray-errors:

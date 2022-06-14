@@ -79,6 +79,10 @@ sinks:
       redact: false
       redactable: true
       exit-on-error: false
+      buffering:
+        max-staleness: 5s
+        flush-trigger-size: 0B
+        max-buffer-size: 0B
   stderr:
     format: crdb-v2-tty
     redact: false
