@@ -131,6 +131,8 @@ CREATE TABLE system.tenants (
 
 // These system tables are not part of the system config.
 const (
+	// Note: the column "nodeID" refers to the SQL instance ID.
+	// It is named "nodeID" for historical reasons.
 	LeaseTableSchema = `
 CREATE TABLE system.lease (
   "descID"   INT8,
