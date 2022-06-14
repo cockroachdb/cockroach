@@ -16,53 +16,48 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/errors"
 )
 
 // TODO: HTTP requests should be bound to context via http.NewRequestWithContext
 // Proper logging context to be decided/designed.
-
-// httpSinkOptions is safe to use concurrently due to the delegation of
-// operations to `http.Client` which is safe to use concurrently.
-type httpSinkOptions struct {
-	unsafeTLS         bool
-	timeout           time.Duration
-	method            string
-	disableKeepAlives bool
-	contentType       string
-}
-
-func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
+func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 	transport, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return nil, errors.AssertionFailedf("http.DefaultTransport is not a http.Transport: %T", http.DefaultTransport)
 	}
 	transport = transport.Clone()
-	transport.DisableKeepAlives = opt.disableKeepAlives
+	transport.DisableKeepAlives = *c.DisableKeepAlives
 	hs := &httpSink{
 		client: http.Client{
 			Transport: transport,
-			Timeout:   opt.timeout,
+			Timeout:   *c.Timeout,
 		},
-		address:     url,
+		address:     *c.Address,
 		doRequest:   doPost,
 		contentType: "application/octet-stream",
 	}
 
-	if opt.unsafeTLS {
+	if *c.UnsafeTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	if opt.method == http.MethodGet {
+	if string(*c.Method) == http.MethodGet {
 		hs.doRequest = doGet
 	}
 
-	if opt.contentType != "" {
-		hs.contentType = opt.contentType
+	f, ok := formatters[*c.Format]
+	if !ok {
+		panic(errors.AssertionFailedf("unknown format: %q", *c.Format))
 	}
+	if f.contentType() != "" {
+		hs.contentType = f.contentType()
+	}
+
+	hs.config = &c
 
 	return hs, nil
 }
@@ -72,6 +67,7 @@ type httpSink struct {
 	address     string
 	contentType string
 	doRequest   func(sink *httpSink, logEntry []byte) (*http.Response, error)
+	config      *logconfig.HTTPSinkConfig
 }
 
 // output emits some formatted bytes to this sink.
