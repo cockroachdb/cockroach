@@ -449,8 +449,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		/* deterministic */ false,
 	)
 
+	// TODO(ryan.zhao): The inclusion of cfg.AmbientCtx.Tracer is temporary until
+	// #74291 is resolved
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx, st, cfg.AmbientCtx.Tracer, nodeDialer, grpcServer.Server, stopper,
 	)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)

@@ -13,11 +13,13 @@ package log
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
@@ -267,4 +269,26 @@ var _ = VErrEventfDepth // silence unused warning
 func HasSpanOrEvent(ctx context.Context) bool {
 	_, _, ok := getSpanOrEventLog(ctx)
 	return ok
+}
+
+// TraceAboveThreshold logs a span's recording if the duration is above a
+// given threshold. It is used when txn, stmt, or snapshot threshold tracing is enabled.
+// This function assumes that sp is non-nil and threshold tracing was enabled.
+func TraceAboveThreshold(
+	ctx context.Context, r tracingpb.Recording, opName string, threshold, elapsed time.Duration,
+) {
+	if elapsed < threshold {
+		return
+	}
+	if r == nil {
+		Warning(ctx, "missing trace when threshold tracing was enabled")
+		return
+	}
+	dump := r.String()
+	if len(dump) == 0 {
+		return
+	}
+	// Note that log lines larger than 65k are truncated in the debug zip (see
+	// #50166).
+	Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump)
 }
