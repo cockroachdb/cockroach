@@ -32,7 +32,7 @@ const (
 	// doctorStatusVersion is the current "version" of the status checks performed
 	// by `dev doctor``. Increasing it will force doctor to be re-run before other
 	// dev commands can be run.
-	doctorStatusVersion = 5
+	doctorStatusVersion = 6
 
 	noCacheFlag = "no-cache"
 )
@@ -182,6 +182,16 @@ Please perform the following steps:
 					failures = append(failures, msg)
 				}
 			}
+		}
+	}
+
+	d.log.Println("doctor: running node check")
+	if runtime.GOOS == "freebsd" {
+		// Having a pre-installed node is only necessary on freebsd.
+		_, err := d.exec.CommandContextSilent(ctx, "/usr/local/bin/node", "--version")
+		if err != nil {
+			failures = append(failures, `/usr/local/bin/node not found.
+You can install node with: `+"`pkg install node`")
 		}
 	}
 
