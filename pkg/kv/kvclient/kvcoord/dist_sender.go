@@ -1326,7 +1326,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// being in the original order, so the helper must preserve the order if the
 	// batch is not a read-only.
 	mustPreserveOrder := !ba.IsReadOnly()
-	truncationHelper, err := MakeBatchTruncationHelper(scanDir, ba.Requests, mustPreserveOrder)
+	// The DistSender relies on the order of ba.Requests not being changed when
+	// it sets the ResumeSpans on the incomplete requests, so we ask the helper
+	// to not modify the ba.Requests slice.
+	// TODO(yuzefovich): refactor the DistSender so that the truncation helper
+	// could reorder requests as it pleases.
+	const canReorderRequestsSlice = false
+	truncationHelper, err := MakeBatchTruncationHelper(
+		scanDir, ba.Requests, mustPreserveOrder, canReorderRequestsSlice,
+	)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}

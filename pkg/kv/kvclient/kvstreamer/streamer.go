@@ -455,9 +455,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	// TODO(yuzefovich): introduce a fast path when all requests are contained
 	// within a single range.
 	// The streamer can process the responses in an arbitrary order, so we don't
-	// require the helper to preserve the order of requests.
+	// require the helper to preserve the order of requests and allow it to
+	// reorder the reqs slice too.
 	const mustPreserveOrder = false
-	truncationHelper, err := kvcoord.MakeBatchTruncationHelper(scanDir, reqs, mustPreserveOrder)
+	const canReorderRequestsSlice = true
+	truncationHelper, err := kvcoord.MakeBatchTruncationHelper(
+		scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
+	)
 	if err != nil {
 		return err
 	}
