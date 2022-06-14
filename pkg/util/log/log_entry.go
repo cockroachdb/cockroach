@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/redact/interfaces"
@@ -243,10 +244,29 @@ func makeUnstructuredEntry(
 		} else {
 			buf.Printf(format, args...)
 		}
+		// Collect and append the hints, if any.
+		for _, a := range args {
+			if e, ok := a.(error); ok {
+				h := errors.FlattenHints(e)
+				if h != "" {
+					buf.Printf("\nHINT: %s", h)
+				}
+			}
+		}
 		res.payload = makeRedactablePayload(ctx, buf.RedactableString())
 	} else {
 		var buf strings.Builder
 		formatArgs(&buf, format, args...)
+		// Collect and append the hints, if any.
+		for _, a := range args {
+			if e, ok := a.(error); ok {
+				h := errors.FlattenHints(e)
+				if h != "" {
+					buf.WriteString("\nHINT:")
+					buf.WriteString(h)
+				}
+			}
+		}
 		res.payload = makeUnsafePayload(ctx, buf.String())
 	}
 
