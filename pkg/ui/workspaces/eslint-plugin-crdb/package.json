@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@bazel/typescript": "5.5.0",
+    "@bazel/worker": "5.5.0",
     "@types/eslint": "^8.4.2",
     "@typescript-eslint/parser": "^5.26.0",
     "@typescript-eslint/utils": "^5.26.0",
