@@ -181,7 +181,8 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // which remote hung up.
 type RaftTransport struct {
 	log.AmbientContext
-	st *cluster.Settings
+	st     *cluster.Settings
+	tracer *tracing.Tracer
 
 	stopper *stop.Stopper
 
@@ -197,7 +198,7 @@ func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTr
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st,
+	return NewRaftTransport(log.MakeTestingAmbientContext(tracer), st, tracer,
 		nodedialer.New(nil, resolver), nil, nil)
 }
 
@@ -205,6 +206,7 @@ func NewDummyRaftTransport(st *cluster.Settings, tracer *tracing.Tracer) *RaftTr
 func NewRaftTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
+	tracer *tracing.Tracer,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	stopper *stop.Stopper,
@@ -212,6 +214,7 @@ func NewRaftTransport(
 	t := &RaftTransport{
 		AmbientContext: ambient,
 		st:             st,
+		tracer:         tracer,
 
 		stopper: stopper,
 		dialer:  dialer,
@@ -752,7 +755,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent, recordBytesSent)
+	return sendSnapshot(ctx, t.st, t.tracer, stream, storePool, header, snap, newBatch, sent, recordBytesSent)
 }
 
 // DelegateSnapshot creates a rpc stream between the leaseholder and the

@@ -169,9 +169,11 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper,
 ) (*kvserver.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
+	ctwWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	transport := kvserver.NewRaftTransport(
-		log.MakeTestingAmbientCtxWithNewTracer(),
+		ctwWithTracer,
 		cluster.MakeTestingClusterSettings(),
+		ctwWithTracer.Tracer,
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,
 		rttc.stopper,
