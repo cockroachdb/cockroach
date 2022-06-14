@@ -1079,12 +1079,13 @@ func (og *operationGenerator) violatesFkConstraints(
 			childColumnName := constraint[3]
 
 			// If self referential, there cannot be a violation.
-			if parentTableSchema == tableName.Schema() && parentTableName == tableName.Object() && parentColumnName == childColumnName {
+			parentAndChildAreSame := parentTableSchema == tableName.Schema() && parentTableName == tableName.Object()
+			if parentAndChildAreSame && parentColumnName == childColumnName {
 				continue
 			}
 
 			violation, err := og.violatesFkConstraintsHelper(
-				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, childColumnName, row,
+				ctx, tx, columnNameToIndexMap, parentTableSchema, parentTableName, parentColumnName, tableName.String(), childColumnName, parentAndChildAreSame, row, rows,
 			)
 			if err != nil {
 				return false, err
@@ -1104,8 +1105,10 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
 	columnNameToIndexMap map[string]int,
-	parentTableSchema, parentTableName, parentColumn, childColumn string,
+	parentTableSchema, parentTableName, parentColumn, childTableName, childColumn string,
+	parentAndChildAreSameTable bool,
 	row []string,
+	allRows [][]string,
 ) (bool, error) {
 
 	// If the value to insert in the child column is NULL and the column default is NULL, then it is not possible to have a fk violation.
@@ -1113,10 +1116,48 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	if childValue == "NULL" {
 		return false, nil
 	}
-
+	// If the parent and child are the same table, then any rows in an existing
+	// insert may satisfy the same constraint.
+	if parentAndChildAreSameTable {
+		colsInfo, err := og.getTableColumns(ctx, tx, childTableName, false)
+		if err != nil {
+			return false, err
+		}
+		// Put values to be inserted into a column name to value map to simplify lookups.
+		columnsToValues := map[string]string{}
+		for name, idx := range columnNameToIndexMap {
+			columnsToValues[name] = row[idx]
+		}
+		colIdx := 0
+		for idx, colInfo := range colsInfo {
+			if colInfo.name == parentColumn {
+				colIdx = idx
+				break
+			}
+		}
+		for _, otherRow := range allRows {
+			parentValueInSameInsert := otherRow[columnNameToIndexMap[parentColumn]]
+			// If the parent column is generated, spend time to generate the value.
+			if colsInfo[colIdx].generated {
+				var err error
+				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[colIdx], columnsToValues)
+				if err != nil {
+					return false, err
+				}
+			}
+			matches, err := og.scanBool(ctx, tx,
+				fmt.Sprintf("SELECT %s = %s", parentValueInSameInsert, childValue))
+			if err != nil {
+				return false, err
+			}
+			if matches {
+				return false, err
+			}
+		}
+	}
 	return og.scanBool(ctx, tx, fmt.Sprintf(`
 	    SELECT count(*) = 0 from %s.%s
-	    WHERE %s = %s
+	    WHERE %s = (%s)
 	`, parentTableSchema, parentTableName, parentColumn, childValue))
 }
 
