@@ -18,7 +18,7 @@ export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/cloud/gcp:gcp_test -- \
+    test //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test -- \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
