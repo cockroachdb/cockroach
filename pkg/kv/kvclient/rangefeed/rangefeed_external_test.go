@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -648,6 +650,18 @@ func TestUnrecoverableErrors(t *testing.T) {
 		// Lower the closed timestamp target duration to speed up the test.
 		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 		require.NoError(t, err)
+
+		// Lower the protectedts Cache refresh interval, so that the
+		// `preGCThresholdTS` defined below is less than the protectedts
+		// `readAt - GCTTL` window, resulting in a BatchTimestampBelowGCError.
+		_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
+		require.NoError(t, err)
+
+		store, err := srv0.GetStores().(*kvserver.Stores).GetStore(srv0.GetFirstStoreID())
+		require.NoError(t, err)
+		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+		require.NoError(t,
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv0.Clock().Now()))
 	}
 
 	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, srv0.ClusterSettings(), nil)
@@ -664,6 +678,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 		if repl.SpanConfig().GCPolicy.IgnoreStrictEnforcement {
 			return errors.New("waiting for span config to apply")
 		}
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
 		return nil
 	})
 
