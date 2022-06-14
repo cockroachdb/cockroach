@@ -16,6 +16,7 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/prometheus",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
