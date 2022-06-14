@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,17 +48,21 @@ func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
 			Transport: transport,
 			Timeout:   opt.timeout,
 		},
-		address:     url,
-		doRequest:   doPost,
-		contentType: "application/octet-stream",
+		address:           url,
+		doRequest:         doPost,
+		method:            http.MethodPost,
+		disableKeepAlives: opt.disableKeepAlives,
+		contentType:       "application/octet-stream",
 	}
 
 	if opt.unsafeTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		hs.unsafeTLS = true
 	}
 
 	if opt.method == http.MethodGet {
 		hs.doRequest = doGet
+		hs.method = http.MethodGet
 	}
 
 	if opt.contentType != "" {
@@ -68,10 +73,13 @@ func newHTTPSink(url string, opt httpSinkOptions) (*httpSink, error) {
 }
 
 type httpSink struct {
-	client      http.Client
-	address     string
-	contentType string
-	doRequest   func(sink *httpSink, logEntry []byte) (*http.Response, error)
+	client            http.Client
+	address           string
+	method            logconfig.HTTPSinkMethod
+	unsafeTLS         bool
+	disableKeepAlives bool
+	contentType       string
+	doRequest         func(sink *httpSink, logEntry []byte) (*http.Response, error)
 }
 
 // output emits some formatted bytes to this sink.

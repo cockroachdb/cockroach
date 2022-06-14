@@ -60,6 +60,15 @@ fluent-defaults:
     format: ` + DefaultFluentFormat + `
     redactable: true
     exit-on-error: false
+    buffering:
+      max-staleness: 5s
+      flush-trigger-size: 1mib
+      max-buffer-size: 50mib
+http-defaults:
+    buffering:
+      max-staleness: 5s	
+      flush-trigger-size: 1mib
+      max-buffer-size: 50mib
 sinks:
   stderr:
     filter: NONE

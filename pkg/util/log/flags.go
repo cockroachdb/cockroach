@@ -442,6 +442,16 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 	c.Criticality = &l.criticality
 	f := l.formatter.formatterName()
 	c.Format = &f
+	bufferedSink, ok := l.sink.(*bufferedSink)
+	if ok {
+		c.Buffering.MaxStaleness = &bufferedSink.maxStaleness
+		triggerSize := logconfig.ByteSize(bufferedSink.triggerSize)
+		c.Buffering.FlushTriggerSize = &triggerSize
+		bufferedSink.mu.Lock()
+		maxBufferSize := logconfig.ByteSize(bufferedSink.mu.buf.maxSizeBytes)
+		c.Buffering.MaxBufferSize = &maxBufferSize
+		bufferedSink.mu.Unlock()
+	}
 	return c
 }
 
@@ -542,15 +552,23 @@ func DescribeAppliedConfig() string {
 	config.Sinks.FluentServers = make(map[string]*logconfig.FluentSinkConfig)
 	sIdx := 1
 	_ = logging.allSinkInfos.iter(func(l *sinkInfo) error {
-		fluentSink, ok := l.sink.(*fluentSink)
+		flSink, ok := l.sink.(*fluentSink)
 		if !ok {
-			return nil
+			// Check to see if it's a fluentSink wrapped in a bufferedSink.
+			bufferedSink, ok := l.sink.(*bufferedSink)
+			if !ok {
+				return nil
+			}
+			flSink, ok = bufferedSink.child.(*fluentSink)
+			if !ok {
+				return nil
+			}
 		}
 
 		fc := &logconfig.FluentSinkConfig{}
 		fc.CommonSinkConfig = l.describeAppliedConfig()
-		fc.Net = fluentSink.network
-		fc.Address = fluentSink.addr
+		fc.Net = flSink.network
+		fc.Address = flSink.addr
 
 		// Describe the connections to this fluent sink.
 		for ch, logger := range chans {
@@ -559,6 +577,41 @@ func DescribeAppliedConfig() string {
 		skey := fmt.Sprintf("s%d", sIdx)
 		sIdx++
 		config.Sinks.FluentServers[skey] = fc
+		return nil
+	})
+
+	// Describe the http sinks.
+	config.Sinks.HTTPServers = make(map[string]*logconfig.HTTPSinkConfig)
+	sIdx = 1
+	_ = logging.allSinkInfos.iter(func(l *sinkInfo) error {
+		netSink, ok := l.sink.(*httpSink)
+		if !ok {
+			// Check to see if it's a httpSink wrapped in a bufferedSink.
+			bufferedSink, ok := l.sink.(*bufferedSink)
+			if !ok {
+				return nil
+			}
+			netSink, ok = bufferedSink.child.(*httpSink)
+			if !ok {
+				return nil
+			}
+		}
+
+		hc := &logconfig.HTTPSinkConfig{}
+		hc.CommonSinkConfig = l.describeAppliedConfig()
+		hc.Address = &netSink.address
+		hc.Method = &netSink.method
+		hc.UnsafeTLS = &netSink.unsafeTLS
+		hc.Timeout = &netSink.client.Timeout
+		hc.DisableKeepAlives = &netSink.disableKeepAlives
+
+		// Describe the connections to this http sink.
+		for ch, logger := range chans {
+			describeConnections(logger, ch, l, &hc.Channels)
+		}
+		skey := fmt.Sprintf("s%d", sIdx)
+		sIdx++
+		config.Sinks.HTTPServers[skey] = hc
 		return nil
 	})
 
