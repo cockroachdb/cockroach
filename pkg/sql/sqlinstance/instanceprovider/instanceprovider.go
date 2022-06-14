@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -31,7 +32,7 @@ import (
 )
 
 type writer interface {
-	CreateInstance(ctx context.Context, sessionID sqlliveness.SessionID, sessionExpiration hlc.Timestamp, instanceAddr string) (base.SQLInstanceID, error)
+	CreateInstance(ctx context.Context, sessionID sqlliveness.SessionID, sessionExpiration hlc.Timestamp, instanceAddr string, locality roachpb.Locality) (base.SQLInstanceID, error)
 	ReleaseInstanceID(ctx context.Context, instanceID base.SQLInstanceID) error
 }
 
@@ -42,6 +43,7 @@ type provider struct {
 	stopper      *stop.Stopper
 	instanceAddr string
 	session      sqlliveness.Instance
+	locality     roachpb.Locality
 	initOnce     sync.Once
 	initialized  chan struct{}
 	instanceID   base.SQLInstanceID
@@ -60,6 +62,7 @@ func New(
 	codec keys.SQLCodec,
 	slProvider sqlliveness.Provider,
 	addr string,
+	locality roachpb.Locality,
 	f *rangefeed.Factory,
 	clock *hlc.Clock,
 ) sqlinstance.Provider {
@@ -71,6 +74,7 @@ func New(
 		Reader:       reader,
 		session:      slProvider,
 		instanceAddr: addr,
+		locality:     locality,
 		initialized:  make(chan struct{}),
 	}
 	return p
@@ -142,7 +146,7 @@ func (p *provider) initialize(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "constructing session")
 	}
-	instanceID, err := p.storage.CreateInstance(ctx, session.ID(), session.Expiration(), p.instanceAddr)
+	instanceID, err := p.storage.CreateInstance(ctx, session.ID(), session.Expiration(), p.instanceAddr, p.locality)
 	if err != nil {
 		return err
 	}
