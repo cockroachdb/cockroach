@@ -280,7 +280,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 			if seqDesc.GetSequenceOpts() == nil {
 				return errors.Errorf("relation %q (%d) is not a sequence", seqDesc.GetName(), seqDesc.GetID())
 			}
-			seqMetadata := &SequenceMetadata{seqDesc: seqDesc}
+			seqMetadata := &SequenceMetadata{SeqDesc: seqDesc}
 			seqNameToMetadata[seqDesc.GetName()] = seqMetadata
 			seqIDToMetadata[seqID] = seqMetadata
 		}
