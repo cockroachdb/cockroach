@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -140,6 +141,20 @@ func TestInfo(t *testing.T) {
 	}
 	if !contains("test", t) {
 		t.Error("Info failed")
+	}
+}
+
+// Test that error hints are included.
+func TestUnstructuredEntryEmbedsErrorHints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	defer capture()()
+	err := errors.WithHint(errors.New("hello"), "world")
+	Infof(context.Background(), "hello %v", err)
+	t.Logf("log contents:\n%s", contents())
+	if !contains("HINT: "+startRedactable+"world"+endRedactable, t) {
+		t.Error("hint failed")
 	}
 }
 

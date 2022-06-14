@@ -181,7 +181,8 @@ func initTraceDir(ctx context.Context, dir string) {
 		// to the current directory (.). If running the process
 		// from a directory which is not writable, we won't
 		// be able to create a sub-directory here.
-		log.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %+v", err)
+		err = errors.WithHint(err, "Try changing the CWD of the cockroach process to a writable directory.")
+		log.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
 		return
 	}
 }
