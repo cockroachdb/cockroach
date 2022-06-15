@@ -3931,10 +3931,9 @@ argparse@^1.0.7:
   dependencies:
     sprintf-js "~1.0.2"
 
-aria-query@^5.0.0:
+aria-query@^5.0.0, "aria-query@file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz":
   version "5.0.0"
-  resolved "https://registry.yarnpkg.com/aria-query/-/aria-query-5.0.0.tgz#210c21aaf469613ee8c9a62c7f86525e058db52c"
-  integrity sha512-V+SM7AbUwJ+EBnB8+DXs0hPZHO0W6pqBcc0dW90OwtVG02PswOu/teuARoLQjdDOH+t9pJgGnW5/Qmouf3gPJg==
+  resolved "file:../../yarn-vendor/aria-query-5.0.0-no-spaced-files.tgz#4f643d272248b0c3df08fee7317e761fe83e9498"
 
 arr-diff@^4.0.0:
   version "4.0.0"
