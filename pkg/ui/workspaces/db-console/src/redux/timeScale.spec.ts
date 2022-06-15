@@ -24,7 +24,9 @@ describe("time scale reducer", function () {
           end,
         },
       };
-      expect(timeScale.setMetricsMovingWindow({ start, end })).toEqual(expectedSetting);
+      expect(timeScale.setMetricsMovingWindow({ start, end })).toEqual(
+        expectedSetting,
+      );
     });
 
     it("should create the correct SET_SCALE action to set time window settings", function () {
@@ -43,7 +45,9 @@ describe("time scale reducer", function () {
 
   describe("reducer", () => {
     it("should have the correct default value.", () => {
-      expect(timeScale.timeScaleReducer(undefined, { type: "unknown" })).toEqual(new timeScale.TimeScaleState());
+      expect(
+        timeScale.timeScaleReducer(undefined, { type: "unknown" }),
+      ).toEqual(new timeScale.TimeScaleState());
       expect(new timeScale.TimeScaleState().scale).toEqual({
         ...defaultTimeScaleOptions["Past 10 Minutes"],
         key: "Past 10 Minutes",
@@ -61,10 +65,12 @@ describe("time scale reducer", function () {
           end,
         };
         expected.metricsTime.shouldUpdateMetricsWindowFromScale = false;
-        expect(timeScale.timeScaleReducer(
-          undefined,
-          timeScale.setMetricsMovingWindow({ start, end }),
-        )).toEqual(expected);
+        expect(
+          timeScale.timeScaleReducer(
+            undefined,
+            timeScale.setMetricsMovingWindow({ start, end }),
+          ),
+        ).toEqual(expected);
       });
     });
 
@@ -81,15 +87,17 @@ describe("time scale reducer", function () {
           fixedWindowEnd: false,
         };
         expected.metricsTime.shouldUpdateMetricsWindowFromScale = true;
-        expect(timeScale.timeScaleReducer(
-          undefined,
-          timeScale.setTimeScale({
-            windowSize: newSize,
-            windowValid: newValid,
-            sampleSize: newSample,
-            fixedWindowEnd: false,
-          }),
-        )).toEqual(expected);
+        expect(
+          timeScale.timeScaleReducer(
+            undefined,
+            timeScale.setTimeScale({
+              windowSize: newSize,
+              windowValid: newValid,
+              sampleSize: newSample,
+              fixedWindowEnd: false,
+            }),
+          ),
+        ).toEqual(expected);
       });
     });
   });

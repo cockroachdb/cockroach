@@ -116,7 +116,7 @@ describe("analytics listener", function () {
         pathname: "/test/path/2",
       } as Location);
 
-      expect(pageSpy.callCount).toEqual(2);
+      expect(pageSpy.callCount).toBe(2);
       expect(pageSpy.args[0][0]).toEqual({
         userId: clusterID,
         name: "/test/path",

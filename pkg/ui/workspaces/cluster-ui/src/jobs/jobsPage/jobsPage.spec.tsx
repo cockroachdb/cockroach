@@ -56,7 +56,9 @@ describe("Jobs", () => {
     expect(formatDuration(moment.duration(5, "minutes"))).toEqual("00:05:00");
     expect(formatDuration(moment.duration(5, "hours"))).toEqual("05:00:00");
     expect(formatDuration(moment.duration(110, "hours"))).toEqual("110:00:00");
-    expect(formatDuration(moment.duration(12345, "hours"))).toEqual("12345:00:00");
+    expect(formatDuration(moment.duration(12345, "hours"))).toEqual(
+      "12345:00:00",
+    );
   });
 
   it("renders expected jobs table columns", () => {

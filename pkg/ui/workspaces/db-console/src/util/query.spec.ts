@@ -75,7 +75,9 @@ describe("Query utils", () => {
       expect(querystring.match(/&/g).length).toBe(2);
       expect(/undefined/.test(querystring)).toBeFalsy();
       expect(/null/.test(querystring)).toBeFalsy();
-      expect({ false: "false", "": "", 0: "0" }).toEqual(decodeQueryString(querystring));
+      expect({ false: "false", "": "", 0: "0" }).toEqual(
+        decodeQueryString(querystring),
+      );
     });
 
     it("handles special characters", function () {
@@ -87,7 +89,9 @@ describe("Query utils", () => {
 
       const querystring = propsToQueryString(testValues);
 
-      expect(querystring.match(/%/g).length > (key + value).match(/%/g).length).toBeTruthy();
+      expect(
+        querystring.match(/%/g).length > (key + value).match(/%/g).length,
+      ).toBeTruthy();
       expect(testValues).toEqual(decodeQueryString(querystring));
     });
 
@@ -103,7 +107,9 @@ describe("Query utils", () => {
       };
 
       const querystring = propsToQueryString(testValues);
-      expect(_.mapValues(testValues, _.toString)).toEqual(decodeQueryString(querystring));
+      expect(_.mapValues(testValues, _.toString)).toEqual(
+        decodeQueryString(querystring),
+      );
     });
   });
   describe("queryByName", () => {
