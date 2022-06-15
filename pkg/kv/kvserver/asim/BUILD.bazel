@@ -4,6 +4,7 @@ go_library(
     name = "asim",
     srcs = [
         "asim.go",
+        "metrics_tracker.go",
         "pacer.go",
         "replicate_queue.go",
     ],
@@ -15,6 +16,7 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
+        "//pkg/util/encoding/csv",
         "//pkg/util/log",
         "//pkg/util/shuffle",
     ],
@@ -24,6 +26,7 @@ go_test(
     name = "asim_test",
     srcs = [
         "asim_test.go",
+        "metrics_tracker_test.go",
         "pacer_test.go",
         "replicate_queue_test.go",
     ],

@@ -52,34 +52,43 @@ type ReplicaChange struct {
 // Change interface. It requires that a replica being removed, must not hold
 // the lease unless a replica is also being added in the same change.
 func (rc *ReplicaChange) Apply(s State) {
-	if s.CanAddReplica(rc.RangeID, rc.Add) {
+	switch {
+	case rc.Add == 0 && rc.Remove == 0:
+		// Nothing to do.
+	case rc.Add > 0 && rc.Remove == 0:
+		if s.CanAddReplica(rc.RangeID, rc.Add) {
+			s.AddReplica(rc.RangeID, rc.Add)
+		}
+	case rc.Add == 0 && rc.Remove > 0:
+		if s.CanRemoveReplica(rc.RangeID, rc.Remove) {
+			s.RemoveReplica(rc.RangeID, rc.Remove)
+		}
+	case rc.Add > 0 && rc.Remove > 0:
 		s.AddReplica(rc.RangeID, rc.Add)
-	}
+		if !s.CanRemoveReplica(rc.RangeID, rc.Remove) {
+			// We want to remove a replica, however we cannot currently. This can only
+			// be due to the requested remove store holding a lease. Check if it's
+			// possible to transfer to the incoming replica if we added one, if not
+			// fail.
+			// TODO(kvoli): Lease transfers should be a separate state change
+			// operation, when they are supported in simulating rebalancing.
+			if !s.ValidTransfer(rc.RangeID, rc.Add) {
+				// Cannot transfer lease, bail out and revert the added replica.
+				s.RemoveReplica(rc.RangeID, rc.Add)
+				return
+			}
+			s.TransferLease(rc.RangeID, rc.Add)
+		}
 
-	if s.CanRemoveReplica(rc.RangeID, rc.Remove) {
+		// A rebalance is allowed.
 		s.RemoveReplica(rc.RangeID, rc.Remove)
-		return
-	}
 
-	if rc.Remove == 0 {
-		return
+		r, _ := s.Range(rc.RangeID)
+		s.ClusterUsageInfo().BytesRebalanced += r.Size()
+		s.ClusterUsageInfo().Rebalances++
+	default:
+		panic("unknown change")
 	}
-
-	// We want to remove a replica, however we cannot currently. This can only
-	// be due to the requested remove store holding a lease. Check if it's
-	// possible to transfer to the incoming replica if we added one, if not
-	// fail.
-	// TODO(kvoli): Lease transfers should be a separate state change
-	// operation, when they are supported in simulating rebalancing.
-	if !s.ValidTransfer(rc.RangeID, rc.Add) && rc.Remove > 0 {
-		// Cannot transfer lease, bail out and revert if we performed an
-		// add.
-		s.RemoveReplica(rc.RangeID, rc.Add)
-		return
-	}
-
-	s.TransferLease(rc.RangeID, rc.Add)
-	s.RemoveReplica(rc.RangeID, rc.Remove)
 }
 
 // Target returns the recipient of any added data for a change.

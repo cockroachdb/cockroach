@@ -90,3 +90,52 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 	}
 	return capacity
 }
+
+// StoreUsageInfo contains the load on a single store.
+type StoreUsageInfo struct {
+	WriteKeys  int64
+	WriteBytes int64
+	ReadKeys   int64
+	ReadBytes  int64
+}
+
+// ClusterUsageInfo contains the load and state of the cluster. Using this we
+// can answer questions such as how balanced the load is, and how much data got
+// rebalanced.
+type ClusterUsageInfo struct {
+	LeaseTransfers  int64
+	Rebalances      int64
+	BytesRebalanced int64
+	StoreUsage      map[StoreID]*StoreUsageInfo
+}
+
+func newClusterUsageInfo() *ClusterUsageInfo {
+	return &ClusterUsageInfo{
+		StoreUsage: make(map[StoreID]*StoreUsageInfo),
+	}
+}
+
+// ApplyLoad applies the load event on the right stores.
+func (u *ClusterUsageInfo) ApplyLoad(r *rng, le workload.LoadEvent) {
+	for _, rep := range r.replicas {
+		s, ok := u.StoreUsage[rep.storeID]
+		if !ok {
+			// First time we see this store ID, add it.
+			s = &StoreUsageInfo{}
+			u.StoreUsage[rep.storeID] = s
+		}
+		// Writes are added to all replicas, reads are added to the leaseholder
+		// only.
+		// Note that the accounting here is different from ReplicaLoadCounter above:
+		// here we try to track the actual load on the store, regardless of the
+		// allocator implementation details, and ReplicaLoadCounter tries to follow
+		// the logic of the production code were, for example, read QPS is applied
+		// to all replicas.
+		s.WriteBytes += le.Size
+		s.WriteKeys++
+		if rep.holdsLease {
+			s.ReadBytes += le.Size
+			s.ReadKeys++
+		}
+	}
+}
