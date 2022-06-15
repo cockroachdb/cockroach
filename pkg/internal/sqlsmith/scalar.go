@@ -61,15 +61,19 @@ var (
 // TODO(mjibson): remove this and correctly pass around the Context.
 func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)) scalarExpr {
 	return func(s *Smither, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
+		s.lock.Lock()
 		needToFlagNonBoolExpr := s.inWhereClause && s.disableConstantWhereClause && t != types.Bool
 		var savedNonBoolExprStarted bool
 		if needToFlagNonBoolExpr {
 			savedNonBoolExprStarted = s.nonBoolExprStarted
 			s.nonBoolExprStarted = true
 		}
+		s.lock.Unlock()
 		scalarExpressionMaker, ok := fn(s, t, refs)
 		if needToFlagNonBoolExpr {
+			s.lock.Lock()
 			s.nonBoolExprStarted = savedNonBoolExprStarted
+			s.lock.Unlock()
 		}
 		return scalarExpressionMaker, ok
 	}
@@ -190,7 +194,7 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	s.lock.Lock()
 	nullChance := 6
 	if s.unlikelyRandomNulls {
-		nullChance = 200 // A one out of 200 chance in generating a NULL.
+		nullChance = 20 // A one out of 20 chance of generating a NULL.
 	}
 	datum = randgen.RandDatumWithNullChance(s.rnd, typ, nullChance, s.favorInterestingData)
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
@@ -210,6 +214,10 @@ func getColRef(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef,
 	// Filter by needed type.
 	cols := make(colRefs, 0, len(refs))
 	for _, c := range refs {
+		// TODO(msirek): Add detection of the nullability of the source colRef and
+		//               compare with that of the destination for INSERT SELECT.
+		//               If destination requires NOT NULL, but the source is
+		//               nullable, don't use the colRef.
 		if typ.Family() == types.AnyFamily || c.typ.Equivalent(typ) {
 			cols = append(cols, c)
 		}

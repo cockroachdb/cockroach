@@ -227,12 +227,13 @@ func statisticsMutator(
 		for _, def := range create.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
-				var nullCount, distinctCount uint64
+				var nullCount, distinctCount, avgSize uint64
 				if rowCount > 0 {
 					if def.Nullable.Nullability != tree.NotNull {
 						nullCount = uint64(rng.Int63n(rowCount))
 					}
 					distinctCount = uint64(rng.Int63n(rowCount))
+					avgSize = uint64(rng.Int63n(32))
 				}
 				cols[def.Name] = def
 				colStats[def.Name] = &stats.JSONStatistic{
@@ -242,6 +243,7 @@ func statisticsMutator(
 					Columns:       []string{def.Name.String()},
 					DistinctCount: distinctCount,
 					NullCount:     nullCount,
+					AvgSize:       avgSize,
 				}
 				if (def.Unique.IsUnique && !def.Unique.WithoutIndex) || def.PrimaryKey.IsPrimaryKey {
 					makeHistogram(def)

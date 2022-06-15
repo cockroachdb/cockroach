@@ -169,10 +169,10 @@ func runOneTLP(
 			t.Status("running TLP: ", i, " statements completed")
 		}
 
-		// Run 3000 mutations first so that the tables have rows. Run a mutation
+		// Run 1000 mutations first so that the tables have rows. Run a mutation
 		// for a fraction of iterations after that to continually change the
 		// state of the database.
-		if i < 3000 || i%10 == 0 {
+		if i < 1000 || i%10 == 0 {
 			runMutationStatement(conn, mutSmither, logStmt)
 			continue
 		}
@@ -196,9 +196,10 @@ func runMutationStatement(conn *gosql.DB, smither *sqlsmith.Smither, logStmt fun
 	stmt := smither.Generate()
 
 	// Ignore timeouts.
+	var err error
 	_ = runWithTimeout(func() error {
 		// Ignore errors. Log successful statements.
-		if _, err := conn.Exec(stmt); err == nil {
+		if _, err = conn.Exec(stmt); err == nil {
 			logStmt(stmt)
 		}
 		return nil
