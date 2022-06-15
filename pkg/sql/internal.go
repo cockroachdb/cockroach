@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descsinterface"
 	"math"
 	"strings"
 	"sync"
@@ -706,6 +707,23 @@ func (ie *InternalExecutor) SetExtraTxnState(extraTxnState sqlutil.ExtraTxnState
 	default:
 		panic("unsupported type of extraTxnType")
 	}
+}
+
+// SetDescsCollection is to set the descriptor collection used by the internal
+// executor.
+func (ie *InternalExecutor) SetDescsCollection(txn *kv.Txn, descCollection descsinterface.DescriptorCollection) {
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            txn,
+		descCollection: descCollection.(*descs.Collection),
+	})
+}
+
+// MakeDescsCollection creates the internal executor's own descriptor collection.
+func (ie *InternalExecutor) MakeDescsCollection(ctx context.Context, sd *sessiondata.SessionData) descsinterface.DescriptorCollection {
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	descsCollection := ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
+	return &descsCollection
 }
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.

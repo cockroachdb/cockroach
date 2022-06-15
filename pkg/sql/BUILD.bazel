@@ -308,6 +308,7 @@ go_library(
         "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/descsinterface",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/nstree",
