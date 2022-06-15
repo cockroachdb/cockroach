@@ -158,10 +158,10 @@ describe("<TimeScaleDropdown> component", function() {
     getByText("Past 10 Minutes");
   });
 
-  it.only("allows selection of a custom time frame", () => {
+  it("initializes the custom selection to the current time frame", () => {
     const mockSetTimeScale = jest.fn();
     // Default state
-    const { getByText, getByDisplayValue, container } = render(
+    const { getByText, getByDisplayValue } = render(
       <MemoryRouter>
         <TimeScaleDropdownWrapper
           currentScale={new timescale.TimeScaleState().scale}
