@@ -62,14 +62,14 @@ func TrimDotExe(name string) (string, bool) {
 
 // NonReleaseFile is a file to upload when publishing a non-release.
 type NonReleaseFile struct {
-	// S3FileName is the name of the file stored in S3.
-	S3FileName string
-	// S3FilePath is the path the file should be stored within the  Cockroach bucket.
-	S3FilePath string
-	// S3RedirectPathPrefix is the prefix of the path that redirects  to the S3FilePath.
+	// FileName is the name of the file stored in the cloud.
+	FileName string
+	// FilePath is the path the file should be stored within the  Cockroach bucket.
+	FilePath string
+	// RedirectPathPrefix is the prefix of the path that redirects  to the FilePath.
 	// It is suffixed with .VersionStr or .LATEST, depending on whether  the branch is
 	// the master branch.
-	S3RedirectPathPrefix string
+	RedirectPathPrefix string
 
 	// LocalAbsolutePath is the location of the file to upload in the local OS.
 	LocalAbsolutePath string
@@ -91,10 +91,10 @@ func MakeCRDBBinaryNonReleaseFile(localAbsolutePath string, versionStr string) N
 	}
 
 	return NonReleaseFile{
-		S3FileName:           fileName,
-		S3FilePath:           fileName,
-		S3RedirectPathPrefix: remoteName,
-		LocalAbsolutePath:    localAbsolutePath,
+		FileName:           fileName,
+		FilePath:           fileName,
+		RedirectPathPrefix: remoteName,
+		LocalAbsolutePath:  localAbsolutePath,
 	}
 }
 
@@ -116,10 +116,10 @@ func MakeCRDBLibraryNonReleaseFiles(
 		files = append(
 			files,
 			NonReleaseFile{
-				S3FileName:           fmt.Sprintf("%s%s", remoteFileName, ext),
-				S3FilePath:           fmt.Sprintf("lib/%s%s", remoteFileName, ext),
-				S3RedirectPathPrefix: fmt.Sprintf("lib/%s%s", remoteFileNameBase, ext),
-				LocalAbsolutePath:    filepath.Join(localAbsoluteBasePath, "lib", localFileName+ext),
+				FileName:           fmt.Sprintf("%s%s", remoteFileName, ext),
+				FilePath:           fmt.Sprintf("lib/%s%s", remoteFileName, ext),
+				RedirectPathPrefix: fmt.Sprintf("lib/%s%s", remoteFileNameBase, ext),
+				LocalAbsolutePath:  filepath.Join(localAbsoluteBasePath, "lib", localFileName+ext),
 			},
 		)
 	}
