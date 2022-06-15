@@ -44,6 +44,14 @@ func declareKeysGC(
 			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key}, header.Timestamp)
 		}
 	}
+	for _, rKey := range gcr.RangeKeys {
+		// Extend the range key latches by feather to ensure MVCC stats
+		// computations correctly account for adjacent ranges if then need to be
+		// split.
+		l, r := rangeTombstonePeekBounds(rKey.StartKey, rKey.EndKey, rs.GetStartKey().AsRawKey(), nil)
+		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: l, EndKey: r},
+			header.Timestamp)
+	}
 	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
 	// send an empty request first to bump the thresholds, and then another one
 	// that actually does work but can avoid declaring these keys below.
@@ -85,7 +93,8 @@ func GC(
 	// 2. the read could be served off a follower, which could be applying the
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
-	if !args.Threshold.IsEmpty() && len(args.Keys) != 0 &&
+	if !args.Threshold.IsEmpty() &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
@@ -117,6 +126,13 @@ func GC(
 		); err != nil {
 			return result.Result{}, err
 		}
+	}
+
+	desc := cArgs.EvalCtx.Desc()
+	if err := storage.MVCCGarbageCollectRanges(ctx, readWriter, desc.StartKey.AsRawKey(),
+		desc.EndKey.AsRawKey(), cArgs.Stats, args.RangeKeys,
+		h.Timestamp); err != nil {
+		return result.Result{}, err
 	}
 
 	// Optionally bump the GC threshold timestamp.

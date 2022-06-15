@@ -5209,6 +5209,631 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 	}
 }
 
+type rangeTestDataItem struct {
+	point          MVCCKeyValue
+	txn            *roachpb.Transaction
+	rangeTombstone MVCCRangeKey
+}
+
+type rangeTestData []rangeTestDataItem
+
+func (d rangeTestData) populateEngine(
+	t *testing.T, engine ReadWriter, ms *enginepb.MVCCStats,
+) hlc.Timestamp {
+	ctx := context.Background()
+	var ts hlc.Timestamp
+	for _, v := range d {
+		if v.rangeTombstone.Timestamp.IsEmpty() {
+			if v.point.Value != nil {
+				require.NoError(t, MVCCPut(ctx, engine, ms, v.point.Key.Key, v.point.Key.Timestamp,
+					hlc.ClockTimestamp{}, roachpb.MakeValueFromBytes(v.point.Value), v.txn),
+					"failed to insert test value into engine (%s)", v.point.Key.String())
+			} else {
+				require.NoError(t, MVCCDelete(ctx, engine, ms, v.point.Key.Key, v.point.Key.Timestamp,
+					hlc.ClockTimestamp{}, v.txn),
+					"failed to insert tombstone value into engine (%s)", v.point.Key.String())
+			}
+			ts = v.point.Key.Timestamp
+		} else {
+			require.NoError(t, ExperimentalMVCCDeleteRangeUsingTombstone(ctx, engine, ms, v.rangeTombstone.StartKey,
+				v.rangeTombstone.EndKey, v.rangeTombstone.Timestamp, hlc.ClockTimestamp{}, nil, nil, 0),
+				"failed to insert range tombstone into engine (%s)", v.rangeTombstone.String())
+			ts = v.rangeTombstone.Timestamp
+		}
+	}
+	return ts
+}
+
+// pt creates a point update for key with default value.
+func pt(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
+	val := roachpb.MakeValueFromString("testval").RawBytes
+	return rangeTestDataItem{point: MVCCKeyValue{Key: mvccVersionKey(key, ts), Value: val}}
+}
+
+// del creates a point delete for key.
+func del(key roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
+	return rangeTestDataItem{point: MVCCKeyValue{Key: mvccVersionKey(key, ts)}}
+}
+
+// txn wraps point update and adds transaction to it for intent creation.
+func txn(d rangeTestDataItem) rangeTestDataItem {
+	ts := d.point.Key.Timestamp
+	d.txn = &roachpb.Transaction{
+		Status:                 roachpb.PENDING,
+		ReadTimestamp:          ts,
+		GlobalUncertaintyLimit: ts.Next().Next(),
+	}
+	d.txn.ID = uuid.MakeV4()
+	d.txn.WriteTimestamp = ts
+	d.txn.Key = roachpb.Key([]byte{0, 1})
+	return d
+}
+
+// rng creates range tombstone update.
+func rng(start, end roachpb.Key, ts hlc.Timestamp) rangeTestDataItem {
+	return rangeTestDataItem{rangeTombstone: MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: ts}}
+}
+
+func TestMVCCGarbageCollectRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+	rangeStart := mkKey("")
+	rangeEnd := rangeStart.PrefixEnd()
+
+	// Note we use keys of different lengths so that stats accounting errors
+	// would not obviously cancel out if right and left bounds are used
+	// incorrectly.
+	keyA := mkKey("a")
+	keyB := mkKey("bb")
+	keyC := mkKey("ccc")
+	keyD := mkKey("dddd")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	ts1 := mkTs(1)
+	ts2 := mkTs(2)
+	ts3 := mkTs(3)
+	ts4 := mkTs(4)
+	ts5 := mkTs(5)
+	ts6 := mkTs(6)
+	ts7 := mkTs(7)
+	ts8 := mkTs(8)
+	tsMax := mkTs(9)
+
+	testData := []struct {
+		name    string
+		before  rangeTestData
+		request []roachpb.GCRequest_GCRangeKey
+		after   []MVCCRangeKey
+	}{
+		{
+			name: "delete range",
+			before: rangeTestData{
+				rng(keyA, keyD, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete multiple contiguous fragments",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+				rng(keyB, keyC, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts4},
+			},
+		},
+		{
+			name: "delete multiple non-contiguous fragments",
+			before: rangeTestData{
+				rng(keyA, keyB, ts2),
+				rng(keyC, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete multiple non-overlapping fragments",
+			before: rangeTestData{
+				rng(keyA, keyB, ts2),
+				rng(keyC, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [A--[B--B]--A]",
+			before: rangeTestData{
+				rng(keyB, keyC, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete overlapping [A--[B--A]--B]",
+			before: rangeTestData{
+				rng(keyB, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyC, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [B--[A--B]--A]",
+			before: rangeTestData{
+				rng(keyA, keyC, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [B--[A--A]--B]",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [[AB--A]--B]",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [[AB--B]--A]",
+			before: rangeTestData{
+				rng(keyA, keyB, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete overlapping [B--[A--AB]]",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [A--[B--AB]]",
+			before: rangeTestData{
+				rng(keyB, keyD, ts2),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete overlapping [B--[A--AB]] point before",
+			before: rangeTestData{
+				rng(keyB, keyD, ts2),
+				pt(keyA, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [B--[A--AB]] point at range start",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+				pt(keyA, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [B--[A--AB]] point between",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+				pt(keyB, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyC, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [B--[A--AB]] point at gc start",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+				pt(keyB, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts2},
+			},
+		},
+		{
+			name: "delete overlapping [A--[B--AB]] point before",
+			before: rangeTestData{
+				rng(keyC, keyD, ts2),
+				pt(keyA, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete overlapping [A--[B--AB]] point at gc start",
+			before: rangeTestData{
+				rng(keyB, keyD, ts2),
+				pt(keyA, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete overlapping [A--[B--AB]] point between",
+			before: rangeTestData{
+				rng(keyC, keyD, ts2),
+				pt(keyB, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete overlapping [A--[B--AB]] point at range start",
+			before: rangeTestData{
+				rng(keyB, keyD, ts2),
+				pt(keyB, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete under intent",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+				txn(pt(keyA, ts4)),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete stacked fragments",
+			before: rangeTestData{
+				rng(keyB, keyC, ts2),
+				rng(keyA, keyD, ts4),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts4},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "old value before range",
+			before: rangeTestData{
+				pt(keyA, ts2),
+				rng(keyB, keyC, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts3},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "old value at range end",
+			before: rangeTestData{
+				pt(keyC, ts2),
+				rng(keyB, keyC, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts3},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete range above delete",
+			before: rangeTestData{
+				del(keyB, ts2),
+				rng(keyA, keyD, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete with del under many versions",
+			before: rangeTestData{
+				del(keyB, ts1),
+				rng(keyA, keyD, ts2),
+				pt(keyB, ts3),
+				pt(keyB, ts4),
+				pt(keyB, ts5),
+				pt(keyB, ts6),
+				pt(keyB, ts7),
+				pt(keyB, ts8),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete with dels under many versions",
+			before: rangeTestData{
+				del(keyB, ts1),
+				del(keyB, ts2),
+				rng(keyA, keyD, ts3),
+				pt(keyB, ts4),
+				pt(keyB, ts5),
+				pt(keyB, ts6),
+				pt(keyB, ts7),
+				pt(keyB, ts8),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
+			},
+			after: []MVCCRangeKey{},
+		},
+		{
+			name: "delete range partially overlap gc request",
+			before: rangeTestData{
+				rng(keyA, keyD, ts1),
+				rng(keyA, keyD, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts1},
+			},
+			after: []MVCCRangeKey{
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts3},
+				{StartKey: keyA, EndKey: keyB, Timestamp: ts1},
+				{StartKey: keyB, EndKey: keyC, Timestamp: ts3},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts3},
+				{StartKey: keyC, EndKey: keyD, Timestamp: ts1},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			for _, d := range testData {
+				t.Run(d.name, func(t *testing.T) {
+					engine := engineImpl.create()
+					defer engine.Close()
+
+					var ms enginepb.MVCCStats
+					ts := d.before.populateEngine(t, engine, &ms)
+
+					require.NoError(t, MVCCGarbageCollectRanges(ctx, engine, rangeStart, rangeEnd, &ms, d.request, ts),
+						"failed to run mvcc range tombstone garbage collect")
+
+					it := engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+						KeyTypes:   IterKeyTypeRangesOnly,
+						LowerBound: roachpb.Key([]byte{0}),
+						UpperBound: roachpb.Key([]byte{0xff, 0xff}),
+					})
+					defer it.Close()
+					it.SeekGE(MVCCKey{Key: keys.MinKey})
+					expectIndex := 0
+					for {
+						ok, err := it.Valid()
+						require.NoError(t, err, "failed to iterate engine")
+						if !ok {
+							break
+						}
+						for _, rkv := range it.RangeKeys() {
+							require.Less(t, expectIndex, len(d.after), "not enough expectations; at unexpected range:", rkv.RangeKey.String())
+							require.EqualValues(t, d.after[expectIndex], rkv.RangeKey, "range key is not equal")
+							expectIndex++
+						}
+						it.Next()
+					}
+					require.Equal(t, len(d.after), expectIndex,
+						"not all range tombstone expectations were consumed")
+
+					ms.AgeTo(tsMax.WallTime)
+					it = engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						KeyTypes:   IterKeyTypePointsAndRanges,
+						LowerBound: rangeStart,
+						UpperBound: rangeEnd,
+					})
+					expMs, err := ComputeStatsForRange(it, rangeStart, rangeEnd, tsMax.WallTime)
+					require.NoError(t, err, "failed to compute stats for range")
+					require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
+				})
+			}
+		})
+	}
+}
+
+func TestMVCCGarbageCollectRangesFailures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mkKey := func(k string) roachpb.Key {
+		return append(keys.SystemSQLCodec.TablePrefix(42), k...)
+	}
+	rangeStart := mkKey("")
+	rangeEnd := rangeStart.PrefixEnd()
+
+	keyA := mkKey("a")
+	keyB := mkKey("b")
+	keyC := mkKey("c")
+	keyD := mkKey("d")
+
+	mkTs := func(wallTimeSec int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: time.Second.Nanoseconds() * wallTimeSec}
+	}
+
+	ts1 := mkTs(1)
+	ts2 := mkTs(2)
+	ts3 := mkTs(3)
+	ts4 := mkTs(4)
+	ts5 := mkTs(5)
+	ts6 := mkTs(6)
+	ts7 := mkTs(7)
+	ts8 := mkTs(8)
+
+	testData := []struct {
+		name    string
+		before  rangeTestData
+		request []roachpb.GCRequest_GCRangeKey
+		error   string
+	}{
+		{
+			name: "request overlap",
+			before: rangeTestData{
+				rng(keyA, keyD, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyC, Timestamp: ts3},
+				{StartKey: keyB, EndKey: keyD, Timestamp: ts3},
+			},
+			error: "range keys in gc request should be non-overlapping",
+		},
+		{
+			name: "delete range above value",
+			before: rangeTestData{
+				pt(keyB, ts2),
+				rng(keyA, keyD, ts3),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts3},
+			},
+			error: "attempt to delete range tombstone .* hiding value at .*",
+		},
+		{
+			// Note that this test is a bit contrived as we can't put intent
+			// under the range tombstone, but we test that if you try to delete
+			// tombstone above intents even if it doesn't exist, we would reject
+			// the attempt as it is an indication of inconsistency.
+			// This might be relaxed to ignore any points which are not covered.
+			name: "delete range above intent",
+			before: rangeTestData{
+				rng(keyA, keyD, ts2),
+				txn(pt(keyB, ts3)),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts4},
+			},
+			error: "attempt to delete range tombstone .* hiding intent at .*",
+		},
+		{
+			name: "delete range above tail of long history (testing seek) #1",
+			before: rangeTestData{
+				pt(keyB, ts1),
+				rng(keyA, keyD, ts2),
+				pt(keyB, ts3),
+				pt(keyB, ts4),
+				pt(keyB, ts5),
+				pt(keyB, ts6),
+				pt(keyB, ts7),
+				pt(keyB, ts8),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			error: "attempt to delete range tombstone .* hiding value at .*",
+		},
+		{
+			name: "delete range above tail of long history (testing seek) #2",
+			before: rangeTestData{
+				pt(keyB, ts1),
+				del(keyB, ts2),
+				rng(keyA, keyD, ts3),
+				pt(keyB, ts4),
+				pt(keyB, ts5),
+				pt(keyB, ts6),
+				pt(keyB, ts7),
+				pt(keyB, ts8),
+			},
+			request: []roachpb.GCRequest_GCRangeKey{
+				{StartKey: keyA, EndKey: keyD, Timestamp: ts2},
+			},
+			error: "attempt to delete range tombstone .* hiding value at .*",
+		},
+	}
+
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			for _, d := range testData {
+				t.Run(d.name, func(t *testing.T) {
+					engine := engineImpl.create()
+					defer engine.Close()
+					ts := d.before.populateEngine(t, engine, nil)
+					err := MVCCGarbageCollectRanges(ctx, engine, rangeStart, rangeEnd, nil, d.request, ts)
+					require.Errorf(t, err, "expected error '%s' but found none", d.error)
+					require.True(t, testutils.IsError(err, d.error),
+						"expected error '%s' found '%s'", d.error, err)
+				})
+			}
+		})
+	}
+}
+
 // TestResolveIntentWithLowerEpoch verifies that trying to resolve
 // an intent at an epoch that is lower than the epoch of the intent
 // leaves the intent untouched.

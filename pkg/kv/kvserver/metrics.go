@@ -1144,6 +1144,12 @@ difficult to meaningfully interpret this metric.`,
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGCNumRangesAffected = metric.Metadata{
+		Name:        "queue.gc.info.numrangekeyssaffected",
+		Help:        "Number of range keys GC'able",
+		Measurement: "Range Keys",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaGCIntentsConsidered = metric.Metadata{
 		Name:        "queue.gc.info.intentsconsidered",
 		Help:        "Number of 'old' intents",
@@ -1658,6 +1664,7 @@ type StoreMetrics struct {
 
 	// GCInfo cumulative totals.
 	GCNumKeysAffected            *metric.Counter
+	GCNumRangesAffected          *metric.Counter
 	GCIntentsConsidered          *metric.Counter
 	GCIntentTxns                 *metric.Counter
 	GCTransactionSpanScanned     *metric.Counter
@@ -2136,6 +2143,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// GCInfo cumulative totals.
 		GCNumKeysAffected:            metric.NewCounter(metaGCNumKeysAffected),
+		GCNumRangesAffected:          metric.NewCounter(metaGCNumRangesAffected),
 		GCIntentsConsidered:          metric.NewCounter(metaGCIntentsConsidered),
 		GCIntentTxns:                 metric.NewCounter(metaGCIntentTxns),
 		GCTransactionSpanScanned:     metric.NewCounter(metaGCTransactionSpanScanned),
