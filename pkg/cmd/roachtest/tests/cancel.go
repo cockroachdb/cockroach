@@ -49,7 +49,9 @@ func registerCancel(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("restoring TPCH dataset for Scale Factor 1")
-			if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx), c.All()); err != nil {
+			if err := loadTPCHDataset(
+				ctx, t, c, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
+			); err != nil {
 				t.Fatal(err)
 			}
 
