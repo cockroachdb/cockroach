@@ -401,7 +401,18 @@ func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnT
 		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
 		Type: RandColumnType(rand),
 	}
-	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))
+	// Slightly prefer non-nullable columns
+	if columnDef.Type.(*types.T).Family() == types.OidFamily {
+		// Make all OIDs nullable so they're not part of a PK or unique index.
+		// Some OID types have a very narrow range of values they accept, which
+		// may cause many duplicate row errors.
+		columnDef.Nullable.Nullability = tree.RandomNullability(rand, true /* nullableOnly */)
+	} else if rand.Intn(2) == 0 {
+		// Slightly prefer non-nullable columns
+		columnDef.Nullable.Nullability = tree.NotNull
+	} else {
+		columnDef.Nullable.Nullability = tree.RandomNullability(rand, false /* nullableOnly */)
+	}
 	return columnDef
 }
 

@@ -99,6 +99,7 @@ go_library(
         "txn.go",
         "type_check.go",
         "type_name.go",
+        "typing.go",
         "union.go",
         "unsupported_error.go",
         "update.go",

@@ -382,29 +382,7 @@ func typeColumnAccess(e opt.ScalarExpr) *types.T {
 // If an overload is not found, FindBinaryOverload returns false.
 func FindBinaryOverload(op opt.Operator, leftType, rightType *types.T) (_ *tree.BinOp, ok bool) {
 	bin := opt.BinaryOpReverseMap[op]
-
-	// Find the binary op that matches the type of the expression's left and
-	// right children. No more than one match should ever be found. The
-	// TestTypingBinaryAssumptions test ensures this will be the case even if
-	// new operators or overloads are added.
-	for _, binOverloads := range tree.BinOps[bin] {
-		o := binOverloads.(*tree.BinOp)
-
-		if leftType.Family() == types.UnknownFamily {
-			if rightType.Equivalent(o.RightType) {
-				return o, true
-			}
-		} else if rightType.Family() == types.UnknownFamily {
-			if leftType.Equivalent(o.LeftType) {
-				return o, true
-			}
-		} else {
-			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return o, true
-			}
-		}
-	}
-	return nil, false
+	return tree.FindBinaryOverload(bin, leftType, rightType)
 }
 
 // FindUnaryOverload finds the correct type signature overload for the
