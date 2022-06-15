@@ -12,6 +12,7 @@ package release
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -21,10 +22,11 @@ import (
 // S3Provider is an implementation of the ObjectPutGetter interface for S3
 type S3Provider struct {
 	service *s3.S3
+	bucket  *string
 }
 
 // NewS3 creates a new instance of S3Provider
-func NewS3(region string) (*S3Provider, error) {
+func NewS3(region string, bucket string) (*S3Provider, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(region),
 	})
@@ -33,13 +35,14 @@ func NewS3(region string) (*S3Provider, error) {
 	}
 	return &S3Provider{
 		service: s3.New(sess),
+		bucket:  &bucket,
 	}, nil
 }
 
 // GetObject implements object retrieval for S3
 func (p *S3Provider) GetObject(input *GetObjectInput) (*GetObjectOutput, error) {
 	obj, err := p.service.GetObject(&s3.GetObjectInput{
-		Bucket: input.Bucket,
+		Bucket: p.bucket,
 		Key:    input.Key,
 	})
 	if err != nil {
@@ -53,7 +56,7 @@ func (p *S3Provider) GetObject(input *GetObjectInput) (*GetObjectOutput, error) 
 // PutObject implements object upload for S3
 func (p *S3Provider) PutObject(input *PutObjectInput) error {
 	putObjectInput := s3.PutObjectInput{
-		Bucket:                  input.Bucket,
+		Bucket:                  p.bucket,
 		Key:                     input.Key,
 		Body:                    input.Body,
 		CacheControl:            input.CacheControl,
@@ -64,4 +67,14 @@ func (p *S3Provider) PutObject(input *PutObjectInput) error {
 		return fmt.Errorf("s3 upload %s: %w", *input.Key, err)
 	}
 	return nil
+}
+
+// Bucket returns bucket name
+func (p *S3Provider) Bucket() string {
+	return *p.bucket
+}
+
+// URL returns key's representation that can be used by AWS CLI
+func (p S3Provider) URL(key string) string {
+	return "s3://" + *p.bucket + "/" + strings.TrimPrefix(key, "/")
 }

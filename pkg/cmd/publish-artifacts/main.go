@@ -29,7 +29,8 @@ const (
 )
 
 func main() {
-	var destBucket = flag.String("bucket", "", "override default bucket")
+	var destBucket = flag.String("bucket", "cockroach", "override default bucket")
+	var gcsBucket = flag.String("gcs-bucket", "", "override default bucket")
 	flag.Parse()
 
 	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
@@ -62,32 +63,35 @@ func main() {
 	}
 	versionStr := string(bytes.TrimSpace(out))
 
-	s3, err := release.NewS3("us-east-1")
+	var providers []release.ObjectPutGetter
+	s3, err := release.NewS3("us-east-1", *destBucket)
 	if err != nil {
 		log.Fatalf("Creating AWS S3 session: %s", err)
 	}
+	providers = append(providers, s3)
 
-	var bucketName string
-	if len(*destBucket) > 0 {
-		bucketName = *destBucket
-	} else {
-		bucketName = "cockroach"
+	if *gcsBucket != "" {
+		if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
+			log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+		}
+		gcs, err := release.NewGCS(*gcsBucket)
+		if err != nil {
+			log.Fatalf("Creating GCS session: %s", err)
+		}
+		providers = append(providers, gcs)
 	}
-	log.Printf("Using S3 bucket: %s", bucketName)
 
-	run([]release.ObjectPutGetter{s3}, runFlags{
-		pkgDir:     pkg,
-		branch:     branch,
-		sha:        versionStr,
-		bucketName: bucketName,
+	run(providers, runFlags{
+		pkgDir: pkg,
+		branch: branch,
+		sha:    versionStr,
 	}, release.ExecFn{})
 }
 
 type runFlags struct {
-	branch     string
-	sha        string
-	pkgDir     string
-	bucketName string
+	branch string
+	sha    string
+	pkgDir string
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
@@ -98,7 +102,6 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		o.PkgDir = flags.pkgDir
 		o.Branch = flags.branch
 		o.VersionStr = flags.sha
-		o.BucketName = flags.bucketName
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
 
@@ -109,7 +112,6 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 	var o opts
 	o.Platform = release.PlatformLinux
 	o.PkgDir = flags.pkgDir
-	o.BucketName = flags.bucketName
 	o.Branch = flags.branch
 	o.VersionStr = flags.sha
 	buildAndPublishWorkload(providers, o, execFn)
@@ -124,8 +126,7 @@ func buildOneCockroach(providers []release.ObjectPutGetter, o opts, execFn relea
 		release.PutNonRelease(
 			provider,
 			release.PutNonReleaseOptions{
-				Branch:     o.Branch,
-				BucketName: o.BucketName,
+				Branch: o.Branch,
 				Files: append(
 					[]release.NonReleaseFile{
 						release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
@@ -149,8 +150,7 @@ func buildAndPublishWorkload(providers []release.ObjectPutGetter, o opts, execFn
 		release.PutNonRelease(
 			provider,
 			release.PutNonReleaseOptions{
-				Branch:     o.Branch,
-				BucketName: o.BucketName,
+				Branch: o.Branch,
 				Files: []release.NonReleaseFile{
 					release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
 				},
@@ -161,13 +161,10 @@ func buildAndPublishWorkload(providers []release.ObjectPutGetter, o opts, execFn
 }
 
 type opts struct {
-	VersionStr      string
-	Branch          string
-	ReleaseVersions []string
-
-	Platform release.Platform
-
-	BucketName               string
+	VersionStr               string
+	Branch                   string
+	ReleaseVersions          []string
+	Platform                 release.Platform
 	AbsolutePath             string
 	CockroachSQLAbsolutePath string
 	PkgDir                   string
