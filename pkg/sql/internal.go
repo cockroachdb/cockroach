@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -29,9 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -72,6 +76,11 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	// extraTxnStateUnderPlanner is to store extra transaction state info that
+	// will be passed to an internal executor. It should only be set when the
+	// internal executor is used under a planner context.
+	extraTxnState *extraTxnStateUnderPlanner
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -122,8 +131,10 @@ func MakeInternalExecutor(
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
-	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	if sessionData != nil {
+		ie.s.populateMinimalSessionData(sessionData)
+		ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	}
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -146,7 +157,7 @@ func (ie *InternalExecutor) initConnEx(
 	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
-) {
+) error {
 	clientComm := &internalClientComm{
 		w: w,
 		// init lastDelivered below the position of the first result (0).
@@ -174,6 +185,8 @@ func (ie *InternalExecutor) initConnEx(
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	var ex *connExecutor
+	var skipReleaseDescsCollection bool
+	var err error
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
@@ -183,20 +196,19 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
+			nil, /* descsCollection */
 		)
 	} else {
-		ex = ie.s.newConnExecutorWithTxn(
+		ex, skipReleaseDescsCollection, err = ie.newConnExecutorWithTxn(
 			ctx,
 			sdMutIterator,
 			stmtBuf,
 			clientComm,
-			ie.mon,
-			ie.memMetrics,
-			&ie.s.InternalMetrics,
-			txn,
-			ie.syntheticDescriptors,
 			applicationStats,
 		)
+	}
+	if err != nil {
+		return err
 	}
 
 	ex.executorType = executorTypeInternal
@@ -212,9 +224,121 @@ func (ie *InternalExecutor) initConnEx(
 		if txn != nil {
 			closeMode = externalTxnClose
 		}
-		ex.close(ctx, closeMode)
+		ex.close(ctx, closeMode, skipReleaseDescsCollection)
 		wg.Done()
 	}()
+	return nil
+}
+
+// newConnExecutorWithTxn creates a connExecutor that will execute statements
+// under a higher-level txn. This connExecutor runs with a different state
+// machine, much reduced from the regular one. It cannot initiate or end
+// transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
+// retries). It may inherit the descriptor collection and txn state from the
+// internal executor.
+//
+// If there is no error, this function also activate()s the returned
+// executor, so the caller does not need to run the
+// activation. However this means that run() or close() must be called
+// to release resources.
+func (ie *InternalExecutor) newConnExecutorWithTxn(
+	ctx context.Context,
+	sdMutIterator *sessionDataMutatorIterator,
+	stmtBuf *StmtBuf,
+	clientComm ClientComm,
+	applicationStats sqlstats.ApplicationStats,
+) (ex *connExecutor, skipReleaseDescsCollection bool, err error) {
+
+	if ie.extraTxnState == nil || ie.extraTxnState.txn == nil {
+		return nil, false, errors.AssertionFailedf("the txn must not be nil")
+	}
+
+	// If an internal executor is run with a not-nil txn, we may want to
+	// let it inherit the descriptor collection and txn state from the caller.
+	var descCollection *descs.Collection
+	if ie.extraTxnState != nil && ie.extraTxnState.descCollection != nil {
+		descCollection = ie.extraTxnState.descCollection
+		// If the descriptor collection is inherited, we leave the caller to release
+		// it.
+		skipReleaseDescsCollection = true
+	}
+
+	// TODO (janexing): Is it necessary to pass the txn state?
+	var txnState fsm.State
+	if ie.extraTxnState.txnState != "" {
+		txnState, err = StringToTxnState(ie.extraTxnState.txnState)
+		if err != nil {
+			return nil, false, err
+		} else {
+			// The default txn state for a child conn executor under internal executor.
+			txnState = stateOpen{ImplicitTxn: fsm.False}
+		}
+	}
+
+	ex = ie.s.newConnExecutor(
+		ctx,
+		sdMutIterator,
+		stmtBuf,
+		clientComm,
+		ie.memMetrics,
+		&ie.s.InternalMetrics,
+		applicationStats,
+		descCollection,
+	)
+
+	if ie.extraTxnState.txn.Type() == kv.LeafTxn {
+		// If the txn is a leaf txn it is not allowed to perform mutations. For
+		// sanity, set read only on the session.
+		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+			m.SetReadOnly(true)
+		})
+	}
+
+	// The new transaction stuff below requires active monitors and traces, so
+	// we need to activate the executor now.
+	ex.activate(ctx, ie.mon, mon.BoundAccount{})
+
+	// Perform some surgery on the executor - replace its state machine and
+	// initialize the state, and its jobs and schema change job records if
+	// they are passed by the caller.
+	ex.machine = fsm.MakeMachine(
+		BoundTxnStateTransitions,
+		txnState,
+		&ex.state,
+	)
+
+	if ie.extraTxnState != nil {
+		if ie.extraTxnState.jobs != nil {
+			ex.extraTxnState.jobs = *ie.extraTxnState.jobs
+		}
+		if ie.extraTxnState.schemaChangeJobRecords != nil {
+			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+		}
+	}
+
+	ex.state.resetForNewSQLTxn(
+		ctx,
+		explicitTxn,
+		ie.extraTxnState.txn.ReadTimestamp().GoTime(),
+		nil, /* historicalTimestamp */
+		roachpb.UnspecifiedUserPriority,
+		tree.ReadWrite,
+		ie.extraTxnState.txn,
+		ex.transitionCtx,
+		ex.QualityOfService())
+
+	// Modify the Collection to match the parent executor's Collection.
+	// This allows the InternalExecutor to see schema changes made by the
+	// parent executor.
+	ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+	return ex, skipReleaseDescsCollection, err
+}
+
+// MakeDescsCollection creates the internal executor's own descriptor collection.
+func (ie *InternalExecutor) MakeDescsCollection(ctx context.Context, sd *sessiondata.SessionData) descs.Collection {
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	return ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
 }
 
 type ieIteratorResult struct {
@@ -570,6 +694,33 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	)
 }
 
+// SetExtraTxnState is to set the extra txn state for an internal executor.
+// It should only be called if the internal executor is used to run sql
+// sql statements under a planner context.
+func (ie *InternalExecutor) SetExtraTxnState(extraTxnState sqlutil.ExtraTxnStateUnderPlanner) {
+	switch ts := extraTxnState.(type) {
+	case extraTxnStateUnderPlanner:
+		if extraTxnState != nil {
+			ie.extraTxnState = &extraTxnStateUnderPlanner{
+				txn:                    ts.txn,
+				descCollection:         ts.descCollection,
+				jobs:                   ts.jobs,
+				schemaChangeJobRecords: ts.schemaChangeJobRecords,
+				txnState:               ts.txnState,
+				txnExplicit:            ts.txnExplicit,
+			}
+		}
+	default:
+		panic("unsupported type of extraTxnType")
+	}
+}
+
+// SetDescsCollection is to set the descriptor collection used by the internal
+// executor.
+func (ie *InternalExecutor) SetDescsCollection(descCollection *descs.Collection) {
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{descCollection: descCollection})
+}
+
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
 	if !o.User.Undefined() {
@@ -730,7 +881,9 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	if err := ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback); err != nil {
+		return nil, err
+	}
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {

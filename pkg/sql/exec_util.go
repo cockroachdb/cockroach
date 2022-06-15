@@ -1299,10 +1299,15 @@ type ExecutorConfig struct {
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
 
-	// InternalExecutorFactory is used to create an InternalExecutor binded with
-	// SessionData and other ExtraTxnState.
+	// InternalExecutorFactory is used to create an InternalExecutor.
 	// This is currently only for builtin functions where we need to execute sql.
-	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	// TODO (janexing): we intend to replace InternalExecutorFactory with
+	// InternalExecutorProto.
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
+
+	// InternalExecutorProto is used to create an InternalExecutor.
+	// This is currently only for builtin functions where we need to execute sql.
+	InternalExecutorProto *sqlutil.InternalExecutorProto
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.

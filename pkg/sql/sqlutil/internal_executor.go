@@ -158,6 +158,11 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetExtraTxnState is to set the extra txn state for an internal executor.
+	// It should only be called if the internal executor is used to run sql
+	// sql statements under a planner context.
+	SetExtraTxnState(extraTxnState ExtraTxnStateUnderPlanner)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -191,9 +196,28 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
-// SessionBoundInternalExecutorFactory is a function that produces a "session
+// InternalExecutorProto stores info needed to initialize an
+// internal executor.
+// The only difference between InternalExecutorProto and InternalExecutorFactory
+// is that the proto also includes the synthetic descriptor.
+type InternalExecutorProto struct {
+	IeFactory InternalExecutorFactory
+	// SyntheticDescs stores the synthetic descriptors to be injected into
+	// each query/statement's descs.Collection upon initialization.
+	//
+	// Warning: Not safe for concurrent use from multiple goroutines.
+	SyntheticDescs []catalog.Descriptor
+}
+
+// SetSyntheticDescs is to set the synthetic descriptor stored in the internal
+// executor proto.
+func (p *InternalExecutorProto) SetSyntheticDescs(d []catalog.Descriptor) {
+	p.SyntheticDescs = d
+}
+
+// InternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
-type SessionBoundInternalExecutorFactory func(
+type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
 
@@ -204,3 +228,7 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// ExtraTxnStateUnderPlanner saves the extra txn state that is used to init a
+// conn executor when the internal executor is used under a planner context.
+type ExtraTxnStateUnderPlanner interface{}
