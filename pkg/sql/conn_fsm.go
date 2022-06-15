@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // Constants for the String() representation of the session states. Shared with
@@ -36,6 +37,25 @@ const (
 	CommitWaitStateStr    = sqlfsm.CommitWaitStateStr
 	InternalErrorStateStr = sqlfsm.InternalErrorStateStr
 )
+
+// StringToTxnState is to return the corresponding txn state to the given
+// string.
+func StringToTxnState(s string) (fsm.State, error) {
+	switch s {
+	case OpenStateStr:
+		return &stateOpen{}, nil
+	case NoTxnStateStr:
+		return &stateNoTxn{}, nil
+	case AbortedStateStr:
+		return &stateAborted{}, nil
+	case CommitWaitStateStr:
+		return &stateCommitWait{}, nil
+	case InternalErrorStateStr:
+		return &stateInternalError{}, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown txn state string")
+	}
+}
 
 /// States.
 

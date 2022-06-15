@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -72,6 +73,11 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	// extraTxnStateUnderPlanner is to store extra transaction state info that
+	// will be passed to an internal executor. It should only be set when the
+	// internal executor is used under a planner context.
+	extraTxnState *extraTxnStateUnderPlanner
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -122,8 +128,10 @@ func MakeInternalExecutor(
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
-	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	if sessionData != nil {
+		ie.s.populateMinimalSessionData(sessionData)
+		ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	}
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -146,7 +154,7 @@ func (ie *InternalExecutor) initConnEx(
 	wg *sync.WaitGroup,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
-) {
+) error {
 	clientComm := &internalClientComm{
 		w: w,
 		// init lastDelivered below the position of the first result (0).
@@ -199,6 +207,25 @@ func (ie *InternalExecutor) initConnEx(
 		)
 	}
 
+	if ie.extraTxnState != nil {
+		if ie.extraTxnState.descCollection != nil {
+			ex.extraTxnState.descCollection = *ie.extraTxnState.descCollection
+		}
+		if ie.extraTxnState.jobs != nil {
+			ex.extraTxnState.jobs = *ie.extraTxnState.jobs
+		}
+		if ie.extraTxnState.schemaChangeJobRecords != nil {
+			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+		}
+		if ie.extraTxnState.txnState != "" {
+			txnState, err := StringToTxnState(ie.extraTxnState.txnState)
+			if err != nil {
+				return err
+			}
+			ex.machine = fsm.MakeMachine(TxnStateTransitions, txnState, &ex.state)
+		}
+	}
+
 	ex.executorType = executorTypeInternal
 
 	wg.Add(1)
@@ -215,6 +242,7 @@ func (ie *InternalExecutor) initConnEx(
 		ex.close(ctx, closeMode)
 		wg.Done()
 	}()
+	return nil
 }
 
 type ieIteratorResult struct {
@@ -570,6 +598,29 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	)
 }
 
+// SetExtraTxnState is to set the extra txn state for an internal executor.
+// It should only be called if the internal executor is used to run sql
+// sql statements under a planner context.
+func (ie *InternalExecutor) SetExtraTxnState(
+	extraTxnState sqlutil.ExtraTxnStateUnderPlanner,
+) {
+	switch ts := extraTxnState.(type) {
+	case extraTxnStateUnderPlanner:
+		if extraTxnState != nil {
+			ie.extraTxnState = &extraTxnStateUnderPlanner{
+				txn:                    ts.txn,
+				descCollection:         ts.descCollection,
+				jobs:                   ts.jobs,
+				schemaChangeJobRecords: ts.schemaChangeJobRecords,
+				txnState:               ts.txnState,
+				txnExplicit:            ts.txnExplicit,
+			}
+		}
+	default:
+		panic("unsupported type of extraTxnType")
+	}
+}
+
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
 	if !o.User.Undefined() {
@@ -730,7 +781,9 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
+	if err := ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback); err != nil {
+		return nil, err
+	}
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {

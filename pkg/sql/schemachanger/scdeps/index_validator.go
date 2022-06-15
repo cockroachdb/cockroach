@@ -54,7 +54,7 @@ type indexValidator struct {
 	db                      *kv.DB
 	codec                   keys.SQLCodec
 	settings                *cluster.Settings
-	ieFactory               sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory               sqlutil.InternalExecutorFactory
 	validateForwardIndexes  ValidateForwardIndexesFn
 	validateInvertedIndexes ValidateInvertedIndexesFn
 	newFakeSessionData      NewFakeSessionDataFn
@@ -113,7 +113,7 @@ func NewIndexValidator(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory sqlutil.InternalExecutorFactory,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	newFakeSessionData NewFakeSessionDataFn,
