@@ -70,5 +70,12 @@ func (b BackendKeyData) GetSQLInstanceID() base.SQLInstanceID {
 	bits = bits &^ leadingBitMask
 	// Use the upper 32 bits as the sqlInstanceID.
 	return base.SQLInstanceID(bits >> 32)
+}
+
+// GetPGBackendPID returns the upper 32 bits of this BackendKeyData. In Postgres,
+// this is the process ID, but we expose it only for compatibility.
+func (b BackendKeyData) GetPGBackendPID() uint32 {
+	bits := uint64(b)
+	return uint32(bits >> 32)
 
 }
