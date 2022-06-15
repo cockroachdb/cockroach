@@ -40,7 +40,11 @@ func makeGCIterator(
 	desc *roachpb.RangeDescriptor, snap storage.Reader, threshold hlc.Timestamp,
 ) gcIterator {
 	return gcIterator{
-		it:        rditer.NewReplicaMVCCDataIterator(desc, snap, true /* seekEnd */),
+		it: rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
+			Reverse:  true,
+			IterKind: storage.MVCCKeyAndIntentsIterKind,
+			KeyTypes: storage.IterKeyTypePointsAndRanges,
+		}),
 		threshold: threshold,
 	}
 }
