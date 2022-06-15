@@ -125,18 +125,19 @@ import (
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
 type SQLServer struct {
-	ambientCtx       log.AmbientContext
-	stopper          *stop.Stopper
-	sqlIDContainer   *base.SQLIDContainer
-	pgServer         *pgwire.Server
-	distSQLServer    *distsql.ServerImpl
-	execCfg          *sql.ExecutorConfig
-	cfg              *BaseConfig
-	internalExecutor *sql.InternalExecutor
-	leaseMgr         *lease.Manager
-	blobService      *blobs.Service
-	tracingService   *service.Service
-	tenantConnect    kvtenant.Connector
+	ambientCtx            log.AmbientContext
+	stopper               *stop.Stopper
+	sqlIDContainer        *base.SQLIDContainer
+	pgServer              *pgwire.Server
+	distSQLServer         *distsql.ServerImpl
+	execCfg               *sql.ExecutorConfig
+	cfg                   *BaseConfig
+	internalExecutor      *sql.InternalExecutor
+	internalExecutorProto *sqlutil.InternalExecutorProto
+	leaseMgr              *lease.Manager
+	blobService           *blobs.Service
+	tracingService        *service.Service
+	tenantConnect         kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
@@ -291,6 +292,10 @@ type sqlServerArgs struct {
 	//
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
+
+	// internalExecutorProto is used to initialize an internal executor, and
+	// then to run sql statements.
+	internalExecutorProto *sqlutil.InternalExecutorProto
 
 	// Stores and deletes expired liveness sessions.
 	sqlLivenessProvider sqlliveness.Provider
@@ -903,7 +908,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
-	// SessionBoundInternalExecutorFactory. The same applies for setting a
+	// InternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
 	ieFactory := func(
 		ctx context.Context, sessionData *sessiondata.SessionData,
@@ -918,8 +923,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return &ie
 	}
 
-	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
-	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
+	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
+	jobRegistry.SetInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
 	execCfg.IndexValidator = scdeps.NewIndexValidator(
@@ -938,6 +943,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		&execCfg.Settings.SV,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
+	execCfg.InternalExecutorProto = &sqlutil.InternalExecutorProto{
+		IeFactory: ieFactory,
+	}
+	cfg.internalExecutorProto = execCfg.InternalExecutorProto
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 
@@ -1040,7 +1049,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 		codec,
 		cfg.registry,
-		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
+		distSQLServer.ServerConfig.InternalExecutorFactory,
 		cfg.sqlStatusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
@@ -1088,6 +1097,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		distSQLServer:                  distSQLServer,
 		execCfg:                        execCfg,
 		internalExecutor:               cfg.circularInternalExecutor,
+		internalExecutorProto:          cfg.internalExecutorProto,
 		leaseMgr:                       leaseMgr,
 		blobService:                    blobService,
 		tracingService:                 tracingService,

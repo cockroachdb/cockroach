@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -667,6 +666,7 @@ func (s *Server) SetupConn(
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		nil, /* descsCollection */
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -820,6 +820,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	descsCollection *descs.Collection,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -921,7 +922,11 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	if descsCollection != nil {
+		ex.extraTxnState.descCollection = *descsCollection
+	} else {
+		ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	}
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -936,74 +941,6 @@ func (s *Server) newConnExecutor(
 
 	ex.initPlanner(ctx, &ex.planner)
 
-	return ex
-}
-
-// newConnExecutorWithTxn creates a connExecutor that will execute statements
-// under a higher-level txn. This connExecutor runs with a different state
-// machine, much reduced from the regular one. It cannot initiate or end
-// transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
-// retries).
-//
-// If there is no error, this function also activate()s the returned
-// executor, so the caller does not need to run the
-// activation. However this means that run() or close() must be called
-// to release resources.
-func (s *Server) newConnExecutorWithTxn(
-	ctx context.Context,
-	sdMutIterator *sessionDataMutatorIterator,
-	stmtBuf *StmtBuf,
-	clientComm ClientComm,
-	parentMon *mon.BytesMonitor,
-	memMetrics MemoryMetrics,
-	srvMetrics *Metrics,
-	txn *kv.Txn,
-	syntheticDescs []catalog.Descriptor,
-	applicationStats sqlstats.ApplicationStats,
-) *connExecutor {
-	ex := s.newConnExecutor(
-		ctx,
-		sdMutIterator,
-		stmtBuf,
-		clientComm,
-		memMetrics,
-		srvMetrics,
-		applicationStats,
-	)
-	if txn.Type() == kv.LeafTxn {
-		// If the txn is a leaf txn it is not allowed to perform mutations. For
-		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.SetReadOnly(true)
-		})
-	}
-
-	// The new transaction stuff below requires active monitors and traces, so
-	// we need to activate the executor now.
-	ex.activate(ctx, parentMon, mon.BoundAccount{})
-
-	// Perform some surgery on the executor - replace its state machine and
-	// initialize the state.
-	ex.machine = fsm.MakeMachine(
-		BoundTxnStateTransitions,
-		stateOpen{ImplicitTxn: fsm.False},
-		&ex.state,
-	)
-	ex.state.resetForNewSQLTxn(
-		ctx,
-		explicitTxn,
-		txn.ReadTimestamp().GoTime(),
-		nil, /* historicalTimestamp */
-		roachpb.UnspecifiedUserPriority,
-		tree.ReadWrite,
-		txn,
-		ex.transitionCtx,
-		ex.QualityOfService())
-
-	// Modify the Collection to match the parent executor's Collection.
-	// This allows the InternalExecutor to see schema changes made by the
-	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
 }
 
@@ -1040,7 +977,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 		logcrash.ReportPanic(ctx, &ex.server.cfg.Settings.SV, panicErr, 1 /* depth */)
 
 		// Close the executor before propagating the panic further.
-		ex.close(ctx, panicClose)
+		ex.close(ctx, panicClose, false /* skipReleaseDescsCollection */)
 
 		// Propagate - this may be meant to stop the process.
 		panic(panicErr)
@@ -1050,10 +987,10 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 	// AddTags and not WithTags, so that we combine the tags with those
 	// filled by AnnotateCtx.
 	closeCtx = logtags.AddTags(closeCtx, logtags.FromContext(ctx))
-	ex.close(closeCtx, normalClose)
+	ex.close(closeCtx, normalClose, false /* skipReleaseDescsCollection */)
 }
 
-func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
+func (ex *connExecutor) close(ctx context.Context, closeType closeType, skipReleaseDescsCollection bool) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
 	txnEvType := noEvent
@@ -1090,7 +1027,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.state.finishExternalTxn()
 	}
 
-	if err := ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}); err != nil {
+	if err := ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}, skipReleaseDescsCollection); err != nil {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
@@ -1628,7 +1565,7 @@ func (ns *prepStmtNamespace) resetTo(
 // finishes execution (either commits, rollbacks or restarts). Based on the
 // transaction event, resetExtraTxnState invokes corresponding callbacks
 // (e.g. onTxnFinish() and onTxnRestart()).
-func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
+func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, skipReleaseDescsCollection bool) error {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
@@ -1640,7 +1577,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		delete(ex.extraTxnState.schemaChangeJobRecords, k)
 	}
 
-	ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	if skipReleaseDescsCollection {
+		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
+	} else {
+		ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	}
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -2365,7 +2306,7 @@ func (ex *connExecutor) execCopyIn(
 	} else {
 		txnOpt = copyTxnOpt{
 			resetExtraTxnState: func(ctx context.Context) error {
-				return ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent})
+				return ex.resetExtraTxnState(ctx, txnEvent{eventType: noEvent}, false)
 			},
 		}
 	}
@@ -2941,7 +2882,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		fallthrough
 	case txnRestart, txnRollback:
-		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent); err != nil {
+		if err := ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, false); err != nil {
 			return advanceInfo{}, err
 		}
 	default:
