@@ -20,6 +20,7 @@ go_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
