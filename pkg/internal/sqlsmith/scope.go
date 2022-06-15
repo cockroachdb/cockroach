@@ -43,6 +43,8 @@ func (t colRefs) stripTableName() {
 // canRecurse returns whether the current function should possibly invoke
 // a function that creates new nodes.
 func (s *Smither) canRecurse() bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	if s.expressionDepth >= maxExpressionDepth {
 		return false
 	}
@@ -53,6 +55,8 @@ func (s *Smither) canRecurse() bool {
 // function should possibly invoke a function that creates new scalar expression
 // nodes.
 func (s *Smither) canRecurseScalar() bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	if s.inWhereClause && s.disableConstantWhereClause && !s.nonBoolExprStarted {
 		return true
 	}

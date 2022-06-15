@@ -34,6 +34,16 @@ type tableRef struct {
 	Columns   []*tree.ColumnTableDef
 }
 
+func (t *tableRef) insertDefaultsAllowed() bool {
+	for _, column := range t.Columns {
+		if column.Nullable.Nullability == tree.NotNull &&
+			!column.HasDefaultExpr() {
+			return false
+		}
+	}
+	return true
+}
+
 type aliasedTableRef struct {
 	*tableRef
 	indexFlags *tree.IndexFlags

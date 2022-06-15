@@ -41,12 +41,18 @@ import (
 // Note that if typ.Family is UNKNOWN, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
-	nullDenominator := 10
+	nullChance := NullChance(nullOk)
+	return RandDatumWithNullChance(rng, typ, nullChance, false /* favorInterestingData */)
+}
+
+// NullChance returns `n` representing a 1 out of `n` probability of generating
+// nulls, depending on whether `nullOk` is true.
+func NullChance(nullOk bool) (nullChance int) {
+	nullChance = 10
 	if !nullOk {
-		nullDenominator = 0
+		nullChance = 0
 	}
-	return RandDatumWithNullChance(rng, typ, nullDenominator, /* nullChance */
-		false /* favorInterestingData */)
+	return nullChance
 }
 
 // RandDatumWithNullChance generates a random Datum of the given type.
@@ -66,7 +72,7 @@ func RandDatumWithNullChance(
 	}
 	// Sometimes pick from a predetermined list of known interesting datums.
 	randomInt := rng.Intn(10)
-	if (favorInterestingData && randomInt < 9) ||
+	if (favorInterestingData && (randomInt < 3 || typ.Family() == types.OidFamily)) ||
 		randomInt == 0 {
 		if special := randInterestingDatum(rng, typ); special != nil {
 			return special

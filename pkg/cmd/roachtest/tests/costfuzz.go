@@ -40,7 +40,6 @@ func registerCostFuzz(r registry.Registry) {
 		Tags:            nil,
 		Cluster:         r.MakeClusterSpec(1),
 		Run:             runCostFuzz,
-		Skip:            "flaky test: https://github.com/cockroachdb/cockroach/issues/81717",
 	})
 }
 
@@ -111,6 +110,18 @@ func runOneRoundCostFuzz(
 		// Blank lines are necessary for reduce -costfuzz to function correctly.
 		fmt.Fprint(costFuzzLog, "\n\n")
 	}
+	printStmt := func(stmt string) {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			return
+		}
+		fmt.Fprint(costFuzzLog, stmt)
+		t.L().Printf(stmt)
+		if !strings.HasSuffix(stmt, ";") {
+			t.L().Printf(";")
+		}
+		t.L().Printf("\n\n")
+	}
 
 	costFuzzFailureLogPath := filepath.Join(
 		t.ArtifactsDir(), fmt.Sprintf("costfuzz%03d.failure.log", iter),
@@ -152,16 +163,18 @@ func runOneRoundCostFuzz(
 	}
 	logStmt(setStmtTimeout)
 
-	// Initialize a smither that generates only INSERT, UPDATE, and DELETE
-	// statements with the MutationsOnly option.
-	mutatingSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly(),
-		sqlsmith.FavorInterestingData(), sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
-		sqlsmith.SetComplexity(.05),
-		sqlsmith.SetScalarComplexity(.01),
-	)
-	if err != nil {
+	setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true"
+	t.Status("setting unconstrained_non_covering_index_scan_enabled")
+	t.L().Printf("\n%s", setUnconstrainedStmt)
+	if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
+		logStmt(setUnconstrainedStmt)
 		t.Fatal(err)
 	}
+	logStmt(setUnconstrainedStmt)
+
+	// Initialize a smither that generates only INSERT and UPDATE statements with
+	// the InsUpdOnly option.
+	mutatingSmither := newMutatingSmither(conn, rnd, t, true /* disableDelete */)
 	defer mutatingSmither.Close()
 
 	// Initialize a smither that generates only deterministic SELECT statements.
@@ -172,7 +185,7 @@ func runOneRoundCostFuzz(
 		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(),
 		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
 		sqlsmith.SetComplexity(.3),
-		sqlsmith.SetScalarComplexity(.02),
+		sqlsmith.SetScalarComplexity(.1),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -193,22 +206,54 @@ func runOneRoundCostFuzz(
 		default:
 		}
 
+		const numInitialMutations = 1000
+
+		if i == numInitialMutations {
+			t.Status("running costfuzz: ", i, " initial mutations completed")
+			// Initialize a new mutating smither that generates INSERT, UPDATE and
+			// DELETE statements with the MutationsOnly option.
+			mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */)
+			defer mutatingSmither.Close()
+		}
+
 		if i%1000 == 0 {
 			t.Status("running costfuzz: ", i, " statements completed")
 		}
 
-		// Run 3000 mutations first so that the tables have rows. Run a mutation for
-		// a tenth of the iterations after that to continually change the state of
-		// the database.
-		if i < 3000 || i%10 == 0 {
+		// Run `numInitialMutations` mutations first so that the tables have rows.
+		// Run a mutation every 25th iteration afterwards to continually change the
+		// state of the database.
+		if i < numInitialMutations || i%25 == 0 {
 			runMutationStatement(conn, mutatingSmither, logStmt)
 			continue
 		}
 
-		if err := runCostFuzzQuery(conn, smither, rnd, logStmt, logFailure); err != nil {
+		if err := runCostFuzzQuery(conn, smither, rnd, logStmt, logFailure, printStmt, i); err != nil {
 			t.Fatal(err)
 		}
 	}
+}
+
+func newMutatingSmither(
+	conn *gosql.DB, rnd *rand.Rand, t test.Test, disableDelete bool,
+) (mutatingSmither *sqlsmith.Smither) {
+	var allowedMutations func() sqlsmith.SmitherOption
+	if disableDelete {
+		allowedMutations = sqlsmith.InsUpdOnly
+	} else {
+		allowedMutations = sqlsmith.MutationsOnly
+	}
+	var err error
+	mutatingSmither, err = sqlsmith.NewSmither(conn, rnd, allowedMutations(),
+		sqlsmith.FavorInterestingData(), sqlsmith.UnlikelyRandomNulls(),
+		sqlsmith.DisableInsertSelect(), sqlsmith.DisableCrossJoins(),
+		sqlsmith.SetComplexity(.05),
+		sqlsmith.SetScalarComplexity(.01),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mutatingSmither
 }
 
 // runCostFuzzQuery executes the same query two times, once with normal costs
@@ -220,6 +265,8 @@ func runCostFuzzQuery(
 	rnd *rand.Rand,
 	logStmt func(string),
 	logFailure func(string, [][]string),
+	printStmt func(string),
+	stmtNo int,
 ) error {
 	// Ignore panics from Generate.
 	defer func() {
@@ -259,7 +306,9 @@ func runCostFuzzQuery(
 	if _, err := conn.Exec(seedStmt); err != nil {
 		logStmt(stmt)
 		logStmt(seedStmt)
-		return errors.Wrap(err, "failed to perturb costs")
+		printStmt(stmt)
+		printStmt(seedStmt)
+		return errors.Wrapf(err, "failed to perturb costs. %d statements run", stmtNo)
 	}
 
 	// Then, re-explain and rerun the statement with cost perturbation.
@@ -270,11 +319,11 @@ func runCostFuzzQuery(
 		return nil
 	}
 
-	perturbRows, err := runQuery(stmt)
-	if err != nil {
+	perturbRows, err2 := runQuery(stmt)
+	if err2 != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
-		es := err.Error()
+		es := err2.Error()
 		if strings.Contains(es, "internal error") {
 			logStmt(stmt)
 			logStmt(seedStmt)
@@ -283,7 +332,9 @@ func runCostFuzzQuery(
 			logFailure(stmt, controlRows)
 			logFailure(seedStmt, nil)
 			logFailure(explainStmt, perturbPlan)
-			return errors.Wrap(err, "internal error while running perturbed statement")
+			printStmt(seedStmt)
+			printStmt(stmt)
+			return errors.Wrapf(err2, "internal error while running perturbed statement. %d statements run", stmtNo)
 		}
 		// Otherwise, skip perturbed statements that fail with a non-internal
 		// error. This could happen if the statement contains bad arguments to a
@@ -306,9 +357,11 @@ func runCostFuzzQuery(
 		logFailure(seedStmt, nil)
 		logFailure(explainStmt, perturbPlan)
 		logFailure(stmt, perturbRows)
+		printStmt(seedStmt)
+		printStmt(stmt)
 		return errors.Newf(
-			"expected control and perturbed results to be equal\n%s\nsql: %s",
-			diff, stmt,
+			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s\n%d statements run",
+			diff, stmt, stmtNo,
 		)
 	}
 
@@ -324,7 +377,7 @@ func runCostFuzzQuery(
 		logStmt(seedStmt)
 		logStmt(stmt)
 		logStmt(resetSeedStmt)
-		return errors.Wrap(err, "failed to disable cost perturbation")
+		return errors.Wrapf(err, "failed to disable cost perturbation. %d statements run", stmtNo)
 	}
 	return nil
 }
