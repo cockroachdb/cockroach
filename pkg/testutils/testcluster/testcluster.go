@@ -369,7 +369,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 			}(i)
 		} else {
 			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
-				if strings.Contains(err.Error(), "requires a CCL binary") {
+				if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
 					if i != 0 {
 						t.Fatal(errors.Newf("failed to start server on node %d due to lack of "+
 							"CCL binary after server started successfully on previous nodes", i))
@@ -381,7 +381,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 						tc.Servers[j].Stopper().Stop(context.TODO())
 					}
 					tc.Stopper().Stop(context.TODO())
-					skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+					skip.IgnoreLint(t, serverutils.TenantSkipCCLBinaryMessage)
 				}
 				t.Fatal(err)
 			}
@@ -395,7 +395,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
-				if strings.Contains(err.Error(), "requires a CCL binary") {
+				if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
 					// We're about to skip the test. Doing so requires us to
 					// clean up all servers before in advance, or else they'll
 					// be detected as a leaked stopper.
@@ -403,7 +403,7 @@ func (tc *TestCluster) Start(t testing.TB) {
 						tc.Servers[j].Stopper().Stop(context.TODO())
 					}
 					tc.Stopper().Stop(context.TODO())
-					skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+					skip.IgnoreLint(t, serverutils.TenantSkipCCLBinaryMessage)
 				}
 				t.Fatal(err)
 			}
@@ -502,9 +502,9 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 	}
 
 	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
-		if strings.Contains(err.Error(), "requires a CCL binary") {
+		if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
 			tc.Stopper().Stop(context.TODO())
-			skip.IgnoreLint(tc.t, "skipping due to lack of CCL binary")
+			skip.IgnoreLint(tc.t, serverutils.TenantSkipCCLBinaryMessage)
 		}
 	}
 	return err
