@@ -317,16 +317,16 @@ describe("sumNodeStats", function () {
       2: LivenessStatus.NODE_STATUS_LIVE,
     };
     const actual = sumNodeStats(nodeStatuses, livenessStatusByNodeID);
-    expect(actual.nodeCounts.healthy).toEqual(2);
-    expect(actual.capacityTotal).toEqual(200);
-    expect(actual.capacityUsed).toEqual(20);
+    expect(actual.nodeCounts.healthy).toBe(2);
+    expect(actual.capacityTotal).toBe(200);
+    expect(actual.capacityUsed).toBe(20);
     // usable = used + available.
-    expect(actual.capacityUsable).toEqual(100);
+    expect(actual.capacityUsable).toBe(100);
   });
 
   it("returns empty stats if liveness statuses are not provided", () => {
     const { nodeCounts, ...restStats } = sumNodeStats(nodeStatuses, {});
-    Object.entries(restStats).forEach(([_, value]) => expect(value).toEqual(0));
-    Object.entries(nodeCounts).forEach(([_, value]) => expect(value).toEqual(0));
+    Object.entries(restStats).forEach(([_, value]) => expect(value).toBe(0));
+    Object.entries(nodeCounts).forEach(([_, value]) => expect(value).toBe(0));
   });
 });

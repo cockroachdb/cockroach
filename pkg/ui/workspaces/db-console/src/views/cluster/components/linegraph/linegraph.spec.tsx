@@ -76,7 +76,7 @@ describe("<LineGraph>", function () {
   it("should render a root component on mount", () => {
     const wrapper = linegraph({ ...mockProps });
     const root = wrapper.find(".linegraph");
-    expect(root.length).toEqual(1);
+    expect(root.length).toBe(1);
   });
 
   it("should set new history", () => {
@@ -200,6 +200,6 @@ describe("fillGaps", () => {
       1634735810000,
     ];
     const result = fillGaps(data, sampleDuration);
-    expect(result.length).toEqual(50);
+    expect(result.length).toBe(50);
   });
 });

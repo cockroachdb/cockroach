@@ -46,7 +46,9 @@ describe("InstructionsBox component", () => {
 
     cases.forEach(testCase => {
       it(`returns ${testCase.expected} for case "${testCase.desc}"`, () => {
-        expect(showInstructionsBox(testCase.showMap, testCase.tiers)).toEqual(testCase.expected);
+        expect(showInstructionsBox(testCase.showMap, testCase.tiers)).toEqual(
+          testCase.expected,
+        );
       });
     });
   });
