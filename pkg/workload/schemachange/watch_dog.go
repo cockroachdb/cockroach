@@ -1,3 +1,13 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package schemachange
 
 import (
@@ -19,6 +29,8 @@ type schemaChangeWatchDog struct {
 	numRetries  int
 }
 
+// newSchemaChangeWatchDog constructs a new watch dog for monitoring
+// a single connection.
 func newSchemaChangeWatchDog(conn *pgxpool.Pool) *schemaChangeWatchDog {
 	return &schemaChangeWatchDog{
 		conn:       conn,
@@ -26,6 +38,10 @@ func newSchemaChangeWatchDog(conn *pgxpool.Pool) *schemaChangeWatchDog {
 	}
 }
 
+// isConnectionActive checks if a connection is alive and making progress,
+// towards completing its current operations. This includes making sure
+// data is being read or transactions are being retried. Returns true
+// when progress is detected.
 func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 	// Scan the session to make sure progress is being made first.
 	sessionInfo := w.conn.QueryRow(ctx,
@@ -50,12 +66,15 @@ func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 	}
 	if lastTxnID != w.txnID ||
 		lastNumRetries != w.numRetries {
+		fmt.Printf("DETECTED INCREASING COUNT: %p %d\n", w, lastNumRetries)
 		return true
 	}
 	// FIXME: Next we can check the transaction to see if retries are happening..
 	return false
 }
 
+// watchLoop monitors the connection until either observed work is finished,
+// or a timeout is hit.
 func (w *schemaChangeWatchDog) watchLoop() {
 	ctx := context.Background()
 	const maxTimeOutForDump = 300
@@ -81,6 +100,8 @@ func (w *schemaChangeWatchDog) watchLoop() {
 	}
 }
 
+// Start starts monitoring the given transaction, as a part of this process,
+// any required session information will be collected.
 func (w *schemaChangeWatchDog) Start(ctx context.Context, tx pgx.Tx) error {
 	sessionInfo := tx.QueryRow(ctx, "SELECT session_id FROM [SHOW session_id]")
 	if sessionInfo == nil {
@@ -95,12 +116,15 @@ func (w *schemaChangeWatchDog) Start(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
+// reset resets the watch dog for re-use.
 func (w *schemaChangeWatchDog) reset() {
 	w.sessionID = ""
 	w.activeQuery = ""
 	w.txnID = ""
 }
 
+// Stop stops monitoring the connection and waits for the watch dog thread to
+// return.
 func (w *schemaChangeWatchDog) Stop() {
 	replyChan := make(chan struct{})
 	w.cmdChannel <- replyChan
