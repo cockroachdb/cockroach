@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -153,6 +154,19 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// IsMemberOf implements the scbuildstmt.PrivilegeChecker interface.
+func (b *builderState) IsMemberOf(role username.SQLUsername) bool {
+	if b.hasAdmin {
+		return true
+	}
+	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, role)
+	if err != nil {
+		panic(err)
+	}
+	_, ok := memberships[b.evalCtx.SessionData().User()]
+	return ok
 }
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)

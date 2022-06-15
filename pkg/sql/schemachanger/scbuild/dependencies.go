@@ -167,6 +167,9 @@ type AuthorizationAccessor interface {
 	CheckPrivilegeForUser(
 		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user username.SQLUsername,
 	) error
+
+	// MemberOfWithAdminOption looks up the roles that 'member' is a member of.
+	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
 }
 
 // AstFormatter provides interfaces for formatting AST nodes.
