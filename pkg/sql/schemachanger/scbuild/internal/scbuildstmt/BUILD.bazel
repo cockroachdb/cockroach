@@ -9,6 +9,7 @@ go_library(
         "create_index.go",
         "dependencies.go",
         "drop_database.go",
+        "drop_owned_by.go",
         "drop_schema.go",
         "drop_sequence.go",
         "drop_table.go",
@@ -20,6 +21,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt",
     visibility = ["//pkg/sql/schemachanger/scbuild:__subpackages__"],
     deps = [
+        "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
@@ -29,6 +31,7 @@ go_library(
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/decodeusername",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

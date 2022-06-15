@@ -1,0 +1,318 @@
+# LogicTest: !local-legacy-schema-changer
+
+# Test dropping nothing.
+statement ok
+DROP OWNED BY testuser
+
+statement ok
+CREATE USER testuser2
+
+# DROP-OBJECTS: Test that DROP OWNED BY drops objects owned by the specified
+# roles.
+#
+# In this test, testuser creates multiple objects and drops all of them in one
+# go. Additionally, testuser2 owns a table that shouldn't be dropped by
+# testuser's DROP OWNED BY.
+subtest drop-objects
+
+user testuser2
+
+statement ok
+CREATE TABLE u()
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+CREATE TABLE t(a INT)
+
+statement ok
+CREATE VIEW v AS SELECT 1
+
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+CREATE TYPE enum AS ENUM('a', 'b')
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  seq  sequence  testuser   0  NULL
+public  t    table     testuser   0  NULL
+public  u    table     testuser2  0  NULL
+public  v    view      testuser   0  NULL
+
+query TTTT
+SHOW ENUMS
+----
+public  enum  {a,b}  testuser
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  u  table  testuser2  0  NULL
+
+query error pgcode 42P01 relation "t" does not exist
+SELECT * FROM t
+
+query error pgcode 42P01 relation "v" does not exist
+SELECT * FROM v
+
+query TTTT
+SHOW ENUMS
+----
+
+user testuser2
+
+statement ok
+DROP OWNED BY testuser2
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+
+# DROP-BEHAVIOR: Test RESTRICT/CASCADE.
+#
+# In this test, testuser2 creates a view dependent on a table owned by
+# testuser. Under RESTRICT, testuser cannot DROP OWNED BY due to this
+# dependency. Under CASCADE, testuser can DROP OWNED BY, which drops both
+# testuser's table and testuser2's view.
+subtest drop-behavior
+
+user testuser
+
+statement ok
+CREATE TABLE t(a INT)
+
+statement ok
+GRANT SELECT ON t TO testuser2 WITH GRANT OPTION
+
+user testuser2
+
+statement ok
+CREATE VIEW v AS SELECT a FROM t
+
+user testuser
+
+statement error pq: cannot drop desired object\(s\) because other objects depend on them
+DROP OWNED BY testuser
+
+statement error pq: cannot drop desired object\(s\) because other objects depend on them
+DROP OWNED BY testuser RESTRICT
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  t  table  testuser   0  NULL
+public  v  view   testuser2  0  NULL
+
+user testuser2
+
+# TODO(jasonmchan): Replace the two following DROP OWNED BY statements with a
+# single DROP OWNED BY testuser2 CASCADE statement.
+statement ok
+DROP OWNED BY testuser2
+
+user testuser
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+
+# DROP-SCHEMA: Test that schemas and the objects that they contain can all be
+# dropped together by a single DROP OWNED BY (when they are all owned by the
+# specified roles).
+subtest drop-schema
+
+user root
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE TABLE s.t1()
+
+statement ok
+CREATE TABLE s.t2()
+
+statement ok
+DROP OWNED BY testuser
+
+statement error pq: target database or schema does not exist
+SHOW TABLES FROM s
+
+user root
+
+# REVOKE-PRIVILEGES-DB: Test that DROP OWNED BY revokes privileges on the
+# current database.
+#
+# The DROP OWNED BY from the previous subtest did not revoke testuser's
+# privileges for the DATABASE. This is because a user should not revoke its own
+# database privileges. However, the root user should be able to drop testuser's
+# database privileges via DROP OWNED BY.
+subtest revoke-privileges-db
+
+query TTTB
+SHOW GRANTS ON DATABASE test
+----
+test  admin     ALL      true
+test  public    CONNECT  false
+test  root      ALL      true
+test  testuser  ALL      true
+
+user root
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTB
+SHOW GRANTS ON DATABASE test
+----
+test  admin   ALL      true
+test  public  CONNECT  false
+test  root    ALL      true
+
+# REVOKE-PRIVILEGES-SCHEMA: Test that DROP OWNED BY revokes privileges on
+# schemas in the current database.
+#
+# In this test, root creates a schema and grants privileges for the schema to
+# testuser. When testuser issues a DROP OWNED BY, those privileges should be
+# revoked.
+subtest revoke-privileges-schema
+
+user root
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+GRANT CREATE ON SCHEMA s TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+CREATE TABLE s.t()
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTB
+SHOW GRANTS ON SCHEMA s
+----
+test  s  admin  ALL  true
+test  s  root   ALL  true
+
+query TTTTIT
+SHOW TABLES FROM s
+----
+
+user root
+
+statement ok
+DROP SCHEMA s
+
+# REVOKE-PRIVILEGES-TABLE: Test that DROP OWNED BY revokes privileges on
+# objects in the database.
+subtest revoke-privileges-table
+
+user root
+
+statement ok
+CREATE TABLE t()
+
+statement ok
+GRANT ALL ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+query TTTTTB
+SHOW GRANTS ON t
+----
+test  public  t  admin    ALL  true
+test  public  t  root     ALL  true
+test  public  t  testuser ALL  true
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTTB
+SHOW GRANTS ON t
+----
+test  public  t  admin    ALL  true
+test  public  t  root     ALL  true
+
+user root
+
+statement ok
+DROP TABLE t
+
+# MUTIROLE: Test DROP OWNED BY with multiple roles.
+subtest multirole
+
+statement ok
+CREATE ROLE r1
+
+statement ok
+CREATE ROLE r2
+
+statement ok
+SET ROLE r1
+
+statement ok
+CREATE TABLE t1()
+
+statement ok
+SET ROLE r2
+
+statement ok
+CREATE TABLE t2()
+
+statement ok
+SET ROLE root
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  t1  table  r1   0  NULL
+public  t2  table  r2   0  NULL
+
+statement ok
+DROP OWNED BY r1, r2
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+
+# ROLES: Test that the current user is a member of all the specified roles. The
+# admin role and the root user are off-limits.
+subtest roles
+
+user testuser
+
+statement error pq: permission denied to drop objects
+DROP OWNED BY testuser2
+
+statement error pq: permission denied to drop objects
+DROP OWNED BY testuser, testuser2
+
+statement error pq: cannot drop objects owned by role "root" because they are required by the database system
+DROP OWNED BY root
+
+statement error pq: cannot drop objects owned by role "admin" because they are required by the database system
+DROP OWNED BY admin

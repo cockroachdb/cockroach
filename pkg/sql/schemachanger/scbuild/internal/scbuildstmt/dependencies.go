@@ -13,6 +13,7 @@ package scbuildstmt
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -148,6 +149,9 @@ type Telemetry interface {
 
 	// IncrementEnumCounter increments the selected enum telemetry counter.
 	IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryType)
+
+	// IncrementDropOwnedByCounter increments the DROP OWNED BY telemetry counter.
+	IncrementDropOwnedByCounter()
 }
 
 // SchemaFeatureChecker checks if a schema change feature is allowed by the
@@ -167,6 +171,10 @@ type PrivilegeChecker interface {
 	// CheckPrivilege panics if the current user does not have the specified
 	// privilege for the element.
 	CheckPrivilege(e scpb.Element, privilege privilege.Kind)
+
+	// CurrentUserIsMemberOf returns true iff the current user has membership in
+	// the specified role.
+	CurrentUserIsMemberOf(member username.SQLUsername) bool
 }
 
 // TableHelpers has methods useful for creating new table elements.

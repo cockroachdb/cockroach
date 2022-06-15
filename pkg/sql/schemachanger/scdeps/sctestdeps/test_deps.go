@@ -127,6 +127,11 @@ func (s *TestState) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 	s.LogSideEffectf("increment telemetry for sql.udts.%s", counterType)
 }
 
+// IncrementDropOwnedByCounter implements the scbuild.Dependencies interface.
+func (s *TestState) IncrementDropOwnedByCounter() {
+	s.LogSideEffectf("increment telemetry for sql.drop_owned_by")
+}
+
 var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
 
 // CheckPrivilege implements the scbuild.AuthorizationAccessor interface.
@@ -154,6 +159,13 @@ func (s *TestState) CheckPrivilegeForUser(
 	user username.SQLUsername,
 ) error {
 	return nil
+}
+
+// MemberOfWithAdminOption implements the scbuild.AuthorizationAccessor interface.
+func (s *TestState) MemberOfWithAdminOption(
+	ctx context.Context, member username.SQLUsername,
+) (map[username.SQLUsername]bool, error) {
+	return nil, nil
 }
 
 // IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.

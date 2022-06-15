@@ -31,7 +31,10 @@ func init() {
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				emit(func(this *scpb.UserPrivileges) scop.Op {
-					return notImplemented(this)
+					return scop.RemoveUserPrivileges{
+						DescID: this.DescriptorID,
+						User:   this.UserName,
+					}
 				}),
 			),
 		),
