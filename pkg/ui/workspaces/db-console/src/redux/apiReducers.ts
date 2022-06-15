@@ -327,18 +327,19 @@ export const statementDetailsRequestToID = (
     req.end,
   );
 
-const queryReducerObj = new KeyedCachedDataReducer(
+export const statementDetailsActionNamespace = "statementDetails";
+export const statementDetailsReducerObj = new KeyedCachedDataReducer(
   api.getStatementDetails,
-  "statementDetails",
+  statementDetailsActionNamespace,
   statementDetailsRequestToID,
   moment.duration(5, "m"),
 );
 
 export const invalidateStatementDetails =
-  queryReducerObj.cachedDataReducer.invalidateData;
+  statementDetailsReducerObj.cachedDataReducer.invalidateData;
 export const invalidateAllStatementDetails =
-  queryReducerObj.cachedDataReducer.invalidateAllData;
-export const refreshStatementDetails = queryReducerObj.refresh;
+  statementDetailsReducerObj.cachedDataReducer.invalidateAllData;
+export const refreshStatementDetails = statementDetailsReducerObj.refresh;
 
 const userSQLRolesReducerObj = new CachedDataReducer(
   api.getUserSQLRoles,
@@ -446,7 +447,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [sessionsReducerObj.actionNamespace]: sessionsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
-  [queryReducerObj.actionNamespace]: queryReducerObj.reducer,
+  [statementDetailsReducerObj.actionNamespace]:
+    statementDetailsReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]:
     dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
