@@ -148,7 +148,11 @@ func verifyRDReplicatedOnlyMVCCIter(
 			}, hlc.Timestamp{WallTime: 42})
 			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
-		iter := NewReplicaMVCCDataIterator(desc, readWriter, reverse /* seekEnd */)
+		iter := NewReplicaMVCCDataIterator(desc, readWriter, ReplicaDataIteratorOptions{
+			Reverse:  reverse,
+			IterKind: storage.MVCCKeyAndIntentsIterKind,
+			KeyTypes: storage.IterKeyTypePointsAndRanges,
+		})
 		defer iter.Close()
 		next := iter.Next
 		if reverse {

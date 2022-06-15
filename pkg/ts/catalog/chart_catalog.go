@@ -854,6 +854,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"queue.gc.info.numkeysaffected"},
 			},
 			{
+				Title:   "Range Keys with GC'able Data",
+				Metrics: []string{"queue.gc.info.numrangekeysaffected"},
+			},
+			{
 				Title:   "Old Intents",
 				Metrics: []string{"queue.gc.info.intentsconsidered"},
 			},
