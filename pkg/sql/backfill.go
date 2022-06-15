@@ -743,22 +743,22 @@ func (sc *SchemaChanger) validateConstraints(
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
-					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieProto.IeFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+					if err := sc.validateCheckInTxn(
+						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
 				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.ieProto.IeFactory, evalCtx.SessionData(), desc, txn, collection, c.GetName()); err != nil {
+					if err := sc.validateFkInTxn(ctx, evalCtx.SessionData(), desc, txn, collection, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieProto.IeFactory(ctx, evalCtx.SessionData()), desc, txn, c.GetName()); err != nil {
+					if err := sc.validateUniqueWithoutIndexConstraintInTxn(ctx, evalCtx.SessionData(), desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
-					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieProto.IeFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+					if err := sc.validateCheckInTxn(
+						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2346,10 +2346,7 @@ func runSchemaChangesInTxn(
 		if c.IsCheck() || c.IsNotNull() {
 			check := &c.ConstraintToUpdateDesc().Check
 			if check.Validity == descpb.ConstraintValidity_Validating {
-				if err := validateCheckInTxn(
-					ctx, &planner.semaCtx, planner.ExecCfg().InternalExecutorFactory,
-					planner.SessionData(), tableDesc, planner.txn, check.Expr,
-				); err != nil {
+				if err := planner.validateCheckInTxn(ctx, tableDesc, check.Expr); err != nil {
 					return err
 				}
 				check.Validity = descpb.ConstraintValidity_Validated
@@ -2371,8 +2368,8 @@ func runSchemaChangesInTxn(
 		} else if c.IsUniqueWithoutIndex() {
 			uwi := &c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint
 			if uwi.Validity == descpb.ConstraintValidity_Validating {
-				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.ExecCfg().InternalExecutor, tableDesc, planner.txn, c.GetName(),
+				if err := planner.validateUniqueWithoutIndexConstraintInTxn(
+					ctx, tableDesc, c.GetName(),
 				); err != nil {
 					return err
 				}
@@ -2442,10 +2439,9 @@ func runSchemaChangesInTxn(
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func validateCheckInTxn(
+func (sc *SchemaChanger) validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	ief sqlutil.InternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2455,8 +2451,8 @@ func validateCheckInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
-	ie := ief(ctx, sessionData)
-	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+	sc.ieProto.SetSyntheticDescs(syntheticDescs)
+	return sc.ieProto.WithTxn(ctx, txn, sessionData, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
 	})
 }
@@ -2513,9 +2509,8 @@ func getTargetTablesAndFk(
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func validateFkInTxn(
+func (sc *SchemaChanger) validateFkInTxn(
 	ctx context.Context,
-	ief sqlutil.InternalExecutorFactory,
 	sd *sessiondata.SessionData,
 	srcTable *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2526,8 +2521,8 @@ func validateFkInTxn(
 	if err != nil {
 		return err
 	}
-	ie := ief(ctx, sd)
-	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+	sc.ieProto.SetSyntheticDescs(syntheticDescs)
+	return sc.ieProto.WithTxn(ctx, txn, sd, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 	})
 }
@@ -2544,9 +2539,9 @@ func validateFkInTxn(
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
-func validateUniqueWithoutIndexConstraintInTxn(
+func (sc *SchemaChanger) validateUniqueWithoutIndexConstraintInTxn(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	sd *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	constraintName string,
@@ -2555,6 +2550,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
+	sc.ieProto.SetSyntheticDescs(syntheticDescs)
 
 	var uc *descpb.UniqueWithoutIndexConstraint
 	for i := range tableDesc.UniqueWithoutIndexConstraints {
@@ -2568,7 +2564,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
 	}
 
-	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+	return sc.ieProto.WithTxn(ctx, txn, sd, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		return validateUniqueConstraint(
 			ctx, tableDesc, uc.Name, uc.ColumnIDs, uc.Predicate, ie, txn, false, /* preExisting */
 		)
