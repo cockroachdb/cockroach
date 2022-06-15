@@ -246,8 +246,8 @@ ALTER SEQUENCE seq NO CYCLE
 statement error pq: feature REASSIGN OWNED BY is part of the schema change category, which was disabled by the database administrator
 REASSIGN OWNED BY root TO testuser
 
-# Test DROP OWNED BY.
-statement error pq: feature DROP OWNED BY is part of the schema change category, which was disabled by the database administrator
+# Test DROP OWNED.
+statement error pq: feature DROP OWNED is part of the schema change category, which was disabled by the database administrator
 DROP OWNED BY testuser
 
 # Test DROP DATABASE.

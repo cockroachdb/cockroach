@@ -530,6 +530,13 @@ type RemoveDatabaseRoleSettings struct {
 	DatabaseID descpb.ID
 }
 
+// RemoveUserPrivileges is used to revoke a user's privileges.
+type RemoveUserPrivileges struct {
+	mutationOp
+	DescID descpb.ID
+	User   string
+}
+
 // DeleteSchedule is used to delete a schedule ID from the database.
 type DeleteSchedule struct {
 	mutationOp
