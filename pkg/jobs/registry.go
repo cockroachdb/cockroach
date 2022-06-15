@@ -107,7 +107,7 @@ type Registry struct {
 	adoptionCh  chan adoptionNotice
 	sqlInstance sqlliveness.Instance
 
-	// sessionBoundInternalExecutorFactory provides a way for jobs to create
+	// InternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
 	// use the internal executor from the JobExecCtx. The intended user of this
 	// interface is the schema change job resumer, which needs to set the
@@ -126,7 +126,7 @@ type Registry struct {
 	// field. Modifying the TableCollection is basically a per-query operation
 	// and should be a per-query setting. #34304 is the issue for creating/
 	// improving this API.
-	sessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
@@ -225,14 +225,12 @@ func MakeRegistry(
 	return r
 }
 
-// SetSessionBoundInternalExecutorFactory sets the
-// SessionBoundInternalExecutorFactory that will be used by the job registry
+// SetInternalExecutorFactory sets the
+// InternalExecutorFactory that will be used by the job registry
 // executor. We expose this separately from the constructor to avoid a circular
 // dependency.
-func (r *Registry) SetSessionBoundInternalExecutorFactory(
-	factory sqlutil.SessionBoundInternalExecutorFactory,
-) {
-	r.sessionBoundInternalExecutorFactory = factory
+func (r *Registry) SetInternalExecutorFactory(factory sqlutil.InternalExecutorFactory) {
+	r.InternalExecutorFactory = factory
 }
 
 // MetricsStruct returns the metrics for production monitoring of each job type.

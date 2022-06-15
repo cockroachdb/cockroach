@@ -179,9 +179,14 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommitted.reset()
 	tc.kv.reset(ctx)
-	tc.synthetic.reset()
+	tc.ResetSyntheticDescriptors()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
+}
+
+// ResetSyntheticDescriptors clear all syntheticDescriptors.
+func (tc *Collection) ResetSyntheticDescriptors() {
+	tc.synthetic.reset()
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted

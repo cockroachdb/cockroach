@@ -93,7 +93,7 @@ func New(
 		settings:          cfg.Settings,
 		targets:           targets,
 		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
-		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
+		ie:                cfg.InternalExecutorFactory(ctx, &sessiondata.SessionData{}),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
 		tolerances:        tolerances,
