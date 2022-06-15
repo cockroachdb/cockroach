@@ -382,3 +382,10 @@ query I
 SELECT * FROM tab_from_seq
 ----
 2
+
+# Regression test for #81554, where tried to do gigantic batches for CTAS in
+# explicit transactions
+statement ok
+BEGIN;
+CREATE TABLE source_tbl_huge AS SELECT 1::CHAR(256) FROM generate_series(1, 500000);
+COMMIT;
