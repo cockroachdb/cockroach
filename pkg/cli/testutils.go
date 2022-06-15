@@ -105,11 +105,11 @@ const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
 func (c *TestCLI) fail(err error) {
 	if c.t != nil {
 		defer c.logScope.Close(c.t)
-		if strings.Contains(err.Error(), "requires a CCL binary") {
+		if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
 			if c.TestServer != nil {
 				c.TestServer.Stopper().Stop(context.Background())
 			}
-			skip.IgnoreLint(c.t, "skipping due to lack of CCL binary")
+			skip.IgnoreLint(c.t, serverutils.TenantSkipCCLBinaryMessage)
 		}
 		c.t.Fatal(err)
 	} else {
