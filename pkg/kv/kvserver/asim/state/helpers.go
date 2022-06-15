@@ -187,7 +187,7 @@ func (s storeRangeCounts) Len() int           { return len(s) }
 func (s storeRangeCounts) Less(i, j int) bool { return s[i].requestedReplicas > s[j].requestedReplicas }
 func (s storeRangeCounts) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-// NewTestStatReplDistribution returns a State that may be used for testing,
+// NewTestStateReplDistribution returns a State that may be used for testing,
 // where the stores given are initialized with the specified % of the replicas.
 // This is done on a best effort basis, given the replication factor. It may be
 // impossible to satisfy some distributions, for example: percentOfReplicas {1:
@@ -195,7 +195,7 @@ func (s storeRangeCounts) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 // as the only distribution possible is {1: 0.33, 2: 0.33, 3: 0.33} given a
 // replication factor of 3. A best effort distribution is applied in these
 // cases.
-func NewTestStatReplDistribution(
+func NewTestStateReplDistribution(
 	ranges int, percentOfReplicas []float64, replicationFactor int,
 ) State {
 	targetRangeCount := make(storeRangeCounts, len(percentOfReplicas))

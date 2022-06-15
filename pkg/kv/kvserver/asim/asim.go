@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
@@ -35,6 +36,8 @@ type Simulator struct {
 	state    state.State
 	changer  state.Changer
 	exchange state.Exchange
+
+	metrics *MetricsTracker
 }
 
 // NewSimulator constructs a valid Simulator.
@@ -46,6 +49,7 @@ func NewSimulator(
 	exchange state.Exchange,
 	changer state.Changer,
 	changeDelay time.Duration,
+	metrics *MetricsTracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
 	rqs := make(map[state.StoreID]ReplicateQueue)
@@ -74,6 +78,7 @@ func NewSimulator(
 		rqs:        rqs,
 		pacers:     pacers,
 		exchange:   exchange,
+		metrics:    metrics,
 	}
 }
 
@@ -124,6 +129,9 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 		// Simulate the replicate queue logic.
 		s.tickReplicateQueue(ctx, tick, stateForAlloc)
+
+		// Print tick metrics.
+		s.tickMetrics(ctx, tick)
 	}
 }
 
@@ -183,5 +191,12 @@ func (s *Simulator) tickReplicateQueue(ctx context.Context, tick time.Time, stat
 			// Tick the replicate queue.
 			s.rqs[storeID].Tick(ctx, tick, state)
 		}
+	}
+}
+
+// tickMetrics prints the metrics up to the given tick.
+func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
+	if err := s.metrics.Tick(tick, s.state); err != nil {
+		log.Errorf(ctx, "error writing to csv: %v", err)
 	}
 }

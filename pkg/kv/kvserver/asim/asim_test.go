@@ -27,17 +27,17 @@ import (
 
 func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
-	rwg := make([]workload.Generator, 1)
-	rwg[0] = &workload.RandomGenerator{}
 	start := state.TestingStartTime()
 	end := start.Add(1000 * time.Second)
 	interval := 10 * time.Second
-
+	rwg := make([]workload.Generator, 1)
+	rwg[0] = testCreateWorkloadGenerator(start, 1, 10)
+	m := asim.NewMetricsTracker()
 	exchange := state.NewFixedDelayExhange(start, interval, interval)
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, interval)
+	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, interval, m)
 	sim.RunSim(ctx)
 }
 
@@ -96,16 +96,16 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	stores := 12
 	replsPerRange := 3
 	replicasPerStore := 500
-	// NB: We want 1000 replicas per store, so the number of ranges required
+	// NB: We want 500 replicas per store, so the number of ranges required
 	// will be 1/3 of the total replicas.
 	ranges := (replicasPerStore * stores) / replsPerRange
 
-	rwg := make([]workload.Generator, 1)
-	rwg[0] = testCreateWorkloadGenerator(start, stores, int64(ranges))
-
 	sample := func() int64 {
+		rwg := make([]workload.Generator, 1)
+		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(ranges))
 		exchange := state.NewFixedDelayExhange(preGossipStart, interval, gossipDelay)
 		changer := state.NewReplicaChanger()
+		m := asim.NewMetricsTracker()
 		replicaDistribution := make([]float64, stores)
 
 		// NB: Here create half of the stores with equal replica counts, the
@@ -119,9 +119,9 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 			replicaDistribution[i] = 0
 		}
 
-		s := state.NewTestStatReplDistribution(ranges, replicaDistribution, replsPerRange)
+		s := state.NewTestStateReplDistribution(ranges, replicaDistribution, replsPerRange)
 		testPreGossipStores(s, exchange, preGossipStart)
-		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, changeDelay)
+		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, changeDelay, m)
 
 		startTime := timeutil.Now()
 		sim.RunSim(ctx)
@@ -140,5 +140,5 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	}
 
 	fmt.Println(time.Duration(minRunTime).Seconds())
-	require.Less(t, minRunTime, time.Second.Nanoseconds())
+	require.Less(t, minRunTime, 2*time.Second.Nanoseconds())
 }
