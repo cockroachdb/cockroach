@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -211,6 +212,10 @@ type Context struct {
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.
 	CatalogBuiltins CatalogBuiltins
+
+	// QueryCancelKey is the key used by the pgwire protocol to cancel the
+	// query currently running in this session.
+	QueryCancelKey pgwirecancel.BackendKeyData
 }
 
 var _ tree.ParseTimeContext = &Context{}
