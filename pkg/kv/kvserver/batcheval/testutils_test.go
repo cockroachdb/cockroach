@@ -14,4 +14,9 @@ import "github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 
 type kvs = storageutils.KVs
 
-var pointKV = storageutils.PointKV
+var (
+	pointKV            = storageutils.PointKV
+	pointKVWithLocalTS = storageutils.PointKVWithLocalTS
+	rangeKV            = storageutils.RangeKV
+	rangeKVWithLocalTS = storageutils.RangeKVWithLocalTS
+)

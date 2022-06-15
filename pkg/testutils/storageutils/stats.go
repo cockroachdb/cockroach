@@ -25,6 +25,7 @@ func EngineStats(t *testing.T, engine storage.Reader, nowNanos int64) *enginepb.
 	t.Helper()
 
 	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	})
@@ -38,7 +39,10 @@ func EngineStats(t *testing.T, engine storage.Reader, nowNanos int64) *enginepb.
 func SSTStats(t *testing.T, sst []byte, nowNanos int64) *enginepb.MVCCStats {
 	t.Helper()
 
-	iter, err := storage.NewMemSSTIterator(sst, true)
+	iter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		UpperBound: keys.MaxKey,
+	})
 	require.NoError(t, err)
 	defer iter.Close()
 	stats, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, nowNanos)

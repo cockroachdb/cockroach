@@ -52,6 +52,9 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
 				for _, rkv := range iter.RangeKeys() {
+					if len(rkv.Value) == 0 {
+						rkv.Value = nil
+					}
 					kvs = append(kvs, rkv.Clone())
 				}
 				prevRangeStart = bounds.Key.Clone()

@@ -37,7 +37,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var pointKV = storageutils.PointKV
+var (
+	pointKV = storageutils.PointKV
+	rangeKV = storageutils.RangeKV
+)
 
 type kvs = storageutils.KVs
 
@@ -521,8 +524,7 @@ func TestWithOnSSTable(t *testing.T) {
 		pointKV("a", ts, "1"),
 		pointKV("b", ts, "2"),
 		pointKV("c", ts, "3"),
-		pointKV("d", ts, "4"),
-		pointKV("e", ts, "5"),
+		rangeKV("d", "e", ts, ""),
 	}
 	sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
 	_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
