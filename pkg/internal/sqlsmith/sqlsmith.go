@@ -102,6 +102,8 @@ type Smither struct {
 	disableCrossJoins          bool
 	disableIndexHints          bool
 	lowProbWhereWithJoinTables bool
+	disableInsertSelect        bool
+	disableDelete              bool
 	expressionDepth            int
 
 	bulkSrv     *httptest.Server
@@ -161,12 +163,16 @@ func (s *Smither) Close() {
 // EnterExpressionBlock records when we are entering a nested query expression
 // block.
 func (s *Smither) EnterExpressionBlock() {
+	s.lock.Lock()
 	s.expressionDepth++
+	s.lock.Unlock()
 }
 
 // LeaveExpressionBlock records when we are leaving a nested query expression
 // block.
 func (s *Smither) LeaveExpressionBlock() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.expressionDepth--
 	if s.expressionDepth < 0 {
 		panic("Smither query block nesting level tracking error")
@@ -209,6 +215,14 @@ func (s *Smither) name(prefix string) tree.Name {
 	count := s.nameCounts[prefix]
 	s.lock.Unlock()
 	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
+}
+
+// EnableDelete turns off the disableDelete flag after the smithtest has
+// started.
+func (s *Smither) EnableDelete() {
+	s.lock.Lock()
+	s.disableDelete = false
+	s.lock.Unlock()
 }
 
 // SmitherOption is an option for the Smither client.
@@ -393,14 +407,16 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 })
 
 // DisableConstantWhereClause causes the Smither to disable generating WHERE
-// clauses on ON clauses in the form `WHERE TRUE` or `WHERE FALSE`.
+// clauses, ON clauses or HAVING clauses which only contain contant boolean
+// expressions such as `WHERE TRUE` or `ON FALSE`.
 var DisableConstantWhereClause = simpleOption("disable constant where clause", func(s *Smither) {
 	s.disableConstantWhereClause = true
 })
 
-// FavorInterestingData causes the Smither to favor generation of scalar data
+// FavorInterestingData increases the chances the Smither generates scalar data
 // from a predetermined set of interesting values, as opposed to purely random
-// values.
+// values. Without this flag there is a 1 in 10 chance of picking a value from
+// the predetermined set.
 var FavorInterestingData = simpleOption("favor interesting data", func(s *Smither) {
 	s.favorInterestingData = true
 })
@@ -426,6 +442,19 @@ var DisableIndexHints = simpleOption("disable index hints", func(s *Smither) {
 // to generate WHERE clauses 50% of the time.
 var LowProbabilityWhereClauseWithJoinTables = simpleOption("low probability where clause with join tables", func(s *Smither) {
 	s.lowProbWhereWithJoinTables = true
+})
+
+// DisableInsertSelect causes the Smither to avoid generating INSERT SELECT
+// statements. Any INSERTs generated use a VALUES clause. The current main
+// motivation for disabling INSERT SELECT is that we cannot detect when the
+// source expression is nullable and the target column is not.
+var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither) {
+	s.disableInsertSelect = true
+})
+
+// DisableDelete causes the Smither to avoid generating DELETE statements.
+var DisableDelete = simpleOption("disable delete", func(s *Smither) {
+	s.disableDelete = true
 })
 
 // CompareMode causes the Smither to generate statements that have

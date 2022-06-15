@@ -84,6 +84,18 @@ func NewTestRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
+// NewTestRandWithSeed returns an instance of math/rand.Rand, similar to
+// NewTestRand, but with the seed specified.
+func NewTestRandWithSeed(seed int64) *rand.Rand {
+	mtx.Lock()
+	defer mtx.Unlock()
+	fxn := getTestName()
+	if fxn != "" && lastTestName != fxn {
+		lastTestName = fxn
+	}
+	return rand.New(rand.NewSource(seed))
+}
+
 // RandIntInRange returns a value in [min, max)
 func RandIntInRange(r *rand.Rand, min, max int) int {
 	return min + r.Intn(max-min)
