@@ -60,6 +60,8 @@ type State interface {
 	Range(RangeID) (Range, bool)
 	// Ranges returns all ranges that exist in this state.
 	Ranges() map[RangeID]Range
+	// RangeCount returns the number of ranges currently in the cluster.
+	RangeCount() int64
 	// Replicas returns all replicas that exist on a store.
 	Replicas(StoreID) []Replica
 	// AddNode modifies the state to include one additional node. This cannot
@@ -92,7 +94,7 @@ type State interface {
 	SplitRange(Key) (Range, Range, bool)
 	// SetSpanConfig set the span config for the Range with ID RangeID.
 	SetSpanConfig(RangeID, roachpb.SpanConfig) bool
-	// Valid transfer returns whether transferring the lease for the Range with ID
+	// ValidTransfer returns whether transferring the lease for the Range with ID
 	// RangeID, to the Store with ID StoreID is valid.
 	ValidTransfer(RangeID, StoreID) bool
 	// TransferLease transfers the lease for the Range with ID RangeID, to the
@@ -109,6 +111,8 @@ type State interface {
 	// UsageInfo returns the usage information for the Range with ID
 	// RangeID.
 	UsageInfo(RangeID) allocator.RangeUsageInfo
+	// ClusterUsageInfo returns the usage information for the entire cluster.
+	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
 	TickClock(time.Time)
 	// UpdateStorePool modifies the state of the StorePool for the Store with
@@ -175,6 +179,10 @@ type Range interface {
 	// Leaseholder returns the ID of the leaseholder for this Range if there is
 	// one, otherwise it returns a ReplicaID -1.
 	Leaseholder() ReplicaID
+	// Size returns the size in bytes of the range. Note that this is actually the
+	// number of bytes ever written to the range because we currently do not
+	// support deletion and compaction.
+	Size() int64
 }
 
 // Replica is a replica for a range that exists on a store. This is the
