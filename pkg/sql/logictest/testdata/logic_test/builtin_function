@@ -2202,7 +2202,7 @@ CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
+CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)

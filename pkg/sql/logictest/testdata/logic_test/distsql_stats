@@ -1264,7 +1264,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
                 "upper_bound": "hi"
             }
         ],
-        "histo_col_type": "public.greeting",
+        "histo_col_type": "test.public.greeting",
         "histo_version": 1,
         "name": "s",
         "null_count": 0,

@@ -111,7 +111,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_explicit_c
 CREATE TABLE public.regional_by_row_table_explicit_crdb_region_column (
                             pk INT8 NOT NULL,
                             a INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT NULL,
+                            crdb_region multi_region_test_db.public.crdb_internal_region NOT NULL,
                             CONSTRAINT regional_by_row_table_explicit_crdb_region_column_pkey PRIMARY KEY (pk ASC),
                             FAMILY fam_0_pk_a_crdb_region (pk, a, crdb_region)
 ) LOCALITY REGIONAL BY ROW
@@ -185,7 +185,7 @@ CREATE TABLE public.regional_by_row_table (
                             a INT8 NOT NULL,
                             b INT8 NOT NULL,
                             j JSONB NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_table_a_idx (a ASC),
                             UNIQUE INDEX regional_by_row_table_b_key (b ASC),
@@ -284,7 +284,7 @@ CREATE TABLE public.regional_by_row_table (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   j JSONB NULL,
-  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
   CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
@@ -326,7 +326,7 @@ CREATE TABLE public.regional_by_row_table (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   j JSONB NULL,
-  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
   unique_col INT8 NOT NULL,
   CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
@@ -531,7 +531,7 @@ CREATE TABLE public.regional_by_row_table (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   j JSONB NULL,
-  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
   CONSTRAINT regional_by_row_table_pkey PRIMARY KEY (pk2 ASC),
   UNIQUE INDEX regional_by_row_table_pk_key (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
@@ -593,7 +593,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_pk_defined
 ----
 CREATE TABLE public.regional_by_row_table_pk_defined_separately (
                             pk INT8 NOT NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region multi_region_test_db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::multi_region_test_db.public.crdb_internal_region,
                             CONSTRAINT "primary" PRIMARY KEY (pk ASC)
 ) LOCALITY REGIONAL BY ROW
 
@@ -632,7 +632,7 @@ CREATE TABLE public.regional_by_row_table_as (
                                                pk INT8 NOT NULL,
                                                a INT8 NULL,
                                                b INT8 NULL,
-                                               crdb_region_col public.crdb_internal_region NOT NULL AS (CASE WHEN pk <= 10:::INT8 THEN 'us-east-1':::public.crdb_internal_region ELSE 'ap-southeast-2':::public.crdb_internal_region END) STORED,
+                                               crdb_region_col multi_region_test_db.public.crdb_internal_region NOT NULL AS (CASE WHEN pk <= 10:::INT8 THEN 'us-east-1':::multi_region_test_db.public.crdb_internal_region ELSE 'ap-southeast-2':::multi_region_test_db.public.crdb_internal_region END) STORED,
                                                CONSTRAINT regional_by_row_table_as_pkey PRIMARY KEY (pk ASC),
                                                INDEX regional_by_row_table_as_a_idx (a ASC),
                                                UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
@@ -905,7 +905,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row             CREATE TABLE public.regional_by_row (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region add_regions.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_i_idx (i ASC),
                             FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -941,7 +941,7 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as                CREATE TABLE public.regional_by_row_as (
                                   pk INT8 NOT NULL,
                                   i INT8 NULL,
-                                  cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                                  cr add_regions.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::add_regions.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                   INDEX regional_by_row_as_i_idx (i ASC),
                                   FAMILY fam_0_cr_pk_i (cr, pk, i)
@@ -985,7 +985,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row             CREATE TABLE public.regional_by_row (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region add_regions.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_i_idx (i ASC),
                             FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1027,7 +1027,7 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as                CREATE TABLE public.regional_by_row_as (
                                   pk INT8 NOT NULL,
                                   i INT8 NULL,
-                                  cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                                  cr add_regions.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::add_regions.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                   INDEX regional_by_row_as_i_idx (i ASC),
                                   FAMILY fam_0_cr_pk_i (cr, pk, i)
@@ -1074,7 +1074,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row             CREATE TABLE public.regional_by_row (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region add_regions.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_i_idx (i ASC),
                             FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1123,7 +1123,7 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as                CREATE TABLE public.regional_by_row_as (
                                   pk INT8 NOT NULL,
                                   i INT8 NULL,
-                                  cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                                  cr add_regions.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::add_regions.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                   INDEX regional_by_row_as_i_idx (i ASC),
                                   FAMILY fam_0_cr_pk_i (cr, pk, i)
@@ -1201,7 +1201,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row             CREATE TABLE public.regional_by_row (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region add_regions_in_txn.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions_in_txn.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_i_idx (i ASC),
                             FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1252,7 +1252,7 @@ SHOW CREATE TABLE regional_by_row_like
 regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
                                                 pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL,
+                                                crdb_region add_regions_in_txn.public.crdb_internal_region NOT VISIBLE NOT NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                                 CONSTRAINT regional_by_row_like_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
@@ -1269,7 +1269,7 @@ SHOW CREATE TABLE regional_by_row_like
 regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
                                                 pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                                crdb_region add_regions_in_txn.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions_in_txn.public.crdb_internal_region,
                                                 CONSTRAINT regional_by_row_pkey PRIMARY KEY (crdb_region ASC, pk ASC),
                                                 INDEX regional_by_row_i_idx (crdb_region ASC, i ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
@@ -1287,7 +1287,7 @@ SHOW CREATE TABLE regional_by_row_like
 regional_by_row_like                            CREATE TABLE public.regional_by_row_like (
                                                 pk INT8 NOT NULL,
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                                crdb_region add_regions_in_txn.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions_in_txn.public.crdb_internal_region,
                                                 CONSTRAINT regional_by_row_pkey PRIMARY KEY (crdb_region ASC, pk ASC),
                                                 INDEX regional_by_row_i_idx (crdb_region ASC, i ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
@@ -1301,7 +1301,7 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as                CREATE TABLE public.regional_by_row_as (
                                   pk INT8 NOT NULL,
                                   i INT8 NULL,
-                                  cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                                  cr add_regions_in_txn.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::add_regions_in_txn.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                   INDEX regional_by_row_as_i_idx (i ASC),
                                   FAMILY fam_0_cr_pk_i (cr, pk, i)
@@ -1363,7 +1363,7 @@ regional_by_row_unique_in_column  CREATE TABLE public.regional_by_row_unique_in_
                                   c INT8 NULL,
                                   d INT8 NULL,
                                   e INT8 NULL,
-                                  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                  crdb_region add_regions_in_txn.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions_in_txn.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_unique_in_column_pkey PRIMARY KEY (a ASC),
                                   UNIQUE INDEX regional_by_row_unique_in_column_b_key (b ASC),
                                   UNIQUE INDEX regional_by_row_unique_in_column_d_e_key (d ASC, e ASC),
@@ -1390,7 +1390,7 @@ regional_by_row_fk          CREATE TABLE public.regional_by_row_fk (
                             h INT8 NULL,
                             i INT8 NULL,
                             j INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region add_regions_in_txn.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::add_regions_in_txn.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_fk_pkey PRIMARY KEY (f ASC),
                             CONSTRAINT ij_fk FOREIGN KEY (i, j) REFERENCES public.regional_by_row_unique_in_column(e, d),
                             CONSTRAINT regional_by_row_fk_g_fkey FOREIGN KEY (g) REFERENCES public.regional_by_row_unique_in_column(a),
@@ -1462,7 +1462,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row             CREATE TABLE public.regional_by_row (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region drop_regions.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::drop_regions.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_i_idx (i ASC),
                             FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1504,7 +1504,7 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as                CREATE TABLE public.regional_by_row_as (
                                   pk INT8 NOT NULL,
                                   i INT8 NULL,
-                                  cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                                  cr drop_regions.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::drop_regions.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                   INDEX regional_by_row_as_i_idx (i ASC),
                                   FAMILY fam_0_cr_pk_i (cr, pk, i)
@@ -1553,7 +1553,7 @@ SHOW CREATE TABLE regional_by_row
 regional_by_row             CREATE TABLE public.regional_by_row (
                             pk INT8 NOT NULL,
                             i INT8 NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region drop_regions.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::drop_regions.public.crdb_internal_region,
                             CONSTRAINT regional_by_row_pkey PRIMARY KEY (pk ASC),
                             INDEX regional_by_row_i_idx (i ASC),
                             FAMILY fam_0_pk_i_crdb_region (pk, i, crdb_region)
@@ -1595,7 +1595,7 @@ SHOW CREATE TABLE regional_by_row_as
 regional_by_row_as                CREATE TABLE public.regional_by_row_as (
                                   pk INT8 NOT NULL,
                                   i INT8 NULL,
-                                  cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                                  cr drop_regions.public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::drop_regions.public.crdb_internal_region,
                                   CONSTRAINT regional_by_row_as_pkey PRIMARY KEY (pk ASC),
                                   INDEX regional_by_row_as_i_idx (i ASC),
                                   FAMILY fam_0_cr_pk_i (cr, pk, i)

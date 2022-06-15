@@ -182,171 +182,177 @@ func (n *createViewNode) startExec(params runParams) error {
 	var newDesc *tabledesc.Mutable
 	applyGlobalMultiRegionZoneConfig := false
 
-	// If replacingDesc != nil, we found an existing view while resolving
-	// the name for our view. So instead of creating a new view, replace
-	// the existing one.
-	if replacingDesc != nil {
-		newDesc, err = params.p.replaceViewDesc(
-			params.ctx,
-			params.p,
-			n,
-			replacingDesc,
-			backRefMutables,
-		)
-		if err != nil {
-			return err
-		}
-	} else {
-		// If we aren't replacing anything, make a new table descriptor.
-		id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
-		if err != nil {
-			return err
-		}
-		// creationTime is initialized to a zero value and populated at read time.
-		// See the comment in desc.MaybeIncrementVersion.
-		//
-		// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
-		// currently relied on in import and restore code and tests.
-		var creationTime hlc.Timestamp
-		desc, err := makeViewTableDesc(
-			params.ctx,
-			viewName,
-			n.viewQuery,
-			n.dbDesc.GetID(),
-			schema.GetID(),
-			id,
-			n.columns,
-			creationTime,
-			privs,
-			&params.p.semaCtx,
-			params.p.EvalContext(),
-			params.p.EvalContext().Settings,
-			n.persistence,
-			n.dbDesc.IsMultiRegion(),
-			params.p)
-		if err != nil {
-			return err
-		}
+	var retErr error
+	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
+		retErr = func() error {
+			// If replacingDesc != nil, we found an existing view while resolving
+			// the name for our view. So instead of creating a new view, replace
+			// the existing one.
+			if replacingDesc != nil {
+				newDesc, err = params.p.replaceViewDesc(
+					params.ctx,
+					params.p,
+					n,
+					replacingDesc,
+					backRefMutables,
+				)
+				if err != nil {
+					return err
+				}
+			} else {
+				// If we aren't replacing anything, make a new table descriptor.
+				id, err := descidgen.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
+				if err != nil {
+					return err
+				}
+				// creationTime is initialized to a zero value and populated at read time.
+				// See the comment in desc.MaybeIncrementVersion.
+				//
+				// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
+				// currently relied on in import and restore code and tests.
+				var creationTime hlc.Timestamp
+				desc, err := makeViewTableDesc(
+					params.ctx,
+					viewName,
+					n.viewQuery,
+					n.dbDesc.GetID(),
+					schema.GetID(),
+					id,
+					n.columns,
+					creationTime,
+					privs,
+					&params.p.semaCtx,
+					params.p.EvalContext(),
+					params.p.EvalContext().Settings,
+					n.persistence,
+					n.dbDesc.IsMultiRegion(),
+					params.p)
+				if err != nil {
+					return err
+				}
 
-		if n.materialized {
-			// If the view is materialized, set up some more state on the view descriptor.
-			// In particular,
-			// * mark the descriptor as a materialized view
-			// * mark the state as adding and remember the AsOf time to perform
-			//   the view query
-			// * use AllocateIDs to give the view descriptor a primary key
-			desc.IsMaterializedView = true
-			desc.State = descpb.DescriptorState_ADD
-			version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-			if err := desc.AllocateIDs(params.ctx, version); err != nil {
+				if n.materialized {
+					// If the view is materialized, set up some more state on the view descriptor.
+					// In particular,
+					// * mark the descriptor as a materialized view
+					// * mark the state as adding and remember the AsOf time to perform
+					//   the view query
+					// * use AllocateIDs to give the view descriptor a primary key
+					desc.IsMaterializedView = true
+					desc.State = descpb.DescriptorState_ADD
+					version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+					if err := desc.AllocateIDs(params.ctx, version); err != nil {
+						return err
+					}
+					// For multi-region databases, we want this descriptor to be GLOBAL instead.
+					if n.dbDesc.IsMultiRegion() {
+						desc.SetTableLocalityGlobal()
+						applyGlobalMultiRegionZoneConfig = true
+					}
+				}
+
+				// Collect all the tables/views this view depends on.
+				orderedDependsOn := catalog.DescriptorIDSet{}
+				for backrefID := range n.planDeps {
+					orderedDependsOn.Add(backrefID)
+				}
+				desc.DependsOn = append(desc.DependsOn, orderedDependsOn.Ordered()...)
+
+				// Collect all types this view depends on.
+				orderedTypeDeps := catalog.DescriptorIDSet{}
+				for backrefID := range n.typeDeps {
+					orderedTypeDeps.Add(backrefID)
+				}
+				desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
+
+				// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
+				// do some basic string formatting (not accurate in the general case).
+				if err = params.p.createDescriptorWithID(
+					params.ctx,
+					catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.viewName.Table()),
+					id,
+					&desc,
+					fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
+				); err != nil {
+					return err
+				}
+				newDesc = &desc
+			}
+
+			// Persist the back-references in all referenced table descriptors.
+			for id, updated := range n.planDeps {
+				backRefMutable := backRefMutables[id]
+				// In case that we are replacing a view that already depends on
+				// this table, remove all existing references so that we don't leave
+				// any out of date references. Then, add the new references.
+				backRefMutable.DependedOnBy = removeMatchingReferences(
+					backRefMutable.DependedOnBy,
+					newDesc.ID,
+				)
+				for _, dep := range updated.deps {
+					// The logical plan constructor merely registered the dependencies.
+					// It did not populate the "ID" field of TableDescriptor_Reference,
+					// because the ID of the newly created view descriptor was not
+					// yet known.
+					// We need to do it here.
+					dep.ID = newDesc.ID
+					dep.ByID = updated.desc.IsSequence()
+					backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
+				}
+				if err := params.p.writeSchemaChange(
+					params.ctx,
+					backRefMutable,
+					descpb.InvalidMutationID,
+					fmt.Sprintf("updating view reference %q in table %s(%d)", n.viewName,
+						updated.desc.GetName(), updated.desc.GetID(),
+					),
+				); err != nil {
+					return err
+				}
+			}
+
+			// Add back references for the type dependencies.
+			for id := range n.typeDeps {
+				jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
+				if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+					return err
+				}
+			}
+
+			if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
 				return err
 			}
-			// For multi-region databases, we want this descriptor to be GLOBAL instead.
-			if n.dbDesc.IsMultiRegion() {
-				desc.SetTableLocalityGlobal()
-				applyGlobalMultiRegionZoneConfig = true
+
+			if applyGlobalMultiRegionZoneConfig {
+				regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.GetID(), params.p.Descriptors())
+				if err != nil {
+					return err
+				}
+				if err := ApplyZoneConfigForMultiRegionTable(
+					params.ctx,
+					params.p.txn,
+					params.p.ExecCfg(),
+					regionConfig,
+					newDesc,
+					applyZoneConfigForMultiRegionTableOptionTableNewConfig(
+						tabledesc.LocalityConfigGlobal(),
+					),
+				); err != nil {
+					return err
+				}
 			}
-		}
 
-		// Collect all the tables/views this view depends on.
-		orderedDependsOn := catalog.DescriptorIDSet{}
-		for backrefID := range n.planDeps {
-			orderedDependsOn.Add(backrefID)
-		}
-		desc.DependsOn = append(desc.DependsOn, orderedDependsOn.Ordered()...)
-
-		// Collect all types this view depends on.
-		orderedTypeDeps := catalog.DescriptorIDSet{}
-		for backrefID := range n.typeDeps {
-			orderedTypeDeps.Add(backrefID)
-		}
-		desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
-
-		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
-		// do some basic string formatting (not accurate in the general case).
-		if err = params.p.createDescriptorWithID(
-			params.ctx,
-			catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.viewName.Table()),
-			id,
-			&desc,
-			fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
-		); err != nil {
-			return err
-		}
-		newDesc = &desc
-	}
-
-	// Persist the back-references in all referenced table descriptors.
-	for id, updated := range n.planDeps {
-		backRefMutable := backRefMutables[id]
-		// In case that we are replacing a view that already depends on
-		// this table, remove all existing references so that we don't leave
-		// any out of date references. Then, add the new references.
-		backRefMutable.DependedOnBy = removeMatchingReferences(
-			backRefMutable.DependedOnBy,
-			newDesc.ID,
-		)
-		for _, dep := range updated.deps {
-			// The logical plan constructor merely registered the dependencies.
-			// It did not populate the "ID" field of TableDescriptor_Reference,
-			// because the ID of the newly created view descriptor was not
-			// yet known.
-			// We need to do it here.
-			dep.ID = newDesc.ID
-			dep.ByID = updated.desc.IsSequence()
-			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
-		}
-		if err := params.p.writeSchemaChange(
-			params.ctx,
-			backRefMutable,
-			descpb.InvalidMutationID,
-			fmt.Sprintf("updating view reference %q in table %s(%d)", n.viewName,
-				updated.desc.GetName(), updated.desc.GetID(),
-			),
-		); err != nil {
-			return err
-		}
-	}
-
-	// Add back references for the type dependencies.
-	for id := range n.typeDeps {
-		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
-		if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
-			return err
-		}
-	}
-
-	if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
-		return err
-	}
-
-	if applyGlobalMultiRegionZoneConfig {
-		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.GetID(), params.p.Descriptors())
-		if err != nil {
-			return err
-		}
-		if err := ApplyZoneConfigForMultiRegionTable(
-			params.ctx,
-			params.p.txn,
-			params.p.ExecCfg(),
-			regionConfig,
-			newDesc,
-			applyZoneConfigForMultiRegionTableOptionTableNewConfig(
-				tabledesc.LocalityConfigGlobal(),
-			),
-		); err != nil {
-			return err
-		}
-	}
-
-	// Log Create View event. This is an auditable log event and is
-	// recorded in the same transaction as the table descriptor update.
-	return params.p.logEvent(params.ctx,
-		newDesc.ID,
-		&eventpb.CreateView{
-			ViewName:  n.viewName.FQString(),
-			ViewQuery: n.viewQuery,
-		})
+			// Log Create View event. This is an auditable log event and is
+			// recorded in the same transaction as the table descriptor update.
+			return params.p.logEvent(params.ctx,
+				newDesc.ID,
+				&eventpb.CreateView{
+					ViewName:  n.viewName.FQString(),
+					ViewQuery: n.viewQuery,
+				})
+		}()
+	})
+	return retErr
 }
 
 func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
@@ -457,24 +463,42 @@ func serializeUserDefinedTypes(
 	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		var innerExpr tree.Expr
+		var typRef tree.ResolvableTypeReference
 		switch n := expr.(type) {
-		case *tree.CastExpr, *tree.AnnotateTypeExpr:
-			texpr, err := tree.TypeCheck(ctx, n, semaCtx, types.Any)
-			if err != nil {
-				return false, expr, err
-			}
-			if !texpr.ResolvedType().UserDefined() {
-				return true, expr, nil
-			}
-
-			s := tree.Serialize(texpr)
-			parsedExpr, err := parser.ParseExpr(s)
-			if err != nil {
-				return false, expr, err
-			}
-			return false, parsedExpr, nil
+		case *tree.CastExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		default:
+			return true, expr, nil
 		}
-		return true, expr, nil
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typeResolver tree.TypeReferenceResolver
+		if semaCtx != nil {
+			typeResolver = semaCtx.TypeResolver
+		}
+		var typ *types.T
+		typ, err = tree.ResolveType(ctx, typRef, typeResolver)
+		if err != nil {
+			return false, expr, err
+		}
+		if !typ.UserDefined() {
+			return true, expr, nil
+		}
+		texpr, err := innerExpr.TypeCheck(ctx, semaCtx, typ)
+		if err != nil {
+			return false, expr, err
+		}
+		s := tree.Serialize(texpr)
+		parsedExpr, err := parser.ParseExpr(s)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, parsedExpr, nil
 	}
 
 	stmt, err := parser.ParseOne(viewQuery)
