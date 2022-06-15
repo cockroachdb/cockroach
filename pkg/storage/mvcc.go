@@ -4361,6 +4361,305 @@ func MVCCGarbageCollect(
 	return nil
 }
 
+// rangeKeyMergeTracker is tracking potential merges of range key fragments
+// when some of the versions are removed.
+type rangeKeyMergeTracker struct {
+	prevEndKey         roachpb.Key
+	previousTimestamps []hlc.Timestamp
+	ms                 *enginepb.MVCCStats
+}
+
+// update updates MVCCStats if previous range key fragments are adjacent to
+// current ones and remaining ones in current stack of fragments (indicated by
+// removed flag), match exactly with the previous stack (by their timestamps).
+func (t *rangeKeyMergeTracker) update(
+	startKey, endKey roachpb.Key, unsafeRangeKeys []MVCCRangeKeyValue,
+) {
+	if t.ms == nil {
+		return
+	}
+	if keyCount := len(unsafeRangeKeys); keyCount > 0 && keyCount == len(t.previousTimestamps) && t.prevEndKey.Equal(startKey) {
+		matching := true
+		for i, pts := range t.previousTimestamps {
+			if !pts.Equal(unsafeRangeKeys[i].RangeKey.Timestamp) {
+				matching = false
+				break
+			}
+		}
+		if matching {
+			// All timestamps in range tombstone history matched with remaining
+			// timestamp in current history. Range tombstones would merge.
+			t.ms.Add(adjustStatsOnRangeTombstoneMerge(unsafeRangeKeys))
+		}
+	}
+	t.previousTimestamps = t.previousTimestamps[:0]
+	for _, rk := range unsafeRangeKeys {
+		t.previousTimestamps = append(t.previousTimestamps, rk.RangeKey.Timestamp)
+	}
+	t.prevEndKey = endKey.Clone()
+}
+
+// CollectableGCRangeKey is a struct containing range key as well as span
+// boundaries locked for particular range key.
+type CollectableGCRangeKey struct {
+	MVCCRangeKey
+	LatchSpan roachpb.Span
+}
+
+// MVCCGarbageCollectRanges is similar in functionality to MVCCGarbageCollect but
+// operates on range keys. It does sanity checks that no values exist below
+// range tombstones so that no values are exposed in case point values GC was
+// not performed correctly by level above.
+// Note that method requires start and end keys for the range since we don't
+// want underlying iterators to trim exposed range fragments and we don't
+// otherwise have a simple means to extend ranges beyond provided range keys.
+func MVCCGarbageCollectRanges(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	rks []CollectableGCRangeKey,
+	timestamp hlc.Timestamp,
+) error {
+
+	var count int64
+	defer func(begin time.Time) {
+		log.Eventf(ctx,
+			"done with GC evaluation for %d range keys at %.2f keys/sec. Deleted %d entries",
+			len(rks), float64(len(rks))*1e9/float64(timeutil.Since(begin)), count)
+	}(timeutil.Now())
+
+	// If there are no keys then there is no work.
+	if len(rks) == 0 {
+		return nil
+	}
+
+	// Validate range keys are well formed.
+	for _, rk := range rks {
+		if err := rk.Validate(); err != nil {
+			return errors.Wrap(err, "failed to validate gc range keys in mvcc gc")
+		}
+	}
+
+	sort.Slice(rks, func(i, j int) bool {
+		return rks[i].Compare(rks[j].MVCCRangeKey) < 0
+	})
+
+	// Validate that keys are non-overlapping.
+	for i := 1; i < len(rks); i++ {
+		if rks[i].StartKey.Compare(rks[i-1].EndKey) < 0 {
+			return errors.Errorf("range keys in gc request should be non-overlapping: %s vs %s",
+				rks[i-1].String(), rks[i].String())
+		}
+	}
+
+	var iter MVCCIterator
+	var ptIter *MVCCIncrementalIterator
+
+	defer func() {
+		if iter != nil {
+			iter.Close()
+		}
+		if ptIter != nil {
+			ptIter.Close()
+		}
+	}()
+
+	for _, gcKey := range rks {
+		mergeTracker := rangeKeyMergeTracker{ms: ms}
+
+		// Bound the iterator appropriately for the set of keys we'll be garbage
+		// collecting.
+		iter = rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			LowerBound: gcKey.LatchSpan.Key,
+			UpperBound: gcKey.LatchSpan.EndKey,
+			KeyTypes:   IterKeyTypeRangesOnly,
+		})
+
+		iter.SeekGE(MVCCKey{Key: gcKey.LatchSpan.Key})
+
+		for ; ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			bounds := iter.RangeBounds()
+			unsafeRangeKeys := iter.RangeKeys()
+
+			// Check if preceeding range tombstone is adjacent to GC'd one. If we
+			// started iterating too early, just skip to next key. If boundaries
+			// match, then we capture start of the range and timestamps for later.
+			switch bounds.EndKey.Compare(gcKey.StartKey) {
+			case -1:
+				continue
+			case 0:
+				mergeTracker.update(bounds.Key, bounds.EndKey, unsafeRangeKeys)
+				continue
+			}
+
+			// Terminate loop once we've reached a range tombstone past the right
+			// GC range key boundary.
+			if cmp := bounds.Key.Compare(gcKey.EndKey); cmp >= 0 {
+				mergeTracker.update(bounds.Key, bounds.EndKey, unsafeRangeKeys)
+				break
+			}
+
+			// Check if we have a partial overlap between range tombstone and
+			// requested GCd range. This shouldn't happen in most cases, but we can
+			// have a range merge between GC run and cmd_gc execution or
+			// erroneous GC request and mvcc stats should be updated correctly.
+			// In those cases gcKey boundaries will not match underlying range
+			// tombstone boundaries and need to be adjusted.
+			trimLeft, trimRight := false, false
+			candidateStartKey := bounds.Key
+			if gcKey.StartKey.Compare(candidateStartKey) > 0 {
+				candidateStartKey = gcKey.StartKey
+				trimLeft = true
+			}
+			candidateEndKey := bounds.EndKey
+			if gcKey.EndKey.Compare(candidateEndKey) < 0 {
+				candidateEndKey = gcKey.EndKey
+				trimRight = true
+			}
+
+			removedRange := MVCCRangeKeyValue{
+				RangeKey: MVCCRangeKey{
+					StartKey: candidateStartKey,
+					EndKey:   candidateEndKey,
+				},
+			}
+			remaining := len(unsafeRangeKeys)
+			for i, rkv := range unsafeRangeKeys {
+				removedRange.RangeKey.Timestamp = rkv.RangeKey.Timestamp
+				removedRange.Value = rkv.Value
+				remove := rkv.RangeKey.Timestamp.LessEq(gcKey.Timestamp)
+				if remove {
+					if err := rw.ClearMVCCRangeKey(removedRange.RangeKey); err != nil {
+						return err
+					}
+					remaining--
+				}
+				if ms != nil {
+					ms.Add(updateStatsOnRangeTombstoneGC(removedRange, trimLeft, trimRight, i == 0, remove))
+				}
+			}
+
+			mergeTracker.update(candidateStartKey, candidateEndKey, unsafeRangeKeys[0:remaining])
+
+			// Verify that there are no remaining data under the deleted range using
+			// time bound iterator.
+			ptIter = NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
+				KeyTypes:     IterKeyTypePointsOnly,
+				StartKey:     gcKey.StartKey,
+				EndKey:       gcKey.EndKey,
+				EndTime:      gcKey.Timestamp,
+				IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
+			})
+			ptIter.SeekGE(MVCCKey{Key: candidateStartKey})
+			for ; ; ptIter.Next() {
+				if ok, err := ptIter.Valid(); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+				pointKey := ptIter.UnsafeKey()
+				if !pointKey.IsValue() {
+					var meta enginepb.MVCCMetadata
+					if err := protoutil.Unmarshal(ptIter.UnsafeValue(), &meta); err != nil {
+						return err
+					}
+					if meta.Timestamp.Less(gcKey.Timestamp.ToLegacyTimestamp()) {
+						return errors.Errorf("attempt to delete range tombstone %q hiding intent at %q",
+							gcKey, pointKey)
+					}
+				} else if pointKey.Timestamp.Less(gcKey.Timestamp) {
+					val, err := DecodeMVCCValue(ptIter.UnsafeValue())
+					if err != nil {
+						return err
+					}
+					if !val.IsTombstone() {
+						return errors.Errorf("attempt to delete range tombstone %q hiding value at %q",
+							gcKey, pointKey)
+					}
+				}
+			}
+			ptIter.Close()
+			ptIter = nil
+		}
+
+		iter.Close()
+		iter = nil
+	}
+
+	return nil
+}
+
+func updateStatsOnRangeTombstoneGC(
+	removedRange MVCCRangeKeyValue, trimLeft, trimRight bool, first, remove bool,
+) (ms enginepb.MVCCStats) {
+	ms.AgeTo(removedRange.RangeKey.Timestamp.WallTime)
+	// Cache component sizes to avoid recomputing them every time.
+	leftKeySize := int64(EncodedMVCCKeyPrefixLength(removedRange.RangeKey.StartKey))
+	rightKeySize := int64(EncodedMVCCKeyPrefixLength(removedRange.RangeKey.EndKey))
+	tsSize := int64(EncodedMVCCTimestampSuffixLength(removedRange.RangeKey.Timestamp))
+	valueSize := int64(len(removedRange.Value))
+
+	if remove {
+		if first {
+			ms.RangeKeyBytes -= leftKeySize + rightKeySize
+			ms.RangeKeyCount--
+		}
+		ms.RangeKeyBytes -= tsSize
+		ms.RangeValBytes -= valueSize
+		ms.RangeValCount--
+	}
+
+	// If we had to trim ranges, then we need to accommodate for new fragment
+	// stacks added to the left and right of removed range.
+	// Mind that we add key contributions twice since they are added as the
+	// end key and start key for ranges. If trimmed range is removed at current
+	// timestamp extra value will be removed above when handling the deletion.
+	if first {
+		if trimLeft {
+			ms.RangeKeyBytes += leftKeySize * 2
+			ms.RangeKeyCount++
+		}
+		if trimRight {
+			ms.RangeKeyBytes += rightKeySize * 2
+			ms.RangeKeyCount++
+		}
+	}
+	if trimLeft {
+		ms.RangeKeyBytes += tsSize
+		ms.RangeValBytes += valueSize
+		ms.RangeValCount++
+	}
+	if trimRight {
+		ms.RangeKeyBytes += tsSize
+		ms.RangeValBytes += valueSize
+		ms.RangeValCount++
+	}
+
+	return ms
+}
+
+// Adjustment updates MVCCStats for the case where all range tombstone fragments
+// merge to the left. i.e. start key is eliminated twice at the top of history
+// and all versions are removed as a timestamp and a value.
+func adjustStatsOnRangeTombstoneMerge(rangeKeys []MVCCRangeKeyValue) (ms enginepb.MVCCStats) {
+	ms.AgeTo(rangeKeys[0].RangeKey.Timestamp.WallTime)
+	ms.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(rangeKeys[0].RangeKey.StartKey)) * 2
+	ms.RangeKeyCount--
+	for _, rk := range rangeKeys {
+		ms.AgeTo(rk.RangeKey.Timestamp.WallTime)
+		ms.RangeKeyBytes -= int64(EncodedMVCCTimestampSuffixLength(rk.RangeKey.Timestamp))
+		ms.RangeValCount--
+		ms.RangeValBytes -= int64(len(rk.Value))
+	}
+	return ms
+}
+
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.

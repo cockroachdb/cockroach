@@ -48,7 +48,7 @@ func declareKeysDeleteRange(
 		// NB: The range end key is not available, so this will pessimistically
 		// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
 		// span will be tightened during evaluation.
-		l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+		l, r := storage.RangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
 		latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 
 		// We need to read the range descriptor to determine the bounds during eval.
@@ -81,7 +81,7 @@ func DeleteRange(
 		}
 
 		desc := cArgs.EvalCtx.Desc()
-		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+		leftPeekBound, rightPeekBound := storage.RangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
@@ -116,24 +116,4 @@ func DeleteRange(
 	// have been written even when an error is returned. This is harmless if the
 	// error is not consumed by the caller because the result will be discarded.
 	return result.FromAcquiredLocks(h.Txn, deleted...), err
-}
-
-// rangeTombstonePeekBounds returns the left and right bounds that
-// MVCCDeleteRangeUsingTombstone can read in order to detect adjacent range
-// tombstones to merge with or fragment. The bounds will be truncated to the
-// Raft range bounds if given.
-func rangeTombstonePeekBounds(
-	startKey, endKey, rangeStart, rangeEnd roachpb.Key,
-) (roachpb.Key, roachpb.Key) {
-	leftPeekBound := startKey.Prevish(roachpb.PrevishKeyLength)
-	if len(rangeStart) > 0 && leftPeekBound.Compare(rangeStart) <= 0 {
-		leftPeekBound = rangeStart
-	}
-
-	rightPeekBound := endKey.Next()
-	if len(rangeEnd) > 0 && rightPeekBound.Compare(rangeEnd) >= 0 {
-		rightPeekBound = rangeEnd
-	}
-
-	return leftPeekBound.Clone(), rightPeekBound.Clone()
 }
