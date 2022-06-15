@@ -49,6 +49,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {AlterTable, true},
 	reflect.TypeOf((*tree.CreateIndex)(nil)):         {CreateIndex, false},
 	reflect.TypeOf((*tree.DropDatabase)(nil)):        {DropDatabase, true},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {DropOwnedBy, true},
 	reflect.TypeOf((*tree.DropSchema)(nil)):          {DropSchema, true},
 	reflect.TypeOf((*tree.DropSequence)(nil)):        {DropSequence, true},
 	reflect.TypeOf((*tree.DropTable)(nil)):           {DropTable, true},
