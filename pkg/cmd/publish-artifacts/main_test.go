@@ -21,10 +21,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/alessio/shellescape"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,9 +30,13 @@ type mockS3 struct {
 	puts []string
 }
 
-var _ s3putter = (*mockS3)(nil)
+var _ release.ObjectPutGetter = (*mockS3)(nil)
 
-func (s *mockS3) PutObject(i *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
+func (s *mockS3) GetObject(*release.GetObjectInput) (*release.GetObjectOutput, error) {
+	return &release.GetObjectOutput{}, nil
+}
+
+func (s *mockS3) PutObject(i *release.PutObjectInput) error {
 	url := fmt.Sprintf(`s3://%s/%s`, *i.Bucket, *i.Key)
 	if i.CacheControl != nil {
 		url += `/` + *i.CacheControl
@@ -42,7 +44,7 @@ func (s *mockS3) PutObject(i *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
 	if i.Body != nil {
 		bytes, err := ioutil.ReadAll(i.Body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if strings.HasSuffix(*i.Key, release.ChecksumSuffix) {
 			// Unfortunately the archive tarball checksum changes every time,
@@ -57,7 +59,7 @@ func (s *mockS3) PutObject(i *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
 	} else if i.WebsiteRedirectLocation != nil {
 		s.puts = append(s.puts, fmt.Sprintf("%s REDIRECT %s", url, *i.WebsiteRedirectLocation))
 	}
-	return &s3.PutObjectOutput{}, nil
+	return nil
 }
 
 type mockExecRunner struct {
@@ -70,7 +72,7 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 		panic("r.fakeBazelBin not set")
 	}
 	if c.Dir == `` {
-		return nil, errors.Errorf(`Dir must be specified`)
+		return nil, fmt.Errorf("`Dir` must be specified")
 	}
 	cmd := fmt.Sprintf("env=%s args=%s", c.Env, shellescape.QuoteCommand(c.Args))
 	r.cmds = append(r.cmds, cmd)
@@ -252,15 +254,15 @@ func TestPublish(t *testing.T) {
 			defer cleanup()
 
 			var s3 mockS3
-			var exec mockExecRunner
+			var runner mockExecRunner
 			fakeBazelBin, cleanup := testutils.TempDir(t)
 			defer cleanup()
-			exec.fakeBazelBin = fakeBazelBin
+			runner.fakeBazelBin = fakeBazelBin
 			flags := test.flags
 			flags.pkgDir = dir
-			execFn := release.ExecFn{MockExecFn: exec.run}
-			run(&s3, flags, execFn)
-			require.Equal(t, test.expectedCmds, exec.cmds)
+			execFn := release.ExecFn{MockExecFn: runner.run}
+			run([]release.ObjectPutGetter{&s3}, flags, execFn)
+			require.Equal(t, test.expectedCmds, runner.cmds)
 			require.Equal(t, test.expectedPuts, s3.puts)
 		})
 	}

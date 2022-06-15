@@ -13,16 +13,12 @@ package main
 import (
 	"bytes"
 	"flag"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/kr/pretty"
@@ -36,34 +32,12 @@ const (
 
 var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 
-type s3I interface {
-	GetObject(*s3.GetObjectInput) (*s3.GetObjectOutput, error)
-	PutObject(*s3.PutObjectInput) (*s3.PutObjectOutput, error)
-}
-
-func makeS3() (s3I, error) {
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1"),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return s3.New(sess), nil
-}
-
-var isReleaseF = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
-var destBucket = flag.String("bucket", "", "override default bucket")
-var doProvisionalF = flag.Bool("provisional", false, "publish provisional binaries")
-var doBlessF = flag.Bool("bless", false, "bless provisional binaries")
-
-var (
-	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
-	// rather than a full key. This means that the actual artifact will no
-	// longer be named "-latest".
-	latestStr = "latest"
-)
-
 func main() {
+	var isReleaseF = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
+	var destBucket = flag.String("bucket", "", "override default bucket")
+	var doProvisionalF = flag.Bool("provisional", false, "publish provisional binaries")
+	var doBlessF = flag.Bool("bless", false, "bless provisional binaries")
+
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
@@ -73,7 +47,7 @@ func main() {
 	if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
 		log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
 	}
-	s3, err := makeS3()
+	s3, err := release.NewS3("us-east-1")
 	if err != nil {
 		log.Fatalf("Creating AWS S3 session: %s", err)
 	}
@@ -99,24 +73,28 @@ func main() {
 		log.Fatalf("%s: out=%q err=%s", cmd.Args, shaOut, err)
 	}
 
-	run(s3, runFlags{
+	run([]release.ObjectPutGetter{s3}, runFlags{
 		doProvisional: *doProvisionalF,
 		doBless:       *doBlessF,
 		isRelease:     *isReleaseF,
 		branch:        branch,
 		pkgDir:        pkg,
+		destBucket:    *destBucket,
 		sha:           string(bytes.TrimSpace(shaOut)),
 	}, release.ExecFn{})
 }
 
 type runFlags struct {
-	doProvisional, doBless bool
-	isRelease              bool
-	branch, sha            string
-	pkgDir                 string
+	doProvisional bool
+	doBless       bool
+	isRelease     bool
+	branch        string
+	sha           string
+	pkgDir        string
+	destBucket    string
 }
 
-func run(svc s3I, flags runFlags, execFn release.ExecFn) {
+func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
 	// TODO(dan): non-release builds currently aren't broken into the two
 	// phases. Instead, the provisional phase does them both.
 	if !flags.isRelease {
@@ -130,7 +108,7 @@ func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 		// If the tag starts with "provisional_", then we're building a binary
 		// that we hope will be some final release and the tag will be of the
 		// form `provisional_<yyyymmddhhss>_<semver>`. If all goes well with the
-		// long running tests, these bits will be released exactly as-is, so the
+		// long-running tests, these bits will be released exactly as-is, so the
 		// version is set to <semver> by stripping the prefix.
 		versionStr = provisionalReleasePrefixRE.ReplaceAllLiteralString(flags.branch, "")
 
@@ -155,8 +133,8 @@ func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 	}
 
 	var bucketName string
-	if len(*destBucket) > 0 {
-		bucketName = *destBucket
+	if len(flags.destBucket) > 0 {
+		bucketName = flags.destBucket
 	} else if flags.isRelease {
 		bucketName = "binaries.cockroachdb.com"
 	} else {
@@ -186,9 +164,36 @@ func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 			buildCockroach(flags, o, execFn)
 
 			if !flags.isRelease {
-				putNonRelease(svc, o)
+				for _, provider := range providers {
+					release.PutNonRelease(
+						provider,
+						release.PutNonReleaseOptions{
+							Branch:     o.Branch,
+							BucketName: o.BucketName,
+							Files: append(
+								[]release.NonReleaseFile{
+									release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
+									release.MakeCRDBBinaryNonReleaseFile(o.CockroachSQLAbsolutePath, o.VersionStr),
+								},
+								release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.Platform, o.VersionStr)...,
+							),
+						},
+					)
+				}
 			} else {
-				putRelease(svc, o)
+				for _, provider := range providers {
+					release.PutRelease(provider, release.PutReleaseOptions{
+						BucketName: o.BucketName,
+						NoCache:    false,
+						Platform:   o.Platform,
+						VersionStr: o.VersionStr,
+						Files: append(
+							[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
+							release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
+						),
+						ExtraFiles: []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")},
+					})
+				}
 			}
 		}
 	}
@@ -198,7 +203,9 @@ func run(svc s3I, flags runFlags, execFn release.ExecFn) {
 		}
 		if updateLatest {
 			for _, o := range cockroachBuildOpts {
-				markLatestRelease(svc, o)
+				for _, provider := range providers {
+					markLatestRelease(provider, o)
+				}
 			}
 		}
 	}
@@ -223,86 +230,21 @@ func buildCockroach(flags runFlags, o opts, execFn release.ExecFn) {
 }
 
 type opts struct {
-	VersionStr string
-	Branch     string
-
-	Platform release.Platform
-
+	VersionStr               string
+	Branch                   string
+	Platform                 release.Platform
 	AbsolutePath             string
 	CockroachSQLAbsolutePath string
 	BucketName               string
 	PkgDir                   string
 }
 
-func putNonRelease(svc s3I, o opts) {
-	release.PutNonRelease(
-		svc,
-		release.PutNonReleaseOptions{
-			Branch:     o.Branch,
-			BucketName: o.BucketName,
-			Files: append(
-				[]release.NonReleaseFile{
-					release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
-					release.MakeCRDBBinaryNonReleaseFile(o.CockroachSQLAbsolutePath, o.VersionStr),
-				},
-				release.MakeCRDBLibraryNonReleaseFiles(o.PkgDir, o.Platform, o.VersionStr)...,
-			),
-		},
-	)
-}
-
-func s3KeyRelease(o opts) (string, string) {
-	return release.S3KeyRelease(o.Platform, o.VersionStr, "cockroach")
-}
-
-func putRelease(svc s3I, o opts) {
-	release.PutRelease(svc, release.PutReleaseOptions{
-		BucketName: o.BucketName,
-		NoCache:    false,
+func markLatestRelease(svc release.ObjectPutGetter, o opts) {
+	latestOpts := release.LatestOpts{
 		Platform:   o.Platform,
 		VersionStr: o.VersionStr,
-		Files: append(
-			[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
-			release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
-		),
-		ExtraFiles: []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")},
-	})
-}
-
-func markLatestRelease(svc s3I, o opts) {
-	markLatestReleaseWithSuffix(svc, o, "")
-	markLatestReleaseWithSuffix(svc, o, release.ChecksumSuffix)
-}
-
-func markLatestReleaseWithSuffix(svc s3I, o opts, suffix string) {
-	_, keyRelease := s3KeyRelease(o)
-	keyRelease += suffix
-	log.Printf("Downloading from %s/%s", o.BucketName, keyRelease)
-	binary, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket: &o.BucketName,
-		Key:    &keyRelease,
-	})
-	if err != nil {
-		log.Fatal(err)
+		BucketName: o.BucketName,
 	}
-	defer binary.Body.Close()
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, binary.Body); err != nil {
-		log.Fatalf("downloading %s/%s: %s", o.BucketName, keyRelease, err)
-	}
-
-	oLatest := o
-	oLatest.VersionStr = latestStr
-	_, keyLatest := s3KeyRelease(oLatest)
-	keyLatest += suffix
-	log.Printf("Uploading to s3://%s/%s", o.BucketName, keyLatest)
-	putObjectInput := s3.PutObjectInput{
-		Bucket:       &o.BucketName,
-		Key:          &keyLatest,
-		Body:         bytes.NewReader(buf.Bytes()),
-		CacheControl: &release.NoCache,
-	}
-	if _, err := svc.PutObject(&putObjectInput); err != nil {
-		log.Fatalf("s3 upload %s: %s", keyLatest, err)
-	}
+	release.MarkLatestReleaseWithSuffix(svc, latestOpts, "")
+	release.MarkLatestReleaseWithSuffix(svc, latestOpts, release.ChecksumSuffix)
 }
