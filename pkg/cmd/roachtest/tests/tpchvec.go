@@ -34,8 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const tpchVecPerfSlownessThreshold = 1.5
-
 var tpchTables = []string{
 	"nation", "region", "part", "supplier",
 	"partsupp", "customer", "orders", "lineitem",
@@ -155,8 +153,8 @@ func (h *tpchVecPerfHelper) parseQueryOutput(t test.Test, output []byte, setupId
 }
 
 const (
-	tpchPerfTestVecOnConfigIdx  = 1
-	tpchPerfTestVecOffConfigIdx = 0
+	tpchPerfTestOnConfigIdx  = 1
+	tpchPerfTestOffConfigIdx = 0
 )
 
 type tpchVecPerfTest struct {
@@ -164,14 +162,20 @@ type tpchVecPerfTest struct {
 	*tpchVecPerfHelper
 
 	disableStatsCreation bool
+	settingName          string
+	slownessThreshold    float64
 }
 
 var _ tpchVecTestCase = &tpchVecPerfTest{}
 
-func newTpchVecPerfTest(disableStatsCreation bool) *tpchVecPerfTest {
+func newTpchVecPerfTest(
+	disableStatsCreation bool, settingName string, slownessThreshold float64,
+) *tpchVecPerfTest {
 	return &tpchVecPerfTest{
 		tpchVecPerfHelper:    newTpchVecPerfHelper(2 /* numSetups */),
 		disableStatsCreation: disableStatsCreation,
+		settingName:          settingName,
+		slownessThreshold:    slownessThreshold,
 	}
 }
 
@@ -182,20 +186,22 @@ func (p tpchVecPerfTest) getRunConfig() tpchVecTestRunConfig {
 		runConfig.queriesToRun = append(runConfig.queriesToRun[:8], runConfig.queriesToRun[9:]...)
 	}
 	runConfig.numRunsPerQuery = 3
-	// Make a copy of the default configuration setup and add different
-	// vectorize setting updates. Note that it's ok that the default setup
-	// sets vectorize cluster setting to 'on' - we will override it with
-	// queries below.
+	// Make a copy of the default configuration setup and add different setting
+	// updates.
+	//
+	// When using sql.defaults.vectorize as the setting name, note that it's ok
+	// that the default setup sets vectorize cluster setting to 'on' - we will
+	// override it with queries below.
 	defaultSetup := runConfig.clusterSetups[0]
 	runConfig.clusterSetups = append(runConfig.clusterSetups, make([]string, len(defaultSetup)))
 	copy(runConfig.clusterSetups[1], defaultSetup)
-	runConfig.clusterSetups[tpchPerfTestVecOffConfigIdx] = append(runConfig.clusterSetups[tpchPerfTestVecOffConfigIdx],
-		"SET CLUSTER SETTING sql.defaults.vectorize=off")
-	runConfig.clusterSetups[tpchPerfTestVecOnConfigIdx] = append(runConfig.clusterSetups[tpchPerfTestVecOnConfigIdx],
-		"SET CLUSTER SETTING sql.defaults.vectorize=on")
+	runConfig.clusterSetups[tpchPerfTestOffConfigIdx] = append(runConfig.clusterSetups[tpchPerfTestOffConfigIdx],
+		fmt.Sprintf("SET CLUSTER SETTING %s=off", p.settingName))
+	runConfig.clusterSetups[tpchPerfTestOnConfigIdx] = append(runConfig.clusterSetups[tpchPerfTestOnConfigIdx],
+		fmt.Sprintf("SET CLUSTER SETTING %s=on", p.settingName))
 	runConfig.setupNames = make([]string, 2)
-	runConfig.setupNames[tpchPerfTestVecOffConfigIdx] = "off"
-	runConfig.setupNames[tpchPerfTestVecOnConfigIdx] = "on"
+	runConfig.setupNames[tpchPerfTestOffConfigIdx] = fmt.Sprintf("%s=off", p.settingName)
+	runConfig.setupNames[tpchPerfTestOnConfigIdx] = fmt.Sprintf("%s=on", p.settingName)
 	return runConfig
 }
 
@@ -219,38 +225,38 @@ func (p *tpchVecPerfTest) postTestRunHook(
 			sort.Float64s(times)
 			return times[len(times)/2]
 		}
-		vecOnTimes := p.timeByQueryNum[tpchPerfTestVecOnConfigIdx][queryNum]
-		vecOffTimes := p.timeByQueryNum[tpchPerfTestVecOffConfigIdx][queryNum]
-		if len(vecOnTimes) != runConfig.numRunsPerQuery {
+		onTimes := p.timeByQueryNum[tpchPerfTestOnConfigIdx][queryNum]
+		offTimes := p.timeByQueryNum[tpchPerfTestOffConfigIdx][queryNum]
+		if len(onTimes) != runConfig.numRunsPerQuery {
 			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-				"recorded with vec ON config: %v", queryNum, vecOnTimes))
+				"recorded with ON config: %v", queryNum, onTimes))
 		}
-		if len(vecOffTimes) != runConfig.numRunsPerQuery {
+		if len(offTimes) != runConfig.numRunsPerQuery {
 			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-				"recorded with vec OFF config: %v", queryNum, vecOffTimes))
+				"recorded with OFF config: %v", queryNum, offTimes))
 		}
-		vecOnTime := findMedian(vecOnTimes)
-		vecOffTime := findMedian(vecOffTimes)
-		if vecOffTime < vecOnTime {
+		onTime := findMedian(onTimes)
+		offTime := findMedian(offTimes)
+		if offTime < onTime {
 			t.L().Printf(
-				fmt.Sprintf("[q%d] vec OFF was faster by %.2f%%: "+
+				fmt.Sprintf("[q%d] OFF was faster by %.2f%%: "+
 					"%.2fs ON vs %.2fs OFF --- WARNING\n"+
-					"vec ON times: %v\t vec OFF times: %v",
-					queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime,
-					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+					"ON times: %v\t OFF times: %v",
+					queryNum, 100*(onTime-offTime)/offTime,
+					onTime, offTime, onTimes, offTimes))
 		} else {
 			t.L().Printf(
-				fmt.Sprintf("[q%d] vec ON was faster by %.2f%%: "+
+				fmt.Sprintf("[q%d] ON was faster by %.2f%%: "+
 					"%.2fs ON vs %.2fs OFF\n"+
-					"vec ON times: %v\t vec OFF times: %v",
-					queryNum, 100*(vecOffTime-vecOnTime)/vecOnTime,
-					vecOnTime, vecOffTime, vecOnTimes, vecOffTimes))
+					"ON times: %v\t OFF times: %v",
+					queryNum, 100*(offTime-onTime)/onTime,
+					onTime, offTime, onTimes, offTimes))
 		}
-		if vecOnTime >= tpchVecPerfSlownessThreshold*vecOffTime {
-			// For some reason, the vectorized engine executed the query a lot
-			// slower than the row-by-row engine which is unexpected. In order
-			// to understand where the slowness comes from, we will run EXPLAIN
-			// ANALYZE (DEBUG) of the query with all `vectorize` options
+		if onTime >= p.slownessThreshold*offTime {
+			// For some reason, the ON setup executed the query a lot slower
+			// than the OFF setup which is unexpected. In order to understand
+			// where the slowness comes from, we will run EXPLAIN ANALYZE
+			// (DEBUG) of the query with all setup options
 			// tpchPerfTestNumRunsPerQuery times (hoping at least one will
 			// "catch" the slowness).
 			for setupIdx, setup := range runConfig.clusterSetups {
@@ -312,9 +318,9 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				}
 			}
 			t.Fatal(fmt.Sprintf(
-				"[q%d] vec ON is slower by %.2f%% than vec OFF\n"+
-					"vec ON times: %v\nvec OFF times: %v",
-				queryNum, 100*(vecOnTime-vecOffTime)/vecOffTime, vecOnTimes, vecOffTimes))
+				"[q%d] ON is slower by %.2f%% than OFF\n"+
+					"ON times: %v\nOFF times: %v",
+				queryNum, 100*(onTime-offTime)/offTime, onTimes, offTimes))
 		}
 	}
 }
@@ -577,7 +583,11 @@ func registerTPCHVec(r registry.Registry) {
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(false /* disableStatsCreation */), baseTestRun)
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
+				false,                    /* disableStatsCreation */
+				"sql.defaults.vectorize", /* settingName */
+				1.5,                      /* slownessThreshold */
+			), baseTestRun)
 		},
 	})
 
@@ -585,8 +595,6 @@ func registerTPCHVec(r registry.Registry) {
 		Name:    "tpchvec/disk",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
-		// 19.2 version doesn't have disk spilling nor memory monitoring, so
-		// there is no point in running this config on that version.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{}, baseTestRun)
 		},
@@ -607,7 +615,25 @@ func registerTPCHVec(r registry.Registry) {
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCHVec(ctx, t, c, newTpchVecPerfTest(true /* disableStatsCreation */), baseTestRun)
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
+				true,                     /* disableStatsCreation */
+				"sql.defaults.vectorize", /* settingName */
+				1.5,                      /* slownessThreshold */
+			), baseTestRun)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:    "tpchvec/streamer",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
+				false,                              /* disableStatsCreation */
+				"sql.distsql.use_streamer.enabled", /* settingName */
+				// TODO(yuzefovich): reduce the threshold over time.
+				3.0, /* slownessThreshold */
+			), baseTestRun)
 		},
 	})
 
