@@ -1039,6 +1039,25 @@ func (p *planner) QueryIterator(
 	return ie.QueryIterator(ctx, opName, p.Txn(), stmt, qargs...)
 }
 
+// WithTxn let user to run sql statements with internal executor generated
+// under a planner context.
+func (p *planner) WithTxn(
+	ctx context.Context,
+	syntheticDescs []catalog.Descriptor,
+	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+) error {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            p.Txn(),
+		descCollection: p.Descriptors(),
+		txnState:       p.EvalContext().TxnState,
+	})
+	return ie.WithSyntheticDescriptors(
+		syntheticDescs,
+		func() error { return run(ctx, p.Txn(), ie) },
+	)
+}
+
 // extraTxnStateUnderPlanner is to store extra transaction state info that
 // will be passed to an internal executor when it's used under a planner
 // context. It should not be exported from the sql package.
