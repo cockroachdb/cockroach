@@ -36,9 +36,16 @@ func loadTPCHDataset(
 	sf int,
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
+	disableMergeQueue bool,
 ) error {
 	db := c.Conn(ctx, t.L(), roachNodes[0])
 	defer db.Close()
+
+	if disableMergeQueue {
+		if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	if _, err := db.ExecContext(ctx, `USE tpch`); err == nil {
 		t.L().Printf("found existing tpch dataset, verifying scale factor\n")
