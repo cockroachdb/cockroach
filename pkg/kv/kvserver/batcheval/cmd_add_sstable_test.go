@@ -67,15 +67,17 @@ func TestEvalAddSSTable(t *testing.T) {
 	}{
 		// Blind writes.
 		"blind writes below existing": {
-			data:           []sstutil.KV{{"a", 5, "a5"}, {"b", 7, ""}},
-			sst:            []sstutil.KV{{"a", 3, "sst"}, {"b", 2, "sst"}},
-			expect:         []sstutil.KV{{"a", 5, "a5"}, {"a", 3, "sst"}, {"b", 7, ""}, {"b", 2, "sst"}},
+			data: []sstutil.KV{{"a", 5, "a5"}, {"b", 7, ""}, {"c", 6, "c6"}},
+			sst:  []sstutil.KV{{"a", 3, "sst"}, {"b", 2, "sst"}, {"c", 3, ""}},
+			expect: []sstutil.KV{
+				{"a", 5, "a5"}, {"a", 3, "sst"}, {"b", 7, ""}, {"b", 2, "sst"}, {"c", 6, "c6"}, {"c", 3, ""},
+			},
 			expectStatsEst: true,
 		},
 		"blind replaces existing": {
-			data:           []sstutil.KV{{"a", 2, "a2"}},
-			sst:            []sstutil.KV{{"a", 2, "sst"}},
-			expect:         []sstutil.KV{{"a", 2, "sst"}},
+			data:           []sstutil.KV{{"a", 2, "a2"}, {"b", 2, "b2"}},
+			sst:            []sstutil.KV{{"a", 2, "sst"}, {"b", 2, ""}},
+			expect:         []sstutil.KV{{"a", 2, "sst"}, {"b", 2, ""}},
 			expectStatsEst: true,
 		},
 		"blind errors on AddSSTableRequireAtRequestTimestamp": {
@@ -100,11 +102,10 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         []sstutil.KV{{"b", intentTS, "b0"}, {"c", 1, "sst"}, {"d", 1, "sst"}},
 			expectStatsEst: true,
 		},
-		"blind writes tombstones unless race": { // unfortunately, for performance
+		"blind writes tombstones": {
 			sst:            []sstutil.KV{{"a", 1, ""}},
 			expect:         []sstutil.KV{{"a", 1, ""}},
 			expectStatsEst: true,
-			expectErrRace:  `SST contains tombstone for key "a"/0.000000001,0`,
 		},
 		"blind writes SST inline values unless race": { // unfortunately, for performance
 			sst:            []sstutil.KV{{"a", 0, "inline"}},
@@ -135,12 +136,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         []sstutil.KV{{"a", 10, "a1"}, {"b", 10, "b1"}},
 			expectStatsEst: true,
 		},
-		"SSTTimestampToRequestTimestamp writes tombstones unless race": { // unfortunately, for performance
+		"SSTTimestampToRequestTimestamp writes tombstones": {
 			reqTS:          10,
 			toReqTS:        1,
 			sst:            []sstutil.KV{{"a", 1, ""}},
 			expect:         []sstutil.KV{{"a", 10, ""}},
-			expectErrRace:  `SST contains tombstone for key "a"/0.000000001,0`,
 			expectStatsEst: true,
 		},
 		"SSTTimestampToRequestTimestamp rejects incorrect SST timestamp": {
@@ -221,9 +221,9 @@ func TestEvalAddSSTable(t *testing.T) {
 			reqTS:    5,
 			toReqTS:  1,
 			noShadow: true,
-			data:     []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}},
-			sst:      []sstutil.KV{{"a", 1, "a5"}, {"b", 1, "b5"}},
-			expect:   []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}},
+			data:     []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}, {"c", 5, ""}},
+			sst:      []sstutil.KV{{"a", 1, "a5"}, {"b", 1, "b5"}, {"c", 1, ""}},
+			expect:   []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}, {"c", 5, ""}},
 		},
 		"SSTTimestampToRequestTimestamp errors with DisallowShadowingBelow equal value above existing below limit": {
 			reqTS:         7,
@@ -295,18 +295,16 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        []sstutil.KV{{"a", 3, "a3"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
-		"DisallowConflicts allows new SST tombstones": { // unfortunately, for performance
-			noConflict:    true,
-			sst:           []sstutil.KV{{"a", 3, ""}},
-			expect:        []sstutil.KV{{"a", 3, ""}},
-			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
+		"DisallowConflicts allows new SST tombstones": {
+			noConflict: true,
+			sst:        []sstutil.KV{{"a", 3, ""}},
+			expect:     []sstutil.KV{{"a", 3, ""}},
 		},
-		"DisallowConflicts rejects SST tombstones when shadowing": {
-			noConflict:    true,
-			data:          []sstutil.KV{{"a", 2, "a2"}},
-			sst:           []sstutil.KV{{"a", 3, ""}},
-			expectErr:     "SST values cannot be tombstones",
-			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
+		"DisallowConflicts allows SST tombstones when shadowing": {
+			noConflict: true,
+			data:       []sstutil.KV{{"a", 2, "a2"}},
+			sst:        []sstutil.KV{{"a", 3, ""}},
+			expect:     []sstutil.KV{{"a", 3, ""}, {"a", 2, "a2"}},
 		},
 		"DisallowConflicts allows new SST inline values": { // unfortunately, for performance
 			noConflict:    true,
@@ -383,18 +381,16 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:      []sstutil.KV{{"a", 3, "a3"}},
 			expect:   []sstutil.KV{{"a", 3, "a3"}},
 		},
-		"DisallowShadowing allows new SST tombstones": { // unfortunately, for performance
-			noShadow:      true,
-			sst:           []sstutil.KV{{"a", 3, ""}},
-			expect:        []sstutil.KV{{"a", 3, ""}},
-			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
+		"DisallowShadowing allows new SST tombstones": {
+			noShadow: true,
+			sst:      []sstutil.KV{{"a", 3, ""}},
+			expect:   []sstutil.KV{{"a", 3, ""}},
 		},
 		"DisallowShadowing rejects SST tombstones when shadowing": {
-			noShadow:      true,
-			data:          []sstutil.KV{{"a", 2, "a2"}},
-			sst:           []sstutil.KV{{"a", 3, ""}},
-			expectErr:     "SST values cannot be tombstones",
-			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
+			noShadow:  true,
+			data:      []sstutil.KV{{"a", 2, "a2"}},
+			sst:       []sstutil.KV{{"a", 3, ""}},
+			expectErr: `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowing allows new SST inline values": { // unfortunately, for performance
 			noShadow:      true,
@@ -502,18 +498,22 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           []sstutil.KV{{"a", 3, "a3"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
-		"DisallowShadowingBelow allows new SST tombstones": { // unfortunately, for performance
+		"DisallowShadowingBelow is not generally idempotent with tombstones": {
+			noShadowBelow: 5,
+			data:          []sstutil.KV{{"a", 3, ""}},
+			sst:           []sstutil.KV{{"a", 3, ""}},
+			expectErr:     &roachpb.WriteTooOldError{},
+		},
+		"DisallowShadowingBelow allows new SST tombstones": {
 			noShadowBelow: 5,
 			sst:           []sstutil.KV{{"a", 3, ""}},
 			expect:        []sstutil.KV{{"a", 3, ""}},
-			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
 		},
-		"DisallowShadowingBelow rejects SST tombstones when shadowing": {
+		"DisallowShadowingBelow rejects SST tombstones when shadowing below": {
 			noShadowBelow: 5,
 			data:          []sstutil.KV{{"a", 2, "a2"}},
 			sst:           []sstutil.KV{{"a", 3, ""}},
-			expectErr:     "SST values cannot be tombstones",
-			expectErrRace: `SST contains tombstone for key "a"/0.000000003,0`,
+			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow allows new SST inline values": { // unfortunately, for performance
 			noShadowBelow: 5,
@@ -558,6 +558,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           []sstutil.KV{{"a", 3, "sst"}, {"b", 1, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "b"`,
 		},
+		"DisallowShadowingBelow tombstone above tombstone": {
+			noShadowBelow: 5,
+			data:          []sstutil.KV{{"a", 2, ""}, {"a", 1, "a1"}},
+			sst:           []sstutil.KV{{"a", 3, ""}},
+			expect:        []sstutil.KV{{"a", 3, ""}, {"a", 2, ""}, {"a", 1, "a1"}},
+		},
 		"DisallowShadowingBelow at limit writes": {
 			noShadowBelow: 5,
 			sst:           []sstutil.KV{{"a", 5, "sst"}},
@@ -596,6 +602,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			noShadowBelow: 5,
 			data:          []sstutil.KV{{"a", 4, "a4"}},
 			sst:           []sstutil.KV{{"a", 7, "sst"}},
+			expectErr:     `ingested key collides with an existing one: "a"`,
+		},
+		"DisallowShadowingBelow tombstone above limit errors on existing below limit": {
+			noShadowBelow: 5,
+			data:          []sstutil.KV{{"a", 4, "a4"}},
+			sst:           []sstutil.KV{{"a", 7, ""}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
 		"DisallowShadowingBelow above limit errors on existing below limit with same value": {
@@ -639,6 +651,12 @@ func TestEvalAddSSTable(t *testing.T) {
 			data:          []sstutil.KV{{"a", 7, "a7"}},
 			sst:           []sstutil.KV{{"a", 7, "a7"}},
 			expect:        []sstutil.KV{{"a", 7, "a7"}},
+		},
+		"DisallowShadowingBelow above limit is idempotent with tombstone": {
+			noShadowBelow: 5,
+			data:          []sstutil.KV{{"a", 7, ""}},
+			sst:           []sstutil.KV{{"a", 7, ""}},
+			expect:        []sstutil.KV{{"a", 7, ""}},
 		},
 		"DisallowShadowingBelow above limit errors below existing": {
 			noShadowBelow: 5,
@@ -764,9 +782,8 @@ func TestEvalAddSSTable(t *testing.T) {
 							UpperBound: keys.MaxKey,
 						})
 						defer iter.Close()
-						iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
 						scan := []sstutil.KV{}
-						for {
+						for iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix}); ; iter.Next() {
 							ok, err := iter.Valid()
 							require.NoError(t, err)
 							if !ok {
@@ -787,23 +804,21 @@ func TestEvalAddSSTable(t *testing.T) {
 								require.NoError(t, protoutil.Unmarshal(iter.UnsafeValue(), &meta))
 								if meta.RawBytes == nil {
 									// Skip intent metadata records (value emitted separately).
-									iter.Next()
 									continue
 								}
 								value, err = roachpb.Value{RawBytes: meta.RawBytes}.GetBytes()
 								require.NoError(t, err)
 							}
 							scan = append(scan, sstutil.KV{key, ts, string(value)})
-							iter.Next()
 						}
 						require.Equal(t, tc.expect, scan)
 
 						// Check that stats were updated correctly.
 						if tc.expectStatsEst {
-							require.True(t, stats.ContainsEstimates > 0, "expected stats to be estimated")
+							require.NotZero(t, stats.ContainsEstimates, "expected stats to be estimated")
 						} else {
-							require.False(t, stats.ContainsEstimates > 0, "found estimated stats")
-							require.Equal(t, stats, engineStats(t, engine, stats.LastUpdateNanos))
+							require.Zero(t, stats.ContainsEstimates, "found estimated stats")
+							require.Equal(t, engineStats(t, engine, stats.LastUpdateNanos), stats)
 						}
 					})
 				}
@@ -1121,6 +1136,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		{"d", 1, "d"},
 		{"d", 2, ""},
 		{"e", 1, "e"},
+		{"u", 3, "u"},
 		{"z", 2, "zzzzzz"},
 	} {
 		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.MVCCValue()))
@@ -1133,14 +1149,16 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		{"d", 4, "dddd"},   // mvcc-shadow existing deleted d.
 		{"e", 4, "eeee"},   // mvcc-shadow existing 1b.
 		{"j", 2, "jj"},     // no colission – via MVCC or LSM – with existing.
+		{"t", 3, ""},       // tombstone, no collission
+		{"u", 5, ""},       // tombstone, shadows existing
 	})
 	statsDelta := enginepb.MVCCStats{
-		// the sst will think it added 4 keys here, but a, c, and e shadow or are shadowed.
-		LiveCount: -3,
-		LiveBytes: -109,
-		// the sst will think it added 5 keys, but only j is new so 4 are over-counted.
-		KeyCount: -4,
-		KeyBytes: -20,
+		// the sst will think it added 5 keys here, but a, c, e, and t shadow or are shadowed.
+		LiveCount: -4,
+		LiveBytes: -129,
+		// the sst will think it added 5 keys, but only j and t are new so 5 are over-counted.
+		KeyCount: -5,
+		KeyBytes: -22,
 		// the sst will think it added 6 values, but since one was a perfect (key+ts)
 		// collision, it *replaced* the existing value and is over-counted.
 		ValCount: -1,
@@ -1229,6 +1247,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		{"b", 6, ""},
 		{"g", 5, "gg"},
 		{"r", 1, "rr"},
+		{"t", 3, ""},
 		{"y", 1, "yy"},
 		{"y", 2, ""},
 		{"y", 5, "yyy"},
@@ -1298,12 +1317,14 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	// Check that there has been no double counting of stats. All keys in second SST are shadowing.
 	require.Equal(t, firstSSTStats, *cArgs.Stats)
 
-	// Evaluate the third SST. Two of the three KVs are perfectly shadowing, but
-	// there is one valid KV which should contribute to the stats.
+	// Evaluate the third SST. Some of the KVs are perfectly shadowing, but there
+	// are two valid KVs which should contribute to the stats.
 	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"e", 2, "ee"},
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
+		{"t", 3, ""},   // identical to existing tombstone.
+		{"x", 7, ""},   // new tombstone.
 	})
 
 	cArgs.Args = &roachpb.AddSSTableRequest{
@@ -1315,15 +1336,15 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &roachpb.AddSSTableResponse{})
 	require.NoError(t, err)
 
-	// This is the stats contribution of the KV {"e", 2, "ee"}. This should be
-	// the only addition to the cumulative stats, as the other two KVs are
-	// perfect shadows of existing data.
+	// This is the stats contribution of the KVs {"e", 2, "ee"} and {"x", 7, ""}.
+	// This should be the only addition to the cumulative stats, as the other
+	// KVs are perfect shadows of existing data.
 	delta := enginepb.MVCCStats{
 		LiveCount: 1,
 		LiveBytes: 21,
-		KeyCount:  1,
-		KeyBytes:  14,
-		ValCount:  1,
+		KeyCount:  2,
+		KeyBytes:  28,
+		ValCount:  2,
 		ValBytes:  7,
 	}
 
@@ -1489,8 +1510,6 @@ func engineStats(t *testing.T, engine storage.Engine, nowNanos int64) *enginepb.
 		UpperBound: keys.MaxKey,
 	})
 	defer iter.Close()
-	// We don't care about nowNanos, because the SST can't contain intents or
-	// tombstones and all existing intents will be resolved.
 	stats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, nowNanos)
 	require.NoError(t, err)
 	return &stats

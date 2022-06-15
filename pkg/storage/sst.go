@@ -38,8 +38,8 @@ import (
 // is non-empty, disallowShadowing is ignored.
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
-// timestamps), nor tombstones (i.e. empty values), but this is only checked for
-// keys that exist in both sides, for performance.
+// timestamps), but this is only checked for keys that exist in both sides, for
+// performance.
 //
 // The returned MVCC statistics is a delta between the SST-only statistics and
 // their effect when applied, which when added to the SST statistics will adjust
@@ -98,9 +98,6 @@ func CheckSSTConflicts(
 		if err != nil {
 			return err
 		}
-		if sstValue.IsTombstone() {
-			return errors.New("SST values cannot be tombstones")
-		}
 		if !extKey.IsValue() {
 			var mvccMeta enginepb.MVCCMetadata
 			if err = extIter.ValueProto(&mvccMeta); err != nil {
@@ -149,15 +146,19 @@ func CheckSSTConflicts(
 			totalBytes := metaKeySize + metaValSize
 
 			// Update the skipped stats to account for the skipped meta key.
-			statsDiff.LiveBytes -= totalBytes
-			statsDiff.LiveCount--
+			if !sstValue.IsTombstone() {
+				statsDiff.LiveBytes -= totalBytes
+				statsDiff.LiveCount--
+			}
 			statsDiff.KeyBytes -= metaKeySize
 			statsDiff.ValBytes -= metaValSize
 			statsDiff.KeyCount--
 
 			// Update the stats to account for the skipped versioned key/value.
 			totalBytes = int64(len(sstValueRaw)) + MVCCVersionTimestampSize
-			statsDiff.LiveBytes -= totalBytes
+			if !sstValue.IsTombstone() {
+				statsDiff.LiveBytes -= totalBytes
+			}
 			statsDiff.KeyBytes -= MVCCVersionTimestampSize
 			statsDiff.ValBytes -= int64(len(sstValueRaw))
 			statsDiff.ValCount--
