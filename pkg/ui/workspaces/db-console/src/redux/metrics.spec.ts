@@ -85,8 +85,8 @@ describe("metrics reducer", function () {
       expect(state.queries[componentID]).toBeDefined();
       expect(_.keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].nextRequest).toEqual(request);
-      expect(state.queries[componentID].data).not.toBeDefined();
-      expect(state.queries[componentID].error).not.toBeDefined();
+      expect(state.queries[componentID].data).toBeUndefined();
+      expect(state.queries[componentID].error).toBeUndefined();
     });
 
     it("should correctly dispatch receiveMetrics with an unmatching nextRequest", function () {
@@ -113,10 +113,10 @@ describe("metrics reducer", function () {
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
       expect(_.keys(state.queries).length).toBe(1);
-      expect(state.queries[componentID].data).not.toBeDefined();
-      expect(state.queries[componentID].request).not.toBeDefined();
-      expect(state.queries[componentID].nextRequest).not.toBeDefined();
-      expect(state.queries[componentID].error).not.toBeDefined();
+      expect(state.queries[componentID].data).toBeUndefined();
+      expect(state.queries[componentID].request).toBeUndefined();
+      expect(state.queries[componentID].nextRequest).toBeUndefined();
+      expect(state.queries[componentID].error).toBeUndefined();
     });
 
     it("should correctly dispatch receiveMetrics with a matching nextRequest", function () {
@@ -150,7 +150,7 @@ describe("metrics reducer", function () {
       expect(_.keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].data).toEqual(response);
       expect(state.queries[componentID].request).toEqual(request);
-      expect(state.queries[componentID].error).not.toBeDefined();
+      expect(state.queries[componentID].error).toBeUndefined();
     });
 
     it("should correctly dispatch errorMetrics", function () {
@@ -163,17 +163,17 @@ describe("metrics reducer", function () {
       expect(state.queries[componentID]).toBeDefined();
       expect(_.keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].error).toEqual(error);
-      expect(state.queries[componentID].request).not.toBeDefined();
-      expect(state.queries[componentID].data).not.toBeDefined();
+      expect(state.queries[componentID].request).toBeUndefined();
+      expect(state.queries[componentID].data).toBeUndefined();
     });
 
     it("should correctly dispatch fetchMetrics and fetchMetricsComplete", function () {
       state = metrics.metricsReducer(state, metrics.fetchMetrics());
-      expect(state.inFlight).toEqual(1);
+      expect(state.inFlight).toBe(1);
       state = metrics.metricsReducer(state, metrics.fetchMetrics());
-      expect(state.inFlight).toEqual(2);
+      expect(state.inFlight).toBe(2);
       state = metrics.metricsReducer(state, metrics.fetchMetricsComplete());
-      expect(state.inFlight).toEqual(1);
+      expect(state.inFlight).toBe(1);
     });
   });
 

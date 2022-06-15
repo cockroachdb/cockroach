@@ -8,7 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { DurationFitScale, durationUnits, BytesFitScale, byteUnits } from "./format";
+import {
+  DurationFitScale,
+  durationUnits,
+  BytesFitScale,
+  byteUnits,
+} from "./format";
 
 describe("Format utils", () => {
   describe("DurationFitScale", () => {
@@ -20,7 +25,9 @@ describe("Format utils", () => {
       expect(DurationFitScale(durationUnits[0])(32)).toEqual("32.00 ns");
       expect(DurationFitScale(durationUnits[1])(32120)).toEqual("32.12 µs");
       expect(DurationFitScale(durationUnits[2])(32122300)).toEqual("32.12 ms");
-      expect(DurationFitScale(durationUnits[3])(32122343000)).toEqual("32.12 s");
+      expect(DurationFitScale(durationUnits[3])(32122343000)).toEqual(
+        "32.12 s",
+      );
     });
   });
 

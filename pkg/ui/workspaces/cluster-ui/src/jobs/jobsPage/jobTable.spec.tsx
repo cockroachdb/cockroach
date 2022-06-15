@@ -40,7 +40,7 @@ describe("<JobTable>", () => {
         isUsedFilter={jobTableProps.isUsedFilter}
       />,
     );
-    expect(jobTable.state().pagination.current).toEqual(2);
+    expect(jobTable.state().pagination.current).toBe(2);
     jobTable.setProps({
       jobs: {
         jobs: [{}, {}],
@@ -48,6 +48,6 @@ describe("<JobTable>", () => {
         toJSON: toJSON,
       },
     });
-    expect(jobTable.state().pagination.current).toEqual(1);
+    expect(jobTable.state().pagination.current).toBe(1);
   });
 });

@@ -93,7 +93,7 @@ describe("selectNodeLocalities", function () {
     const state = makeStateWithLocalities(localities);
 
     const result = selectNodeLocalities.resultFunc(state.cachedData.nodes.data);
-    expect(result.size).toEqual(2);
+    expect(result.size).toBe(2);
     result.forEach((v, k) => {
       expect(v).toEqual(
         localities[k].map(l => `${l.key}=${l.value}`).join(", "),
@@ -104,6 +104,6 @@ describe("selectNodeLocalities", function () {
   it("should return empty map if no locality is provided", function () {
     const state = makeStateWithLocalities([]);
     const result = selectNodeLocalities.resultFunc(state.cachedData.nodes.data);
-    expect(result.size).toEqual(0);
+    expect(result.size).toBe(0);
   });
 });
