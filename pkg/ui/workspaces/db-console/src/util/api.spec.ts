@@ -30,7 +30,7 @@ describe("rest api", function () {
         matcher: api.API_PREFIX + "/databases",
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.DatabasesResponse.encode({
               databases: ["system", "test"],
@@ -57,7 +57,7 @@ describe("rest api", function () {
         matcher: api.API_PREFIX + "/databases",
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -81,7 +81,7 @@ describe("rest api", function () {
         matcher: api.API_PREFIX + "/databases",
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -112,7 +112,7 @@ describe("rest api", function () {
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.DatabaseDetailsResponse.encode({
               table_names: ["table1", "table2"],
@@ -148,7 +148,7 @@ describe("rest api", function () {
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -174,7 +174,7 @@ describe("rest api", function () {
         matcher: `${api.API_PREFIX}/databases/${dbName}`,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -208,7 +208,7 @@ describe("rest api", function () {
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.TableDetailsResponse.encode(
               {},
@@ -244,7 +244,7 @@ describe("rest api", function () {
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -271,7 +271,7 @@ describe("rest api", function () {
         matcher: `${api.API_PREFIX}/databases/${dbName}/tables/${tableName}`,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -305,7 +305,7 @@ describe("rest api", function () {
         matcher: eventsPrefixMatcher,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.EventsResponse.encode({
               events: [{ event_type: "test" }],
@@ -357,7 +357,7 @@ describe("rest api", function () {
                 throw new Error(`Unknown property ${k}`);
             }
           });
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.EventsResponse.encode({
               events: [{ event_type: "test" }],
@@ -382,7 +382,7 @@ describe("rest api", function () {
         matcher: eventsPrefixMatcher,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -404,7 +404,7 @@ describe("rest api", function () {
         matcher: eventsPrefixMatcher,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -435,7 +435,7 @@ describe("rest api", function () {
         matcher: healthUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.HealthResponse.encode({}).finish();
           return {
@@ -460,7 +460,7 @@ describe("rest api", function () {
         matcher: healthUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -482,7 +482,7 @@ describe("rest api", function () {
         matcher: healthUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -513,7 +513,7 @@ describe("rest api", function () {
         matcher: clusterUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.ClusterResponse.encode({
               cluster_id: clusterID,
@@ -538,7 +538,7 @@ describe("rest api", function () {
         matcher: clusterUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -560,7 +560,7 @@ describe("rest api", function () {
         matcher: clusterUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -590,7 +590,7 @@ describe("rest api", function () {
         matcher: metricMetadataUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const encodedResponse =
             protos.cockroach.server.serverpb.MetricMetadataResponse.encode({
               metadata,
@@ -617,7 +617,7 @@ describe("rest api", function () {
         matcher: metricMetadataUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return { throws: new Error() };
         },
       });
@@ -641,7 +641,7 @@ describe("rest api", function () {
         matcher: metricMetadataUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });
@@ -678,7 +678,7 @@ describe("rest api", function () {
         matcher: logsUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           const logsResponse =
             protos.cockroach.server.serverpb.LogEntriesResponse.encode({
               entries: [logEntry],
@@ -695,10 +695,10 @@ describe("rest api", function () {
         )
         .then(result => {
           expect(fetchMock.calls(logsUrl).length).toBe(1);
-          expect(result.entries.length).toEqual(1);
-          expect(result.entries[0].message).toEqual(logEntry.message);
+          expect(result.entries.length).toBe(1);
+          expect(result.entries[0].message).toBe(logEntry.message);
           expect(result.entries[0].severity).toEqual(logEntry.severity);
-          expect(result.entries[0].file).toEqual(logEntry.file);
+          expect(result.entries[0].file).toBe(logEntry.file);
         });
     });
 
@@ -722,7 +722,7 @@ describe("rest api", function () {
         })
         .catch(function (e: Error) {
           expect(_.isError(e)).toBeTruthy();
-          expect(e.message).toEqual(REMOTE_DEBUGGING_ERROR_TEXT);
+          expect(e.message).toBe(REMOTE_DEBUGGING_ERROR_TEXT);
         })
         .finally(done);
     });
@@ -733,7 +733,7 @@ describe("rest api", function () {
         matcher: logsUrl,
         method: "GET",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).not.toBeDefined();
+          expect(requestObj.body).toBeUndefined();
           return new Promise<any>(() => {});
         },
       });

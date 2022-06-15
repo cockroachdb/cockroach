@@ -246,7 +246,7 @@ describe("<MetricsDataProvider>", function () {
         spy,
       );
       const props: any = provider.first().props();
-      expect(props.data).not.toBeDefined();
+      expect(props.data).toBeUndefined();
     });
 
     it("throws error if it contains multiple graph components", function () {

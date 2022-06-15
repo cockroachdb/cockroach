@@ -79,13 +79,13 @@ describe("UIData reducer", function () {
       const value1 = "value1";
       const value2 = "value2";
 
-      expect(uidata.getData(state, key1)).not.toBeDefined();
-      expect(uidata.getData(state, key2)).not.toBeDefined();
+      expect(uidata.getData(state, key1)).toBeUndefined();
+      expect(uidata.getData(state, key2)).toBeUndefined();
 
       dispatch(uidata.setUIDataKey(key1, value1));
 
       expect(uidata.getData(state, key1)).toEqual(value1);
-      expect(uidata.getData(state, key2)).not.toBeDefined();
+      expect(uidata.getData(state, key2)).toBeUndefined();
 
       dispatch(uidata.setUIDataKey(key2, value2));
 
@@ -230,9 +230,9 @@ describe("UIData reducer", function () {
       const bool = true;
       const num = 240;
 
-      expect(state[objKey]).not.toBeDefined();
-      expect(state[boolKey]).not.toBeDefined();
-      expect(state[numKey]).not.toBeDefined();
+      expect(state[objKey]).toBeUndefined();
+      expect(state[boolKey]).toBeUndefined();
+      expect(state[numKey]).toBeUndefined();
 
       // Validate setting a variety of object types.
       dispatch(uidata.setUIDataKey(objKey, obj));
@@ -258,7 +258,7 @@ describe("UIData reducer", function () {
     it("should correctly dispatch loadErrorUIData.", function () {
       const key1 = "key1";
       const err = new Error("an error.");
-      expect(state[key1]).not.toBeDefined();
+      expect(state[key1]).toBeUndefined();
       dispatch(uidata.loadErrorUIData(key1, err));
       expect(state[key1].status).toEqual(uidata.UIDataStatus.LOAD_ERROR);
       expect(state[key1].error).toEqual(err);
@@ -271,7 +271,7 @@ describe("UIData reducer", function () {
     it("should correctly dispatch saveErrorUIData.", function () {
       const key1 = "key1";
       const err = new Error("an error.");
-      expect(state[key1]).not.toBeDefined();
+      expect(state[key1]).toBeUndefined();
       dispatch(uidata.saveErrorUIData(key1, err));
       expect(state[key1].status).toEqual(uidata.UIDataStatus.SAVE_ERROR);
       expect(state[key1].error).toEqual(err);
@@ -420,12 +420,12 @@ describe("UIData reducer", function () {
         expect(_.keys(state).length).toBe(2);
         expect(state[uiKey1].status).toEqual(uidata.UIDataStatus.SAVING);
         expect(state[uiKey2].status).toEqual(uidata.UIDataStatus.SAVING);
-        expect(state[uiKey1].data).not.toBeDefined();
-        expect(state[uiKey2].data).not.toBeDefined();
+        expect(state[uiKey1].data).toBeUndefined();
+        expect(state[uiKey2].data).toBeUndefined();
         expect("data" in state[uiKey1]).toBeFalsy();
         expect("data" in state[uiKey2]).toBeFalsy();
-        expect(state[uiKey1].error).not.toBeDefined();
-        expect(state[uiKey2].error).not.toBeDefined();
+        expect(state[uiKey1].error).toBeUndefined();
+        expect(state[uiKey2].error).toBeUndefined();
         setTimeout(() => {
           expect(state[uiKey1].status).toEqual(uidata.UIDataStatus.SAVE_ERROR);
           expect(state[uiKey2].status).toEqual(uidata.UIDataStatus.SAVE_ERROR);
@@ -507,12 +507,12 @@ describe("UIData reducer", function () {
         expect(_.keys(state).length).toBe(2);
         expect(state[uiKey1].status).toEqual(uidata.UIDataStatus.LOADING);
         expect(state[uiKey2].status).toEqual(uidata.UIDataStatus.LOADING);
-        expect(state[uiKey1].data).not.toBeDefined();
-        expect(state[uiKey2].data).not.toBeDefined();
+        expect(state[uiKey1].data).toBeUndefined();
+        expect(state[uiKey2].data).toBeUndefined();
         expect("data" in state[uiKey1]).toBeFalsy();
         expect("data" in state[uiKey2]).toBeFalsy();
-        expect(state[uiKey1].error).not.toBeDefined();
-        expect(state[uiKey2].error).not.toBeDefined();
+        expect(state[uiKey1].error).toBeUndefined();
+        expect(state[uiKey2].error).toBeUndefined();
         setTimeout(() => {
           expect(state[uiKey1].status).toEqual(uidata.UIDataStatus.LOAD_ERROR);
           expect(state[uiKey2].status).toEqual(uidata.UIDataStatus.LOAD_ERROR);

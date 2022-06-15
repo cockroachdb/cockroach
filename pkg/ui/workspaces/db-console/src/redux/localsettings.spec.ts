@@ -26,7 +26,9 @@ describe("Local Settings", function () {
         key: settingName,
         value: settingValue,
       };
-      expect(setLocalSetting(settingName, settingValue).payload).toEqual(expectedSetting);
+      expect(setLocalSetting(settingName, settingValue).payload).toEqual(
+        expectedSetting,
+      );
     });
   });
 
@@ -63,7 +65,9 @@ describe("Local Settings", function () {
         const initial: LocalSettingsState = {
           [key]: "oldvalue",
         };
-        expect(localSettingsReducer(initial, setLocalSetting(key, value))).toEqual(expected);
+        expect(
+          localSettingsReducer(initial, setLocalSetting(key, value)),
+        ).toEqual(expected);
       });
     });
   });
@@ -94,7 +98,7 @@ describe("Local Settings", function () {
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
-      expect(numberSetting.selector(topLevelState)).toEqual(99);
+      expect(numberSetting.selector(topLevelState)).toBe(99);
     });
 
     it("sets values correctly.", function () {
@@ -137,9 +141,9 @@ describe("Local Settings", function () {
         (s: typeof topLevelState) => s.localSettings,
         99,
       );
-      expect(numberSetting.selector(topLevelState)).toEqual(99);
+      expect(numberSetting.selector(topLevelState)).toBe(99);
       dispatch(numberSetting.set(5));
-      expect(numberSetting.selector(topLevelState)).toEqual(5);
+      expect(numberSetting.selector(topLevelState)).toBe(5);
     });
   });
 });
