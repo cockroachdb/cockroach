@@ -21,7 +21,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -33,7 +32,6 @@ import (
 
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 63064, "flaky test")
 	defer utilccl.TestingEnableEnterprise()()
 
 	dir := t.TempDir()
