@@ -51,6 +51,14 @@ import (
 // in other packages.
 const TenantModeFlagName = "tenantMode"
 
+// TenantSkipCCLBinaryMessage is the message we return any time we need to
+// skip a test due to the lack of a CCL binary.
+const TenantSkipCCLBinaryMessage = "skipping due to lack of CCL binary"
+
+// RequiresCCLBinaryMessage is the message we look for to determine if we've
+// encountered an error due to the lack of a CCL binary.
+const RequiresCCLBinaryMessage = "requires a CCL binary"
+
 var tenantModeFlag = flag.String(
 	TenantModeFlagName, tenantModeDefault,
 	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
@@ -308,8 +316,8 @@ func StartServer(
 	}
 
 	if err := server.Start(context.Background()); err != nil {
-		if strings.Contains(err.Error(), "requires a CCL binary") {
-			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		if strings.Contains(err.Error(), RequiresCCLBinaryMessage) {
+			skip.IgnoreLint(t, TenantSkipCCLBinaryMessage)
 		}
 		t.Fatalf("%+v", err)
 	}
