@@ -146,7 +146,7 @@ describe("alerts", function () {
     describe("version mismatch warning", function () {
       it("requires versions to be loaded before displaying", function () {
         const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).not.toBeDefined();
+        expect(numAlert).toBeUndefined();
       });
 
       it("does not display when versions match", function () {
@@ -165,7 +165,7 @@ describe("alerts", function () {
           ]),
         );
         const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).not.toBeDefined();
+        expect(numAlert).toBeUndefined();
       });
 
       it("displays when mismatch detected and not dismissed", function () {
@@ -212,7 +212,7 @@ describe("alerts", function () {
         );
         dispatch(staggeredVersionDismissedSetting.set(true));
         const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).not.toBeDefined();
+        expect(numAlert).toBeUndefined();
       });
 
       it("dismisses by setting local dismissal", function () {
@@ -260,7 +260,7 @@ describe("alerts", function () {
       it("displays nothing when versions have not yet been loaded", function () {
         dispatch(setUIDataKey(VERSION_DISMISSED_KEY, null));
         const alert = newVersionNotificationSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
       });
 
       it("displays nothing when persistent dismissal has not been checked", function () {
@@ -275,7 +275,7 @@ describe("alerts", function () {
           }),
         );
         const alert = newVersionNotificationSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
       });
 
       it("displays nothing when no new version is available", function () {
@@ -286,7 +286,7 @@ describe("alerts", function () {
           }),
         );
         const alert = newVersionNotificationSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
       });
 
       it("displays when new version available and not dismissed", function () {
@@ -321,7 +321,7 @@ describe("alerts", function () {
         );
         dispatch(newVersionDismissedLocalSetting.set(moment()));
         let alert = newVersionNotificationSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
 
         // Local dismissal only lasts one day.
         dispatch(
@@ -344,7 +344,7 @@ describe("alerts", function () {
           }),
         );
         let alert = newVersionNotificationSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
 
         // Dismissal only lasts one day.
         dispatch(
@@ -406,7 +406,7 @@ describe("alerts", function () {
     describe("disconnected alert", function () {
       it("requires health to be available before displaying", function () {
         const alert = disconnectedAlertSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
       });
 
       it("does not display when cluster is healthy", function () {
@@ -416,7 +416,7 @@ describe("alerts", function () {
           ),
         );
         const alert = disconnectedAlertSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
       });
 
       it("displays when cluster health endpoint returns an error", function () {
@@ -433,7 +433,7 @@ describe("alerts", function () {
         dispatch(healthReducerObj.errorData(new Error("error")));
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         const alert = disconnectedAlertSelector(state());
-        expect(alert).not.toBeDefined();
+        expect(alert).toBeUndefined();
       });
 
       it("dismisses by setting local dismissal", function (done) {
