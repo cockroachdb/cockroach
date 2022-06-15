@@ -219,6 +219,39 @@ type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
 
+// WithTxn is to run SQL statements under the same txn.
+// TODO (janexing): if to use WithTxn to run multiple sql statements,
+// should these executions share the desc collection, session data, txn
+// state, job collection and etc for the conn executors?
+func (p InternalExecutorProto) WithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, sessionData)
+	return ie.WithSyntheticDescriptors(
+		p.SyntheticDescs,
+		func() error {
+			return run(ctx, txn, ie)
+		},
+	)
+}
+
+// WithoutTxn is to run SQL statements without a txn context.
+func (p InternalExecutorProto) WithoutTxn(
+	ctx context.Context,
+	run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, nil)
+	return ie.WithSyntheticDescriptors(
+		p.SyntheticDescs,
+		func() error {
+			return run(ctx, ie)
+		},
+	)
+}
+
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
 
