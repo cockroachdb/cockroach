@@ -347,9 +347,12 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 		}
 
 		op, err := w.opGen.randOp(ctx, tx)
-
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
+		} else if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
+			// Error was already marked for us.
+			return err
 		} else if err != nil {
 			return errors.Mark(
 				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s\nStmts: \n%s\n",

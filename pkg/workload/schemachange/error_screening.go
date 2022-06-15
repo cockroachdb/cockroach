@@ -13,6 +13,7 @@ package schemachange
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -317,7 +318,7 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 GROUP BY name;
 `, tableName.String())
 	if err != nil {
-		return false, nil, err
+		return false, nil, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
 	// Determine if the tuples are unique for a given constraint, where the index
 	// will be the constraint.
@@ -1056,6 +1057,27 @@ SELECT count(*) FROM %s
 	return numJoinRows == childRows, err
 }
 
+var (
+	regexpUnknownSchemaErr = regexp.MustCompile(`unknown schema \[\d+\]`)
+)
+
+// checkAndAdjustForUnknownSchemaErrors in certain contexts we will attempt to
+// bind descriptors without leasing them, since we are using crdb_internal tables,
+// so it's possible for said descriptor to be dropped before we bind it. This
+// method will allow for "unknown schema [xx]" in those contexts.
+func (og *operationGenerator) checkAndAdjustForUnknownSchemaErrors(err error) error {
+	if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+		pgcode.MakeCode(pgErr.Code) == pgcode.InvalidSchemaName {
+		if regexpUnknownSchemaErr.MatchString(pgErr.Message) {
+			og.opGenLog.WriteString(fmt.Sprintf("Rolling back due to unknown schema error %v",
+				err))
+			// Force a rollback and log inside the oepration generator.
+			return errors.Mark(err, errRunInTxnRbkSentinel)
+		}
+	}
+	return err
+}
+
 // violatesFkConstraints checks if the rows to be inserted will result in a foreign key violation.
 func (og *operationGenerator) violatesFkConstraints(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columns []string, rows [][]string,
@@ -1095,7 +1117,7 @@ func (og *operationGenerator) violatesFkConstraints(
 		 WHERE child.column_name != 'rowid';
 `, tableName.String(), tableName.Schema(), tableName.Object(), tableName.String(), tableName.Schema(), tableName.Object()))
 	if err != nil {
-		return false, err
+		return false, og.checkAndAdjustForUnknownSchemaErrors(err)
 	}
 
 	// Maps a column name to its index. This way, the value of a column in a row can be looked up
