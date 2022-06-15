@@ -103,6 +103,7 @@ go_test(
         "cmd_delete_range_test.go",
         "cmd_end_transaction_test.go",
         "cmd_export_test.go",
+        "cmd_gc_test.go",
         "cmd_get_test.go",
         "cmd_lease_test.go",
         "cmd_query_intent_test.go",

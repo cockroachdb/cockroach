@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,7 +84,7 @@ var (
 		keysPerValueMax: 100,
 		intentFrac:      .1,
 		oldIntentFrac:   .1,
-		rangeKeyFrac:    .05,
+		rangeKeyFrac:    .1,
 	}
 )
 
@@ -242,6 +243,15 @@ func TestNewVsInvariants(t *testing.T) {
 			ttlSec:       10,
 			intentAgeSec: 15,
 		},
+		{
+			ds: someVersionsWithSomeRangeKeys,
+			now: hlc.Timestamp{
+				WallTime: 100 * time.Second.Nanoseconds(),
+			},
+			// Higher TTL means range tombstones between 70 sec and 50 sec are
+			// not removed.
+			ttlSec: 50,
+		},
 	} {
 		t.Run(fmt.Sprintf("%v@%v,ttl=%vsec", tc.ds, tc.now, tc.ttlSec), func(t *testing.T) {
 			rng := rand.New(rand.NewSource(1))
@@ -268,7 +278,7 @@ func TestNewVsInvariants(t *testing.T) {
 			// Handle GC + resolve intents.
 			var stats enginepb.MVCCStats
 			require.NoError(t,
-				storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.requests(), gcThreshold))
+				storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcThreshold))
 			for _, i := range gcer.intents {
 				l := roachpb.LockUpdate{
 					Span:   roachpb.Span{Key: i.Key},
@@ -277,6 +287,12 @@ func TestNewVsInvariants(t *testing.T) {
 				}
 				_, err := storage.MVCCResolveWriteIntent(ctx, eng, &stats, l)
 				require.NoError(t, err, "failed to resolve intent")
+			}
+			for _, batch := range gcer.rangeKeyBatches() {
+				rangeKeys := storage.MakeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
+					desc.EndKey.AsRawKey(), batch)
+				require.NoError(t,
+					storage.MVCCGarbageCollectRanges(ctx, eng, &stats, rangeKeys))
 			}
 
 			assertLiveData(t, eng, beforeGC, *desc, tc.now, gcThreshold, intentThreshold, ttl,
@@ -293,9 +309,13 @@ type historyItem struct {
 // assertLiveData will create a stream of expected values based on full data
 // set contained in provided "before" reader and compare it with the "after"
 // reader that contains data after applying GC request.
+// Same process is then repeated with range tombstones.
+// For range tombstones, we merge all the fragments before asserting to avoid
+// any dependency on how key splitting is done inside pebble.
 // Generated expected values are produces by simulating GC in a naive way where
 // each value is considered live if:
 // - it is a value or tombstone and its timestamp is higher than gc threshold
+// - it is a range tombstone and its timestamp is higher than gc threshold
 // - it is a first value at or below gc threshold and there are no deletions
 //   between gc threshold and the value
 func assertLiveData(
@@ -330,8 +350,19 @@ func assertLiveData(
 	pointExpectationsGenerator := getExpectationsGenerator(t, pointIt, gcThreshold, intentThreshold,
 		&expInfo)
 
+	rangeIt := before.NewMVCCIterator(storage.MVCCKeyIterKind,
+		storage.IterOptions{
+			LowerBound: desc.StartKey.AsRawKey(),
+			UpperBound: desc.EndKey.AsRawKey(),
+			KeyTypes:   storage.IterKeyTypeRangesOnly,
+		})
+	defer rangeIt.Close()
+	rangeIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+	expectedRanges := mergeRanges(filterRangeFragments(rangeFragmentsFromIt(t, rangeIt), gcThreshold,
+		&expInfo))
+
 	// Loop over engine data after applying GCer requests and compare with
-	// expected ranges.
+	// expected point keys.
 	itAfter := after.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: desc.StartKey.AsRawKey(),
 		UpperBound: desc.EndKey.AsRawKey(),
@@ -368,6 +399,28 @@ func assertLiveData(
 			eKV, dataOk = pointExpectationsGenerator()
 		}
 	}
+
+	rangeItAfter := after.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypeRangesOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer rangeItAfter.Close()
+	rangeItAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+	actualRanges := mergeRanges(rangeFragmentsFromIt(t, rangeItAfter))
+
+	// Be careful when enabling logging on tests with default large N,
+	// 1000 elements is ok, but 10k or 100k entries might become unreadable.
+	if log.V(1) {
+		ctx := context.Background()
+		log.Info(ctx, "Expected data:")
+		for _, l := range formatTable(engineData(t, before, desc), desc.StartKey.AsRawKey()) {
+			log.Infof(ctx, "%s", l)
+		}
+	}
+
+	require.EqualValues(t, expectedRanges, actualRanges, "GC'd range tombstones")
 
 	require.EqualValues(t, expInfo, gcInfo, "collected gc info mismatch")
 }
@@ -554,12 +607,121 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 	return strings.Join(result, ", ")
 }
 
+func rangeFragmentsFromIt(t *testing.T, it storage.MVCCIterator) [][]storage.MVCCRangeKeyValue {
+	var result [][]storage.MVCCRangeKeyValue
+	for {
+		ok, err := it.Valid()
+		require.NoError(t, err, "failed to read range tombstones from iterator")
+		if !ok {
+			break
+		}
+		_, r := it.HasPointAndRange()
+		if r {
+			fragments := make([]storage.MVCCRangeKeyValue, len(it.RangeKeys()))
+			for i, r := range it.RangeKeys() {
+				fragments[i] = r.Clone()
+			}
+			result = append(result, fragments)
+		}
+		it.NextKey()
+	}
+	return result
+}
+
+// Filter all fragments that match GC criteria and update gcinfo accordingly.
+func filterRangeFragments(
+	fragments [][]storage.MVCCRangeKeyValue, gcThreshold hlc.Timestamp, expInfo *Info,
+) [][]storage.MVCCRangeKeyValue {
+	var result [][]storage.MVCCRangeKeyValue
+	for _, stack := range fragments {
+		var newStack []storage.MVCCRangeKeyValue
+		for i, r := range stack {
+			if r.RangeKey.Timestamp.LessEq(gcThreshold) {
+				// Update expectations:
+				// On lowest range timestamp bump range counter.
+				if i == len(stack)-1 {
+					expInfo.NumRangeKeysAffected++
+				}
+				// If all fragments are deleted then keys bytes are accounted for.
+				if i == 0 {
+					expInfo.AffectedVersionsRangeKeyBytes += int64(len(r.RangeKey.StartKey) + len(r.RangeKey.EndKey))
+				}
+				// Count timestamps for all versions of range keys.
+				expInfo.AffectedVersionsRangeKeyBytes += storage.MVCCVersionTimestampSize
+				expInfo.AffectedVersionsRangeValBytes += int64(len(r.Value))
+			} else {
+				newStack = append(newStack, r)
+			}
+		}
+		if len(newStack) > 0 {
+			result = append(result, newStack)
+		}
+	}
+	return result
+}
+
+func mergeRanges(fragments [][]storage.MVCCRangeKeyValue) []storage.MVCCRangeKeyValue {
+	var result []storage.MVCCRangeKeyValue
+	var partialRangeKeys []storage.MVCCRangeKeyValue
+	var lastEnd roachpb.Key
+	for _, stack := range fragments {
+		start, end := stack[0].RangeKey.StartKey, stack[0].RangeKey.EndKey
+		if lastEnd.Equal(start) {
+			// Try merging keys by timestamp.
+			var newPartial []storage.MVCCRangeKeyValue
+			i, j := 0, 0
+			for i < len(stack) && j < len(partialRangeKeys) {
+				switch stack[i].RangeKey.Timestamp.Compare(partialRangeKeys[j].RangeKey.Timestamp) {
+				case 1:
+					newPartial = append(newPartial, stack[i])
+					i++
+				case 0:
+					// We don't compare range values here as it would complicate things
+					// too much and not worth for this test as we don't expect mixed
+					// tombstone types.
+					newPartial = append(newPartial, storage.MVCCRangeKeyValue{
+						RangeKey: storage.MVCCRangeKey{
+							StartKey:  partialRangeKeys[j].RangeKey.StartKey,
+							EndKey:    stack[i].RangeKey.EndKey,
+							Timestamp: partialRangeKeys[j].RangeKey.Timestamp,
+						},
+						Value: partialRangeKeys[j].Value,
+					})
+					i++
+					j++
+				case -1:
+					newPartial = append(newPartial, partialRangeKeys[j])
+					j++
+				}
+			}
+			for ; i < len(stack); i++ {
+				newPartial = append(newPartial, stack[i])
+			}
+			for ; j < len(partialRangeKeys); j++ {
+				newPartial = append(newPartial, partialRangeKeys[j])
+			}
+			partialRangeKeys = newPartial
+		} else {
+			result = append(result, partialRangeKeys...)
+			partialRangeKeys = make([]storage.MVCCRangeKeyValue, 0, len(stack))
+			partialRangeKeys = append(partialRangeKeys, stack...)
+		}
+		lastEnd = end
+	}
+	result = append(result, partialRangeKeys...)
+	return result
+}
+
 type fakeGCer struct {
-	gcKeys     map[string]roachpb.GCRequest_GCKey
-	threshold  Threshold
-	intents    []roachpb.Intent
-	batches    [][]roachpb.Intent
-	txnIntents []txnIntents
+	gcKeys map[string]roachpb.GCRequest_GCKey
+	// fake GCer stores range key batches as it since we need to be able to
+	// feed them into MVCCGarbageCollectRanges and ranges argument should be
+	// non-overlapping.
+	gcRangeKeyBatches [][]roachpb.GCRequest_GCRangeKey
+	threshold         Threshold
+	intents           []roachpb.Intent
+	batches           [][]roachpb.Intent
+	txnIntents        []txnIntents
 }
 
 func makeFakeGCer() fakeGCer {
@@ -581,6 +743,7 @@ func (f *fakeGCer) GC(
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
 	}
+	f.gcRangeKeyBatches = append(f.gcRangeKeyBatches, rangeKeys)
 	return nil
 }
 
@@ -609,10 +772,22 @@ func (f *fakeGCer) normalize() {
 	f.batches = nil
 }
 
-func (f *fakeGCer) requests() []roachpb.GCRequest_GCKey {
+func (f *fakeGCer) pointKeys() []roachpb.GCRequest_GCKey {
 	var reqs []roachpb.GCRequest_GCKey
 	for _, r := range f.gcKeys {
 		reqs = append(reqs, r)
+	}
+	return reqs
+}
+
+func (f *fakeGCer) rangeKeyBatches() [][]roachpb.GCRequest_GCRangeKey {
+	return f.gcRangeKeyBatches
+}
+
+func (f *fakeGCer) rangeKeys() []roachpb.GCRequest_GCRangeKey {
+	var reqs []roachpb.GCRequest_GCRangeKey
+	for _, r := range f.gcRangeKeyBatches {
+		reqs = append(reqs, r...)
 	}
 	return reqs
 }

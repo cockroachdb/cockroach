@@ -296,7 +296,7 @@ func newDataDistribution(
 			}
 			retries = 0
 		}
-		return nextKey, nil, keyTimestamps, hasIntent
+		return nextKey, unusedEndKey, keyTimestamps, hasIntent
 	}
 
 	generateRangeKey := func() (startKey, endKey roachpb.Key, timestamps []hlc.Timestamp, hasIntent bool) {
@@ -375,14 +375,27 @@ type distSpec interface {
 // uniformDistSpec is a distSpec which represents uniform distributions over its
 // various dimensions.
 type uniformDistSpec struct {
-	tsSecFrom, tsSecTo               int64 // seconds
+	tsSecFrom, tsSecTo int64
+	// Intents are split into two categories with distinct time ranges.
+	// All intents have lower timestamp bound to ensure they don't overlap with
+	// range tombstones since we will not be able to put a range tombstone over
+	// intent.
+	// Additionally, we have two time thresholds for intents. This is needed to
+	// ensure that we have certain fraction of intents GC'able since they lay
+	// below certain threshold.
 	tsSecMinIntent, tsSecOldIntentTo int64
 	keySuffixMin, keySuffixMax       int
 	valueLenMin, valueLenMax         int
 	deleteFrac                       float64
+	// keysPerValue parameters determine number of versions for a key. This number
+	// includes tombstones and intents which may be present on top of the history.
 	keysPerValueMin, keysPerValueMax int
-	intentFrac, oldIntentFrac        float64
-	rangeKeyFrac                     float64
+	// Fractions define how likely is that a key will belong to one of categories.
+	// If we only had a single version for each key, then that would be fraction
+	// of total number of objects, but if we have many versions, this value would
+	// roughly be total objects/avg(keysPerValueMin, keysPerValueMax) * frac.
+	intentFrac, oldIntentFrac float64
+	rangeKeyFrac              float64
 }
 
 var _ distSpec = uniformDistSpec{}
