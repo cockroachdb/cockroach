@@ -708,6 +708,22 @@ func (ie *InternalExecutor) SetExtraTxnState(extraTxnState sqlutil.ExtraTxnState
 	}
 }
 
+// SetDescsCollection is to set the descriptor collection used by the internal
+// executor.
+func (ie *InternalExecutor) SetDescsCollection(txn *kv.Txn, descCollection *descs.Collection) {
+	ie.SetExtraTxnState(extraTxnStateUnderPlanner{
+		txn:            txn,
+		descCollection: descCollection,
+	})
+}
+
+// MakeDescsCollection creates the internal executor's own descriptor collection.
+func (ie *InternalExecutor) MakeDescsCollection(ctx context.Context, sd *sessiondata.SessionData) descs.Collection {
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	return ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
+}
+
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
 func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.SessionData) {
 	if !o.User.Undefined() {

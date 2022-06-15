@@ -12,10 +12,10 @@ package sqlutil
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -163,6 +163,13 @@ type InternalExecutor interface {
 	// It should only be called if the internal executor is used to run sql
 	// sql statements under a planner context.
 	SetExtraTxnState(extraTxnState ExtraTxnStateUnderPlanner)
+
+	// SetDescsCollection is to set the descriptor collection used by the internal
+	// executor.
+	SetDescsCollection(txn *kv.Txn, collection *descs.Collection)
+
+	// MakeDescsCollection creates the internal executor's own descriptor collection.
+	MakeDescsCollection(ctx context.Context, sd *sessiondata.SessionData) descs.Collection
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -220,6 +227,41 @@ func (p *InternalExecutorProto) SetSyntheticDescs(d []catalog.Descriptor) {
 type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
+
+// WithTxn is to run SQL statements under the same txn.
+// All executions within this scope should share the same descriptor
+// collection.
+// TODO (janexing): verify if this is the desired behavior.
+func (p InternalExecutorProto) WithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, sessionData)
+	descsCollection := ie.MakeDescsCollection(ctx, sessionData)
+	ie.SetDescsCollection(txn, &descsCollection)
+	defer descsCollection.ReleaseAll(ctx)
+	return ie.WithSyntheticDescriptors(
+		p.SyntheticDescs,
+		func() error {
+			return run(ctx, txn, ie)
+		},
+	)
+}
+
+// WithoutTxn is to run SQL statements without a txn context.
+func (p InternalExecutorProto) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, nil)
+	return ie.WithSyntheticDescriptors(
+		p.SyntheticDescs,
+		func() error {
+			return run(ctx, ie)
+		},
+	)
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
