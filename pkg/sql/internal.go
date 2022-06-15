@@ -127,8 +127,10 @@ func MakeInternalExecutor(
 //
 // SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
-	ie.s.populateMinimalSessionData(sessionData)
-	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	if sessionData != nil {
+		ie.s.populateMinimalSessionData(sessionData)
+		ie.sessionDataStack = sessiondata.NewStack(sessionData)
+	}
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
