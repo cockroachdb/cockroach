@@ -35,11 +35,22 @@ var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 func main() {
 	var isReleaseF = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
 	var destBucket = flag.String("bucket", "", "override default bucket")
+	var gcsBucket = flag.String("gcs-bucket", "", "override default bucket")
 	var doProvisionalF = flag.Bool("provisional", false, "publish provisional binaries")
 	var doBlessF = flag.Bool("bless", false, "bless provisional binaries")
 
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	var bucketName string
+	if len(*destBucket) > 0 {
+		bucketName = *destBucket
+	} else if *isReleaseF {
+		bucketName = "binaries.cockroachdb.com"
+	} else {
+		bucketName = "cockroach"
+	}
+	log.Printf("Using S3 bucket: %s", bucketName)
 
 	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
 		log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
@@ -47,10 +58,23 @@ func main() {
 	if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
 		log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
 	}
-	s3, err := release.NewS3("us-east-1")
+	var providers []release.ObjectPutGetter
+	s3, err := release.NewS3("us-east-1", bucketName)
 	if err != nil {
 		log.Fatalf("Creating AWS S3 session: %s", err)
 	}
+	providers = append(providers, s3)
+	if *gcsBucket != "" {
+		if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
+			log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+		}
+		gcs, err := release.NewGCS(*gcsBucket)
+		if err != nil {
+			log.Fatalf("Creating GCS session: %s", err)
+		}
+		providers = append(providers, gcs)
+	}
+
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
 	if !ok {
 		log.Fatalf("VCS branch environment variable %s is not set", teamcityBuildBranchKey)
@@ -73,13 +97,12 @@ func main() {
 		log.Fatalf("%s: out=%q err=%s", cmd.Args, shaOut, err)
 	}
 
-	run([]release.ObjectPutGetter{s3}, runFlags{
+	run(providers, runFlags{
 		doProvisional: *doProvisionalF,
 		doBless:       *doBlessF,
 		isRelease:     *isReleaseF,
 		branch:        branch,
 		pkgDir:        pkg,
-		destBucket:    *destBucket,
 		sha:           string(bytes.TrimSpace(shaOut)),
 	}, release.ExecFn{})
 }
@@ -91,7 +114,6 @@ type runFlags struct {
 	branch        string
 	sha           string
 	pkgDir        string
-	destBucket    string
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
@@ -132,16 +154,6 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		updateLatest = true
 	}
 
-	var bucketName string
-	if len(flags.destBucket) > 0 {
-		bucketName = flags.destBucket
-	} else if flags.isRelease {
-		bucketName = "binaries.cockroachdb.com"
-	} else {
-		bucketName = "cockroach"
-	}
-	log.Printf("Using S3 bucket: %s", bucketName)
-
 	platforms := []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows}
 	if !flags.isRelease {
 		platforms = append(platforms, release.PlatformLinuxArm)
@@ -153,7 +165,6 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		o.PkgDir = flags.pkgDir
 		o.Branch = flags.branch
 		o.VersionStr = versionStr
-		o.BucketName = bucketName
 		o.AbsolutePath = filepath.Join(flags.pkgDir, "cockroach"+release.SuffixFromPlatform(platform))
 		o.CockroachSQLAbsolutePath = filepath.Join(flags.pkgDir, "cockroach-sql"+release.SuffixFromPlatform(platform))
 		cockroachBuildOpts = append(cockroachBuildOpts, o)
@@ -168,8 +179,7 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 					release.PutNonRelease(
 						provider,
 						release.PutNonReleaseOptions{
-							Branch:     o.Branch,
-							BucketName: o.BucketName,
+							Branch: o.Branch,
 							Files: append(
 								[]release.NonReleaseFile{
 									release.MakeCRDBBinaryNonReleaseFile(o.AbsolutePath, o.VersionStr),
@@ -183,7 +193,6 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 			} else {
 				for _, provider := range providers {
 					release.PutRelease(provider, release.PutReleaseOptions{
-						BucketName: o.BucketName,
 						NoCache:    false,
 						Platform:   o.Platform,
 						VersionStr: o.VersionStr,
@@ -235,7 +244,6 @@ type opts struct {
 	Platform                 release.Platform
 	AbsolutePath             string
 	CockroachSQLAbsolutePath string
-	BucketName               string
 	PkgDir                   string
 }
 
@@ -243,7 +251,6 @@ func markLatestRelease(svc release.ObjectPutGetter, o opts) {
 	latestOpts := release.LatestOpts{
 		Platform:   o.Platform,
 		VersionStr: o.VersionStr,
-		BucketName: o.BucketName,
 	}
 	release.MarkLatestReleaseWithSuffix(svc, latestOpts, "")
 	release.MarkLatestReleaseWithSuffix(svc, latestOpts, release.ChecksumSuffix)

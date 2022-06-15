@@ -27,9 +27,7 @@ import (
 
 // PutReleaseOptions are options to for the PutRelease function.
 type PutReleaseOptions struct {
-	// BucketName is the bucket to upload the files to.
-	BucketName string
-	// NoCache is true if we should set the NoCache option to S3.
+	// NoCache is true if we should set the NoCache option.
 	NoCache bool
 	// Platform is the platform of the release.
 	Platform Platform
@@ -45,15 +43,12 @@ type PutReleaseOptions struct {
 type PutNonReleaseOptions struct {
 	// Branch is the branch from which the release is being uploaded from.
 	Branch string
-	// BucketName is the bucket to upload the files to.
-	BucketName string
-
-	// Files are all the files to be uploaded into S3.
+	// Files are all the files to be uploaded
 	Files []NonReleaseFile
 }
 
 // PutRelease uploads a compressed archive containing the release
-// files and a checksum file of the archive to S3.
+// files and a checksum file of the archive.
 func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
 	keys := makeArchiveKeys(o.Platform, o.VersionStr, "cockroach")
 	var body bytes.Buffer
@@ -68,33 +63,31 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
 		}
 	}
 
-	log.Printf("Uploading to s3://%s/%s", o.BucketName, keys.archive)
+	log.Printf("Uploading to %s", svc.URL(keys.archive))
 	putObjectInput := PutObjectInput{
-		Bucket: &o.BucketName,
-		Key:    &keys.archive,
-		Body:   bytes.NewReader(body.Bytes()),
+		Key:  &keys.archive,
+		Body: bytes.NewReader(body.Bytes()),
 	}
 	if o.NoCache {
 		putObjectInput.CacheControl = &NoCache
 	}
 	if err := svc.PutObject(&putObjectInput); err != nil {
-		log.Fatalf("s3 upload %s: %s", keys.archive, err)
+		log.Fatalf("failed uploading %s: %s", keys.archive, err)
 	}
 	// Generate a SHA256 checksum file with a single entry.
 	checksumContents := fmt.Sprintf("%x %s\n", sha256.Sum256(body.Bytes()),
 		filepath.Base(keys.archive))
 	targetChecksum := keys.archive + ChecksumSuffix
-	log.Printf("Uploading to s3://%s/%s", o.BucketName, targetChecksum)
+	log.Printf("Uploading to %s", svc.URL(targetChecksum))
 	putObjectInputChecksum := PutObjectInput{
-		Bucket: &o.BucketName,
-		Key:    &targetChecksum,
-		Body:   strings.NewReader(checksumContents),
+		Key:  &targetChecksum,
+		Body: strings.NewReader(checksumContents),
 	}
 	if o.NoCache {
 		putObjectInputChecksum.CacheControl = &NoCache
 	}
 	if err := svc.PutObject(&putObjectInputChecksum); err != nil {
-		log.Fatalf("s3 upload %s: %s", targetChecksum, err)
+		log.Fatalf("failed uploading %s: %s", targetChecksum, err)
 	}
 	for _, f := range o.ExtraFiles {
 		keyBase, hasExe := TrimDotExe(f.ArchiveFilePath)
@@ -103,21 +96,20 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
 		if hasExe {
 			targetKey += ".exe"
 		}
-		log.Printf("Uploading to s3://%s/%s", o.BucketName, targetKey)
+		log.Printf("Uploading to %s", svc.URL(targetKey))
 		handle, err := os.Open(f.LocalAbsolutePath)
 		if err != nil {
 			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
 		}
 		putObjectInput := PutObjectInput{
-			Bucket: &o.BucketName,
-			Key:    &targetKey,
-			Body:   handle,
+			Key:  &targetKey,
+			Body: handle,
 		}
 		if o.NoCache {
 			putObjectInput.CacheControl = &NoCache
 		}
 		if err := svc.PutObject(&putObjectInput); err != nil {
-			log.Fatalf("s3 upload %s: %s", targetKey, err)
+			log.Fatalf("failed uploading %s: %s", targetKey, err)
 		}
 	}
 }
@@ -195,15 +187,15 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 	return nil
 }
 
-// PutNonRelease uploads non-release related files to S3.
-// Files are uploaded to /cockroach/<S3FilePath> for each non release file.
-// A `latest` key is then put at cockroach/<S3RedirectPrefix>.<BranchName> that redirects
+// PutNonRelease uploads non-release related files.
+// Files are uploaded to /cockroach/<FilePath> for each non release file.
+// A `latest` key is then put at cockroach/<RedirectPrefix>.<BranchName> that redirects
 // to the above file.
 func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
-	const repoName = "cockroach"
+	const nonReleasePrefix = "cockroach"
 	for _, f := range o.Files {
 		disposition := mime.FormatMediaType("attachment", map[string]string{
-			"filename": f.S3FileName,
+			"filename": f.FileName,
 		})
 
 		fileToUpload, err := os.Open(f.LocalAbsolutePath)
@@ -216,29 +208,27 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 
 		// NB: The leading slash is required to make redirects work
 		// correctly since we reuse this key as the redirect location.
-		versionKey := fmt.Sprintf("/%s/%s", repoName, f.S3FilePath)
-		log.Printf("Uploading to s3://%s%s", o.BucketName, versionKey)
+		versionKey := fmt.Sprintf("/%s/%s", nonReleasePrefix, f.FilePath)
+		log.Printf("Uploading to %s", svc.URL(versionKey))
 		if err := svc.PutObject(&PutObjectInput{
-			Bucket:             &o.BucketName,
 			ContentDisposition: &disposition,
 			Key:                &versionKey,
 			Body:               fileToUpload,
 		}); err != nil {
-			log.Fatalf("s3 upload %s: %s", versionKey, err)
+			log.Fatalf("failed uploading %s: %s", versionKey, err)
 		}
 
 		latestSuffix := o.Branch
 		if latestSuffix == "master" {
 			latestSuffix = "LATEST"
 		}
-		latestKey := fmt.Sprintf("%s/%s.%s", repoName, f.S3RedirectPathPrefix, latestSuffix)
+		latestKey := fmt.Sprintf("%s/%s.%s", nonReleasePrefix, f.RedirectPathPrefix, latestSuffix)
 		if err := svc.PutObject(&PutObjectInput{
-			Bucket:                  &o.BucketName,
 			CacheControl:            &NoCache,
 			Key:                     &latestKey,
 			WebsiteRedirectLocation: &versionKey,
 		}); err != nil {
-			log.Fatalf("s3 redirect to %s: %s", versionKey, err)
+			log.Fatalf("failed adding a redirect to %s: %s", versionKey, err)
 		}
 	}
 }
@@ -276,7 +266,6 @@ const latestStr = "latest"
 type LatestOpts struct {
 	Platform   Platform
 	VersionStr string
-	BucketName string
 }
 
 // MarkLatestReleaseWithSuffix adds redirects to release files using "latest" instead of the version
@@ -287,21 +276,19 @@ func MarkLatestReleaseWithSuffix(svc ObjectPutGetter, o LatestOpts, suffix strin
 	oLatest.VersionStr = latestStr
 	latestKeys := makeArchiveKeys(oLatest.Platform, oLatest.VersionStr, "cockroach")
 	latestKey := latestKeys.archive + suffix
-	log.Printf("Adding redirect to s3://%s/%s", o.BucketName, latestKey)
+	log.Printf("Adding redirect to %s", svc.URL(latestKey))
 	if err := svc.PutObject(&PutObjectInput{
-		Bucket:                  &o.BucketName,
 		CacheControl:            &NoCache,
 		Key:                     &latestKey,
 		WebsiteRedirectLocation: &versionedKey,
 	}); err != nil {
-		log.Fatalf("s3 redirect to %s: %s", versionedKey, err)
+		log.Fatalf("failed adding a redirect to %s: %s", versionedKey, err)
 	}
 }
 
 // GetObjectInput specifies input parameters for GetOject
 type GetObjectInput struct {
-	Bucket *string
-	Key    *string
+	Key *string
 }
 
 // GetObjectOutput specifies output parameters for GetOject
@@ -311,7 +298,6 @@ type GetObjectOutput struct {
 
 // PutObjectInput specifies input parameters for PutOject
 type PutObjectInput struct {
-	Bucket                  *string
 	Key                     *string
 	Body                    io.ReadSeeker
 	CacheControl            *string
@@ -323,4 +309,6 @@ type PutObjectInput struct {
 type ObjectPutGetter interface {
 	GetObject(*GetObjectInput) (*GetObjectOutput, error)
 	PutObject(*PutObjectInput) error
+	Bucket() string
+	URL(string) string
 }
