@@ -39,7 +39,7 @@ import (
 //
 // The given SST and reader cannot contain intents or inline values (i.e. zero
 // timestamps), but this is only checked for keys that exist in both sides, for
-// performance.
+// performance. MVCC range tombstones are not yet handled, and will error.
 //
 // The returned MVCC statistics is a delta between the SST-only statistics and
 // their effect when applied, which when added to the SST statistics will adjust
@@ -54,6 +54,28 @@ func CheckSSTConflicts(
 	maxIntents int64,
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
+
+	// Check for any range keys.
+	//
+	// TODO(erikgrinaker): We should support these, but it's not needed yet.
+	// See: https://github.com/cockroachdb/cockroach/issues/83405
+	rkIter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	rkIter.SeekGE(NilKey)
+	if ok, err := rkIter.Valid(); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if ok {
+		return enginepb.MVCCStats{}, errors.Errorf(
+			"MVCC range tombstone conflict checks are not yet supported, found %s",
+			rkIter.RangeBounds().Clone())
+	}
+
 	var statsDiff enginepb.MVCCStats
 	var intents []roachpb.Intent
 
@@ -71,6 +93,9 @@ func CheckSSTConflicts(
 		}
 	}
 
+	// TODO(erikgrinaker): We need to handle MVCC range tombstones both in the SST
+	// and in the existing data here. For now, we ignore them. See:
+	// https://github.com/cockroachdb/cockroach/issues/83405
 	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		UpperBound:   end.Key,
 		Prefix:       usePrefixSeek,
@@ -339,7 +364,12 @@ func UpdateSSTTimestamps(
 	writer := MakeIngestionSSTWriter(ctx, st, sstOut)
 	defer writer.Close()
 
-	iter, err := NewMemSSTIterator(sst, false)
+	// Rewrite point keys.
+	iter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+		KeyTypes:   IterKeyTypePointsOnly,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +389,42 @@ func UpdateSSTTimestamps(
 		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, iter.UnsafeValue())
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Rewrite range keys.
+	iter, err = NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+
+	for iter.SeekGE(MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+		for _, rkv := range iter.RangeKeys() {
+			if rkv.RangeKey.Timestamp != from {
+				return nil, errors.Errorf("unexpected timestamp %s (expected %s) for range key %s",
+					rkv.RangeKey.Timestamp, from, rkv.RangeKey)
+			}
+			rkv.RangeKey.Timestamp = to
+			mvccValue, ok, err := tryDecodeSimpleMVCCValue(rkv.Value)
+			if !ok && err == nil {
+				mvccValue, err = decodeExtendedMVCCValue(rkv.Value)
+			}
+			if err != nil {
+				return nil, err
+			}
+			if err = writer.ExperimentalPutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+				return nil, err
+			}
 		}
 	}
 
