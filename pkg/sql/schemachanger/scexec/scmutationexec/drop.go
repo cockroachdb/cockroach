@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -130,6 +131,19 @@ func (m *visitor) RemoveDatabaseRoleSettings(
 	ctx context.Context, op scop.RemoveDatabaseRoleSettings,
 ) error {
 	return m.s.DeleteDatabaseRoleSettings(ctx, op.DatabaseID)
+}
+
+func (m *visitor) RemoveUserPrivileges(ctx context.Context, op scop.RemoveUserPrivileges) error {
+	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	if err != nil {
+		return err
+	}
+	user, err := username.MakeSQLUsernameFromUserInput(op.User, username.PurposeValidation)
+	if err != nil {
+		return err
+	}
+	desc.GetPrivileges().RemoveUser(user)
+	return nil
 }
 
 func (m *visitor) DeleteSchedule(_ context.Context, op scop.DeleteSchedule) error {
