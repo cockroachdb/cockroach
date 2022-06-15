@@ -1,0 +1,212 @@
+# LogicTest: !local-legacy-schema-changer
+
+statement ok
+CREATE USER testuser2
+
+user testuser2
+
+statement ok
+CREATE TABLE u()
+
+user testuser
+
+statement ok
+CREATE TABLE t(a INT)
+
+statement ok
+CREATE VIEW v AS SELECT 1
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  t  table  testuser   0  NULL
+public  u  table  testuser2  0  NULL
+public  v  view   testuser   0  NULL
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  u  table  testuser2  0  NULL
+
+query error pgcode 42P01 relation "t" does not exist
+SELECT * FROM t
+
+query error pgcode 42P01 relation "v" does not exist
+SELECT * FROM v
+
+statement ok
+CREATE TABLE t1(a INT)
+
+statement ok
+CREATE TABLE t2(b INT)
+
+statement ok
+GRANT SELECT ON t1 TO testuser2 WITH GRANT OPTION
+
+user testuser2
+
+statement ok
+CREATE VIEW v1 AS SELECT a FROM t1
+
+user testuser
+
+statement error pq: cannot drop desired object\(s\) because other objects depend on them
+DROP OWNED BY testuser
+
+statement error pq: cannot drop desired object\(s\) because other objects depend on them
+DROP OWNED BY testuser RESTRICT
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+public  t1  table  testuser   0  NULL
+public  t2  table  testuser   0  NULL
+public  u   table  testuser2  0  NULL
+public  v1  view   testuser2  0  NULL
+
+user testuser2
+
+statement ok
+DROP OWNED BY testuser2
+
+user testuser
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTIT
+SHOW TABLES FROM public
+----
+
+user root
+
+statement ok
+GRANT ALL ON DATABASE test TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE TABLE s.t1()
+
+statement ok
+CREATE TABLE s.t2()
+
+statement ok
+GRANT CREATE ON SCHEMA s TO testuser2 WITH GRANT OPTION
+
+user testuser2
+
+statement ok
+CREATE TABLE s.t3()
+
+user testuser
+
+statement error pq: cannot drop desired object\(s\) because other objects depend on them
+DROP OWNED BY testuser
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+DROP OWNED BY testuser, testuser2
+
+statement error pq: target database or schema does not exist
+SHOW TABLES FROM s
+
+user root
+
+statement ok
+REVOKE testuser2 FROM testuser
+
+query TTTB
+SHOW GRANTS ON DATABASE test
+----
+test  admin     ALL      true
+test  public    CONNECT  false
+test  root      ALL      true
+test  testuser  ALL      true
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTB
+SHOW GRANTS ON DATABASE test
+----
+test  admin   ALL      true
+test  public  CONNECT  false
+test  root    ALL      true
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+GRANT CREATE ON SCHEMA s TO testuser WITH GRANT OPTION
+
+user testuser
+
+statement ok
+CREATE TABLE s.t()
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTB
+SHOW GRANTS ON SCHEMA s
+----
+test  s  admin  ALL  true
+test  s  root   ALL  true
+
+query TTTTIT
+SHOW TABLES FROM s
+----
+
+user root
+
+statement ok
+DROP SCHEMA s
+
+statement ok
+CREATE TABLE t()
+
+statement ok
+GRANT ALL ON t TO testuser WITH GRANT OPTION
+
+user testuser
+
+query TTTTTB
+SHOW GRANTS ON t
+----
+test  public  t  admin    ALL  true
+test  public  t  root     ALL  true
+test  public  t  testuser ALL  true
+
+statement ok
+DROP OWNED BY testuser
+
+query TTTTTB
+SHOW GRANTS ON t
+----
+test  public  t  admin    ALL  true
+test  public  t  root     ALL  true
+
+user root
+
+statement ok
+DROP TABLE t
+
+user root
+statement error pq: cannot drop objects owned by role "root" because they are required by the database system
+DROP OWNED BY root
+
+statement error pq: cannot drop objects owned by role "admin" because they are required by the database system
+DROP OWNED BY admin

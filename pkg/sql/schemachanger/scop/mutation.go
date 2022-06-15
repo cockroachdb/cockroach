@@ -530,6 +530,12 @@ type RemoveDatabaseRoleSettings struct {
 	DatabaseID descpb.ID
 }
 
+type RemoveUserPrivileges struct {
+	mutationOp
+	DescID descpb.ID
+	User   string
+}
+
 // DeleteSchedule is used to delete a schedule ID from the database.
 type DeleteSchedule struct {
 	mutationOp
