@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -3735,6 +3736,10 @@ type EvalContext struct {
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
 	KVStoresIterator kvserverbase.StoresIterator
+
+	// QueryCancelKey is the key used by the pgwire protocol to cancel the
+	// query currently running in this session.
+	QueryCancelKey pgwirecancel.BackendKeyData
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

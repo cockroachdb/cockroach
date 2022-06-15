@@ -2672,6 +2672,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ReCache:                   ex.server.reCache,
 			SQLStatsController:        ex.server.sqlStatsController,
 			IndexUsageStatsController: ex.server.indexUsageStatsController,
+			QueryCancelKey:            ex.queryCancelKey,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
