@@ -295,7 +295,7 @@ func newDataDistribution(
 			}
 			retries = 0
 		}
-		return nextKey, nil, keyTimestamps, hasIntent
+		return nextKey, unusedEndKey, keyTimestamps, hasIntent
 	}
 
 	generateRangeKey := func() (startKey, endKey roachpb.Key, timestamps []hlc.Timestamp, hasIntent bool) {
