@@ -290,7 +290,6 @@ func adjustOpWeightsForCockroachVersion(
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
 func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt string, err error) {
-
 	for {
 		op := opType(og.params.ops.Int())
 		og.resetOpState()
