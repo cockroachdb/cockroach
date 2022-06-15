@@ -113,7 +113,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
-	ieProto              sqlutil.SessionBoundInternalExecutorProto
+	ieProto              sqlutil.InternalExecutorProto
 	// mvccCompliantAddIndex is set to true early in exec if we
 	// find that the schema change was created under the
 	// mvcc-compliant regime.
@@ -142,7 +142,7 @@ func NewSchemaChangerForTesting(
 		execCfg:       execCfg,
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
-		ieProto: sqlutil.SessionBoundInternalExecutorProto{
+		ieProto: sqlutil.InternalExecutorProto{
 			IeFactory: func(
 				ctx context.Context, sd *sessiondata.SessionData,
 			) sqlutil.InternalExecutor {
@@ -2635,7 +2635,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieProto: sqlutil.SessionBoundInternalExecutorProto{
+			ieProto: sqlutil.InternalExecutorProto{
 				IeFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
 					return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
 				},
@@ -2825,7 +2825,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieProto: sqlutil.SessionBoundInternalExecutorProto{
+		ieProto: sqlutil.InternalExecutorProto{
 			IeFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
 				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
 			},

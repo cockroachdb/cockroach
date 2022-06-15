@@ -214,19 +214,31 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
-type SessionBoundInternalExecutorProto struct {
-	IeFactory     SessionBoundInternalExecutorFactory
-	SytheticDescs []catalog.Descriptor
+// InternalExecutorProto stores info needed to initialize an
+// internal executor.
+type InternalExecutorProto struct {
+	IeFactory InternalExecutorFactory
+	// SyntheticDescs stores the synthetic descriptors to be injected into
+	// each query/statement's descs.Collection upon initialization.
+	//
+	// Warning: Not safe for concurrent use from multiple goroutines.
+	SyntheticDescs []catalog.Descriptor
 }
 
-// SessionBoundInternalExecutorFactory is a function that produces a "session
+// SetSyntheticDescs is to set the synthetic descriptor stored in the internal
+// executor proto.
+func (p *InternalExecutorProto) SetSyntheticDescs(d []catalog.Descriptor) {
+	p.SyntheticDescs = d
+}
+
+// InternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
-type SessionBoundInternalExecutorFactory func(
+type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
 
 // WithTxn is to run SQL statements under the same txn.
-func (p SessionBoundInternalExecutorProto) WithTxn(
+func (p InternalExecutorProto) WithTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
@@ -234,7 +246,7 @@ func (p SessionBoundInternalExecutorProto) WithTxn(
 ) error {
 	ie := p.IeFactory(ctx, sessionData)
 	return ie.WithSyntheticDescriptors(
-		p.SytheticDescs,
+		p.SyntheticDescs,
 		func() error {
 			return run(ctx, txn, ie)
 		},
@@ -242,14 +254,13 @@ func (p SessionBoundInternalExecutorProto) WithTxn(
 }
 
 // WithoutTxn is to run SQL statements without a txn context.
-func (p SessionBoundInternalExecutorProto) WithoutTxn(
+func (p InternalExecutorProto) WithoutTxn(
 	ctx context.Context,
-	sessionData *sessiondata.SessionData,
 	run func(ctx context.Context, ie InternalExecutor) error,
 ) error {
-	ie := p.IeFactory(ctx, sessionData)
+	ie := p.IeFactory(ctx, nil)
 	return ie.WithSyntheticDescriptors(
-		p.SytheticDescs,
+		p.SyntheticDescs,
 		func() error {
 			return run(ctx, ie)
 		},

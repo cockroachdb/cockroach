@@ -903,7 +903,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
-	// SessionBoundInternalExecutorFactory. The same applies for setting a
+	// InternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
 	ieFactory := func(
 		ctx context.Context, sessionData *sessiondata.SessionData,
@@ -918,8 +918,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return &ie
 	}
 
-	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
-	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
+	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
+	jobRegistry.SetInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
 	execCfg.IndexValidator = scdeps.NewIndexValidator(
@@ -1040,7 +1040,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 		codec,
 		cfg.registry,
-		distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
+		distSQLServer.ServerConfig.InternalExecutorFactory,
 		cfg.sqlStatusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
