@@ -854,6 +854,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"queue.gc.info.numkeysaffected"},
 			},
 			{
+				Title:   "Range tombstones GC'able",
+				Metrics: []string{"queue.gc.info.numrangessaffected"},
+			},
+			{
 				Title:   "Old Intents",
 				Metrics: []string{"queue.gc.info.intentsconsidered"},
 			},

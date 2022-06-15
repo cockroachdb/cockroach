@@ -894,6 +894,11 @@ func MVCCGetAsTxn(
 // If the supplied iterator is nil, no seek operation is performed. This is
 // used by the Blind{Put,ConditionalPut} operations to avoid seeking when the
 // metadata is known not to exist.
+// TODO(oleg): cleanup this
+// ok - err != nil
+// keyBytes - size of meta key (same as passed down!?)
+// valBytes - meta size or 0
+// err - any processing error
 func mvccGetMetadata(
 	iter MVCCIterator, metaKey MVCCKey, meta *enginepb.MVCCMetadata,
 ) (ok bool, keyBytes, valBytes int64, synthesizedFromRange bool, err error) {
@@ -3924,6 +3929,211 @@ func MVCCGarbageCollect(
 				return err
 			}
 			prevNanos = unsafeIterKey.Timestamp.WallTime
+		}
+	}
+
+	return nil
+}
+
+// MVCCGarbageCollectRanges is similar in functionality to MVCCGarbageCollect but
+// operates on range keys. It does sanity checks that no values exist below
+// range tombstones so that no values are exposed in case point values GC was
+// not performed correctly by level above.
+func MVCCGarbageCollectRanges(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeKeys []roachpb.GCRequest_GCRangeKey,
+	timestamp hlc.Timestamp,
+) error {
+
+	var count int64
+	defer func(begin time.Time) {
+		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
+			len(rangeKeys), float64(len(rangeKeys))*1e9/float64(timeutil.Since(begin)), count)
+	}(timeutil.Now())
+
+	// If there are no keys then there is no work.
+	if len(rangeKeys) == 0 {
+		return nil
+	}
+
+	sort.Slice(rangeKeys, func(i, j int) bool {
+		iKey := MVCCRangeKey{StartKey: rangeKeys[i].StartKey, Timestamp: rangeKeys[i].Timestamp}
+		jKey := MVCCRangeKey{StartKey: rangeKeys[j].StartKey, Timestamp: rangeKeys[j].Timestamp}
+		return iKey.Compare(jKey) < 0
+	})
+	// Validate that keys are non-overlapping
+	var lastEndKey roachpb.Key
+	for i, rangeKey := range rangeKeys {
+		if rangeKey.StartKey.Compare(lastEndKey) < 0 {
+			return errors.Errorf("range keys in gc request should be non-overlapping: %s vs %s",
+				rangeKeys[i-1].String(), rangeKey.String())
+		}
+		lastEndKey = rangeKey.EndKey
+	}
+
+	var lastFragmentStart roachpb.Key
+	var pendingRanges []MVCCRangeKey
+	deletePendingFragments := func() error {
+		// Delete what was previously found.
+		if len(pendingRanges) > 0 {
+			for _, r := range pendingRanges {
+				if err := rw.ExperimentalClearMVCCRangeKey(r); err != nil {
+					return err
+				}
+			}
+			pendingRanges = pendingRanges[:0]
+		}
+		return nil
+	}
+
+	// Bound the iterator appropriately for the set of keys we'll be garbage
+	// collecting.
+	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		LowerBound: rangeKeys[0].StartKey,
+		UpperBound: rangeKeys[len(rangeKeys)-1].EndKey,
+		KeyTypes:   IterKeyTypePointsAndRanges,
+	})
+	defer iter.Close()
+
+	var currentKey roachpb.Key
+	for _, rangeKey := range rangeKeys {
+		iter.SeekGE(MVCCKey{Key: rangeKey.StartKey})
+
+		// Iterate within fragment till we find the end of it.
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			if err := deletePendingFragments(); err != nil {
+				return err
+			}
+			break
+		}
+		hasP, hasR := iter.HasPointAndRange()
+
+		for ok { // Loop over gc'd range
+			if hasR {
+				span := iter.RangeBounds()
+				fragmentStart := span.Key
+				// Check if we landed on the new fragment set and need to find matching.
+				if !fragmentStart.Equal(lastFragmentStart) {
+					lastFragmentStart = append(lastFragmentStart[:0], fragmentStart...)
+					if err := deletePendingFragments(); err != nil {
+						return err
+					}
+					// Check if we moved past the end of GC range first.
+					if fragmentStart.Compare(rangeKey.EndKey) >= 0 {
+						break
+					}
+					// Find candidate fragments.
+					rangeKeyFragments := iter.RangeKeys()
+					idx := sort.Search(len(rangeKeyFragments), func(i int) bool {
+						return rangeKeyFragments[i].RangeKey.Timestamp.LessEq(rangeKey.Timestamp)
+					})
+					// Copy overlapping parts of range fragments below timestamp into pending.
+					if idx < len(rangeKeyFragments) {
+						stackStart := rangeKey.StartKey
+						if fragmentStart.Compare(rangeKey.StartKey) > 0 {
+							stackStart = fragmentStart.Clone()
+						}
+						stackEnd := rangeKey.EndKey
+						if span.EndKey.Compare(rangeKey.EndKey) < 0 {
+							stackEnd = span.EndKey.Clone()
+						}
+						for ; idx < len(rangeKeyFragments); idx++ {
+							pendingRanges = append(pendingRanges, MVCCRangeKey{
+								StartKey:  stackStart,
+								EndKey:    stackEnd,
+								Timestamp: rangeKeyFragments[idx].RangeKey.Timestamp,
+							})
+						}
+					}
+				}
+			} else {
+				if err := deletePendingFragments(); err != nil {
+					return err
+				}
+				lastFragmentStart = lastFragmentStart[:0]
+			}
+
+			// If point, we need to check anything below deleted tombstone.
+			if hasP {
+				// Check if we moved past the end of GC range first.
+				if iter.UnsafeKey().Key.Compare(rangeKey.EndKey) >= 0 {
+					break
+				}
+
+				// Iterate reminder of history to find if we hide any values.
+				currentKey = append(currentKey[:0], iter.UnsafeKey().Key...)
+
+				for nextTimes := 0; ; nextTimes++ {
+					pointKey := iter.UnsafeKey()
+					if nextTimes > 0 && !currentKey.Equal(pointKey.Key) {
+						// We are at next key already.
+						break
+					}
+					// Note that we check hasP here since SeekGE might put us on a bare
+					// range and we need to advance after that to the next point.
+					if hasP {
+						// Check if metadata object or value falls under the range key
+						// timestamp requested for deletion.
+						// We should never have tombstones above txn timestamp, but if GC
+						// requests asks us to do this, it is a problem we want to report.
+						if !pointKey.IsValue() {
+							var meta enginepb.MVCCMetadata
+							if err := iter.ValueProto(&meta); err != nil {
+								return err
+							}
+							if meta.Timestamp.Less(rangeKey.Timestamp.ToLegacyTimestamp()) {
+								return errors.Errorf("attempt to delete range tombstone %q hiding intent at %q",
+									rangeKey, pointKey)
+							}
+						} else {
+							val, err := DecodeMVCCValue(iter.UnsafeValue())
+							if err != nil {
+								return err
+							}
+							if pointKey.Timestamp.LessEq(rangeKey.Timestamp) && !val.IsTombstone() {
+								return errors.Errorf("attempt to delete range tombstone %q hiding value at %q",
+									rangeKey, pointKey)
+							}
+						}
+					}
+					// If we tried next too many times, do a seek to tombstone position to
+					// check instead of advancing one by one similarly to MVCCGC above.
+					if nextTimes == 3 {
+						iter.SeekGE(MVCCKey{Key: currentKey, Timestamp: rangeKey.Timestamp})
+					} else {
+						iter.Next()
+					}
+					ok, err = iter.Valid()
+					if err != nil {
+						return err
+					}
+					if !ok {
+						break
+					}
+					hasP, hasR = iter.HasPointAndRange()
+				}
+			} else {
+				iter.Next()
+				ok, err = iter.Valid()
+				if err != nil {
+					return err
+				}
+				if ok {
+					hasP, hasR = iter.HasPointAndRange()
+				}
+			}
+		}
+
+		// At the end of GC'd range, delete pending tail fragments.
+		lastFragmentStart = lastFragmentStart[:0]
+		if err := deletePendingFragments(); err != nil {
+			return err
 		}
 	}
 

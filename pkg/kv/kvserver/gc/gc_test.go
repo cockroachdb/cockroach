@@ -675,7 +675,10 @@ func runTest(t *testing.T, data string, ignoreLiveStats bool) {
 		gcer.resolveIntents, gcer.resolveIntentsAsync)
 	require.NoError(t, err)
 	require.Empty(t, gcer.intents, "expecting no intents")
-	require.NoError(t, storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.requests(), gcTS))
+	require.NoError(t,
+		storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcTS))
+	require.NoError(t,
+		storage.MVCCGarbageCollectRanges(ctx, eng, &stats, gcer.rangeKeys(), gcTS))
 
 	ctrlEng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
@@ -705,6 +708,8 @@ func runTest(t *testing.T, data string, ignoreLiveStats bool) {
 func requireEqualReaders(
 	t *testing.T, exected storage.Reader, actual storage.Reader, desc roachpb.RangeDescriptor,
 ) {
+	// First compare only points. We assert points and ranges separately for
+	// simplicity.
 	itExp := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
@@ -712,6 +717,7 @@ func requireEqualReaders(
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
 	defer itExp.Close()
+	itExp.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 
 	itActual := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
@@ -720,8 +726,8 @@ func requireEqualReaders(
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
 	defer itActual.Close()
-	itExp.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	itActual.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+
 	for {
 		okExp, err := itExp.Valid()
 		require.NoError(t, err, "failed to iterate values")
@@ -737,9 +743,42 @@ func requireEqualReaders(
 			itActual.UnsafeKey())
 		require.True(t, bytes.Equal(itExp.UnsafeValue(), itActual.UnsafeValue()),
 			"expected value not equal to actual for key %s", itExp.UnsafeKey())
-
 		itExp.Next()
 		itActual.Next()
+	}
+
+	// Compare only ranges.
+	itExpRanges := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypeRangesOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer itExpRanges.Close()
+	itExpRanges.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+
+	itActualRanges := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound:           desc.StartKey.AsRawKey(),
+		UpperBound:           desc.EndKey.AsRawKey(),
+		KeyTypes:             storage.IterKeyTypeRangesOnly,
+		RangeKeyMaskingBelow: hlc.Timestamp{},
+	})
+	defer itActualRanges.Close()
+	itActualRanges.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
+
+	for {
+		okExp, err := itExpRanges.Valid()
+		require.NoError(t, err, "failed to iterate values")
+		okAct, err := itActualRanges.Valid()
+		require.NoError(t, err, "failed to iterate values")
+		if !okExp && !okAct {
+			break
+		}
+
+		require.Equal(t, okExp, okAct, "iterators have different number of elements")
+		require.EqualValues(t, itExpRanges.RangeKeys(), itActualRanges.RangeKeys(), "range keys")
+		itExpRanges.Next()
+		itActualRanges.Next()
 	}
 }
 
