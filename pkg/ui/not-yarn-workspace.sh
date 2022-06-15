@@ -3,6 +3,7 @@ set -euo pipefail
 
 (
   set -x
+  yarn --cwd workspaces/eslint-plugin-crdb install
   yarn --cwd workspaces/db-console/src/js install
   yarn --cwd workspaces/cluster-ui install
   yarn --cwd workspaces/db-console install

@@ -355,6 +355,10 @@ $(GITHOOKSDIR)/%: githooks/%
 	@ln -s ../../$(basename $<) $(dir $@)
 endif
 
+ESLINT_PLUGIN_CRDB := pkg/ui/workspaces/eslint-plugin-crdb/dist/index.js
+.SECONDARY: $(ESLINT_PLUGIN_CRDB)
+$(ESLINT_PLUGIN_CRDB): $(shell find pkg/ui/workspaces/eslint-plugin-crdb/src -type f | grep -v '\.spec') pkg/ui/yarn.installed
+	$(NODE_RUN) -C pkg/ui/workspaces/eslint-plugin-crdb yarn build
 
 CLUSTER_UI_JS := pkg/ui/cluster-ui/dist/main.js
 
@@ -1353,7 +1357,7 @@ ui-topo: pkg/ui/yarn.installed
 	pkg/ui/workspaces/db-console/scripts/topo.js
 
 .PHONY: ui-lint
-ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
+ui-lint: pkg/ui/yarn.installed $(ESLINT_PLUGIN_CRDB) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(TSC)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn lint
