@@ -1485,7 +1485,7 @@ SELECT create_statement from [SHOW CREATE TABLE t_as]
 create_statement
 CREATE TABLE public.t_as (
                                                 i INT8 NULL,
-                                                crdb_region public.crdb_internal_region NULL,
+                                                crdb_region mr-create-table-as.public.crdb_internal_region NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                                 CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
@@ -1512,7 +1512,7 @@ SELECT create_statement from [SHOW CREATE TABLE t_as]
 create_statement
 CREATE TABLE public.t_as (
                                            i INT8 NULL,
-                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           crdb_region mr-create-table-as.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-create-table-as.public.crdb_internal_region,
                                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                            CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region
@@ -1555,7 +1555,7 @@ SELECT create_statement from [SHOW CREATE TABLE t_as]
 create_statement
 CREATE TABLE public.t_as (
                                            i INT8 NOT NULL,
-                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           crdb_region mr-create-table-as.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-create-table-as.public.crdb_internal_region,
                                            CONSTRAINT t_as_pkey PRIMARY KEY (i ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region
 
@@ -1565,7 +1565,7 @@ SELECT create_statement from [SHOW CREATE TABLE t]
 create_statement
 CREATE TABLE public.t (
                             i INT8 NOT NULL,
-                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            crdb_region mr-create-table-as.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::mr-create-table-as.public.crdb_internal_region,
                             CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 ) LOCALITY REGIONAL BY ROW
 

@@ -1019,7 +1019,7 @@ crdb_oid    tablename  indexname          indexdef
 2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
 2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
+2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::constraint_db.public.mytype) ASC) WHERE (m = 'foo'::constraint_db.public.mytype)
 784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
@@ -1065,12 +1065,12 @@ JOIN pg_catalog.pg_class c ON i.indexrelid = c.oid
 WHERE c.relname LIKE 't6_%'
 ORDER BY 1
 ----
-relname            indkey  indexprs                    indpred
-t6_expr_expr1_idx  0 0     (lower(c)) (a + b)          NULL
-t6_expr_idx        0       (a + b)                     NULL
-t6_expr_idx1       0       (m = 'foo'::public.mytype)  m = 'foo'::public.mytype
-t6_expr_key        0       (lower(c))                  NULL
-t6_pkey            6       NULL                        NULL
+relname            indkey  indexprs                                  indpred
+t6_expr_expr1_idx  0 0     (lower(c)) (a + b)                        NULL
+t6_expr_idx        0       (a + b)                                   NULL
+t6_expr_idx1       0       (m = 'foo'::constraint_db.public.mytype)  m = 'foo'::constraint_db.public.mytype
+t6_expr_key        0       (lower(c))                                NULL
+t6_pkey            6       NULL                                      NULL
 
 statement ok
 SET DATABASE = system
@@ -4984,7 +4984,7 @@ WHERE tablename = 'partial_index_table'
 indexname                   indexdef
 partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
 partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
+partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
 
 query TT colnames
 SELECT conname, condef
@@ -4995,7 +4995,7 @@ ORDER BY conname
 ----
 conname                     condef
 partial_index_table_a_key   UNIQUE (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
+partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
 partial_index_table_pkey    PRIMARY KEY (rowid ASC)
 
 subtest regression_46799

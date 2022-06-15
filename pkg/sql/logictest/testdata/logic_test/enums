@@ -363,7 +363,7 @@ SELECT b'\x80'::as_bytes, b'\x80':::as_bytes
 ----
 bytes bytes
 
-query error pq: could not find \[255\] in enum "public.as_bytes" representation
+query error pq: could not find \[255\] in enum "test.public.as_bytes" representation
 SELECT b'\xFF'::as_bytes
 
 # Regression for #49300. Ensure that virtual tables have access to hydrated
@@ -372,7 +372,7 @@ query TT
 SHOW CREATE t1
 ----
 t1  CREATE TABLE public.t1 (
-    x public.greeting NULL,
+    x test.public.greeting NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
     INDEX i (x ASC)
@@ -384,7 +384,7 @@ query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
 CREATE TABLE public.t1 (
-   x public.greeting NULL,
+   x test.public.greeting NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
    INDEX i (x ASC)
@@ -397,7 +397,7 @@ SELECT ARRAY['hello']::_greeting, ARRAY['hello'::greeting]
 {hello} {hello}
 
 # Test that we can't mix enums in an array.
-query error pq: expected 'cockroach'::public.dbs to be of type greeting, found type dbs
+query error pq: expected 'cockroach'::test.public.dbs to be of type greeting, found type dbs
 SELECT ARRAY['hello'::greeting, 'cockroach'::dbs]
 
 statement ok
@@ -479,7 +479,7 @@ WHERE
   AND NOT a.attisdropped
   AND attname = 'y'
 ----
-'hello'::public.greeting
+'hello'::test.public.greeting
 
 # Test that enum default values are formatted in human readable ways.
 query TT
@@ -487,8 +487,8 @@ SHOW CREATE enum_default
 ----
 enum_default  CREATE TABLE public.enum_default (
               x INT8 NULL,
-              y public.greeting NULL DEFAULT 'hello':::public.greeting,
-              z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
+              y test.public.greeting NULL DEFAULT 'hello':::test.public.greeting,
+              z BOOL NULL DEFAULT 'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting),
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
               FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
@@ -505,8 +505,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  'hello':::public.greeting
-z  'hello':::public.greeting IS OF (public.greeting, public.greeting)
+y  'hello':::test.public.greeting
+z  'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting)
 
 # Test information_schema.columns.
 query TT
@@ -519,8 +519,8 @@ WHERE
 ORDER BY
   column_name
 ----
-y  'hello':::public.greeting
-z  'hello':::public.greeting IS OF (public.greeting, public.greeting)
+y  'hello':::test.public.greeting
+z  'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting)
 
 # Test computed columns with enum values.
 statement ok
@@ -544,9 +544,9 @@ SHOW CREATE enum_computed
 ----
 enum_computed  CREATE TABLE public.enum_computed (
                x INT8 NULL,
-               y public.greeting NULL AS ('hello':::public.greeting) STORED,
-               z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
-               w public.greeting NULL,
+               y test.public.greeting NULL AS ('hello':::test.public.greeting) STORED,
+               z BOOL NULL AS (w = 'howdy':::test.public.greeting) STORED,
+               w test.public.greeting NULL,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
@@ -580,11 +580,11 @@ query TT
 SHOW CREATE enum_checks
 ----
 enum_checks  CREATE TABLE public.enum_checks (
-             x public.greeting NULL,
+             x test.public.greeting NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
-             CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
-             CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
+             CONSTRAINT check_x CHECK (x = 'hello':::test.public.greeting),
+             CONSTRAINT "check" CHECK ('hello':::test.public.greeting = 'hello':::test.public.greeting)
 )
 
 # Ensure that we can add check constraints to tables with enums.
@@ -603,7 +603,7 @@ INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 ALTER TABLE enum_checks ADD CHECK (x > 'hello')
 
 # Ensure that checks are validated on insert.
-statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::public.greeting\)
+statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::test.public.greeting\)
 INSERT INTO enum_checks VALUES ('hello')
 
 # Try adding a check that fails validation.
@@ -620,7 +620,7 @@ CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 ALTER TABLE enum_checks ADD CHECK (x > 'hello')
 
-statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::public.greeting\)
+statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::test.public.greeting\)
 INSERT INTO enum_checks VALUES ('hello')
 
 statement ok
@@ -632,7 +632,7 @@ CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 
 # Try adding a check that fails validation.
-statement error pq: validation of CHECK "x = 'hello':::public.greeting" failed
+statement error pq: validation of CHECK "x = 'hello':::test.public.greeting" failed
 ALTER TABLE enum_checks ADD CHECK (x = 'hello')
 
 statement ok
@@ -1511,9 +1511,9 @@ query TT
 SHOW CREATE TABLE arr_t6
 ----
 arr_t6  CREATE TABLE public.arr_t6 (
-        i public.arr_typ2[] NULL DEFAULT ARRAY['a':::public.arr_typ2]:::public.arr_typ2[],
-        j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
-        k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
+        i test_57196.public.arr_typ2[] NULL DEFAULT ARRAY['a':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[],
+        j test_57196.public.arr_typ2 NULL DEFAULT (ARRAY['b':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[])[1:::INT8],
+        k test_57196.public.arr_typ2[] NULL DEFAULT ARRAY['c':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[],
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
         FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
