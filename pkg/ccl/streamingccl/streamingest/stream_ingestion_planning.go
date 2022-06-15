@@ -203,11 +203,10 @@ func ingestionPlanHook(
 		}
 
 		jr := jobs.Record{
-			Description:   jobDescription,
-			Username:      p.User(),
-			Progress:      jobspb.StreamIngestionProgress{},
-			Details:       streamIngestionDetails,
-			NonCancelable: true,
+			Description: jobDescription,
+			Username:    p.User(),
+			Progress:    jobspb.StreamIngestionProgress{},
+			Details:     streamIngestionDetails,
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()

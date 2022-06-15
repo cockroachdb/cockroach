@@ -116,7 +116,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	sql.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	registry := source.JobRegistry().(*jobs.Registry)
 	ptp := source.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
-	timeout, username := 1*time.Second, username.MakeSQLUsernameFromPreNormalizedString("user")
+	timeout, usr := 1*time.Second, username.MakeSQLUsernameFromPreNormalizedString("user")
 
 	registerConstructor := func(initialTime time.Time) (*timeutil.ManualTime, func(), func(), func()) {
 		mt := timeutil.NewManualTime(initialTime)
@@ -176,7 +176,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		{ // Job times out at the beginning
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			ptsID := uuid.MakeV4()
-			jr := makeProducerJobRecord(registry, 10, timeout, username, ptsID)
+			jr := makeProducerJobRecord(registry, 10, timeout, usr, ptsID)
 			defer jobs.ResetConstructors()()
 			_, _, _, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(1 * time.Millisecond))
 
@@ -204,9 +204,10 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 			ptsID := uuid.MakeV4()
 
-			jr := makeProducerJobRecord(registry, 20, timeout, username, ptsID)
+			jr := makeProducerJobRecord(registry, 20, timeout, usr, ptsID)
 			defer jobs.ResetConstructors()()
-			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
+			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting :=
+				registerConstructor(expirationTime(jr).Add(-5 * time.Millisecond))
 
 			require.NoError(t, runJobWithProtectedTimestamp(ptsID, ts, jr))
 			waitForTimeRequest()

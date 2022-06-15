@@ -147,6 +147,12 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
 	}
 
+	if read.readAt.Less(lease.Start.ToTimestamp()) {
+		log.VEventf(ctx, 1, "not gc'ing replica %v because current lease %v started after record was read %v",
+			r, lease, read.readAt)
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
+	}
+
 	gcTimestamp = read.readAt
 	if !read.earliestProtectionTimestamp.IsEmpty() {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
@@ -155,12 +161,6 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		if impliedGCTimestamp.Less(gcTimestamp) {
 			gcTimestamp = impliedGCTimestamp
 		}
-	}
-
-	if gcTimestamp.Less(lease.Start.ToTimestamp()) {
-		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
-			r, lease, gcTimestamp)
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil
 	}
 
 	newThreshold = gc.CalculateThreshold(gcTimestamp, gcTTL)

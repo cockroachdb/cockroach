@@ -118,11 +118,9 @@ func updateReplicationStreamProgress(
 				}
 				status.ProtectedTimestamp = &ts
 			}
-
-			if p := md.Progress; expiration.After(p.GetStreamReplication().Expiration) {
-				p.GetStreamReplication().Expiration = expiration
-				ju.UpdateProgress(p)
-			}
+			// Allow expiration time to go backwards as user may set a smaller timeout.
+			md.Progress.GetStreamReplication().Expiration = expiration
+			ju.UpdateProgress(md.Progress)
 			return nil
 		})
 
@@ -139,7 +137,6 @@ func updateReplicationStreamProgress(
 func heartbeatReplicationStream(
 	evalCtx *eval.Context, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
-
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	expirationTime := timeutil.Now().Add(timeout)
