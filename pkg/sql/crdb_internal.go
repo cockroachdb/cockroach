@@ -2152,6 +2152,8 @@ CREATE VIEW crdb_internal.cluster_contended_keys (
     crdb_internal.cluster_contention_events.index_id
     = crdb_internal.table_indexes.index_id
     AND crdb_internal.cluster_contention_events.table_id
+      = crdb_internal.table_indexes.descriptor_id
+    AND crdb_internal.cluster_contention_events.table_id
       = crdb_internal.tables.table_id
   GROUP BY
     database_name, schema_name, name, index_name, key
