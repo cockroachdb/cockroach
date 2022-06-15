@@ -23,8 +23,9 @@ import { Axis } from "src/views/shared/components/metricQuery";
 import {
   calculateXAxisDomain,
   calculateYAxisDomain,
-  configureUPlotLineChart,
-} from "src/views/cluster/util/graphs";
+  util,
+} from "@cockroachlabs/cluster-ui";
+import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import Long from "long";
 
 describe("<LineGraph>", function() {
@@ -143,13 +144,20 @@ describe("<LineGraph>", function() {
       _store: { validated: false },
     };
     const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
+    const resultDatapoints = _.flatMap(mockData.results, result =>
+      result.datapoints.map(dp => dp.value),
+    );
     const mockOptions = configureUPlotLineChart(
       mockMetrics,
       mockAxis,
       mockData,
       instance.setNewTimeRange,
-      () => calculateYAxisDomain(0, mockData),
-      () => calculateXAxisDomain(mockProps.timeInfo),
+      () => calculateYAxisDomain(0, resultDatapoints),
+      () =>
+        calculateXAxisDomain(
+          util.NanoToMilli(mockProps.timeInfo.start.toNumber()),
+          util.NanoToMilli(mockProps.timeInfo.end.toNumber()),
+        ),
     );
     instance.u = new uPlot(mockOptions);
     const setDataSpy = sinon.spy(instance.u, "setData");

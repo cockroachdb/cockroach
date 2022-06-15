@@ -1,0 +1,19 @@
+:global {
+  @import "uplot/dist/uPlot.min";
+}
+
+.bargraph {
+  height: 100%;
+  :global(.uplot) {
+    display: flex;
+    flex-direction: column;
+    :global(.u-legend) {
+      text-align: left;
+      font-size: 10px;
+      margin-top: 20px;
+      z-index: 1;
+      width: fit-content;
+      padding: 10px;
+    }
+  }
+}
