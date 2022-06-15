@@ -753,12 +753,12 @@ func (j *Job) FractionCompleted() float32 {
 
 // MakeSessionBoundInternalExecutor makes an internal executor, for use in a job
 // resumer, and sets it with the provided session data. See the comment on
-// sessionBoundInternalExecutorFactory for a more detailed explanation of why
+// InternalExecutorFactory for a more detailed explanation of why
 // this exists.
 func (j *Job) MakeSessionBoundInternalExecutor(
 	ctx context.Context, sd *sessiondata.SessionData,
 ) sqlutil.InternalExecutor {
-	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd)
+	return j.registry.InternalExecutorFactory(ctx, sd)
 }
 
 // MarkIdle marks the job as Idle.  Idleness should not be toggled frequently

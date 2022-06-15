@@ -26,14 +26,14 @@ import (
 // MetadataUpdaterFactory used to construct a commenter.DescriptorMetadataUpdater, which
 // can be used to update comments on schema objects.
 type MetadataUpdaterFactory struct {
-	ieFactory         sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory         sqlutil.InternalExecutorFactory
 	collectionFactory *descs.CollectionFactory
 	settings          *settings.Values
 }
 
 // NewMetadataUpdaterFactory creates a new comment updater factory.
 func NewMetadataUpdaterFactory(
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory sqlutil.InternalExecutorFactory,
 	collectionFactory *descs.CollectionFactory,
 	settings *settings.Values,
 ) scexec.DescriptorMetadataUpdaterFactory {
