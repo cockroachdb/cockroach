@@ -57,7 +57,7 @@ func declareKeysClearRange(
 	// up to args.EndKey.Next(). If EndKey falls on the range end key, the span
 	// will be tightened during evaluation.
 	args := req.(*roachpb.ClearRangeRequest)
-	l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+	l, r := storage.RangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
 	latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 }
 
@@ -204,7 +204,7 @@ func computeStatsDelta(
 		// TODO(erikgrinaker): Consolidate this logic with the corresponding logic
 		// during range splits/merges and MVCC range tombstone writes.
 		if !entireRange {
-			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+			leftPeekBound, rightPeekBound := storage.RangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 			iter = readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypeRangesOnly,

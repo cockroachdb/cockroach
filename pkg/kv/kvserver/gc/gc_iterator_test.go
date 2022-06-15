@@ -140,7 +140,7 @@ func TestGCIterator(t *testing.T) {
 		check(ex.cur, "cur", s.cur)
 		check(ex.next, "next", s.next)
 		check(ex.afterNext, "after", s.afterNext)
-		require.Equal(t, ex.tombstoneTS, s.lastTombstone, "step %d: unexpected last tombstone timestamp", step)
+		require.Equal(t, ex.tombstoneTS, s.firstRangeTombstoneTsAtOrBelowGC, "step %d: unexpected last tombstone timestamp", step)
 		require.Equal(t, ex.isNewest, s.curIsNewest(), "step %d: is newest", step)
 		require.Equal(t, ex.isIntent, s.curIsIntent(), "step %d: is intent", step)
 	}

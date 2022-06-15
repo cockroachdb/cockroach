@@ -40,7 +40,11 @@ func makeGCIterator(
 	desc *roachpb.RangeDescriptor, snap storage.Reader, threshold hlc.Timestamp,
 ) gcIterator {
 	return gcIterator{
-		it:        rditer.NewReplicaMVCCDataIterator(desc, snap, true /* seekEnd */),
+		it: rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
+			Reverse:  true,
+			IterKind: storage.MVCCKeyAndIntentsIterKind,
+			KeyTypes: storage.IterKeyTypePointsAndRanges,
+		}),
 		threshold: threshold,
 	}
 }
@@ -50,7 +54,7 @@ type gcIteratorState struct {
 	cur, next, afterNext *storage.MVCCKeyValue
 	// First available range tombstone greater or equal than threshold
 	// for the first key.
-	lastTombstone hlc.Timestamp
+	firstRangeTombstoneTsAtOrBelowGC hlc.Timestamp
 }
 
 // curIsNewest returns true if the current MVCCKeyValue in the gcIteratorState
@@ -59,8 +63,7 @@ type gcIteratorState struct {
 // It returns true if next is nil or if next is an intent.
 func (s *gcIteratorState) curIsNewest() bool {
 	return s.cur.Key.IsValue() &&
-		(s.next == nil || (s.afterNext != nil && !s.afterNext.Key.IsValue())) /* &&
-		   (s.lastTombstone.IsEmpty() || s.lastTombstone.Less(s.cur.Key.Timestamp))*/
+		(s.next == nil || (s.afterNext != nil && !s.afterNext.Key.IsValue()))
 }
 
 // curIsNotValue returns true if the current MVCCKeyValue in the gcIteratorState
@@ -100,7 +103,7 @@ func (s *gcIteratorState) String() string {
 	add(s.cur, false)
 	add(s.next, false)
 	add(s.afterNext, true)
-	if ts := s.lastTombstone; !ts.IsEmpty() {
+	if ts := s.firstRangeTombstoneTsAtOrBelowGC; !ts.IsEmpty() {
 		b.WriteString(" rts@")
 		b.WriteString(ts.String())
 	}
@@ -120,7 +123,7 @@ func (it *gcIterator) state() (s gcIteratorState, ok bool) {
 	// The current key is the newest if the key which comes next is different or
 	// the key which comes after the current key is an intent or this is the first
 	// key in the range.
-	s.cur, s.lastTombstone, ok = it.peekAt(0)
+	s.cur, s.firstRangeTombstoneTsAtOrBelowGC, ok = it.peekAt(0)
 	if !ok {
 		return gcIteratorState{}, false
 	}
