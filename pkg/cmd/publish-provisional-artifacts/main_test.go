@@ -27,15 +27,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockS3 struct {
-	gets []string
-	puts []string
+type mockStorage struct {
+	bucket string
+	gets   []string
+	puts   []string
 }
 
-var _ release.ObjectPutGetter = (*mockS3)(nil)
+var _ release.ObjectPutGetter = (*mockStorage)(nil)
 
-func (s *mockS3) GetObject(i *release.GetObjectInput) (*release.GetObjectOutput, error) {
-	url := fmt.Sprintf(`s3://%s/%s`, *i.Bucket, *i.Key)
+func (s *mockStorage) Bucket() string {
+	return s.bucket
+}
+
+func (s *mockStorage) GetObject(i *release.GetObjectInput) (*release.GetObjectOutput, error) {
+	url := fmt.Sprintf(`s3://%s/%s`, s.Bucket(), *i.Key)
 	s.gets = append(s.gets, url)
 	o := &release.GetObjectOutput{
 		Body: ioutil.NopCloser(bytes.NewBufferString(url)),
@@ -43,8 +48,8 @@ func (s *mockS3) GetObject(i *release.GetObjectInput) (*release.GetObjectOutput,
 	return o, nil
 }
 
-func (s *mockS3) PutObject(i *release.PutObjectInput) error {
-	url := fmt.Sprintf(`s3://%s/%s`, *i.Bucket, *i.Key)
+func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
+	url := fmt.Sprintf(`s3://%s/%s`, s.Bucket(), *i.Key)
 	if i.CacheControl != nil {
 		url += `/` + *i.CacheControl
 	}
@@ -283,7 +288,16 @@ func TestProvisional(t *testing.T) {
 			dir, cleanup := testutils.TempDir(t)
 			defer cleanup()
 
-			var s3 mockS3
+			var s3 mockStorage
+			s3.bucket = "cockroach"
+			if test.flags.isRelease {
+				s3.bucket = "binaries.cockroachdb.com"
+			}
+			var gcs mockStorage
+			gcs.bucket = "cockroach"
+			if test.flags.isRelease {
+				gcs.bucket = "binaries.cockroachdb.com"
+			}
 			var runner mockExecRunner
 			fakeBazelBin, cleanup := testutils.TempDir(t)
 			defer cleanup()
@@ -291,10 +305,12 @@ func TestProvisional(t *testing.T) {
 			flags := test.flags
 			flags.pkgDir = dir
 			execFn := release.ExecFn{MockExecFn: runner.run}
-			run([]release.ObjectPutGetter{&s3}, flags, execFn)
+			run([]release.ObjectPutGetter{&s3, &gcs}, flags, execFn)
 			require.Equal(t, test.expectedCmds, runner.cmds)
 			require.Equal(t, test.expectedGets, s3.gets)
 			require.Equal(t, test.expectedPuts, s3.puts)
+			require.Equal(t, test.expectedGets, gcs.gets)
+			require.Equal(t, test.expectedPuts, gcs.puts)
 		})
 	}
 }
@@ -343,7 +359,8 @@ func TestBless(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var s3 mockS3
+			var s3 mockStorage
+			s3.bucket = "binaries.cockroachdb.com"
 			var execFn release.ExecFn // bless shouldn't exec anything
 			run([]release.ObjectPutGetter{&s3}, test.flags, execFn)
 			require.Equal(t, test.expectedGets, s3.gets)

@@ -4,6 +4,7 @@ go_library(
     name = "release",
     srcs = [
         "build.go",
+        "gcs.go",
         "release.go",
         "s3.go",
         "upload.go",
@@ -16,5 +17,6 @@ go_library(
         "@com_github_aws_aws_sdk_go//aws/session",
         "@com_github_aws_aws_sdk_go//service/s3",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
     ],
 )

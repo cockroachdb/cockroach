@@ -26,18 +26,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockS3 struct {
+type mockStorage struct {
 	puts []string
 }
 
-var _ release.ObjectPutGetter = (*mockS3)(nil)
+var _ release.ObjectPutGetter = (*mockStorage)(nil)
 
-func (s *mockS3) GetObject(*release.GetObjectInput) (*release.GetObjectOutput, error) {
+func (s *mockStorage) Bucket() string {
+	return "cockroach"
+}
+
+func (s *mockStorage) GetObject(*release.GetObjectInput) (*release.GetObjectOutput, error) {
 	return &release.GetObjectOutput{}, nil
 }
 
-func (s *mockS3) PutObject(i *release.PutObjectInput) error {
-	url := fmt.Sprintf(`s3://%s/%s`, *i.Bucket, *i.Key)
+func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
+	url := fmt.Sprintf(`s3://%s/%s`, s.Bucket(), *i.Key)
 	if i.CacheControl != nil {
 		url += `/` + *i.CacheControl
 	}
@@ -140,9 +144,8 @@ func TestPublish(t *testing.T) {
 		{
 			name: `release`,
 			flags: runFlags{
-				branch:     "master",
-				sha:        "1234567890abcdef",
-				bucketName: "cockroach",
+				branch: "master",
+				sha:    "1234567890abcdef",
 			},
 			expectedCmds: []string{
 				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
@@ -253,7 +256,8 @@ func TestPublish(t *testing.T) {
 			dir, cleanup := testutils.TempDir(t)
 			defer cleanup()
 
-			var s3 mockS3
+			var s3 mockStorage
+			var gcs mockStorage
 			var runner mockExecRunner
 			fakeBazelBin, cleanup := testutils.TempDir(t)
 			defer cleanup()
@@ -261,9 +265,10 @@ func TestPublish(t *testing.T) {
 			flags := test.flags
 			flags.pkgDir = dir
 			execFn := release.ExecFn{MockExecFn: runner.run}
-			run([]release.ObjectPutGetter{&s3}, flags, execFn)
+			run([]release.ObjectPutGetter{&s3, &gcs}, flags, execFn)
 			require.Equal(t, test.expectedCmds, runner.cmds)
 			require.Equal(t, test.expectedPuts, s3.puts)
+			require.Equal(t, test.expectedPuts, gcs.puts)
 		})
 	}
 }
