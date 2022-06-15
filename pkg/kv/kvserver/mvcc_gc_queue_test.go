@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"testing/quick"
@@ -500,55 +501,99 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	key9 := mkKey("i")
 	key10 := mkKey("j")
 	key11 := mkKey("k")
+	key12 := mkKey("l")
+	key13 := mkKey("m")
+	key14 := mkKey("n")
+	key15 := mkKey("o")
 
-	data := []struct {
-		key roachpb.Key
-		ts  hlc.Timestamp
-		del bool
-		txn bool
-	}{
-		// For key1, we expect first value to GC.
-		{key1, ts1, false, false},
-		{key1, ts2, false, false},
-		{key1, ts5, false, false},
-		// For key2, we expect values to GC, even though most recent is deletion.
-		{key2, ts1, false, false},
-		{key2, ts2m1, false, false}, // use a value < the GC time to verify it's kept
-		{key2, ts5, true, false},
-		// For key3, we expect just ts1 to GC, because most recent deletion is intent.
-		{key3, ts1, false, false},
-		{key3, ts2, false, false},
-		{key3, ts5, true, true},
-		// For key4, expect oldest value to GC.
-		{key4, ts1, false, false},
-		{key4, ts2, false, false},
-		// For key5, expect all values to GC (most recent value deleted).
-		{key5, ts1, false, false},
-		{key5, ts2, true, false}, // deleted, so GC
-		// For key6, expect no values to GC because most recent value is intent.
-		{key6, ts1, false, false},
-		{key6, ts5, false, true},
-		// For key7, expect no values to GC because intent is exactly 2h old.
-		{key7, ts2, false, false},
-		{key7, ts4, false, true},
-		// For key8, expect most recent value to resolve by aborting, which will clean it up.
-		{key8, ts2, false, false},
-		{key8, ts3, true, true},
-		// For key9, resolve naked intent with no remaining values.
-		{key9, ts3, false, true},
-		// For key10, GC ts1 because it's a delete but not ts3 because it's above the threshold.
-		{key10, ts1, true, false},
-		{key10, ts3, true, false},
-		{key10, ts4, false, false},
-		{key10, ts5, false, false},
-		// For key11, we can't GC anything because ts1 isn't a delete.
-		{key11, ts1, false, false},
-		{key11, ts3, true, false},
-		{key11, ts4, true, false},
-		{key11, ts5, true, false},
+	type kvData struct {
+		key    roachpb.Key
+		endKey roachpb.Key
+		ts     hlc.Timestamp
+		del    bool
+		txn    bool
 	}
 
+	mkVal := func(key roachpb.Key, ts hlc.Timestamp) kvData {
+		return kvData{key: key, ts: ts}
+	}
+	mkDel := func(key roachpb.Key, ts hlc.Timestamp) kvData {
+		return kvData{key: key, ts: ts, del: true}
+	}
+	mkTxn := func(data kvData) kvData {
+		data.txn = true
+		return data
+	}
+	mkRng := func(key, endKey roachpb.Key, ts hlc.Timestamp) kvData {
+		return kvData{key: key, endKey: endKey, ts: ts, del: true}
+	}
+
+	data := []kvData{
+		// For key1, we expect first value to GC.
+		mkVal(key1, ts1),
+		mkVal(key1, ts2),
+		mkVal(key1, ts5),
+		// For key2, we expect values to GC, even though most recent is deletion.
+		mkVal(key2, ts1),
+		mkVal(key2, ts2m1), // use a value < the GC time to verify it's kept
+		mkDel(key2, ts5),
+		// For key3, we expect just ts1 to GC, because most recent deletion is intent.
+		mkVal(key3, ts1),
+		mkVal(key3, ts2),
+		mkTxn(mkDel(key3, ts5)),
+		// For key4, expect oldest value to GC.
+		mkVal(key4, ts1),
+		mkVal(key4, ts2),
+		// For key5, expect all values to GC (most recent value deleted).
+		mkVal(key5, ts1),
+		mkDel(key5, ts2), // deleted, so GC
+		// For key6, expect no values to GC because most recent value is intent.
+		mkVal(key6, ts1),
+		mkTxn(mkVal(key6, ts5)),
+		// For key7, expect no values to GC because intent is exactly 2h old.
+		mkVal(key7, ts2),
+		mkTxn(mkVal(key7, ts4)),
+		// For key8, expect most recent value to resolve by aborting, which will clean it up.
+		mkVal(key8, ts2),
+		mkTxn(mkDel(key8, ts3)),
+		// For key9, resolve naked intent with no remaining values.
+		mkTxn(mkVal(key9, ts3)),
+		// For key10, GC ts1 because it's a delete but not ts3 because it's above the threshold.
+		mkDel(key10, ts1),
+		mkDel(key10, ts3),
+		mkVal(key10, ts4),
+		mkVal(key10, ts5),
+		// For key11, we can't GC anything because ts1 isn't a delete.
+		mkVal(key11, ts1),
+		mkDel(key11, ts3),
+		mkDel(key11, ts4),
+		mkDel(key11, ts5),
+		// key12 has its older version covered by range tombstone and should be GCd
+		mkVal(key12, ts1),
+		mkVal(key12, ts5),
+		// key13 has all versions covered by range tombstone
+		mkVal(key13, ts1),
+		// This is old range tombstone below gc threshold
+		mkRng(key12, key14, ts2),
+		// This is newer range tombstone above gc threshold
+		mkRng(key13, key15, ts3),
+	}
+
+	sort.Slice(data, func(i, j int) bool {
+		return data[i].ts.Less(data[j].ts)
+	})
+
 	for i, datum := range data {
+		if len(datum.endKey) > 0 {
+			drArgs := deleteRangeArgs(datum.key, datum.endKey)
+			drArgs.UseRangeTombstone = true
+			if _, err := tc.SendWrappedWith(roachpb.Header{
+				Timestamp: datum.ts,
+			}, &drArgs); err != nil {
+				t.Fatalf("%d: could not delete data: %+v", i, err)
+			}
+			continue
+		}
 		if datum.del {
 			dArgs := deleteArgs(datum.key)
 			var txn *roachpb.Transaction
@@ -566,23 +611,23 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 			}, &dArgs); err != nil {
 				t.Fatalf("%d: could not delete data: %+v", i, err)
 			}
-		} else {
-			pArgs := putArgs(datum.key, []byte("value"))
-			var txn *roachpb.Transaction
-			if datum.txn {
-				txn = newTransaction("test", datum.key, 1, tc.Clock())
-				// Overwrite the timestamps set by newTransaction().
-				txn.ReadTimestamp = datum.ts
-				txn.WriteTimestamp = datum.ts
-				txn.MinTimestamp = datum.ts
-				assignSeqNumsForReqs(txn, &pArgs)
-			}
-			if _, err := tc.SendWrappedWith(roachpb.Header{
-				Timestamp: datum.ts,
-				Txn:       txn,
-			}, &pArgs); err != nil {
-				t.Fatalf("%d: could not put data: %+v", i, err)
-			}
+			continue
+		}
+		pArgs := putArgs(datum.key, []byte("value"))
+		var txn *roachpb.Transaction
+		if datum.txn {
+			txn = newTransaction("test", datum.key, 1, tc.Clock())
+			// Overwrite the timestamps set by newTransaction().
+			txn.ReadTimestamp = datum.ts
+			txn.WriteTimestamp = datum.ts
+			txn.MinTimestamp = datum.ts
+			assignSeqNumsForReqs(txn, &pArgs)
+		}
+		if _, err := tc.SendWrappedWith(roachpb.Header{
+			Timestamp: datum.ts,
+			Txn:       txn,
+		}, &pArgs); err != nil {
+			t.Fatalf("%d: could not put data: %+v", i, err)
 		}
 	}
 
@@ -591,18 +636,30 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The total size of the GC'able versions of the keys and values in Info.
-	// Key size: len(scratch+"a") + MVCCVersionTimestampSize (13 bytes) = 15 bytes.
-	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
-	// key1 at ts1  (15 bytes) => "value" (10 bytes)
-	// key2 at ts1  (15 bytes) => "value" (10 bytes)
-	// key3 at ts1  (15 bytes) => "value" (10 bytes)
-	// key4 at ts1  (15 bytes) => "value" (10 bytes)
-	// key5 at ts1  (15 bytes) => "value" (10 bytes)
-	// key5 at ts2  (15 bytes) => delete (0 bytes)
-	// key10 at ts1 (15 bytes) => delete (0 bytes)
-	var expectedVersionsKeyBytes int64 = 7 * 15
-	var expectedVersionsValBytes int64 = 5 * 10
+	// TODO: following computations should take care of new local timestamp
+	// for tombstones as they can be non-zero in size.
+	var (
+		// The total size of the GC'able versions of the keys and values in Info.
+		// Key size: len(scratch+"a") + 1 + MVCCVersionTimestampSize (12 bytes) = 15 bytes.
+		// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
+		// key1 at ts1  (15 bytes) => "value" (10 bytes)
+		// key2 at ts1  (15 bytes) => "value" (10 bytes)
+		// key3 at ts1  (15 bytes) => "value" (10 bytes)
+		// key4 at ts1  (15 bytes) => "value" (10 bytes)
+		// key5 at ts1  (15 bytes) => "value" (10 bytes)
+		// key5 at ts2  (15 bytes) => delete (0 bytes)
+		// key10 at ts1 (15 bytes) => delete (0 bytes)
+		// key12 at ts1 (15 bytes) => "value" (10 bytes)
+		// key13 at ts1 (15 bytes) => "value" (10 bytes)
+		expectedVersionsKeyBytes int64 = 9 * 15
+		expectedVersionsValBytes int64 = 7 * 10
+		// Range Key size: len(scratch + "x") * 2 + timestamp (12)
+		// Range Value size: 0 for deletion
+		// key13, key14 at ts1 (12) => delete (0 bytes)
+		// key14, key15 at ts1 (16) => delete (0 bytes)
+		expectedVersionsRangeKeyBytes int64 = 12 + 16
+		expectedVersionsRangeValBytes int64 = 0
+	)
 
 	// Call Run with dummy functions to get current Info.
 	gcInfo, err := func() (gc.Info, error) {
@@ -630,10 +687,20 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gcInfo.AffectedVersionsKeyBytes != expectedVersionsKeyBytes {
-		t.Errorf("expected total keys size: %d bytes; got %d bytes", expectedVersionsKeyBytes, gcInfo.AffectedVersionsKeyBytes)
+		t.Errorf("expected total keys size: %d bytes; got %d bytes", expectedVersionsKeyBytes,
+			gcInfo.AffectedVersionsKeyBytes)
 	}
 	if gcInfo.AffectedVersionsValBytes != expectedVersionsValBytes {
-		t.Errorf("expected total values size: %d bytes; got %d bytes", expectedVersionsValBytes, gcInfo.AffectedVersionsValBytes)
+		t.Errorf("expected total values size: %d bytes; got %d bytes", expectedVersionsValBytes,
+			gcInfo.AffectedVersionsValBytes)
+	}
+	if gcInfo.AffectedVersionsRangeKeyBytes != expectedVersionsRangeKeyBytes {
+		t.Errorf("expected total range key size: %d bytes; got %d bytes", expectedVersionsRangeKeyBytes,
+			gcInfo.AffectedVersionsRangeKeyBytes)
+	}
+	if gcInfo.AffectedVersionsRangeValBytes != expectedVersionsRangeValBytes {
+		t.Errorf("expected total range value size: %d bytes; got %d bytes", expectedVersionsRangeValBytes,
+			gcInfo.AffectedVersionsRangeValBytes)
 	}
 
 	// Process through a scan queue.
@@ -670,6 +737,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		{key11, ts4},
 		{key11, ts3},
 		{key11, ts1},
+		{key12, ts5},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
 	// However, because the GC processing pushes transactions and
@@ -694,6 +762,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 			}
 			log.VEventf(ctx, 2, "%d: %s", i, kv.Key)
 		}
+		t.Log("success")
 		return nil
 	})
 }

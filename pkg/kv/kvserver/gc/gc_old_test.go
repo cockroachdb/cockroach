@@ -51,7 +51,11 @@ func runGCOld(
 	cleanupTxnIntentsAsyncFn CleanupTxnIntentsAsyncFunc,
 ) (Info, error) {
 
-	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, false /* seekEnd */)
+	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
+		Reverse:  false,
+		IterKind: storage.MVCCKeyAndIntentsIterKind,
+		KeyTypes: storage.IterKeyTypePointsOnly,
+	})
 	defer iter.Close()
 
 	// Compute intent expiration (intent age at which we attempt to resolve).

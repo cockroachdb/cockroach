@@ -490,6 +490,7 @@ func (r *replicaGCer) GC(
 	}
 	req := r.template()
 	req.Keys = keys
+	req.RangeKeys = rangeKeys
 	return r.send(ctx, req)
 }
 
@@ -622,6 +623,7 @@ func (mgcq *mvccGCQueue) process(
 
 func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCNumKeysAffected.Inc(int64(info.NumKeysAffected))
+	metrics.GCNumRangeKeysAffected.Inc(int64(info.NumRangeKeysAffected))
 	metrics.GCIntentsConsidered.Inc(int64(info.IntentsConsidered))
 	metrics.GCIntentTxns.Inc(int64(info.IntentTxns))
 	metrics.GCTransactionSpanScanned.Inc(int64(info.TransactionSpanTotal))

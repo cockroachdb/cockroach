@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -44,6 +45,17 @@ func declareKeysGC(
 			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key}, header.Timestamp)
 		}
 	}
+	// Extend the range key latches by feather to ensure MVCC stats
+	// computations correctly account for adjacent range keys tombstones if they
+	// need to be split.
+	// TODO(oleg): These latches are very broad and will be disruptive to read and
+	// write operations despite only accessing "stale" data. We should think of
+	// better integrating it with latchless GC approach.
+	for _, span := range mergeAdjacentSpans(makeLookupBoundariesForGCRanges(rs.GetStartKey().AsRawKey(),
+		nil, gcr.RangeKeys)) {
+		latchSpans.AddMVCC(spanset.SpanReadWrite, span,
+			header.Timestamp)
+	}
 	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
 	// send an empty request first to bump the thresholds, and then another one
 	// that actually does work but can avoid declaring these keys below.
@@ -52,6 +64,25 @@ func declareKeysGC(
 	}
 	// Needed for Range bounds checks in calls to EvalContext.ContainsKey.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+}
+
+// Create latches and merge adjacent.
+func mergeAdjacentSpans(spans []roachpb.Span) []roachpb.Span {
+	if len(spans) == 0 {
+		return nil
+	}
+	sort.Slice(spans, func(i, j int) bool {
+		return spans[i].Key.Compare(spans[j].Key) < 0
+	})
+	j := 0
+	for i := 1; i < len(spans); i++ {
+		if spans[i].Key.Compare(spans[j].EndKey) < 0 {
+			spans[j].EndKey = spans[i].EndKey
+		} else {
+			j++
+		}
+	}
+	return spans[0 : j+1]
 }
 
 // GC iterates through the list of keys to garbage collect
@@ -85,7 +116,8 @@ func GC(
 	// 2. the read could be served off a follower, which could be applying the
 	//    GC request's effect from the raft log. Latches held on the leaseholder
 	//    would have no impact on a follower read.
-	if !args.Threshold.IsEmpty() && len(args.Keys) != 0 &&
+	if !args.Threshold.IsEmpty() &&
+		(len(args.Keys) != 0 || len(args.RangeKeys) != 0) &&
 		!cArgs.EvalCtx.EvalKnobs().AllowGCWithNewThresholdAndKeys {
 		return result.Result{}, errors.AssertionFailedf(
 			"GC request can set threshold or it can GC keys, but it is unsafe for it to do both")
@@ -119,6 +151,16 @@ func GC(
 		}
 	}
 
+	// Garbage collect range keys. Note that we pass latch range boundaries for
+	// each key as we may need to merge range keys with adjacent ones, but we
+	// are restricted on how far we are allowed to read.
+	desc := cArgs.EvalCtx.Desc()
+	rangeKeys := makeCollectableGCRangesFromGCRequests(desc.StartKey.AsRawKey(),
+		desc.EndKey.AsRawKey(), args.RangeKeys)
+	if err := storage.MVCCGarbageCollectRangeKeys(ctx, readWriter, cArgs.Stats, rangeKeys); err != nil {
+		return result.Result{}, err
+	}
+
 	// Optionally bump the GC threshold timestamp.
 	var res result.Result
 	if !args.Threshold.IsEmpty() {
@@ -146,4 +188,44 @@ func GC(
 	}
 
 	return res, nil
+}
+
+// makeLookupBoundariesForGCRanges creates spans that could be used for latches
+// and iterators when performing range tombstone garbage collection. Each of
+// spans includes additional keys to the left and right of the GD'd range to
+// ensure merging of range tombstones could be performed and at the same time
+// no data is accessed outside of latches.
+func makeLookupBoundariesForGCRanges(
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) []roachpb.Span {
+	spans := make([]roachpb.Span, len(rangeKeys))
+	for i := range rangeKeys {
+		l, r := rangeTombstonePeekBounds(rangeKeys[i].StartKey, rangeKeys[i].EndKey, rangeStart, rangeEnd)
+		spans[i] = roachpb.Span{
+			Key:    l,
+			EndKey: r,
+		}
+	}
+	return spans
+}
+
+// makeCollectableGCRangesFromGCRequests creates GC collectable ranges
+// containing ranges to be removed as well as safe iteration boundaries.
+// See makeLookupBoundariesForGCRanges for why additional boundaries are used.
+func makeCollectableGCRangesFromGCRequests(
+	rangeStart, rangeEnd roachpb.Key, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) []storage.CollectableGCRangeKey {
+	latches := makeLookupBoundariesForGCRanges(rangeStart, rangeEnd, rangeKeys)
+	collectableKeys := make([]storage.CollectableGCRangeKey, len(rangeKeys))
+	for i, rk := range rangeKeys {
+		collectableKeys[i] = storage.CollectableGCRangeKey{
+			MVCCRangeKey: storage.MVCCRangeKey{
+				StartKey:  rk.StartKey,
+				EndKey:    rk.EndKey,
+				Timestamp: rk.Timestamp,
+			},
+			LatchSpan: latches[i],
+		}
+	}
+	return collectableKeys
 }
