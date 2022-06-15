@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -874,3 +875,14 @@ func (p *planner) QueryIteratorEx(
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
 }
+
+// extraTxnStateUnderPlanner is to store extra transaction state info that
+// will be passed to an internal executor when it's used under a planner
+// context. It should not be exported from the sql package.
+type extraTxnStateUnderPlanner struct {
+	txn            *kv.Txn
+	descCollection *descs.Collection
+	txnState       string
+}
+
+var _ sqlutil.ExtraTxnStateUnderPlanner = &extraTxnStateUnderPlanner{}

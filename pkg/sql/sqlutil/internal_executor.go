@@ -118,6 +118,15 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) ([]tree.Datums, error)
 
+	QueryBufferedExWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, colinfo.ResultColumns, error)
+
 	// QueryIterator executes the query, returning an iterator that can be used
 	// to get the results. If the call is successful, the returned iterator
 	// *must* be closed.
@@ -158,6 +167,11 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetExtraTxnState is to set the extra txn state for an internal executor.
+	// It should only be called if the internal executor is used to run sql
+	// sql statements under a planner context.
+	SetExtraTxnState(extraTxnState ExtraTxnStateUnderPlanner)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -191,11 +205,58 @@ type InternalRows interface {
 	Types() colinfo.ResultColumns
 }
 
-// SessionBoundInternalExecutorFactory is a function that produces a "session
+// InternalExecutorProto stores info needed to initialize an
+// internal executor.
+type InternalExecutorProto struct {
+	IeFactory InternalExecutorFactory
+	// SyntheticDescs stores the synthetic descriptors to be injected into
+	// each query/statement's descs.Collection upon initialization.
+	//
+	// Warning: Not safe for concurrent use from multiple goroutines.
+	SyntheticDescs []catalog.Descriptor
+}
+
+// SetSyntheticDescs is to set the synthetic descriptor stored in the internal
+// executor proto.
+func (p *InternalExecutorProto) SetSyntheticDescs(d []catalog.Descriptor) {
+	p.SyntheticDescs = d
+}
+
+// InternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
-type SessionBoundInternalExecutorFactory func(
+type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
+
+// WithTxn is to run SQL statements under the same txn.
+func (p InternalExecutorProto) WithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, sessionData)
+	return ie.WithSyntheticDescriptors(
+		p.SyntheticDescs,
+		func() error {
+			return run(ctx, txn, ie)
+		},
+	)
+}
+
+// WithoutTxn is to run SQL statements without a txn context.
+func (p InternalExecutorProto) WithoutTxn(
+	ctx context.Context,
+	run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := p.IeFactory(ctx, nil)
+	return ie.WithSyntheticDescriptors(
+		p.SyntheticDescs,
+		func() error {
+			return run(ctx, ie)
+		},
+	)
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
@@ -204,3 +265,5 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+type ExtraTxnStateUnderPlanner interface{}
