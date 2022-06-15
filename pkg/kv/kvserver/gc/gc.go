@@ -19,12 +19,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -160,7 +162,7 @@ type Info struct {
 	// Stats about the userspace key-values considered, namely the number of
 	// keys with GC'able data, the number of "old" intents and the number of
 	// associated distinct transactions.
-	NumKeysAffected, IntentsConsidered, IntentTxns int
+	NumKeysAffected, NumRangeKeysAffected, IntentsConsidered, IntentTxns int
 	// TransactionSpanTotal is the total number of entries in the transaction span.
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
@@ -194,6 +196,13 @@ type Info struct {
 	// AffectedVersionsValBytes is the number of (fully encoded) bytes deleted from values in the storage engine.
 	// See AffectedVersionsKeyBytes for caveats.
 	AffectedVersionsValBytes int64
+	// AffectedVersionsRangeKeyBytes is the number of (fully encoded) bytes deleted from range keys.
+	// For this counter, we don't count start and end key unless all versions are deleted, but we
+	// do count timestamp size for each version.
+	AffectedVersionsRangeKeyBytes int64
+	// AffectedVersionsRangeValBytes is the number of (fully encoded) bytes deleted from values that
+	// belong to removed range keys.
+	AffectedVersionsRangeValBytes int64
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
@@ -265,6 +274,10 @@ func Run(
 			maxTxnsPerIntentCleanupBatch:           options.MaxTxnsPerIntentCleanupBatch,
 			intentCleanupBatchTimeout:              options.IntentCleanupBatchTimeout,
 		}, cleanupIntentsFn, &info)
+	if err != nil {
+		return Info{}, err
+	}
+	err = processReplicatedRangeTombstones(ctx, desc, snap, now, newThreshold, gcer, &info)
 	if err != nil {
 		return Info{}, err
 	}
@@ -737,6 +750,132 @@ func processAbortSpan(
 		}
 		return nil
 	})
+}
+
+type rangeKeyBatcher struct {
+	gcer      GCer
+	batchSize int64
+
+	pending     []storage.MVCCRangeKey
+	pendingSize int64
+}
+
+// addAndMaybeFlushRangeFragment will try to add fragment to existing batch
+// and flush it if batch is full.
+// unsafeRangeKeyValues contains all range key values with the same key range
+// that has to be GCd.
+// To ensure the resulting batch is not too large, we need to account for all
+// removed versions. This method will try to include versions from oldest to
+// newest and will stop if we either reach batch size or reach the newest
+// provided version. Only the last version of this iteration will be flushed.
+// If more versions remained after flush, process would be resumed.
+func (b *rangeKeyBatcher) addAndMaybeFlushRangeFragment(
+	ctx context.Context, unsafeRangeKeyValues []storage.MVCCRangeKeyValue,
+) error {
+	maxKey := len(unsafeRangeKeyValues) - 1
+	for i := maxKey; i >= 0; i-- {
+		rk := unsafeRangeKeyValues[i].RangeKey
+		rangeSize := int64(len(rk.StartKey)) + int64(len(rk.EndKey)) + storage.MVCCVersionTimestampSize
+		hasData := len(b.pending) > 0 || i < maxKey
+		if hasData && (b.pendingSize+rangeSize) >= b.batchSize {
+			// If we need to send a batch, add previous key from history that we
+			// already accounted for and flush pending.
+			if i < maxKey {
+				b.addRangeKey(unsafeRangeKeyValues[i+1].RangeKey)
+			}
+			if err := b.flushPendingFragments(ctx); err != nil {
+				return err
+			}
+		}
+		b.pendingSize += rangeSize
+	}
+	b.addRangeKey(unsafeRangeKeyValues[0].RangeKey)
+	return nil
+}
+
+func (b *rangeKeyBatcher) addRangeKey(unsafeRk storage.MVCCRangeKey) {
+	if len(b.pending) == 0 {
+		b.pending = append(b.pending, unsafeRk.Clone())
+		return
+	}
+	lastFragment := b.pending[len(b.pending)-1]
+	// If new fragment is adjacent to previous one and has the same timestamp,
+	// merge fragments.
+	if lastFragment.EndKey.Equal(unsafeRk.StartKey) &&
+		lastFragment.Timestamp.Equal(unsafeRk.Timestamp) {
+		lastFragment.EndKey = unsafeRk.EndKey.Clone()
+		b.pending[len(b.pending)-1] = lastFragment
+	} else {
+		b.pending = append(b.pending, unsafeRk.Clone())
+	}
+}
+
+func (b *rangeKeyBatcher) flushPendingFragments(ctx context.Context) error {
+	if pendingCount := len(b.pending); pendingCount > 0 {
+		toSend := make([]roachpb.GCRequest_GCRangeKey, pendingCount)
+		for i, rk := range b.pending {
+			toSend[i] = roachpb.GCRequest_GCRangeKey{
+				StartKey:  rk.StartKey,
+				EndKey:    rk.EndKey,
+				Timestamp: rk.Timestamp,
+			}
+		}
+		b.pending = b.pending[:0]
+		b.pendingSize = 0
+		return b.gcer.GC(ctx, nil, toSend)
+	}
+	return nil
+}
+
+func processReplicatedRangeTombstones(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	snap storage.Reader,
+	now hlc.Timestamp,
+	gcThreshold hlc.Timestamp,
+	gcer GCer,
+	info *Info,
+) error {
+	iter := rditer.NewReplicaMVCCDataIterator(desc, snap, rditer.ReplicaDataIteratorOptions{
+		Reverse:  false,
+		IterKind: storage.MVCCKeyIterKind,
+		KeyTypes: storage.IterKeyTypeRangesOnly,
+	})
+	defer iter.Close()
+
+	b := rangeKeyBatcher{
+		gcer:      gcer,
+		batchSize: KeyVersionChunkBytes,
+	}
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		rangeKeys := iter.RangeKeys()
+
+		if idx := sort.Search(len(rangeKeys), func(i int) bool {
+			return rangeKeys[i].RangeKey.Timestamp.LessEq(gcThreshold)
+		}); idx < len(rangeKeys) {
+			if err = b.addAndMaybeFlushRangeFragment(ctx, rangeKeys[idx:]); err != nil {
+				return err
+			}
+			info.NumRangeKeysAffected++
+			keyBytes := storage.MVCCVersionTimestampSize * int64(len(rangeKeys)-idx)
+			if idx == 0 {
+				keyBytes += int64(len(rangeKeys[0].RangeKey.StartKey) + len(rangeKeys[0].RangeKey.EndKey))
+			}
+			info.AffectedVersionsRangeKeyBytes += keyBytes
+			for _, v := range rangeKeys[idx:] {
+				info.AffectedVersionsRangeValBytes += int64(len(v.Value))
+			}
+		}
+		iter.Next()
+	}
+	return b.flushPendingFragments(ctx)
 }
 
 // batchingInlineGCer is a helper to paginate the GC of inline (i.e. zero
