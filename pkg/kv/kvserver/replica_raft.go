@@ -1496,6 +1496,10 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(ctx context.Context, messages []r
 	}
 }
 
+var errOverloaded = errors.New("follower is under IO overload; dropping MsgApp")
+
+var toErrEveryN = log.Every(time.Second)
+
 // sendRaftMessageRaftMuLocked sends a Raft message.
 func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Message) {
 	r.mu.RLock()
@@ -1518,6 +1522,10 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 				startKey = r.descRLocked().StartKey
 			}
 		})
+		if storeDesc, ok := r.store.allocator.StorePool.GetStoreDescriptor(toReplica.StoreID); ok && storeDesc.Capacity.L0Sublevels > 20 {
+			// NB: this isn't good enough for prod. If multiple followers are overloaded, we must still send to a quorum.
+			toErr = errOverloaded
+		}
 	}
 	r.mu.RUnlock()
 
@@ -1526,7 +1534,7 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
-	if toErr != nil {
+	if toErr != nil && toErrEveryN.ShouldLog() {
 		log.Warningf(ctx, "failed to look up recipient replica %d in r%d while sending %s: %s",
 			msg.To, r.RangeID, msg.Type, toErr)
 		return
