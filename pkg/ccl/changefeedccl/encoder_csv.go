@@ -21,8 +21,6 @@ import (
 )
 
 type csvEncoder struct {
-	virtualColumnVisibility string
-
 	csvRow []string
 	buf    *bytes.Buffer
 	writer *csv.Writer
@@ -30,12 +28,11 @@ type csvEncoder struct {
 
 var _ Encoder = &csvEncoder{}
 
-func newCSVEncoder(opts map[string]string) *csvEncoder {
+func newCSVEncoder(opts changefeedbase.EncodingOptions) *csvEncoder {
 	newBuf := bytes.NewBuffer([]byte{})
 	newEncoder := &csvEncoder{
-		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
-		buf:                     newBuf,
-		writer:                  csv.NewWriter(newBuf),
+		buf:    newBuf,
+		writer: csv.NewWriter(newBuf),
 	}
 	newEncoder.writer.SkipNewline = true
 	return newEncoder
