@@ -25,13 +25,37 @@ export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export function filterActiveStatements(
   statements: ActiveStatement[],
   filters: ActiveStatementFilters,
+  internalAppNamePrefix: string,
   search?: string,
 ): ActiveStatement[] {
   if (statements == null) return [];
 
-  let filteredStatements = statements.filter(
-    stmt => filters.app === "" || stmt.application === filters.app,
-  );
+  let filteredStatements = statements;
+
+  const isInternal = (statement: ActiveStatement) =>
+    statement.application.startsWith(internalAppNamePrefix);
+  if (filters.app) {
+    filteredStatements = filteredStatements.filter(
+      (statement: ActiveStatement) => {
+        const apps = filters.app.toString().split(",");
+        let showInternal = false;
+        if (apps.includes(internalAppNamePrefix)) {
+          showInternal = true;
+        }
+        if (apps.includes("(unset)")) {
+          apps.push("");
+        }
+        return (
+          (showInternal && isInternal(statement)) ||
+          apps.includes(statement.application)
+        );
+      },
+    );
+  } else {
+    filteredStatements = filteredStatements.filter(
+      statement => !isInternal(statement),
+    );
+  }
 
   if (search) {
     filteredStatements = filteredStatements.filter(stmt =>
@@ -82,27 +106,51 @@ export function getActiveStatementsFromSessions(
 
 export function getAppsFromActiveStatements(
   statements: ActiveStatement[] | null,
+  internalAppNamePrefix: string,
 ): string[] {
   if (statements == null) return [];
-  return Array.from(
-    statements.reduce(
-      (apps, stmt) => apps.add(stmt.application),
-      new Set<string>(),
-    ),
+
+  const uniqueAppNames = new Set(
+    statements.map(s => {
+      if (s.application.startsWith(internalAppNamePrefix)) {
+        return internalAppNamePrefix;
+      }
+      return s.application ? s.application : "(unset)";
+    }),
   );
+
+  return Array.from(uniqueAppNames).sort();
 }
 
 export function filterActiveTransactions(
   txns: ActiveTransaction[] | null,
   filters: ActiveTransactionFilters,
+  internalAppNamePrefix: string,
   search?: string,
 ): ActiveTransaction[] {
   if (txns == null) return [];
 
   let filteredTxns = txns;
 
+  const isInternal = (txn: ActiveTransaction) =>
+    txn.application.startsWith(internalAppNamePrefix);
   if (filters.app) {
-    filteredTxns = filteredTxns.filter(txn => txn.application === filters.app);
+    filteredTxns = filteredTxns.filter((txn: ActiveTransaction) => {
+      const apps = filters.app.toString().split(",");
+      let showInternal = false;
+      if (apps.includes(internalAppNamePrefix)) {
+        showInternal = true;
+      }
+      if (apps.includes("(unset)")) {
+        apps.push("");
+      }
+
+      return (
+        (showInternal && isInternal(txn)) || apps.includes(txn.application)
+      );
+    });
+  } else {
+    filteredTxns = filteredTxns.filter(txn => !isInternal(txn));
   }
 
   if (search) {
@@ -116,12 +164,20 @@ export function filterActiveTransactions(
 
 export function getAppsFromActiveTransactions(
   txns: ActiveTransaction[],
+  internalAppNamePrefix: string,
 ): string[] {
   if (txns == null) return [];
 
-  return Array.from(
-    txns.reduce((apps, txn) => apps.add(txn.application), new Set<string>()),
+  const uniqueAppNames = new Set(
+    txns.map(t => {
+      if (t.application.startsWith(internalAppNamePrefix)) {
+        return internalAppNamePrefix;
+      }
+      return t.application ? t.application : "(unset)";
+    }),
   );
+
+  return Array.from(uniqueAppNames).sort();
 }
 
 export function getActiveTransactionsFromSessions(

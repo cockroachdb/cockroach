@@ -21,6 +21,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { SessionsResponseMessage } from "src/util/api";
 import { refreshSessions } from "src/redux/apiReducers";
+import { selectAppName } from "src/views/statements/activeStatementsSelectors";
 
 const selectActiveTransactions = createSelector(
   (state: AdminUIState) => state.cachedData.sessions,
@@ -62,6 +63,7 @@ export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   sessionsError: state.cachedData?.sessions.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  internalAppNamePrefix: selectAppName(state),
 });
 
 export const activeTransactionsPageActions = {
