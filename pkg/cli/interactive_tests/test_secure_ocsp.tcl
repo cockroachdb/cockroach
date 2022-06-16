@@ -13,12 +13,6 @@ proc start_secure_server {argv certs_dir extra} {
     report "END START SECURE SERVER"
 }
 
-proc stop_secure_server {argv certs_dir} {
-    report "BEGIN STOP SECURE SERVER"
-    system "$argv quit --certs-dir=$certs_dir"
-    report "END STOP SECURE SERVER"
-}
-
 proc expect_exit_status {expected} {
     set status [lindex [wait] 3]
     if {$status != $expected} {
@@ -131,4 +125,4 @@ system "kill -CONT $ocsp_pid"
 system "kill $ocsp_pid"
 wait
 
-stop_secure_server $argv $certs_dir
+stop_server $argv

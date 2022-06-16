@@ -17,12 +17,12 @@ eexpect ":/# "
 # Check what happens when attempting to connect and the server does not exist.
 
 start_test "Connecting a RPC client to a non-started server"
-send "$argv quit\r"
+send "$argv node drain 1\r"
 eexpect "ERROR: cannot load certificates.\r\nCheck your certificate settings"
 eexpect "or use --insecure"
 eexpect ":/# "
 
-send "$argv quit --certs-dir=$certs_dir\r"
+send "$argv node drain 1 --certs-dir=$certs_dir\r"
 eexpect "ERROR: cannot dial server.\r\nIs the server running?"
 eexpect "connection refused"
 eexpect ":/# "
@@ -53,7 +53,7 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Connecting a secure RPC client to an insecure server"
-send "$argv quit --certs-dir=$certs_dir\r"
+send "$argv node drain 1 --certs-dir=$certs_dir\r"
 eexpect "ERROR: cannot establish secure connection to insecure server."
 eexpect "Maybe use --insecure?"
 eexpect ":/# "
@@ -87,9 +87,9 @@ start_test "Connecting an insecure RPC client to a non-CockroachDB server"
 # In one shell, start a bogus server
 send "python2 $fakeserv\r"
 eexpect "ready"
-# In the other shell, try to run cockroach quit
+# In the other shell, try to run cockroach node drain
 set spawn_id $client_spawn_id
-send "$argv quit --insecure\r"
+send "$argv node drain 1 --insecure\r"
 eexpect "insecure\r\n"
 # Wait to see an HTTP/2.0 header on the fake server, then stop the server.
 set spawn_id $shell_spawn_id
@@ -97,7 +97,7 @@ eexpect "connected"
 eexpect "PRI * HTTP/2.0"
 interrupt
 eexpect ":/# "
-# Check that cockroach quit becomes suitably confused.
+# Check that cockroach node drain becomes suitably confused.
 set spawn_id $client_spawn_id
 eexpect "ERROR: server closed the connection."
 eexpect "Is this a CockroachDB node?"

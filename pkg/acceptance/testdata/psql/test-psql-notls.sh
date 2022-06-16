@@ -18,7 +18,7 @@ set -x
 
 # Start a server in secure mode and allow non-TLS SQL clients.
 "$crdb" start-single-node --background \
-        --certs-dir="$CERTS_DIR" --socket-dir=/tmp \
+        --certs-dir="$CERTS_DIR" --socket-dir=/tmp --pid-file=/tmp/server_pid \
         --accept-sql-without-tls \
         --listen-addr=:12345
 
@@ -35,4 +35,4 @@ env PGPASSWORD=pass psql 'postgres://foo@localhost:12345?sslmode=disable' -c "se
 
 set +x
 # Done.
-"$crdb" quit --certs-dir="$CERTS_DIR" -p 12345
+kill -9 `cat /tmp/server_pid`
