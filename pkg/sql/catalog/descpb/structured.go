@@ -250,6 +250,11 @@ func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
 }
 
+// IsRefreshViewRequired implements the TableDescriptor interface.
+func (desc *TableDescriptor) IsRefreshViewRequired() bool {
+	return desc.IsMaterializedView && desc.RefreshViewRequired
+}
+
 // IsPhysicalTable implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsPhysicalTable() bool {
 	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable()) || desc.MaterializedView()
