@@ -3,9 +3,9 @@
 
 init
 rate:  1
-burst: 2
-read:  { base: 1, perbyte: 0.1 }
-write: { base: 1, perbyte: 0.1 }
+burst: 3
+read:  { perbatch: 1, perrequest: 1, perbyte: 0.1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 0.1 }
 ----
 00:00:00.000
 
@@ -16,11 +16,11 @@ get_tenants
 ----
 [2#1]
 
-# Launch a write request for tenant 2 that needs 3 units, more than the burst
+# Launch a write request for tenant 2 that needs 4 units, more than the burst
 # limit. This will not block but will put the limiter into debt.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 20 }
+- { id: g1, tenant: 2, writerequests: 1, writebytes: 20 }
 ----
 [g1@2]
 
@@ -29,31 +29,31 @@ await
 ----
 []
 
-# Launch another request which will block until there is 1 unit available.
-# This will be 2s because we're in debt 1 and the rate is 1/s.
+# Launch another request which will block until there are 2 units available.
+# This will be 3s because we're in debt 1 and the rate is 1/s.
 
 launch
-- { id: g2, tenant: 2, iswrite: true, writebytes: 0 }
+- { id: g2, tenant: 2, writerequests: 1, writebytes: 0 }
 ----
 [g2@2]
 
-# Observe that the request indeed sees two seconds of waiting.
+# Observe that the request indeed sees 3 seconds of waiting.
 
 timers
 ----
-00:00:02.000
+00:00:03.000
 
 # Advance time to unblock the above request.
 
 advance
-1s999ms
+2s999ms
 ----
-00:00:01.999
+00:00:02.999
 
 advance
 1ms
 ----
-00:00:02.000
+00:00:03.000
 
 # Ensure that the request is indeed unblocked.
 
@@ -63,11 +63,11 @@ await
 []
 
 # Test that when consuming more than burst that we wait for the token bucket to
-# be full. At time 4s the token bucket will be full. When requesting 4, which
+# be full. At time 5s the token bucket will be full. When requesting 5, which
 # is above the burst of 2, we'll need to wait for the bucket to be full.
 
 launch
-- { id: g3,  tenant: 2, iswrite: true, writebytes: 30 }
+- { id: g3,  tenant: 2, writerequests: 1, writebytes: 30 }
 ----
 [g3@2]
 
@@ -76,12 +76,12 @@ launch
 
 timers
 ----
-00:00:04.000
+00:00:06.000
 
 advance
-2s
+3s
 ----
-00:00:04.000
+00:00:06.000
 
 await
 - g3

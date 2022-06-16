@@ -1,6 +1,7 @@
 # Tests in this file verify the enacting of the fallback rate when token bucket
 # requests start erroring out while we are being throttled.
 
+# Wait for initial 10K RUs to be granted.
 wait-for-event
 token-bucket-response
 ----
@@ -10,8 +11,8 @@ throttle: 100
 fallback_rate: 1000
 ----
 
-# Large request that requires more than the initial RUs.
-write bytes=20000000 label=w2
+# Issue an 8K write that triggers fetch of more RU and also sets fallback rate.
+write bytes=8189952
 ----
 
 wait-for-event
@@ -22,53 +23,67 @@ wait-for-event
 token-bucket-response
 ----
 
-# We were granted 10s worth of tokens at 100 RU/s.
-timers
+# Response sets up throttled rate of 100 RU/s.
+token-bucket
 ----
-00:00:09.000
-00:04:46.544
+2000.00 RU filling @ 100.00 RU/s
 
+# Force error on next fetch.
 configure
 error: true
+----
+
+# Advance time to 90% of the trickle rate duration (10s), which will trigger a
+# low RU notification and token bucket request (which will fail).
+advance
+9s
+----
+00:00:09.000
+
+wait-for-event
+low-ru
+----
+
+# Expect failure of the token bucket request.
+wait-for-event
+token-bucket-response-error
+----
+
+# The fallback rate can take up to two ticks to be applied.
+advance wait=true
+2s
+----
+00:00:11.000
+
+token-bucket
+----
+3100.00 RU filling @ 1000.00 RU/s
+
+# Advance 1 second and ensure bucket is replenished at fallback rate.
+advance wait=true
+1s
+----
+00:00:12.000
+
+token-bucket
+----
+4100.00 RU filling @ 1000.00 RU/s
+
+wait-for-event
+token-bucket-response-error
+----
+
+# Clear token bucket errors and ensure we eventually get a successful response.
+configure
+throttle: 100
+fallback_rate: 1000
 ----
 
 advance
 10s
 ----
-00:00:10.000
+00:00:22.000
 
-# Wait until we process the "low RU" notification (where we set the fallback rate
-# start time).
 wait-for-event
-low-ru
-----
-
-timers
-----
-00:04:46.544
-
-advance
-2s
-----
-00:00:12.000
-
-# We would set up the fallback rate now, which should allow the request to go
-# through much sooner than 4 minutes.
-wait-for-event
-tick
-----
-
-timers
-----
-00:00:39.454
-
-not-completed label=w2
-----
-
-advance
-30s
-----
-00:00:42.000
-
-await label=w2
+token-bucket-response
 ----

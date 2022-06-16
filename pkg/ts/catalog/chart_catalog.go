@@ -946,6 +946,18 @@ var charts = []sectionDescription{
 				Metrics:     []string{"kv.tenant_rate_limit.num_tenants"},
 			},
 			{
+				Title:       "Read Batches Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.read_batches_admitted"},
+			},
+			{
+				Title:       "Write Batches Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.write_batches_admitted"},
+			},
+			{
 				Title:       "Read Requests Admitted by Rate Limiter",
 				Downsampler: DescribeAggregator_MAX,
 				Percentiles: false,
@@ -3273,6 +3285,13 @@ var charts = []sectionDescription{
 		Organization: [][]string{{Tenants, "Consumption"}},
 		Charts: []chartDescription{
 			{
+				Title: "Total number of KV read/write batches",
+				Metrics: []string{
+					"tenant.consumption.write_batches",
+					"tenant.consumption.read_batches",
+				},
+			},
+			{
 				Title: "Total number of KV read/write requests",
 				Metrics: []string{
 					"tenant.consumption.write_requests",
@@ -3287,7 +3306,7 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Total number of bytes written to KV",
+				Title: "Total amount of CPU used by SQL pods",
 				Metrics: []string{
 					"tenant.consumption.sql_pods_cpu_seconds",
 				},

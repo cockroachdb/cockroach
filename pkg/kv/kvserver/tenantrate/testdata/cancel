@@ -3,8 +3,8 @@
 init
 rate:  2
 burst: 4
-read:  { base: 1, perbyte: 0.1 }
-write: { base: 1, perbyte: 0.1 }
+read:  { perbatch: 1, perrequest: 1, perbyte: 0.1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 0.1 }
 ----
 00:00:00.000
 
@@ -13,10 +13,10 @@ get_tenants
 ----
 [2#1]
 
-# Launch a request to consume one unit.
+# Launch a request to consume two units.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 0 }
+- { id: g1, tenant: 2, writerequests: 1, writebytes: 0 }
 ----
 [g1@2]
 
@@ -28,7 +28,7 @@ await
 # Launch a request requiring more quota than exists.
 
 launch
-- { id: g2, tenant: 2, iswrite: true, writebytes: 100 }
+- { id: g2, tenant: 2, writerequests: 1, writebytes: 100 }
 ----
 [g2@2]
 
@@ -36,12 +36,12 @@ launch
 
 timers
 ----
-00:00:00.500
+00:00:01.000
 
 # Launch another request which could be fulfilled by the existing quota.
 
 launch
-- { id: g3, tenant: 2, iswrite: true, writebytes: 0 }
+- { id: g3, tenant: 2, writerequests: 1, writebytes: 0 }
 ----
 [g2@2, g3@2]
 

@@ -27,8 +27,10 @@ import (
 type Metrics struct {
 	TotalRU                     *aggmetric.AggGaugeFloat64
 	TotalKVRU                   *aggmetric.AggGaugeFloat64
+	TotalReadBatches            *aggmetric.AggGauge
 	TotalReadRequests           *aggmetric.AggGauge
 	TotalReadBytes              *aggmetric.AggGauge
+	TotalWriteBatches           *aggmetric.AggGauge
 	TotalWriteRequests          *aggmetric.AggGauge
 	TotalWriteBytes             *aggmetric.AggGauge
 	TotalSQLPodsCPUSeconds      *aggmetric.AggGaugeFloat64
@@ -63,6 +65,12 @@ var (
 		Measurement: "Request Units",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTotalReadBatches = metric.Metadata{
+		Name:        "tenant.consumption.read_batches",
+		Help:        "Total number of KV read batches",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTotalReadRequests = metric.Metadata{
 		Name:        "tenant.consumption.read_requests",
 		Help:        "Total number of KV read requests",
@@ -73,6 +81,12 @@ var (
 		Name:        "tenant.consumption.read_bytes",
 		Help:        "Total number of bytes read from KV",
 		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalWriteBatches = metric.Metadata{
+		Name:        "tenant.consumption.write_batches",
+		Help:        "Total number of KV write batches",
+		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaTotalWriteRequests = metric.Metadata{
@@ -89,7 +103,7 @@ var (
 	}
 	metaTotalSQLPodsCPUSeconds = metric.Metadata{
 		Name:        "tenant.consumption.sql_pods_cpu_seconds",
-		Help:        "Total number of bytes written to KV",
+		Help:        "Total amount of CPU used by SQL pods",
 		Measurement: "CPU Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
@@ -118,8 +132,10 @@ func (m *Metrics) init() {
 	*m = Metrics{
 		TotalRU:                     b.GaugeFloat64(metaTotalRU),
 		TotalKVRU:                   b.GaugeFloat64(metaTotalKVRU),
+		TotalReadBatches:            b.Gauge(metaTotalReadBatches),
 		TotalReadRequests:           b.Gauge(metaTotalReadRequests),
 		TotalReadBytes:              b.Gauge(metaTotalReadBytes),
+		TotalWriteBatches:           b.Gauge(metaTotalWriteBatches),
 		TotalWriteRequests:          b.Gauge(metaTotalWriteRequests),
 		TotalWriteBytes:             b.Gauge(metaTotalWriteBytes),
 		TotalSQLPodsCPUSeconds:      b.GaugeFloat64(metaTotalSQLPodsCPUSeconds),
@@ -134,8 +150,10 @@ func (m *Metrics) init() {
 type tenantMetrics struct {
 	totalRU                     *aggmetric.GaugeFloat64
 	totalKVRU                   *aggmetric.GaugeFloat64
+	totalReadBatches            *aggmetric.Gauge
 	totalReadRequests           *aggmetric.Gauge
 	totalReadBytes              *aggmetric.Gauge
+	totalWriteBatches           *aggmetric.Gauge
 	totalWriteRequests          *aggmetric.Gauge
 	totalWriteBytes             *aggmetric.Gauge
 	totalSQLPodsCPUSeconds      *aggmetric.GaugeFloat64
@@ -158,8 +176,10 @@ func (m *Metrics) getTenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 		tm = tenantMetrics{
 			totalRU:                     m.TotalRU.AddChild(tid),
 			totalKVRU:                   m.TotalKVRU.AddChild(tid),
+			totalReadBatches:            m.TotalReadBatches.AddChild(tid),
 			totalReadRequests:           m.TotalReadRequests.AddChild(tid),
 			totalReadBytes:              m.TotalReadBytes.AddChild(tid),
+			totalWriteBatches:           m.TotalWriteBatches.AddChild(tid),
 			totalWriteRequests:          m.TotalWriteRequests.AddChild(tid),
 			totalWriteBytes:             m.TotalWriteBytes.AddChild(tid),
 			totalSQLPodsCPUSeconds:      m.TotalSQLPodsCPUSeconds.AddChild(tid),

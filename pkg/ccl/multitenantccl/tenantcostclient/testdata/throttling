@@ -1,103 +1,105 @@
-# By default, the test provider grants all RUs immediately. Verify that
-# requests never block.
+# By default, the test provider grants all RUs immediately. Test cases where it
+# instead throttles usage to a limited rate.
 
+# Wait for initial 10K RUs to be granted.
 wait-for-event
 token-bucket-response
 ----
 
-read bytes=102400
-----
-
-advance
-1s
-----
-00:00:01.000
-
-write bytes=128
-----
-
-advance
-1s
-----
-00:00:02.000
-
-write bytes=128
-----
-
-write bytes=128
-----
-
-# Set up throttling at 1000 RU/s.
-configure 
+# Set up throttling at 1K RU/s.
+configure
 throttle: 1000
 ----
 
-# Fire off some writes that need significantly more than the 10000 initial RUs.
-write bytes=10000000 label=w1
+# Issue 8K RU write to consume all tokens in the bucket and create 2K debt.
+write bytes=8189952
 ----
 
 wait-for-event
 token-bucket-response
 ----
 
-timers
+token-bucket
 ----
-00:00:11.000
-00:00:11.359
+2000.00 RU filling @ 1000.00 RU/s
 
-advance
-1s
-----
-00:00:03.000
-
-not-completed label=w1
-----
-
-write bytes=20000000 label=w2
-----
-
-# Wait until we count the request's RUs. Otherwise, we may request too few RUs
-# and mess up the timings.
-wait-for-event
-waiting-ru-accounted
-----
-
-# Advance time enough for w1 to complete.
-advance
-10s
-----
-00:00:13.000
-
-wait-for-event
-token-bucket-response
+# Issue 4K RU write that should block as long as it takes to accumulate 2K RUs
+# with a 1K fill rate.
+write bytes=4093952 label=w1
 ----
 
 timers
 ----
-00:00:22.000
-00:00:50.013
+00:00:02.000
+00:00:09.000
 
-advance
-20s
+advance wait=true
+2s
 ----
-00:00:33.000
+00:00:02.000
 
 await label=w1
 ----
 
+token-bucket
+----
+0.00 RU filling @ 1000.00 RU/s
+
+# Create 20K debt in bucket.
+pgwire-egress
+22528000
+----
+
+advance wait=true
+1s
+----
+00:00:03.000
+
+advance wait=true
+1s
+----
+00:00:04.000
+
+token-bucket
+----
+-19000.00 RU filling @ 1000.00 RU/s (1000.00 waiting debt @ 500.00 RU/s)
+
+# The debt in the token bucket is greater than what one trickle duration can
+# cover. Ensure that another write blocks for entire trickle duration, plus
+# another fetch from the server token bucket.
+write bytes=1024 label=w2
+----
+
+# Wait for 5 more seconds until 90% of the trickle duration is complete and a
+# token bucket request is issued.
+advance
+5s
+----
+00:00:09.000
+
+wait-for-event
+token-bucket-response
+----
+
+# Ensure that fill rate has been updated to include RU leftover from previous
+# trickle, as well as the RU from the new trickle.
+token-bucket
+----
+-15000.00 RU filling @ 1100.00 RU/s
+
 timers
 ----
-00:00:42.000
-00:00:50.013
+00:00:18.000
+00:00:22.636
 
-not-completed label=w2
-----
-
-# Advance time enough for w2 to complete.
 advance
-40s
+15s
 ----
-00:01:13.000
+00:00:24.000
+
+wait-for-event
+token-bucket-response
+----
 
 await label=w2
 ----

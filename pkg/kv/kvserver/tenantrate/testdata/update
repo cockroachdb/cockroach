@@ -3,8 +3,8 @@
 init
 rate:  2
 burst: 4
-read:  { base: 1, perbyte: 0.1 }
-write: { base: 1, perbyte: 0.1 }
+read:  { perbatch: 1, perrequest: 1, perbyte: 0.1 }
+write: { perbatch: 1, perrequest: 1, perbyte: 0.1 }
 ----
 00:00:00.000
 
@@ -16,7 +16,7 @@ get_tenants
 # Launch a request that puts the limiter in debt by 2.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 50 }
+- { id: g1, tenant: 2, writerequests: 2, writebytes: 30 }
 ----
 [g1@2]
 
@@ -29,7 +29,7 @@ await
 # with the current debt.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 30 }
+- { id: g1, tenant: 2, writerequests: 1, writebytes: 20 }
 ----
 [g1@2]
 
