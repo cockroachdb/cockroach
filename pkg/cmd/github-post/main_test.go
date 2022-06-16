@@ -47,7 +47,7 @@ func TestListFailures(t *testing.T) {
 				testName:   "TestStopperWithCancelConcurrent",
 				title:      "util/stop: TestStopperWithCancelConcurrent failed",
 				message:    "this is just a testing issue",
-				mention:    []string{"@cockroachdb/server"},
+				mention:    []string{"@cockroachdb/kv"},
 				hasProject: true,
 			}},
 			formatter: defaultFormatter,
