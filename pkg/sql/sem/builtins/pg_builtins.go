@@ -540,10 +540,14 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(-1), nil
+			Fn: func(ctx *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				pid := ctx.QueryCancelKey.GetPGBackendPID()
+				return tree.NewDInt(tree.DInt(pid)), nil
 			},
-			Info:       notUsableInfo,
+			Info: "Returns a numerical ID attached to this session. This ID is " +
+				"part of the query cancellation key used by the wire protocol. This " +
+				"function was only added for compatibility, and unlike in Postgres, the" +
+				"returned value does not correspond to a real process ID.",
 			Volatility: volatility.Stable,
 		},
 	),

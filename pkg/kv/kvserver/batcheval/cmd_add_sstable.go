@@ -428,32 +428,21 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 	defer iter.Close()
 
 	// Check SST KV pairs.
-	iter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
-	for {
-		ok, err := iter.Valid()
-		if err != nil {
+	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
 			return err
-		}
-		if !ok {
+		} else if !ok {
 			break
 		}
 
-		key, valueRaw := iter.UnsafeKey(), iter.UnsafeValue()
-		value, err := storage.DecodeMVCCValue(valueRaw)
-		if err != nil {
-			return err
-		}
+		key := iter.UnsafeKey()
 		if key.Timestamp.IsEmpty() {
 			return errors.AssertionFailedf("SST contains inline value or intent for key %s", key)
-		}
-		if value.IsTombstone() {
-			return errors.AssertionFailedf("SST contains tombstone for key %s", key)
 		}
 		if sstTimestamp.IsSet() && key.Timestamp != sstTimestamp {
 			return errors.AssertionFailedf("SST has unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, sstTimestamp, key.Key)
 		}
-		iter.Next()
 	}
 
 	// Compare statistics with those passed by client. We calculate them at the

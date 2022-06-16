@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -78,9 +79,42 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 	if backendKeyData == nil {
 		return nil, errors.Errorf("did not receive BackendKeyData")
 	}
+	if err := checkPGBackendPID(p, backendKeyData); err != nil {
+		return nil, err
+	}
+
 	p.isCockroachDB = foundCrdb
 	success = err == nil
 	return p, err
+}
+
+func checkPGBackendPID(p *PGTest, backendKeyData *pgproto3.BackendKeyData) error {
+	if err := p.fe.Send(&pgproto3.Query{
+		String: "SELECT pg_backend_pid();",
+	}); err != nil {
+		return errors.Wrap(err, "fetching pg_backend_pid")
+	}
+	msgs, err := p.Until(false /* keepErrMsg */, &pgproto3.ReadyForQuery{})
+	if err != nil {
+		return errors.Wrap(err, "fetching pg_backend_pid")
+	}
+	matched := false
+	for _, msg := range msgs {
+		if d, ok := msg.(*pgproto3.DataRow); ok {
+			pid, err := strconv.Atoi(string(d.Values[0]))
+			if err != nil {
+				return errors.Wrap(err, "parsing pg_backend_pid")
+			}
+			if uint32(pid) != backendKeyData.ProcessID {
+				return errors.Errorf("wrong pg_backend_pid; wanted %d, got %d", backendKeyData.ProcessID, pid)
+			}
+			matched = true
+		}
+	}
+	if !matched {
+		return errors.Errorf("could not retrieve pg_backend_pid")
+	}
+	return nil
 }
 
 // Close sends a Terminate message and closes the connection.

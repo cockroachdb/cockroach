@@ -1688,8 +1688,13 @@ message AdminVerifyProtectedTimestampResponse {
 // AddSSTableRequest contains arguments to the AddSSTable method, which links an
 // SST file into the Pebble log-structured merge-tree. The SST must only contain
 // committed versioned values with non-zero MVCC timestamps (no intents or
-// inline values) and no tombstones. It cannot be used in a transaction, cannot
-// be split across ranges, and must be alone in a batch.
+// inline values). It cannot be used in a transaction, cannot be split across
+// ranges, and must be alone in a batch.
+//
+// In 22.1, AddSSTable does not support MVCC point tombstones in SSTs, and may
+// return an error when given these. 22.2 does allow this, but check the
+// AddSSTableTombstones version gate first to make sure there are no 22.1 nodes
+// left in the cluster.
 //
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
