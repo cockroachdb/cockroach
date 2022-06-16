@@ -141,6 +141,11 @@ func TestWatchPods(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Trigger a deletion event, which will be missed by the pod watcher.
+	require.True(t, tds.RemovePod(tenantID, runningPod.Addr))
+
+	// Start the directory server again.
 	require.NoError(t, tds.Start(ctx))
 	testutils.SucceedsSoon(t, func() error {
 		if tds.WatchListenersCount() == 0 {
@@ -148,6 +153,20 @@ func TestWatchPods(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Directory cache should still have the DRAINING pod.
+	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
+	require.NoError(t, err)
+	require.Len(t, pods, 1)
+	require.Equal(t, pod, pods[0])
+
+	// Now attempt to perform a resumption. We get an error here, which shows
+	// that we attempted to call EnsurePod in the test directory server because
+	// the cache has no running pods. In the actual directory server, this
+	// should put the draining pod back to running.
+	pods, err = dir.LookupTenantPods(ctx, tenantID, "my-tenant")
+	require.Regexp(t, "tenant has no pods", err)
+	require.Empty(t, pods)
 
 	// Put the same pod back to running.
 	require.True(t, tds.AddPod(tenantID, runningPod))
