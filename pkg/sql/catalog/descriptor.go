@@ -717,6 +717,9 @@ type TableDescriptor interface {
 	// validated and swap operations are complete (to avoid having two constraints
 	// with the same name).
 	GetIndexNameByID(indexID descpb.IndexID) (name string, err error)
+	// IsRefreshViewRequired indicates if a REFRESH VIEW operation needs to be called
+	// on a materialized view.
+	IsRefreshViewRequired() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

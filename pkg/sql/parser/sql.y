@@ -8344,7 +8344,9 @@ role_or_group_or_user:
 
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
-// %Text: CREATE [TEMPORARY | TEMP] [MATERIALIZED] VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] AS <source>
+// %Text:
+// CREATE [TEMPORARY | TEMP] VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] AS <source>
+// CREATE [TEMPORARY | TEMP] MATERIALIZED VIEW [IF NOT EXISTS] <viewname> [( <colnames...> )] AS <source> [WITH [NO] DATA]
 // %SeeAlso: CREATE TABLE, SHOW CREATE, WEBDOCS/create-view.html
 create_view_stmt:
   CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
@@ -8393,6 +8395,7 @@ create_view_stmt:
       ColumnNames: $5.nameList(),
       AsSource: $7.slct(),
       Materialized: true,
+      WithData: $8.bool(),
     }
   }
 | CREATE MATERIALIZED VIEW IF NOT EXISTS view_name opt_column_list AS select_stmt opt_with_data
@@ -8404,6 +8407,7 @@ create_view_stmt:
       AsSource: $10.slct(),
       Materialized: true,
       IfNotExists: true,
+      WithData: $11.bool(),
     }
   }
 | CREATE opt_temp opt_view_recursive VIEW error // SHOW HELP: CREATE VIEW
@@ -8411,7 +8415,7 @@ create_view_stmt:
 opt_with_data:
   WITH NO DATA error
   {
-    return unimplementedWithIssue(sqllex, 74083)
+    $$.val = false
   }
 | WITH DATA
   {

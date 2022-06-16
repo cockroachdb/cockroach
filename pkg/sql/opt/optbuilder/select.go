@@ -109,7 +109,6 @@ func (b *Builder) buildDataSource(
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
-
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
@@ -259,7 +258,6 @@ func (b *Builder) buildView(
 				"failed to parse underlying query from view %q", view.Name())
 			panic(wrapped)
 		}
-
 		sel, ok = stmt.AST.(*tree.Select)
 		if !ok {
 			panic(errors.AssertionFailedf("expected SELECT statement"))
@@ -491,6 +489,12 @@ func (b *Builder) buildScan(
 		}
 	}
 
+	if refreshRequired := tab.IsRefreshViewRequired(); refreshRequired {
+		err := errors.WithHint(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "materialized view %q has not been populated", tab.Name()),
+			"use the REFRESH MATERIALIZED VIEW command.")
+		panic(err)
+	}
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
 			panic(pgerror.Newf(pgcode.Syntax,
