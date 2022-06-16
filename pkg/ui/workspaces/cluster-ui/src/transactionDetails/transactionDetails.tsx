@@ -60,11 +60,14 @@ import { StatementsRequest } from "../api";
 import {
   TimeScale,
   TimeScaleDropdown,
+  timeScaleToString,
   toDateRange,
 } from "../timeScaleDropdown";
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -218,6 +221,7 @@ export class TransactionDetails extends React.Component<
     const { latestTransactionText } = this.state;
     const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;
+    const period = timeScaleToString(this.props.timeScale);
 
     return (
       <div>
@@ -242,6 +246,12 @@ export class TransactionDetails extends React.Component<
             />
           </PageConfigItem>
         </PageConfig>
+        <p
+          className={timeScaleStylesCx("time-label", "label-no-margin-bottom")}
+        >
+          Showing aggregated stats from{" "}
+          <span className={timeScaleStylesCx("bold")}>{period}</span>
+        </p>
         <Loading
           error={error}
           page={"transaction details"}

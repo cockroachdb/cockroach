@@ -16,7 +16,6 @@ import { ArrowLeft } from "@cockroachlabs/icons";
 import { Location } from "history";
 import _ from "lodash";
 import Long from "long";
-import { format as d3Format } from "d3-format";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
@@ -26,12 +25,7 @@ import { AxisUnits } from "../graphs";
 import { AlignedData, Options } from "uplot";
 
 import {
-  NumericStat,
   intersperse,
-  Bytes,
-  Duration,
-  FixLong,
-  stdDev,
   unique,
   queryByName,
   appAttr,
@@ -42,13 +36,11 @@ import { Loading } from "src/loading";
 import { Button } from "src/button";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SortSetting } from "src/sortedtable";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import { PlanDetails } from "./planDetails";
 import { SummaryCard } from "src/summaryCard";
-import { latencyBreakdown, genericBarChart } from "src/barCharts";
 import { DiagnosticsView } from "./diagnostics/diagnosticsView";
-import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
 import styles from "./statementDetails.module.scss";
 import { commonStyles } from "src/common";
 import { NodeSummaryStats } from "../nodes";
@@ -58,6 +50,7 @@ import { StatementDetailsRequest } from "src/api/statementsApi";
 import {
   TimeScale,
   TimeScaleDropdown,
+  timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
 import SQLActivityError from "../sqlActivity/errorComponent";
@@ -91,25 +84,6 @@ export type StatementDetailsProps = StatementDetailsOwnProps &
 export interface StatementDetailsState {
   sortSetting: SortSetting;
   currentTab?: string;
-}
-
-interface NumericStatRow {
-  name: string;
-  value: NumericStat;
-  bar?: () => ReactNode;
-  summary?: boolean;
-  // You can override the table's formatter on a per-row basis with this format
-  // method.
-  format?: (v: number) => string;
-}
-
-interface NumericStatTableProps {
-  title?: string;
-  description?: string;
-  measure: string;
-  rows: NumericStatRow[];
-  count: number;
-  format?: (v: number) => string;
 }
 
 export type NodesSummary = {
@@ -170,8 +144,8 @@ export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
   StatementDetailsStateProps;
 
 const cx = classNames.bind(styles);
-const sortableTableCx = classNames.bind(sortedTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
+const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 function getStatementDetailsRequest(
   timeScale: TimeScale,
@@ -191,7 +165,6 @@ function AppLink(props: { app: string }) {
   if (!props.app) {
     return <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>;
   }
-
   const searchParams = new URLSearchParams({ [appAttr]: props.app });
 
   return (
@@ -220,87 +193,6 @@ function renderTransactionType(implicitTxn: boolean) {
     return "Implicit";
   }
   return "Explicit";
-}
-
-class NumericStatTable extends React.Component<NumericStatTableProps> {
-  static defaultProps = {
-    format: (v: number) => `${v}`,
-  };
-
-  render() {
-    const { rows } = this.props;
-    return (
-      <table
-        className={classNames(
-          sortableTableCx("sort-table"),
-          cx("statements-table"),
-        )}
-      >
-        <thead>
-          <tr
-            className={sortableTableCx(
-              "sort-table__row",
-              "sort-table__row--header",
-            )}
-          >
-            <th
-              className={sortableTableCx(
-                "sort-table__cell",
-                "sort-table__cell--header",
-              )}
-            >
-              {this.props.title}
-            </th>
-            <th className={sortableTableCx("sort-table__cell")}>
-              Mean {this.props.measure}
-            </th>
-            <th className={sortableTableCx("sort-table__cell")}>
-              Standard Deviation
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row: NumericStatRow, idx) => {
-            let { format } = this.props;
-            if (row.format) {
-              format = row.format;
-            }
-            const className = sortableTableCx(
-              "sort-table__row",
-              "sort-table__row--body",
-              {
-                "sort-table__row--summary": row.summary,
-              },
-            );
-            return (
-              <tr className={className} key={idx}>
-                <th
-                  className={sortableTableCx(
-                    "sort-table__cell",
-                    "sort-table__cell--header",
-                  )}
-                  style={{ textAlign: "left" }}
-                >
-                  {row.name}
-                </th>
-                <td className={sortableTableCx("sort-table__cell")}>
-                  {row.bar ? row.bar() : null}
-                </td>
-                <td
-                  className={sortableTableCx(
-                    "sort-table__cell",
-                    "sort-table__cell--active",
-                  )}
-                >
-                  {format(stdDev(row.value, this.props.count))}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    );
-  }
 }
 
 export class StatementDetails extends React.Component<
@@ -492,8 +384,8 @@ export class StatementDetails extends React.Component<
   renderTabs = (): React.ReactElement => {
     const { currentTab } = this.state;
     const { stats } = this.props.statementDetails.statement;
-
     const hasData = Number(stats.count) > 0;
+    const period = timeScaleToString(this.props.timeScale);
 
     return (
       <Tabs
@@ -503,10 +395,10 @@ export class StatementDetails extends React.Component<
         activeKey={currentTab}
       >
         <TabPane tab="Overview" key="overview">
-          {this.renderOverviewTabContent(hasData)}
+          {this.renderOverviewTabContent(hasData, period)}
         </TabPane>
         <TabPane tab="Explain Plans" key="explain-plan">
-          {this.renderExplainPlanTabContent(hasData)}
+          {this.renderExplainPlanTabContent(hasData, period)}
         </TabPane>
         {!this.props.isTenant && !this.props.hasViewActivityRedactedRole && (
           <TabPane
@@ -520,13 +412,6 @@ export class StatementDetails extends React.Component<
             {this.renderDiagnosticsTabContent(hasData)}
           </TabPane>
         )}
-        <TabPane
-          tab="Execution Stats"
-          key="execution-stats"
-          className={cx("fit-content-width")}
-        >
-          {this.renderExecutionStatsTabContent(hasData)}
-        </TabPane>
       </Tabs>
     );
   };
@@ -566,7 +451,10 @@ export class StatementDetails extends React.Component<
     </>
   );
 
-  renderOverviewTabContent = (hasData: boolean): React.ReactElement => {
+  renderOverviewTabContent = (
+    hasData: boolean,
+    period: string,
+  ): React.ReactElement => {
     if (!hasData) {
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent();
     }
@@ -672,6 +560,10 @@ export class StatementDetails extends React.Component<
             />
           </PageConfigItem>
         </PageConfig>
+        <p className={timeScaleStylesCx("time-label", "label-margin")}>
+          Showing aggregated stats from{" "}
+          <span className={timeScaleStylesCx("bold")}>{period}</span>
+        </p>
         <section className={cx("section")}>
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
@@ -794,7 +686,10 @@ export class StatementDetails extends React.Component<
     );
   };
 
-  renderExplainPlanTabContent = (hasData: boolean): React.ReactElement => {
+  renderExplainPlanTabContent = (
+    hasData: boolean,
+    period: string,
+  ): React.ReactElement => {
     if (!hasData) {
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent();
     }
@@ -810,6 +705,10 @@ export class StatementDetails extends React.Component<
             />
           </PageConfigItem>
         </PageConfig>
+        <p className={timeScaleStylesCx("time-label", "label-margin")}>
+          Showing explain plans from{" "}
+          <span className={timeScaleStylesCx("bold")}>{period}</span>
+        </p>
         <section className={cx("section")}>
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
@@ -842,120 +741,6 @@ export class StatementDetails extends React.Component<
         }
         onSortingChange={this.props.onSortingChange}
       />
-    );
-  };
-
-  renderExecutionStatsTabContent = (hasData: boolean): React.ReactElement => {
-    if (!hasData) {
-      return this.renderNoDataTabContent();
-    }
-    const { stats } = this.props.statementDetails.statement;
-
-    const count = FixLong(stats.count).toInt();
-    const { statement } = this.props.statementDetails;
-    const {
-      parseBarChart,
-      planBarChart,
-      runBarChart,
-      overheadBarChart,
-      overallBarChart,
-    } = latencyBreakdown(statement);
-    return (
-      <>
-        <SummaryCard>
-          <h3
-            className={classNames(
-              commonStyles("base-heading"),
-              summaryCardStylesCx("summary--card__title"),
-            )}
-          >
-            Execution Latency By Phase
-            <div className={cx("numeric-stats-table__tooltip")}>
-              <Tooltip content="The execution latency of this statement, broken down by phase.">
-                <div className={cx("numeric-stats-table__tooltip-hover-area")}>
-                  <div className={cx("numeric-stats-table__info-icon")}>i</div>
-                </div>
-              </Tooltip>
-            </div>
-          </h3>
-          <NumericStatTable
-            title="Phase"
-            measure="Latency"
-            count={count}
-            format={(v: number) => Duration(v * 1e9)}
-            rows={[
-              { name: "Parse", value: stats.parse_lat, bar: parseBarChart },
-              { name: "Plan", value: stats.plan_lat, bar: planBarChart },
-              { name: "Run", value: stats.run_lat, bar: runBarChart },
-              {
-                name: "Overhead",
-                value: stats.overhead_lat,
-                bar: overheadBarChart,
-              },
-              {
-                name: "Overall",
-                summary: true,
-                value: stats.service_lat,
-                bar: overallBarChart,
-              },
-            ]}
-          />
-        </SummaryCard>
-        <SummaryCard>
-          <h3
-            className={classNames(
-              commonStyles("base-heading"),
-              summaryCardStylesCx("summary--card__title"),
-            )}
-          >
-            Other Execution Statistics
-          </h3>
-          <NumericStatTable
-            title="Stat"
-            measure="Quantity"
-            count={count}
-            format={d3Format(".2f")}
-            rows={[
-              {
-                name: "Rows Read",
-                value: stats.rows_read,
-                bar: genericBarChart(stats.rows_read, stats.count),
-              },
-              {
-                name: "Disk Bytes Read",
-                value: stats.bytes_read,
-                bar: genericBarChart(stats.bytes_read, stats.count, Bytes),
-                format: Bytes,
-              },
-              {
-                name: "Rows Written",
-                value: stats.rows_written,
-                bar: genericBarChart(stats.rows_written, stats.count),
-              },
-              {
-                name: "Network Bytes Sent",
-                value: stats.exec_stats.network_bytes,
-                bar: genericBarChart(
-                  stats.exec_stats.network_bytes,
-                  stats.exec_stats.count,
-                  Bytes,
-                ),
-                format: Bytes,
-              },
-            ].filter(function (r) {
-              if (
-                r.name === "Network Bytes Sent" &&
-                r.value &&
-                r.value.mean === 0
-              ) {
-                // Omit if empty.
-                return false;
-              }
-              return r.value;
-            })}
-          />
-        </SummaryCard>
-      </>
     );
   };
 }

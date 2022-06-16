@@ -74,6 +74,7 @@ import {
   TimeScaleDropdown,
   TimeScale,
   toDateRange,
+  timeScaleToString,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
@@ -556,6 +557,8 @@ export class StatementsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
+    const period = timeScaleToString(this.props.timeScale);
+
     return (
       <div>
         <section className={sortableTableCx("cl-table-container")}>
@@ -570,6 +573,7 @@ export class StatementsPage extends React.Component<
               totalCount={totalCount}
               arrayItemName="statements"
               activeFilters={activeFilters}
+              period={period}
               onClearFilters={this.onClearFilters}
             />
           </div>
