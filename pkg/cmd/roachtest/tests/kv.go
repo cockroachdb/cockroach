@@ -424,8 +424,13 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			qpsAllUp := qps(func() {
 				run(kv+" --seed 1 {pgurl:1}", true)
 			})
-			// Gracefully shut down third node (doesn't matter whether it's graceful or not).
-			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
+			// Graceful shut down third node.
+			gracefulOpts := option.DefaultStopOpts()
+			gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
+			gracefulOpts.RoachprodOpts.Wait = true
+			gracefulOpts.RoachprodOpts.MaxWait = 30
+			c.Stop(ctx, t.L(), gracefulOpts, c.Node(nodes))
+			// If graceful shutdown fails within 30 seconds, proceed with hard shutdown.
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
@@ -597,7 +602,15 @@ func registerKVGracefulDraining(r registry.Registry) {
 						}
 					}
 					m.ExpectDeath()
-					c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
+					// Graceful drain: send SIGTERM, which should be sufficient
+					// to stop the node, followed by a non-graceful SIGKILL a
+					// bit later to clean up should the process have become
+					// stuck.
+					stopOpts := option.DefaultStopOpts()
+					stopOpts.RoachprodOpts.Sig = 15
+					stopOpts.RoachprodOpts.Wait = true
+					stopOpts.RoachprodOpts.MaxWait = 30
+					c.Stop(ctx, t.L(), stopOpts, c.Node(nodes))
 					c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(nodes))
 					t.Status("letting workload run with one node down")
 					select {
