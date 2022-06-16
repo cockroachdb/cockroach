@@ -339,9 +339,7 @@ func runSingleDecommission(
 
 	if stopFirst {
 		h.t.Status(fmt.Sprintf("gracefully stopping node%d", target))
-		if err := h.stop(ctx, target); err != nil {
-			return err
-		}
+		h.stop(ctx, target)
 	}
 
 	h.t.Status(fmt.Sprintf("decommissioning node%d (n%d)", target, target))
@@ -365,9 +363,7 @@ func runSingleDecommission(
 	if reuse {
 		if !stopFirst {
 			h.t.Status(fmt.Sprintf("gracefully stopping node%d", target))
-			if err := h.stop(ctx, target); err != nil {
-				return err
-			}
+			h.stop(ctx, target)
 		}
 
 		// TODO(sarkesian): Wipe the node and re-add to cluster.
