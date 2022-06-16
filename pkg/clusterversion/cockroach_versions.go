@@ -377,6 +377,9 @@ const (
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
 	SampledStmtDiagReqs
+	// AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
+	// Previously, SSTs containing these could error.
+	AddSSTableTombstones
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -665,6 +668,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
+	},
+	{
+		Key:     AddSSTableTombstones,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
 
 	// *************************************************
