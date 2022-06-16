@@ -58,7 +58,7 @@ func initCLIDefaults() {
 	setDumpContextDefaults()
 	setDebugContextDefaults()
 	setStartContextDefaults()
-	setQuitContextDefaults()
+	setDrainContextDefaults()
 	setNodeContextDefaults()
 	setSqlfmtContextDefaults()
 	setConvContextDefaults()
@@ -501,10 +501,10 @@ func setStartContextDefaults() {
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
 }
 
-// quitCtx captures the command-line parameters of the `quit` and
-// `node drain` commands.
+// drainCtx captures the command-line parameters of the `node drain`
+// commands.
 // See below for defaults.
-var quitCtx struct {
+var drainCtx struct {
 	// drainWait is the amount of time to wait for the server
 	// to drain. Set to 0 to disable a timeout (let the server decide).
 	drainWait time.Duration
@@ -513,12 +513,12 @@ var quitCtx struct {
 	nodeDrainSelf bool
 }
 
-// setQuitContextDefaults set the default values in quitCtx.  This
+// setDrainContextDefaults set the default values in drainCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
-func setQuitContextDefaults() {
-	quitCtx.drainWait = 10 * time.Minute
-	quitCtx.nodeDrainSelf = false
+func setDrainContextDefaults() {
+	drainCtx.drainWait = 10 * time.Minute
+	drainCtx.nodeDrainSelf = false
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
