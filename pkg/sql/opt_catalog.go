@@ -1271,6 +1271,11 @@ func (ot *optTable) CollectTypes(ord int) (descpb.IDs, error) {
 	return collectTypes(col)
 }
 
+// IsRefreshViewRequired is part of the cat.Table interface.
+func (ot *optTable) IsRefreshViewRequired() bool {
+	return ot.desc.IsRefreshViewRequired()
+}
+
 // optIndex is a wrapper around catalog.Index that caches some
 // commonly accessed information and keeps a reference to the table wrapper.
 type optIndex struct {
@@ -2165,6 +2170,11 @@ func (ot *optVirtualTable) IsPartitionAllBy() bool {
 func (ot *optVirtualTable) CollectTypes(ord int) (descpb.IDs, error) {
 	col := ot.desc.AllColumns()[ord]
 	return collectTypes(col)
+}
+
+// IsRefreshViewRequired is part of the cat.Table interface.
+func (ot *optVirtualTable) IsRefreshViewRequired() bool {
+	return false
 }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
