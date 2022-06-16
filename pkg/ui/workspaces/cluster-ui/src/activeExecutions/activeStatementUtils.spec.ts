@@ -14,6 +14,8 @@ import {
   ActiveTransaction,
   ActiveStatement,
   SessionStatusType,
+  ActiveStatementFilters,
+  ActiveTransactionFilters,
 } from "./types";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment";
@@ -26,6 +28,7 @@ import {
   getActiveStatementsFromSessions,
   filterActiveStatements,
   filterActiveTransactions,
+  INTERNAL_APP_NAME_PREFIX,
 } from "./activeStatementUtils";
 
 type ActiveQuery = protos.cockroach.server.serverpb.ActiveQuery;
@@ -108,9 +111,12 @@ describe("test activeStatementUtils", () => {
         makeActiveStatement({ executionID: "4", application: "app1" }),
       ];
 
-      const filters = { app: "app1" };
-      const filtered = filterActiveStatements(statements, filters);
-
+      const filters: ActiveStatementFilters = { app: "app1" };
+      const filtered = filterActiveStatements(
+        statements,
+        filters,
+        INTERNAL_APP_NAME_PREFIX,
+      );
       expect(filtered.length).toBe(2);
       expect(filtered[0].executionID).toBe("1");
       expect(filtered[1].executionID).toBe("4");
@@ -140,9 +146,14 @@ describe("test activeStatementUtils", () => {
         }),
       ];
 
-      const filters = { app: "app1" };
+      const filters: ActiveStatementFilters = { app: "app1" };
       const search = "SELECT 1";
-      const filtered = filterActiveStatements(statements, filters, search);
+      const filtered = filterActiveStatements(
+        statements,
+        filters,
+        INTERNAL_APP_NAME_PREFIX,
+        search,
+      );
 
       expect(filtered.length).toBe(2);
       expect(filtered[0].executionID).toBe("1");
@@ -158,8 +169,12 @@ describe("test activeStatementUtils", () => {
         makeActiveStatement(),
       ];
 
-      const filters = { app: "" };
-      const filtered = filterActiveStatements(statements, filters, "");
+      const filters: ActiveStatementFilters = {};
+      const filtered = filterActiveStatements(
+        statements,
+        filters,
+        INTERNAL_APP_NAME_PREFIX,
+      );
 
       expect(filtered.length).toBe(statements.length);
     });
@@ -196,7 +211,7 @@ describe("test activeStatementUtils", () => {
         },
       ],
       errors: [],
-      internal_app_name_prefix: "",
+      internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
       toJSON: () => ({}),
     };
 
@@ -237,7 +252,10 @@ describe("test activeStatementUtils", () => {
       makeActiveStatement({ application: "app3" }),
       makeActiveStatement({ application: "app4" }),
     ];
-    const apps = getAppsFromActiveStatements(activeStatements);
+    const apps = getAppsFromActiveStatements(
+      activeStatements,
+      INTERNAL_APP_NAME_PREFIX,
+    );
     expect(apps).toEqual(["app1", "app2", "app3", "app4"]);
   });
 
@@ -290,7 +308,7 @@ describe("test activeStatementUtils", () => {
         },
       ],
       errors: [],
-      internal_app_name_prefix: "",
+      internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
       toJSON: () => ({}),
     };
 
@@ -328,8 +346,12 @@ describe("test activeStatementUtils", () => {
         makeActiveTxn({ executionID: "4", application: "app1" }),
       ];
 
-      const filters = { app: "app1" };
-      const filtered = filterActiveTransactions(txns, filters);
+      const filters: ActiveTransactionFilters = { app: "app1" };
+      const filtered = filterActiveTransactions(
+        txns,
+        filters,
+        INTERNAL_APP_NAME_PREFIX,
+      );
 
       expect(filtered.length).toBe(2);
       expect(filtered[0].executionID).toBe("1");
@@ -359,9 +381,14 @@ describe("test activeStatementUtils", () => {
         }),
       ];
 
-      const filters = { app: "app1" };
+      const filters: ActiveTransactionFilters = { app: "app1" };
       const search = "SELECT 1";
-      const filtered = filterActiveTransactions(txns, filters, search);
+      const filtered = filterActiveTransactions(
+        txns,
+        filters,
+        INTERNAL_APP_NAME_PREFIX,
+        search,
+      );
 
       expect(filtered.length).toBe(2);
       expect(filtered[0].executionID).toBe("1");
@@ -377,8 +404,12 @@ describe("test activeStatementUtils", () => {
         makeActiveTxn(),
       ];
 
-      const filters = { app: "" };
-      const filtered = filterActiveTransactions(txns, filters, "");
+      const filters: ActiveTransactionFilters = {};
+      const filtered = filterActiveTransactions(
+        txns,
+        filters,
+        INTERNAL_APP_NAME_PREFIX,
+      );
 
       expect(filtered.length).toBe(txns.length);
     });
@@ -392,7 +423,10 @@ describe("test activeStatementUtils", () => {
       makeActiveTxn({ application: "app4" }),
     ];
 
-    const apps = getAppsFromActiveTransactions(activeTxns);
+    const apps = getAppsFromActiveTransactions(
+      activeTxns,
+      INTERNAL_APP_NAME_PREFIX,
+    );
     expect(apps).toEqual(["app1", "app2", "app3", "app4"]);
   });
 });
