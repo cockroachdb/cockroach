@@ -226,6 +226,10 @@ type BytesMonitor struct {
 	// pool.
 	poolAllocationSize int64
 
+	// relinquishAllOnReleaseBytes, if true, indicates that the monitor should
+	// relinquish all bytes on releaseBytes() call.
+	relinquishAllOnReleaseBytes bool
+
 	// noteworthyUsageBytes is the size beyond which total allocations start to
 	// become reported in the logs.
 	noteworthyUsageBytes int64
@@ -839,13 +843,22 @@ func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	mm.mu.curBudget.Clear(ctx)
 }
 
+// RelinquishAllOnReleaseBytes makes it so that the monitor doesn't keep any
+// margin bytes when the bytes are released from it.
+func (mm *BytesMonitor) RelinquishAllOnReleaseBytes() {
+	mm.relinquishAllOnReleaseBytes = true
+}
+
 // adjustBudget ensures that the monitor does not keep many more bytes reserved
 // from the pool than it currently has allocated. Bytes are relinquished when
 // there are at least maxAllocatedButUnusedBlocks*poolAllocationSize bytes
-// reserved but unallocated.
+// reserved but unallocated (if relinquishAllOnReleaseBytes is false).
 func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	// NB: mm.mu Already locked by releaseBytes().
-	margin := mm.poolAllocationSize * int64(maxAllocatedButUnusedBlocks)
+	var margin int64
+	if !mm.relinquishAllOnReleaseBytes {
+		margin = mm.poolAllocationSize * int64(maxAllocatedButUnusedBlocks)
+	}
 
 	neededBytes := mm.mu.curAllocated
 	if neededBytes <= mm.reserved.used {
