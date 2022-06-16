@@ -181,10 +181,6 @@ const (
 	// AlterSystemTableStatisticsAddAvgSizeCol adds the column avgSize to the
 	// table system.table_statistics that contains a new statistic.
 	AlterSystemTableStatisticsAddAvgSizeCol
-	// AlterSystemStmtDiagReqs adds the migration for
-	// system.statement_diagnostics_requests table to support collecting stmt
-	// bundles when the query latency exceeds the user provided threshold.
-	AlterSystemStmtDiagReqs
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
 	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
@@ -377,6 +373,10 @@ const (
 	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
 	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
 	UpgradeSequenceToBeReferencedByID
+	// SampledStmtDiagReqs enables installing statement diagnostic requests that
+	// probabilistically collects stmt bundles, controlled by the user provided
+	// sampling rate.
+	SampledStmtDiagReqs
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -436,10 +436,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemTableStatisticsAddAvgSizeCol,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 12},
-	},
-	{
-		Key:     AlterSystemStmtDiagReqs,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 14},
 	},
 	{
 		Key:     MVCCAddSSTable,
@@ -665,6 +661,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
+	},
+	{
+		Key:     SampledStmtDiagReqs,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 
 	// *************************************************

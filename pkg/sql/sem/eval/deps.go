@@ -543,6 +543,7 @@ type IndexUsageStatsController interface {
 type StmtDiagnosticsRequestInsertFunc func(
 	ctx context.Context,
 	stmtFingerprint string,
+	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) error
