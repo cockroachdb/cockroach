@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,61 +57,139 @@ func (s *spanStatsServer) RegisterGateway(
 	return serverpb.RegisterSpanStatsHandler(ctx, mux, conn)
 }
 
-// GetSpanStatistics implements the SpanStatsServer interface.
-func (s *spanStatsServer) GetSpanStatistics(
-	ctx context.Context, req *serverpb.GetSpanStatisticsRequest,
-) (*serverpb.GetSpanStatisticsResponse, error) {
-
-	res := serverpb.GetSpanStatisticsResponse{Samples: make([]*serverpb.Sample, 0)}
-
-	type uniqueStat struct {
-		sp            *roachpb.Span
-		startPretty   string
-		endPretty     string
-		batchRequests uint64
+func (s *spanStatsServer) dialNode(ctx context.Context, nodeID roachpb.NodeID) (serverpb.SpanStatsClient, error) {
+	addr, err := s.server.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, err
 	}
+	log.Infof(ctx, "dial node %d with addr: %s", nodeID, addr.String())
+	rpcConnection := s.server.rpcContext.GRPCDialNode(addr.String(), nodeID, rpc.DefaultClass)
+	log.Infof(ctx, "Have connection for node %d", nodeID)
+	conn, err := rpcConnection.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewSpanStatsClient(conn), nil
+}
 
-	uniqueStats := make(map[string]uniqueStat)
+type uniqueBucket struct {
+	sp            *roachpb.Span
+	batchRequests uint64
+}
 
-	if err := s.server.node.stores.VisitStores(func(st *kvserver.Store) error {
+func (s *spanStatsServer) GetNodeSpanStats(
+	ctx context.Context, req *serverpb.GetNodeSpanStatsRequest,
+) (*serverpb.GetNodeSpanStatsResponse, error) {
 
-		// visit the spanStatHistogram buckets on this store
-		// accumulate each bucket's value.
-		st.VisitSpanStatsBuckets(func(span *roachpb.Span, batchRequests uint64) {
+	uniqueBuckets := make(map[string]uniqueBucket)
+
+	if err := s.server.node.stores.VisitStores(func(store *kvserver.Store) error {
+		store.VisitSpanStatsBuckets(func(span *roachpb.Span, batchRequests uint64) {
 			spanAsString := span.String()
-			if stat, ok := uniqueStats[spanAsString]; ok {
+			if stat, ok := uniqueBuckets[spanAsString]; ok {
 				stat.batchRequests += batchRequests
 			} else {
-				uniqueStats[spanAsString] = uniqueStat{
+				uniqueBuckets[spanAsString] = uniqueBucket{
 					sp:            span,
-					startPretty:   span.Key.String(),
-					endPretty:     span.EndKey.String(),
 					batchRequests: batchRequests,
 				}
 			}
 		})
-
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	// convert uniqueStats into a `GetSpanStatisticsResponse`
-	stats := make([]*serverpb.SpanStatistics, 0)
+	res := serverpb.GetNodeSpanStatsResponse{}
+	res.Stats = make([]*serverpb.GetNodeSpanStatsResponse_NodeSpanStat, 0)
 
-	for _, value := range uniqueStats {
-		stats = append(stats, &serverpb.SpanStatistics{
-			Pretty: &serverpb.SpanStatistics_SpanPretty{
-				StartKey: value.startPretty,
-				EndKey:   value.endPretty,
-			},
-			Span:          value.sp,
-			BatchRequests: value.batchRequests,
+	for _, bucket := range uniqueBuckets {
+		res.Stats = append(res.Stats, &serverpb.GetNodeSpanStatsResponse_NodeSpanStat{
+			Span:          bucket.sp,
+			BatchRequests: bucket.batchRequests,
 		})
 	}
 
-	t := hlc.Timestamp{WallTime: time.Now().UnixNano()}
-	res.Samples = append(res.Samples, &serverpb.Sample{SampleTime: &t, SpanStats: stats})
+	return &res, nil
+}
+
+// GetSpanStatistics implements the SpanStatsServer interface.
+// Get span statistics from all stores on this node.
+// this will be called by the tenant's job.
+func (s *spanStatsServer) GetSpanStatistics(
+	ctx context.Context, req *serverpb.GetSpanStatisticsRequest,
+) (*serverpb.GetSpanStatisticsResponse, error) {
+
+	responsesByNodeID := make(map[roachpb.NodeID]serverpb.GetNodeSpanStatsResponse)
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		spanStats := client.(serverpb.SpanStatsClient)
+		// TODO: update bucket boundaries before returning.
+		// TODO: use a time window.
+		nodeSpanStats, err := spanStats.GetNodeSpanStats(ctx, &serverpb.GetNodeSpanStatsRequest{})
+		// TODO check for error
+		spanStats.SetSpanBoundaries(ctx, &serverpb.SetSpanBoundariesRequest{})
+		return nodeSpanStats, err
+	}
+
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		// TODO: this name is too similar to `SpanStatsRequest` and `SpanStatsResponse`
+		nodeResponse := resp.(*serverpb.GetNodeSpanStatsResponse)
+		responsesByNodeID[nodeID] = *nodeResponse
+	}
+
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		log.Errorf(ctx, "COULD NOT GET SPAN STATS FOR NODE %d: %s", nodeID, err.Error())
+	}
+
+	err := s.server.status.iterateNodes(ctx, "iterating nodes for span stats", dialFn, nodeFn, responseFn, errorFn)
+
+	if err != nil {
+		panic("could not iterate nodes")
+	}
+
+	res := serverpb.GetSpanStatisticsResponse{}
+	uniqueBuckets := make(map[string]uniqueBucket)
+
+	// aggregate buckets across nodes
+	for _, nodeResponse := range responsesByNodeID {
+		for _, bucket := range nodeResponse.Stats {
+			spanAsString := bucket.Span.String()
+			if b, ok := uniqueBuckets[spanAsString]; ok {
+				b.batchRequests += bucket.BatchRequests
+			} else {
+				uniqueBuckets[spanAsString] = uniqueBucket{
+					sp:            bucket.Span,
+					batchRequests: bucket.BatchRequests,
+				}
+			}
+		}
+	}
+
+	// build response
+	spanStats := make([]*serverpb.SpanStatistics, 0)
+	for _, bucket := range uniqueBuckets {
+		spanStats = append(spanStats, &serverpb.SpanStatistics{
+			Pretty: &serverpb.SpanStatistics_SpanPretty{
+				StartKey: bucket.sp.Key.String(),
+				EndKey:   bucket.sp.EndKey.String(),
+			},
+			Span:          bucket.sp,
+			BatchRequests: bucket.batchRequests,
+		})
+	}
+
+	// TODO: proto namespace
+	res.Samples = make([]*serverpb.Sample, 0)
+	res.Samples = append(res.Samples, &serverpb.Sample{
+		SampleTime: &hlc.Timestamp{WallTime: time.Now().UnixNano()},
+		SpanStats:  spanStats,
+	})
 
 	return &res, nil
 }

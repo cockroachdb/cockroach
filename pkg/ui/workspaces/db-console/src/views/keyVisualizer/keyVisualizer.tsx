@@ -30,17 +30,17 @@ function drawBucket(
 
       const index = i * 4 + j * 4 * CanvasWidth;
 
-      // if (j === y || i === x) {
-      //   pixels[index] = 100; // red
-      //   pixels[index + 1] = 100; // green
-      //   pixels[index + 2] = 100; // blue
-      //   pixels[index + 3] = 255; // alpha
-      // } else {
+      if (j === y || i === x) {
+        pixels[index] = 100; // red
+        pixels[index + 1] = 100; // green
+        pixels[index + 2] = 100; // blue
+        pixels[index + 3] = 255; // alpha
+      } else {
         pixels[index] = color[0] * 255; // red
         pixels[index + 1] = color[1] * 255; // green
         pixels[index + 2] = color[2] * 255; // blue
         pixels[index + 3] = 255; // alpha
-      // }
+      }
     }
   }
 }

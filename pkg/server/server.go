@@ -1114,31 +1114,32 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.spanStatsServer = spanStatsServer
 
 	collectStats := func() {
-		ctx := context.Background()
-		sample, err := s.spanStatsServer.GetSpanStatistics(ctx, &serverpb.GetSpanStatisticsRequest{})
-		if err != nil {
-			log.Error(ctx, err.Error())
-			return
+		if s.NodeID() == 1 {
+			ctx := context.Background()
+			sample, err := s.spanStatsServer.GetSpanStatistics(ctx, &serverpb.GetSpanStatisticsRequest{})
+
+			if err != nil {
+				log.Errorf(ctx, "Span Statistics Error: %s", err.Error())
+				return
+			}
+
+			m := jsonpb.Marshaler{}
+			result, _ := m.MarshalToString(sample)
+
+			// write to file
+			filename := fmt.Sprintf("./key-visualizer-write/span_stats_%d.json", time.Now().Unix())
+			f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0777)
+			if err != nil {
+				log.Fatal(ctx, err.Error())
+			}
+
+			if _, err := f.WriteString(result); err != nil {
+				s := fmt.Sprintf("%s %s", "could not write", err.Error())
+				panic(s)
+			}
+
+			f.Close()
 		}
-
-		m := jsonpb.Marshaler{}
-		result, _ := m.MarshalToString(sample)
-
-		// write to file
-		filename := fmt.Sprintf("./key-visualizer-write/span_stats_%d.json", time.Now().Unix())
-		f, err := os.OpenFile(filename, os.O_CREATE | os.O_WRONLY, 0777)
-		if err != nil {
-			log.Fatal(ctx, err.Error())
-		}
-
-		if _, err := f.WriteString(result); err != nil {
-			s := fmt.Sprintf("%s %s", "could not write", err.Error())
-			panic(s)
-		}
-		f.Close()
-
-		// update bucket boundaries for next time
-		s.spanStatsServer.SetSpanBoundaries(ctx, &serverpb.SetSpanBoundariesRequest{})
 	}
 
 	go func() {
@@ -1147,7 +1148,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 			collectStats()
 		}
 	}()
-
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.

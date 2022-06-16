@@ -43,6 +43,20 @@ message GetSpanStatisticsResponse {
   repeated Sample samples = 1;
 }
 
+// retrieve stats from stores that live on a specific node
+message GetNodeSpanStatsRequest {
+//  todo: time window
+}
+
+// this is aggregated.
+message GetNodeSpanStatsResponse {
+  message NodeSpanStat {
+    roachpb.Span span = 1;
+    uint64 batch_requests = 2;
+  }
+  repeated NodeSpanStat stats = 1;
+}
+
 message SetSpanBoundariesRequest{}
 message SetSpanBoundariesResponse{}
 
@@ -59,6 +73,7 @@ service SpanStats {
   // histogram data over the requested period and aggregates the results.
   rpc GetSpanStatistics(GetSpanStatisticsRequest) returns (GetSpanStatisticsResponse) {}
 
+  rpc GetNodeSpanStats(GetNodeSpanStatsRequest) returns (GetNodeSpanStatsResponse) {}
 
   rpc SetSpanBoundaries(SetSpanBoundariesRequest) returns (SetSpanBoundariesResponse) {}
 
