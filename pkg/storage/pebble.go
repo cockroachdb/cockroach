@@ -1781,7 +1781,7 @@ type pebbleReadOnly struct {
 	normalEngineIter pebbleIterator
 
 	iter       *pebble.Iterator
-	iterUnused bool
+	iterUsed   bool // avoids cloning after PinEngineStateForIterators()
 	durability DurabilityRequirement
 	closed     bool
 }
@@ -1825,7 +1825,7 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
-	if p.iterUnused {
+	if p.iter != nil && !p.iterUsed {
 		err := p.iter.Close()
 		if err != nil {
 			panic(err)
@@ -1929,12 +1929,12 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		iter.setOptions(opts, p.durability)
 	} else {
 		iter.initReuseOrCreate(
-			p.parent.db, p.iter, !p.iterUnused, opts, p.durability, p.SupportsRangeKeys())
+			p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
-		p.iterUnused = false
+		p.iterUsed = true
 		iter.reusable = true
 	}
 
@@ -1967,12 +1967,12 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter.setOptions(opts, p.durability)
 	} else {
 		iter.initReuseOrCreate(
-			p.parent.db, p.iter, !p.iterUnused, opts, p.durability, p.SupportsRangeKeys())
+			p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
-		p.iterUnused = false
+		p.iterUsed = true
 		iter.reusable = true
 	}
 
@@ -1998,10 +1998,8 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
 		}
 		p.iter = p.parent.db.NewIter(o)
-		// Since the iterator is being created just to pin the state of the engine
-		// for future iterators, we'll avoid cloning it the next time we want an
-		// iterator and instead just re-use what we created here.
-		p.iterUnused = true
+		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(), since
+		// we've just created it.
 	}
 	return nil
 }
