@@ -24,3 +24,25 @@
     color: $body-color;
   }
 }
+
+.time-label {
+  font-family: $font-family--base;
+  font-size: $font-size--medium;
+  padding: 0px;
+  margin: 0px;
+  color: $colors--neutral-6;
+  line-height: $line-height--large;
+  letter-spacing: 0.1px;
+  .bold {
+    font-family: $font-family--bold;
+    color: $colors--neutral-7;
+  }
+}
+
+.label-margin {
+  margin-top: 5px;
+}
+
+.label-no-margin-bottom {
+  margin-bottom: -10px;
+}

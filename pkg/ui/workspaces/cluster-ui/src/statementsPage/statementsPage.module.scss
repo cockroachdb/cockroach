@@ -1,5 +1,9 @@
 @import "src/core/index.module";
 
+cl-table-container {
+  padding-top: 10px;
+}
+
 .cl-table-statistic {
   display: flex;
   justify-content: space-between;
@@ -15,8 +19,9 @@
   padding: 0px;
   margin: 0px;
   color: $colors--neutral-6;
-  line-height: 1.57;
+  line-height: $line-height--large;
   letter-spacing: 0.1px;
+  display: flex;
   .label {
     font-family: $font-family--bold;
     color: $colors--neutral-7;
