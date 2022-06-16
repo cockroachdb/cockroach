@@ -528,6 +528,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - group-limit: used with check-size to set a max limit on the number of
 //    groups that can be added to the memo before a testing error is returned.
 //
+//  - memo-cycles: used with memo to search the memo for cycles and output a
+//    path with a cycle if one is found.
+//
 //  - use-multi-col-stats sets the value for
 //  SessionData.OptimizerUseMultiColStats which indicates whether or not
 //  multi-column statistics are used for cardinality estimation in the
@@ -1114,6 +1117,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return errors.Wrap(err, "use-multi-col-stats")
 		}
 		f.UseMultiColStats = b
+
+	case "memo-cycles":
+		f.MemoFormat = xform.FmtCycle
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
