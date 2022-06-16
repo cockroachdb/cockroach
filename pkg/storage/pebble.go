@@ -1002,10 +1002,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		return iter
 	}
 
-	iter := newPebbleIterator(p.db, nil, opts, StandardDurability, p.SupportsRangeKeys())
-	if iter == nil {
-		panic("couldn't create a new iterator")
-	}
+	iter := newPebbleIterator(p.db, opts, StandardDurability, p.SupportsRangeKeys())
 	if util.RaceEnabled {
 		return wrapInUnsafeIter(iter)
 	}
@@ -1017,11 +1014,7 @@ func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
 	if opts.KeyTypes != IterKeyTypePointsOnly {
 		panic("EngineIterator does not support range keys")
 	}
-	iter := newPebbleIterator(p.db, nil, opts, StandardDurability, p.SupportsRangeKeys())
-	if iter == nil {
-		panic("couldn't create a new iterator")
-	}
-	return iter
+	return newPebbleIterator(p.db, opts, StandardDurability, p.SupportsRangeKeys())
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -1787,8 +1780,8 @@ type pebbleReadOnly struct {
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
 
-	iter       cloneableIter
-	iterUnused bool
+	iter       *pebble.Iterator
+	iterUsed   bool // avoids cloning after PinEngineStateForIterators()
 	durability DurabilityRequirement
 	closed     bool
 }
@@ -1832,7 +1825,7 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
-	if p.iterUnused {
+	if p.iter != nil && !p.iterUsed {
 		err := p.iter.Close()
 		if err != nil {
 			panic(err)
@@ -1929,18 +1922,19 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		iter = &p.prefixIter
 	}
 	if iter.inuse {
-		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability, p.SupportsRangeKeys())
+		return newPebbleIteratorByCloning(p.iter, opts, p.durability, p.SupportsRangeKeys())
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability, p.SupportsRangeKeys())
+		iter.initReuseOrCreate(
+			p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
-		p.iterUnused = false
+		p.iterUsed = true
 		iter.reusable = true
 	}
 
@@ -1966,18 +1960,19 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
-		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability, p.SupportsRangeKeys())
+		return newPebbleIteratorByCloning(p.iter, opts, p.durability, p.SupportsRangeKeys())
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability, p.SupportsRangeKeys())
+		iter.initReuseOrCreate(
+			p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
-		p.iterUnused = false
+		p.iterUsed = true
 		iter.reusable = true
 	}
 
@@ -2003,10 +1998,8 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
 		}
 		p.iter = p.parent.db.NewIter(o)
-		// Since the iterator is being created just to pin the state of the engine
-		// for future iterators, we'll avoid cloning it the next time we want an
-		// iterator and instead just re-use what we created here.
-		p.iterUnused = true
+		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(), since
+		// we've just created it.
 	}
 	return nil
 }
@@ -2188,7 +2181,7 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	iter := MVCCIterator(newPebbleIterator(
-		p.snapshot, nil, opts, StandardDurability, p.SupportsRangeKeys()))
+		p.snapshot, opts, StandardDurability, p.SupportsRangeKeys()))
 	if util.RaceEnabled {
 		iter = wrapInUnsafeIter(iter)
 	}
@@ -2200,7 +2193,7 @@ func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
 	if opts.KeyTypes != IterKeyTypePointsOnly {
 		panic("EngineIterator does not support range keys")
 	}
-	return newPebbleIterator(p.snapshot, nil, opts, StandardDurability, p.SupportsRangeKeys())
+	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.SupportsRangeKeys())
 }
 
 // ConsistentIterators implements the Reader interface.
