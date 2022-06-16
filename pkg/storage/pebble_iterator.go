@@ -89,12 +89,16 @@ func newPebbleIteratorByCloning(
 	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
 ) *pebbleIterator {
 	var err error
-	if iter, err = iter.Clone(); err != nil {
-		panic(err)
-	}
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
-	p.init(iter, opts, durability, supportsRangeKeys)
+	p.init(nil, opts, durability, supportsRangeKeys)
+	p.iter, err = iter.Clone(pebble.CloneOptions{
+		IterOptions:      &p.options,
+		RefreshBatchView: true,
+	})
+	if err != nil {
+		panic(err)
+	}
 	return p
 }
 
@@ -131,15 +135,23 @@ func (p *pebbleIterator) initReuseOrCreate(
 	durability DurabilityRequirement,
 	supportsRangeKeys bool, // TODO(erikgrinaker): remove after 22.2
 ) {
-	if clone && iter != nil {
-		var err error
-		if iter, err = iter.Clone(); err != nil {
-			panic(err)
-		}
+	if iter != nil && !clone {
+		p.init(iter, opts, durability, supportsRangeKeys)
+		return
 	}
-	p.init(iter, opts, durability, supportsRangeKeys)
+
+	p.init(nil, opts, durability, supportsRangeKeys)
 	if iter == nil {
 		p.iter = handle.NewIter(&p.options)
+	} else if clone {
+		var err error
+		p.iter, err = iter.Clone(pebble.CloneOptions{
+			IterOptions:      &p.options,
+			RefreshBatchView: true,
+		})
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
