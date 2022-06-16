@@ -108,6 +108,16 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		}
 		stmt.Prepared.Columns = colinfo.ExplainPlanColumns
 		return opc.flags, nil
+	case *tree.DeclareCursor:
+		// Build memo for the purposes of typing placeholders.
+		// TODO(jordan): converting DeclareCursor to not be an opaque statement
+		// would be a better way to accomplish this goal. See CREATE TABLE for an
+		// example.
+		f := opc.optimizer.Factory()
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &opc.catalog, f, t.Select)
+		if err := bld.Build(); err != nil {
+			return opc.flags, err
+		}
 	}
 
 	if opc.useCache {
