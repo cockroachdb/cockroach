@@ -60,11 +60,11 @@ func doDrain(
 ) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
-	if quitCtx.drainWait == 0 {
+	if drainCtx.drainWait == 0 {
 		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
-	err = contextutil.RunWithTimeout(ctx, "drain", quitCtx.drainWait, func(ctx context.Context) (err error) {
+	err = contextutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
 	})

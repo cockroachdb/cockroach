@@ -671,8 +671,8 @@ func init() {
 	// Quit and node drain commands.
 	for _, cmd := range []*cobra.Command{quitCmd, drainNodeCmd} {
 		f := cmd.Flags()
-		cliflagcfg.DurationFlag(f, &quitCtx.drainWait, cliflags.DrainWait)
-		cliflagcfg.BoolFlag(f, &quitCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
+		cliflagcfg.DurationFlag(f, &drainCtx.drainWait, cliflags.DrainWait)
+		cliflagcfg.BoolFlag(f, &drainCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 	}
 
 	// Commands that establish a SQL connection.
