@@ -23,12 +23,12 @@ import {
   FixLong,
   longToInt,
   TimestampToNumber,
-  TimestampToString,
   addStatementStats,
   flattenStatementStats,
   DurationToNumber,
   computeOrUseStmtSummary,
   transactionScopedStatementKey,
+  unset,
 } from "../util";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -42,7 +42,7 @@ export const getTrxAppFilterOptions = (
   const uniqueAppNames = new Set(
     transactions
       .filter(t => !t.stats_data.app.startsWith(prefix))
-      .map(t => (t.stats_data.app ? t.stats_data.app : "(unset)")),
+      .map(t => (t.stats_data.app ? t.stats_data.app : unset)),
   );
 
   return Array.from(uniqueAppNames).sort();
@@ -166,7 +166,7 @@ export const filterTransactions = (
         if (apps.includes(internalAppNamePrefix)) {
           showInternal = true;
         }
-        if (apps.includes("(unset)")) {
+        if (apps.includes(unset)) {
           apps.push("");
         }
 

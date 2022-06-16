@@ -26,6 +26,8 @@ export const sessionAttr = "session";
 export const tabAttr = "tab";
 export const tableNameAttr = "table_name";
 export const txnFingerprintIdAttr = "txn_fingerprint_id";
+export const unset = "(unset)";
+export const viewAttr = "view";
 
 export const REMOTE_DEBUGGING_ERROR_TEXT =
   "This information is not available due to the current value of the 'server.remote_debugging.mode' setting.";
