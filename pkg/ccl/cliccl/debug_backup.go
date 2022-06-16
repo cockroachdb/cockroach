@@ -627,8 +627,9 @@ func makeRowFetcher(
 	if err := rf.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Alloc: &tree.DatumAlloc{},
-			Spec:  &spec,
+			WillUseCustomKVBatchFetcher: true,
+			Alloc:                       &tree.DatumAlloc{},
+			Spec:                        &spec,
 		},
 	); err != nil {
 		return rf, err
