@@ -409,6 +409,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		require.NoError(t, fetcher.Init(
 			ctx,
 			row.FetcherInitArgs{
+				Txn:        txn,
 				Alloc:      &alloc,
 				MemMonitor: mm.Monitor(),
 				Spec:       &spec,
@@ -417,7 +418,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		))
 
 		require.NoError(t, fetcher.StartScan(
-			ctx, txn, spans, nil /* spanIDs */, rowinfra.NoBytesLimit, 0,
+			ctx, spans, nil /* spanIDs */, rowinfra.NoBytesLimit, 0,
 		))
 		var rows []tree.Datums
 		for {

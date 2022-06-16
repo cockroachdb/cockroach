@@ -28,7 +28,7 @@ import (
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, spanIDs []int,
+		_ context.Context, _ roachpb.Spans, spanIDs []int,
 		batchBytesLimit rowinfra.BytesLimit, rowLimitHint rowinfra.RowLimit,
 	) error
 	StartScanFrom(_ context.Context, _ row.KVBatchFetcher) error

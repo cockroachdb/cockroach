@@ -778,6 +778,7 @@ func fetchIndex(
 	require.NoError(t, fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
+			Txn:        txn,
 			Reverse:    reverse,
 			Alloc:      &alloc,
 			MemMonitor: mm.Monitor(),
@@ -787,7 +788,7 @@ func fetchIndex(
 	))
 
 	require.NoError(t, fetcher.StartScan(
-		ctx, txn, spans, nil /* spanIDs */, rowinfra.NoBytesLimit, 0,
+		ctx, spans, nil /* spanIDs */, rowinfra.NoBytesLimit, 0,
 	))
 	var rows []tree.Datums
 	for {

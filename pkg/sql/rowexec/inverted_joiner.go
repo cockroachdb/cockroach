@@ -291,6 +291,7 @@ func newInvertedJoiner(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
+			Txn:                        flowCtx.Txn,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
@@ -496,7 +497,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 
 	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, nil, /* spanIDs */
+		ij.Ctx, ij.indexSpans, nil, /* spanIDs */
 		rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 	); err != nil {
 		ij.MoveToDraining(err)
