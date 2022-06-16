@@ -293,7 +293,7 @@ func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("network/authentication/nodes=%d", numNodes),
-		Owner:   registry.OwnerServer,
+		Owner:   registry.OwnerKV, // Should be moved to new security team once one exists.
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkAuthentication(ctx, t, c)

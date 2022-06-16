@@ -22,7 +22,7 @@ const (
 	OwnerKV            Owner = `kv`
 	OwnerMultiRegion   Owner = `multiregion`
 	OwnerObsInf        Owner = `obs-inf-prs`
-	OwnerServer        Owner = `server`
+	OwnerServer        Owner = `server` // not currently staffed
 	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
