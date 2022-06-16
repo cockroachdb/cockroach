@@ -29,8 +29,9 @@ function drawBucket(
       }
 
       const index = i * 4 + j * 4 * CanvasWidth;
-
-      if (j === y || i === x) {
+      // buckets may be drawn out of lexicographic order, so a 1 pixel y-offset for the border
+      // prevents border cropping.
+      if (j === y + 1 || i === x) {
         pixels[index] = 100; // red
         pixels[index + 1] = 100; // green
         pixels[index + 2] = 100; // blue
