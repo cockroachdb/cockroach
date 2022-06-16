@@ -1,0 +1,8 @@
+feature-allowlist
+sql.plan.ops.jsonb.subscript
+----
+
+feature-usage
+SELECT ('{"a": {"b": {"c": 1}}}'::jsonb)['a']['b']
+----
+sql.plan.ops.jsonb.subscript

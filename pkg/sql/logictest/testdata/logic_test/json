@@ -884,3 +884,58 @@ query TBTB
 SELECT j, j ? 'a', j-1, (j-1) ? 'a' FROM t81647
 ----
 ["a", "b"]  true  ["a"]  true
+
+#
+# Test JSONB subscripting.
+#
+
+# Constant folding.
+query TTT
+SELECT
+  ('{"a": {"b": {"c": 1}}}'::jsonb)['a'],
+  ('{"a": {"b": {"c": 1}}}'::jsonb)['a']['b']['c'],
+  ('[1, "2", null]'::jsonb)[1]
+----
+{"b": {"c": 1}}  1  "2"
+
+# Referencing subscript which does not exist.
+query TTTT
+SELECT
+  ('{"a": 1}'::jsonb)['b'],
+  ('{"a": {"b": {"c": 1}}}'::jsonb)['c']['b']['c'],
+  ('[1, "2", null]'::jsonb)[4],
+  ('{"a": 1}'::jsonb)[NULL]
+----
+NULL  NULL  NULL  NULL
+
+# Error cases.
+statement error unexpected JSON subscript type: TIMESTAMPTZ
+SELECT ('{"a": 1}'::jsonb)[now()]
+
+# Check it works from a JSON table.
+statement ok
+CREATE TABLE json_subscript_test (
+  id SERIAL PRIMARY KEY,
+  j JSONB,
+  extract_field TEXT,
+  extract_int_field INT
+);
+INSERT INTO json_subscript_test (j, extract_field, extract_int_field) VALUES
+  ('{"other_field": 2}', 'other_field', 1),
+  ('{"field": {"field": 2}}', 'field', 0),
+  ('[1, 2, 3]', 'nothing_to_fetch', 1)
+
+# Test subscripts with fields using other columns.
+query TTITTTT
+SELECT j, extract_field, extract_int_field, j['field'], j[extract_field], j[extract_field][extract_field], j[extract_int_field]
+FROM json_subscript_test ORDER BY id
+----
+{"other_field": 2}       other_field       1  NULL          2             NULL  NULL
+{"field": {"field": 2}}  field             0  {"field": 2}  {"field": 2}  2     NULL
+[1, 2, 3]                nothing_to_fetch  1  NULL          NULL          NULL  2
+
+# Test use in a WHERE clause.
+query T
+SELECT j FROM json_subscript_test WHERE j['other_field'] = '2' ORDER BY id
+----
+{"other_field": 2}
