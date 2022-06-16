@@ -17,7 +17,12 @@ import { merge } from "lodash";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
-import { appAttr, appNamesAttr, statementAttr } from "src/util/constants";
+import {
+  appAttr,
+  appNamesAttr,
+  statementAttr,
+  unset,
+} from "src/util/constants";
 import {
   selectStatements,
   selectApps,
@@ -171,7 +176,7 @@ describe("selectStatements", () => {
       ],
       timeScale,
     );
-    const props = makeRoutePropsWithApp("(unset)");
+    const props = makeRoutePropsWithApp(unset);
 
     const result = selectStatements(state, props);
 
@@ -215,7 +220,7 @@ describe("selectApps", () => {
 
     const result = selectApps(state);
 
-    assert.deepEqual(result, ["(unset)", "cockroach sql", "foobar"]);
+    assert.deepEqual(result, [unset, "cockroach sql", "foobar"]);
   });
 });
 
@@ -391,10 +396,7 @@ describe("selectStatement", () => {
       detailsC,
     ]);
     const stmtAFingerprintID = stmtA.id.toString();
-    const props = makeRoutePropsWithStatementAndApp(
-      stmtAFingerprintID,
-      "(unset)",
-    );
+    const props = makeRoutePropsWithStatementAndApp(stmtAFingerprintID, unset);
 
     const { statementDetails } = selectStatementDetails(state, props);
     const result = statementDetails.statement;
