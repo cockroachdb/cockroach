@@ -239,8 +239,9 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	if err := rf.Init(
 		context.TODO(),
 		row.FetcherInitArgs{
-			Alloc: &c.a,
-			Spec:  &spec,
+			WillUseCustomKVFetcher: true,
+			Alloc:                  &c.a,
+			Spec:                   &spec,
 		},
 	); err != nil {
 		return nil, nil, err

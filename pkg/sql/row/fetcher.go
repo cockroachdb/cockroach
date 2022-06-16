@@ -76,6 +76,15 @@ type kvBatchFetcherResponse struct {
 
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
 type KVBatchFetcher interface {
+	// SetupNextFetch prepares the fetch of the next set of spans.
+	SetupNextFetch(
+		ctx context.Context,
+		spans roachpb.Spans,
+		spanIDs []int,
+		batchBytesLimit rowinfra.BytesLimit,
+		firstBatchKeyLimit rowinfra.KeyLimit,
+	) error
+
 	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
 	// details on what is returned.
 	nextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
@@ -209,6 +218,17 @@ func (rf *Fetcher) Close(ctx context.Context) {
 
 // FetcherInitArgs contains arguments for Fetcher.Init.
 type FetcherInitArgs struct {
+	// StreamingKVFetcher, if non-nil, contains the KVFetcher that uses the
+	// kvstreamer.Streamer API under the hood. The caller is then expected to
+	// use only StartScan() method.
+	StreamingKVFetcher *KVFetcher
+	// WillUseCustomKVFetcher, if true, indicates that the caller will only use
+	// StartScanFrom() method and will be providing its own KVFetcher.
+	WillUseCustomKVFetcher bool
+	// Txn is the txn for the fetch. It might be nil, and the caller is expected
+	// to either provide the txn later via SetTxn() or to only use StartScanFrom
+	// method.
+	Txn *kv.Txn
 	// Reverse denotes whether or not the spans should be read in reverse or not
 	// when StartScan* methods are invoked.
 	Reverse bool
@@ -339,11 +359,49 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 	}
 
+	if args.StreamingKVFetcher != nil {
+		if args.WillUseCustomKVFetcher {
+			return errors.AssertionFailedf(
+				"StreamingKVFetcher is non-nil when WillUseCustomKVFetcher is true",
+			)
+		}
+		rf.kvFetcher = args.StreamingKVFetcher
+	} else if !args.WillUseCustomKVFetcher {
+		fetcherArgs := kvBatchFetcherArgs{
+			reverse:                    args.Reverse,
+			lockStrength:               args.LockStrength,
+			lockWaitPolicy:             args.LockWaitPolicy,
+			lockTimeout:                args.LockTimeout,
+			acc:                        rf.kvFetcherMemAcc,
+			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
+		}
+		if args.Txn != nil {
+			fetcherArgs.sendFn = makeKVBatchFetcherDefaultSendFunc(args.Txn)
+			fetcherArgs.requestAdmissionHeader = args.Txn.AdmissionHeader()
+			fetcherArgs.responseAdmissionQ = args.Txn.DB().SQLKVResponseAdmissionQ
+		}
+		rf.kvFetcher = newKVFetcher(newKVBatchFetcher(fetcherArgs))
+	}
+
 	return nil
 }
 
+// SetTxn updates the Fetcher to use the provided txn.
+func (rf *Fetcher) SetTxn(txn *kv.Txn) {
+	rf.setTxnAndSendFn(txn, makeKVBatchFetcherDefaultSendFunc(txn))
+}
+
+// setTxnAndSendFn peeks inside of the KVFetcher to update the underlying
+// txnKVFetcher with the new txn and sendFn.
+func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
+	f := rf.kvFetcher.KVBatchFetcher.(*txnKVFetcher)
+	f.sendFn = sendFn
+	f.requestAdmissionHeader = txn.AdmissionHeader()
+	f.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
+}
+
 // StartScan initializes and starts the key-value scan. Can be used multiple
-// times.
+// times. Cannot be used if WillUseCustomKVFetcher was set to true in Init().
 //
 // The fetcher takes ownership of the spans slice - it can modify the slice and
 // will perform the memory accounting accordingly (if Init() was called with
@@ -377,40 +435,29 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // argument that some number of rows will eventually satisfy the query and we
 // likely don't need to scan `spans` fully. The bytes limit, on the other hand,
 // is simply intended to protect against OOMs.
+//
+// Batch limits can only be used if the spans are ordered.
 func (rf *Fetcher) StartScan(
 	ctx context.Context,
-	txn *kv.Txn,
 	spans roachpb.Spans,
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 ) error {
+	if rf.args.WillUseCustomKVFetcher {
+		return errors.AssertionFailedf("StartScan is called instead of StartScanFrom")
+	}
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
 
-	f, err := makeKVBatchFetcher(
-		ctx,
-		kvBatchFetcherArgs{
-			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
-			spans:                      spans,
-			spanIDs:                    spanIDs,
-			reverse:                    rf.args.Reverse,
-			batchBytesLimit:            batchBytesLimit,
-			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
-			lockStrength:               rf.args.LockStrength,
-			lockWaitPolicy:             rf.args.LockWaitPolicy,
-			lockTimeout:                rf.args.LockTimeout,
-			acc:                        rf.kvFetcherMemAcc,
-			forceProductionKVBatchSize: rf.args.ForceProductionKVBatchSize,
-			requestAdmissionHeader:     txn.AdmissionHeader(),
-			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
-		},
-	)
-	if err != nil {
+	if err := rf.kvFetcher.SetupNextFetch(
+		ctx, spans, spanIDs, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint),
+	); err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+
+	return rf.startScan(ctx)
 }
 
 // TestingInconsistentScanSleep introduces a sleep inside the fetcher after
@@ -428,7 +475,10 @@ var TestingInconsistentScanSleep time.Duration
 // that has passed. See the documentation for TableReaderSpec for more
 // details.
 //
-// Can be used multiple times.
+// Can be used multiple times. Cannot be used if WillUseCustomKVFetcher was set
+// to true in Init().
+//
+// Batch limits can only be used if the spans are ordered.
 func (rf *Fetcher) StartInconsistentScan(
 	ctx context.Context,
 	db *kv.DB,
@@ -439,6 +489,12 @@ func (rf *Fetcher) StartInconsistentScan(
 	rowLimitHint rowinfra.RowLimit,
 	qualityOfService sessiondatapb.QoSLevel,
 ) error {
+	if rf.args.StreamingKVFetcher != nil {
+		return errors.AssertionFailedf("StartInconsistentScan is called instead of StartScanFrom")
+	}
+	if rf.args.WillUseCustomKVFetcher {
+		return errors.AssertionFailedf("StartInconsistentScan is called instead of StartScanFrom")
+	}
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
@@ -491,28 +547,15 @@ func (rf *Fetcher) StartInconsistentScan(
 	// TODO(radu): we should commit the last txn. Right now the commit is a no-op
 	// on read transactions, but perhaps one day it will release some resources.
 
-	f, err := makeKVBatchFetcher(
-		ctx,
-		kvBatchFetcherArgs{
-			sendFn:                     sendFn,
-			spans:                      spans,
-			spanIDs:                    nil,
-			reverse:                    rf.args.Reverse,
-			batchBytesLimit:            batchBytesLimit,
-			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
-			lockStrength:               rf.args.LockStrength,
-			lockWaitPolicy:             rf.args.LockWaitPolicy,
-			lockTimeout:                rf.args.LockTimeout,
-			acc:                        rf.kvFetcherMemAcc,
-			forceProductionKVBatchSize: rf.args.ForceProductionKVBatchSize,
-			requestAdmissionHeader:     txn.AdmissionHeader(),
-			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
-		},
-	)
-	if err != nil {
+	rf.setTxnAndSendFn(txn, sendFn)
+
+	if err := rf.kvFetcher.SetupNextFetch(
+		ctx, spans, nil /* spanIDs */, batchBytesLimit, rf.rowLimitToKeyLimit(rowLimitHint),
+	); err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+
+	return rf.startScan(ctx)
 }
 
 func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {
@@ -530,14 +573,22 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.K
 	return rowinfra.KeyLimit(int64(rowLimitHint)*int64(rf.table.spec.MaxKeysPerRow) + 1)
 }
 
-// StartScanFrom initializes and starts a scan from the given KVBatchFetcher. Can be
-// used multiple times.
+// StartScanFrom initializes and starts a scan from the given KVBatchFetcher.
+// Can be used multiple times. Cannot be used if WillUseCustomKVFetcher was set
+// to false in Init().
 func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher) error {
-	rf.indexKey = nil
+	if !rf.args.WillUseCustomKVFetcher {
+		return errors.AssertionFailedf("StartScanFrom is called instead of StartScan")
+	}
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
 	}
 	rf.kvFetcher = newKVFetcher(f)
+	return rf.startScan(ctx)
+}
+
+func (rf *Fetcher) startScan(ctx context.Context) error {
+	rf.indexKey = nil
 	rf.kvEnd = false
 	// Retrieve the first key.
 	var err error
