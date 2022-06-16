@@ -94,11 +94,8 @@ func (s *Store) insertRangeLogEvent(
 // logSplit logs a range split event into the event table. The affected range is
 // the range which previously existed and is being split in half; the "other"
 // range is the new range which is being created.
-//
-// TODO(mrtracy): There are several different reasons that a range split
-// could occur, and that information should be logged.
 func (s *Store) logSplit(
-	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor,
+	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor, reason string,
 ) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
@@ -112,6 +109,7 @@ func (s *Store) logSplit(
 		Info: &kvserverpb.RangeLogEvent_Info{
 			UpdatedDesc: &updatedDesc,
 			NewDesc:     &newDesc,
+			Details:     reason,
 		},
 	})
 }

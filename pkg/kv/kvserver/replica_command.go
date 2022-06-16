@@ -180,6 +180,7 @@ func splitTxnAttempt(
 	splitKey roachpb.RKey,
 	expiration hlc.Timestamp,
 	oldDesc *roachpb.RangeDescriptor,
+	reason string,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -218,7 +219,7 @@ func splitTxnAttempt(
 	}
 
 	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason); err != nil {
 		return err
 	}
 
@@ -412,7 +413,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc)
+		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc, reason)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
