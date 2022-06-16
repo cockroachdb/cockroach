@@ -597,6 +597,11 @@ func (p *pebbleIterator) HasPointAndRange() (bool, bool) {
 	return p.iter.HasPointAndRange()
 }
 
+// HasEnginePointAndRange implements the EngineIterator interface.
+func (p *pebbleIterator) HasEnginePointAndRange() (bool, bool) {
+	return p.iter.HasPointAndRange()
+}
+
 // RangeBounds implements the MVCCIterator interface.
 func (p *pebbleIterator) RangeBounds() roachpb.Span {
 	start, end := p.iter.RangeBounds()
@@ -619,6 +624,24 @@ func (p *pebbleIterator) RangeBounds() roachpb.Span {
 	}
 
 	return roachpb.Span{Key: startKey.Key, EndKey: endKey.Key}
+}
+
+// EngineRangeBounds implements the EngineIterator interface.
+func (p *pebbleIterator) EngineRangeBounds() (roachpb.Span, error) {
+	start, end := p.iter.RangeBounds()
+	if len(start) == 0 && len(end) == 0 {
+		return roachpb.Span{}, nil
+	}
+
+	s, ok := DecodeEngineKey(start)
+	if !ok || len(s.Version) > 0 {
+		return roachpb.Span{}, errors.Errorf("invalid encoded engine key: %x", start)
+	}
+	e, ok := DecodeEngineKey(end)
+	if !ok || len(e.Version) > 0 {
+		return roachpb.Span{}, errors.Errorf("invalid encoded engine key: %x", end)
+	}
+	return roachpb.Span{Key: s.Key, EndKey: e.Key}, nil
 }
 
 // RangeKeys implements the MVCCIterator interface.
@@ -644,6 +667,16 @@ func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
 		})
 	}
 	return rangeKVs
+}
+
+// EngineRangeKeys implements the EngineIterator interface.
+func (p *pebbleIterator) EngineRangeKeys() []EngineRangeKeyValue {
+	rangeKeys := p.iter.RangeKeys()
+	rkvs := make([]EngineRangeKeyValue, 0, len(rangeKeys))
+	for _, rk := range rangeKeys {
+		rkvs = append(rkvs, EngineRangeKeyValue{Version: rk.Suffix, Value: rk.Value})
+	}
+	return rkvs
 }
 
 // ComputeStats implements the MVCCIterator interface.

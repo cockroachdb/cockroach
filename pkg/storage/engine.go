@@ -298,6 +298,20 @@ type EngineIterator interface {
 	// the iteration. After this call, valid will be true if the iterator was
 	// not originally positioned at the first key.
 	PrevEngineKey() (valid bool, err error)
+	// HasEnginePointAndRange returns whether the iterator is positioned on a
+	// point or range key.
+	//
+	// TODO(erikgrinaker): Consider renaming this HasPointAndRange and merge with
+	// the SimpleMVCCIterator implementation. However, HasPointAndRange() needs to
+	// imply Valid() for MVCC iterators, which in turns prevents it from being
+	// used e.g. across the lock table. Once we revamp the MVCCIterator interface
+	// we can probably merge these:
+	// https://github.com/cockroachdb/cockroach/issues/82589
+	HasEnginePointAndRange() (bool, bool)
+	// EngineRangeBounds returns the current range key bounds.
+	EngineRangeBounds() (roachpb.Span, error)
+	// EngineRangeKeys returns the engine range keys at the current position.
+	EngineRangeKeys() []EngineRangeKeyValue
 	// UnsafeEngineKey returns the same value as EngineKey, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
@@ -388,12 +402,6 @@ type IterOptions struct {
 	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
 	// Defaults to IterKeyTypePointsOnly. For more details on range keys, see
 	// comment on SimpleMVCCIterator.
-	//
-	// Range keys are only supported for use with MVCCIterators. Enabling them
-	// for EngineIterators will error.
-	//
-	// TODO(erikgrinaker): Consider separating the options structs for
-	// EngineIterator and MVCCIterator.
 	KeyTypes IterKeyType
 	// RangeKeyMaskingBelow enables masking (hiding) of point keys by range keys.
 	// Any range key with a timestamp at or below RangeKeyMaskingBelow
@@ -537,7 +545,7 @@ type Reader interface {
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
-	// after this function returns. EngineIterators do not support range keys.
+	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same

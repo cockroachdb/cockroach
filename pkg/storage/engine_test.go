@@ -2135,42 +2135,84 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 			t.Run(fmt.Sprintf("read/%s/%s", name, keyTypeName), func(t *testing.T) {
 				require.False(t, r.SupportsRangeKeys())
 
-				iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-					KeyTypes:             keyType,
-					UpperBound:           keys.MaxKey,
-					RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
-				})
-				defer iter.Close()
+				t.Run("MVCCIterator", func(t *testing.T) {
+					iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						KeyTypes:             keyType,
+						UpperBound:           keys.MaxKey,
+						RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
+					})
+					defer iter.Close()
 
-				iter.SeekGE(pointKey("a", 0))
+					iter.SeekGE(pointKey("a", 0))
 
-				ok, err := iter.Valid()
-				require.NoError(t, err)
+					ok, err := iter.Valid()
+					require.NoError(t, err)
 
-				if keyType == IterKeyTypeRangesOnly {
-					// With RangesOnly, the iterator must be empty.
-					require.False(t, ok)
+					if keyType == IterKeyTypeRangesOnly {
+						// With RangesOnly, the iterator must be empty.
+						require.False(t, ok)
+						hasPoint, hasRange := iter.HasPointAndRange()
+						require.False(t, hasPoint)
+						require.False(t, hasRange)
+						return
+					}
+
+					require.True(t, ok)
+					require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
+					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
+
 					hasPoint, hasRange := iter.HasPointAndRange()
-					require.False(t, hasPoint)
+					require.True(t, hasPoint)
 					require.False(t, hasRange)
-					return
-				}
+					require.Empty(t, iter.RangeBounds())
+					require.Empty(t, iter.RangeKeys())
 
-				require.True(t, ok)
-				require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
-				require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
+					// Exhaust the iterator.
+					iter.Next()
+					ok, err = iter.Valid()
+					require.NoError(t, err)
+					require.False(t, ok)
+				})
 
-				hasPoint, hasRange := iter.HasPointAndRange()
-				require.True(t, hasPoint)
-				require.False(t, hasRange)
-				require.Empty(t, iter.RangeBounds())
-				require.Empty(t, iter.RangeKeys())
+				t.Run("EngineIterator", func(t *testing.T) {
+					iter := r.NewEngineIterator(IterOptions{
+						KeyTypes:             keyType,
+						UpperBound:           keys.MaxKey,
+						RangeKeyMaskingBelow: hlc.Timestamp{WallTime: 1}, // should get disabled when unsupported
+					})
+					defer iter.Close()
 
-				// Exhaust the iterator.
-				iter.Next()
-				ok, err = iter.Valid()
-				require.NoError(t, err)
-				require.False(t, ok)
+					ok, err := iter.SeekEngineKeyGE(engineKey("a", 0))
+					require.NoError(t, err)
+
+					if keyType == IterKeyTypeRangesOnly {
+						// With RangesOnly, the iterator must be empty.
+						require.False(t, ok)
+						hasPoint, hasRange := iter.HasEnginePointAndRange()
+						require.False(t, hasPoint)
+						require.False(t, hasRange)
+						return
+					}
+
+					require.True(t, ok)
+					key, err := iter.UnsafeEngineKey()
+					require.NoError(t, err)
+					require.Equal(t, engineKey("a", 1), key)
+					require.Equal(t, stringValueRaw("a1"), iter.UnsafeValue())
+
+					hasPoint, hasRange := iter.HasEnginePointAndRange()
+					require.True(t, hasPoint)
+					require.False(t, hasRange)
+					rangeBounds, err := iter.EngineRangeBounds()
+					require.NoError(t, err)
+					require.Empty(t, rangeBounds)
+					require.Empty(t, iter.EngineRangeKeys())
+
+					// Exhaust the iterator.
+					ok, err = iter.NextEngineKey()
+					require.NoError(t, err)
+					require.False(t, ok)
+				})
 			})
 		}
 	}
