@@ -400,12 +400,14 @@ func newJoinReader(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
-			LockStrength:   spec.LockingStrength,
-			LockWaitPolicy: spec.LockingWaitPolicy,
-			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
-			Alloc:          &jr.alloc,
-			MemMonitor:     flowCtx.EvalCtx.Mon,
-			Spec:           &spec.FetchSpec,
+			LockStrength:               spec.LockingStrength,
+			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:                      &jr.alloc,
+			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			Spec:                       &spec.FetchSpec,
+			TraceKV:                    flowCtx.TraceKV,
+			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
 		return nil, err
@@ -948,7 +950,7 @@ func (jr *joinReader) readInput() (
 			jr.MoveToDraining(err)
 			return jrStateUnknown, nil, jr.DrainHelper()
 		}
-		err = jr.fetcher.StartScanFrom(jr.Ctx, kvBatchFetcher, jr.FlowCtx.TraceKV)
+		err = jr.fetcher.StartScanFrom(jr.Ctx, kvBatchFetcher)
 	} else {
 		var bytesLimit rowinfra.BytesLimit
 		if !jr.shouldLimitBatches {
@@ -961,7 +963,6 @@ func (jr *joinReader) readInput() (
 		}
 		err = jr.fetcher.StartScan(
 			jr.Ctx, jr.txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
-			jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 	}
 	if err != nil {
@@ -1028,7 +1029,6 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 			}
 			if err := jr.fetcher.StartScan(
 				jr.Ctx, jr.txn, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
-				jr.FlowCtx.TraceKV, jr.EvalCtx.TestingKnobs.ForceProductionValues,
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()

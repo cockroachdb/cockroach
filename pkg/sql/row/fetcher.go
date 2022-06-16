@@ -148,32 +148,12 @@ type tableInfo struct {
 //      // Process res.row
 //   }
 type Fetcher struct {
+	args  FetcherInitArgs
 	table tableInfo
-
-	// reverse denotes whether or not the spans should be read in reverse
-	// or not when StartScan is invoked.
-	reverse bool
 
 	// True if the index key must be decoded. This is only false if there are no
 	// needed columns.
 	mustDecodeIndexKey bool
-
-	// lockStrength represents the row-level locking mode to use when fetching
-	// rows.
-	lockStrength descpb.ScanLockingStrength
-
-	// lockWaitPolicy represents the policy to be used for handling conflicting
-	// locks held by other active transactions.
-	lockWaitPolicy descpb.ScanLockingWaitPolicy
-
-	// lockTimeout specifies the maximum amount of time that the fetcher will
-	// wait while attempting to acquire a lock on a key or while blocking on an
-	// existing lock in order to perform a non-locking read on a key.
-	lockTimeout time.Duration
-
-	// traceKV indicates whether or not session tracing is enabled. It is set
-	// when beginning a new scan.
-	traceKV bool
 
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched.
@@ -200,9 +180,6 @@ type Fetcher struct {
 	// IgnoreUnexpectedNulls allows Fetcher to return null values for non-nullable
 	// columns and is only used for decoding for error messages or debugging.
 	IgnoreUnexpectedNulls bool
-
-	// Buffered allocation of decoded datums.
-	alloc *tree.DatumAlloc
 
 	// Memory monitor and memory account for the bytes fetched by this fetcher.
 	mon             *mon.BytesMonitor
@@ -232,13 +209,26 @@ func (rf *Fetcher) Close(ctx context.Context) {
 
 // FetcherInitArgs contains arguments for Fetcher.Init.
 type FetcherInitArgs struct {
-	Reverse        bool
-	LockStrength   descpb.ScanLockingStrength
+	// Reverse denotes whether or not the spans should be read in reverse or not
+	// when StartScan* methods are invoked.
+	Reverse bool
+	// LockStrength represents the row-level locking mode to use when fetching
+	// rows.
+	LockStrength descpb.ScanLockingStrength
+	// LockWaitPolicy represents the policy to be used for handling conflicting
+	// locks held by other active transactions.
 	LockWaitPolicy descpb.ScanLockingWaitPolicy
-	LockTimeout    time.Duration
-	Alloc          *tree.DatumAlloc
-	MemMonitor     *mon.BytesMonitor
-	Spec           *descpb.IndexFetchSpec
+	// LockTimeout specifies the maximum amount of time that the fetcher will
+	// wait while attempting to acquire a lock on a key or while blocking on an
+	// existing lock in order to perform a non-locking read on a key.
+	LockTimeout time.Duration
+	// Alloc is used for buffered allocation of decoded datums.
+	Alloc      *tree.DatumAlloc
+	MemMonitor *mon.BytesMonitor
+	Spec       *descpb.IndexFetchSpec
+	// TraceKV indicates whether or not session tracing is enabled.
+	TraceKV                    bool
+	ForceProductionKVBatchSize bool
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -246,11 +236,8 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	if args.Spec.Version != descpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", args.Spec.Version)
 	}
-	rf.reverse = args.Reverse
-	rf.lockStrength = args.LockStrength
-	rf.lockWaitPolicy = args.LockWaitPolicy
-	rf.lockTimeout = args.LockTimeout
-	rf.alloc = args.Alloc
+
+	rf.args = args
 
 	if args.MemMonitor != nil {
 		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, args.MemMonitor)
@@ -397,8 +384,6 @@ func (rf *Fetcher) StartScan(
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
-	traceKV bool,
-	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -410,14 +395,14 @@ func (rf *Fetcher) StartScan(
 			sendFn:                     makeKVBatchFetcherDefaultSendFunc(txn),
 			spans:                      spans,
 			spanIDs:                    spanIDs,
-			reverse:                    rf.reverse,
+			reverse:                    rf.args.Reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
-			lockStrength:               rf.lockStrength,
-			lockWaitPolicy:             rf.lockWaitPolicy,
-			lockTimeout:                rf.lockTimeout,
+			lockStrength:               rf.args.LockStrength,
+			lockWaitPolicy:             rf.args.LockWaitPolicy,
+			lockTimeout:                rf.args.LockTimeout,
 			acc:                        rf.kvFetcherMemAcc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			forceProductionKVBatchSize: rf.args.ForceProductionKVBatchSize,
 			requestAdmissionHeader:     txn.AdmissionHeader(),
 			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
 		},
@@ -425,7 +410,7 @@ func (rf *Fetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f, traceKV)
+	return rf.StartScanFrom(ctx, &f)
 }
 
 // TestingInconsistentScanSleep introduces a sleep inside the fetcher after
@@ -452,8 +437,6 @@ func (rf *Fetcher) StartInconsistentScan(
 	spans roachpb.Spans,
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
-	traceKV bool,
-	forceProductionKVBatchSize bool,
 	qualityOfService sessiondatapb.QoSLevel,
 ) error {
 	if len(spans) == 0 {
@@ -514,14 +497,14 @@ func (rf *Fetcher) StartInconsistentScan(
 			sendFn:                     sendFn,
 			spans:                      spans,
 			spanIDs:                    nil,
-			reverse:                    rf.reverse,
+			reverse:                    rf.args.Reverse,
 			batchBytesLimit:            batchBytesLimit,
 			firstBatchKeyLimit:         rf.rowLimitToKeyLimit(rowLimitHint),
-			lockStrength:               rf.lockStrength,
-			lockWaitPolicy:             rf.lockWaitPolicy,
-			lockTimeout:                rf.lockTimeout,
+			lockStrength:               rf.args.LockStrength,
+			lockWaitPolicy:             rf.args.LockWaitPolicy,
+			lockTimeout:                rf.args.LockTimeout,
 			acc:                        rf.kvFetcherMemAcc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			forceProductionKVBatchSize: rf.args.ForceProductionKVBatchSize,
 			requestAdmissionHeader:     txn.AdmissionHeader(),
 			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
 		},
@@ -529,7 +512,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f, traceKV)
+	return rf.StartScanFrom(ctx, &f)
 }
 
 func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.KeyLimit {
@@ -549,8 +532,7 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.K
 
 // StartScanFrom initializes and starts a scan from the given KVBatchFetcher. Can be
 // used multiple times.
-func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher, traceKV bool) error {
-	rf.traceKV = traceKV
+func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher) error {
 	rf.indexKey = nil
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
@@ -667,7 +649,7 @@ func (rf *Fetcher) prettyKeyDatums(
 	var buf strings.Builder
 	for i, v := range vals {
 		buf.WriteByte('/')
-		if err := v.EnsureDecoded(cols[i].Type, rf.alloc); err != nil {
+		if err := v.EnsureDecoded(cols[i].Type, rf.args.Alloc); err != nil {
 			buf.WriteByte('?')
 		} else {
 			buf.WriteString(v.Datum.String())
@@ -691,7 +673,7 @@ func (rf *Fetcher) processKV(
 ) (prettyKey string, prettyValue string, err error) {
 	table := &rf.table
 
-	if rf.traceKV {
+	if rf.args.TraceKV {
 		prettyKey = fmt.Sprintf(
 			"/%s/%s%s",
 			table.spec.TableName,
@@ -743,7 +725,7 @@ func (rf *Fetcher) processKV(
 
 	if len(table.spec.FetchedColumns) == 0 {
 		// We don't need to decode any values.
-		if rf.traceKV {
+		if rf.args.TraceKV {
 			prettyValue = "<undecoded>"
 		}
 		return prettyKey, prettyValue, nil
@@ -831,7 +813,7 @@ func (rf *Fetcher) processKV(
 						table.row[idx] = table.extraVals[i]
 					}
 				}
-				if rf.traceKV {
+				if rf.args.TraceKV {
 					prettyValue = rf.prettyKeyDatums(extraCols, table.extraVals)
 				}
 			}
@@ -852,7 +834,7 @@ func (rf *Fetcher) processKV(
 		}
 	}
 
-	if rf.traceKV && prettyValue == "" {
+	if rf.args.TraceKV && prettyValue == "" {
 		prettyValue = "<undecoded>"
 	}
 
@@ -879,7 +861,7 @@ func (rf *Fetcher) processValueSingle(
 		return prettyKey, "", nil
 	}
 
-	if rf.traceKV {
+	if rf.args.TraceKV {
 		prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
 	}
 	if len(kv.Value.RawBytes) == 0 {
@@ -891,11 +873,11 @@ func (rf *Fetcher) processValueSingle(
 	// although that would require changing UnmarshalColumnValue to operate
 	// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 	// single values.
-	value, err := valueside.UnmarshalLegacy(rf.alloc, typ, kv.Value)
+	value, err := valueside.UnmarshalLegacy(rf.args.Alloc, typ, kv.Value)
 	if err != nil {
 		return "", "", err
 	}
-	if rf.traceKV {
+	if rf.args.TraceKV {
 		prettyValue = value.String()
 	}
 	table.row[idx] = rowenc.DatumToEncDatum(typ, value)
@@ -913,7 +895,7 @@ func (rf *Fetcher) processValueBytes(
 	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
-	if rf.traceKV {
+	if rf.args.TraceKV {
 		if rf.prettyValueBuf == nil {
 			rf.prettyValueBuf = &bytes.Buffer{}
 		}
@@ -945,7 +927,7 @@ func (rf *Fetcher) processValueBytes(
 			continue
 		}
 
-		if rf.traceKV {
+		if rf.args.TraceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
 		}
 
@@ -955,8 +937,8 @@ func (rf *Fetcher) processValueBytes(
 		if err != nil {
 			return "", "", err
 		}
-		if rf.traceKV {
-			err := encValue.EnsureDecoded(table.spec.FetchedColumns[idx].Type, rf.alloc)
+		if rf.args.TraceKV {
+			err := encValue.EnsureDecoded(table.spec.FetchedColumns[idx].Type, rf.args.Alloc)
 			if err != nil {
 				return "", "", err
 			}
@@ -968,7 +950,7 @@ func (rf *Fetcher) processValueBytes(
 			log.Infof(ctx, "Scan %d -> %v", idx, encValue)
 		}
 	}
-	if rf.traceKV {
+	if rf.args.TraceKV {
 		prettyValue = rf.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
@@ -998,7 +980,7 @@ func (rf *Fetcher) NextRow(ctx context.Context) (row rowenc.EncDatumRow, spanID 
 		if err != nil {
 			return nil, 0, err
 		}
-		if rf.traceKV {
+		if rf.args.TraceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
@@ -1058,7 +1040,7 @@ func (rf *Fetcher) NextRowDecoded(ctx context.Context) (datums tree.Datums, err 
 			rf.table.decodedRow[i] = tree.DNull
 			continue
 		}
-		if err := encDatum.EnsureDecoded(rf.table.spec.FetchedColumns[i].Type, rf.alloc); err != nil {
+		if err := encDatum.EnsureDecoded(rf.table.spec.FetchedColumns[i].Type, rf.args.Alloc); err != nil {
 			return nil, err
 		}
 		rf.table.decodedRow[i] = encDatum.Datum
@@ -1098,7 +1080,7 @@ func (rf *Fetcher) NextRowDecodedInto(
 			destination[ord] = tree.DNull
 			continue
 		}
-		if err := encDatum.EnsureDecoded(col.Type, rf.alloc); err != nil {
+		if err := encDatum.EnsureDecoded(col.Type, rf.args.Alloc); err != nil {
 			return false, err
 		}
 		destination[ord] = encDatum.Datum
@@ -1129,7 +1111,7 @@ func (rf *Fetcher) finalizeRow() error {
 		// TODO (rohany): Datums are immutable, so we can't store a DDecimal on the
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
-		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.RowLastModified())})
+		dec := rf.args.Alloc.NewDDecimal(tree.DDecimal{Decimal: eval.TimestampToDecimal(rf.RowLastModified())})
 		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 	if table.oidOutputIdx != noOutputColumn {

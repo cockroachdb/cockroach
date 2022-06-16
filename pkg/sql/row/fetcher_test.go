@@ -156,8 +156,6 @@ func TestNextRowSingle(t *testing.T) {
 				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
-				false, /*traceKV*/
-				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -260,9 +258,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
 				rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-				10,    /*limitHint*/
-				false, /*traceKV*/
-				false, /*forceProductionKVBatchSize*/
+				10, /*limitHint*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -356,8 +352,6 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		nil, /* spanIDs */
 		rowinfra.NoBytesLimit,
 		rowinfra.NoRowLimit,
-		false, /*traceKV*/
-		false, /*forceProductionKVBatchSize*/
 	)
 	assert.Error(t, err)
 	assert.Equal(t, pgerror.GetPGCode(err), pgcode.OutOfMemory)
@@ -435,9 +429,7 @@ INDEX(c)
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
-		1,     /*limitHint*/
-		false, /*traceKV*/
-		false, /*forceProductionKVBatchSize*/
+		1, /*limitHint*/
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -593,8 +585,6 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
-				false, /*traceKV*/
-				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}

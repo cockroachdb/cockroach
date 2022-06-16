@@ -184,7 +184,8 @@ type cFetcherArgs struct {
 	reverse bool
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when initializing the fetcher.
-	traceKV bool
+	traceKV                    bool
+	forceProductionKVBatchSize bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -510,7 +511,6 @@ func (cf *cFetcher) StartScan(
 	limitBatches bool,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
-	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -557,7 +557,7 @@ func (cf *cFetcher) StartScan(
 		cf.lockWaitPolicy,
 		cf.lockTimeout,
 		cf.kvFetcherMemAcc,
-		forceProductionKVBatchSize,
+		cf.forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
