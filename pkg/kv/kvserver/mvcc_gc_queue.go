@@ -611,9 +611,11 @@ func (mgcq *mvccGCQueue) process(
 		return false, err
 	}
 
+	newScore := makeMVCCGCQueueScore(
+		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold)
+	if r.FinalScore
 	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
-	log.Eventf(ctx, "GC score after GC: %s", makeMVCCGCQueueScore(
-		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold))
+	log.Eventf(ctx, "GC score after GC: %s", newScore)
 	updateStoreMetricsWithGCInfo(mgcq.store.metrics, info)
 	return true, nil
 }
