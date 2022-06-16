@@ -369,6 +369,7 @@ ALL_TESTS = [
     "//pkg/sql/protoreflect:protoreflect_test",
     "//pkg/sql/querycache:querycache_test",
     "//pkg/sql/randgen:randgen_test",
+    "//pkg/sql/row:row_disallowed_imports_test",
     "//pkg/sql/row:row_test",
     "//pkg/sql/rowcontainer:rowcontainer_test",
     "//pkg/sql/rowenc/keyside:keyside_test",

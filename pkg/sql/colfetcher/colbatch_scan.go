@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -92,9 +93,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
 		s.Ctx,
-		s.flowCtx.Txn,
 		s.Spans,
-		s.bsHeader,
 		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,
@@ -188,29 +187,6 @@ func NewColBatchScan(
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
 		return nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
-	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
-	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
-	if err != nil {
-		return nil, err
-	}
-
-	fetcher := cFetcherPool.Get().(*cFetcher)
-	fetcher.cFetcherArgs = cFetcherArgs{
-		spec.LockingStrength,
-		spec.LockingWaitPolicy,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		execinfra.GetWorkMemLimit(flowCtx),
-		estimatedRowCount,
-		spec.Reverse,
-		flowCtx.TraceKV,
-		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
-	}
-
-	if err = fetcher.Init(allocator, kvFetcherMemAcc, tableArgs); err != nil {
-		fetcher.Release()
-		return nil, err
-	}
-
 	var bsHeader *roachpb.BoundedStalenessHeader
 	if aost := flowCtx.EvalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
 		ts := aost.Timestamp
@@ -226,6 +202,38 @@ func NewColBatchScan(
 			MinTimestampBoundStrict: aost.NearestOnly,
 			MaxTimestampBound:       flowCtx.EvalCtx.AsOfSystemTime.MaxTimestampBound, // may be empty
 		}
+	}
+
+	limitHint := rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	tableArgs, err := populateTableArgs(ctx, flowCtx, &spec.FetchSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	kvFetcher := row.NewKVFetcher(
+		flowCtx.Txn,
+		bsHeader,
+		spec.Reverse,
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		kvFetcherMemAcc,
+		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+	)
+
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.cFetcherArgs = cFetcherArgs{
+		execinfra.GetWorkMemLimit(flowCtx),
+		estimatedRowCount,
+		flowCtx.TraceKV,
+		true, /* singleUse */
+	}
+
+	if err = fetcher.Init(
+		allocator, kvFetcher, tableArgs,
+	); err != nil {
+		fetcher.Release()
+		return nil, err
 	}
 
 	s := colBatchScanPool.Get().(*ColBatchScan)

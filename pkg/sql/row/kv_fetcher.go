@@ -16,13 +16,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,20 +63,15 @@ type KVFetcher struct {
 //
 // If spanIDs is non-nil, then it must be of the same length as spans.
 func NewKVFetcher(
-	ctx context.Context,
 	txn *kv.Txn,
-	spans roachpb.Spans,
-	spanIDs []int,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
-	batchBytesLimit rowinfra.BytesLimit,
-	firstBatchLimit rowinfra.KeyLimit,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
-) (*KVFetcher, error) {
+) *KVFetcher {
 	var sendFn sendFunc
 	// Avoid the heap allocation by allocating sendFn specifically in the if.
 	if bsHeader == nil {
@@ -99,33 +98,66 @@ func NewKVFetcher(
 		}
 	}
 
-	kvBatchFetcher, err := makeKVBatchFetcher(
-		ctx,
-		kvBatchFetcherArgs{
-			sendFn:                     sendFn,
-			spans:                      spans,
-			spanIDs:                    spanIDs,
-			reverse:                    reverse,
-			batchBytesLimit:            batchBytesLimit,
-			firstBatchKeyLimit:         firstBatchLimit,
-			lockStrength:               lockStrength,
-			lockWaitPolicy:             lockWaitPolicy,
-			lockTimeout:                lockTimeout,
-			acc:                        acc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
-			requestAdmissionHeader:     txn.AdmissionHeader(),
-			responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
-		},
-	)
-	return newKVFetcher(&kvBatchFetcher), err
+	fetcherArgs := kvBatchFetcherArgs{
+		sendFn:                     sendFn,
+		reverse:                    reverse,
+		lockStrength:               lockStrength,
+		lockWaitPolicy:             lockWaitPolicy,
+		lockTimeout:                lockTimeout,
+		acc:                        acc,
+		forceProductionKVBatchSize: forceProductionKVBatchSize,
+	}
+	if txn != nil {
+		// In most cases, the txn is non-nil; however, in some code paths (e.g.
+		// when executing EXPLAIN (VEC)) it might be nil, so we need to have
+		// this check.
+		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
+		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
+	}
+	return newKVFetcher(newKVBatchFetcher(fetcherArgs))
 }
 
-// NewKVStreamingFetcher returns a new KVFetcher that utilizes the provided
-// TxnKVStreamer to perform KV reads.
-func NewKVStreamingFetcher(streamer *TxnKVStreamer) *KVFetcher {
-	return &KVFetcher{
-		KVBatchFetcher: streamer,
+// NewStreamingKVFetcher returns a new KVFetcher that utilizes the provided
+// kvstreamer.Streamer to perform KV reads.
+//
+// If maintainOrdering is true, then diskBuffer must be non-nil.
+func NewStreamingKVFetcher(
+	distSender *kvcoord.DistSender,
+	stopper *stop.Stopper,
+	txn *kv.Txn,
+	st *cluster.Settings,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockStrength descpb.ScanLockingStrength,
+	streamerBudgetLimit int64,
+	streamerBudgetAcc *mon.BoundAccount,
+	maintainOrdering bool,
+	singleRowLookup bool,
+	maxKeysPerRow int,
+	diskBuffer kvstreamer.ResultDiskBuffer,
+) *KVFetcher {
+	streamer := kvstreamer.NewStreamer(
+		distSender,
+		stopper,
+		txn,
+		st,
+		getWaitPolicy(lockWaitPolicy),
+		streamerBudgetLimit,
+		streamerBudgetAcc,
+	)
+	mode := kvstreamer.OutOfOrder
+	if maintainOrdering {
+		mode = kvstreamer.InOrder
 	}
+	streamer.Init(
+		mode,
+		kvstreamer.Hints{
+			UniqueRequests:  true,
+			SingleRowLookup: singleRowLookup,
+		},
+		maxKeysPerRow,
+		diskBuffer,
+	)
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
@@ -236,6 +268,23 @@ func (f *KVFetcher) NextKV(
 	}
 }
 
+// SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in
+// order to reset this KVFetcher.
+func (f *KVFetcher) SetupNextFetch(
+	ctx context.Context,
+	spans roachpb.Spans,
+	spanIDs []int,
+	batchBytesLimit rowinfra.BytesLimit,
+	firstBatchKeyLimit rowinfra.KeyLimit,
+) error {
+	f.kvs = nil
+	f.batchResponse = nil
+	f.spanID = 0
+	return f.KVBatchFetcher.SetupNextFetch(
+		ctx, spans, spanIDs, batchBytesLimit, firstBatchKeyLimit,
+	)
+}
+
 // Close releases the resources held by this KVFetcher. It must be called
 // at the end of execution if the fetcher was provisioned with a memory
 // monitor.
@@ -261,6 +310,13 @@ func (f *SpanKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherResponse, 
 		moreKVs: true,
 		kvs:     res,
 	}, nil
+}
+
+// SetupNextFetch implements the KVBatchFetcher interface.
+func (f *SpanKVFetcher) SetupNextFetch(
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+) error {
+	return nil
 }
 
 func (f *SpanKVFetcher) close(context.Context) {}
@@ -364,6 +420,13 @@ func (f *BackupSSTKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherRespo
 		moreKVs: true,
 		kvs:     res,
 	}, nil
+}
+
+// SetupNextFetch implements the KVBatchFetcher interface.
+func (f *BackupSSTKVFetcher) SetupNextFetch(
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+) error {
+	return nil
 }
 
 func (f *BackupSSTKVFetcher) close(context.Context) {

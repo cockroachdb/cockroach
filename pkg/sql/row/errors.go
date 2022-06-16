@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -280,8 +281,9 @@ func DecodeRowInfo(
 	if err := rf.Init(
 		ctx,
 		FetcherInitArgs{
-			Alloc: &tree.DatumAlloc{},
-			Spec:  &spec,
+			WillUseCustomKVBatchFetcher: true,
+			Alloc:                       &tree.DatumAlloc{},
+			Spec:                        &spec,
 		},
 	); err != nil {
 		return nil, nil, nil, err
@@ -314,6 +316,12 @@ func DecodeRowInfo(
 		values[i] = datums[i].String()
 	}
 	return index, names, values, nil
+}
+
+func (f *singleKVFetcher) SetupNextFetch(
+	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
+) error {
+	return nil
 }
 
 func (f *singleKVFetcher) close(context.Context) {}

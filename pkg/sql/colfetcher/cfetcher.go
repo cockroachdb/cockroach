@@ -17,13 +17,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -44,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -165,28 +161,18 @@ func (m colIdxMap) Swap(i, j int) {
 }
 
 type cFetcherArgs struct {
-	// lockStrength represents the row-level locking mode to use when fetching
-	// rows.
-	lockStrength descpb.ScanLockingStrength
-	// lockWaitPolicy represents the policy to be used for handling conflicting
-	// locks held by other active transactions.
-	lockWaitPolicy descpb.ScanLockingWaitPolicy
-	// lockTimeout specifies the maximum amount of time that the fetcher will
-	// wait while attempting to acquire a lock on a key or while blocking on an
-	// existing lock in order to perform a non-locking read on a key.
-	lockTimeout time.Duration
 	// memoryLimit determines the maximum memory footprint of the output batch.
 	memoryLimit int64
 	// estimatedRowCount is the optimizer-derived number of expected rows that
 	// this fetch will produce, if non-zero.
 	estimatedRowCount uint64
-	// reverse denotes whether or not the spans should be read in reverse or not
-	// when StartScan is invoked.
-	reverse bool
 	// traceKV indicates whether or not session tracing is enabled. It is set
 	// when initializing the fetcher.
-	traceKV                    bool
-	forceProductionKVBatchSize bool
+	traceKV bool
+	// singleUse, if true, indicates that the cFetcher will only need to scan a
+	// single set of spans. This allows the cFetcher to close itself eagerly,
+	// once it finishes the first fetch.
+	singleUse bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -230,7 +216,7 @@ type cFetcher struct {
 	fetcher *row.KVFetcher
 	// bytesRead stores the cumulative number of bytes read by this cFetcher
 	// throughout its whole existence (i.e. between its construction and
-	// Release()). It accumulates the bytes read statistic across StartScan* and
+	// Release()). It accumulates the bytes read statistic across StartScan and
 	// Close methods.
 	//
 	// The field should not be accessed directly by the users of the cFetcher -
@@ -287,10 +273,6 @@ type cFetcher struct {
 
 	accountingHelper colmem.SetAccountingHelper
 
-	// kvFetcherMemAcc is a memory account that will be used by the underlying
-	// KV fetcher.
-	kvFetcherMemAcc *mon.BoundAccount
-
 	// maxCapacity if non-zero indicates the target capacity of the output
 	// batch. It is set when at the row finalization we realize that the output
 	// batch has exceeded the memory limit.
@@ -344,15 +326,14 @@ func (cf *cFetcher) resetBatch() {
 	}
 }
 
-// Init sets up a Fetcher based on the table args. Only columns present in
+// Init sets up the cFetcher based on the table args. Only columns present in
 // tableArgs.cols will be fetched.
 func (cf *cFetcher) Init(
-	allocator *colmem.Allocator, kvFetcherMemAcc *mon.BoundAccount, tableArgs *cFetcherTableArgs,
+	allocator *colmem.Allocator, kvFetcher *row.KVFetcher, tableArgs *cFetcherTableArgs,
 ) error {
 	if tableArgs.spec.Version != descpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
-	cf.kvFetcherMemAcc = kvFetcherMemAcc
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
 	if cap(table.orderedColIdxMap.vals) < nCols {
@@ -482,33 +463,22 @@ func (cf *cFetcher) Init(
 	}
 
 	cf.table = table
+	cf.fetcher = kvFetcher
 	cf.accountingHelper.Init(allocator, cf.table.typs)
 
 	return nil
 }
 
-//gcassert:inline
-func (cf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
-	cf.fetcher = f
-	cf.machine.lastRowPrefix = nil
-	cf.machine.limitHint = int(limitHint)
-	cf.machine.state[0] = stateResetBatch
-	cf.machine.state[1] = stateInitFetch
-}
-
-// StartScan initializes and starts the key-value scan. Can be used multiple
-// times.
+// StartScan initializes and starts the key-value scan. Can only be used
+// multiple times if cFetcherArgs.singleUse was set to false in Init().
 //
 // The fetcher takes ownership of the spans slice - it can modify the slice and
 // will perform the memory accounting accordingly. The caller can only reuse the
-// spans slice after the fetcher has been closed (which happens when the fetcher
-// emits the first zero batch), and if the caller does, it becomes responsible
-// for the memory accounting.
+// spans slice after the fetcher emits a zero-length batch, and if the caller
+// does, it becomes responsible for the memory accounting.
 func (cf *cFetcher) StartScan(
 	ctx context.Context,
-	txn *kv.Txn,
 	spans roachpb.Spans,
-	bsHeader *roachpb.BoundedStalenessHeader,
 	limitBatches bool,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
@@ -545,49 +515,13 @@ func (cf *cFetcher) StartScan(
 		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
 	}
 
-	f, err := row.NewKVFetcher(
-		ctx,
-		txn,
-		spans,
-		nil, /* spanIDs */
-		bsHeader,
-		cf.reverse,
-		batchBytesLimit,
-		firstBatchLimit,
-		cf.lockStrength,
-		cf.lockWaitPolicy,
-		cf.lockTimeout,
-		cf.kvFetcherMemAcc,
-		cf.forceProductionKVBatchSize,
+	cf.machine.lastRowPrefix = nil
+	cf.machine.limitHint = int(limitHint)
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
+	return cf.fetcher.SetupNextFetch(
+		ctx, spans, nil /* spanIDs */, batchBytesLimit, firstBatchLimit,
 	)
-	if err != nil {
-		return err
-	}
-	cf.setFetcher(f, limitHint)
-	return nil
-}
-
-// StartScanStreaming initializes and starts the key-value scan using the
-// Streamer API. Can be used multiple times.
-//
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly. The caller can only reuse the
-// spans slice after the fetcher has been closed (which happens when the fetcher
-// emits the first zero batch), and if the caller does, it becomes responsible
-// for the memory accounting.
-func (cf *cFetcher) StartScanStreaming(
-	ctx context.Context,
-	streamer *kvstreamer.Streamer,
-	spans roachpb.Spans,
-	limitHint rowinfra.RowLimit,
-) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, nil /* spanIDs */, cf.lockStrength)
-	if err != nil {
-		return err
-	}
-	f := row.NewKVStreamingFetcher(kvBatchFetcher)
-	cf.setFetcher(f, limitHint)
-	return nil
 }
 
 // fetcherState is the state enum for NextBatch.
@@ -954,13 +888,17 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateEmitLastBatch:
 			cf.machine.state[0] = stateFinished
 			cf.finalizeBatch()
-			// Close the fetcher eagerly so that its memory could be GCed.
-			cf.Close(ctx)
+			if cf.singleUse {
+				// Close the fetcher eagerly so that its memory could be GCed.
+				cf.Close(ctx)
+			}
 			return cf.machine.batch, nil
 
 		case stateFinished:
-			// Close the fetcher eagerly so that its memory could be GCed.
-			cf.Close(ctx)
+			if cf.singleUse {
+				// Close the fetcher eagerly so that its memory could be GCed.
+				cf.Close(ctx)
+			}
 			return coldata.ZeroBatch, nil
 		}
 	}
@@ -1348,7 +1286,7 @@ func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
 
 // getBytesRead returns the number of bytes read by the cFetcher throughout its
 // existence so far. This number accumulates the bytes read statistic across
-// StartScan* and Close methods.
+// StartScan and Close methods.
 func (cf *cFetcher) getBytesRead() int64 {
 	if cf.fetcher != nil {
 		cf.bytesRead += cf.fetcher.ResetBytesRead()
