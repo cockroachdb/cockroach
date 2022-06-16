@@ -678,6 +678,9 @@ type StopOpts struct {
 	// If Wait is set, roachprod waits until the PID disappears (i.e. the
 	// process has terminated).
 	Wait bool // forced to true when Sig == 9
+	// If MaxWait is set, roachprod waits that approximate number of seconds
+	// until the PID disappears.
+	MaxWait int
 }
 
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
@@ -686,6 +689,7 @@ func DefaultStopOpts() StopOpts {
 		ProcessTag: "",
 		Sig:        9,
 		Wait:       false,
+		MaxWait:    0,
 	}
 }
 
@@ -698,7 +702,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
-	return c.Stop(ctx, l, opts.Sig, opts.Wait)
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait)
 }
 
 // Init initializes the cluster.
