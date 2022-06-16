@@ -32,35 +32,33 @@ import (
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
-	targets                 []jobspb.ChangefeedTargetSpecification
-	buf                     bytes.Buffer
-	virtualColumnVisibility string
+	targets []jobspb.ChangefeedTargetSpecification
+	buf     bytes.Buffer
 }
 
 var _ Encoder = &jsonEncoder{}
 
 func makeJSONEncoder(
-	opts map[string]string, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
-		targets:                 targets,
-		keyOnly:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeKeyOnly,
-		wrapped:                 changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
-		virtualColumnVisibility: opts[changefeedbase.OptVirtualColumns],
+		targets: targets,
+		keyOnly: opts.Envelope == changefeedbase.OptEnvelopeKeyOnly,
+		wrapped: opts.Envelope == changefeedbase.OptEnvelopeWrapped,
 	}
-	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
-	_, e.mvccTimestampField = opts[changefeedbase.OptMVCCTimestamps]
-	_, e.beforeField = opts[changefeedbase.OptDiff]
+	e.updatedField = opts.UpdatedTimestamps
+	e.mvccTimestampField = opts.MVCCTimestamps
+	e.beforeField = opts.Diff
 	if e.beforeField && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptDiff, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.keyInValue = opts[changefeedbase.OptKeyInValue]
+	e.keyInValue = opts.KeyInValue
 	if e.keyInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 	}
-	_, e.topicInValue = opts[changefeedbase.OptTopicInValue]
+	e.topicInValue = opts.TopicInValue
 	if e.topicInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
 			changefeedbase.OptTopicInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
@@ -111,7 +109,6 @@ func rowAsGoNative(row cdcevent.Row) (map[string]interface{}, error) {
 	}); err != nil {
 		return nil, err
 	}
-
 	return result, nil
 }
 

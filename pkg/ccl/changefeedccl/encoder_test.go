@@ -44,16 +44,16 @@ func TestEncoders(t *testing.T) {
 	}
 	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
 
-	var opts []map[string]string
-	for _, f := range []string{string(changefeedbase.OptFormatJSON), string(changefeedbase.OptFormatAvro)} {
-		for _, e := range []string{
-			string(changefeedbase.OptEnvelopeKeyOnly), string(changefeedbase.OptEnvelopeRow), string(changefeedbase.OptEnvelopeWrapped),
+	var opts []changefeedbase.EncodingOptions
+	for _, f := range []changefeedbase.FormatType{changefeedbase.OptFormatJSON, changefeedbase.OptFormatAvro} {
+		for _, e := range []changefeedbase.EnvelopeType{
+			changefeedbase.OptEnvelopeKeyOnly, changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeWrapped,
 		} {
 			opts = append(opts,
-				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e},
-				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e, changefeedbase.OptDiff: ``},
-				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e, changefeedbase.OptUpdatedTimestamps: ``},
-				map[string]string{changefeedbase.OptFormat: f, changefeedbase.OptEnvelope: e, changefeedbase.OptUpdatedTimestamps: ``, changefeedbase.OptDiff: ``},
+				changefeedbase.EncodingOptions{Format: f, Envelope: e, UpdatedTimestamps: false, Diff: false},
+				changefeedbase.EncodingOptions{Format: f, Envelope: e, UpdatedTimestamps: false, Diff: true},
+				changefeedbase.EncodingOptions{Format: f, Envelope: e, UpdatedTimestamps: true, Diff: false},
+				changefeedbase.EncodingOptions{Format: f, Envelope: e, UpdatedTimestamps: true, Diff: true},
 			)
 		}
 	}
@@ -179,11 +179,11 @@ func TestEncoders(t *testing.T) {
 	}
 
 	for _, o := range opts {
-		name := fmt.Sprintf("format=%s,envelope=%s", o[changefeedbase.OptFormat], o[changefeedbase.OptEnvelope])
-		if _, ok := o[changefeedbase.OptUpdatedTimestamps]; ok {
+		name := fmt.Sprintf("format=%s,envelope=%s", o.Format, o.Envelope)
+		if o.UpdatedTimestamps {
 			name += `,updated`
 		}
-		if _, ok := o[changefeedbase.OptDiff]; ok {
+		if o.Diff {
 			name += `,diff`
 		}
 		t.Run(name, func(t *testing.T) {
@@ -191,14 +191,14 @@ func TestEncoders(t *testing.T) {
 
 			var rowStringFn func([]byte, []byte) string
 			var resolvedStringFn func([]byte) string
-			switch o[changefeedbase.OptFormat] {
-			case string(changefeedbase.OptFormatJSON):
+			switch o.Format {
+			case changefeedbase.OptFormatJSON:
 				rowStringFn = func(k, v []byte) string { return fmt.Sprintf(`%s->%s`, k, v) }
 				resolvedStringFn = func(r []byte) string { return string(r) }
-			case string(changefeedbase.OptFormatAvro), string(changefeedbase.DeprecatedOptFormatAvro):
+			case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 				reg := cdctest.StartTestSchemaRegistry()
 				defer reg.Close()
-				o[changefeedbase.OptConfluentSchemaRegistry] = reg.URL()
+				o.SchemaRegistryURI = reg.URL()
 				rowStringFn = func(k, v []byte) string {
 					key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
 					return fmt.Sprintf(`%s->%s`, key, value)
@@ -207,7 +207,7 @@ func TestEncoders(t *testing.T) {
 					return string(avroToJSON(t, reg, r))
 				}
 			default:
-				t.Fatalf(`unknown format: %s`, o[changefeedbase.OptFormat])
+				t.Fatalf(`unknown format: %s`, o.Format)
 			}
 
 			target := jobspb.ChangefeedTargetSpecification{
@@ -217,11 +217,12 @@ func TestEncoders(t *testing.T) {
 			}
 			targets := []jobspb.ChangefeedTargetSpecification{target}
 
-			e, err := getEncoder(o, targets)
 			if len(expected.err) > 0 {
-				require.EqualError(t, err, expected.err)
+				require.EqualError(t, o.Validate(), expected.err)
 				return
 			}
+			require.NoError(t, o.Validate())
+			e, err := getEncoder(o, targets)
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -315,9 +316,9 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 	}
 	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
 
-	opts := map[string]string{
-		changefeedbase.OptFormat:   "avro",
-		changefeedbase.OptEnvelope: "key_only",
+	opts := changefeedbase.EncodingOptions{
+		Format:   changefeedbase.OptFormatAvro,
+		Envelope: changefeedbase.OptEnvelopeKeyOnly,
 	}
 	expected := struct {
 		insert   string
@@ -344,7 +345,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		regURL, err := url.Parse(reg.URL())
 		require.NoError(t, err)
 		regURL.RawQuery = params.Encode()
-		opts[changefeedbase.OptConfluentSchemaRegistry] = regURL.String()
+		opts.SchemaRegistryURI = regURL.String()
 
 		rowStringFn = func(k, v []byte) string {
 			key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
@@ -391,14 +392,14 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		noCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(nil)
 		require.NoError(t, err)
 		defer noCertReg.Close()
-		opts[changefeedbase.OptConfluentSchemaRegistry] = noCertReg.URL()
+		opts.SchemaRegistryURI = noCertReg.URL()
 
 		enc, err := getEncoder(opts, targets)
 		require.NoError(t, err)
 		_, err = enc.EncodeKey(context.Background(), rowInsert)
 		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
 			`contacting confluent schema registry: Post "%s/subjects/foo-key/versions": x509: certificate signed by unknown authority`,
-			opts[changefeedbase.OptConfluentSchemaRegistry]))
+			opts.SchemaRegistryURI))
 
 		wrongCert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
@@ -406,14 +407,14 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		wrongCertReg, err := cdctest.StartTestSchemaRegistryWithTLS(wrongCert)
 		require.NoError(t, err)
 		defer wrongCertReg.Close()
-		opts[changefeedbase.OptConfluentSchemaRegistry] = wrongCertReg.URL()
+		opts.SchemaRegistryURI = wrongCertReg.URL()
 
 		enc, err = getEncoder(opts, targets)
 		require.NoError(t, err)
 		_, err = enc.EncodeKey(context.Background(), rowInsert)
 		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
 			`contacting confluent schema registry: Post "%s/subjects/foo-key/versions": x509: certificate signed by unknown authority`,
-			opts[changefeedbase.OptConfluentSchemaRegistry]))
+			opts.SchemaRegistryURI))
 	})
 }
 

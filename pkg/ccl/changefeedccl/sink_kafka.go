@@ -482,15 +482,19 @@ func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
 	}
 }
 
-func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
+func getSaramaConfig(
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+) (config *saramaConfig, err error) {
 	config = defaultSaramaConfig()
-	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
-		err = json.Unmarshal([]byte(configStr), config)
+	if jsonStr != `` {
+		err = json.Unmarshal([]byte(jsonStr), config)
 	}
 	return
 }
 
-func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error) {
+func buildKafkaConfig(
+	u sinkURL, jsonStr changefeedbase.SinkSpecificJSONConfig,
+) (*sarama.Config, error) {
 	dialConfig := struct {
 		tlsEnabled    bool
 		tlsSkipVerify bool
@@ -622,7 +626,7 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 	}
 
 	// Apply statement level overrides.
-	saramaCfg, err := getSaramaConfig(opts)
+	saramaCfg, err := getSaramaConfig(jsonStr)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
@@ -642,7 +646,7 @@ func makeKafkaSink(
 	ctx context.Context,
 	u sinkURL,
 	targets []jobspb.ChangefeedTargetSpecification,
-	opts map[string]string,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
@@ -651,7 +655,7 @@ func makeKafkaSink(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	config, err := buildKafkaConfig(u, opts)
+	config, err := buildKafkaConfig(u, jsonStr)
 	if err != nil {
 		return nil, err
 	}
