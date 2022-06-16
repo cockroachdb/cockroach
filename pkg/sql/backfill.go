@@ -2584,7 +2584,7 @@ func columnBackfillInTxn(
 	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
 	var backfiller backfill.ColumnBackfiller
 	if err := backfiller.InitForLocalUse(
-		ctx, evalCtx, semaCtx, tableDesc, columnBackfillerMon, rowMetrics, traceKV,
+		ctx, txn, evalCtx, semaCtx, tableDesc, columnBackfillerMon, rowMetrics, traceKV,
 	); err != nil {
 		return err
 	}
@@ -2633,8 +2633,10 @@ func indexBackfillInTxn(
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
-		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx,
-			txn, tableDesc, sp, indexTxnBackfillChunkSize, false /* alsoCommit */, traceKV)
+		sp.Key, err = backfiller.RunIndexBackfillChunk(
+			ctx, txn, tableDesc, sp, indexTxnBackfillChunkSize,
+			false /* alsoCommit */, traceKV,
+		)
 		if err != nil {
 			return err
 		}

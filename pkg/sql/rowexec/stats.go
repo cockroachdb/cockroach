@@ -94,14 +94,13 @@ func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
 // StartScan is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) StartScan(
 	ctx context.Context,
-	txn *kv.Txn,
 	spans roachpb.Spans,
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 ) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartScan(ctx, txn, spans, spanIDs, batchBytesLimit, limitHint)
+	err := c.fetcher.StartScan(ctx, spans, spanIDs, batchBytesLimit, limitHint)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -127,8 +126,7 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 ) error {
 	start := timeutil.Now()
 	err := c.fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit,
-		limitHint, qualityOfService,
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err

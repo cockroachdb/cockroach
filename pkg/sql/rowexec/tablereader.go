@@ -148,6 +148,7 @@ func newTableReader(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
+			Txn:                        flowCtx.Txn,
 			Reverse:                    spec.Reverse,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
@@ -211,7 +212,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.Spans, nil /* spanIDs */, bytesLimit, tr.limitHint,
+			ctx, tr.Spans, nil /* spanIDs */, bytesLimit, tr.limitHint,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
