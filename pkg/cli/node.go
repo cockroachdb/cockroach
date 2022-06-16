@@ -730,11 +730,11 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if !quitCtx.nodeDrainSelf && len(args) == 0 {
+	if !drainCtx.nodeDrainSelf && len(args) == 0 {
 		fmt.Fprintf(stderr, "warning: draining a node without node ID or passing --self explicitly is deprecated.\n")
-		quitCtx.nodeDrainSelf = true
+		drainCtx.nodeDrainSelf = true
 	}
-	if quitCtx.nodeDrainSelf && len(args) > 0 {
+	if drainCtx.nodeDrainSelf && len(args) > 0 {
 		return errors.Newf("cannot use --%s with an explicit node ID", cliflags.NodeDrainSelf.Name)
 	}
 
