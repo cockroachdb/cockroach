@@ -457,12 +457,14 @@ func (z *zigzagJoiner) setupInfo(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
-			LockStrength:   spec.LockingStrength,
-			LockWaitPolicy: spec.LockingWaitPolicy,
-			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
-			Alloc:          &info.alloc,
-			MemMonitor:     flowCtx.EvalCtx.Mon,
-			Spec:           &spec.FetchSpec,
+			LockStrength:               spec.LockingStrength,
+			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:                      &info.alloc,
+			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			Spec:                       &spec.FetchSpec,
+			TraceKV:                    flowCtx.TraceKV,
+			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
 		return err
@@ -650,8 +652,6 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
-			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 		if err != nil {
 			return nil, err
@@ -793,8 +793,6 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
-			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)

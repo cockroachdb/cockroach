@@ -112,6 +112,7 @@ func (cb *ColumnBackfiller) init(
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 	rowMetrics *rowinfra.Metrics,
+	traceKV bool,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -156,6 +157,7 @@ func (cb *ColumnBackfiller) init(
 			Alloc:      &cb.alloc,
 			MemMonitor: cb.mon,
 			Spec:       &spec,
+			TraceKV:    traceKV,
 		},
 	)
 }
@@ -170,6 +172,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 	rowMetrics *rowinfra.Metrics,
+	traceKV bool,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -190,7 +193,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, traceKV)
 }
 
 // InitForDistributedUse initializes a ColumnBackfiller for use as part of a
@@ -247,7 +250,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	rowMetrics := flowCtx.GetRowMetrics()
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
+	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, flowCtx.TraceKV)
 }
 
 // Close frees the resources used by the ColumnBackfiller.
@@ -310,7 +313,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	if err := cb.fetcher.StartScan(
 		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-		chunkSize, traceKV, false, /* forceProductionKVBatchSize */
+		chunkSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
@@ -804,6 +807,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			Alloc:      &ib.alloc,
 			MemMonitor: ib.mon,
 			Spec:       &spec,
+			TraceKV:    traceKV,
 		},
 	); err != nil {
 		return nil, nil, 0, err
@@ -812,7 +816,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	if err := fetcher.StartScan(
 		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-		initBufferSize, traceKV, false, /* forceProductionKVBatchSize */
+		initBufferSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, 0, err

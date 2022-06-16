@@ -387,7 +387,7 @@ func (d *eventDecoder) DecodeKV(
 
 	d.kvFetcher.KVs = d.kvFetcher.KVs[:0]
 	d.kvFetcher.KVs = append(d.kvFetcher.KVs, kv)
-	if err := d.fetcher.StartScanFrom(ctx, &d.kvFetcher, false /* traceKV */); err != nil {
+	if err := d.fetcher.StartScanFrom(ctx, &d.kvFetcher); err != nil {
 		return Row{}, err
 	}
 

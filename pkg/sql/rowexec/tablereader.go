@@ -148,13 +148,15 @@ func newTableReader(
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
-			Reverse:        spec.Reverse,
-			LockStrength:   spec.LockingStrength,
-			LockWaitPolicy: spec.LockingWaitPolicy,
-			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
-			Alloc:          &tr.alloc,
-			MemMonitor:     flowCtx.EvalCtx.Mon,
-			Spec:           &spec.FetchSpec,
+			Reverse:                    spec.Reverse,
+			LockStrength:               spec.LockingStrength,
+			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:                      &tr.alloc,
+			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			Spec:                       &spec.FetchSpec,
+			TraceKV:                    flowCtx.TraceKV,
+			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
 		return nil, err
@@ -209,17 +211,13 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.Spans, nil /* spanIDs */, bytesLimit,
-			tr.limitHint, tr.FlowCtx.TraceKV,
-			tr.EvalCtx.TestingKnobs.ForceProductionValues,
+			ctx, tr.FlowCtx.Txn, tr.Spans, nil /* spanIDs */, bytesLimit, tr.limitHint,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.Spans,
-			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
-			tr.EvalCtx.TestingKnobs.ForceProductionValues,
-			tr.EvalCtx.QualityOfService(),
+			bytesLimit, tr.limitHint, tr.EvalCtx.QualityOfService(),
 		)
 	}
 	tr.scanStarted = true

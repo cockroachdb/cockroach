@@ -114,7 +114,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			log.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}
 
-		if err := rf.StartScanFrom(ctx, &row.SpanKVFetcher{KVs: kvs}, false /* traceKV */); err != nil {
+		if err := rf.StartScanFrom(ctx, &row.SpanKVFetcher{KVs: kvs}); err != nil {
 			t.Fatal(err)
 		}
 		var rows []rowWithMVCCMetadata
