@@ -841,6 +841,9 @@ func (b *Builder) buildSelectStmt(
 	case *tree.UnionClause:
 		return b.buildUnionClause(stmt, desiredTypes, inScope)
 
+	case *tree.TypedValuesClause:
+		return b.buildTypedValuesClause(stmt, desiredTypes, inScope)
+
 	case *tree.ValuesClause:
 		return b.buildValuesClause(stmt, desiredTypes, inScope)
 
@@ -931,6 +934,10 @@ func (b *Builder) buildSelectStmtWithoutParens(
 	case *tree.UnionClause:
 		b.rejectIfLocking(locking, "UNION/INTERSECT/EXCEPT")
 		outScope = b.buildUnionClause(t, desiredTypes, inScope)
+
+	case *tree.TypedValuesClause:
+		b.rejectIfLocking(locking, "VALUES")
+		outScope = b.buildTypedValuesClause(t, desiredTypes, inScope)
 
 	case *tree.ValuesClause:
 		b.rejectIfLocking(locking, "VALUES")

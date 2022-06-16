@@ -24,6 +24,12 @@ type ValuesClause struct {
 	Rows []Exprs
 }
 
+// TypedValuesClause is like ValuesClause but values have been typed checked
+// and are assumed to be ready to go Datums.
+type TypedValuesClause struct {
+	Rows [][]TypedExpr
+}
+
 // Format implements the NodeFormatter interface.
 func (node *ValuesClause) Format(ctx *FmtCtx) {
 	ctx.WriteString("VALUES ")
@@ -35,4 +41,9 @@ func (node *ValuesClause) Format(ctx *FmtCtx) {
 		ctx.WriteByte(')')
 		comma = ", "
 	}
+}
+
+// Format implements the NodeFormatter interface.
+func (node *TypedValuesClause) Format(ctx *FmtCtx) {
+	//TODO
 }

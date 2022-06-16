@@ -746,6 +746,10 @@ func (h *hasher) HashPersistence(val tree.Persistence) {
 	h.hash *= prime64
 }
 
+func (h *hasher) HashTypedRows(val *opt.TypedRows) {
+	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1188,6 +1192,10 @@ func (h *hasher) IsMaterializeClauseEqual(l, r tree.MaterializeClause) bool {
 }
 
 func (h *hasher) IsPersistenceEqual(l, r tree.Persistence) bool {
+	return l == r
+}
+
+func (h *hasher) IsTypedRowsEqual(l, r *opt.TypedRows) bool {
 	return l == r
 }
 

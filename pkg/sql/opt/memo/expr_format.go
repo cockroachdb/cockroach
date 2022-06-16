@@ -293,6 +293,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *ValuesExpr:
 		colList = t.Cols
 
+	case *TypedValuesExpr:
+		colList = t.Cols
+
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,
 		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr, *LocalityOptimizedSearchExpr:
 		colList = e.Private().(*SetPrivate).OutCols

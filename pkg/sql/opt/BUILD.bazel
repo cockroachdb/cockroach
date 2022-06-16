@@ -14,6 +14,7 @@ go_library(
         "rule_name.go",
         "table_meta.go",
         "telemetry.go",
+        "values.go",
         "view_dependencies.go",
         ":gen-operator",  # keep
         ":gen-rulenames",  # keep

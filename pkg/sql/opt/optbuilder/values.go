@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -84,6 +85,8 @@ func (b *Builder) buildValuesClause(
 					// array of a more specific tuple type.
 					colTypes[colIdx] = typ
 				} else if !typ.Equivalent(colTypes[colIdx]) {
+					// RFC: assignment casts will later fix this, ie add a cast to turn and int into a string,
+					// are we being too strict here, What does PG do?
 					panic(pgerror.Newf(pgcode.DatatypeMismatch,
 						"VALUES types %s and %s cannot be matched", typ, colTypes[colIdx]))
 				} else if !typ.Identical(colTypes[colIdx]) {
@@ -171,4 +174,25 @@ func rightHasMoreSpecificTuple(left, right *types.T) (isMoreSpecific bool, isEqu
 	}
 	// At this point, both left and right are neither tuples nor arrays.
 	return false, left.Equivalent(right)
+}
+
+func (b *Builder) buildTypedValuesClause(
+	values *tree.TypedValuesClause, desiredTypes []*types.T, inScope *scope,
+) (outScope *scope) {
+	numRows := len(values.Rows)
+	numCols := 0
+	if numRows > 0 {
+		numCols = len(values.Rows[0])
+	}
+	outScope = inScope.push()
+	for colIdx := 0; colIdx < numCols; colIdx++ {
+		// The column names for VALUES are column1, column2, etc.
+		colName := scopeColName(tree.Name(fmt.Sprintf("column%d", colIdx+1)))
+		b.synthesizeColumn(outScope, colName, desiredTypes[colIdx], nil, nil /* scalar */)
+	}
+
+	colList := colsToColList(outScope.cols)
+	tr := opt.TypedRows{Rows: values.Rows}
+	outScope.expr = b.factory.ConstructTypedValues(&tr, &memo.ValuesPrivate{Cols: colList})
+	return
 }

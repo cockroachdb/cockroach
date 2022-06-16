@@ -193,6 +193,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ValuesExpr:
 		ep, err = b.buildValues(t)
 
+	case *memo.TypedValuesExpr:
+		ep, err = b.buildTypedValues(t)
+
 	case *memo.ScanExpr:
 		ep, err = b.buildScan(t)
 
@@ -457,6 +460,10 @@ func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (ex
 	}
 
 	return ep, nil
+}
+
+func (b *Builder) buildTypedValues(values *memo.TypedValuesExpr) (execPlan, error) {
+	return b.constructValues(values.Rows.Rows, values.Cols)
 }
 
 // getColumns returns the set of column ordinals in the table for the set of

@@ -429,6 +429,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.InvertedFilterOp:
 		return sb.colStatInvertedFilter(colSet, e.(*InvertedFilterExpr))
 
+	case opt.TypedValuesOp:
+		return sb.colStatTypedValues(colSet, e.(*TypedValuesExpr))
+
 	case opt.ValuesOp:
 		return sb.colStatValues(colSet, e.(*ValuesExpr))
 
@@ -2033,6 +2036,23 @@ func (sb *statisticsBuilder) buildValues(values *ValuesExpr, relProps *props.Rel
 
 	s.RowCount = float64(len(values.Rows))
 	sb.finalizeFromCardinality(relProps)
+}
+
+// buildTypedValues builds the statistics for a VALUES expression.
+func (sb *statisticsBuilder) buildTypedValues(values *TypedValuesExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+	s.Available = sb.availabilityFromInput(values)
+	s.RowCount = float64(len(values.Rows.Rows))
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatTypedValues(
+	colSet opt.ColSet, values *TypedValuesExpr,
+) *props.ColumnStatistic {
+	s := &values.Relational().Stats
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	return colStat
 }
 
 func (sb *statisticsBuilder) colStatValues(

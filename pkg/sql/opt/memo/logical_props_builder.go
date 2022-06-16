@@ -791,6 +791,40 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	}
 }
 
+func (b *logicalPropsBuilder) buildTypedValuesProps(
+	values *TypedValuesExpr, rel *props.Relational,
+) {
+	BuildSharedProps(values, &rel.Shared, b.evalCtx)
+
+	card := uint32(len(values.Rows.Rows))
+
+	// Output Columns
+	// --------------
+	// Use output columns that are attached to the values op.
+	rel.OutputCols = values.Cols.ToSet()
+
+	// Outer Columns
+	// -------------
+	// Outer columns were already derived by BuildSharedProps.
+
+	// Functional Dependencies
+	// -----------------------
+	if card <= 1 {
+		rel.FuncDeps.MakeMax1Row(rel.OutputCols)
+	}
+
+	// Cardinality
+	// -----------
+	// Cardinality is number of tuples in the Values operator.
+	rel.Cardinality = props.Cardinality{Min: card, Max: card}
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildTypedValues(values, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Relational) {
 	BuildSharedProps(values, &rel.Shared, b.evalCtx)
 

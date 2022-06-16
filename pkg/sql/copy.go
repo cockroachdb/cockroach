@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -79,7 +80,7 @@ type copyMachine struct {
 	// row between protocol messages.
 	buf bytes.Buffer
 	// rows accumulates a batch of rows to be eventually inserted.
-	rows []tree.Exprs
+	rows [][]tree.TypedExpr
 	// insertedRows keeps track of the total number of rows inserted by the
 	// machine.
 	insertedRows int
@@ -529,7 +530,7 @@ func (c *copyMachine) readCSVTuple(ctx context.Context, record []string) error {
 			"expected %d values, got %d", expected, len(record))
 	}
 	record = c.maybeIgnoreHiddenColumnsStr(record)
-	exprs := make(tree.Exprs, len(record))
+	exprs := make(tree.TypedExprs, len(record))
 	for i, s := range record {
 		if s == c.null {
 			exprs[i] = tree.DNull
@@ -612,7 +613,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (readSoFar []byte, er
 		return nil, pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
-	exprs := make(tree.Exprs, fieldCount)
+	exprs := make(tree.TypedExprs, fieldCount)
 	var byteCount int32
 	var byteCountBytes [4]byte
 	for i := range exprs {
@@ -738,7 +739,22 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 		retErr = cleanup(ctx, retErr)
 	}()
 
-	vc := &tree.ValuesClause{Rows: c.rows}
+	// Testing switch, make a session var?
+	copyEnv := envutil.EnvOrDefaultBool("COCKROACH_COPY_FAST", true)
+	var vc tree.SelectStatement
+	if copyEnv {
+		vc = &tree.TypedValuesClause{Rows: c.rows}
+	} else {
+		nonTypedRows := make([]tree.Exprs, len(c.rows))
+		for i, r := range c.rows {
+			newrow := make(tree.Exprs, len(r))
+			for j, val := range r {
+				newrow[j] = val
+			}
+			nonTypedRows[i] = newrow
+		}
+		vc = &tree.ValuesClause{Rows: nonTypedRows}
+	}
 	numRows := len(c.rows)
 	// Reuse the same backing array once the Insert is complete.
 	c.rows = c.rows[:0]
@@ -796,7 +812,7 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 			"expected %d values, got %d", expected, len(parts))
 	}
 	parts = c.maybeIgnoreHiddenColumnsBytes(parts)
-	exprs := make(tree.Exprs, len(parts))
+	exprs := make(tree.TypedExprs, len(parts))
 	for i, part := range parts {
 		s := string(part)
 		// Disable NULL conversion during file uploads.
