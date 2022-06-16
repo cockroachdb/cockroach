@@ -73,23 +73,29 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			relsJoinedLast = ""
 		})
 
-	o.JoinOrderBuilder().NotifyOnAddJoin(func(left, right, all, refs []memo.RelExpr, op opt.Operator) {
-		relsToJoin := jof.formatVertexSet(all)
-		if relsToJoin != relsJoinedLast {
-			ot.output(fmt.Sprintf("Joining %s\n", relsToJoin))
-			relsJoinedLast = relsToJoin
-		}
-		ot.indent(
-			fmt.Sprintf(
-				"%s %s [%s, refs=%s]",
-				jof.formatVertexSet(left),
-				jof.formatVertexSet(right),
-				joinOpLabel(op),
-				jof.formatVertexSet(refs),
-			),
-		)
-		joinsConsidered++
-	})
+	o.JoinOrderBuilder().NotifyOnAddJoin(
+		func(left, right, all, joinRefs, selRefs []memo.RelExpr, op opt.Operator) {
+			relsToJoin := jof.formatVertexSet(all)
+			if relsToJoin != relsJoinedLast {
+				ot.output(fmt.Sprintf("Joining %s\n", relsToJoin))
+				relsJoinedLast = relsToJoin
+			}
+			var selString string
+			if len(selRefs) > 0 {
+				selString = fmt.Sprintf(" [select, refs=%s]", jof.formatVertexSet(selRefs))
+			}
+			ot.indent(
+				fmt.Sprintf(
+					"%s %s [%s, refs=%s]%s",
+					jof.formatVertexSet(left),
+					jof.formatVertexSet(right),
+					joinOpLabel(op),
+					jof.formatVertexSet(joinRefs),
+					selString,
+				),
+			)
+			joinsConsidered++
+		})
 
 	expr, err := ot.optimizeExpr(o, nil)
 	if err != nil {
