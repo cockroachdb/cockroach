@@ -36,8 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -50,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -68,7 +65,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
 )
 
 // debugTSImportFile is the path to a file (containing data coming from
@@ -1252,70 +1248,6 @@ func setupAndInitializeLoggingAndProfiling(
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil
-}
-
-func addrWithDefaultHost(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", err
-	}
-	if host == "" {
-		host = "localhost"
-	}
-	return net.JoinHostPort(host, port), nil
-}
-
-// getClientGRPCConn returns a ClientConn, a Clock and a method that blocks
-// until the connection (and its associated goroutines) have terminated.
-func getClientGRPCConn(
-	ctx context.Context, cfg server.Config,
-) (*grpc.ClientConn, *hlc.Clock, func(), error) {
-	if ctx.Done() == nil {
-		return nil, nil, nil, errors.New("context must be cancellable")
-	}
-	// 0 to disable max offset checks; this RPC context is not a member of the
-	// cluster, so there's no need to enforce that its max offset is the same
-	// as that of nodes in the cluster.
-	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
-	tracer := cfg.Tracer
-	if tracer == nil {
-		tracer = tracing.NewTracer()
-	}
-	stopper := stop.NewStopper(stop.WithTracer(tracer))
-	rpcContext := rpc.NewContext(ctx,
-		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   cfg.Config,
-			Clock:    clock,
-			Stopper:  stopper,
-			Settings: cfg.Settings,
-
-			ClientOnly: true,
-		})
-	if cfg.TestingKnobs.Server != nil {
-		rpcContext.Knobs = cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs
-	}
-	addr, err := addrWithDefaultHost(cfg.AdvertiseAddr)
-	if err != nil {
-		stopper.Stop(ctx)
-		return nil, nil, nil, err
-	}
-	// We use GRPCUnvalidatedDial() here because it does not matter
-	// to which node we're talking to.
-	conn, err := rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
-	if err != nil {
-		stopper.Stop(ctx)
-		return nil, nil, nil, err
-	}
-	stopper.AddCloser(stop.CloserFn(func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}))
-
-	// Tie the lifetime of the stopper to that of the context.
-	closer := func() {
-		stopper.Stop(ctx)
-	}
-	return conn, clock, closer, nil
 }
 
 // initGEOS sets up the Geospatial library.

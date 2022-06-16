@@ -281,13 +281,3 @@ func doShutdown(
 	}
 	return hardError, err
 }
-
-// getAdminClient returns an AdminClient and a closure that must be invoked
-// to free associated resources.
-func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
-	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to connect to the node")
-	}
-	return serverpb.NewAdminClient(conn), finish, nil
-}
