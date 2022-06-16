@@ -35,7 +35,10 @@ func registerAdmissionControlFollowerOverload(r registry.Registry) {
 			Timeout: 3 * time.Hour,
 			// Don't re-use the cluster, since we're deploying a disk nemesis which isn't
 			// guaranteed to be shut down by termination of this test.
-			Cluster: r.MakeClusterSpec(4, spec.CPU(4), spec.ReuseNone(), spec.AvoidSSD(), spec.SSD(0), spec.MultipleStores(true)),
+			// NB: use 16vcpu machines to avoid getting anywhere close to EBS bandwidth limits
+			// on AWS, see:
+			// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
+			Cluster: r.MakeClusterSpec(4, spec.CPU(16), spec.ReuseNone(), spec.AvoidSSD(), spec.SSD(0), spec.MultipleStores(true)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runAdmissionControlFollowerOverload(ctx, t, c, cfg)
 			},
@@ -202,8 +205,8 @@ func runAdmissionControlFollowerOverload(
 		// per-store read throughput of ~60mb/s and write throughput of ~140mb/s for
 		// a total of close to 200mb/s (per store). This was too much for default
 		// EBS disks (see below) and there was unpredictable performance when
-		// reprovisioning such volumes with higher throughput, so we run at 2mb/s
-		// which should translate to ~100mb/s of max sustained combined throughput.
+		// reprovisioning such volumes with higher throughput, so we run at 1mb/s
+		// which should translate to ~50mb/s of max sustained combined throughput.
 		//
 		// NB: on GCE pd-ssd, we get 30 IOPS/GB of (combined) throughput and
 		// 0.45MB/(GB*s) for each GB provisioned, so for the 500GB volumes in this
@@ -212,7 +215,10 @@ func runAdmissionControlFollowerOverload(
 		// See: https://cloud.google.com/compute/docs/disks/performance#footnote-1
 		//
 		// On AWS, the default EBS volumes have 3000 IOPS and 125MB/s combined
-		// throughput.
+		// throughput. Additionally, instances have a throughput limit for talking
+		// to EBS, see:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
 		deployWorkload := `
 mkdir -p logs &&
 sudo systemd-run --property=Type=exec
