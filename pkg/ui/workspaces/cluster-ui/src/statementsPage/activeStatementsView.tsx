@@ -53,6 +53,7 @@ export type ActiveStatementsViewStateProps = {
   sortSetting: SortSetting;
   sessionsError: Error | null;
   filters: ActiveStatementFilters;
+  internalAppNamePrefix: string;
 };
 
 export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
@@ -68,6 +69,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   statements,
   sessionsError,
   filters,
+  internalAppNamePrefix,
 }: ActiveStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -152,12 +154,13 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
 
-  const apps = getAppsFromActiveStatements(statements);
+  const apps = getAppsFromActiveStatements(statements, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
 
   const filteredStatements = filterActiveStatements(
     statements,
     filters,
+    internalAppNamePrefix,
     search,
   );
 

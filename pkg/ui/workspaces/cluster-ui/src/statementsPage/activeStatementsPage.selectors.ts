@@ -31,6 +31,14 @@ export const selectActiveStatements = createSelector(
   },
 );
 
+export const selectAppName = createSelector(
+  (state: AppState) => state.adminUI.sessions,
+  response => {
+    if (!response.data) return null;
+    return response.data.internal_app_name_prefix;
+  },
+);
+
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveStatementsPage"];
 
@@ -59,6 +67,7 @@ export const mapStateToActiveStatementsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
+  internalAppNamePrefix: selectAppName(state),
 });
 
 export const mapDispatchToActiveStatementsPageProps = (

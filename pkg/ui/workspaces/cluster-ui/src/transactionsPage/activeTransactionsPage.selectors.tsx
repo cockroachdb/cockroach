@@ -11,6 +11,7 @@
 import { createSelector } from "reselect";
 import { getActiveTransactionsFromSessions } from "../activeExecutions/activeStatementUtils";
 import { localStorageSelector } from "src/statementsPage/statementsPage.selectors";
+import { selectAppName } from "src/statementsPage/activeStatementsPage.selectors";
 import {
   ActiveTransactionFilters,
   ActiveTransactionsViewDispatchProps,
@@ -62,6 +63,7 @@ export const mapStateToActiveTransactionsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
+  internalAppNamePrefix: selectAppName(state),
 });
 
 export const mapDispatchToActiveTransactionsPageProps = (
