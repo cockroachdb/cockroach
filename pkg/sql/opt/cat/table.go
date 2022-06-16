@@ -143,6 +143,11 @@ type Table interface {
 	// IsPartitionAllBy returns true if this is a PARTITION ALL BY table. This
 	// includes REGIONAL BY ROW tables.
 	IsPartitionAllBy() bool
+
+	// IsRefreshViewRequired returns true if the table is a materialized view
+	// created with the NO DATA option and is yet to be refreshed. Accessing
+	// such a view prior to running refresh returns an error.
+	IsRefreshViewRequired() bool
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check

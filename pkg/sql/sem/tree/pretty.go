@@ -1316,10 +1316,16 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 			p.bracket("(", p.Doc(&node.ColumnNames), ")"),
 		)
 	}
-	return p.nestUnder(
+	d = p.nestUnder(
 		pretty.ConcatSpace(d, pretty.Keyword("AS")),
 		p.Doc(node.AsSource),
 	)
+	if node.Materialized && node.WithData {
+		d = pretty.ConcatSpace(d, pretty.Keyword("WITH DATA"))
+	} else if node.Materialized && !node.WithData {
+		d = pretty.ConcatSpace(d, pretty.Keyword("WITH NO DATA"))
+	}
+	return d
 }
 
 func (node *TableDefs) doc(p *PrettyCfg) pretty.Doc {

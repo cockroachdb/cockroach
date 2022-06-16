@@ -552,6 +552,10 @@ func (u *unknownTable) IsPartitionAllBy() bool {
 	return false
 }
 
+func (u *unknownTable) IsRefreshViewRequired() bool {
+	return false
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent

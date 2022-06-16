@@ -894,6 +894,11 @@ func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
 	return ids, nil
 }
 
+// IsRefreshViewRequired is a part of the cat.Table interface.
+func (tt *Table) IsRefreshViewRequired() bool {
+	return false
+}
+
 // Index implements the cat.Index interface for testing purposes.
 type Index struct {
 	IdxName string

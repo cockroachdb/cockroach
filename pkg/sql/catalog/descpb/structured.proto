@@ -976,7 +976,9 @@ message TableDescriptor {
   // as a table. The data on disk is refreshed with the REFRESH MATERIALIZED
   // VIEW command. This flag is only set when ViewQuery != "".
   optional bool is_materialized_view = 41 [(gogoproto.nullable) = false];
-
+  // RefreshViewRequired indicates if the materialized view needs to be refreshed
+  // prior to access.
+  optional bool refresh_view_required = 53 [(gogoproto.nullable) = false];
   // The IDs of all relations that this depends on.
   // Only ever populated if this descriptor is for a view.
   repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
@@ -1180,7 +1182,7 @@ message TableDescriptor {
   // this table, in which case the global setting is used.
   optional bool forecast_stats = 52 [(gogoproto.nullable) = true, (gogoproto.customname) = "ForecastStats"];
 
-  // Next ID: 53
+  // Next ID: 54
 }
 
 // SurvivalGoal is the survival goal for a database.

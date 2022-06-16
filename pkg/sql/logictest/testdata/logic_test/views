@@ -1275,3 +1275,41 @@ li                          CREATE MATERIALIZED VIEW public.li (
                                                     test_t1,
                                                     rowid
                         ) AS (SELECT 1 AS test_t1)
+
+statement ok
+CREATE TABLE test_view (a INT PRIMARY KEY, b INT)
+
+statement ok
+INSERT INTO test_view VALUES (1, 99), (2, 98), (3, 97)
+
+statement ok
+CREATE MATERIALIZED VIEW mv1 AS SELECT a, b FROM test_view
+
+query II colnames,rowsort
+SELECT * FROM mv1
+----
+a b
+1 99
+2 98
+3 97
+
+statement ok
+CREATE MATERIALIZED VIEW mv2 AS SELECT a, b FROM test_view WHERE b > 98 WITH NO DATA
+
+query error  pq: materialized view "mv2" has not been populated\nHINT: use the REFRESH MATERIALIZED VIEW command.
+SELECT * FROM mv2
+
+statement ok
+REFRESH MATERIALIZED VIEW mv2
+
+query II colnames,rowsort
+SELECT * from mv2
+----
+a b
+1 99
+
+statement ok
+DROP MATERIALIZED VIEW mv1
+
+statement ok
+DROP MATERIALIZED VIEW mv2

@@ -1975,6 +1975,7 @@ type CreateView struct {
 	Persistence  Persistence
 	Replace      bool
 	Materialized bool
+	WithData     bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -2009,6 +2010,11 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 
 	ctx.WriteString(" AS ")
 	ctx.FormatNode(node.AsSource)
+	if node.Materialized && node.WithData {
+		ctx.WriteString(" WITH DATA")
+	} else if node.Materialized && !node.WithData {
+		ctx.WriteString(" WITH NO DATA")
+	}
 }
 
 // RefreshMaterializedView represents a REFRESH MATERIALIZED VIEW statement.

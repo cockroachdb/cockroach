@@ -108,6 +108,9 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 		newIndexes[i].ID = getID()
 	}
 
+	// Set RefreshViewRequired to false. This will allow SELECT operations on the materialized
+	// view to succeed when the view has been created with the NO DATA option.
+	n.desc.RefreshViewRequired = false
 	// Queue the refresh mutation.
 	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
 		NewPrimaryIndex: newPrimaryIndex,
