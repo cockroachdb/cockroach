@@ -72,39 +72,41 @@ var pebbleIterPool = sync.Pool{
 	},
 }
 
-type cloneableIter interface {
-	Clone() (*pebble.Iterator, error)
-	Close() error
-}
-
-// Instantiates a new Pebble iterator, or gets one from the pool.
+// newPebbleIterator creates a new Pebble iterator for the given Pebble reader.
 func newPebbleIterator(
-	handle pebble.Reader,
-	iterToClone cloneableIter,
-	opts IterOptions,
-	durability DurabilityRequirement,
-	supportsRangeKeys bool,
+	handle pebble.Reader, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
 ) *pebbleIterator {
-	iter := pebbleIterPool.Get().(*pebbleIterator)
-	iter.reusable = false // defensive
-	iter.init(handle, iterToClone, false /* iterUnused */, opts, durability, supportsRangeKeys)
-	return iter
+	p := pebbleIterPool.Get().(*pebbleIterator)
+	p.reusable = false // defensive
+	p.init(nil, opts, durability, supportsRangeKeys)
+	p.iter = handle.NewIter(&p.options)
+	return p
 }
 
-// init resets this pebbleIterator for use with the specified arguments. The
-// current instance could either be a cached pebbleIterator (e.g. in
-// pebbleBatch), or a newly-instantiated one through newPebbleIterator. The
-// underlying *pebble.Iterator is created using iterToClone, if non-nil, else it
-// is created using handle.
+// newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
+// iterator and reconfiguring it.
+func newPebbleIteratorByCloning(
+	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
+) *pebbleIterator {
+	var err error
+	if iter, err = iter.Clone(); err != nil {
+		panic(err)
+	}
+	p := pebbleIterPool.Get().(*pebbleIterator)
+	p.reusable = false // defensive
+	p.init(iter, opts, durability, supportsRangeKeys)
+	return p
+}
+
+// init resets this pebbleIterator for use with the specified arguments,
+// reconfiguring the given iter. It is valid to pass a nil iter and then create
+// p.iter using p.options, to avoid redundant reconfiguration via SetOptions().
 func (p *pebbleIterator) init(
-	handle pebble.Reader,
-	iterToClone cloneableIter,
-	iterUnused bool,
-	opts IterOptions,
-	durability DurabilityRequirement,
-	supportsRangeKeys bool, // TODO(erikgrinaker): remove after 22.2.
+	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
 ) {
 	*p = pebbleIterator{
+		iter:               iter,
+		inuse:              true,
 		keyBuf:             p.keyBuf,
 		lowerBoundBuf:      p.lowerBoundBuf,
 		upperBoundBuf:      p.upperBoundBuf,
@@ -112,27 +114,33 @@ func (p *pebbleIterator) init(
 		reusable:           p.reusable,
 		supportsRangeKeys:  supportsRangeKeys,
 	}
+	p.setOptions(opts, durability)
+}
 
-	if iterToClone != nil {
-		if iterUnused {
-			// NB: If the iterator was never used (at the time of writing, this means
-			// that the iterator was created by `PinEngineStateForIterators()`), we
-			// don't need to clone it.
-			p.iter = iterToClone.(*pebble.Iterator)
-		} else {
-			var err error
-			if p.iter, err = iterToClone.Clone(); err != nil {
-				panic(err)
-			}
+// initReuseOrCreate is a convenience method that (re-)initializes an existing
+// pebbleIterator in one out of three ways:
+//
+// 1. iter != nil && !clone: use and reconfigure the given raw Pebble iterator.
+// 2. iter != nil && clone: clone and reconfigure the given raw Pebble iterator.
+// 3. iter == nil: create a new iterator from handle.
+func (p *pebbleIterator) initReuseOrCreate(
+	handle pebble.Reader,
+	iter *pebble.Iterator,
+	clone bool,
+	opts IterOptions,
+	durability DurabilityRequirement,
+	supportsRangeKeys bool, // TODO(erikgrinaker): remove after 22.2
+) {
+	if clone && iter != nil {
+		var err error
+		if iter, err = iter.Clone(); err != nil {
+			panic(err)
 		}
 	}
-
-	p.setOptions(opts, durability)
-
-	if p.iter == nil {
+	p.init(iter, opts, durability, supportsRangeKeys)
+	if iter == nil {
 		p.iter = handle.NewIter(&p.options)
 	}
-	p.inuse = true
 }
 
 // setOptions updates the options for a pebbleIterator. If p.iter is non-nil, it
