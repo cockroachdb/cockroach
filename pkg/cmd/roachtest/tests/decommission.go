@@ -315,9 +315,7 @@ func runDecommission(
 			}
 
 			if whileDown {
-				if err := h.stop(ctx, node); err != nil {
-					return err
-				}
+				h.stop(ctx, node)
 			}
 
 			run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE = 'constraints: {"-node%d"}'`, node))
@@ -332,9 +330,7 @@ func runDecommission(
 			}
 
 			if !whileDown {
-				if err := h.stop(ctx, node); err != nil {
-					return err
-				}
+				h.stop(ctx, node)
 			}
 
 			// Wipe the node and re-add to cluster with a new node ID.
@@ -1165,11 +1161,12 @@ func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 	}
 }
 
-// stop gracefully stops a node with `cockroach quit`.
-func (h *decommTestHelper) stop(ctx context.Context, node int) error {
-	port := fmt.Sprintf("{pgport:%d}", node)
-	defer time.Sleep(time.Second) // work around quit returning too early
-	return h.c.RunE(ctx, h.c.Node(node), "./cockroach quit --insecure --host=:"+port)
+// stop gracefully stops a node with a signal.
+func (h *decommTestHelper) stop(ctx context.Context, node int) {
+	opts := option.DefaultStopOpts()
+	opts.RoachprodOpts.Sig = 15 // SIGTERM
+	opts.RoachprodOpts.Wait = true
+	h.c.Stop(ctx, h.t.L(), opts, h.c.Node(node))
 }
 
 // decommission decommissions the given targetNodes, running the process
