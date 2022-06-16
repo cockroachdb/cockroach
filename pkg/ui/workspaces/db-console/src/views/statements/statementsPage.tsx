@@ -21,7 +21,7 @@ import {
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
-import { appAttr } from "src/util/constants";
+import { appAttr, unset } from "src/util/constants";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import {
@@ -115,7 +115,7 @@ export const selectStatements = createSelector(
       if (criteria.includes(state.data.internal_app_name_prefix)) {
         showInternal = true;
       }
-      if (criteria.includes("(unset)")) {
+      if (criteria.includes(unset)) {
         criteria.push("");
       }
 
@@ -201,7 +201,7 @@ export const selectApps = createSelector(
       },
     );
     return []
-      .concat(sawBlank ? ["(unset)"] : [])
+      .concat(sawBlank ? [unset] : [])
       .concat(Object.keys(apps))
       .sort();
   },
@@ -218,7 +218,7 @@ export const selectDatabases = createSelector(
     return Array.from(
       new Set(
         state.data.statements.map(s =>
-          s.key.key_data.database ? s.key.key_data.database : "(unset)",
+          s.key.key_data.database ? s.key.key_data.database : unset,
         ),
       ),
     )

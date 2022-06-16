@@ -27,6 +27,7 @@ import {
   TimestampToMoment,
   computeOrUseStmtSummary,
   appNamesAttr,
+  unset,
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -180,9 +181,17 @@ export const StatementLinkTarget = (
   const base = `/statement/${props.implicitTxn}`;
   const statementFingerprintID = props.statementFingerprintID;
 
-  const searchParams = propsToQueryString({
-    [appNamesAttr]: props.appNames,
-  });
+  let searchParams = "";
+
+  if (!(props.appNames.length === 1 && props.appNames[0] === "")) {
+    const apps = props.appNames;
+    if (apps.includes(unset)) {
+      apps[apps.indexOf(unset)] = "";
+    }
+    searchParams = propsToQueryString({
+      [appNamesAttr]: props.appNames,
+    });
+  }
 
   return `${base}/${encodeURIComponent(
     statementFingerprintID,
