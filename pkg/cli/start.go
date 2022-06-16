@@ -709,9 +709,8 @@ func waitForShutdown(
 	// start up goroutine started above.
 	//
 	// It is concerned with determining when the server should stop
-	// because the main process is being shut down -- either via a stop
-	// message received from `cockroach quit` / `cockroach
-	// decommission`, or a signal.
+	// because the main process is being shut down, e.g. via a RPC call
+	// or a signal.
 
 	// We'll want to log any shutdown activity against a separate span.
 	// We cannot use s.AnnotateCtx here because the server might not have

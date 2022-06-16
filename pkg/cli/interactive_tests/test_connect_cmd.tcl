@@ -13,12 +13,6 @@ proc start_secure_server {argv certs_dir extra} {
     report "END START SECURE SERVER"
 }
 
-proc stop_secure_server {argv certs_dir} {
-    report "BEGIN STOP SECURE SERVER"
-    system "$argv quit --certs-dir=$certs_dir"
-    report "END STOP SECURE SERVER"
-}
-
 start_secure_server $argv $certs_dir ""
 
 spawn $argv sql --certs-dir=$certs_dir
@@ -170,7 +164,7 @@ end_test
 send "\\q\r"
 eexpect eof
 
-stop_secure_server $argv $certs_dir
+stop_server $argv
 
 # Some more tests with the insecure mode.
 set ::env(COCKROACH_INSECURE) "true"

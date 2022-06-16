@@ -2,7 +2,7 @@
 
 CERTS_DIR=${CERTS_DIR:-/certs}
 crdb=$1
-trap "set -x; killall cockroach cockroachshort || true" EXIT HUP
+trap "set -x; cat /tmp/server_pid | xargs kill -9 || true" EXIT HUP
 
 set -euo pipefail
 
@@ -18,9 +18,9 @@ set -x
 
 # Start a server in secure mode and allow non-TLS SQL clients.
 "$crdb" start-single-node --background \
-        --certs-dir="$CERTS_DIR" --socket-dir=/tmp \
+        --certs-dir="$CERTS_DIR" --socket-dir=/tmp --pid-file=/tmp/server_pid \
         --accept-sql-without-tls \
-        --listen-addr=:12345
+        --listen-addr=localhost:12345
 
 # Wait for server ready; also create a user that can log in.
 "$crdb" sql --certs-dir="$CERTS_DIR" -e "create user foo with password 'pass'" -p 12345
@@ -33,6 +33,4 @@ set -x
 # the proper password.
 env PGPASSWORD=pass psql 'postgres://foo@localhost:12345?sslmode=disable' -c "select 1" | grep "1 row"
 
-set +x
 # Done.
-"$crdb" quit --certs-dir="$CERTS_DIR" -p 12345
