@@ -473,7 +473,7 @@ func registerQuitAllNodes(r registry.Registry) {
 	// short --drain-wait for the remaining nodes under quorum.
 	r.Add(registry.TestSpec{
 		Name:    "quit-all-nodes",
-		Owner:   registry.OwnerServer,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(5),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			q := quitTest{t: t, c: c}
