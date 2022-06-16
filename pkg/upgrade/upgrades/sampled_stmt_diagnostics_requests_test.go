@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestAlterSystemStmtDiagReqs(t *testing.T) {
+func TestSampledStmtDiagReqsMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -40,7 +40,7 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.AlterSystemStmtDiagReqs - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.SampledStmtDiagReqs - 1),
 				},
 			},
 		},
@@ -56,20 +56,19 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 
 	var (
 		validationStmts = []string{
-			`SELECT min_execution_latency, expires_at FROM system.statement_diagnostics_requests LIMIT 0`,
-			`SELECT min_execution_latency, expires_at FROM system.statement_diagnostics_requests@completed_idx_v2 LIMIT 0`,
+			`SELECT sampling_probability FROM system.statement_diagnostics_requests LIMIT 0`,
+			`SELECT sampling_probability FROM system.statement_diagnostics_requests@completed_idx LIMIT 0`,
 		}
 		validationSchemas = []upgrades.Schema{
-			{Name: "min_execution_latency", ValidationFn: upgrades.HasColumn},
-			{Name: "expires_at", ValidationFn: upgrades.HasColumn},
+			{Name: "sampling_probability", ValidationFn: upgrades.HasColumn},
 			{Name: "primary", ValidationFn: upgrades.HasColumnFamily},
-			{Name: "completed_idx", ValidationFn: upgrades.DoesNotHaveIndex},
+			{Name: "completed_idx_v2", ValidationFn: upgrades.DoesNotHaveIndex},
 		}
 	)
 
 	// Inject the old copy of the descriptor.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementDiagnosticsRequestsTable,
-		getDeprecatedStmtDiagReqsDescriptor)
+		getV2StmtDiagReqsDescriptor)
 	validateSchemaExists := func(expectExists bool) {
 		upgrades.ValidateSchemaExists(
 			ctx,
@@ -90,7 +89,7 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.AlterSystemStmtDiagReqs,
+		clusterversion.SampledStmtDiagReqs,
 		nil,   /* done */
 		false, /* expectError */
 	)
@@ -98,10 +97,10 @@ func TestAlterSystemStmtDiagReqs(t *testing.T) {
 	validateSchemaExists(true)
 }
 
-// getDeprecatedStmtDiagReqsDescriptor returns the
-// system.statement_diagnostics_requests table descriptor that was being used
-// before adding two new indexes in the current version.
-func getDeprecatedStmtDiagReqsDescriptor() *descpb.TableDescriptor {
+// getV2StmtDiagReqsDescriptor returns the system.statement_diagnostics_requests
+// table descriptor that was being used before adding the sampling_probability
+// column to the current version.
+func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 	uniqueRowIDString := "unique_rowid()"
 	falseBoolString := "false"
 
@@ -117,13 +116,15 @@ func getDeprecatedStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 			{Name: "statement_fingerprint", ID: 3, Type: types.String, Nullable: false},
 			{Name: "statement_diagnostics_id", ID: 4, Type: types.Int, Nullable: true},
 			{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
+			{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
+			{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
 		},
-		NextColumnID: 6,
+		NextColumnID: 8,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
 				Name:        "primary",
-				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+				ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 			},
 		},
 		NextFamilyID: 1,
@@ -137,14 +138,14 @@ func getDeprecatedStmtDiagReqsDescriptor() *descpb.TableDescriptor {
 		},
 		Indexes: []descpb.IndexDescriptor{
 			{
-				Name:                "completed_idx",
+				Name:                "completed_idx_v2",
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		},
