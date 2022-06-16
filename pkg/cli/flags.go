@@ -579,7 +579,6 @@ func init() {
 		doctorRecreateClusterCmd,
 		genHAProxyCmd,
 		initCmd,
-		quitCmd,
 		sqlShellCmd,
 		/* StartCmds are covered above */
 	}
@@ -668,9 +667,9 @@ func init() {
 		cliflagcfg.BoolFlag(f, &nodeCtx.nodeDecommissionSelf, cliflags.NodeDecommissionSelf)
 	}
 
-	// Quit and node drain commands.
-	for _, cmd := range []*cobra.Command{quitCmd, drainNodeCmd} {
-		f := cmd.Flags()
+	// node drain command.
+	{
+		f := drainNodeCmd.Flags()
 		cliflagcfg.DurationFlag(f, &drainCtx.drainWait, cliflags.DrainWait)
 		cliflagcfg.BoolFlag(f, &drainCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 	}
