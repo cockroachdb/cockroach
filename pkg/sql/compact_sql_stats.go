@@ -37,6 +37,13 @@ type sqlStatsCompactionResumer struct {
 }
 
 var _ jobs.Resumer = &sqlStatsCompactionResumer{}
+var _ jobs.TenantCostControlExemption = (*sqlStatsCompactionResumer)(nil)
+
+// HasTenantCostControlExemption implements the jobs.TenantCostControlExemption
+// interface.
+func (r *sqlStatsCompactionResumer) HasTenantCostControlExemption() {
+	// Do not include the cost of stats compaction in tenant accounting.
+}
 
 // Resume implements the jobs.Resumer interface.
 func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interface{}) error {

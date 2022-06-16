@@ -35,6 +35,7 @@ type resumer struct {
 }
 
 var _ jobs.Resumer = (*resumer)(nil)
+var _ jobs.TenantCostControlExemption = (*resumer)(nil)
 
 var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
@@ -43,6 +44,12 @@ var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 	5*time.Second,
 	settings.NonNegativeDuration,
 )
+
+// HasTenantCostControlExemption implements the jobs.TenantCostControlExemption
+// interface.
+func (r *resumer) HasTenantCostControlExemption() {
+	// Do not include the cost of span reconciliation in tenant accounting.
+}
 
 // Resume implements the jobs.Resumer interface.
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr error) {

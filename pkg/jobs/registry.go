@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -703,6 +704,10 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
+	// Since the job polling system is outside user control, exclude it from cost
+	// accounting and control. Individual jobs are not part of this exclusion.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
 	wrapWithSession := func(f withSessionFunc) func(ctx context.Context) {
 		return func(ctx context.Context) { r.withSession(ctx, f) }
 	}
@@ -1054,6 +1059,23 @@ func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id jobspb.JobID) er
 		return err
 	}
 	return job.unpaused(ctx, txn)
+}
+
+// TenantCostControlExemption allows job implementors to exclude their job's
+// Storage I/O costs (i.e. from reads/writes) from tenant accounting. Jobs that
+// are not triggered by user actions should be exempted from cost control. For
+// example, a backup job was triggered by a user BACKUP request and should
+// therefore be included. Even an auto stats job should be included, since the
+// user could choose to turn it off. But SQL stats compaction, span reconciler,
+// and long-running migration jobs are not triggered by user actions, and so
+// should be exempted.
+//
+// NOTE: A cost control exemption does not exclude CPU or Egress costs from
+// accounting, since those cannot be attributed to individual jobs.
+type TenantCostControlExemption interface {
+	// HasTenantCostControlExemption is a marker interface that indicates the
+	// job's cost should be excluded from tenant accounting.
+	HasTenantCostControlExemption()
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be

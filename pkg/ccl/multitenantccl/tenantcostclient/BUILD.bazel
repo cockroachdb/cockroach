@@ -49,6 +49,8 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/nodelocal",
         "//pkg/cloud/nullsink",
+        "//pkg/jobs",
+        "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/multitenant",

@@ -59,6 +59,15 @@ type resumer struct {
 }
 
 var _ jobs.Resumer = (*resumer)(nil)
+var _ jobs.TenantCostControlExemption = (*resumer)(nil)
+
+// HasTenantCostControlExemption implements the jobs.TenantCostControlExemption
+// interface.
+func (r resumer) HasTenantCostControlExemption() {
+	// Do not include the cost of long-running migrations in tenant accounting.
+	// NB: While the exemption excludes the cost of Storage I/O, it is not able
+	// to exclude the CPU cost.
+}
 
 func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)

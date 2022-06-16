@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nullsink"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -43,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -966,6 +969,98 @@ func TestSQLLivenessExemption(t *testing.T) {
 			return nil
 		},
 	)
+}
+
+// TestScheduledJobsConsumption verifies that the scheduled jobs system itself
+// does not consume RUs, but that the jobs it runs do consume RUs.
+func TestScheduledJobsConsumption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer hostServer.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+
+	testProvider := newTestProvider()
+
+	// Delay jobs from being scheduled until we're ready.
+	delayCh := make(chan struct{}, 0)
+	scanDelay := func() time.Duration {
+		<-delayCh
+		return 0
+	}
+
+	env := jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now())
+	var zeroDuration time.Duration
+	tenantServer, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
+		TenantID:                    serverutils.TestTenantID(),
+		Settings:                    st,
+		AllowSettingClusterSettings: true,
+		TestingKnobs: base.TestingKnobs{
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
+					return testProvider
+				},
+			},
+			TTL: &sql.TTLTestingKnobs{
+				// Don't wait until we can use a historical query.
+				AOSTDuration: &zeroDuration,
+			},
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				JobSchedulerEnv:                 env,
+				SchedulerDaemonInitialScanDelay: scanDelay,
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					// Force fast adoption and resumption.
+					Adopt:             &zeroDuration,
+					RetryInitialDelay: &zeroDuration,
+					RetryMaxDelay:     &zeroDuration,
+				},
+			},
+		},
+	})
+
+	// Ensure the job system is not consuming RUs when scanning/claiming jobs.
+	beforeWait := testProvider.waitForConsumption(t)
+	tenantServer.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	env.AdvanceTime(24 * time.Hour)
+	time.Sleep(100 * time.Millisecond)
+	afterWait := testProvider.waitForConsumption(t)
+	afterWait.Sub(&beforeWait)
+	require.Zero(t, afterWait.WriteBatches)
+	require.Zero(t, afterWait.WriteBytes)
+	require.Zero(t, afterWait.ReadBatches)
+	require.Zero(t, afterWait.ReadBytes)
+
+	// Create a table with rows that expire after a TTL. This will trigger the
+	// creation of a TTL job.
+	r := sqlutils.MakeSQLRunner(tenantDB)
+	r.Exec(t, "CREATE TABLE t (v INT PRIMARY KEY) WITH ("+
+		"ttl_expire_after = '1 microsecond', ttl_job_cron = '* * * * ?', ttl_delete_batch_size = 1)")
+	r.Exec(t, "INSERT INTO t SELECT x FROM generate_series(1,100) g(x)")
+	beforeTTL := testProvider.waitForConsumption(t)
+
+	// Make sure that at least 100 writes (deletes) are reported. The TTL job
+	// should not be exempt from cost control.
+	testutils.SucceedsWithin(t, func() error {
+		// Let the job scheduler daemon run so that it can schedule the TTL job.
+		select {
+		case delayCh <- struct{}{}:
+		default:
+		}
+
+		tenantServer.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		env.AdvanceTime(time.Minute)
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&beforeTTL)
+		if c.WriteRequests < 100 {
+			return errors.New("no write requests reported")
+		}
+		return nil
+	}, timeout)
 }
 
 // TestConsumption verifies consumption reporting from a tenant server process.
