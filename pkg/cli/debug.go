@@ -912,13 +912,12 @@ func runDebugGossipValues(cmd *cobra.Command, args []string) error {
 			return errors.Wrap(err, "failed to parse provided file as gossip.InfoStatus")
 		}
 	} else {
-		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+		status, finish, err := getStatusClient(ctx, serverCfg)
 		if err != nil {
 			return err
 		}
 		defer finish()
 
-		status := serverpb.NewStatusClient(conn)
 		gossipInfo, err = status.Gossip(ctx, &serverpb.GossipRequest{})
 		if err != nil {
 			return errors.Wrap(err, "failed to retrieve gossip from server")
