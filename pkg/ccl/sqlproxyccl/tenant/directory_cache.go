@@ -194,14 +194,7 @@ func (d *directoryCache) LookupTenantPods(
 	tenantPods := entry.GetPods()
 
 	// Trigger resumption if there are no RUNNING pods.
-	hasRunningPod := false
-	for _, pod := range tenantPods {
-		if pod.State == RUNNING {
-			hasRunningPod = true
-			break
-		}
-	}
-	if !hasRunningPod {
+	if !hasRunningPod(tenantPods) {
 		// There are no known pod IP addresses, so fetch pod information from
 		// the directory server. Resume the tenant if it is suspended; that
 		// will always result in at least one pod IP address (or an error).
