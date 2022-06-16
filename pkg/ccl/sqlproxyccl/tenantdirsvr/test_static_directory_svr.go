@@ -270,17 +270,21 @@ func (d *TestStaticDirectoryServer) AddPod(tenantID roachpb.TenantID, pod *tenan
 	// Emit an event that the pod has been created.
 	d.notifyPodUpdateLocked(pod)
 
+	// Make a copy of the pod so that any changes to the pod's state would not
+	// mutate the original data.
+	copyPod := *pod
+
 	// Check if the pod exists. This would handle pods transitioning from
 	// DRAINING to RUNNING.
 	for i, existing := range pods {
-		if existing.Addr == pod.Addr {
-			d.mu.tenants[tenantID][i] = pod
+		if existing.Addr == copyPod.Addr {
+			d.mu.tenants[tenantID][i] = &copyPod
 			return true
 		}
 	}
 
 	// A new pod has been added.
-	d.mu.tenants[tenantID] = append(d.mu.tenants[tenantID], pod)
+	d.mu.tenants[tenantID] = append(d.mu.tenants[tenantID], &copyPod)
 	return true
 }
 
