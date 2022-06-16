@@ -2397,6 +2397,107 @@ inner-join (hash)
       └── a:1 = z:16 [outer=(1,16), constraints=(/1: (/NULL - ]; /16: (/NULL - ]), fd=(1)==(16), (16)==(1)]
 
 
+# Special case for reordering inner-joins and left-joins: One inner-join
+# conjunct can be pushed into the left side of the left-join, and the other
+# remains above the left-join on a select operator. The 'OR z IS NULL' expression
+# prevents the left join from being null-rejected.
+reorderjoins
+SELECT * FROM bx
+INNER JOIN
+(
+  SELECT * FROM cy
+  LEFT JOIN dz
+  ON c = d
+)
+ON b = c AND (x = z OR z IS NULL)
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  left-join (hash)
+   ├── scan cy
+   ├── scan dz
+   └── filters
+        └── c = d
+Vertexes
+  A:
+    scan cy
+  B:
+    scan dz
+Edges
+  c = d [left, ses=AB, tes=AB, rules=()]
+Joining AB
+  A B [left, refs=AB]
+Joins Considered: 1
+--------------------------------------------------------------------------------
+Join Tree #2
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── scan bx
+   ├── left-join (hash)
+   │    ├── scan cy
+   │    ├── scan dz
+   │    └── filters
+   │         └── c = d
+   └── filters
+        ├── b = c
+        └── (x = z) OR (z IS NULL)
+Vertexes
+  C:
+    scan bx
+  A:
+    scan cy
+  B:
+    scan dz
+Edges
+  c = d [left, ses=AB, tes=AB, rules=()]
+  b = c [inner, ses=CA, tes=CA, rules=()]
+  (x = z) OR (z IS NULL) [inner, ses=CB, tes=CAB, rules=()]
+Joining CA
+  C A [inner, refs=CA]
+  A C [inner, refs=CA]
+Joining AB
+  A B [left, refs=AB]
+Joining CAB
+  C AB [inner, refs=CAB]
+  AB C [inner, refs=CAB]
+  CA B [left, refs=AB] [select, refs=CB]
+Joins Considered: 6
+================================================================================
+Final Plan
+================================================================================
+inner-join (merge)
+ ├── columns: b:1!null x:2 c:5!null y:6 d:9 z:10
+ ├── left ordering: +1
+ ├── right ordering: +5
+ ├── key: (5)
+ ├── fd: (1)-->(2), (5)-->(6,9,10), (9)-->(10), (1)==(5), (5)==(1)
+ ├── scan bx
+ │    ├── columns: b:1!null x:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ ├── left-join (merge)
+ │    ├── columns: c:5!null y:6 d:9 z:10
+ │    ├── left ordering: +5
+ │    ├── right ordering: +9
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6,9,10), (9)-->(10)
+ │    ├── ordering: +5
+ │    ├── scan cy
+ │    │    ├── columns: c:5!null y:6
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6)
+ │    │    └── ordering: +5
+ │    ├── scan dz
+ │    │    ├── columns: d:9!null z:10
+ │    │    ├── key: (9)
+ │    │    ├── fd: (9)-->(10)
+ │    │    └── ordering: +9
+ │    └── filters (true)
+ └── filters
+      └── (x:2 = z:10) OR (z:10 IS NULL) [outer=(2,10)]
+
 # Regression test for #59076. Do not reorder on the inner join produced by
 # CommuteSemiJoin when it matches on an already-reordered semi join because
 # doing so can lead to an exponential blowup in the size of the memo.
@@ -2596,3 +2697,173 @@ project
       │         └── t2.a:5 = 123456 [outer=(5), constraints=(/5: [/123456 - /123456]; tight), fd=()-->(5)]
       └── filters
            └── t1.a:1 = 123456 [outer=(1), constraints=(/1: [/123456 - /123456]; tight), fd=()-->(1)]
+
+# Regression test for #80901. Do not cause a memo cycle when redundant inner
+# join filters can be inferred that reference the right side of a left join, and
+# the inner join is pushed into the left side of the left join.
+
+exec-ddl
+CREATE TABLE table80901_1 (
+  col1_5  DECIMAL,
+  col1_7  BOOL,
+  col1_9  OID,
+  col1_11 STRING,
+  col1_12 STRING,
+  col1_14 STRING,
+  col1_15 STRING,
+  col1_16 STRING,
+  col1_17 STRING
+);
+----
+
+exec-ddl
+CREATE TABLE table80901_3 (col3_2 OID, col3_4 FLOAT8, col3_9 STRING);
+----
+
+memo memo-cycles
+SELECT (
+  SELECT NULL
+  FROM table80901_1 AS tab_42924
+  JOIN table80901_1 AS tab_42927
+    LEFT JOIN table80901_3 AS tab_42928 ON tab_42921.col1_7
+  JOIN table80901_3 AS tab_42929
+  ON tab_42927.col1_9 = tab_42929.col3_2
+  ON tab_42924.col1_17 = tab_42927.col1_15
+    AND tab_42924.col1_12 = tab_42929.col3_9
+    AND tab_42924.col1_14 = tab_42928.col3_9
+    AND tab_42924.col1_14 = tab_42929.col3_9
+    AND tab_42924.col1_11 = tab_42927.col1_17
+    AND tab_42924.col1_11 = tab_42927.col1_16
+    AND tab_42924.col1_15 = tab_42929.col3_9
+    AND tab_42924.col1_5 = tab_42929.crdb_internal_mvcc_timestamp
+)
+  FROM table80901_1 AS tab_42921;
+----
+memo (optimized, ~60KB, required=[presentation: ?column?:50])
+ ├── G1: (project G2 G3)
+ │    └── [presentation: ?column?:50]
+ │         ├── best: (project G2 G3)
+ │         └── cost: 13000.58
+ ├── G2: (ensure-distinct-on G4 G5 cols=(10)) (ensure-distinct-on G4 G5 cols=(10),ordering=+10)
+ │    └── []
+ │         ├── best: (ensure-distinct-on G4 G5 cols=(10))
+ │         └── cost: 11263.07
+ ├── G3: (projections G6)
+ ├── G4: (left-join-apply G7 G8 G9)
+ │    ├── [ordering: +10]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 40638.22
+ │    └── []
+ │         ├── best: (left-join-apply G7 G8 G9)
+ │         └── cost: 6609.67
+ ├── G5: (aggregations G10)
+ ├── G6: (variable "?column?")
+ ├── G7: (scan table80901_1 [as=tab_42921],cols=(2,10))
+ │    └── []
+ │         ├── best: (scan table80901_1 [as=tab_42921],cols=(2,10))
+ │         └── cost: 1145.22
+ ├── G8: (project G11 G12)
+ │    └── []
+ │         ├── best: (project G11 G12)
+ │         └── cost: 4581.66
+ ├── G9: (filters)
+ ├── G10: (const-agg G6)
+ ├── G11: (inner-join G13 G14 G15) (inner-join G14 G13 G15) (select G16 G17) (inner-join G18 G19 G20) (inner-join G19 G18 G20) (inner-join G21 G22 G23) (inner-join G22 G21 G23)
+ │    └── []
+ │         ├── best: (select G16 G17)
+ │         └── cost: 4579.90
+ ├── G12: (projections G24)
+ ├── G13: (scan table80901_1 [as=tab_42924],cols=(13,16-19,21))
+ │    └── []
+ │         ├── best: (scan table80901_1 [as=tab_42924],cols=(13,16-19,21))
+ │         └── cost: 1185.62
+ ├── G14: (inner-join G18 G22 G25) (left-join G26 G27 G28) (inner-join G22 G18 G25) (right-join G27 G26 G28) (inner-join G22 G18 G29)
+ │    └── []
+ │         ├── best: (left-join G26 G27 G28)
+ │         └── cost: 101613.03
+ ├── G15: (filters G30 G31 G32 G33 G34 G35 G36 G37)
+ ├── G16: (left-join G38 G27 G28) (right-join G27 G38 G28)
+ │    └── []
+ │         ├── best: (right-join G27 G38 G28)
+ │         └── cost: 4579.00
+ ├── G17: (filters G32)
+ ├── G18: (left-join G39 G27 G28) (right-join G27 G39 G28)
+ │    └── []
+ │         ├── best: (left-join G39 G27 G28)
+ │         └── cost: 12270.12
+ ├── G19: (inner-join G13 G22 G40) (inner-join G22 G13 G40)
+ │    └── []
+ │         ├── best: (inner-join G13 G22 G40)
+ │         └── cost: 2311.47
+ ├── G20: (filters G41 G30 G32 G34 G35)
+ ├── G21: (inner-join G13 G18 G42) (inner-join G18 G13 G42) (select G43 G44)
+ │    └── []
+ │         ├── best: (select G43 G44)
+ │         └── cost: 5372.91
+ ├── G22: (scan table80901_3 [as=tab_42929],cols=(43,45,47))
+ │    └── []
+ │         ├── best: (scan table80901_3 [as=tab_42929],cols=(43,45,47))
+ │         └── cost: 1094.72
+ ├── G23: (filters G41 G31 G37)
+ ├── G24: (null)
+ ├── G25: (filters G41)
+ ├── G26: (inner-join G39 G22 G25) (inner-join G22 G39 G25)
+ │    └── []
+ │         ├── best: (inner-join G39 G22 G25)
+ │         └── cost: 2388.32
+ ├── G27: (scan table80901_3 [as=tab_42928],cols=(39))
+ │    └── []
+ │         ├── best: (scan table80901_3 [as=tab_42928],cols=(39))
+ │         └── cost: 1074.52
+ ├── G28: (filters G45)
+ ├── G29: (filters G41 G46)
+ ├── G30: (eq G47 G48)
+ ├── G31: (eq G49 G50)
+ ├── G32: (eq G51 G52)
+ ├── G33: (eq G51 G50)
+ ├── G34: (eq G53 G54)
+ ├── G35: (eq G53 G55)
+ ├── G36: (eq G56 G50)
+ ├── G37: (eq G57 G58)
+ ├── G38: (inner-join G13 G26 G59) (inner-join G26 G13 G59) (inner-join G39 G19 G60) (inner-join G19 G39 G60) (inner-join G61 G22 G62) (inner-join G22 G61 G62)
+ │    └── []
+ │         ├── best: (inner-join G39 G19 G60)
+ │         └── cost: 3491.07
+ ├── G39: (scan table80901_1 [as=tab_42927],cols=(27,31-33))
+ │    └── []
+ │         ├── best: (scan table80901_1 [as=tab_42927],cols=(27,31-33))
+ │         └── cost: 1165.42
+ ├── G40: (filters G31 G33 G36 G37)
+ ├── G41: (eq G63 G64)
+ ├── G42: (filters G30 G32 G34 G35 G65 G66)
+ ├── G43: (left-join G61 G27 G28) (right-join G27 G61 G28)
+ │    └── []
+ │         ├── best: (right-join G27 G61 G28)
+ │         └── cost: 4421.87
+ ├── G44: (filters G32 G65 G66)
+ ├── G45: (variable tab_42921.col1_7)
+ ├── G46: (eq G52 G50)
+ ├── G47: (variable tab_42924.col1_17)
+ ├── G48: (variable tab_42927.col1_15)
+ ├── G49: (variable tab_42924.col1_12)
+ ├── G50: (variable tab_42929.col3_9)
+ ├── G51: (variable tab_42924.col1_14)
+ ├── G52: (variable tab_42928.col3_9)
+ ├── G53: (variable tab_42924.col1_11)
+ ├── G54: (variable tab_42927.col1_17)
+ ├── G55: (variable tab_42927.col1_16)
+ ├── G56: (variable tab_42924.col1_15)
+ ├── G57: (variable tab_42924.col1_5)
+ ├── G58: (variable tab_42929.crdb_internal_mvcc_timestamp)
+ ├── G59: (filters G30 G31 G33 G34 G35 G36 G37)
+ ├── G60: (filters G41 G30 G34 G35)
+ ├── G61: (inner-join G13 G39 G67) (inner-join G39 G13 G67)
+ │    └── []
+ │         ├── best: (inner-join G13 G39 G67)
+ │         └── cost: 2382.17
+ ├── G62: (filters G41 G31 G33 G36 G37)
+ ├── G63: (variable tab_42927.col1_9)
+ ├── G64: (variable tab_42929.col3_2)
+ ├── G65: (eq G49 G52)
+ ├── G66: (eq G56 G52)
+ └── G67: (filters G30 G34 G35)
