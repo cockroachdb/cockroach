@@ -49,8 +49,8 @@ type pebbleBatch struct {
 	normalEngineIter pebbleIterator
 
 	iter              *pebble.Iterator
+	iterUsed          bool // avoids cloning after PinEngineStateForIterators()
 	writeOnly         bool
-	iterUnused        bool
 	containsRangeKeys bool
 	closed            bool
 
@@ -114,7 +114,7 @@ func (p *pebbleBatch) Close() {
 	}
 	p.closed = true
 
-	if p.iterUnused {
+	if p.iter != nil && !p.iterUsed {
 		if err := p.iter.Close(); err != nil {
 			panic(err)
 		}
@@ -228,12 +228,12 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		iter.setOptions(opts, StandardDurability)
 	} else {
 		iter.initReuseOrCreate(
-			handle, p.iter, !p.iterUnused, opts, StandardDurability, p.SupportsRangeKeys())
+			handle, p.iter, p.iterUsed, opts, StandardDurability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
-		p.iterUnused = false
+		p.iterUsed = true
 	}
 
 	iter.inuse = true
@@ -269,12 +269,12 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter.setOptions(opts, StandardDurability)
 	} else {
 		iter.initReuseOrCreate(
-			handle, p.iter, !p.iterUnused, opts, StandardDurability, p.SupportsRangeKeys())
+			handle, p.iter, p.iterUsed, opts, StandardDurability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
-		p.iterUnused = false
+		p.iterUsed = true
 	}
 
 	iter.inuse = true
@@ -299,10 +299,8 @@ func (p *pebbleBatch) PinEngineStateForIterators() error {
 		} else {
 			p.iter = p.db.NewIter(nil)
 		}
-		// Since the iterator is being created just to pin the state of the engine
-		// for future iterators, we'll avoid cloning it the next time we want an
-		// iterator and instead just re-use what we created here.
-		p.iterUnused = true
+		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(). We've
+		// just created it, so cloning it would just be overhead.
 	}
 	return nil
 }
