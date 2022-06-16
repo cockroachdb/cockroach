@@ -20,23 +20,33 @@ import (
 // Config contains the configuration of the rate limiter.
 //
 // We limit the rate of KV operations using the tenant cost model which can
-// map these operations to "Request Units".
+// map these operations to "KV Compute Units". Note that KV Compute Units are
+// not the same thing as Request Units. One KV Compute Unit is equivalent to one
+// millisecond of CPU. Request Units measure other resources besides CPU (e.g.
+// egress and IOPS). Also, Request Units correspond to the retail price of
+// resources rather than the underlying cost of Cloud Provider resources (i.e.
+// they include markup). For example, one KV Compute Unit might correspond to 2
+// Request Units.
 type Config struct {
-	// Rate defines the "sustained" rate limit in Request Units per second.
+	// Rate defines the "sustained" rate limit in KV Compute Units per second.
 	Rate float64
-	// Burst defines the "burst" limit in Request Units. Unused units accumulate
-	// up to this limit.
+	// Burst defines the "burst" limit in KV Compute Units. Unused units
+	// accumulate up to this limit.
 	Burst float64
 
-	// ReadRequestUnits is the baseline cost of a read, in KV Compute Units.
+	// ReadBatchUnits is the baseline cost of a read batch, in KV Compute Units.
+	ReadBatchUnits float64
+	// ReadRequestUnits is the baseline cost of one read request in a batch, in
+	// KV Compute Units.
 	ReadRequestUnits float64
-	// ReadRequestUnits is the size-dependent cost of a read, in KV Compute Units
-	// per byte.
+	// ReadUnitsPerByte is the cost of a reading a byte in KV Compute Units.
 	ReadUnitsPerByte float64
-	// WriteRequestUnits is the baseline cost of a write, in KV Compute Units.
+	// WriteBatchUnits is the baseline cost of a write batch, in KV Compute Units.
+	WriteBatchUnits float64
+	// WriteRequestUnits is the baseline cost of one write request in a batch,
+	// in KV Compute Units.
 	WriteRequestUnits float64
-	// WriteRequestUnits is the size-dependent cost of a write, in KV Compute
-	// Units per byte.
+	// WriteUnitsPerByte is the cost of writing a byte in KV Compute Units.
 	WriteUnitsPerByte float64
 }
 
@@ -64,7 +74,7 @@ var (
 	// per CPU, or roughly 20% of the machine (by design 1 RU roughly maps to 1
 	// CPU-millisecond).
 	kvcuRateLimit = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.SystemOnly,
 		"kv.tenant_rate_limiter.rate_limit",
 		"per-tenant rate limit in KV Compute Units per second if positive, "+
 			"or KV Compute Units per second per CPU if negative",
@@ -78,53 +88,71 @@ var (
 	)
 
 	kvcuBurstLimitSeconds = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.SystemOnly,
 		"kv.tenant_rate_limiter.burst_limit_seconds",
 		"per-tenant burst limit as a multiplier of the rate",
 		10,
-		settings.PositiveFloat,
+		settings.NonNegativeFloat,
+	)
+
+	readBatchCost = settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.tenant_rate_limiter.read_batch_cost",
+		"base cost of a read batch in KV Compute Units",
+		0.567,
+		settings.NonNegativeFloat,
 	)
 
 	readRequestCost = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.SystemOnly,
 		"kv.tenant_rate_limiter.read_request_cost",
 		"base cost of a read request in KV Compute Units",
-		0.7,
-		settings.PositiveFloat,
+		0.0275,
+		settings.NonNegativeFloat,
 	)
 
-	readCostPerMB = settings.RegisterFloatSetting(
-		settings.TenantWritable,
-		"kv.tenant_rate_limiter.read_cost_per_megabyte",
-		"cost of a read in KV Compute Units per MB",
-		10.0,
-		settings.PositiveFloat,
+	readCostPerMiB = settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.tenant_rate_limiter.read_cost_per_mebibyte",
+		"cost of a read in KV Compute Units per MiB",
+		12.77,
+		settings.NonNegativeFloat,
+	)
+
+	writeBatchCost = settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.tenant_rate_limiter.write_batch_cost",
+		"base cost of a write batch in KV Compute Units",
+		0.328,
+		settings.NonNegativeFloat,
 	)
 
 	writeRequestCost = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.SystemOnly,
 		"kv.tenant_rate_limiter.write_request_cost",
 		"base cost of a write request in KV Compute Units",
-		1.0,
-		settings.PositiveFloat,
+		0.314,
+		settings.NonNegativeFloat,
 	)
 
-	writeCostPerMB = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+	writeCostPerMiB = settings.RegisterFloatSetting(
+		settings.SystemOnly,
 		"kv.tenant_rate_limiter.write_cost_per_megabyte",
-		"cost of a write in KV Compute Units per MB",
-		400.0,
-		settings.PositiveFloat,
+		"cost of a write in KV Compute Units per MiB",
+		43.95,
+		settings.NonNegativeFloat,
 	)
 
 	// List of config settings, used to set up "on change" notifiers.
 	configSettings = [...]settings.NonMaskedSetting{
 		kvcuRateLimit,
 		kvcuBurstLimitSeconds,
+		readBatchCost,
 		readRequestCost,
-		readCostPerMB,
+		readCostPerMiB,
+		writeBatchCost,
 		writeRequestCost,
-		writeCostPerMB,
+		writeCostPerMiB,
 	}
 )
 
@@ -145,10 +173,12 @@ func ConfigFromSettings(sv *settings.Values) Config {
 	return Config{
 		Rate:              rate,
 		Burst:             rate * kvcuBurstLimitSeconds.Get(sv),
+		ReadBatchUnits:    readBatchCost.Get(sv),
 		ReadRequestUnits:  readRequestCost.Get(sv),
-		ReadUnitsPerByte:  readCostPerMB.Get(sv) / (1024 * 1024),
+		ReadUnitsPerByte:  readCostPerMiB.Get(sv) / (1024 * 1024),
+		WriteBatchUnits:   writeBatchCost.Get(sv),
 		WriteRequestUnits: writeRequestCost.Get(sv),
-		WriteUnitsPerByte: writeCostPerMB.Get(sv) / (1024 * 1024),
+		WriteUnitsPerByte: writeCostPerMiB.Get(sv) / (1024 * 1024),
 	}
 }
 
@@ -159,9 +189,11 @@ func DefaultConfig() Config {
 	return Config{
 		Rate:              rate,
 		Burst:             rate * kvcuBurstLimitSeconds.Default(),
+		ReadBatchUnits:    readBatchCost.Default(),
 		ReadRequestUnits:  readRequestCost.Default(),
-		ReadUnitsPerByte:  readCostPerMB.Default() / (1024 * 1024),
+		ReadUnitsPerByte:  readCostPerMiB.Default() / (1024 * 1024),
+		WriteBatchUnits:   writeBatchCost.Default(),
 		WriteRequestUnits: writeRequestCost.Default(),
-		WriteUnitsPerByte: writeCostPerMB.Default() / (1024 * 1024),
+		WriteUnitsPerByte: writeCostPerMiB.Default() / (1024 * 1024),
 	}
 }

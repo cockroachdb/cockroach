@@ -1,55 +1,102 @@
+# Test token bucket that has gone into debt.
+
+# Wait for initial 10K RUs to be granted.
 wait-for-event
 token-bucket-response
 ----
 
 # Set up throttling at 1000 RU/s.
-configure 
+configure
 throttle: 1000
 ----
 
-# Fire off a write that needs more than the 10000 initial RUs.
-write bytes=6000000 label=w1
+# Issue 6K write that triggers fetch of more RU and also sets throttle rate.
+write bytes=6141952
 ----
 
 wait-for-event
 token-bucket-response
 ----
 
-timers
+token-bucket
 ----
-00:00:01.600
-00:00:09.000
+4000.00 RU filling @ 1000.00 RU/s
 
-advance
-2s
-----
-00:00:02.000
-
-wait-for-event
-tick
+# Consume 6K RUs that causes bucket to go into debt.
+cpu
+18s
 ----
 
-await label=w1
+advance wait=true
+1s
 ----
+00:00:01.000
 
-# Do a read which incurs a debt of about 1000 RUs upon completion.
-read bytes=10000000
+token-bucket
 ----
+0.00 RU filling @ 1000.00 RU/s (996.67 waiting debt @ 498.33 RU/s)
 
 # Verify that a small write doesn't have to wait a second for the entire debt
 # to be paid.
-write bytes=1024 label=w2
+write bytes=1024 label=w1
 ----
 
 timers
 ----
-00:00:02.011
+00:00:01.005
 00:00:09.000
 
 advance
 100ms
 ----
-00:00:02.100
+00:00:01.100
 
-await label=w2
+await label=w1
 ----
+
+token-bucket
+----
+47.17 RU filling @ 1000.00 RU/s (946.83 waiting debt @ 498.33 RU/s)
+
+# Consume enough RUs that the debt cannot be paid within debtApplySecs.
+pgwire-egress
+4096000
+----
+
+advance wait=true
+1.5s
+----
+00:00:02.600
+
+token-bucket
+----
+-1399.67 RU filling @ 1000.00 RU/s (2000.00 waiting debt @ 1000.00 RU/s)
+
+# Advance and ensure that waiting debt is reduced.
+advance
+400ms
+----
+00:00:03.000
+
+token-bucket
+----
+-1399.67 RU filling @ 1000.00 RU/s (1600.00 waiting debt @ 1000.00 RU/s)
+
+advance wait=true
+1s
+----
+00:00:04.000
+
+token-bucket
+----
+-1399.67 RU filling @ 1000.00 RU/s (600.00 waiting debt @ 300.00 RU/s)
+
+# Advance again and ensure that both available RUs and waiting debt are reduced.
+advance wait=true
+1s
+----
+00:00:05.000
+
+token-bucket
+----
+-699.67 RU filling @ 1000.00 RU/s (300.00 waiting debt @ 150.00 RU/s)

@@ -1,59 +1,130 @@
 # Test that the controller reports consumption as expected.
 
+# Wait for initial 10K RUs to be granted.
+wait-for-event
+token-bucket-response
+----
+
+# With no usage, consumption gets reported only every 40s.
+advance
+40s
+----
+00:00:40.000
+
+wait-for-event
+token-bucket-response
+----
+
 usage
 ----
 RU:  0.00
 KVRU:  0.00
-Reads:  0 requests (0 bytes)
-Writes:  0 requests (0 bytes)
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  0 requests in 0 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
-read bytes=1024000
+# Do a small read that uses less than 100 RUs. Consumption should only be
+# reported after 40s.
+read bytes=1048576
+----
+
+advance
+10s
+----
+00:00:50.000
+
+usage
+----
+RU:  0.00
+KVRU:  0.00
+Reads:  0 requests in 0 batches (0 bytes)
+Writes:  0 requests in 0 batches (0 bytes)
+SQL Pods CPU seconds:  0.00
+PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
+
+advance
+30s
+----
+00:01:20.000
+
+wait-for-event
+token-bucket-response
 ----
 
 usage
 ----
-RU:  105.83
-KVRU:  105.83
-Reads:  1 requests (1024000 bytes)
-Writes:  0 requests (0 bytes)
+RU:  16.62
+KVRU:  16.62
+Reads:  1 requests in 1 batches (1048576 bytes)
+Writes:  0 requests in 0 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Test write operation consumption.
 write bytes=1024
 ----
 
+advance
+40s
+----
+00:02:00.000
+
+wait-for-event
+token-bucket-response
+----
+
 usage
 ----
-RU:  113.58
-KVRU:  113.58
-Reads:  1 requests (1024000 bytes)
-Writes:  1 requests (1024 bytes)
+RU:  19.62
+KVRU:  19.62
+Reads:  1 requests in 1 batches (1048576 bytes)
+Writes:  1 requests in 1 batches (1024 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+
+# Test CPU consumption.
+advance wait=true
+30s
+----
+00:02:30.000
 
 cpu
 1s
 ----
 
+advance
+10s
+----
+00:02:40.000
+
+wait-for-event
+token-bucket-response
+----
+
+# CPU usage is reduced by 10% because:
+#   1. 1% of a CPU per second is considered background usage (33.33 RUs).
+#   2. 10 seconds have elapsed since CPU was recorded (333.33 RUs).
 usage
 ----
-RU:  1113.58
-KVRU:  113.58
-Reads:  1 requests (1024000 bytes)
-Writes:  1 requests (1024 bytes)
-SQL Pods CPU seconds:  1.00
+RU:  319.62
+KVRU:  19.62
+Reads:  1 requests in 1 batches (1048576 bytes)
+Writes:  1 requests in 1 batches (1024 bytes)
+SQL Pods CPU seconds:  0.90
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Test multiple operations together.
 write bytes=4096
 ----
 
@@ -63,120 +134,232 @@ read bytes=65536
 write bytes=4096
 ----
 
+advance
+40s
+----
+00:03:20.000
+
+wait-for-event
+token-bucket-response
+----
+
 usage
 ----
-RU:  1148.39
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  1.00
+RU:  333.25
+KVRU:  33.25
+Reads:  2 requests in 2 batches (1114112 bytes)
+Writes:  3 requests in 3 batches (9216 bytes)
+SQL Pods CPU seconds:  0.90
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Test larger amount of CPU usage that exceeds 100 RUs. The consumption report
+# should be sent after only 10s. In addition, the CPU usage should only be
+# reduced by 33.33333 RUs (1% of 1 CPU for 10 seconds).
 cpu
-1h
+3s
+----
+
+advance
+10s
+----
+00:03:30.000
+
+wait-for-event
+token-bucket-response
 ----
 
 usage
 ----
-RU:  3601148.39
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
+RU:  1299.92
+KVRU:  33.25
+Reads:  2 requests in 2 batches (1114112 bytes)
+Writes:  3 requests in 3 batches (9216 bytes)
+SQL Pods CPU seconds:  3.80
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Test egress.
 pgwire-egress
 12345
 ----
 
+advance
+40s
+----
+00:04:10.000
+
+wait-for-event
+token-bucket-response
+----
+
 usage
 ----
-RU:  3601158.74
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
+RU:  1311.97
+KVRU:  33.25
+Reads:  2 requests in 2 batches (1114112 bytes)
+Writes:  3 requests in 3 batches (9216 bytes)
+SQL Pods CPU seconds:  3.80
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Test multiple requests in the same batch.
+write count=2 bytes=1024
+----
+
+read count=2 bytes=65536
+----
+
+advance
+40s
+----
+00:04:50.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  1317.72
+KVRU:  39.00
+Reads:  4 requests in 3 batches (1179648 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.80
+PGWire egress:  12345 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
+
+# Test a small amount of CPU usage in a tick that has no read/write operations.
+# Anything under 30ms (3% of one CPU) should be ignored.
+
+advance wait=true
+1s
+----
+00:04:51.000
+
+cpu
+29ms
+----
+
+advance wait=true
+1s
+----
+00:04:52.000
+
+# Wait for usage to be reported.
+advance
+40s
+----
+00:05:32.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  1317.72
+KVRU:  39.00
+Reads:  4 requests in 3 batches (1179648 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.80
+PGWire egress:  12345 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
+
+# Now ensure that 30ms meets the threshold and is reported.
+cpu
+30ms
+----
+
+advance wait=true
+1s
+----
+00:05:33.000
+
+# Wait for usage to be reported.
+advance
+40s
+----
+00:06:13.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  1324.39
+KVRU:  39.00
+Reads:  4 requests in 3 batches (1179648 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
+
+# Ensure no RU usage is reported, but ingress/egress bytes are reported.
 disable-external-ru-accounting
 ----
 
-external-egress bytes=10
+external-egress bytes=2000
+----
+
+external-ingress bytes=10000
+----
+
+# Wait for usage to be reported.
+advance
+40s
+----
+00:06:53.000
+
+wait-for-event
+token-bucket-response
 ----
 
 usage
 ----
-RU:  3601158.74
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
+RU:  1324.39
+KVRU:  39.00
+Reads:  4 requests in 3 batches (1179648 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
-ExternalIO egress: 10 bytes
-ExternalIO ingress: 0 bytes
+ExternalIO egress: 2000 bytes
+ExternalIO ingress: 10000 bytes
 
-external-egress bytes=10 unused=5
-----
-
-usage
-----
-RU:  3601158.74
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
-PGWire egress:  12345 bytes
-ExternalIO egress: 15 bytes
-ExternalIO ingress: 0 bytes
-
-external-ingress bytes=10
-----
-
-usage
-----
-RU:  3601158.74
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
-PGWire egress:  12345 bytes
-ExternalIO egress: 15 bytes
-ExternalIO ingress: 10 bytes
-
-
+# Enable accounting and ensure RUs are updated.
 enable-external-ru-accounting
 ----
 
 external-egress bytes=1024000
 ----
 
-usage
-----
-RU:  3601159.71
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
-PGWire egress:  12345 bytes
-ExternalIO egress: 1024015 bytes
-ExternalIO ingress: 10 bytes
-
 external-ingress bytes=1024000
 ----
 
+# Wait for usage to be reported.
+advance
+40s
+----
+00:07:33.000
+
+wait-for-event
+token-bucket-response
+----
+
 usage
 ----
-RU:  3601160.69
-KVRU:  148.39
-Reads:  2 requests (1089536 bytes)
-Writes:  3 requests (9216 bytes)
-SQL Pods CPU seconds:  3601.00
+RU:  2324.39
+KVRU:  39.00
+Reads:  4 requests in 3 batches (1179648 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
-ExternalIO egress: 1024015 bytes
-ExternalIO ingress: 1024010 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes
