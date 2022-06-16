@@ -1252,7 +1252,7 @@ func (mb *mutationBuilder) addAssignmentCasts(srcCols opt.OptionalColList) {
 
 		// An assignment cast is not necessary if the source and target types
 		// are identical.
-		if srcType.Identical(targetType) {
+		if srcType.Equivalent(targetType) {
 			continue
 		}
 
