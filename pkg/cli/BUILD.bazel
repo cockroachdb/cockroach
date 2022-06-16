@@ -49,6 +49,7 @@ go_library(
         "prefixer.go",
         "quit.go",
         "rpc_client.go",
+        "rpc_node_shutdown.go",
         "sql_client.go",
         "sql_shell_cmd.go",
         "sqlfmt.go",
