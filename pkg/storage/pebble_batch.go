@@ -249,9 +249,6 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if p.writeOnly {
 		panic("write-only batch")
 	}
-	if opts.KeyTypes != IterKeyTypePointsOnly {
-		panic("EngineIterator does not support range keys")
-	}
 
 	iter := &p.normalEngineIter
 	if opts.Prefix {

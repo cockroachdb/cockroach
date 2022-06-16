@@ -186,3 +186,10 @@ func TestEngineKeyValidate(t *testing.T) {
 		})
 	}
 }
+
+func engineKey(key string, ts int) EngineKey {
+	return EngineKey{
+		Key:     roachpb.Key(key),
+		Version: encodeMVCCTimestamp(wallTS(ts)),
+	}
+}

@@ -1009,9 +1009,6 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
-	if opts.KeyTypes != IterKeyTypePointsOnly {
-		panic("EngineIterator does not support range keys")
-	}
 	return newPebbleIterator(p.db, opts, StandardDurability, p.SupportsRangeKeys())
 }
 
@@ -1949,9 +1946,6 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
-	if opts.KeyTypes != IterKeyTypePointsOnly {
-		panic("EngineIterator does not support range keys")
-	}
 
 	iter := &p.normalEngineIter
 	if opts.Prefix {
@@ -2188,9 +2182,6 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
-	if opts.KeyTypes != IterKeyTypePointsOnly {
-		panic("EngineIterator does not support range keys")
-	}
 	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.SupportsRangeKeys())
 }
 

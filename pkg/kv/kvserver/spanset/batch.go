@@ -358,6 +358,21 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	return true, nil
 }
 
+// HasEnginePointAndRange is part of the storage.EngineIterator interface.
+func (i *EngineIterator) HasEnginePointAndRange() (bool, bool) {
+	return i.i.HasEnginePointAndRange()
+}
+
+// EngineRangeBounds is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineRangeBounds() (roachpb.Span, error) {
+	return i.i.EngineRangeBounds()
+}
+
+// EngineRangeKeys is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineRangeKeys() []storage.EngineRangeKeyValue {
+	return i.i.EngineRangeKeys()
+}
+
 // UnsafeEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeEngineKey() (storage.EngineKey, error) {
 	return i.i.UnsafeEngineKey()
