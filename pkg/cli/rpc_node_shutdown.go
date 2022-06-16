@@ -132,7 +132,7 @@ func doDrainNoTimeout(
 					finalString = " (complete)"
 				}
 
-				// We use stderr so that 'cockroach quit''s stdout remains a
+				// We use stderr so that the stdout output remains a
 				// simple 'ok' in case of success (for compatibility with
 				// scripts).
 				fmt.Fprintf(stderr, "remaining: %d%s\n", remaining, finalString)

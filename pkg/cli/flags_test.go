@@ -240,11 +240,11 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	cleanup2 := securitytest.CreateTestCerts(testCertsDirPath)
 	defer func() { _ = cleanup2() }()
 
-	anyCmd := []string{"sql", "quit"}
-	anyNonSQL := []string{"quit", "init"}
+	anyCmd := []string{"sql", "node drain"}
+	anyNonSQL := []string{"node drain", "init"}
 	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
-	anyNonSQLShell := []string{"quit"}
+	anyNonSQLShell := []string{"node drain"}
 	anyImportCmd := []string{"import db pgdump", "import table pgdump"}
 
 	testData := []struct {
@@ -962,32 +962,33 @@ func TestClientConnSettings(t *testing.T) {
 
 	// For some reason, when run under stress all these test cases fail due to the
 	// `--host` flag being unknown to quitCmd. Just skip this under stress.
+	// TODO(knz): Check if this skip still applies.
 	skip.UnderStress(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
 
-	f := quitCmd.Flags()
+	f := drainNodeCmd.Flags()
 	testData := []struct {
 		args         []string
 		expectedAddr string
 	}{
-		{[]string{"quit"}, "localhost:" + base.DefaultPort},
-		{[]string{"quit", "--host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort},
-		{[]string{"quit", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort},
-		{[]string{"quit", "--host", ":12345"}, ":12345"},
-		{[]string{"quit", "--host", "127.0.0.1:12345"}, "127.0.0.1:12345"},
+		{[]string{"node", "drain"}, "localhost:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "127.0.0.1"}, "127.0.0.1:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "192.168.0.111"}, "192.168.0.111:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", ":12345"}, ":12345"},
+		{[]string{"node", "drain", "--host", "127.0.0.1:12345"}, "127.0.0.1:12345"},
 		// confirm hostnames will work
-		{[]string{"quit", "--host", "my.host.name"}, "my.host.name:" + base.DefaultPort},
-		{[]string{"quit", "--host", "myhostname"}, "myhostname:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "my.host.name"}, "my.host.name:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "myhostname"}, "myhostname:" + base.DefaultPort},
 		// confirm IPv6 works too
-		{[]string{"quit", "--host", "[::1]"}, "[::1]:" + base.DefaultPort},
-		{[]string{"quit", "--host", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
+		{[]string{"node", "drain", "--host", "[::1]"}, "[::1]:" + base.DefaultPort},
+		{[]string{"node", "drain", "--host", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
 			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort},
 
 		// Deprecated syntax.
-		{[]string{"quit", "--port", "12345"}, "localhost:12345"},
-		{[]string{"quit", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
+		{[]string{"node", "drain", "--port", "12345"}, "localhost:12345"},
+		{[]string{"node", "drain", "--host", "127.0.0.1", "--port", "12345"}, "127.0.0.1:12345"},
 	}
 
 	for i, td := range testData {

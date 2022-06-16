@@ -31,12 +31,6 @@ proc start_secure_server {argv certs_dir extra} {
     report "END START SECURE SERVER"
 }
 
-proc stop_secure_server {argv certs_dir} {
-    report "BEGIN STOP SECURE SERVER"
-    system "$argv quit --certs-dir=$certs_dir"
-    report "END STOP SECURE SERVER"
-}
-
 start_secure_server $argv $certs_dir ""
 
 start_test "Check that the env vars are properly reported in the log file."
@@ -205,7 +199,7 @@ end_test
 
 
 # Now test the cookies with non-TLS http.
-stop_secure_server $argv $certs_dir
+stop_server $argv
 
 start_secure_server $argv $certs_dir --unencrypted-localhost-http
 
@@ -218,4 +212,4 @@ end_test
 send "exit 0\r"
 eexpect eof
 
-stop_secure_server $argv $certs_dir
+stop_server $argv
