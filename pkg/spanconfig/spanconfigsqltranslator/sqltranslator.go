@@ -372,7 +372,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		// no data under /Table/{0-2}.
 		// We have named ranges(liveness, meta) before the first table in the
 		// system tenant keyspace, so we use the first table ID.
-		startKey := []byte(keys.TableDataMin)
+		startKey := keys.TableDataMin
 		if !s.codec.ForSystemTenant() {
 			// We start the span at the tenant prefix. This effectively installs
 			// the tenant's split boundary at /Tenant/<id> instead of
