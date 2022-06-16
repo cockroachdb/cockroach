@@ -66,17 +66,14 @@ func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 	}
 	if lastTxnID != w.txnID ||
 		lastNumRetries != w.numRetries {
-		fmt.Printf("DETECTED INCREASING COUNT: %p %d\n", w, lastNumRetries)
 		return true
 	}
-	// FIXME: Next we can check the transaction to see if retries are happening..
 	return false
 }
 
 // watchLoop monitors the connection until either observed work is finished,
 // or a timeout is hit.
-func (w *schemaChangeWatchDog) watchLoop() {
-	ctx := context.Background()
+func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
 	const maxTimeOutForDump = 300
 	totalTimeWaited := 0
 	for {
@@ -85,7 +82,13 @@ func (w *schemaChangeWatchDog) watchLoop() {
 			// Only command is to stop.
 			close(responseChannel)
 			return
+			// FIXME: Sense the deadline here?
 		case <-time.After(time.Second):
+			if deadline, ok := ctx.Deadline(); ok {
+				if deadline.Before(time.Now()) {
+					panic("dumping stacks, we failed to terminate threads on time.")
+				}
+			}
 			// If the connection is making progress, the watch dog timer can be reset
 			// again.
 			if w.isConnectionActive(ctx) {
@@ -93,8 +96,8 @@ func (w *schemaChangeWatchDog) watchLoop() {
 			}
 			totalTimeWaited += 1
 			if totalTimeWaited > maxTimeOutForDump {
+				fmt.Printf("connection time out detected\n")
 				panic(fmt.Sprintf("connection has timed out %v", w))
-				// FIXME: Dump stacks..
 			}
 		}
 	}
@@ -112,11 +115,11 @@ func (w *schemaChangeWatchDog) Start(ctx context.Context, tx pgx.Tx) error {
 		return err
 	}
 	// Start up the session watch loop.
-	go w.watchLoop()
+	go w.watchLoop(ctx)
 	return nil
 }
 
-// reset resets the watch dog for re-use.
+// reset prepares the watch dog for re-use.
 func (w *schemaChangeWatchDog) reset() {
 	w.sessionID = ""
 	w.activeQuery = ""
