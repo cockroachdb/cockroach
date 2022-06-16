@@ -1030,6 +1030,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
 	typeDeps opt.ViewTypeDeps,
+	withData bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create view")
 }
