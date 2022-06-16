@@ -624,11 +624,13 @@ func makeRowFetcher(
 	}
 
 	var rf row.Fetcher
-	if err := rf.Init(ctx,
+	if err := rf.Init(
+		ctx,
 		row.FetcherInitArgs{
 			Alloc: &tree.DatumAlloc{},
 			Spec:  &spec,
-		}); err != nil {
+		},
+	); err != nil {
 		return rf, err
 	}
 	return rf, nil
@@ -667,7 +669,7 @@ func processEntryFiles(
 	}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, startTime, endTime, debugBackupArgs.withRevisions)
 
-	if err := rf.StartScanFrom(ctx, &kvFetcher, false /* traceKV */); err != nil {
+	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
 		return errors.Wrapf(err, "row fetcher starts scan")
 	}
 

@@ -260,7 +260,6 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 					false, /* limitBatches */
 					rowinfra.NoBytesLimit,
 					rowinfra.NoRowLimit,
-					s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 				)
 			}
 			if err != nil {
@@ -552,6 +551,7 @@ func NewColIndexJoin(
 		0,     /* estimatedRowCount */
 		false, /* reverse */
 		flowCtx.TraceKV,
+		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcherMemAcc, tableArgs,

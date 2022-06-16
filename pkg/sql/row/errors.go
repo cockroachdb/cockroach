@@ -292,7 +292,7 @@ func DecodeRowInfo(
 	}
 	// Use the Fetcher to decode the single kv pair above by passing in
 	// this singleKVFetcher implementation, which doesn't actually hit KV.
-	if err := rf.StartScanFrom(ctx, &f, false /* traceKV */); err != nil {
+	if err := rf.StartScanFrom(ctx, &f); err != nil {
 		return nil, nil, nil, err
 	}
 	datums, err := rf.NextRowDecoded(ctx)

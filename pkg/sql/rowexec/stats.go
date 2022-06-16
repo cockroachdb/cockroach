@@ -99,21 +99,17 @@ func (c *rowFetcherStatCollector) StartScan(
 	spanIDs []int,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
-	traceKV bool,
-	forceProductionKVBatchSize bool,
 ) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartScan(ctx, txn, spans, spanIDs, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize)
+	err := c.fetcher.StartScan(ctx, txn, spans, spanIDs, batchBytesLimit, limitHint)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
 
 // StartScanFrom is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) StartScanFrom(
-	ctx context.Context, f row.KVBatchFetcher, traceKV bool,
-) error {
+func (c *rowFetcherStatCollector) StartScanFrom(ctx context.Context, f row.KVBatchFetcher) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartScanFrom(ctx, f, traceKV)
+	err := c.fetcher.StartScanFrom(ctx, f)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -127,14 +123,12 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	spans roachpb.Spans,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
-	traceKV bool,
-	forceProductionKVBatchSize bool,
 	qualityOfService sessiondatapb.QoSLevel,
 ) error {
 	start := timeutil.Now()
 	err := c.fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV,
-		forceProductionKVBatchSize, qualityOfService,
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit,
+		limitHint, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err

@@ -98,7 +98,6 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		limitBatches,
 		s.batchBytesLimit,
 		s.limitHint,
-		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	); err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -204,6 +203,7 @@ func NewColBatchScan(
 		estimatedRowCount,
 		spec.Reverse,
 		flowCtx.TraceKV,
+		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	}
 
 	if err = fetcher.Init(allocator, kvFetcherMemAcc, tableArgs); err != nil {

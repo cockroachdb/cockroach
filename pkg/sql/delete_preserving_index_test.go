@@ -782,11 +782,12 @@ func fetchIndex(
 			Alloc:      &alloc,
 			MemMonitor: mm.Monitor(),
 			Spec:       &spec,
+			TraceKV:    true,
 		},
 	))
 
 	require.NoError(t, fetcher.StartScan(
-		ctx, txn, spans, nil /* spanIDs */, rowinfra.NoBytesLimit, 0, true, false, /* forceProductionBatchSize */
+		ctx, txn, spans, nil /* spanIDs */, rowinfra.NoBytesLimit, 0,
 	))
 	var rows []tree.Datums
 	for {
