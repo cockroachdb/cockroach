@@ -50,7 +50,7 @@ func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 	lastTxnID := w.txnID
 	lastActiveQuery := w.activeQuery
 	if err := sessionInfo.Scan(&w.activeQuery, &w.txnID); err != nil {
-		fmt.Printf("failed to get session information: %v", err)
+		fmt.Printf("failed to get session information: %v\n", err)
 		return false
 	}
 	if w.activeQuery != lastActiveQuery {
@@ -61,7 +61,7 @@ func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 		"SELECT SUM(num_retries) + SUM(num_auto_retries) FROM crdb_internal.cluster_transactions WHERE id=$1",
 		&w.txnID)
 	if err := txnInfo.Scan(&w.numRetries); err != nil {
-		fmt.Printf("failed to get transaction information: %v", err)
+		fmt.Printf("failed to get transaction information: %v\n", err)
 		return false
 	}
 	if lastTxnID != w.txnID ||

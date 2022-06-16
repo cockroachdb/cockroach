@@ -1220,6 +1220,8 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 }
 
 func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	const MaxRowsToConsume = 300000
+
 	numSourceTables := og.randIntn(og.params.maxSourceTables) + 1
 
 	sourceTableNames := make([]tree.TableExpr, numSourceTables)
@@ -1335,8 +1337,8 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(opStmt.expectedExecErrors)
 
-	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s`,
-		destTableName, selectStatement.String())
+	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s FETCH FIRST %d ROWS ONLY`,
+		destTableName, selectStatement.String(), MaxRowsToConsume)
 	return opStmt, nil
 }
 
@@ -2482,6 +2484,7 @@ type opStmt struct {
 	queryResultCallback opStmtQueryResultCallback
 }
 
+// String implements Stringer
 func (s *opStmt) String() string {
 	return fmt.Sprintf("QUERY: %s, Expected Errors: %s, Potential Errors: %s",
 		s.sql,
@@ -2511,14 +2514,14 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 
 func (og *operationGenerator) getErrorState(op *opStmt) string {
 	return fmt.Sprintf("Dumping state before death:\n"+
-		"Expected errors: %s"+
-		"Potential errors: %s"+
-		"Expected commit errors: %s"+
-		"Potential commit errors: %s"+
-		"==========================="+
-		"Executed queries for generating errors: %s"+
-		"==========================="+
-		"Previous statements %s",
+		"Expected errors: %s\n"+
+		"Potential errors: %s\n"+
+		"Expected commit errors: %s\n"+
+		"Potential commit errors: %s\n"+
+		"===========================\n"+
+		"Executed queries for generating errors: %s\n"+
+		"===========================\n"+
+		"Previous statements %s\n",
 		op.expectedExecErrors,
 		op.potentialExecErrors,
 		og.expectedCommitErrors.String(),
@@ -2544,7 +2547,7 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
 			return errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED ERROR; Received a non pg error. %s",
+				errors.Wrapf(err, "***UNEXPECTED ERROR; Received a non pg error.\n %s",
 					og.getErrorState(s)),
 				errRunInTxnFatalSentinel,
 			)
@@ -2555,14 +2558,13 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			return errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED ERROR; Received an unexpected execution error. %s",
+				errors.Wrapf(err, "***UNEXPECTED ERROR; Received an unexpected execution error.\n %s",
 					og.getErrorState(s)),
 				errRunInTxnFatalSentinel,
 			)
 		}
-		// FIXME: Operation tracking..
 		return errors.Mark(
-			errors.Wrapf(err, "ROLLBACK; Successfully got expected execution error. %s",
+			errors.Wrapf(err, "ROLLBACK; Successfully got expected execution error.\n %s",
 				og.getErrorState(s)),
 			errRunInTxnRbkSentinel,
 		)
