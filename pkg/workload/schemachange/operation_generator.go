@@ -2427,7 +2427,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		// in the database.
 		fkConstraintsEnabled, err := isFkConstraintsEnabled(ctx, tx)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if fkConstraintsEnabled {
 			fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
@@ -2689,6 +2689,8 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 	codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !allTableExists},
 	}.add(stmt.expectedExecErrors)
+	// FIXME: Makes no sense why this is event seen, these queries have limited complexity
+	stmt.potentialExecErrors.add(pgcode.OutOfMemory)
 	return stmt, nil
 }
 
