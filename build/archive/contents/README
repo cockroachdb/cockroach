@@ -19,7 +19,7 @@ To interact with a one-node SQL cluster:
 
      $ cockroach start --background --insecure
      $ cockroach sql --insecure
-     $ cockroach quit --insecure
+     $ killall -TERM cockroach # to shut down the nodes
 
 Next steps:
 
