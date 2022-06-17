@@ -71,6 +71,7 @@ func init() {
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return &changefeedResumer{job: job}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }
 
