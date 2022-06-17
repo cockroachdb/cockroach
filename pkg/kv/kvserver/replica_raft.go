@@ -1534,9 +1534,11 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 			msg.From, r.RangeID, msg.Type, fromErr)
 		return
 	}
-	if toErr != nil && toErrEveryN.ShouldLog() {
-		log.Warningf(ctx, "failed to look up recipient replica %d in r%d while sending %s: %s",
-			msg.To, r.RangeID, msg.Type, toErr)
+	if toErr != nil {
+		if toErrEveryN.ShouldLog() {
+			log.Warningf(ctx, "failed to look up recipient replica %d in r%d while sending %s: %s",
+				msg.To, r.RangeID, msg.Type, toErr)
+		}
 		return
 	}
 

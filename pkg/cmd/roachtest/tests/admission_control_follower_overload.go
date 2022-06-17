@@ -219,6 +219,8 @@ func runAdmissionControlFollowerOverload(
 		// to EBS, see:
 		//
 		// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
+		//
+		// TODO(during review): actually run at 1mb/s, right now we're at 2mb/s still.
 		deployWorkload := `
 mkdir -p logs &&
 sudo systemd-run --property=Type=exec
