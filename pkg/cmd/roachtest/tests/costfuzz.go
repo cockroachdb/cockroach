@@ -96,7 +96,7 @@ func runOneRoundCostFuzz(
 	costFuzzLogPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("costfuzz%03d.log", iter))
 	costFuzzLog, err := os.Create(costFuzzLogPath)
 	if err != nil {
-		t.Fatalf("could not create costfuzz.log: %v", err)
+		t.Fatalf("could not create costfuzz%03d.log: %v", iter, err)
 	}
 	defer costFuzzLog.Close()
 	logStmt := func(stmt string) {
@@ -108,7 +108,23 @@ func runOneRoundCostFuzz(
 		if !strings.HasSuffix(stmt, ";") {
 			fmt.Fprint(costFuzzLog, ";")
 		}
+		// Blank lines are necessary for reduce -costfuzz to function correctly.
 		fmt.Fprint(costFuzzLog, "\n\n")
+	}
+
+	costFuzzFailureLogPath := filepath.Join(
+		t.ArtifactsDir(), fmt.Sprintf("costfuzz%03d.failure.log", iter),
+	)
+	costFuzzFailureLog, err := os.Create(costFuzzFailureLogPath)
+	if err != nil {
+		t.Fatalf("could not create costfuzz%03d.failure.log: %v", iter, err)
+	}
+	defer costFuzzFailureLog.Close()
+	logFailure := func(stmt string, rows [][]string) {
+		fmt.Fprint(costFuzzFailureLog, stmt)
+		fmt.Fprint(costFuzzFailureLog, "\n----\n")
+		fmt.Fprint(costFuzzFailureLog, sqlutils.MatrixToStr(rows))
+		fmt.Fprint(costFuzzFailureLog, "\n")
 	}
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -119,7 +135,6 @@ func runOneRoundCostFuzz(
 	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
 
 	t.Status("executing setup")
-	t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 	for _, stmt := range setup {
 		if _, err := conn.Exec(stmt); err != nil {
 			t.Fatal(err)
@@ -130,7 +145,6 @@ func runOneRoundCostFuzz(
 
 	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
 	t.Status("setting statement_timeout")
-	t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 	if _, err := conn.Exec(setStmtTimeout); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +192,7 @@ func runOneRoundCostFuzz(
 			continue
 		}
 
-		if err := runCostFuzzQuery(conn, smither, rnd, logStmt); err != nil {
+		if err := runCostFuzzQuery(conn, smither, rnd, logStmt, logFailure); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -188,7 +202,11 @@ func runOneRoundCostFuzz(
 // and once with randomly perturbed costs. If the results of the two executions
 // are not equal an error is returned.
 func runCostFuzzQuery(
-	conn *gosql.DB, smither *sqlsmith.Smither, rnd *rand.Rand, logStmt func(string),
+	conn *gosql.DB,
+	smither *sqlsmith.Smither,
+	rnd *rand.Rand,
+	logStmt func(string),
+	logFailure func(string, [][]string),
 ) error {
 	// Ignore panics from Generate.
 	defer func() {
@@ -197,19 +215,29 @@ func runCostFuzzQuery(
 		}
 	}()
 
-	stmt := smither.Generate()
+	query := func(stmt string) ([][]string, error) {
+		rows, err := conn.Query(stmt)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		return sqlutils.RowsToStrMatrix(rows)
+	}
 
-	// First, run the statement without cost perturbation.
-	rows, err := conn.Query(stmt)
+	stmt := smither.Generate()
+	explainStmt := "EXPLAIN (OPT, VERBOSE) " + stmt
+
+	// First, explain and run the statement without cost perturbation.
+	controlPlan, err := query(explainStmt)
 	if err != nil {
-		// Skip statements that fail with an error.
+		// Skip statements that fail to explain with an error.
 		//nolint:returnerrcheck
 		return nil
 	}
-	defer rows.Close()
-	unperturbedRows, err := sqlutils.RowsToStrMatrix(rows)
+
+	controlRows, err := query(stmt)
 	if err != nil {
-		// Skip statements whose results cannot be printed.
+		// Skip statements that fail with an error.
 		//nolint:returnerrcheck
 		return nil
 	}
@@ -221,8 +249,15 @@ func runCostFuzzQuery(
 		return errors.Wrap(err, "failed to perturb costs")
 	}
 
-	// Then, rerun the statement with cost perturbation.
-	rows2, err := conn.Query(stmt)
+	// Then, re-explain and rerun the statement with cost perturbation.
+	perturbPlan, err := query(explainStmt)
+	if err != nil {
+		// Skip statements that fail to explain with an error.
+		//nolint:returnerrcheck
+		return nil
+	}
+
+	perturbRows, err := query(stmt)
 	if err != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
@@ -231,6 +266,10 @@ func runCostFuzzQuery(
 			logStmt(stmt)
 			logStmt(seedStmt)
 			logStmt(stmt)
+			logFailure(explainStmt, controlPlan)
+			logFailure(stmt, controlRows)
+			logFailure(seedStmt, nil)
+			logFailure(explainStmt, perturbPlan)
 			return errors.Wrap(err, "internal error while running perturbed statement")
 		}
 		// Otherwise, skip perturbed statements that fail with a non-internal
@@ -241,25 +280,21 @@ func runCostFuzzQuery(
 		//nolint:returnerrcheck
 		return nil
 	}
-	defer rows2.Close()
-	perturbedRows, err := sqlutils.RowsToStrMatrix(rows2)
-	// If we've gotten this far, we should be able to print the results of the
-	// perturbed statement, so consider it a test failure if we cannot.
-	if err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
-		return errors.Wrap(err, "error while printing perturbed statement results")
-	}
-	if diff := unsortedMatricesDiff(unperturbedRows, perturbedRows); diff != "" {
-		// We have a mismatch in the perturbed vs non-perturbed query outputs.
-		// Output the real plan and the perturbed plan, along with the seed, so
+
+	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
+		// We have a mismatch in the perturbed vs control query outputs.
+		// Output the control plan and the perturbed plan, along with the seed, so
 		// that the perturbed query is reproducible.
 		logStmt(stmt)
 		logStmt(seedStmt)
 		logStmt(stmt)
+		logFailure(explainStmt, controlPlan)
+		logFailure(stmt, controlRows)
+		logFailure(seedStmt, nil)
+		logFailure(explainStmt, perturbPlan)
+		logFailure(stmt, perturbRows)
 		return errors.Newf(
-			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s",
+			"expected control and perturbed results to be equal\n%s\nsql: %s",
 			diff, stmt,
 		)
 	}
