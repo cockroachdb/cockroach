@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,8 +46,11 @@ type txnKVStreamer struct {
 	streamer   *kvstreamer.Streamer
 	keyLocking lock.Strength
 
-	spans   roachpb.Spans
-	spanIDs []int
+	spans       roachpb.Spans
+	spanIDs     []int
+	reqsScratch []roachpb.RequestUnion
+
+	acc *mon.BoundAccount
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
@@ -63,11 +67,12 @@ var _ KVBatchFetcher = &txnKVStreamer{}
 
 // newTxnKVStreamer creates a new txnKVStreamer.
 func newTxnKVStreamer(
-	streamer *kvstreamer.Streamer, lockStrength descpb.ScanLockingStrength,
+	streamer *kvstreamer.Streamer, lockStrength descpb.ScanLockingStrength, acc *mon.BoundAccount,
 ) KVBatchFetcher {
 	return &txnKVStreamer{
 		streamer:   streamer,
 		keyLocking: getKeyLockingStrength(lockStrength),
+		acc:        acc,
 	}
 }
 
@@ -86,13 +91,22 @@ func (f *txnKVStreamer) SetupNextFetch(
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", spans)
 	}
-	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking)
+	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, f.reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}
 	f.spans = spans
 	f.spanIDs = spanIDs
-	return nil
+	// Keep the reference to the requests slice in order to reuse in the future
+	// after making sure to nil out the requests in order to lose references to
+	// the underlying Get and Scan requests which could keep large byte slices
+	// alive.
+	f.reqsScratch = reqs
+	for i := range f.reqsScratch {
+		f.reqsScratch[i] = roachpb.RequestUnion{}
+	}
+	reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
+	return f.acc.ResizeTo(ctx, reqsScratchMemUsage)
 }
 
 func (f *txnKVStreamer) getSpanID(resultPosition int) int {

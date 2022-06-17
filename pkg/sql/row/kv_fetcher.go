@@ -134,6 +134,7 @@ func NewStreamingKVFetcher(
 	singleRowLookup bool,
 	maxKeysPerRow int,
 	diskBuffer kvstreamer.ResultDiskBuffer,
+	kvFetcherMemAcc *mon.BoundAccount,
 ) *KVFetcher {
 	streamer := kvstreamer.NewStreamer(
 		distSender,
@@ -157,7 +158,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {

@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -148,6 +149,7 @@ type txnKVFetcher struct {
 	// least once.
 	alreadyFetched bool
 	batchIdx       int
+	reqsScratch    []roachpb.RequestUnion
 
 	responses        []roachpb.ResponseUnion
 	remainingBatches [][]byte
@@ -156,11 +158,12 @@ type txnKVFetcher struct {
 	getResponseScratch [1]roachpb.KeyValue
 
 	acc *mon.BoundAccount
-	// spansAccountedFor and batchResponseAccountedFor track the number of bytes
-	// that we've already registered with acc in regards to spans and the batch
-	// response, respectively.
+	// spansAccountedFor, batchResponseAccountedFor, and reqsScratchAccountedFor
+	// track the number of bytes that we've already registered with acc in
+	// regards to spans, the batch response, and reqsScratch, respectively.
 	spansAccountedFor         int64
 	batchResponseAccountedFor int64
+	reqsScratchAccountedFor   int64
 
 	// If set, we will use the production value for kvBatchSize.
 	forceProductionKVBatchSize bool
@@ -387,7 +390,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength)
+	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength, f.reqsScratch)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -464,6 +467,21 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	f.batchIdx++
 	f.scratchSpans.reset()
 	f.alreadyFetched = true
+	// Keep the reference to the requests slice in order to reuse in the future
+	// after making sure to nil out the requests in order to lose references to
+	// the underlying Get and Scan requests which could keep large byte slices
+	// alive.
+	f.reqsScratch = ba.Requests
+	for i := range f.reqsScratch {
+		f.reqsScratch[i] = roachpb.RequestUnion{}
+	}
+	if monitoring {
+		reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
+		if err := f.acc.Resize(ctx, f.reqsScratchAccountedFor, reqsScratchMemUsage); err != nil {
+			return err
+		}
+		f.reqsScratchAccountedFor = reqsScratchMemUsage
+	}
 
 	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
 	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the
@@ -615,7 +633,9 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 	f.remainingBatches = nil
 	f.spans = identifiableSpans{}
 	f.scratchSpans = identifiableSpans{}
-	// Release only the allocations made by this fetcher.
+	// Release only the allocations made by this fetcher. Note that we're still
+	// keeping the reference to reqsScratch, so we don't release the allocation
+	// for it.
 	f.acc.Shrink(ctx, f.batchResponseAccountedFor+f.spansAccountedFor)
 	f.batchResponseAccountedFor, f.spansAccountedFor = 0, 0
 }
@@ -625,14 +645,24 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.reset(ctx)
 }
 
+const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
+
 // spansToRequests converts the provided spans to the corresponding requests. If
 // a span doesn't have the EndKey set, then a Get request is used for it;
 // otherwise, a Scan (or ReverseScan if reverse is true) request is used with
 // BATCH_RESPONSE format.
+//
+// The provided reqsScratch is reused if it has enough capacity for all spans,
+// if not, a new slice is allocated.
 func spansToRequests(
-	spans roachpb.Spans, reverse bool, keyLocking lock.Strength,
+	spans roachpb.Spans, reverse bool, keyLocking lock.Strength, reqsScratch []roachpb.RequestUnion,
 ) []roachpb.RequestUnion {
-	reqs := make([]roachpb.RequestUnion, len(spans))
+	var reqs []roachpb.RequestUnion
+	if cap(reqsScratch) >= len(spans) {
+		reqs = reqsScratch[:len(spans)]
+	} else {
+		reqs = make([]roachpb.RequestUnion, len(spans))
+	}
 	// Detect the number of gets vs scans, so we can batch allocate all of the
 	// requests precisely.
 	nGets := 0
