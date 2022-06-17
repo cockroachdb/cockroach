@@ -512,6 +512,7 @@ func NewColIndexJoin(
 			rowcontainer.NewKVStreamerResultDiskBuffer(
 				flowCtx.Cfg.TempStorage, diskMonitor,
 			),
+			kvFetcherMemAcc,
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
