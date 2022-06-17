@@ -366,7 +366,7 @@ func defaultClusterAllocator(
 			if err == nil {
 				return c, nil
 			}
-			if err != nil && !errors.Is(err, errClusterNotFound) {
+			if !errors.Is(err, errClusterNotFound) {
 				return nil, err
 			}
 			// Fall through to create new cluster with name override.
