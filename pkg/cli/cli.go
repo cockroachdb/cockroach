@@ -247,7 +247,6 @@ func init() {
 		connectCmd,
 		initCmd,
 		certCmd,
-		quitCmd,
 
 		sqlShellCmd,
 		stmtDiagCmd,

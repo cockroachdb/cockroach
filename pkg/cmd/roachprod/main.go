@@ -416,8 +416,8 @@ The --sig flag will pass a signal to kill to allow us finer control over how we
 shutdown cockroach. The --wait flag causes stop to loop waiting for all
 processes with the right ROACHPROD environment variable to exit. Note that stop
 will wait forever if you specify --wait with a non-terminating signal (e.g.
-SIGHUP). --wait defaults to true for signal 9 (SIGKILL) and false for all other
-signals.
+SIGHUP), unless you also configure --max-wait.
+--wait defaults to true for signal 9 (SIGKILL) and false for all other signals.
 ` + tagHelp + `
 `,
 	Args: cobra.ExactArgs(1),
@@ -426,7 +426,7 @@ signals.
 		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
 			wait = true
 		}
-		stopOpts := roachprod.StopOpts{Wait: wait, ProcessTag: tag, Sig: sig}
+		stopOpts := roachprod.StopOpts{Wait: wait, MaxWait: maxWait, ProcessTag: tag, Sig: sig}
 		return roachprod.Stop(context.Background(), roachprodLibraryLogger, args[0], stopOpts)
 	}),
 }

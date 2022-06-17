@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -17,75 +17,13 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/spf13/cobra"
 )
-
-// quitCmd command shuts down the node server.
-// TODO(irfansharif): Delete this subcommand once v20.2 is cut.
-var quitCmd = &cobra.Command{
-	Use:   "quit",
-	Short: "drain and shut down a node\n",
-	Long: `
-Shut down the server. The first stage is drain, where the server stops accepting
-client connections, then stops extant connections, and finally pushes range
-leases onto other nodes, subject to various timeout parameters configurable via
-cluster settings. After the first stage completes, the server process is shut
-down.
-
-If an argument is specified, the command affects the node
-whose ID is given. If --self is specified, the command
-affects the node that the command is connected to (via --host).
-`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: clierrorplus.MaybeDecorateError(runQuit),
-	Deprecated: `see 'cockroach node drain' instead to drain a 
-server without terminating the server process (which can in turn be done using 
-an orchestration layer or a process manager, or by sending a termination signal
-directly).`,
-}
-
-// runQuit accesses the quit shutdown path.
-func runQuit(cmd *cobra.Command, args []string) (err error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// At the end, we'll report "ok" if there was no error.
-	defer func() {
-		if err == nil {
-			fmt.Println("ok")
-		}
-	}()
-
-	if !quitCtx.nodeDrainSelf && len(args) == 0 {
-		fmt.Fprintf(stderr, "warning: draining a node without node ID or passing --self explicitly is deprecated.\n")
-		quitCtx.nodeDrainSelf = true
-	}
-	if quitCtx.nodeDrainSelf && len(args) > 0 {
-		return errors.Newf("cannot use --%s with an explicit node ID", cliflags.NodeDrainSelf.Name)
-	}
-
-	targetNode := "local"
-	if len(args) > 0 {
-		targetNode = args[0]
-	}
-
-	// Establish a RPC connection.
-	c, finish, err := getAdminClient(ctx, serverCfg)
-	if err != nil {
-		return err
-	}
-	defer finish()
-
-	return drainAndShutdown(ctx, c, targetNode)
-}
 
 // drainAndShutdown attempts to drain the server and then shut it
 // down.
@@ -122,11 +60,11 @@ func doDrain(
 ) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
-	if quitCtx.drainWait == 0 {
+	if drainCtx.drainWait == 0 {
 		return doDrainNoTimeout(ctx, c, targetNode)
 	}
 
-	err = contextutil.RunWithTimeout(ctx, "drain", quitCtx.drainWait, func(ctx context.Context) (err error) {
+	err = contextutil.RunWithTimeout(ctx, "drain", drainCtx.drainWait, func(ctx context.Context) (err error) {
 		hardError, remainingWork, err = doDrainNoTimeout(ctx, c, targetNode)
 		return err
 	})
@@ -194,7 +132,7 @@ func doDrainNoTimeout(
 					finalString = " (complete)"
 				}
 
-				// We use stderr so that 'cockroach quit''s stdout remains a
+				// We use stderr so that the stdout output remains a
 				// simple 'ok' in case of success (for compatibility with
 				// scripts).
 				fmt.Fprintf(stderr, "remaining: %d%s\n", remaining, finalString)
@@ -280,14 +218,4 @@ func doShutdown(
 		hardError = true
 	}
 	return hardError, err
-}
-
-// getAdminClient returns an AdminClient and a closure that must be invoked
-// to free associated resources.
-func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
-	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to connect to the node")
-	}
-	return serverpb.NewAdminClient(conn), finish, nil
 }

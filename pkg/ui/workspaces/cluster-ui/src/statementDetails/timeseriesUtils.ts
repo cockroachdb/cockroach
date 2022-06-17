@@ -86,7 +86,7 @@ export function generateContentionTimeseries(
 
   stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-    count.push(stat.stats.exec_stats.contention_time.mean);
+    count.push(stat.stats.exec_stats.contention_time.mean * 1e9);
   });
 
   return [ts, count];

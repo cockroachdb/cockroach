@@ -222,12 +222,11 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	c, finish, err := getStatusClient(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
 	defer finish()
-	c := serverpb.NewStatusClient(conn)
 
 	nodeStatuses, err := c.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
