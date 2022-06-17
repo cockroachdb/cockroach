@@ -323,7 +323,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				return rts.onPauseRequest(ctx, execCfg, txn, progress)
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 }
 
 func (rts *registryTestSuite) tearDown() {
@@ -1216,7 +1216,7 @@ func TestJobLifecycle(t *testing.T) {
 				}
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.StartableJob, expectation) {
 		beforeTime := timeutil.Now()
@@ -1760,7 +1760,7 @@ func TestJobLifecycle(t *testing.T) {
 						return nil
 					},
 				}
-			})
+			}, jobs.UsesTenantCostControl)
 
 		jobID := registry.MakeJobID()
 		record := jobs.Record{
@@ -2212,7 +2212,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 					}
 				},
 			}
-		})
+		}, jobs.UsesTenantCostControl)
 
 	type row struct {
 		id     jobspb.JobID
@@ -2373,7 +2373,7 @@ func TestJobInTxn(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 	// Piggy back on RESTORE to be able to create a failing test job.
 	sql.AddPlanHook(
 		"test",
@@ -2404,7 +2404,7 @@ func TestJobInTxn(t *testing.T) {
 				return errors.New("RESTORE failed")
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 
 	t.Run("rollback txn", func(t *testing.T) {
 		start := timeutil.Now()
@@ -2499,7 +2499,7 @@ func TestStartableJobMixedVersion(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{}
-	})
+	}, jobs.UsesTenantCostControl)
 	var j *jobs.StartableJob
 	jobID := jr.MakeJobID()
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -2542,7 +2542,7 @@ func TestStartableJob(t *testing.T) {
 				return resumeFunc.Load().(func(ctx context.Context) error)(ctx)
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 	woodyP, _ := security.MakeSQLUsernameFromUserInput("Woody Pride", security.UsernameValidation)
 	rec := jobs.Record{
 		Description:   "There's a snake in my boot!",
@@ -2737,7 +2737,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	jr := s.JobRegistry().(*jobs.Registry)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{}
-	})
+	}, jobs.UsesTenantCostControl)
 	rec := jobs.Record{
 		Details:  jobspb.RestoreDetails{},
 		Progress: jobspb.RestoreProgress{},
@@ -2785,7 +2785,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 					return nil
 				},
 			}
-		})
+		}, jobs.UsesTenantCostControl)
 		select {
 		case <-resuming:
 			t.Fatal("job was resumed")
@@ -2845,7 +2845,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 	before := timeutil.Now()
 	jobID := registry.MakeJobID()
 	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
@@ -2914,10 +2914,10 @@ func TestMetrics(t *testing.T) {
 	}
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return res
-	})
+	}, jobs.UsesTenantCostControl)
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return res
-	})
+	}, jobs.UsesTenantCostControl)
 	setup := func(t *testing.T) (
 		s serverutils.TestServerInterface, db *gosql.DB, r *jobs.Registry, cleanup func(),
 	) {
@@ -3135,7 +3135,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 				return err
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 
 	_, err := registry.CreateJobWithTxn(ctx, rec, registry.MakeJobID(), nil)
 	require.NoError(t, err)
@@ -3189,7 +3189,7 @@ func TestPauseReason(t *testing.T) {
 				}
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
@@ -3406,7 +3406,7 @@ func TestPausepoints(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},

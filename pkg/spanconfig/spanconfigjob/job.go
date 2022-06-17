@@ -226,5 +226,8 @@ func init() {
 	jobs.RegisterConstructor(jobspb.TypeAutoSpanConfigReconciliation,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 			return &resumer{job: job}
-		})
+		},
+		// Do not include the cost of span reconciliation in tenant accounting.
+		jobs.DisablesTenantCostControl,
+	)
 }

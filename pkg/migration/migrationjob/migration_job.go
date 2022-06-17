@@ -31,9 +31,12 @@ import (
 )
 
 func init() {
+	// Do not include the cost of long-running migrations in tenant accounting.
+	// NB: While the exemption excludes the cost of Storage I/O, it is not able
+	// to exclude the CPU cost.
 	jobs.RegisterConstructor(jobspb.TypeMigration, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &resumer{j: job}
-	})
+	}, jobs.DisablesTenantCostControl)
 }
 
 // NewRecord constructs a new jobs.Record for this migration.

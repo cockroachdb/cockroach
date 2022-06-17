@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -480,6 +481,12 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
+	// Exclude SQL background processing from cost accounting and limiting.
+	// NOTE: Only exclude background processing that is not under user control.
+	// If a user can opt in/out of some aspect of background processing, then it
+	// should be accounted for in their costs.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
 	s.sqlStats.Start(ctx, stopper)
 
 	// reportedStats is periodically cleared to prevent too many SQL Stats

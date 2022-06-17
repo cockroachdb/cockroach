@@ -11,6 +11,7 @@ package tenantcostclient_test
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -30,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nullsink"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -43,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -966,6 +970,97 @@ func TestSQLLivenessExemption(t *testing.T) {
 			return nil
 		},
 	)
+}
+
+// TestScheduledJobsConsumption verifies that the scheduled jobs system itself
+// does not consume RUs, but that the jobs it runs do consume RUs.
+func TestScheduledJobsConsumption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+
+	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	defer hostServer.Stopper().Stop(ctx)
+
+	testProvider := newTestProvider()
+
+	env := jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now())
+	var zeroDuration time.Duration
+	var execSchedules func() error
+	var tenantServer serverutils.TestTenantInterface
+	var tenantDB *gosql.DB
+	tenantServer, tenantDB = serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
+		TenantID:                    serverutils.TestTenantID(),
+		Settings:                    st,
+		AllowSettingClusterSettings: true,
+		TestingKnobs: base.TestingKnobs{
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
+					return testProvider
+				},
+			},
+			TTL: &sql.TTLTestingKnobs{
+				// Don't wait until we can use a historical query.
+				AOSTDuration: &zeroDuration,
+			},
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				JobSchedulerEnv: env,
+				TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
+					execSchedules = func() error {
+						defer tenantServer.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+						return fn(ctx, 0)
+					}
+				},
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					// Force fast adoption and resumption.
+					Adopt:             &zeroDuration,
+					RetryInitialDelay: &zeroDuration,
+					RetryMaxDelay:     &zeroDuration,
+				},
+			},
+		},
+	})
+
+	r := sqlutils.MakeSQLRunner(tenantDB)
+	// Create a table with rows that expire after a TTL. This will trigger the
+	// creation of a TTL job.
+	r.Exec(t, "CREATE TABLE t (v INT PRIMARY KEY) WITH ("+
+		"ttl_expire_after = '1 microsecond', ttl_job_cron = '* * * * ?', ttl_delete_batch_size = 1)")
+	r.Exec(t, "INSERT INTO t SELECT x FROM generate_series(1,100) g(x)")
+	before := testProvider.waitForConsumption(t)
+
+	// Ensure the job system is not consuming RUs when scanning/claiming jobs.
+	tenantServer.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	env.AdvanceTime(24 * time.Hour)
+	time.Sleep(100 * time.Millisecond)
+	after := testProvider.waitForConsumption(t)
+	after.Sub(&before)
+	require.Zero(t, after.WriteBatches)
+	require.Zero(t, after.WriteBytes)
+	// Expect up to 3 batches for initial auto-stats query, schema catalog fill,
+	// and anything else that happens once during server startup but might not be
+	// done by this point.
+	require.LessOrEqual(t, after.ReadBatches, uint64(3))
+
+	// Make sure that at least 100 writes (deletes) are reported. The TTL job
+	// should not be exempt from cost control.
+	testutils.SucceedsSoon(t, func() error {
+		// Run all job schedules.
+		env.AdvanceTime(time.Minute)
+		require.NoError(t, execSchedules())
+
+		// Check consumption.
+		c := testProvider.waitForConsumption(t)
+		c.Sub(&before)
+		if c.WriteRequests < 100 {
+			return errors.New("no write requests reported")
+		}
+		return nil
+	})
 }
 
 // TestConsumption verifies consumption reporting from a tenant server process.

@@ -323,7 +323,7 @@ func TestBatchJobsCreation(t *testing.T) {
 							return nil
 						},
 					}
-				})
+				}, UsesTenantCostControl)
 
 				// Create a batch of job specifications.
 				var records []*Record
@@ -514,7 +514,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					return <-bti.errCh
 				},
 			}
-		})
+		}, UsesTenantCostControl)
 		return cleanup
 	}
 
@@ -787,7 +787,7 @@ func TestExponentialBackoffSettings(t *testing.T) {
 			// Create and run a dummy job.
 			RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
 				return FakeResumer{}
-			})
+			}, UsesTenantCostControl)
 			registry := s.JobRegistry().(*Registry)
 			id := registry.MakeJobID()
 			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -936,7 +936,7 @@ func TestRunWithoutLoop(t *testing.T) {
 				return nil
 			},
 		}
-	})
+	}, UsesTenantCostControl)
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
@@ -1007,7 +1007,7 @@ func TestJobIdleness(t *testing.T) {
 				return <-resumeErrChan
 			},
 		}
-	})
+	}, UsesTenantCostControl)
 
 	currentlyIdle := r.MetricsStruct().JobMetrics[jobspb.TypeImport].CurrentlyIdle
 

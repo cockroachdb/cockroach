@@ -9,6 +9,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/kv",
+        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings",

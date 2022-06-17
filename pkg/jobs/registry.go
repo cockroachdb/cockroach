@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -703,6 +704,10 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
+	// Since the job polling system is outside user control, exclude it from cost
+	// accounting and control. Individual jobs are not part of this exclusion.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
 	wrapWithSession := func(f withSessionFunc) func(ctx context.Context) {
 		return func(ctx context.Context) { r.withSession(ctx, f) }
 	}
@@ -1076,6 +1081,51 @@ type Resumer interface {
 	OnFailOrCancel(ctx context.Context, execCtx interface{}) error
 }
 
+// RegisterOption is the template for options passed to the RegisterConstructor
+// function.
+type RegisterOption func(opts *registerOptions)
+
+// DisablesTenantCostControl allows job implementors to exclude their job's
+// Storage I/O costs (i.e. from reads/writes) from tenant accounting, based on
+// this principle:
+//
+//   Jobs that are not triggered by user actions should be exempted from cost
+//   control.
+//
+// For example, SQL stats compaction, span reconciler, and long-running
+// migration jobs are not triggered by user actions, and so should be exempted.
+// However, backup jobs are triggered by user BACKUP requests and should be
+// costed. Even auto stats jobs should be costed, since the user could choose to
+// disable auto stats.
+//
+// NOTE: A cost control exemption does not exclude CPU or Egress costs from
+// accounting, since those cannot be attributed to individual jobs.
+var DisablesTenantCostControl = func(opts *registerOptions) {
+	opts.disableTenantCostControl = true
+	opts.hasTenantCostControlOption = true
+}
+
+// UsesTenantCostControl indicates that resumed jobs should include their
+// Storage I/O costs in tenant accounting. See DisablesTenantCostControl comment
+// for more details.
+var UsesTenantCostControl = func(opts *registerOptions) {
+	opts.disableTenantCostControl = false
+	opts.hasTenantCostControlOption = true
+}
+
+// registerOptions are passed to RegisterConstructor and control how a job
+// resumer is created and configured.
+type registerOptions struct {
+	// disableTenantCostControl is true when a job's Storage I/O costs should
+	// be excluded from tenant accounting. See DisablesTenantCostControl comment.
+	disableTenantCostControl bool
+
+	// hasTenantCostControlOption is true if either DisablesTenantCostControl or
+	// UsesTenantCostControl was specified as an option. RegisterConstructor will
+	// panic if this is false.
+	hasTenantCostControlOption bool
+}
+
 // PauseRequester is an extension of Resumer which allows job implementers to inject
 // logic during the transaction which moves a job to PauseRequested.
 type PauseRequester interface {
@@ -1103,10 +1153,28 @@ type JobResultsReporter interface {
 type Constructor func(job *Job, settings *cluster.Settings) Resumer
 
 var constructors = make(map[jobspb.Type]Constructor)
+var options = make(map[jobspb.Type]registerOptions)
 
 // RegisterConstructor registers a Resumer constructor for a certain job type.
-func RegisterConstructor(typ jobspb.Type, fn Constructor) {
+//
+// NOTE: You must pass either jobs.UsesTenantCostControl or
+// jobs.DisablesTenantCostControl as an option, or this method will panic; see
+// comments for these options for more details on how to use them. We want
+// engineers to explicitly pass one of these options so that they will be
+// prompted to think about which is appropriate for their new job type.
+func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption) {
 	constructors[typ] = fn
+
+	// Apply all options to the struct.
+	var resOpts registerOptions
+	for _, opt := range opts {
+		opt(&resOpts)
+	}
+	if !resOpts.hasTenantCostControlOption {
+		panic("when registering a new job type, either jobs.DisablesTenantCostControl " +
+			"or jobs.UsesTenantCostControl is required; see comments for these options to learn more")
+	}
+	options[typ] = resOpts
 }
 
 func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {

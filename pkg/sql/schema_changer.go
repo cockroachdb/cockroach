@@ -2896,7 +2896,7 @@ func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &schemaChangeResumer{job: job}
 	}
-	jobs.RegisterConstructor(jobspb.TypeSchemaChange, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeSchemaChange, createResumerFn, jobs.UsesTenantCostControl)
 }
 
 // queueCleanupJob checks if the completed schema change needs to start a
