@@ -43,6 +43,9 @@ message SampledQuery {
 
   // The distribution of the DistSQL query plan (local, full, or partial).
   string distribution = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The query's plan gist bytes as a base64 encoded string.
+  string plan_gist = 7 [(gogoproto.jsontag) = ',omitempty'];
 }
 
 // CapturedIndexUsageStats
