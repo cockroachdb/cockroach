@@ -46,7 +46,15 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Need to disable the test tenant because this test fails
+				// when run through a tenant (with internal server error).
+				// More investigation is required. Tracked with #76387.
+				DisableDefaultTestTenant: true,
+			},
+		})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
@@ -112,10 +120,12 @@ func TestAdminAPIJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	//ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Fails with the default test tenant. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            dir})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 

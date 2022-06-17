@@ -347,7 +347,6 @@ func TestTenantClusterFlow(t *testing.T) {
 	for i := 0; i < numPods; i++ {
 		pods[i], podConns[i] = serverutils.StartTenant(t, tci.Server(0), base.TestTenantArgs{
 			TenantID:     tenantID,
-			Existing:     i != 0,
 			TestingKnobs: testingKnobs,
 		})
 		defer podConns[i].Close()

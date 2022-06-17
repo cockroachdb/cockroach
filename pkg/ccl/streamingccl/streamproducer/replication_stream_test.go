@@ -170,6 +170,10 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	serverArgs := base.TestServerArgs{
+		// This test fails when run from within a test tenant. This is likely
+		// due to the lack of support for tenant streaming, but more
+		// investigation is required. Tracked with #76378.
+		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -267,7 +271,13 @@ func encodeSpec(
 func TestStreamPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, serverutils.TestTenantID())
+	h, cleanup := streamingtest.NewReplicationHelper(t,
+		base.TestServerArgs{
+			// Test fails within a test tenant. More investigation is required.
+			// Tracked with #76378.
+			DisableDefaultTestTenant: true,
+		},
+		serverutils.TestTenantID())
 	defer cleanup()
 
 	h.Tenant.SQL.Exec(t, `
@@ -374,7 +384,11 @@ CREATE TABLE t2(
 func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, serverutils.TestTenantID())
+	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
+		// Test hangs when run within the default test tenant. Tracked with
+		// #76378.
+		DisableDefaultTestTenant: true,
+	}, serverutils.TestTenantID())
 	defer cleanup()
 
 	h.Tenant.SQL.Exec(t, `

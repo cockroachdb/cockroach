@@ -181,14 +181,18 @@ func TestNonExistentTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	_, err := tc.Server(0).StartTenant(ctx,
 		base.TestTenantArgs{
-			TenantID:        serverutils.TestTenantID(),
-			Existing:        true,
-			SkipTenantCheck: true,
+			TenantID:            serverutils.TestTenantID(),
+			DisableCreateTenant: true,
+			SkipTenantCheck:     true,
 		})
 	require.Error(t, err)
 	require.Equal(t, "system DB uninitialized, check if tenant is non existent", err.Error())

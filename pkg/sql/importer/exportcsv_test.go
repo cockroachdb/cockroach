@@ -49,9 +49,11 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	tc := testcluster.StartTestCluster(t, nodes,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				ExternalIODir:      dir,
-				UseDatabase:        "test",
-				DisableSpanConfigs: true,
+				// Disabled due to underlying tests' use of SCATTER.
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            dir,
+				UseDatabase:              "test",
+				DisableSpanConfigs:       true,
 			},
 		},
 	)

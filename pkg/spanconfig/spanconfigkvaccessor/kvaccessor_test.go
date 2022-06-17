@@ -146,7 +146,13 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("batch-size=%d", batchSize), func(b *testing.B) {
-			tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{})
+			tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					// Requires span_configuration table which is not visible
+					// from secondary tenants.
+					DisableDefaultTestTenant: true,
+				},
+			})
 			defer tc.Stopper().Stop(ctx)
 
 			const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
@@ -182,7 +188,13 @@ func TestKVAccessorPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Requires span_configuration table which is not visible
+			// from secondary tenants.
+			DisableDefaultTestTenant: true,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
