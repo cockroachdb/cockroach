@@ -2458,6 +2458,7 @@ contains common SQL event/execution details.
 | `SkippedQueries` | skipped_queries indicate how many SQL statements were not considered for sampling prior to this one. If the field is omitted, or its value is zero, this indicates that no statement was omitted since the last event. | no |
 | `CostEstimate` | Cost of the query as estimated by the optimizer. | no |
 | `Distribution` | The distribution of the DistSQL query plan (local, full, or partial). | no |
+| `PlanGist` |  | yes |
 
 
 #### Common fields
