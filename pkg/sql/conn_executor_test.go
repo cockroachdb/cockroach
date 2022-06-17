@@ -1447,6 +1447,21 @@ func TestInjectRetryErrors(t *testing.T) {
 		}
 		require.Equal(t, 5, txRes)
 	})
+
+	t.Run("insert_outside_of_txn", func(t *testing.T) {
+		// Add a special test for INSERTs in an implicit txn, since the 1PC
+		// optimization leads to different transaction commit semantics.
+		_, err := db.ExecContext(ctx, "CREATE TABLE t (a INT)")
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, "INSERT INTO t VALUES(1::INT)")
+		require.NoError(t, err)
+		var res int
+		err = db.QueryRow("SELECT a FROM t LIMIT 1").Scan(&res)
+		require.NoError(t, err)
+		require.Equal(t, 1, res)
+		_, err = db.ExecContext(ctx, "DROP TABLE t")
+		require.NoError(t, err)
+	})
 }
 
 func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
