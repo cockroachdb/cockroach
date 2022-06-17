@@ -129,6 +129,7 @@ type joinReader struct {
 		unlimitedMemMonitor *mon.BytesMonitor
 		budgetAcc           mon.BoundAccount
 		diskMonitor         *mon.BytesMonitor
+		txnKVStreamerMemAcc mon.BoundAccount
 	}
 
 	input execinfra.RowSource
@@ -472,6 +473,7 @@ func newJoinReader(
 		)
 		jr.streamerInfo.unlimitedMemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
+		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.maintainOrdering {
@@ -496,6 +498,7 @@ func newJoinReader(
 			singleRowLookup,
 			int(spec.FetchSpec.MaxKeysPerRow),
 			diskBuffer,
+			&jr.streamerInfo.txnKVStreamerMemAcc,
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint
@@ -1090,6 +1093,7 @@ func (jr *joinReader) close() {
 		}
 		if jr.usesStreamer {
 			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
+			jr.streamerInfo.txnKVStreamerMemAcc.Close(jr.Ctx)
 			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
 			if jr.streamerInfo.diskMonitor != nil {
 				jr.streamerInfo.diskMonitor.Stop(jr.Ctx)
