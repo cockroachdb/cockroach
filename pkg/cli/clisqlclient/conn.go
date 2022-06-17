@@ -417,13 +417,18 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 // column, `false` is returned in the second result.
 func (c *sqlConn) GetServerValue(
 	ctx context.Context, what, sql string,
-) (driver.Value, string, bool) {
+) (retVal driver.Value, retType string, retOk bool) {
 	rows, err := c.Query(ctx, sql)
 	if err != nil {
 		fmt.Fprintf(c.errw, "warning: error retrieving the %s: %v\n", what, err)
 		return nil, "", false
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			fmt.Fprintf(c.errw, "warning: error retrieving the %s: %v\n", what, err)
+			retVal, retOk = nil, false
+		}
+	}()
 
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(c.errw, "warning: cannot get the %s\n", what)
