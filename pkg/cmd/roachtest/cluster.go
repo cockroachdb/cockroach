@@ -993,20 +993,16 @@ func (c *clusterImpl) setTest(t test.Test) {
 func (c *clusterImpl) StopCockroachGracefullyOnNode(
 	ctx context.Context, l *logger.Logger, node int,
 ) error {
-	port := fmt.Sprintf("{pgport:%d}", node)
-	// Note that the following command line needs to run against both v2.1
-	// and the current branch. Do not change it in a manner that is
-	// incompatible with 2.1.
-	if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port="+port); err != nil {
-		return err
-	}
-	// TODO (rohany): This comment below might be out of date.
+	// A graceful shutdown is sending SIGTERM to the node, then waiting
+	// some reasonable amount of time, then sending a non-graceful SIGKILL.
+	gracefulOpts := option.DefaultStopOpts()
+	gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
+	gracefulOpts.RoachprodOpts.Wait = true
+	gracefulOpts.RoachprodOpts.MaxWait = 60
+	c.Stop(ctx, l, gracefulOpts, c.Node(node))
 	// NB: we still call Stop to make sure the process is dead when we try
 	// to restart it (or we'll catch an error from the RocksDB dir being
 	// locked). This won't happen unless run with --local due to timing.
-	// However, it serves as a reminder that `./cockroach quit` doesn't yet
-	// work well enough -- ideally all listeners and engines are closed by
-	// the time it returns to the client.
 	c.Stop(ctx, l, option.DefaultStopOpts(), c.Node(node))
 	// TODO(tschottdorf): should return an error. I doubt that we want to
 	//  call these *testing.T-style methods on goroutines.

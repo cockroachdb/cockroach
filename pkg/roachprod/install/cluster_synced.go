@@ -223,7 +223,12 @@ func (c *SyncedCluster) newSession(node Node) (session, error) {
 //
 // When running roachprod stop without other flags, the signal is 9 (SIGKILL)
 // and wait is true.
-func (c *SyncedCluster) Stop(ctx context.Context, l *logger.Logger, sig int, wait bool) error {
+//
+// If maxWait is non-zero, Stop stops waiting after that approximate
+// number of seconds.
+func (c *SyncedCluster) Stop(
+	ctx context.Context, l *logger.Logger, sig int, wait bool, maxWait int,
+) error {
 	if sig == 9 {
 		// `kill -9` without wait is never what a caller wants. See #77334.
 		wait = true
@@ -244,15 +249,22 @@ func (c *SyncedCluster) Stop(ctx context.Context, l *logger.Logger, sig int, wai
 			waitCmd = fmt.Sprintf(`
   for pid in ${pids}; do
     echo "${pid}: checking" >> %[1]s/roachprod.log
+    waitcnt=0
     while kill -0 ${pid}; do
+      if [ %[2]d -gt 0 -a $waitcnt -gt %[2]d ]; then
+         echo "${pid}: max %[2]d attempts reached, aborting wait" >>%[1]s/roachprod.log
+         break
+      fi
       kill -0 ${pid} >> %[1]s/roachprod.log 2>&1
       echo "${pid}: still alive [$?]" >> %[1]s/roachprod.log
       ps axeww -o pid -o command >> %[1]s/roachprod.log
       sleep 1
+      waitcnt=$(expr $waitcnt + 1)
     done
     echo "${pid}: dead" >> %[1]s/roachprod.log
   done`,
 				c.LogDir(c.Nodes[i]), // [1]
+				maxWait,              // [2]
 			)
 		}
 
@@ -281,7 +293,7 @@ fi`,
 // Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCerts bool) error {
 	display := fmt.Sprintf("%s: wiping", c.Name)
-	if err := c.Stop(ctx, l, 9, true /* wait */); err != nil {
+	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */); err != nil {
 		return err
 	}
 	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) ([]byte, error) {

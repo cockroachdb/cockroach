@@ -110,6 +110,8 @@ type ClusterInfo struct {
 // information such as regions, zones, etc.
 func LoadConfig(c ClusterInfo) State {
 	s := newState()
+	// A new state has a single range - add the replica load for that range.
+	s.load[1] = &ReplicaLoadCounter{}
 	s.clusterinfo = c
 	// TODO(lidor): load locality info to be used by the allocator. Do we need a
 	// NodeDescriptor and higher level localities? or can we simulate those?
@@ -117,7 +119,17 @@ func LoadConfig(c ClusterInfo) State {
 		for _, z := range r.Zones {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
-				s.AddStore(node.NodeID())
+				store, _ := s.AddStore(node.NodeID())
+
+				// A new state has a range before stores were added, if this new store
+				// is one of the first to be added, make sure we create replicas for
+				// that first range on the new store.
+				// TODO(lidor): clean this up, and potentially merge LoadConfig() with
+				// NewTestState().
+				r, ok := s.Range(1)
+				if ok && len(r.Replicas()) < 3 {
+					s.addReplica(1, store.StoreID())
+				}
 			}
 		}
 	}

@@ -368,13 +368,6 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		stopOpts.RoachprodOpts.Sig = 15
 		stopOpts.RoachprodOpts.Wait = true
 		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID)) // graceful shutdown
-
-	})
-
-	// Uses 'cockroach quit' which should drain and then request a
-	// shutdown. It then waits for the process to self-exit.
-	registerTest("quit", "v19.2.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
-		_ = runQuit(ctx, t, c, nodeID)
 	})
 
 	// Uses 'cockroach drain', followed by a non-graceful process
@@ -444,82 +437,4 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		stopOpts.RoachprodOpts.Wait = true
 		c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID))
 	})
-}
-
-func runQuit(
-	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int, extraArgs ...string,
-) []byte {
-	args := append([]string{
-		"./cockroach", "quit", "--insecure", "--logtostderr=INFO",
-		fmt.Sprintf("--port={pgport:%d}", nodeID)},
-		extraArgs...)
-	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID), args...)
-	output := result.Stdout + result.Stderr
-	t.L().Printf("cockroach quit:\n%s\n", output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stopOpts := option.DefaultStopOpts()
-	stopOpts.RoachprodOpts.Sig = 0
-	stopOpts.RoachprodOpts.Wait = true
-	c.Stop(ctx, t.L(), stopOpts, c.Node(nodeID)) // no shutdown, just wait for exit
-
-	return []byte(output)
-}
-
-func registerQuitAllNodes(r registry.Registry) {
-	// This test verifies that 'cockroach quit' can terminate all nodes
-	// in the cluster: normally as long as there's quorum, then with a
-	// short --drain-wait for the remaining nodes under quorum.
-	r.Add(registry.TestSpec{
-		Name:    "quit-all-nodes",
-		Owner:   registry.OwnerServer,
-		Cluster: r.MakeClusterSpec(5),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			q := quitTest{t: t, c: c}
-
-			// Start the cluster.
-			q.init(ctx)
-			// Wait for up-replication so that the cluster expects 1 ranges
-			// everywhere for system ranges.
-			q.waitForUpReplication(ctx)
-
-			// Shut one nodes down gracefully with a very long wait (longer
-			// than the test timeout). This is guaranteed to work - we still
-			// have quorum at that point.
-			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 5, "--drain-wait=1h") })
-
-			// Now shut down the remaining 4 nodes less gracefully, with a
-			// short wait.
-
-			// For the next two nodes, we may or may not observe that
-			// the graceful shutdown succeed. It may succeed if every
-			// range has enough quorum on the last 2 nodes (shut down later below).
-			// It may fail if some ranges have a quorum composed of n3, n4, n5.
-			// See: https://github.com/cockroachdb/cockroach/issues/48339
-			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 4, "--drain-wait=4s") })
-			q.runWithTimeout(ctx, func(ctx context.Context) { _ = runQuit(ctx, q.t, q.c, 3, "--drain-wait=4s") })
-
-			// For the lat two nodes, we are always under quorum. In this
-			// case we can expect `quit` to always report a hard shutdown
-			// was required.
-			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 2, "--drain-wait=4s")) })
-			q.runWithTimeout(ctx, func(ctx context.Context) { expectHardShutdown(ctx, q.t, runQuit(ctx, q.t, q.c, 1, "--drain-wait=4s")) })
-
-			// At the end, restart all nodes. We do this to check that
-			// the cluster can indeed restart, and also to please
-			// the dead node detection check at the end of each test.
-			settings := install.MakeClusterSettings(install.EnvOption(q.env))
-			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
-			q.c.Start(ctx, t.L(), startOpts, settings)
-		},
-	})
-}
-
-// expectHardShutdown expects a "drain did not complete successfully" message.
-func expectHardShutdown(ctx context.Context, t test.Test, cmdOut []byte) {
-	if !strings.Contains(string(cmdOut), "drain did not complete successfully") {
-		t.Fatalf("expected 'drain did not complete successfully' in quit output, got:\n%s", cmdOut)
-	}
 }

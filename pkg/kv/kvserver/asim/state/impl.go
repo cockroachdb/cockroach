@@ -32,6 +32,7 @@ type state struct {
 	load        map[RangeID]ReplicaLoad
 	ranges      *rmap
 	clusterinfo ClusterInfo
+	usageInfo   *ClusterUsageInfo
 	clock       ManualSimClock
 
 	// Unique ID generators for Nodes and Stores. These are incremented
@@ -47,10 +48,11 @@ func NewState() State {
 
 func newState() *state {
 	return &state{
-		nodes:  make(map[NodeID]*node),
-		stores: make(map[StoreID]*store),
-		load:   make(map[RangeID]ReplicaLoad),
-		ranges: newRMap(),
+		nodes:     make(map[NodeID]*node),
+		stores:    make(map[StoreID]*store),
+		load:      make(map[RangeID]ReplicaLoad),
+		ranges:    newRMap(),
+		usageInfo: newClusterUsageInfo(),
 	}
 }
 
@@ -221,6 +223,10 @@ func (s *state) Ranges() map[RangeID]Range {
 		ranges[rangeID] = r
 	}
 	return ranges
+}
+
+func (s *state) RangeCount() int64 {
+	return int64(len(s.ranges.rangeMap))
 }
 
 // Replicas returns all replicas that exist on a store.
@@ -500,6 +506,8 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
+
+	s.usageInfo.LeaseTransfers++
 	return true
 }
 
@@ -535,7 +543,13 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 // the targets of the LoadEvent.
 func (s *state) ApplyLoad(le workload.LoadEvent) {
 	rng := s.rangeFor(Key(le.Key))
+	if le.IsWrite {
+		// Note that deletes are not supported currently, also we are also assuming
+		// data is not compacted.
+		rng.size += le.Size
+	}
 	s.load[rng.RangeID()].ApplyLoad(le)
+	s.usageInfo.ApplyLoad(rng, le)
 }
 
 func (s *state) updateStoreCapacities() {
@@ -548,6 +562,12 @@ func (s *state) updateStoreCapacities() {
 // RangeID.
 func (s *state) UsageInfo(rangeID RangeID) allocator.RangeUsageInfo {
 	return s.load[rangeID].Load()
+}
+
+// ClusterUsageInfo returns the usage information for the Range with ID
+// RangeID.
+func (s *state) ClusterUsageInfo() *ClusterUsageInfo {
+	return s.usageInfo
 }
 
 // TickClock modifies the state Clock time to Tick. The clock is used as the
@@ -684,6 +704,7 @@ type rng struct {
 	config      roachpb.SpanConfig
 	replicas    map[StoreID]*replica
 	leaseholder ReplicaID
+	size        int64
 }
 
 // RangeID returns the ID of this range.
@@ -736,6 +757,10 @@ func (r *rng) Replicas() map[StoreID]Replica {
 // one, otherwise it returns a ReplicaID -1.
 func (r *rng) Leaseholder() ReplicaID {
 	return r.leaseholder
+}
+
+func (r *rng) Size() int64 {
+	return r.size
 }
 
 // replica is an implementation of the Replica interface.
