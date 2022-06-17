@@ -374,7 +374,7 @@ func TestGCDurationControl(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{}
-	})
+	}, jobs.UsesTenantCostControl)
 	s, sqlDB, kvDB := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
@@ -454,7 +454,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 			OnResume:     execFn,
 			FailOrCancel: execFn,
 		}
-	})
+	}, jobs.UsesTenantCostControl)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

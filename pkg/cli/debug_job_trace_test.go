@@ -96,6 +96,7 @@ func TestDebugJobTrace(t *testing.T) {
 				recordedSpanCh:    recordedSpanCh,
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 
 	// Create a "backup job" but we have overridden the resumer constructor above

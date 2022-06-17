@@ -135,7 +135,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 				resumer:           r,
 				revertingFinished: waitJobFinishReverting,
 			}
-		})
+		}, jobs.UsesTenantCostControl)
 		return mt,
 			func() {
 				in <- struct{}{} // Signals the timer that a new time is assigned to time source

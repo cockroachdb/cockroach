@@ -1727,5 +1727,6 @@ func init() {
 				settings: settings,
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }

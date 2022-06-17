@@ -884,5 +884,6 @@ func init() {
 				job: job,
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }
