@@ -1241,6 +1241,24 @@ func (p *Pebble) put(key MVCCKey, value []byte) error {
 	return p.db.Set(EncodeMVCCKey(key), value, pebble.Sync)
 }
 
+// ExperimentalPutEngineRangeKey implements the Engine interface.
+func (p *Pebble) ExperimentalPutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
+	if !p.SupportsRangeKeys() {
+		return errors.Errorf("range keys not supported by Pebble database version %s",
+			p.db.FormatMajorVersion())
+	}
+	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeySet(
+		EngineKey{Key: start}.Encode(),
+		EngineKey{Key: end}.Encode(),
+		suffix,
+		value,
+		pebble.Sync)
+}
+
 // LogData implements the Engine interface.
 func (p *Pebble) LogData(data []byte) error {
 	return p.db.LogData(data, pebble.Sync)
@@ -2043,6 +2061,12 @@ func (p *pebbleReadOnly) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 }
 
 func (p *pebbleReadOnly) ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalPutEngineRangeKey(
+	roachpb.Key, roachpb.Key, []byte, []byte,
+) error {
 	panic("not implemented")
 }
 

@@ -489,6 +489,33 @@ func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value M
 	return nil
 }
 
+// ExperimentalPutEngineRangeKey implements the Engine interface.
+func (p *pebbleBatch) ExperimentalPutEngineRangeKey(
+	start, end roachpb.Key, suffix, value []byte,
+) error {
+	if !p.SupportsRangeKeys() {
+		return errors.Errorf("range keys not supported by Pebble database version %s",
+			p.db.FormatMajorVersion())
+	}
+	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	if err := p.batch.Experimental().RangeKeySet(
+		EngineKey{Key: start}.Encode(),
+		EngineKey{Key: end}.Encode(),
+		suffix,
+		value,
+		nil,
+	); err != nil {
+		return err
+	}
+	// Mark the batch as containing range keys. See ExperimentalClearAllRangeKeys
+	// for why.
+	p.containsRangeKeys = true
+	return nil
+}
+
 // Merge implements the Batch interface.
 func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {

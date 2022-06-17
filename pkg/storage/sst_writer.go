@@ -161,6 +161,13 @@ func (fw *SSTWriter) ExperimentalClearAllRangeKeys(roachpb.Key, roachpb.Key) err
 	return nil
 }
 
+// ExperimentalPutEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) ExperimentalPutEngineRangeKey(
+	start, end roachpb.Key, suffix, value []byte,
+) error {
+	panic("not implemented")
+}
+
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
