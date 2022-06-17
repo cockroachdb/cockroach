@@ -371,7 +371,7 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 	if err := p.batch.DeleteRange(p.buf, EncodeMVCCKey(MVCCKey{Key: end}), nil); err != nil {
 		return err
 	}
-	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return p.ExperimentalClearAllRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Batch interface.
@@ -408,7 +408,7 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 			return err
 		}
 	}
-	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return p.ExperimentalClearAllRangeKeys(start, end)
 }
 
 // ExperimentalClearMVCCRangeKey implements the Engine interface.
@@ -426,8 +426,8 @@ func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
 		nil)
 }
 
-// ExperimentalClearAllMVCCRangeKeys implements the Engine interface.
-func (p *pebbleBatch) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+// ExperimentalClearAllRangeKeys implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
 	if !p.SupportsRangeKeys() {
 		return nil // noop
 	}
@@ -487,7 +487,7 @@ func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value M
 		return err
 	}
 	// Mark the batch as containing range keys. See
-	// ExperimentalClearAllMVCCRangeKeys for why.
+	// ExperimentalClearAllRangeKeys for why.
 	p.containsRangeKeys = true
 	return nil
 }

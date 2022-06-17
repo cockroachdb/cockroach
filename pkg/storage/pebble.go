@@ -1097,7 +1097,7 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
 	if err := p.db.DeleteRange(startKey, endKey, pebble.Sync); err != nil {
 		return err
 	}
-	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return p.ExperimentalClearAllRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Engine interface.
@@ -1139,8 +1139,8 @@ func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		pebble.Sync)
 }
 
-// ExperimentalClearAllMVCCRangeKeys implements the Engine interface.
-func (p *Pebble) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+// ExperimentalClearAllRangeKeys implements the Engine interface.
+func (p *Pebble) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
 	if !p.SupportsRangeKeys() {
 		return nil // noop
 	}
@@ -2056,7 +2056,7 @@ func (p *pebbleReadOnly) ExperimentalClearMVCCRangeKey(MVCCRangeKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ExperimentalClearAllMVCCRangeKeys(roachpb.Key, roachpb.Key) error {
+func (p *pebbleReadOnly) ExperimentalClearAllRangeKeys(roachpb.Key, roachpb.Key) error {
 	panic("not implemented")
 }
 
