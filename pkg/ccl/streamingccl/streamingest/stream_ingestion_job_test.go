@@ -86,8 +86,16 @@ func TestTenantStreaming(t *testing.T) {
 
 	ctx := context.Background()
 
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+	args := base.TestServerArgs{
+		// Disabling the test tenant because the test below assumes that
+		// when it's monitoring the streaming job, it's doing so from the system
+		// tenant and not from within a secondary tenant. When inside
+		// a secondary tenant, it won't be able to see the streaming job.
+		// This may also be impacted by the fact that we don't currently support
+		// tenant->tenant streaming. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	}
 
 	// Start the source server.
@@ -117,7 +125,13 @@ SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
 		";")...)
 
 	// Start the destination server.
-	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, base.TestServerArgs{}, roachpb.MakeTenantID(20))
+	hDest, cleanupDest := streamingtest.NewReplicationHelper(t,
+		// Test fails when run from within the test tenant. More investigation
+		// is required. Tracked with #76378.
+		// TODO(ajstorm): This may be the right course of action here as the
+		//  replication is now being run inside a tenant.
+		base.TestServerArgs{DisableDefaultTestTenant: true},
+		roachpb.MakeTenantID(20))
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
@@ -197,9 +211,17 @@ func TestCutoverBuiltin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
-	}}
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Disable the test tenant as the test below looks for a
+			// streaming job assuming that it's within the system tenant.
+			// Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)

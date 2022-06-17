@@ -350,6 +350,11 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							params.Locality.Tiers = []roachpb.Tier{
 								{Key: "region", Value: "ajstorm-1"},
 							}
+							// Need to disable the test tenant here because
+							// when running inside a tenant, for some reason
+							// this test doesn't error when expected. More
+							// investigation is required. Tracked with #76378.
+							params.DisableDefaultTestTenant = true
 							var sqlDB *gosql.DB
 							params.Knobs = base.TestingKnobs{
 								SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{

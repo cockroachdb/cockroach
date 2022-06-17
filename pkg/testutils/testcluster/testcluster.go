@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,8 +57,14 @@ import (
 type TestCluster struct {
 	Servers []*server.TestServer
 	Conns   []*gosql.DB
-	stopper *stop.Stopper
-	mu      struct {
+
+	// Connection to the storage cluster. Typically, the first connection in
+	// Conns, but could be different if we're transparently running in a test
+	// tenant (see the DisableDefaultTestTenant flag of base.TestServerArgs for
+	// more detail).
+	storageConn *gosql.DB
+	stopper     *stop.Stopper
+	mu          struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
@@ -89,9 +96,20 @@ func (tc *TestCluster) ServerConn(idx int) *gosql.DB {
 	return tc.Conns[idx]
 }
 
+// StorageClusterConn is part of TestClusterInterface.
+func (tc *TestCluster) StorageClusterConn() *gosql.DB {
+	return tc.storageConn
+}
+
 // Stopper returns the stopper for this testcluster.
 func (tc *TestCluster) Stopper() *stop.Stopper {
 	return tc.stopper
+}
+
+// StartedDefaultTestTenant returns whether this cluster started a default
+// test tenant.
+func (tc *TestCluster) StartedDefaultTestTenant() bool {
+	return !tc.Servers[0].Cfg.DisableDefaultTestTenant
 }
 
 // stopServers stops the stoppers for each individual server in the cluster.
@@ -313,11 +331,36 @@ func (tc *TestCluster) Start(t testing.TB) {
 		errCh = make(chan error, nodes)
 	}
 
+	// Determine if we should probabilistically start a test tenant for the
+	// cluster. We key off of the DisableDefaultTestTenant flag of the first
+	// server in the cluster since they should all be set to the same value
+	// (validated below).
+	probabilisticallyStartTestTenant := false
+	if !tc.Servers[0].Cfg.DisableDefaultTestTenant {
+		probabilisticallyStartTestTenant = serverutils.ShouldStartDefaultTestTenant(t)
+	}
+
+	startedTestTenant := true
 	disableLBS := false
 	for i := 0; i < nodes; i++ {
 		// Disable LBS if any server has a very low scan interval.
 		if tc.serverArgs[i].ScanInterval > 0 && tc.serverArgs[i].ScanInterval <= 100*time.Millisecond {
 			disableLBS = true
+		}
+
+		// If we're not probabilistically starting the test tenant, disable
+		// its start and set the "started" flag accordingly. We need to do this
+		// with two separate if checks because the DisableDefaultTestTenant flag
+		// could have been set coming into this function by the caller.
+		if !probabilisticallyStartTestTenant {
+			tc.Servers[i].Cfg.DisableDefaultTestTenant = true
+		}
+		if tc.Servers[i].Cfg.DisableDefaultTestTenant {
+			if startedTestTenant && i > 0 {
+				t.Fatal(errors.Newf("starting only some nodes with a test tenant is not"+
+					"currently supported - attempted to disable SQL sever on node %d", i))
+			}
+			startedTestTenant = false
 		}
 
 		if tc.clusterArgs.ParallelStart {
@@ -326,6 +369,20 @@ func (tc *TestCluster) Start(t testing.TB) {
 			}(i)
 		} else {
 			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
+				if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
+					if i != 0 {
+						t.Fatal(errors.Newf("failed to start server on node %d due to lack of "+
+							"CCL binary after server started successfully on previous nodes", i))
+					}
+					// We're about to skip the test. Doing so requires us to
+					// clean up all servers before in advance, or else they'll
+					// be detected as a leaked stopper.
+					for j := 0; j < nodes; j++ {
+						tc.Servers[j].Stopper().Stop(context.TODO())
+					}
+					tc.Stopper().Stop(context.TODO())
+					skip.IgnoreLint(t, serverutils.TenantSkipCCLBinaryMessage)
+				}
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -338,6 +395,16 @@ func (tc *TestCluster) Start(t testing.TB) {
 	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
+				if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
+					// We're about to skip the test. Doing so requires us to
+					// clean up all servers before in advance, or else they'll
+					// be detected as a leaked stopper.
+					for j := 0; j < nodes; j++ {
+						tc.Servers[j].Stopper().Stop(context.TODO())
+					}
+					tc.Stopper().Stop(context.TODO())
+					skip.IgnoreLint(t, serverutils.TenantSkipCCLBinaryMessage)
+				}
 				t.Fatal(err)
 			}
 		}
@@ -345,7 +412,10 @@ func (tc *TestCluster) Start(t testing.TB) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].Gossip())
 	}
 
-	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
+	// No need to disable the merge queue for SQL servers, as they don't have
+	// access to that cluster setting (and ALTER TABLE ... SPLIT AT is not
+	// supported in SQL servers either).
+	if !startedTestTenant && tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		// We've already disabled the merge queue via testing knobs above, but ALTER
 		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
 		// the cluster setting.
@@ -431,7 +501,13 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 		return err
 	}
 
-	return tc.startServer(len(tc.Servers)-1, serverArgs)
+	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
+		if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
+			tc.Stopper().Stop(context.TODO())
+			skip.IgnoreLint(tc.t, serverutils.TenantSkipCCLBinaryMessage)
+		}
+	}
+	return err
 }
 
 // AddServer is like AddAndStartServer, except it does not start it.
@@ -509,9 +585,22 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 		return err
 	}
 
+	// For the first server started, populate the host cluster connection.
+	var hostDbConn *gosql.DB
+	if idx == 0 {
+		hostDbConn, err = serverutils.OpenDBConnE(
+			server.HostSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
+		if err != nil {
+			return err
+		}
+	}
+
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.Conns = append(tc.Conns, dbConn)
+	if idx == 0 {
+		tc.storageConn = hostDbConn
+	}
 	return nil
 }
 

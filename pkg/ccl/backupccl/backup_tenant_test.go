@@ -38,7 +38,14 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// Test is designed to run with explicit tenants. No need to
+				// implicitly create a tenant.
+				DisableDefaultTestTenant: true,
+			},
+		})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
@@ -81,7 +88,6 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	}
 	tSrv, tSQL = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantID:     roachpb.MakeTenantID(10),
-		Existing:     true,
 		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
 	defer tSQL.Close()

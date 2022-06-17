@@ -424,10 +424,12 @@ func startTenant(
 	t, err := srv.StartTenant(
 		ctx,
 		base.TestTenantArgs{
-			Existing:      true,
-			TenantID:      roachpb.MakeTenantID(id),
-			ForceInsecure: true,
-			Stopper:       tenantStopper,
+			TenantID: roachpb.MakeTenantID(id),
+			// Disable tenant creation, since this function assumes a tenant
+			// already exists.
+			DisableCreateTenant: true,
+			ForceInsecure:       true,
+			Stopper:             tenantStopper,
 		})
 	if err != nil {
 		// Remap tenant "not found" error to GRPC NotFound error.
@@ -487,10 +489,13 @@ func newTestDirectoryCache(
 	tds *tenantdirsvr.TestDirectoryServer,
 ) {
 	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
-		// We need to start the cluster insecure in order to not
-		// care about TLS settings for the RPC client connection.
 		ServerArgs: base.TestServerArgs{
+			// We need to start the cluster insecure in order to not
+			// care about TLS settings for the RPC client connection.
 			Insecure: true,
+			// Test fails when run within a tenant. More investigation
+			// is required here. Tracked with #76387.
+			DisableDefaultTestTenant: true,
 		},
 	})
 	clusterStopper := tc.Stopper()

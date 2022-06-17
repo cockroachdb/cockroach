@@ -159,7 +159,11 @@ func TestRestoreOldVersions(t *testing.T) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
-					ExternalIODir: externalDir,
+					// Disabling the default test tenant due to test cases
+					// failures. More investigation is required. Tracked with
+					// #76378.
+					DisableDefaultTestTenant: true,
+					ExternalIODir:            externalDir,
 				},
 			})
 			sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -326,6 +330,9 @@ func runOldVersionMultiRegionTest(exportDir string) func(t *testing.T) {
 				region = "us-west1"
 			}
 			params[i] = base.TestServerArgs{
+				// Test fails due to inability to use multi-region
+				// abstractions by default in tenants. Tracked with #76378.
+				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{
 						{Key: "region", Value: region},
@@ -504,7 +511,10 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				ExternalIODir: externalDir,
+				// Disabling the test tenant due to test failures. More
+				// investigation is required. Tracked with #76378.
+				DisableDefaultTestTenant: true,
+				ExternalIODir:            externalDir,
 			},
 		})
 		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -676,7 +686,9 @@ func TestRestoreOldBackupMissingOfflineIndexes(t *testing.T) {
 
 	badBackups, err := filepath.Abs(testutils.TestDataPath(t, "restore_old_versions", "inc_missing_addsst", "v20.2.7"))
 	require.NoError(t, err)
-	args := base.TestServerArgs{ExternalIODir: badBackups}
+	// Disabling the default test tenant due to test cases failures. More
+	// investigation is required. Tracked with #76378.
+	args := base.TestServerArgs{ExternalIODir: badBackups, DisableDefaultTestTenant: true}
 	backupDirs := make([]string, 9)
 	for i := range backupDirs {
 		backupDirs[i] = fmt.Sprintf("'nodelocal://0/%d'", i)
@@ -753,7 +765,15 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 		fromDir = "nodelocal://0/"
 	)
 
-	args := base.TestServerArgs{ExternalIODir: backupDir}
+	args := base.TestServerArgs{
+		ExternalIODir: backupDir,
+		// Disabling the test tenant because this test case traps when run
+		// from within a tenant. The problem occurs because we try to
+		// reference a nil pointer below where we're expecting a database
+		// descriptor to exist. More investigation is required.
+		// Tracked with #76378.
+		DisableDefaultTestTenant: true,
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, args)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(ctx)

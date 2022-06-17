@@ -108,6 +108,9 @@ func TestDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				// Test fails when run within a tenant. More investigation
+				// is required. Tracked with #76378.
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					GCJob:      gcTestingKnobs,
 					SpanConfig: scKnobs,

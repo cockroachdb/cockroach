@@ -34,7 +34,10 @@ func TestInsertMissingPublicSchemaNamespaceEntry(t *testing.T) {
 	defer cleanup()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			ExternalIODir: dir,
+			// Disabling the default test tenant due to test failures. More
+			// investigation is required. Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			ExternalIODir:            dir,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),

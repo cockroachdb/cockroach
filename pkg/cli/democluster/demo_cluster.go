@@ -751,6 +751,9 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		CacheSize:               demoCtx.CacheSize,
 		NoAutoInitializeCluster: true,
 		EnableDemoLoginEndpoint: true,
+		// Demo clusters by default will create their own tenants, so we
+		// don't need to create them here.
+		DisableDefaultTestTenant: true,
 		// This disables the tenant server. We could enable it but would have to
 		// generate the suitable certs at the caller who wishes to do so.
 		TenantAddr: new(string),

@@ -34,7 +34,14 @@ func TestVerifyPassword(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			// Need to disable the test tenant here because it appears as
+			// though we don't have all the same roles in the tenant as we
+			// have in the host cluster (like root).
+			DisableDefaultTestTenant: true,
+		},
+	)
 	defer s.Stopper().Stop(ctx)
 
 	ie := sql.MakeInternalExecutor(

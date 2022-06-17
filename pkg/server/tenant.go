@@ -217,11 +217,10 @@ func startTenantInternal(
 
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
-	tenantStatusServer.sqlServer = s
-
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
+	tenantStatusServer.sqlServer = s
 
 	drainServer = newDrainServer(baseCfg, args.stopper, args.grpc, s)
 
