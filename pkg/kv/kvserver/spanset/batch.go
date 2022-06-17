@@ -617,11 +617,11 @@ func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeK
 	return s.w.ExperimentalClearMVCCRangeKey(rangeKey)
 }
 
-func (s spanSetWriter) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+func (s spanSetWriter) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return s.w.ExperimentalClearAllRangeKeys(start, end)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {

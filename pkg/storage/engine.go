@@ -651,6 +651,23 @@ type Writer interface {
 	// after it returns.
 	ClearMVCCIteratorRange(start, end roachpb.Key) error
 
+	// ExperimentalClearAllRangeKeys deletes all range keys (and all versions)
+	// from start (inclusive) to end (exclusive). This can be used both for MVCC
+	// range keys or the more general engine range keys. For any range key that
+	// straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Clears are idempotent.
+	//
+	// This method is primarily intended for MVCC garbage collection and similar
+	// internal use. It will do an internal scan across the span first to check
+	// whether it contains any range keys at all, and clear the smallest single
+	// span that covers all range keys (if any), to avoid dropping Pebble range
+	// tombstones across unnecessary spans.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalClearAllRangeKeys(start, end roachpb.Key) error
+
 	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
 	// (inclusive) to end (exclusive) at the given timestamp. For any range key
 	// that straddles the start and end boundaries, only the segments within the
@@ -664,22 +681,6 @@ type Writer interface {
 	// have severe limitations including being ignored by all KV and MVCC APIs and
 	// only being stored in memory.
 	ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
-
-	// ExperimentalClearAllMVCCRangeKeys deletes all MVCC range keys (i.e. all
-	// versions) from start (inclusive) to end (exclusive). For any range key
-	// that straddles the start and end boundaries, only the segments within the
-	// boundaries will be cleared. Clears are idempotent.
-	//
-	// This method is primarily intended for MVCC garbage collection and similar
-	// internal use. It will do an internal scan across the span first to check
-	// whether it contains any range keys at all, and clear the smallest single
-	// span that covers all range keys (if any), to avoid dropping Pebble range
-	// tombstones across unnecessary spans.
-	//
-	// This method is EXPERIMENTAL: range keys are under active development, and
-	// have severe limitations including being ignored by all KV and MVCC APIs and
-	// only being stored in memory.
-	ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error
 
 	// ExperimentalPutMVCCRangeKey writes an MVCC range key. It will replace any
 	// overlapping range keys at the given timestamp (even partial overlap). Only
@@ -1211,7 +1212,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	if err != nil {
 		return err
 	}
-	return writer.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return writer.ExperimentalClearAllRangeKeys(start, end)
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(
