@@ -625,6 +625,18 @@ func (s spanSetWriter) ExperimentalPutMVCCRangeKey(
 	return s.w.ExperimentalPutMVCCRangeKey(rangeKey, value)
 }
 
+func (s spanSetWriter) ExperimentalPutEngineRangeKey(
+	start, end roachpb.Key, suffix, value []byte,
+) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ExperimentalPutEngineRangeKey")
+	}
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ExperimentalPutEngineRangeKey(start, end, suffix, value)
+}
+
 func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
 		return err
@@ -633,6 +645,9 @@ func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeK
 }
 
 func (s spanSetWriter) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ExperimentalClearAllRangeKeys")
+	}
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}

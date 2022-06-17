@@ -706,6 +706,13 @@ type Writer interface {
 	// only being stored in memory.
 	ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
 
+	// ExperimentalPutEngineRangeKey sets the given range key to the values
+	// provided. This is a general-purpose and low-level method that should be
+	// used sparingly, only when the other Put* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ExperimentalPutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error
+
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"

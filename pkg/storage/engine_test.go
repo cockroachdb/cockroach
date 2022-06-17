@@ -1977,6 +1977,10 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		require.Error(t, rw.ExperimentalPutMVCCRangeKey(invalid, MVCCValue{}))
 		require.Error(t, rw.ExperimentalPutMVCCRangeKey(zeroLength, MVCCValue{}))
 
+		require.Error(t, rw.ExperimentalPutEngineRangeKey(empty.StartKey, empty.EndKey, nil, nil))
+		require.Error(t, rw.ExperimentalPutEngineRangeKey(invalid.StartKey, invalid.EndKey, nil, nil))
+		require.Error(t, rw.ExperimentalPutEngineRangeKey(zeroLength.StartKey, zeroLength.EndKey, nil, nil))
+
 		require.Error(t, rw.ExperimentalClearMVCCRangeKey(empty))
 		require.Error(t, rw.ExperimentalClearMVCCRangeKey(invalid))
 		require.Error(t, rw.ExperimentalClearMVCCRangeKey(zeroLength))
@@ -2041,8 +2045,12 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 			rangeKV("g", "h", 1, MVCCValue{}),
 		}, scanRangeKeys(t, rw))
 
-		// Write another range key to bridge the [c-g)@1 gap.
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("c", "g", 1), MVCCValue{}))
+		// Write another range key to bridge the [c-g)@1 gap. We write
+		// a raw engine key rather than an MVCC key, to test that too.
+		valueRaw, err := EncodeMVCCValue(MVCCValue{})
+		require.NoError(t, err)
+		require.NoError(t, rw.ExperimentalPutEngineRangeKey(
+			roachpb.Key("c"), roachpb.Key("g"), EncodeMVCCTimestampSuffix(wallTS(1)), valueRaw))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "f", 1, MVCCValue{}),
 			rangeKV("f", "g", 2, MVCCValue{}),
@@ -2115,9 +2123,15 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 	for name, w := range writers {
 		t.Run(fmt.Sprintf("write/%s", name), func(t *testing.T) {
 			rangeKey := rangeKey("a", "b", 2)
+
 			err := w.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
+
+			err = w.ExperimentalPutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey, nil, nil)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "range keys not supported")
+
 			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rangeKey))
 			require.NoError(t, w.ExperimentalClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
 		})
