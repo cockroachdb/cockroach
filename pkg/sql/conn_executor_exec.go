@@ -1156,7 +1156,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// numTxnRetryErrors is the number of times an error will be injected if
 		// the transaction is retried using SAVEPOINTs.
 		const numTxnRetryErrors = 3
-		if ex.sessionData().InjectRetryErrorsEnabled && stmt.AST.StatementTag() != "SET" {
+		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
+		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
+			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
 			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
 				retryErr := planner.Txn().GenerateForcedRetryableError(
 					ctx, "injected by `inject_retry_errors_enabled` session variable")
