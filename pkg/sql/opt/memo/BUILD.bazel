@@ -25,6 +25,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
+        "//pkg/settings",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/inverted",

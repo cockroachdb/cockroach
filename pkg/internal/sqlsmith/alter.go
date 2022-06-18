@@ -65,8 +65,6 @@ var (
 
 func makeAlter(s *Smither) (tree.Statement, bool) {
 	if s.canRecurse() {
-		s.EnterExpressionBlock()
-		defer s.LeaveExpressionBlock()
 		// Schema changes aren't visible immediately, so try to
 		// sync the change from the last alter before trying the
 		// next one. This is instead of running ReloadSchemas right
@@ -193,7 +191,7 @@ func makeAddColumn(s *Smither) (tree.Statement, bool) {
 	}
 	for s.coin() {
 		col.CheckExprs = append(col.CheckExprs, tree.ColumnTableDefCheckExpr{
-			Expr: makeBoolExpr(s, colRefs),
+			Expr: makeBoolExpr(s, colRefs, true /* isPredicate */),
 		})
 	}
 

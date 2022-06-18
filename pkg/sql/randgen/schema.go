@@ -407,7 +407,7 @@ func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnT
 		// Some OID types have a very narrow range of values they accept, which
 		// may cause many duplicate row errors.
 		columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull)) + 1)
-	} else if rand.Intn(1) == 0 {
+	} else if rand.Intn(2) == 0 {
 		// Slightly prefer non-nullable columns
 		columnDef.Nullable.Nullability = tree.NotNull
 	} else {

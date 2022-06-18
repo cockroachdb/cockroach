@@ -61,20 +61,7 @@ var (
 // TODO(mjibson): remove this and correctly pass around the Context.
 func scalarNoContext(fn func(*Smither, *types.T, colRefs) (tree.TypedExpr, bool)) scalarExpr {
 	return func(s *Smither, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
-		s.lock.Lock()
-		needToFlagNonBoolExpr := s.inWhereClause && s.disableConstantWhereClause && t != types.Bool
-		var savedNonBoolExprStarted bool
-		if needToFlagNonBoolExpr {
-			savedNonBoolExprStarted = s.nonBoolExprStarted
-			s.nonBoolExprStarted = true
-		}
-		s.lock.Unlock()
 		scalarExpressionMaker, ok := fn(s, t, refs)
-		if needToFlagNonBoolExpr {
-			s.lock.Lock()
-			s.nonBoolExprStarted = savedNonBoolExprStarted
-			s.lock.Unlock()
-		}
 		return scalarExpressionMaker, ok
 	}
 }
@@ -86,15 +73,17 @@ func makeScalar(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 }
 
 func makeScalarContext(s *Smither, ctx Context, typ *types.T, refs colRefs) tree.TypedExpr {
-	return makeScalarSample(s.scalarExprSampler, s, ctx, typ, refs)
+	return makeScalarSample(s.scalarExprSampler, s, ctx, typ, refs, false /* isPredicate */)
 }
 
-func makeBoolExpr(s *Smither, refs colRefs) tree.TypedExpr {
-	return makeBoolExprContext(s, emptyCtx, refs)
+func makeBoolExpr(s *Smither, refs colRefs, isPredicate bool) tree.TypedExpr {
+	return makeBoolExprContext(s, emptyCtx, refs, isPredicate)
 }
 
-func makeBoolExprWithPlaceholders(s *Smither, refs colRefs) (tree.Expr, []interface{}) {
-	expr := makeBoolExprContext(s, emptyCtx, refs)
+func makeBoolExprWithPlaceholders(
+	s *Smither, refs colRefs, isPredicate bool,
+) (tree.Expr, []interface{}) {
+	expr := makeBoolExprContext(s, emptyCtx, refs, isPredicate)
 
 	// Replace constants with placeholders if the type is numeric or bool.
 	visitor := replaceDatumPlaceholderVisitor{}
@@ -102,12 +91,12 @@ func makeBoolExprWithPlaceholders(s *Smither, refs colRefs) (tree.Expr, []interf
 	return exprFmt, visitor.Args
 }
 
-func makeBoolExprContext(s *Smither, ctx Context, refs colRefs) tree.TypedExpr {
-	return makeScalarSample(s.boolExprSampler, s, ctx, types.Bool, refs)
+func makeBoolExprContext(s *Smither, ctx Context, refs colRefs, isPredicate bool) tree.TypedExpr {
+	return makeScalarSample(s.boolExprSampler, s, ctx, types.Bool, refs, isPredicate)
 }
 
 func makeScalarSample(
-	sampler *scalarExprSampler, s *Smither, ctx Context, typ *types.T, refs colRefs,
+	sampler *scalarExprSampler, s *Smither, ctx Context, typ *types.T, refs colRefs, isPredicate bool,
 ) tree.TypedExpr {
 	// If we are in a GROUP BY, attempt to find an aggregate function.
 	if ctx.fnClass == tree.AggregateClass {
@@ -115,7 +104,7 @@ func makeScalarSample(
 			return expr
 		}
 	}
-	if s.canRecurseScalar() {
+	if s.canRecurseScalar(isPredicate, typ) {
 		for {
 			// No need for a retry counter here because makeConstExpr will eventually
 			// be called and it always succeeds.
@@ -125,9 +114,16 @@ func makeScalarSample(
 			}
 		}
 	}
+	generateColRef := false
+	if s.avoidConstantBooleanExpressions(isPredicate, typ) {
+		// 1 in 20 chance of making a constant expression.
+		generateColRef = s.rnd.Intn(20) != 0
+	} else {
+		generateColRef = s.coin()
+	}
 	// Sometimes try to find a col ref or a const if there's no columns
 	// with a matching type.
-	if s.coin() {
+	if generateColRef {
 		if expr, ok := makeColRef(s, typ, refs); ok {
 			return expr
 		}
@@ -254,8 +250,9 @@ func makeOr(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	default:
 		return nil, false
 	}
-	left := makeBoolExpr(s, refs)
-	right := makeBoolExpr(s, refs)
+	// Assume we're in a WHERE to avoid having to modify all make* functions.
+	left := makeBoolExpr(s, refs, true /* isPredicate */)
+	right := makeBoolExpr(s, refs, true /* isPredicate */)
 	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
 }
 
@@ -265,8 +262,9 @@ func makeAnd(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	default:
 		return nil, false
 	}
-	left := makeBoolExpr(s, refs)
-	right := makeBoolExpr(s, refs)
+	// Assume we're in a WHERE to avoid having to modify all make* functions.
+	left := makeBoolExpr(s, refs, true /* isPredicate */)
+	right := makeBoolExpr(s, refs, true /* isPredicate */)
 	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
 }
 
@@ -276,7 +274,8 @@ func makeNot(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	default:
 		return nil, false
 	}
-	expr := makeBoolExpr(s, refs)
+	// Assume we're in a WHERE to avoid having to modify all make* functions.
+	expr := makeBoolExpr(s, refs, true /* isPredicate */)
 	return typedParen(tree.NewTypedNotExpr(expr), types.Bool), true
 }
 

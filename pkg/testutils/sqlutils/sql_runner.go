@@ -223,7 +223,12 @@ func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
 		vals[i] = new(interface{})
 	}
 	res := [][]string{}
+	const maxRowsForMatrix = 1_000_000
 	for rows.Next() {
+		if len(res) > maxRowsForMatrix {
+			rows.Close()
+			return nil, errors.Errorf("More than %d rows in result set!\n", maxRowsForMatrix)
+		}
 		if err := rows.Scan(vals...); err != nil {
 			return nil, err
 		}

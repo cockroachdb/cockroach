@@ -113,9 +113,9 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 
 	var pred tree.Expr
 	if s.coin() {
-		pred = makeBoolExpr(s, cols)
+		pred = makeBoolExpr(s, cols, true /* isPredicate */)
 	} else {
-		pred, args = makeBoolExprWithPlaceholders(s, cols)
+		pred, args = makeBoolExprWithPlaceholders(s, cols, true /* isPredicate */)
 	}
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
@@ -218,7 +218,7 @@ func (s *Smither) generateOuterJoinTLP() (unpartitioned, partitioned string) {
 		leftJoinTrue, leftJoinFalse, leftJoinFalse,
 	)
 
-	pred := makeBoolExpr(s, cols1)
+	pred := makeBoolExpr(s, cols1, true /* isPredicate */)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
@@ -288,7 +288,7 @@ func (s *Smither) generateInnerJoinTLP() (unpartitioned, partitioned string) {
 	)
 
 	cols := cols1.extend(cols2...)
-	pred := makeBoolExpr(s, cols)
+	pred := makeBoolExpr(s, cols, true /* isPredicate */)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
@@ -373,7 +373,7 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 		innerAgg, tableName, tableNameAlias,
 	)
 
-	pred := makeBoolExpr(s, cols)
+	pred := makeBoolExpr(s, cols, true /* isPredicate */)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
@@ -436,7 +436,7 @@ func (s *Smither) generateDistinctTLP() (unpartitioned, partitioned string) {
 	distinctCols := strings.Join(colStrs, ",")
 	unpartitioned = fmt.Sprintf("SELECT DISTINCT %s FROM %s", distinctCols, tableName)
 
-	pred := makeBoolExpr(s, cols)
+	pred := makeBoolExpr(s, cols, true /* isPredicate */)
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
