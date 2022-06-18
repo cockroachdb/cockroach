@@ -70,7 +70,7 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// AllowUnconstrainedNonCoveringIndexScan allows all index access paths to
 		// be explored, even when non-covering and unconstrained, without forcing a
 		// particular index.
-		if !scanPrivate.Flags.ForceIndex && !scanPrivate.Flags.AllowUnconstrainedNonCoveringIndexScan {
+		if !scanPrivate.Flags.ForceIndex && !c.e.mem.AllowUnconstrainedNonCoveringIndexScan() {
 			return
 		}
 

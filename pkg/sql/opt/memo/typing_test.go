@@ -88,57 +88,6 @@ func TestTypingUnaryAssumptions(t *testing.T) {
 	}
 }
 
-// TestTypingBinaryAssumptions ensures that binary overloads conform to certain
-// assumptions we're making in the type inference code:
-//   1. The return type can be inferred from the operator type and the data
-//      types of its operands.
-//   2. When of the operands is null, and if NullableArgs is true, then the
-//      return type can be inferred from just the non-null operand.
-func TestTypingBinaryAssumptions(t *testing.T) {
-	for name, overloads := range tree.BinOps {
-		for i, overload := range overloads {
-			op := overload.(*tree.BinOp)
-
-			// Check for basic ambiguity where two different binary op overloads
-			// both allow equivalent operand types.
-			for i2, overload2 := range overloads {
-				if i == i2 {
-					continue
-				}
-
-				op2 := overload2.(*tree.BinOp)
-				if op.LeftType.Equivalent(op2.LeftType) && op.RightType.Equivalent(op2.RightType) {
-					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
-					t.Errorf(format, name, op, op2)
-				}
-			}
-
-			// Handle ops that allow null operands. Check for ambiguity where
-			// the return type cannot be inferred from the non-null operand.
-			if op.NullableArgs {
-				for i2, overload2 := range overloads {
-					if i == i2 {
-						continue
-					}
-
-					op2 := overload2.(*tree.BinOp)
-					if !op2.NullableArgs {
-						continue
-					}
-
-					if op.LeftType == op2.LeftType && op.ReturnType != op2.ReturnType {
-						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
-					}
-
-					if op.RightType == op2.RightType && op.ReturnType != op2.ReturnType {
-						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
-					}
-				}
-			}
-		}
-	}
-}
-
 // TestTypingComparisonAssumptions ensures that comparison overloads conform to
 // certain assumptions we're making in the type inference code:
 //   1. All comparison ops will be present in tree.CmpOps after being mapped

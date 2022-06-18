@@ -379,7 +379,7 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
 			// Use unnamed fields so that compilation fails if a new field is
 			// added to ScanFlags.
-			{val1: ScanFlags{false, false, false, false, false, 0, 0, util.FastIntSet{}, false}, val2: ScanFlags{}, equal: true},
+			{val1: ScanFlags{false, false, false, false, false, 0, 0, util.FastIntSet{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -793,7 +793,7 @@ func BenchmarkEncodeDatum(b *testing.B) {
 	datums := make([]tree.Datum, 10000)
 	for i := range datums {
 		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
-			false /* favorInterestingData */)
+			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -808,7 +808,7 @@ func BenchmarkIsDatumEqual(b *testing.B) {
 	datums := make([]tree.Datum, 1000)
 	for i := range datums {
 		datums[i] = randgen.RandDatumWithNullChance(r, randgen.RandEncodableType(r), 0, /* nullChance */
-			false /* favorInterestingData */)
+			false /* favorCommonData */, false /* targetColumnIsUnique */)
 	}
 	b.ResetTimer()
 	var h hasher
