@@ -379,7 +379,7 @@ func (o *randOp) run(ctx context.Context) (err error) {
 				nullPct = 100 / o.config.nullPct
 			}
 			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct, /* nullChance */
-				false /* favorInterestingData */)
+				false /* favorCommonData */)
 			params[k], err = DatumToGoSQL(d)
 			if err != nil {
 				return err

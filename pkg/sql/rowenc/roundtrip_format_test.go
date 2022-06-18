@@ -64,7 +64,7 @@ func TestRandParseDatumStringAs(t *testing.T) {
 		t.Run(typ.String(), func(t *testing.T) {
 			for i := 0; i < testsForTyp; i++ {
 				datum := randgen.RandDatumWithNullChance(rng, typ, 0, /* nullChance */
-					false /* favorInterestingData */)
+					false /* favorCommonData */)
 				ds := tree.AsStringWithFlags(datum, tree.FmtExport)
 
 				// Because of how RandDatumWithNullChanceWorks, we might
