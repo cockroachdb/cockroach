@@ -111,11 +111,35 @@ message StreamReplicationStatus {
 }
 
 message StreamIngestionStats {
-  uint64 stream_id = 1;
+  // The status of current stream producer job.
+  StreamReplicationStatus stream_replication_status = 1;
 
-  // Stream production status.
-  StreamReplicationStatus stream_replication_status = 2;
+  // The error when trying to reach the current stream producer job.
+  string producer_error = 2;
 
-  // Stream ingestion progress.
-  cockroach.sql.jobs.jobspb.StreamIngestionProgress ingestion_progress = 3;
+  // Stream ingestion details.
+  cockroach.sql.jobs.jobspb.StreamIngestionDetails ingestion_details = 3;
+
+  // Stream ingestion progress, including each partition ingestion progress.
+  cockroach.sql.jobs.jobspb.StreamIngestionProgress ingestion_progress = 4;
+
+  message ReplicationLagInfo {
+    // The max timestamp at least which all partitions have ingested to.
+    // The cutover can only happen when high watermark is not less than the
+    // above cutover timestamp, i.e., this is max timestamp we can cut over.
+    util.hlc.Timestamp high_watermark = 1 [(gogoproto.nullable) = false];
+
+    // The difference between destination cluster's current time and
+    // the ingestion high watermark.
+    google.protobuf.Duration replication_lag = 2
+    [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+
+    string fastest_source_partition = 3;
+
+    string slowest_source_partition = 4;
+  }
+
+  // Current replication lag information. It is absent if no ingestion progress
+  // has been recorded yet.
+  ReplicationLagInfo replication_lag_info = 5;
 }

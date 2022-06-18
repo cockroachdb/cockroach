@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,21 +60,42 @@ func getStreamIngestionStats(
 	}
 	details := j.Details().(jobspb.StreamIngestionDetails)
 	progress := j.Progress()
+	stats := &streampb.StreamIngestionStats{
+		IngestionDetails:  &details,
+		IngestionProgress: progress.GetStreamIngest(),
+	}
+	if highwater := progress.GetHighWater(); highwater != nil && !highwater.IsEmpty() {
+		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
+			HighWatermark: *highwater,
+		}
+		minIngestedTime := hlc.MaxTimestamp
+		maxIngestedTime := hlc.MinTimestamp
+		for partition, pp := range progress.GetStreamIngest().PartitionProgress {
+			if pp.IngestedTimestamp.Less(minIngestedTime) {
+				minIngestedTime = pp.IngestedTimestamp
+				lagInfo.SlowestSourcePartition = partition
+			}
+
+			if maxIngestedTime.Less(pp.IngestedTimestamp) {
+				maxIngestedTime = pp.IngestedTimestamp
+				lagInfo.FastestSourcePartition = partition
+			}
+			lagInfo.ReplicationLag = timeutil.Now().Sub(highwater.GoTime())
+		}
+		stats.ReplicationLagInfo = lagInfo
+	}
 
 	client, err := streamclient.NewStreamClient(streamingccl.StreamAddress(details.StreamAddress))
 	if err != nil {
 		return nil, err
 	}
 	streamStatus, err := client.Heartbeat(evalCtx.Ctx(), streaming.StreamID(details.StreamID), hlc.MinTimestamp)
-	err = errors.CombineErrors(err, client.Close())
 	if err != nil {
-		return nil, err
+		stats.ProducerError = err.Error()
+	} else {
+		stats.StreamReplicationStatus = &streamStatus
 	}
-	return &streampb.StreamIngestionStats{
-		StreamId:                details.StreamID,
-		StreamReplicationStatus: &streamStatus,
-		IngestionProgress:       progress.GetStreamIngest(),
-	}, nil
+	return stats, client.Close()
 }
 
 type streamIngestionResumer struct {
@@ -191,6 +213,10 @@ func revertToCutoverTimestamp(
 			"cannot revert to a consistent state")
 	}
 
+	if sp.StreamIngest.CutoverStatus == jobspb.StreamIngestionProgress_Finished {
+		return errors.AssertionFailedf("unexpected cutover status: finished")
+	}
+
 	spans := []roachpb.Span{sd.Span}
 	for len(spans) != 0 {
 		var b kv.Batch
@@ -221,7 +247,8 @@ func revertToCutoverTimestamp(
 		}
 	}
 
-	return nil
+	sp.StreamIngest.CutoverStatus = jobspb.StreamIngestionProgress_Finished
+	return j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

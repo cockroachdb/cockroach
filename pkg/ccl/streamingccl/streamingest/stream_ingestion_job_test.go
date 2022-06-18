@@ -71,7 +71,6 @@ func verifyIngestionStats(t *testing.T, streamID int64, cutoverTime time.Time, s
 			partitionProgressIter.Value(), "ingested_timestamp"), "wall_time").String()))
 	}
 
-	require.Equal(t, streamID, parseInt64(fetchValueKey(statsJSON, "stream_id").String()))
 	require.Equal(t, strconv.Itoa(int(streampb.StreamReplicationStatus_STREAM_INACTIVE)),
 		fetchValueKey(fetchValueKey(statsJSON, "stream_replication_status"), "stream_status").String())
 }
@@ -185,7 +184,7 @@ INSERT INTO d.t2 VALUES (2);
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 
 	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
-		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats($1)", ingestionJobID)[0][0])
+		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
 
 	query := "SELECT * FROM d.t1"
 	sourceData := sourceSQL.QueryStr(t, query)

@@ -44,6 +44,7 @@ func distStreamIngestionPlanSpecs(
 	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(sqlInstanceIDs))
 
 	trackedSpans := make([]roachpb.Span, 0)
+	subscribingSqlInstances := make(map[string]uint32)
 	for i, partition := range topology {
 		// Round robin assign the stream partitions to nodes. Partitions 0 through
 		// len(nodes) - 1 creates the spec. Future partitions just add themselves to
@@ -64,6 +65,7 @@ func distStreamIngestionPlanSpecs(
 		}
 		n := i % len(sqlInstanceIDs)
 
+		subscribingSqlInstances[partition.ID] = uint32(sqlInstanceIDs[n])
 		streamIngestionSpecs[n].PartitionIds = append(streamIngestionSpecs[n].PartitionIds, partition.ID)
 		streamIngestionSpecs[n].PartitionSpecs = append(streamIngestionSpecs[n].PartitionSpecs,
 			string(partition.SubscriptionToken))
@@ -81,11 +83,12 @@ func distStreamIngestionPlanSpecs(
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
 	// node.
 	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{
-		HighWaterAtStart: initialHighWater,
-		TrackedSpans:     trackedSpans,
-		JobID:            int64(jobID),
-		StreamID:         uint64(streamID),
-		StreamAddress:    string(streamAddress),
+		HighWaterAtStart:        initialHighWater,
+		TrackedSpans:            trackedSpans,
+		JobID:                   int64(jobID),
+		StreamID:                uint64(streamID),
+		StreamAddress:           string(streamAddress),
+		SubscribingSqlInstances: subscribingSqlInstances,
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil

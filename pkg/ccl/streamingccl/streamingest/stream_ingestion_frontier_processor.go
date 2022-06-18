@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
@@ -98,13 +99,19 @@ func newStreamIngestionFrontierProcessor(
 	if err != nil {
 		return nil, err
 	}
+	partitionProgress := make(map[string]*jobspb.StreamIngestionProgress_PartitionProgress)
+	for sourcePartition, destPartition := range spec.SubscribingSqlInstances {
+		partitionProgress[sourcePartition] = &jobspb.StreamIngestionProgress_PartitionProgress{
+			InstanceID: base.SQLInstanceID(destPartition),
+		}
+	}
 	sf := &streamIngestionFrontier{
 		flowCtx:           flowCtx,
 		spec:              spec,
 		input:             input,
 		highWaterAtStart:  spec.HighWaterAtStart,
 		frontier:          frontier,
-		partitionProgress: make(map[string]*jobspb.StreamIngestionProgress_PartitionProgress),
+		partitionProgress: partitionProgress,
 		metrics:           flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
 		heartbeatSender:   heartbeatSender,
 	}
@@ -323,20 +330,27 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 	resolvedSpanDatums rowenc.EncDatum,
 ) (bool, error) {
 	var frontierChanged bool
-	if err := resolvedSpanDatums.EnsureDecoded(streamIngestionResultTypes[0], &sf.alloc); err != nil {
-		return frontierChanged, err
-	}
-	raw, ok := resolvedSpanDatums.Datum.(*tree.DBytes)
-	if !ok {
-		return frontierChanged, errors.AssertionFailedf(`unexpected datum type %T: %s`,
-			resolvedSpanDatums.Datum, resolvedSpanDatums.Datum)
-	}
-	var resolvedSpans jobspb.ResolvedSpans
-	if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
-		return frontierChanged, errors.NewAssertionErrorWithWrappedErrf(err,
-			`unmarshalling resolved timestamp: %x`, raw)
+	decodeResolvedSpans := func(resolvedSpanDatums rowenc.EncDatum) (*jobspb.ResolvedSpans, error) {
+		if err := resolvedSpanDatums.EnsureDecoded(streamIngestionResultTypes[0], &sf.alloc); err != nil {
+			return nil, err
+		}
+		raw, ok := resolvedSpanDatums.Datum.(*tree.DBytes)
+		if !ok {
+			return nil, errors.AssertionFailedf(`unexpected datum type %T: %s`,
+				resolvedSpanDatums.Datum, resolvedSpanDatums.Datum)
+		}
+		var resolvedSpans jobspb.ResolvedSpans
+		if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				`unmarshalling resolved timestamp: %x`, raw)
+		}
+		return &resolvedSpans, nil
 	}
 
+	resolvedSpans, err := decodeResolvedSpans(resolvedSpanDatums)
+	if err != nil {
+		return false, err
+	}
 	for _, resolved := range resolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the ingestion flow started at could
 		// potentially regress the job progress. This is not expected and thus we
@@ -381,15 +395,20 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	f.SpanEntries(allSpans, func(span roachpb.Span, timestamp hlc.Timestamp) (done span.OpResult) {
 		partitionKey := span.Key
 		partition := string(partitionKey)
-		if curFrontier, ok := partitionFrontiers[partition]; !ok {
-			partitionFrontiers[partition] = &jobspb.StreamIngestionProgress_PartitionProgress{
-				IngestedTimestamp: timestamp,
-			}
-		} else if curFrontier.IngestedTimestamp.Less(timestamp) {
+		curFrontier, ok := partitionFrontiers[partition]
+		if !ok {
+			err = errors.Errorf("Received progress update from unrecognized partition %s", partition)
+			return true
+		}
+		if curFrontier.IngestedTimestamp.Less(timestamp) {
 			curFrontier.IngestedTimestamp = timestamp
 		}
 		return true
 	})
+
+	if err != nil {
+		return err
+	}
 
 	sf.lastPartitionUpdate = timeutil.Now()
 	// TODO(pbardea): Only update partitions that have changed.

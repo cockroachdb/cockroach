@@ -76,7 +76,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"crdb_internal.stream_ingestion_stats": makeBuiltin(
+	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categoryStreamIngestion,
 			DistsqlBlocklist: true,
@@ -109,6 +109,39 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			Info: "This function can be used on the ingestion side to get a statistics summary " +
 				"of a stream ingestion job in json format.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"crdb_internal.stream_ingestion_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"job_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+				ingestionJobID := int64(tree.MustBeDInt(args[0]))
+				stats, err := mgr.GetStreamIngestionStats(evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				if err != nil {
+					return nil, err
+				}
+				rawStatus, err := protoutil.Marshal(stats)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawStatus)), nil
+			},
+			Info: "This function can be used on the ingestion side to get a statistics summary " +
+				"of a stream ingestion job.",
 			Volatility: volatility.Volatile,
 		},
 	),
