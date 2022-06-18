@@ -95,6 +95,7 @@ go_library(
         "predecessor_version.go",
         "psycopg.go",
         "psycopg_blocklist.go",
+        "query_comparison_util.go",
         "queue.go",
         "quit.go",
         "rapid_restart.go",
