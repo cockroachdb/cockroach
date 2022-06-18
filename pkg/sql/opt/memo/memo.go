@@ -135,21 +135,22 @@ type Memo struct {
 	// planning. We need to cross-check these before reusing a cached memo.
 	// NOTE: If you add new fields here, be sure to add them to the relevant
 	//       fields in explain_bundle.go.
-	reorderJoinsLimit           int
-	zigzagJoinEnabled           bool
-	useHistograms               bool
-	useMultiColStats            bool
-	localityOptimizedSearch     bool
-	safeUpdates                 bool
-	preferLookupJoinsForFKs     bool
-	saveTablesPrefix            string
-	dateStyle                   pgdate.DateStyle
-	intervalStyle               duration.IntervalStyle
-	propagateInputOrdering      bool
-	disallowFullTableScans      bool
-	largeFullScanRows           float64
-	nullOrderedLast             bool
-	costScansWithDefaultColSize bool
+	reorderJoinsLimit                      int
+	zigzagJoinEnabled                      bool
+	useHistograms                          bool
+	useMultiColStats                       bool
+	localityOptimizedSearch                bool
+	safeUpdates                            bool
+	preferLookupJoinsForFKs                bool
+	saveTablesPrefix                       string
+	dateStyle                              pgdate.DateStyle
+	intervalStyle                          duration.IntervalStyle
+	propagateInputOrdering                 bool
+	disallowFullTableScans                 bool
+	largeFullScanRows                      float64
+	nullOrderedLast                        bool
+	costScansWithDefaultColSize            bool
+	allowUnconstrainedNonCoveringIndexScan bool
 
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
@@ -179,25 +180,32 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*m = Memo{
-		metadata:                    m.metadata,
-		reorderJoinsLimit:           int(evalCtx.SessionData().ReorderJoinsLimit),
-		zigzagJoinEnabled:           evalCtx.SessionData().ZigzagJoinEnabled,
-		useHistograms:               evalCtx.SessionData().OptimizerUseHistograms,
-		useMultiColStats:            evalCtx.SessionData().OptimizerUseMultiColStats,
-		localityOptimizedSearch:     evalCtx.SessionData().LocalityOptimizedSearch,
-		safeUpdates:                 evalCtx.SessionData().SafeUpdates,
-		preferLookupJoinsForFKs:     evalCtx.SessionData().PreferLookupJoinsForFKs,
-		saveTablesPrefix:            evalCtx.SessionData().SaveTablesPrefix,
-		dateStyle:                   evalCtx.SessionData().GetDateStyle(),
-		intervalStyle:               evalCtx.SessionData().GetIntervalStyle(),
-		propagateInputOrdering:      evalCtx.SessionData().PropagateInputOrdering,
-		disallowFullTableScans:      evalCtx.SessionData().DisallowFullTableScans,
-		largeFullScanRows:           evalCtx.SessionData().LargeFullScanRows,
-		nullOrderedLast:             evalCtx.SessionData().NullOrderedLast,
-		costScansWithDefaultColSize: evalCtx.SessionData().CostScansWithDefaultColSize,
+		metadata:                               m.metadata,
+		reorderJoinsLimit:                      int(evalCtx.SessionData().ReorderJoinsLimit),
+		zigzagJoinEnabled:                      evalCtx.SessionData().ZigzagJoinEnabled,
+		useHistograms:                          evalCtx.SessionData().OptimizerUseHistograms,
+		useMultiColStats:                       evalCtx.SessionData().OptimizerUseMultiColStats,
+		localityOptimizedSearch:                evalCtx.SessionData().LocalityOptimizedSearch,
+		safeUpdates:                            evalCtx.SessionData().SafeUpdates,
+		preferLookupJoinsForFKs:                evalCtx.SessionData().PreferLookupJoinsForFKs,
+		saveTablesPrefix:                       evalCtx.SessionData().SaveTablesPrefix,
+		dateStyle:                              evalCtx.SessionData().GetDateStyle(),
+		intervalStyle:                          evalCtx.SessionData().GetIntervalStyle(),
+		propagateInputOrdering:                 evalCtx.SessionData().PropagateInputOrdering,
+		disallowFullTableScans:                 evalCtx.SessionData().DisallowFullTableScans,
+		largeFullScanRows:                      evalCtx.SessionData().LargeFullScanRows,
+		nullOrderedLast:                        evalCtx.SessionData().NullOrderedLast,
+		costScansWithDefaultColSize:            evalCtx.SessionData().CostScansWithDefaultColSize,
+		allowUnconstrainedNonCoveringIndexScan: UnconstrainedNonCoveringIndexScanClusterMode.Get(&evalCtx.Settings.SV),
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(evalCtx, m)
+}
+
+// AllowUnconstrainedNonCoveringIndexScan indicates whether unconstrained
+// non-covering index scans are enabled.
+func (m *Memo) AllowUnconstrainedNonCoveringIndexScan() bool {
+	return m.allowUnconstrainedNonCoveringIndexScan
 }
 
 // ResetLogProps resets the logPropsBuilder. It should be used in combination
@@ -317,7 +325,8 @@ func (m *Memo) IsStale(
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
 		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
-		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize {
+		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize ||
+		m.allowUnconstrainedNonCoveringIndexScan != UnconstrainedNonCoveringIndexScanClusterMode.Get(&evalCtx.Settings.SV) {
 		return true, nil
 	}
 

@@ -63,8 +63,9 @@ func NullDenominator(nullOk bool) int {
 // be returned.
 // Note that if typ.Family is UNKNOWN, the datum will always be DNull,
 // regardless of the null flag. If favorInterestingData is true, selection of
-// data values is highly biased towards randomly picking from a pre-determined
-// set of interesting values as opposed to purely random values.
+// data values from a pre-determined set of interesting values as opposed to
+// purely random values is increased. By default interesting data is picked 10%
+// of the time. When favorInterestingData is true it is picked 30% of the time.
 func RandDatumWithNullChance(
 	rng *rand.Rand, typ *types.T, nullChance int, favorInterestingData bool,
 ) tree.Datum {
@@ -73,6 +74,9 @@ func RandDatumWithNullChance(
 	}
 	// Sometimes pick from a predetermined list of known interesting datums.
 	randomInt := rng.Intn(10)
+	// OIDs must be valid defined objects for their specific type, so random data
+	// errors out most of the time. Always pick interesting OIDs if interesting
+	// data is favored.
 	if (favorInterestingData && (randomInt < 3 || typ.Family() == types.OidFamily)) ||
 		randomInt == 0 {
 		if special := randInterestingDatum(rng, typ); special != nil {
@@ -174,6 +178,9 @@ func RandDatumWithNullChance(
 		return &tree.DJSON{JSON: j}
 	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
+		if nullChance == 0 {
+			nullChance = 10
+		}
 		for i := range typ.TupleContents() {
 			tuple.D[i] = RandDatumWithNullChance(
 				rng, typ.TupleContents()[i], nullChance, favorInterestingData,
@@ -239,7 +246,7 @@ func RandDatumWithNullChance(
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
-		return RandArrayPlus(rng, typ, 0 /* nullChance */, favorInterestingData)
+		return RandArrayWithInterestingDataChance(rng, typ, 0 /* nullChance */, favorInterestingData)
 	case types.AnyFamily:
 		return RandDatumWithNullChance(rng, RandType(rng), nullChance,
 			favorInterestingData,
@@ -270,13 +277,13 @@ func RandDatumWithNullChance(
 // RandArray generates a random DArray where the contents have nullChance
 // of being null.
 func RandArray(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
-	return RandArrayPlus(rng, typ, nullChance, false)
+	return RandArrayWithInterestingDataChance(rng, typ, nullChance, false)
 }
 
-// RandArrayPlus generates a random DArray where the contents have nullChance of
-// being null, plus it favors generations of non-random interesting data if
-// favorInterestingData is true.
-func RandArrayPlus(
+// RandArrayWithInterestingDataChance generates a random DArray where the
+// contents have nullChance of being null, plus it favors generations of
+// non-random interesting data if favorInterestingData is true.
+func RandArrayWithInterestingDataChance(
 	rng *rand.Rand, typ *types.T, nullChance int, favorInterestingData bool,
 ) tree.Datum {
 	contents := typ.ArrayContents()

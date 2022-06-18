@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -368,11 +369,16 @@ type ScanFlags struct {
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
 	ZigzagIndexes util.FastIntSet
-
-	// AllowUnconstrainedNonCoveringIndexScan allows GenerateIndexScans to explore
-	// index access paths which are non-covering.
-	AllowUnconstrainedNonCoveringIndexScan bool
 }
+
+// UnconstrainedNonCoveringIndexScanClusterMode controls the cluster setting for
+// enabling unconstrained non-covering index scans in the optimizer.
+var UnconstrainedNonCoveringIndexScanClusterMode = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.optimizer.unconstrained_non_covering_index_scan.enabled",
+	"if enabled, unconstrained non-covering index scan access paths are explored by the optimizer",
+	false,
+).WithPublic()
 
 // Empty returns true if there are no flags set.
 func (sf *ScanFlags) Empty() bool {

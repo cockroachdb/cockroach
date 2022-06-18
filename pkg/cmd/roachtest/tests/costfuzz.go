@@ -147,8 +147,8 @@ func runOneRoundCostFuzz(
 	}
 	logStmt(setStmtTimeout)
 
-	// Initialize a smither that generates only INSERT, UPDATE, and DELETE
-	// statements with the MutationsOnly option.
+	// Initialize a smither that generates only INSERT and UPDATE statements with
+	// the MutationsOnly and DisableDelete options.
 	mutatingSmither, err := sqlsmith.NewSmither(conn, rnd, sqlsmith.MutationsOnly(),
 		sqlsmith.FavorInterestingData(), sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableInsertSelect(), sqlsmith.DisableDelete(),
@@ -163,7 +163,7 @@ func runOneRoundCostFuzz(
 	// Initialize a smither that generates only deterministic SELECT statements.
 	smither, err := sqlsmith.NewSmither(conn, rnd,
 		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFns(), sqlsmith.DisableLimits(),
-		sqlsmith.DisableConstantWhereClause(), sqlsmith.FavorInterestingData(),
+		sqlsmith.UnlikelyConstantPredicate(), sqlsmith.FavorInterestingData(),
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(),
 		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
@@ -197,7 +197,9 @@ func runOneRoundCostFuzz(
 		}
 
 		if i%1000 == 0 {
-			t.Status("running costfuzz: ", i, " statements completed")
+			if i != numInitialMutations {
+				t.Status("running costfuzz: ", i, " statements completed")
+			}
 		}
 
 		// Run `numInitialmutations` mutations first so that the tables have rows.
