@@ -12,7 +12,6 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -30,15 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
-
-// UnconstrainedNonCoveringIndexScanClusterMode controls the cluster setting for
-// enabling unconstrained non-covering index scans in the optimizer.
-var UnconstrainedNonCoveringIndexScanClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.optimizer.unconstrained_non_covering_index_scan.enabled",
-	"if enabled, unconstrained non-covering index scan access paths are explored by the optimizer",
-	false,
-).WithPublic()
 
 // buildDataSource builds a set of memo groups that represent the given table
 // expression. For example, if the tree.TableExpr consists of a single table,
@@ -518,9 +508,6 @@ func (b *Builder) buildScan(
 	}
 
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
-	if UnconstrainedNonCoveringIndexScanClusterMode.Get(&b.evalCtx.Settings.SV) {
-		private.Flags.AllowUnconstrainedNonCoveringIndexScan = true
-	}
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin

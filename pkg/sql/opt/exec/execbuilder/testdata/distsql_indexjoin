@@ -121,7 +121,7 @@ vectorized: true
           spans: FULL SCAN
 
 statement ok
-SET CLUSTER SETTING sql.optimizer.unconstrained_non_covering_index_scan.enabled = true;
+SET unconstrained_non_covering_index_scan_enabled = true;
 
 # The cluster setting should allow generation of an unconstrained index scan.
 query T

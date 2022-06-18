@@ -25,8 +25,6 @@ func (s *Smither) makeSelectStmt(
 	desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
 	if s.canRecurse() {
-		s.EnterExpressionBlock()
-		defer s.LeaveExpressionBlock()
 		for {
 			expr, exprRefs, ok := s.selectStmtSampler.Next()(s, desiredTypes, refs, withTables)
 			if ok {
@@ -138,8 +136,6 @@ var (
 // valid to be used as a join reference.
 func makeTableExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
-		s.EnterExpressionBlock()
-		defer s.LeaveExpressionBlock()
 		for i := 0; i < retryCount; i++ {
 			expr, exprRefs, ok := s.tableExprSampler.Next()(s, refs, forJoin)
 			if ok {
@@ -186,8 +182,6 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 	if !ok {
 		return nil, nil, false
 	}
-	s.lock.RLock()
-
 	maxJoinType := len(joinTypes)
 	if s.disableCrossJoins {
 		maxJoinType = len(joinTypes) - 1
@@ -204,26 +198,14 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 			joinExpr.Cond = &tree.OnJoinCond{Expr: cond}
 		}
 	}
-	s.lock.RUnlock()
 	if joinExpr.Cond == nil && joinExpr.JoinType != tree.AstCross {
 		var allRefs colRefs
 		// We used to make an ON clause only out of projected columns.
 		// Now we consider all left and right input relation columns.
-		allRefs = make(colRefs, 0, len(leftRefs)+len(rightRefs)+len(refs))
+		allRefs = make(colRefs, 0, len(leftRefs)+len(rightRefs))
 		allRefs = append(allRefs, leftRefs...)
 		allRefs = append(allRefs, rightRefs...)
-		allRefs = append(allRefs, refs...)
-		s.lock.Lock()
-		savedInWhereClause := s.inWhereClause
-		savedNonBoolExprStarted := s.nonBoolExprStarted
-		s.inWhereClause = true
-		s.nonBoolExprStarted = false
-		s.lock.Unlock()
 		on := makeBoolExpr(s, allRefs)
-		s.lock.Lock()
-		s.inWhereClause = savedInWhereClause
-		s.nonBoolExprStarted = savedNonBoolExprStarted
-		s.lock.Unlock()
 		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
@@ -625,8 +607,6 @@ func (s *Smither) makeSelectClause(
 	hasJoinTable := false
 	for (requireFrom && len(clause.From.Tables) < 1) ||
 		(!s.disableCrossJoins && s.canRecurse()) {
-		s.EnterExpressionBlock()
-		defer s.LeaveExpressionBlock()
 		var from tree.TableExpr
 		if len(withTables) == 0 || s.coin() {
 			// Add a normal data source.
@@ -669,8 +649,6 @@ func (s *Smither) makeSelectClause(
 		selectListRefs = selectListRefs.extend(fromRefs...)
 
 		if s.d6() <= 2 && s.canRecurse() {
-			s.EnterExpressionBlock()
-			defer s.LeaveExpressionBlock()
 			// Enable GROUP BY. Choose some random subset of the
 			// fromRefs.
 			// TODO(mjibson): Refence handling and aggregation functions
@@ -697,17 +675,7 @@ func (s *Smither) makeSelectClause(
 			}
 			groupByRefs = groupByRefs[:len(groupBy)]
 			clause.GroupBy = groupBy
-			s.lock.Lock()
-			savedInWhereClause := s.inWhereClause
-			savedNonBoolExprStarted := s.nonBoolExprStarted
-			s.inWhereClause = true
-			s.nonBoolExprStarted = false
-			s.lock.Unlock()
 			clause.Having = s.makeHaving(fromRefs)
-			s.lock.Lock()
-			s.inWhereClause = savedInWhereClause
-			s.nonBoolExprStarted = savedNonBoolExprStarted
-			s.lock.Unlock()
 			selectListRefs = groupByRefs
 			orderByRefs = groupByRefs
 			// TODO(mjibson): also use this context sometimes in
@@ -1274,17 +1242,7 @@ func (s *Smither) makeWhere(refs colRefs, hasJoinTable bool) *tree.Where {
 		generateWhere = s.coin()
 	}
 	if generateWhere {
-		s.lock.Lock()
-		savedInWhereClause := s.inWhereClause
-		savedNonBoolExprStarted := s.nonBoolExprStarted
-		s.inWhereClause = true
-		s.nonBoolExprStarted = false
-		s.lock.Unlock()
 		where := makeBoolExpr(s, refs)
-		s.lock.Lock()
-		s.inWhereClause = savedInWhereClause
-		s.nonBoolExprStarted = savedNonBoolExprStarted
-		s.lock.Unlock()
 		return tree.NewWhere("WHERE", where)
 	}
 	return nil

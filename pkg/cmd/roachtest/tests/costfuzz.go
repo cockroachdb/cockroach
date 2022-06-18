@@ -180,7 +180,7 @@ func runOneRoundCostFuzz(
 	// Initialize a smither that generates only deterministic SELECT statements.
 	smither, err := sqlsmith.NewSmither(conn, rnd,
 		sqlsmith.DisableMutations(), sqlsmith.DisableImpureFns(), sqlsmith.DisableLimits(),
-		sqlsmith.DisableConstantWhereClause(), sqlsmith.FavorInterestingData(),
+		sqlsmith.UnlikelyConstantPredicate(), sqlsmith.FavorInterestingData(),
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(),
 		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
@@ -191,8 +191,6 @@ func runOneRoundCostFuzz(
 		t.Fatal(err)
 	}
 	defer smither.Close()
-
-	_, _ = conn.Query("SET CLUSTER SETTING sql.optimizer.unconstrained_non_covering_index_scan.enabled = true")
 
 	t.Status("running costfuzz")
 	until := time.After(roundTimeout)
@@ -217,7 +215,9 @@ func runOneRoundCostFuzz(
 		}
 
 		if i%1000 == 0 {
-			t.Status("running costfuzz: ", i, " statements completed")
+			if i != numInitialMutations {
+				t.Status("running costfuzz: ", i, " statements completed")
+			}
 		}
 
 		// Run `numInitialMutations` mutations first so that the tables have rows.

@@ -267,6 +267,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().CostScansWithDefaultColSize = false
 	notStale()
 
+	// Stale unconstrained non-covering index scan enabled.
+	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = true
+	stale()
+	evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

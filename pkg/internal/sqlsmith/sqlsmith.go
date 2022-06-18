@@ -55,11 +55,6 @@ import (
 
 const retryCount = 20
 
-// maxExpressionDepth is the maximum depth of nested query expressions the
-// Smither is allowed to create (to prevent stack overflows and long query
-// compilation times).
-const maxExpressionDepth = 100
-
 // Smither is a sqlsmith generator.
 type Smither struct {
 	rnd              *rand.Rand
@@ -94,16 +89,13 @@ type Smither struct {
 	ignoreFNs                  []*regexp.Regexp
 	complexity                 float64
 	scalarComplexity           float64
-	disableConstantWhereClause bool
-	inWhereClause              bool
-	nonBoolExprStarted         bool
+	unlikelyConstantPredicate  bool
 	favorInterestingData       bool
 	unlikelyRandomNulls        bool
 	disableCrossJoins          bool
 	disableIndexHints          bool
 	lowProbWhereWithJoinTables bool
 	disableInsertSelect        bool
-	expressionDepth            int
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -133,7 +125,8 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 		scalarExprWeights: scalars,
 		boolExprWeights:   bools,
 
-		complexity: 0.2,
+		complexity:       0.2,
+		scalarComplexity: 0.2,
 	}
 	for _, opt := range opts {
 		opt.Apply(s)
@@ -156,25 +149,6 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 func (s *Smither) Close() {
 	if s.bulkSrv != nil {
 		s.bulkSrv.Close()
-	}
-}
-
-// EnterExpressionBlock records when we are entering a nested query expression
-// block.
-func (s *Smither) EnterExpressionBlock() {
-	s.lock.Lock()
-	s.expressionDepth++
-	s.lock.Unlock()
-}
-
-// LeaveExpressionBlock records when we are leaving a nested query expression
-// block.
-func (s *Smither) LeaveExpressionBlock() {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.expressionDepth--
-	if s.expressionDepth < 0 {
-		panic("Smither query block nesting level tracking error")
 	}
 }
 
@@ -210,9 +184,9 @@ func (s *Smither) GenerateExpr() tree.TypedExpr {
 
 func (s *Smither) name(prefix string) tree.Name {
 	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.nameCounts[prefix]++
 	count := s.nameCounts[prefix]
-	s.lock.Unlock()
 	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
 }
 
@@ -276,7 +250,9 @@ var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 
 // SetComplexity configures the Smither's complexity, in other words the
 // likelihood that at any given node the Smither will recurse and create a
-// deeper query tree. The default is .2.
+// deeper query tree. The default is .2. Note that this does not affect the
+// complexity of generated scalar expressions, unless non-scalar expressions
+// occur within a scalar expression.
 func SetComplexity(complexity float64) SmitherOption {
 	return option{
 		name: "set complexity (likelihood of making a deeper random tree)",
@@ -405,11 +381,12 @@ var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
 })
 
-// DisableConstantWhereClause causes the Smither to disable generating WHERE
-// clauses, ON clauses or HAVING clauses which only contain contant boolean
-// expressions such as `WHERE TRUE` or `ON FALSE`.
-var DisableConstantWhereClause = simpleOption("disable constant where clause", func(s *Smither) {
-	s.disableConstantWhereClause = true
+// UnlikelyConstantPredicate causes the Smither to make generation of constant
+// WHERE clause, ON clause or HAVING clause predicates which only contain
+// constant boolean expressions such as `TRUE` or `FALSE OR TRUE` much less
+// likely.
+var UnlikelyConstantPredicate = simpleOption("unlikely constant predicate", func(s *Smither) {
+	s.unlikelyConstantPredicate = true
 })
 
 // FavorInterestingData increases the chances the Smither generates scalar data
