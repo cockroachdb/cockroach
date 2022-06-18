@@ -182,6 +182,8 @@ func randExpr(
 					Right:    tree.NewUnresolvedName(string(x.Name)),
 				}
 				referencedCols[x.Name] = struct{}{}
+				// Make sure the data type is large enough to hold the result. For
+				// example, (INT4 + INT8) should be an INT8, not an INT4.
 				colType = tree.InferBinaryType(treebin.Plus, colType, x.Type.(*types.T))
 				if colType == nil {
 					// If the plus expression is illegal, don't use it.
@@ -218,6 +220,8 @@ func randExpr(
 			Left:     tree.NewUnresolvedName(string(x.Name)),
 			Right:    RandDatum(rng, xTyp, nullOk),
 		}
+		// Make sure the data type is large enough to hold the result. For
+		// example, (INT4 + INT8) should be an INT8, not an INT4.
 		typ = tree.InferBinaryType(treebin.Plus, typ, expr.(*tree.BinaryExpr).Right.(tree.Datum).ResolvedType())
 
 	case types.StringFamily:

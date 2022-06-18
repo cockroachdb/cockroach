@@ -368,10 +368,6 @@ type ScanFlags struct {
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
 	ZigzagIndexes util.FastIntSet
-
-	// AllowUnconstrainedNonCoveringIndexScan allows GenerateIndexScans to explore
-	// index access paths which are non-covering.
-	AllowUnconstrainedNonCoveringIndexScan bool
 }
 
 // Empty returns true if there are no flags set.

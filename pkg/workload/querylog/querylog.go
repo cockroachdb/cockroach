@@ -459,7 +459,7 @@ func (w *worker) generatePlaceholders(
 								nullPct = 100 / w.config.nullPct
 							}
 							d := randgen.RandDatumWithNullChance(w.rng, c.dataType, nullPct, /* nullChance */
-								false /* favorInterestingData */)
+								false /* favorCommonData */)
 							if i, ok := d.(*tree.DInt); ok && c.intRange > 0 {
 								j := int64(*i) % int64(c.intRange/2)
 								d = tree.NewDInt(tree.DInt(j))
