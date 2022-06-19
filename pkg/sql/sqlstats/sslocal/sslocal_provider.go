@@ -62,9 +62,11 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
-			s.mu.Lock()
-			last := s.mu.lastReset
-			s.mu.Unlock()
+			last := func() time.Time {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				return s.mu.lastReset
+			}()
 
 			next := last.Add(sqlstats.MaxSQLStatReset.Get(&s.st.SV))
 			wait := next.Sub(timeutil.Now())
@@ -186,12 +188,14 @@ func (s *SQLStats) Reset(ctx context.Context) error {
 }
 
 func (s *SQLStats) getAppNames(sorted bool) []string {
-	var appNames []string
-	s.mu.Lock()
-	for n := range s.mu.apps {
-		appNames = append(appNames, n)
-	}
-	s.mu.Unlock()
+	appNames := func() (appNames []string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for n := range s.mu.apps {
+			appNames = append(appNames, n)
+		}
+		return appNames
+	}()
 	if sorted {
 		sort.Strings(appNames)
 	}
