@@ -259,13 +259,17 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 	imt.jobMu.Lock()
 	defer imt.jobMu.Unlock()
 
-	imt.mu.Lock()
-	if imt.mu.progress.TodoSpans == nil {
-		imt.mu.Unlock()
+	progress := func() *MergeProgress {
+		imt.mu.Lock()
+		defer imt.mu.Unlock()
+		if imt.mu.progress.TodoSpans == nil {
+			return nil
+		}
+		return imt.mu.progress.Copy()
+	}()
+	if progress == nil {
 		return nil
 	}
-	progress := imt.mu.progress.Copy()
-	imt.mu.Unlock()
 
 	details, ok := imt.jobMu.job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
@@ -282,9 +286,11 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 // FlushFractionCompleted writes out the fraction completed based on the number of total
 // ranges completed.
 func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error {
-	imt.mu.Lock()
-	spans := imt.mu.progress.FlatSpans()
-	imt.mu.Unlock()
+	spans := func() []roachpb.Span {
+		imt.mu.Lock()
+		defer imt.mu.Unlock()
+		return imt.mu.progress.FlatSpans()
+	}()
 
 	rangeCount, err := imt.rangeCounter(ctx, spans)
 	if err != nil {
