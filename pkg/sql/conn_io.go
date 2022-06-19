@@ -397,9 +397,9 @@ func (buf *StmtBuf) Init() {
 // Close() is idempotent.
 func (buf *StmtBuf) Close() {
 	buf.mu.Lock()
+	defer buf.mu.Unlock()
 	buf.mu.closed = true
 	buf.mu.cond.Signal()
-	buf.mu.Unlock()
 }
 
 // Push adds a Command to the end of the buffer. If a CurCmd() call was blocked
@@ -498,9 +498,9 @@ func (buf *StmtBuf) Ltrim(ctx context.Context, pos CmdPos) {
 // yet. The previous CmdPos is returned.
 func (buf *StmtBuf) AdvanceOne() CmdPos {
 	buf.mu.Lock()
+	defer buf.mu.Unlock()
 	prev := buf.mu.curPos
 	buf.mu.curPos++
-	buf.mu.Unlock()
 	return prev
 }
 
@@ -516,18 +516,21 @@ func (buf *StmtBuf) AdvanceOne() CmdPos {
 // It is an error to start seeking when the cursor is positioned on an empty
 // slot.
 func (buf *StmtBuf) seekToNextBatch() error {
-	buf.mu.Lock()
-	curPos := buf.mu.curPos
-	cmdIdx, err := buf.translatePosLocked(curPos)
-	if err != nil {
-		buf.mu.Unlock()
+	if err := func() error {
+		buf.mu.Lock()
+		defer buf.mu.Unlock()
+		curPos := buf.mu.curPos
+		cmdIdx, err := buf.translatePosLocked(curPos)
+		if err != nil {
+			return err
+		}
+		if cmdIdx == buf.mu.data.Len() {
+			return errors.AssertionFailedf("invalid seek start point")
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
-	if cmdIdx == buf.mu.data.Len() {
-		buf.mu.Unlock()
-		return errors.AssertionFailedf("invalid seek start point")
-	}
-	buf.mu.Unlock()
 
 	var foundSync bool
 	for !foundSync {
@@ -536,18 +539,21 @@ func (buf *StmtBuf) seekToNextBatch() error {
 		if err != nil {
 			return err
 		}
-		buf.mu.Lock()
-		cmdIdx, err := buf.translatePosLocked(pos)
-		if err != nil {
-			buf.mu.Unlock()
+		if err := func() error {
+			buf.mu.Lock()
+			defer buf.mu.Unlock()
+			cmdIdx, err := buf.translatePosLocked(pos)
+			if err != nil {
+				return err
+			}
+
+			if _, ok := buf.mu.data.Get(cmdIdx).(Sync); ok {
+				foundSync = true
+			}
+			return nil
+		}(); err != nil {
 			return err
 		}
-
-		if _, ok := buf.mu.data.Get(cmdIdx).(Sync); ok {
-			foundSync = true
-		}
-
-		buf.mu.Unlock()
 	}
 	return nil
 }
