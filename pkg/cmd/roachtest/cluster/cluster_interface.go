@@ -130,4 +130,5 @@ type Cluster interface {
 	) error
 
 	FetchTimeseriesData(ctx context.Context, t test.Test) error
+	RefetchCertsFromNode(ctx context.Context, node int) error
 }
