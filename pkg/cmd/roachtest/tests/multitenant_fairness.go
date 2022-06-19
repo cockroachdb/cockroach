@@ -176,13 +176,17 @@ func runMultiTenantFairness(
 
 	// Create the tenants.
 	t.L().Printf("initializing %d tenants", numTenants)
+	tenantIDs := make([]int, 0, numTenants)
+	for i := 0; i < numTenants; i++ {
+		tenantIDs = append(tenantIDs, tenantBaseID+i)
+	}
 
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
 		node := i + 2
 		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1)`, tenantBaseID+i)
 		require.NoError(t, err)
-		tenant := createTenantNode(ctx, t, c, c.Node(1), tenantBaseID+i, node, tenantHTTPPort(i), tenantSQLPort(i))
+		tenant := createTenantNode(ctx, t, c, c.Node(1), tenantBaseID+i, node, tenantHTTPPort(i), tenantSQLPort(i), createTenantOtherTenantIDs(tenantIDs))
 		defer tenant.stop(ctx, t, c)
 		tenant.start(ctx, t, c, "./cockroach")
 		tenants[i] = tenant
