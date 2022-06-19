@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Constants for the String() representation of the session states. Shared with
@@ -342,9 +343,11 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Next:        stateCommitWait{},
 			Action: func(args fsm.Args) error {
 				ts := args.Extended.(*txnState)
-				ts.mu.Lock()
-				txnID := ts.mu.txn.ID()
-				ts.mu.Unlock()
+				txnId := func() uuid.UUID {
+					ts.mu.Lock()
+					defer ts.mu.Unlock()
+					return ts.mu.txn.ID()
+				}()
 				ts.setAdvanceInfo(
 					advanceOne,
 					noRewind,
@@ -504,9 +507,11 @@ func (ts *txnState) finishTxn(ev txnEventType) error {
 // cleanupAndFinishOnError rolls back the KV txn and finishes the SQL txn.
 func cleanupAndFinishOnError(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
-	ts.mu.Lock()
-	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
-	ts.mu.Unlock()
+	func() {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+	}()
 	finishedTxnID := ts.finishSQLTxn()
 	ts.setAdvanceInfo(
 		skipBatch,
@@ -518,9 +523,11 @@ func cleanupAndFinishOnError(args fsm.Args) error {
 
 func prepareTxnForRetry(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
-	ts.mu.Lock()
-	ts.mu.txn.PrepareForRetry(ts.Ctx)
-	ts.mu.Unlock()
+	func() {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		ts.mu.txn.PrepareForRetry(ts.Ctx)
+	}()
 	ts.setAdvanceInfo(
 		advanceOne,
 		noRewind,
@@ -532,11 +539,13 @@ func prepareTxnForRetry(args fsm.Args) error {
 func prepareTxnForRetryWithRewind(args fsm.Args) error {
 	pl := args.Payload.(eventRetriableErrPayload)
 	ts := args.Extended.(*txnState)
-	ts.mu.Lock()
-	ts.mu.txn.PrepareForRetry(ts.Ctx)
-	ts.mu.autoRetryReason = pl.err
-	ts.mu.autoRetryCounter++
-	ts.mu.Unlock()
+	func() {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		ts.mu.txn.PrepareForRetry(ts.Ctx)
+		ts.mu.autoRetryReason = pl.err
+		ts.mu.autoRetryCounter++
+	}()
 	// The caller will call rewCap.rewindAndUnlock().
 	ts.setAdvanceInfo(
 		rewind,
