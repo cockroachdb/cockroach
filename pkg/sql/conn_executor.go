@@ -2822,9 +2822,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		txnIsOpen = true
 	}
 
-	ex.mu.Lock()
-	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
-	ex.mu.Unlock()
+	err := func() error {
+		ex.mu.Lock()
+		defer ex.mu.Unlock()
+		return ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
+	}()
 	if err != nil {
 		if errors.HasType(err, (*fsm.TransitionNotFoundError)(nil)) {
 			panic(err)
