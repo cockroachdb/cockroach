@@ -307,16 +307,20 @@ func (ibm *IndexBackfillMerger) scan(
 		nextStart = resp.Rows[len(resp.Rows)-1].Key.Next()
 		chunk.completedSpan = roachpb.Span{Key: startKey, EndKey: nextStart}
 
-		ibm.muBoundAccount.Lock()
-		for i := range resp.Rows {
-			chunk.keys = append(chunk.keys, resp.Rows[i].Key)
-			if err := ibm.muBoundAccount.boundAccount.Grow(ctx, int64(len(resp.Rows[i].Key))); err != nil {
-				ibm.muBoundAccount.Unlock()
-				return mergeChunk{}, nil, errors.Wrap(err, "failed to allocate space for merge keys")
+		if err := func() error {
+			ibm.muBoundAccount.Lock()
+			defer ibm.muBoundAccount.Unlock()
+			for i := range resp.Rows {
+				chunk.keys = append(chunk.keys, resp.Rows[i].Key)
+				if err := ibm.muBoundAccount.boundAccount.Grow(ctx, int64(len(resp.Rows[i].Key))); err != nil {
+					return errors.Wrap(err, "failed to allocate space for merge keys")
+				}
+				chunkMem += int64(len(resp.Rows[i].Key))
 			}
-			chunkMem += int64(len(resp.Rows[i].Key))
+			return nil
+		}(); err != nil {
+			return mergeChunk{}, nil, err
 		}
-		ibm.muBoundAccount.Unlock()
 	}
 	chunk.memUsed = chunkMem
 	return chunk, nextStart, nil
@@ -477,14 +481,14 @@ func mergeEntry(sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool,
 }
 
 func (ibm *IndexBackfillMerger) growBoundAccount(ctx context.Context, growBy int64) error {
-	defer ibm.muBoundAccount.Unlock()
 	ibm.muBoundAccount.Lock()
+	defer ibm.muBoundAccount.Unlock()
 	return ibm.muBoundAccount.boundAccount.Grow(ctx, growBy)
 }
 
 func (ibm *IndexBackfillMerger) shrinkBoundAccount(ctx context.Context, shrinkBy int64) {
-	defer ibm.muBoundAccount.Unlock()
 	ibm.muBoundAccount.Lock()
+	defer ibm.muBoundAccount.Unlock()
 	ibm.muBoundAccount.boundAccount.Shrink(ctx, shrinkBy)
 }
 
