@@ -380,10 +380,12 @@ func (r *Registry) insertRequestInternal(
 	// Manually insert the request in the (local) registry. This lets this node
 	// pick up the request quickly if the right query comes around, without
 	// waiting for the poller.
-	r.mu.Lock()
-	r.mu.epoch++
-	r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
-	r.mu.Unlock()
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.mu.epoch++
+		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
+	}()
 
 	// Notify all the other nodes that they have to poll.
 	buf := make([]byte, 8)
