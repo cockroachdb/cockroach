@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,14 +44,32 @@ type tenantNode struct {
 	node   int
 }
 
+type createTenantOptions struct {
+	// TODO(ssd): This is a hack to work around the currently tangled state of
+	// cluster management between roachtest and roachprod. createTenantNode
+	// recreates client certs. Only one copy of the client certs are cached
+	// locally, so if we want a client to work against multiple tenants in a
+	// single test, we need to create the certs with all tenants.
+	otherTenantIDs []int
+}
+type createTenantOpt func(*createTenantOptions)
+
+func createTenantOtherTenantIDs(ids []int) createTenantOpt {
+	return func(c *createTenantOptions) { c.otherTenantIDs = ids }
+}
+
 func createTenantNode(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	kvnodes option.NodeListOption,
 	tenantID, node, httpPort, sqlPort int,
+	opts ...createTenantOpt,
 ) *tenantNode {
-
+	var createOptions createTenantOptions
+	for _, o := range opts {
+		o(&createOptions)
+	}
 	// In secure mode only the internal address works, possibly because its started
 	// with --advertise-addr on internal address?
 	kvAddrs, err := c.InternalAddr(ctx, t.L(), kvnodes)
@@ -64,17 +81,24 @@ func createTenantNode(
 		node:     node,
 		sqlPort:  sqlPort,
 	}
-	n := c.Node(1)
-	versionStr, err := fetchCockroachVersion(ctx, t.L(), c, n[0])
-	v := version.MustParse(versionStr)
-	require.NoError(t, err)
-	// Tenant scoped certificates were introduced in version 22.2.
-	tenantScopeRequiredVersion := version.MustParse("v22.2.0-alpha.00000000-746-gc030b8b6dc")
-	if v.AtLeast(tenantScopeRequiredVersion) {
-		tn.recreateClientCertsWithTenantScope(ctx, c)
+	if tn.cockroachBinSupportsTenantScope(ctx, c) {
+		err := tn.recreateClientCertsWithTenantScope(ctx, c, createOptions.otherTenantIDs)
+		require.NoError(t, err)
 	}
 	tn.createTenantCert(ctx, t, c)
 	return tn
+}
+
+// cockroachBinSupportsTenantScope is a hack to figure out if the version of
+// cockroach on the node supports tenant scoped certificates. We can't use a
+// version comparison here because we need to compare alpha build versions which
+// are compared lexicographically. This is a problem because our alpha versions
+// contain an integer count of commits, which does not sort correctly.  Once
+// this feature ships in a release, it will be easier to do a version comparison
+// on whether this command line flag is supported.
+func (tn *tenantNode) cockroachBinSupportsTenantScope(ctx context.Context, c cluster.Cluster) bool {
+	err := c.RunE(ctx, c.Node(tn.node), "./cockroach cert create-client --help | grep '\\--tenant-scope'")
+	return err == nil
 }
 
 func (tn *tenantNode) createTenantCert(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -94,13 +118,21 @@ func (tn *tenantNode) createTenantCert(ctx context.Context, t test.Test, c clust
 	c.Run(ctx, c.Node(tn.node), cmd)
 }
 
-func (tn *tenantNode) recreateClientCertsWithTenantScope(ctx context.Context, c cluster.Cluster) {
+func (tn *tenantNode) recreateClientCertsWithTenantScope(
+	ctx context.Context, c cluster.Cluster, otherIDs []int,
+) error {
+	tenantArgs := fmt.Sprintf("1,%d", tn.tenantID)
+	for _, id := range otherIDs {
+		tenantArgs = fmt.Sprintf("%s,%d", tenantArgs, id)
+	}
+
 	for _, user := range []security.SQLUsername{security.RootUserName(), security.TestUserName()} {
 		cmd := fmt.Sprintf(
-			"./cockroach cert create-client %s --certs-dir=certs --ca-key=certs/ca.key --tenant-scope 1,%d --overwrite",
-			user.Normalized(), tn.tenantID)
+			"./cockroach cert create-client %s --certs-dir=certs --ca-key=certs/ca.key --tenant-scope %s --overwrite",
+			user.Normalized(), tenantArgs)
 		c.Run(ctx, c.Node(tn.node), cmd)
 	}
+	return c.RefetchCertsFromNode(ctx, tn.node)
 }
 
 func (tn *tenantNode) stop(ctx context.Context, t test.Test, c cluster.Cluster) {
