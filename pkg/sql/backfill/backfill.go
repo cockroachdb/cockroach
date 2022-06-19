@@ -651,9 +651,11 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 // Close releases the resources used by the IndexBackfiller.
 func (ib *IndexBackfiller) Close(ctx context.Context) {
 	if ib.mon != nil {
-		ib.muBoundAccount.Lock()
-		ib.muBoundAccount.boundAccount.Close(ctx)
-		ib.muBoundAccount.Unlock()
+		func() {
+			ib.muBoundAccount.Lock()
+			defer ib.muBoundAccount.Unlock()
+			ib.muBoundAccount.boundAccount.Close(ctx)
+		}()
 		ib.mon.Stop(ctx)
 	}
 }
@@ -661,8 +663,8 @@ func (ib *IndexBackfiller) Close(ctx context.Context) {
 // GrowBoundAccount grows the mutex protected bound account backing the
 // index backfiller.
 func (ib *IndexBackfiller) GrowBoundAccount(ctx context.Context, growBy int64) error {
-	defer ib.muBoundAccount.Unlock()
 	ib.muBoundAccount.Lock()
+	defer ib.muBoundAccount.Unlock()
 	err := ib.muBoundAccount.boundAccount.Grow(ctx, growBy)
 	return err
 }
@@ -670,8 +672,8 @@ func (ib *IndexBackfiller) GrowBoundAccount(ctx context.Context, growBy int64) e
 // ShrinkBoundAccount shrinks the mutex protected bound account backing the
 // index backfiller.
 func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int64) {
-	defer ib.muBoundAccount.Unlock()
 	ib.muBoundAccount.Lock()
+	defer ib.muBoundAccount.Unlock()
 	ib.muBoundAccount.boundAccount.Shrink(ctx, shrinkBy)
 }
 
@@ -912,23 +914,24 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		buffer = buffer[:0]
 		// We lock the bound account for the duration of this method as it could
 		// attempt to Grow() it while encoding secondary indexes.
-		var memUsedDuringEncoding int64
-		ib.muBoundAccount.Lock()
-		if buffer, memUsedDuringEncoding, err = rowenc.EncodeSecondaryIndexes(
-			ctx,
-			ib.evalCtx.Codec,
-			tableDesc,
-			ib.indexesToEncode,
-			ib.colIdxMap,
-			ib.rowVals,
-			buffer,
-			false, /* includeEmpty */
-			&ib.muBoundAccount.boundAccount,
-		); err != nil {
-			ib.muBoundAccount.Unlock()
+		buffer, memUsedDuringEncoding, err := func() ([]rowenc.IndexEntry, int64, error) {
+			ib.muBoundAccount.Lock()
+			defer ib.muBoundAccount.Unlock()
+			return rowenc.EncodeSecondaryIndexes(
+				ctx,
+				ib.evalCtx.Codec,
+				tableDesc,
+				ib.indexesToEncode,
+				ib.colIdxMap,
+				ib.rowVals,
+				buffer,
+				false, /* includeEmpty */
+				&ib.muBoundAccount.boundAccount,
+			)
+		}()
+		if err != nil {
 			return nil, nil, 0, err
 		}
-		ib.muBoundAccount.Unlock()
 		memUsedPerChunk += memUsedDuringEncoding
 
 		// The memory monitor has already accounted for cap(entries). If the number
