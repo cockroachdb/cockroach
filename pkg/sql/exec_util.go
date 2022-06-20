@@ -3262,8 +3262,12 @@ func (m *sessionDataMutator) SetTroubleshootingModeEnabled(val bool) {
 	m.data.TroubleshootingMode = val
 }
 
-func (m *sessionDataMutator) SetTestingOptimizerRandomCostSeed(val int64) {
-	m.data.TestingOptimizerRandomCostSeed = val
+func (m *sessionDataMutator) SetTestingOptimizerRandomSeed(val int64) {
+	m.data.TestingOptimizerRandomSeed = val
+}
+
+func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
+	m.data.TestingOptimizerCostPerturbation = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

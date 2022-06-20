@@ -2166,21 +2166,49 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
-	`testing_optimizer_random_cost_seed`: {
-		GetStringVal: makeIntGetStringValFn(`testing_optimizer_random_cost_seed`),
+
+	// CockroachDB extension.
+	`testing_optimizer_random_seed`: {
+		GetStringVal: makeIntGetStringValFn(`testing_optimizer_random_seed`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			i, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err
 			}
-			m.SetTestingOptimizerRandomCostSeed(i)
+			m.SetTestingOptimizerRandomSeed(i)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) (string, error) {
-			return strconv.FormatInt(evalCtx.SessionData().TestingOptimizerRandomCostSeed, 10), nil
+			return strconv.FormatInt(evalCtx.SessionData().TestingOptimizerRandomSeed, 10), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return strconv.FormatInt(0, 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`testing_optimizer_cost_perturbation`: {
+		GetStringVal: makeFloatGetStringValFn(`testing_optimizer_cost_perturbation`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "testing_optimizer_cost_perturbation must be non-negative",
+				)
+			}
+			m.SetTestingOptimizerCostPerturbation(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatFloatAsPostgresSetting(
+				evalCtx.SessionData().TestingOptimizerCostPerturbation,
+			), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(0)
 		},
 	},
 }
