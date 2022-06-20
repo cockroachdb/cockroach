@@ -258,6 +258,11 @@ message LocalOnlySessionData {
   // perturb costs with an rng seeded to the given integer. This should only be
   // used in test scenarios and is very much a non-production setting.
   int64 testing_optimizer_random_cost_seed = 70;
+  // TestingOptimizerDisableRuleProbability is non-zero when the optimizer
+  // should randomly disable every non-essential transformation rule with the
+  // given probability. This should only be used in test scenarios and is very
+  // much a non-production setting.
+  double testing_optimizer_disable_rule_probability = 71;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

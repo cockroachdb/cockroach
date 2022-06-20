@@ -11,13 +11,16 @@
 package tests
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
@@ -34,6 +37,10 @@ func registerCostFuzz(r registry.Registry) {
 		Run:             runCostFuzz,
 		Skip:            "flaky test: https://github.com/cockroachdb/cockroach/issues/81717",
 	})
+}
+
+func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
+	runQueryComparison(ctx, t, c, &queryComparisonTest{name: "costfuzz", run: runCostFuzzQuery})
 }
 
 // runCostFuzzQuery executes the same query two times, once with normal costs

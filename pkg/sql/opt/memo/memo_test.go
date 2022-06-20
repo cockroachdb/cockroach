@@ -267,6 +267,18 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().CostScansWithDefaultColSize = false
 	notStale()
 
+	// Stale testing_optimizer_random_cost_seed.
+	evalCtx.SessionData().TestingOptimizerRandomCostSeed = 100
+	stale()
+	evalCtx.SessionData().TestingOptimizerRandomCostSeed = 0
+	notStale()
+
+	// Stale testing_optimizer_disable_rule_probability.
+	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 1
+	stale()
+	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 0
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

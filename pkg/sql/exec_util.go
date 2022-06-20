@@ -3226,6 +3226,10 @@ func (m *sessionDataMutator) SetTestingOptimizerRandomCostSeed(val int64) {
 	m.data.TestingOptimizerRandomCostSeed = val
 }
 
+func (m *sessionDataMutator) SetTestingOptimizerDisableRuleProbability(val float64) {
+	m.data.TestingOptimizerDisableRuleProbability = val
+}
+
 func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float64) {
 	m.data.TrigramSimilarityThreshold = val
 }

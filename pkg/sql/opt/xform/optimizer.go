@@ -136,6 +136,13 @@ func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	}
 	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation, o.rng)
 	o.coster = &o.defaultCoster
+	if evalCtx.SessionData().TestingOptimizerDisableRuleProbability != 0 {
+		// If non-zero, the setting TestingOptimizerDisableRuleProbability should
+		// override the equivalent testing knob. This is needed for use by the
+		// unoptimized-query-oracle roachtest.
+		evalCtx.TestingKnobs.DisableOptimizerRuleProbability =
+			evalCtx.SessionData().TestingOptimizerDisableRuleProbability
+	}
 	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
 		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
 	}
@@ -974,7 +981,7 @@ func (o *Optimizer) disableRules(probability float64) {
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
-		if o.rng.Float64() < probability && !essentialRules.Contains(int(i)) {
+		if rand.Float64() < probability && !essentialRules.Contains(int(i)) {
 			o.disabledRules.Add(int(i))
 		}
 	}
