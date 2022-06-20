@@ -3179,13 +3179,12 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause opt_as_tenant_clause
+| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_tenant_clause
   {
    $$.val = &tree.StreamIngestion{
      Targets: $2.targetList(),
      From: $7.stringOrPlaceholderOptList(),
-     AsOf: $8.asOfClause(),
-     AsTenant: $9.asTenantClause(),
+     AsTenant: $8.asTenantClause(),
    }
   }
 | RESTORE error // SHOW HELP: RESTORE

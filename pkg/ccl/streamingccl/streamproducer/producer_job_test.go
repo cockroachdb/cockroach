@@ -227,8 +227,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			expire := expirationTime(jr).Add(10 * time.Millisecond)
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				streamStatus, err = updateReplicationStreamProgress(
-					ctx, expire,
-					ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn)
+					ctx, expire, ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn)
 				return err
 			}))
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, streamStatus.StreamStatus)

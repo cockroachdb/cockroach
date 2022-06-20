@@ -10,6 +10,8 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
@@ -23,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -102,39 +106,63 @@ type streamIngestionResumer struct {
 	job *jobs.Job
 }
 
-func ingest(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	streamAddress streamingccl.StreamAddress,
-	oldTenantID roachpb.TenantID,
-	newTenantID roachpb.TenantID,
-	streamID streaming.StreamID,
-	startTime hlc.Timestamp,
-	progress jobspb.Progress,
-	ingestionJobID jobspb.JobID,
-) error {
+func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
+	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
+	progress := ingestionJob.Progress()
+	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
+
+	startTime := progress.GetStreamIngest().StartTime
+	// Start from the last checkpoint if it exists.
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		startTime = *h
+	}
+
+	// If there is an existing stream ID, reconnect to it.
+	streamID := streaming.StreamID(details.StreamID)
 	// Initialize a stream client and resolve topology.
 	client, err := streamclient.NewStreamClient(streamAddress)
 	if err != nil {
 		return err
 	}
 	ingestWithClient := func() error {
-		// TODO(dt): if there is an existing stream ID, reconnect to it.
+		ro := retry.Options{
+			InitialBackoff: 1 * time.Second,
+			Multiplier:     2,
+			MaxBackoff:     10 * time.Second,
+			MaxRetries:     5,
+		}
+		// Make sure the producer job is active before start the stream replication.
+		var status streampb.StreamReplicationStatus
+		for r := retry.Start(ro); r.Next(); {
+			status, err = client.Heartbeat(ctx, streamID, startTime)
+			if err != nil {
+				return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job error",
+					ingestionJob.ID())
+			}
+			if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+				break
+			}
+		}
+		if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
+			return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
+				"and in status %s", ingestionJob.ID(), status.StreamStatus)
+		}
+
 		topology, err := client.Plan(ctx, streamID)
 		if err != nil {
 			return err
 		}
 
-		// TODO(adityamaru): If the job is being resumed it is possible that it has
-		// check-pointed a resolved ts up to which all of its processors had ingested
-		// KVs. We can skip to ingesting after this resolved ts. Plumb the
-		// initialHighwatermark to the ingestion processor spec based on what we read
-		// from the job progress.
-		initialHighWater := startTime
-		if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-			initialHighWater = *h
+		// TODO(casper): update running status
+		if progress.GetStreamIngest().StartTime.Less(startTime) {
+			progress.GetStreamIngest().StartTime = startTime
+			if err := ingestionJob.SetProgress(ctx, nil, *progress.GetStreamIngest()); err != nil {
+				return errors.Wrap(err, "failed to update job progress")
+			}
 		}
 
+		log.Infof(ctx, "ingestion job %d resumes stream ingestion from start time %s",
+			ingestionJob.ID(), progress.GetStreamIngest().StartTime)
 		evalCtx := execCtx.ExtendedEvalContext()
 		dsp := execCtx.DistSQLPlanner()
 
@@ -145,13 +173,14 @@ func ingest(
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, initialHighWater, ingestionJobID, streamID, oldTenantID, newTenantID)
+			streamAddress, topology, sqlInstanceIDs, progress.GetStreamIngest().StartTime,
+			ingestionJob.ID(), streamID, details.TenantID, details.NewTenantID)
 		if err != nil {
 			return err
 		}
 
 		// Plan and run the DistSQL flow.
-		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJobID, planCtx, dsp, streamIngestionSpecs,
+		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJob.ID(), planCtx, dsp, streamIngestionSpecs,
 			streamIngestionFrontierSpec); err != nil {
 			return err
 		}
@@ -160,7 +189,7 @@ func ingest(
 		// processors shut down gracefully, i.e stopped ingesting any additional
 		// events from the replication stream. At this point it is safe to revert to
 		// the cutoff time to leave the cluster in a consistent state.
-		if err = revertToCutoverTimestamp(ctx, execCtx, ingestionJobID); err != nil {
+		if err = revertToCutoverTimestamp(ctx, execCtx, ingestionJob.ID()); err != nil {
 			return err
 		}
 		// Completes the producer job in the source cluster.
@@ -171,15 +200,22 @@ func ingest(
 
 // Resume is part of the jobs.Resumer interface.
 func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
-	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
 	// Start ingesting KVs from the replication stream.
-	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
 	// TODO(casper): retry stream ingestion with exponential
 	// backoff and finally pause on error.
-	return ingest(resumeCtx, p, streamAddress, details.TenantID, details.NewTenantID,
-		streaming.StreamID(details.StreamID), details.StartTime, s.job.Progress(), s.job.ID())
+	err := ingest(resumeCtx, p, s.job)
+	if err != nil {
+		log.Warningf(resumeCtx, "ingestion job failed (%v) but is being paused", err)
+		errorMessage := fmt.Sprintf("ingestion job failed (%v) but got paused", err)
+		return s.job.PauseRequested(resumeCtx, p.Txn(), func(ctx context.Context,
+			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+			progress.RunningStatus = errorMessage
+			return nil
+		}, errorMessage)
+	}
+	return nil
 }
 
 // revertToCutoverTimestamp reads the job progress for the cutover time and
