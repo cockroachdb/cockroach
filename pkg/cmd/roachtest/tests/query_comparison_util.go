@@ -331,9 +331,9 @@ func (h *queryComparisonHelper) logStatements() {
 	}
 }
 
-// logFailures logs all the queries and statements that were executed,
+// logVerboseOutput logs all the queries and statements that were executed,
 // as well as the output rows and EXPLAIN output.
-func (h *queryComparisonHelper) logFailures() {
+func (h *queryComparisonHelper) logVerboseOutput() {
 	for _, stmtOrExplain := range h.statementsAndExplains {
 		h.logFailure(stmtOrExplain.sql, stmtOrExplain.output)
 	}

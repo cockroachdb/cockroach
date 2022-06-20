@@ -3230,6 +3230,10 @@ func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
 	m.data.TestingOptimizerCostPerturbation = val
 }
 
+func (m *sessionDataMutator) SetTestingOptimizerDisableRuleProbability(val float64) {
+	m.data.TestingOptimizerDisableRuleProbability = val
+}
+
 func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float64) {
 	m.data.TrigramSimilarityThreshold = val
 }

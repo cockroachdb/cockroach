@@ -83,7 +83,7 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 		es := err2.Error()
 		if strings.Contains(es, "internal error") {
 			h.logStatements()
-			h.logFailures()
+			h.logVerboseOutput()
 			return h.makeError(err, "internal error while running perturbed statement")
 		}
 		// Otherwise, skip perturbed statements that fail with a non-internal
@@ -98,7 +98,7 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
 		// We have a mismatch in the perturbed vs control query outputs.
 		h.logStatements()
-		h.logFailures()
+		h.logVerboseOutput()
 		return h.makeError(errors.Newf(
 			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s\n",
 			diff, stmt,
