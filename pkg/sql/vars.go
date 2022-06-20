@@ -2059,12 +2059,39 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
+			if f < 0 {
+				return errors.New("testing_optimizer_cost_perturbation must be non-negative")
+			}
 			m.SetTestingOptimizerCostPerturbation(f)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatFloatAsPostgresSetting(
 				evalCtx.SessionData().TestingOptimizerCostPerturbation,
+			), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(0)
+		},
+	},
+
+	// CockroachDB extension.
+	`testing_optimizer_disable_rule_probability`: {
+		GetStringVal: makeFloatGetStringValFn(`testing_optimizer_disable_rule_probability`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 || f > 1 {
+				return errors.New("testing_optimizer_disable_rule_probability must be in the range [0.0,1.0]")
+			}
+			m.SetTestingOptimizerDisableRuleProbability(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(
+				evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
 			), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
