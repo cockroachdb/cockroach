@@ -12,7 +12,9 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,10 +29,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
+type queryComparisonTest struct {
+	name string
+	run  func(*gosql.DB, *sqlsmith.Smither, *rand.Rand, func(string)) error
+}
+
+func runQueryComparison(
+	ctx context.Context, t test.Test, c cluster.Cluster, qct *queryComparisonTest,
+) {
 	roundTimeout := 10 * time.Minute
-	// Run 10 minute iterations of costfuzz in a loop for about the entire test,
-	// giving 5 minutes at the end to allow the test to shut down cleanly.
+	// Run 10 minute iterations of query comparison in a loop for about the entire
+	// test, giving 5 minutes at the end to allow the test to shut down cleanly.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
 	defer cancel()
@@ -55,11 +64,10 @@ func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return
 		}
 
-		runOneRoundCostFuzz(ctx, i, roundTimeout, t, c)
-		// If this iteration of costfuzz was interrupted because the timeout of
-		// ctx has been reached, we want to cleanly exit from the test, without
-		// wiping out the cluster (if we tried that, we'd get an error because
-		// ctx is canceled).
+		runOneRoundQueryComparison(ctx, i, roundTimeout, t, c, qct)
+		// If this iteration was interrupted because the timeout of ctx has been
+		// reached, we want to cleanly exit from the test, without wiping out the
+		// cluster (if we tried that, we'd get an error because ctx is canceled).
 		if shouldExit() {
 			return
 		}
@@ -68,30 +76,35 @@ func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-// runOneRoundCostFuzz creates a random schema, inserts random data, and then
-// executes costfuzz queries until the roundTimeout is reached.
-func runOneRoundCostFuzz(
-	ctx context.Context, iter int, roundTimeout time.Duration, t test.Test, c cluster.Cluster,
+// runOneRoundQueryComparison creates a random schema, inserts random data, and
+// then executes queries until the roundTimeout is reached.
+func runOneRoundQueryComparison(
+	ctx context.Context,
+	iter int,
+	roundTimeout time.Duration,
+	t test.Test,
+	c cluster.Cluster,
+	qct *queryComparisonTest,
 ) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a final error or panic.
-	costFuzzLogPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("costfuzz%03d.log", iter))
-	costFuzzLog, err := os.Create(costFuzzLogPath)
+	logPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("%s%03d.log", qct.name, iter))
+	log, err := os.Create(logPath)
 	if err != nil {
-		t.Fatalf("could not create costfuzz.log: %v", err)
+		t.Fatalf("could not create %s.log: %v", qct.name, err)
 	}
-	defer costFuzzLog.Close()
+	defer log.Close()
 	logStmt := func(stmt string) {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			return
 		}
-		fmt.Fprint(costFuzzLog, stmt)
+		fmt.Fprint(log, stmt)
 		if !strings.HasSuffix(stmt, ";") {
-			fmt.Fprint(costFuzzLog, ";")
+			fmt.Fprint(log, ";")
 		}
-		fmt.Fprint(costFuzzLog, "\n\n")
+		fmt.Fprint(log, "\n\n")
 	}
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -137,7 +150,7 @@ func runOneRoundCostFuzz(
 	}
 	defer smither.Close()
 
-	t.Status("running costfuzz")
+	t.Status("running ", qct.name)
 	until := time.After(roundTimeout)
 	done := ctx.Done()
 	for i := 1; ; i++ {
@@ -150,7 +163,7 @@ func runOneRoundCostFuzz(
 		}
 
 		if i%1000 == 0 {
-			t.Status("running costfuzz: ", i, " statements completed")
+			t.Status("running ", qct.name, ": ", i, " statements completed")
 		}
 
 		// Run 1000 mutations first so that the tables have rows. Run a mutation for
@@ -161,7 +174,7 @@ func runOneRoundCostFuzz(
 			continue
 		}
 
-		if err := runCostFuzzQuery(conn, smither, rnd, logStmt); err != nil {
+		if err := qct.run(conn, smither, rnd, logStmt); err != nil {
 			t.Fatal(err)
 		}
 	}

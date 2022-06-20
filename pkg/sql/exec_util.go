@@ -3222,8 +3222,12 @@ func (m *sessionDataMutator) SetShowPrimaryKeyConstraintOnNotVisibleColumns(val 
 	m.data.ShowPrimaryKeyConstraintOnNotVisibleColumns = val
 }
 
-func (m *sessionDataMutator) SetTestingOptimizerRandomCostSeed(val int64) {
-	m.data.TestingOptimizerRandomCostSeed = val
+func (m *sessionDataMutator) SetTestingOptimizerRandomSeed(val int64) {
+	m.data.TestingOptimizerRandomSeed = val
+}
+
+func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
+	m.data.TestingOptimizerCostPerturbation = val
 }
 
 func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float64) {

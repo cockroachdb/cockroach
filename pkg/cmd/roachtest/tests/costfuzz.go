@@ -11,13 +11,16 @@
 package tests
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
@@ -36,6 +39,10 @@ func registerCostFuzz(r registry.Registry) {
 	})
 }
 
+func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
+	runQueryComparison(ctx, t, c, &queryComparisonTest{name: "costfuzz", run: runCostFuzzQuery})
+}
+
 // runCostFuzzQuery executes the same query two times, once with normal costs
 // and once with randomly perturbed costs. If the results of the two executions
 // are not equal an error is returned.
@@ -51,8 +58,25 @@ func runCostFuzzQuery(
 
 	stmt := smither.Generate()
 
+	// Keep track of each statement that is executed so we can log them all later.
+	var statements []string
+	execStmt := func(stmt string) error {
+		statements = append(statements, stmt)
+		_, err := conn.Exec(stmt)
+		return err
+	}
+	runQuery := func(stmt string) (*gosql.Rows, error) {
+		statements = append(statements, stmt)
+		return conn.Query(stmt)
+	}
+	logStatements := func() {
+		for _, stmt := range statements {
+			logStmt(stmt)
+		}
+	}
+
 	// First, run the statement without cost perturbation.
-	rows, err := conn.Query(stmt)
+	rows, err := runQuery(stmt)
 	if err != nil {
 		// Skip statements that fail with an error.
 		//nolint:returnerrcheck
@@ -66,23 +90,27 @@ func runCostFuzzQuery(
 		return nil
 	}
 
-	seedStmt := fmt.Sprintf("SET testing_optimizer_random_cost_seed = %d", rnd.Int63())
-	if _, err := conn.Exec(seedStmt); err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
+	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
+	if err := execStmt(seedStmt); err != nil {
+		logStatements()
+		return errors.Wrap(err, "failed to set random seed")
+	}
+	// Perturb costs such that an expression with cost c will be randomly assigned
+	// a new cost in the range [0, 2*c).
+	perturbCostsStmt := "SET testing_optimizer_cost_perturbation = 1.0"
+	if err := execStmt(perturbCostsStmt); err != nil {
+		logStatements()
 		return errors.Wrap(err, "failed to perturb costs")
 	}
 
 	// Then, rerun the statement with cost perturbation.
-	rows2, err := conn.Query(stmt)
+	rows2, err := runQuery(stmt)
 	if err != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
 		es := err.Error()
 		if strings.Contains(es, "internal error") {
-			logStmt(stmt)
-			logStmt(seedStmt)
-			logStmt(stmt)
+			logStatements()
 			return errors.Wrap(err, "internal error while running perturbed statement")
 		}
 		// Otherwise, skip perturbed statements that fail with a non-internal
@@ -98,18 +126,12 @@ func runCostFuzzQuery(
 	// If we've gotten this far, we should be able to print the results of the
 	// perturbed statement, so consider it a test failure if we cannot.
 	if err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
+		logStatements()
 		return errors.Wrap(err, "error while printing perturbed statement results")
 	}
 	if diff := unsortedMatricesDiff(unperturbedRows, perturbedRows); diff != "" {
 		// We have a mismatch in the perturbed vs non-perturbed query outputs.
-		// Output the real plan and the perturbed plan, along with the seed, so
-		// that the perturbed query is reproducible.
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
+		logStatements()
 		return errors.Newf(
 			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s",
 			diff, stmt,
@@ -122,12 +144,14 @@ func runCostFuzzQuery(
 	// EXCEPT ALL the table contents. But this might be very slow.
 
 	// Finally, disable cost perturbation for the next statement.
-	resetSeedStmt := "RESET testing_optimizer_random_cost_seed"
-	if _, err := conn.Exec(resetSeedStmt); err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
-		logStmt(resetSeedStmt)
+	resetSeedStmt := "RESET testing_optimizer_random_seed"
+	if err := execStmt(resetSeedStmt); err != nil {
+		logStatements()
+		return errors.Wrap(err, "failed to reset random seed")
+	}
+	resetPerturbCostsStmt := "RESET testing_optimizer_cost_perturbation"
+	if err := execStmt(resetPerturbCostsStmt); err != nil {
+		logStatements()
 		return errors.Wrap(err, "failed to disable cost perturbation")
 	}
 	return nil

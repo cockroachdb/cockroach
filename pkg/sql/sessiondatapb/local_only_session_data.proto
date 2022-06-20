@@ -254,10 +254,15 @@ message LocalOnlySessionData {
   // CONSTRAINTS and pg_catalog.pg_constraint will include primary key
   // constraints that only include hidden columns.
   bool show_primary_key_constraint_on_not_visible_columns = 69;
-  // TestingOptimizerRandomCostSeed is non-zero when the coster should randomly
-  // perturb costs with an rng seeded to the given integer. This should only be
-  // used in test scenarios and is very much a non-production setting.
-  int64 testing_optimizer_random_cost_seed = 70;
+  // TestingOptimizerRandomSeed is non-zero when we are testing the optimizer by
+  // randomly perturbing costs or disabling rules. This will initialize a rng
+  // seeded to the given integer. This should only be used in test scenarios and
+  // is very much a non-production setting.
+  int64 testing_optimizer_random_seed = 70;
+  // TestingOptimizerCostPerturbation is non-zero when the coster should
+  // randomly perturb costs to produce a non-optimal query plan. This should
+  // only be used in test scenarios and is very much a non-production setting.
+  double testing_optimizer_cost_perturbation = 71;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
