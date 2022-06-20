@@ -2054,6 +2054,27 @@ var varGen = map[string]sessionVar{
 			return formatFloatAsPostgresSetting(0)
 		},
 	},
+
+	// CockroachDB extension.
+	`testing_optimizer_disable_rule_probability`: {
+		GetStringVal: makeFloatGetStringValFn(`testing_optimizer_disable_rule_probability`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			m.SetTestingOptimizerDisableRuleProbability(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(
+				evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+			), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(0)
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."

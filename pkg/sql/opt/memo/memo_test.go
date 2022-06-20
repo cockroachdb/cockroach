@@ -279,6 +279,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().TestingOptimizerCostPerturbation = 0
 	notStale()
 
+	// Stale testing_optimizer_disable_rule_probability.
+	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 1
+	stale()
+	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 0
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()

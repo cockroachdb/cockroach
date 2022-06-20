@@ -263,6 +263,11 @@ message LocalOnlySessionData {
   // randomly perturb costs to produce a non-optimal query plan. This should
   // only be used in test scenarios and is very much a non-production setting.
   double testing_optimizer_cost_perturbation = 71;
+  // TestingOptimizerDisableRuleProbability is non-zero when the optimizer
+  // should randomly disable every non-essential transformation rule with the
+  // given probability. This should only be used in test scenarios and is very
+  // much a non-production setting.
+  double testing_optimizer_disable_rule_probability = 72;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

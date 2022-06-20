@@ -137,6 +137,7 @@ go_library(
         "tpchvec.go",
         "ts_util.go",
         "typeorm.go",
+        "unoptimized_query_oracle.go",
         "util.go",
         "util_disk_usage.go",
         "util_if_local.go",

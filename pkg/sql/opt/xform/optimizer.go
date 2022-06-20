@@ -136,6 +136,12 @@ func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 		// costfuzz roachtest.
 		evalCtx.TestingKnobs.OptimizerCostPerturbation = perturbation
 	}
+	if probability := evalCtx.SessionData().TestingOptimizerDisableRuleProbability; probability != 0 {
+		// If non-zero, the setting TestingOptimizerDisableRuleProbability should
+		// override the equivalent testing knob. This is needed for use by the
+		// unoptimized-query-oracle roachtest.
+		evalCtx.TestingKnobs.DisableOptimizerRuleProbability = probability
+	}
 	if o.rng == nil && (evalCtx.TestingKnobs.OptimizerCostPerturbation != 0 ||
 		evalCtx.TestingKnobs.DisableOptimizerRuleProbability != 0) {
 		o.rng, _ = randutil.NewPseudoRand()
