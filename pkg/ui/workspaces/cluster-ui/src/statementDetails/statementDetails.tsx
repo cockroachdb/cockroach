@@ -36,6 +36,8 @@ import {
   appAttr,
   appNamesAttr,
   RenderCount,
+  TimestampToMoment,
+  DATE_FORMAT_24_UTC,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -56,7 +58,6 @@ import styles from "./statementDetails.module.scss";
 import { commonStyles } from "src/common";
 import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store";
-import moment from "moment";
 import { StatementDetailsRequest } from "src/api/statementsApi";
 import {
   TimeScale,
@@ -609,9 +610,8 @@ export class StatementDetails extends React.Component<
     const duration = (v: number) => Duration(v * 1e9);
     const lastExec =
       stats.last_exec_timestamp &&
-      moment(stats.last_exec_timestamp.seconds.low * 1e3).format(
-        "MMM DD, YYYY HH:MM",
-      );
+      TimestampToMoment(stats.last_exec_timestamp).format(DATE_FORMAT_24_UTC);
+
     const statementSampled = stats.exec_stats.count > Long.fromNumber(0);
     const unavailableTooltip = !statementSampled && (
       <Tooltip
