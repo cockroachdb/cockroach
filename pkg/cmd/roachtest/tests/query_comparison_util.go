@@ -28,12 +28,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
-func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
+type queryComparisonTest struct {
+	name string
+	run  func(*sqlsmith.Smither, *rand.Rand, queryComparisonHelper) error
+}
+
+func runQueryComparison(
+	ctx context.Context, t test.Test, c cluster.Cluster, qct *queryComparisonTest,
+) {
 	roundTimeout := 10 * time.Minute
-	// Run 10 minute iterations of costfuzz in a loop for about the entire test,
-	// giving 5 minutes at the end to allow the test to shut down cleanly.
+	// Run 10 minute iterations of query comparison in a loop for about the entire
+	// test, giving 5 minutes at the end to allow the test to shut down cleanly.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
 	defer cancel()
@@ -58,11 +66,10 @@ func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return
 		}
 
-		runOneRoundCostFuzz(ctx, i, roundTimeout, t, c)
-		// If this iteration of costfuzz was interrupted because the timeout of
-		// ctx has been reached, we want to cleanly exit from the test, without
-		// wiping out the cluster (if we tried that, we'd get an error because
-		// ctx is canceled).
+		runOneRoundQueryComparison(ctx, i, roundTimeout, t, c, qct)
+		// If this iteration was interrupted because the timeout of ctx has been
+		// reached, we want to cleanly exit from the test, without wiping out the
+		// cluster (if we tried that, we'd get an error because ctx is canceled).
 		if shouldExit() {
 			return
 		}
@@ -71,38 +78,42 @@ func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-// runOneRoundCostFuzz creates a random schema, inserts random data, and then
-// executes costfuzz queries until the roundTimeout is reached.
-func runOneRoundCostFuzz(
-	ctx context.Context, iter int, roundTimeout time.Duration, t test.Test, c cluster.Cluster,
+// runOneRoundQueryComparison creates a random schema, inserts random data, and
+// then executes queries until the roundTimeout is reached.
+func runOneRoundQueryComparison(
+	ctx context.Context,
+	iter int,
+	roundTimeout time.Duration,
+	t test.Test,
+	c cluster.Cluster,
+	qct *queryComparisonTest,
 ) {
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a final error or panic.
-	costFuzzLogPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("costfuzz%03d.log", iter))
-	costFuzzLog, err := os.Create(costFuzzLogPath)
+	logPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("%s%03d.log", qct.name, iter))
+	log, err := os.Create(logPath)
 	if err != nil {
-		t.Fatalf("could not create costfuzz%03d.log: %v", iter, err)
+		t.Fatalf("could not create %s%03d.log: %v", qct.name, iter, err)
 	}
-	defer costFuzzLog.Close()
+	defer log.Close()
 	logStmt := func(stmt string) {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			return
 		}
-		fmt.Fprint(costFuzzLog, stmt)
+		fmt.Fprint(log, stmt)
 		if !strings.HasSuffix(stmt, ";") {
-			fmt.Fprint(costFuzzLog, ";")
+			fmt.Fprint(log, ";")
 		}
 		// Blank lines are necessary for reduce -costfuzz to function correctly.
-		fmt.Fprint(costFuzzLog, "\n\n")
+		fmt.Fprint(log, "\n\n")
 	}
 	printStmt := func(stmt string) {
 		stmt = strings.TrimSpace(stmt)
 		if stmt == "" {
 			return
 		}
-		fmt.Fprint(costFuzzLog, stmt)
 		t.L().Printf(stmt)
 		if !strings.HasSuffix(stmt, ";") {
 			t.L().Printf(";")
@@ -110,19 +121,19 @@ func runOneRoundCostFuzz(
 		t.L().Printf("\n\n")
 	}
 
-	costFuzzFailureLogPath := filepath.Join(
-		t.ArtifactsDir(), fmt.Sprintf("costfuzz%03d.failure.log", iter),
+	failureLogPath := filepath.Join(
+		t.ArtifactsDir(), fmt.Sprintf("%s%03d.failure.log", qct.name, iter),
 	)
-	costFuzzFailureLog, err := os.Create(costFuzzFailureLogPath)
+	failureLog, err := os.Create(failureLogPath)
 	if err != nil {
-		t.Fatalf("could not create costfuzz%03d.failure.log: %v", iter, err)
+		t.Fatalf("could not create %s%03d.failure.log: %v", qct.name, iter, err)
 	}
-	defer costFuzzFailureLog.Close()
+	defer failureLog.Close()
 	logFailure := func(stmt string, rows [][]string) {
-		fmt.Fprint(costFuzzFailureLog, stmt)
-		fmt.Fprint(costFuzzFailureLog, "\n----\n")
-		fmt.Fprint(costFuzzFailureLog, sqlutils.MatrixToStr(rows))
-		fmt.Fprint(costFuzzFailureLog, "\n")
+		fmt.Fprint(failureLog, stmt)
+		fmt.Fprint(failureLog, "\n----\n")
+		fmt.Fprint(failureLog, sqlutils.MatrixToStr(rows))
+		fmt.Fprint(failureLog, "\n")
 	}
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -179,7 +190,7 @@ func runOneRoundCostFuzz(
 	}
 	defer smither.Close()
 
-	t.Status("running costfuzz")
+	t.Status("running ", qct.name)
 	until := time.After(roundTimeout)
 	done := ctx.Done()
 	for i := 1; ; i++ {
@@ -194,7 +205,7 @@ func runOneRoundCostFuzz(
 		const numInitialMutations = 1000
 
 		if i == numInitialMutations {
-			t.Status("running costfuzz: ", i, " initial mutations completed")
+			t.Status("running ", qct.name, ": ", i, " initial mutations completed")
 			// Initialize a new mutating smither that generates INSERT, UPDATE and
 			// DELETE statements with the MutationsOnly option.
 			mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */)
@@ -203,7 +214,7 @@ func runOneRoundCostFuzz(
 
 		if i%1000 == 0 {
 			if i != numInitialMutations {
-				t.Status("running costfuzz: ", i, " statements completed")
+				t.Status("running ", qct.name, ": ", i, " statements completed")
 			}
 		}
 
@@ -215,7 +226,14 @@ func runOneRoundCostFuzz(
 			continue
 		}
 
-		if err := runCostFuzzQuery(conn, smither, rnd, logStmt, logFailure, printStmt, i); err != nil {
+		h := queryComparisonHelper{
+			conn:       conn,
+			logStmt:    logStmt,
+			logFailure: logFailure,
+			printStmt:  printStmt,
+			stmtNo:     i,
+		}
+		if err := qct.run(smither, rnd, h); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -241,4 +259,88 @@ func newMutatingSmither(
 		t.Fatal(err)
 	}
 	return mutatingSmither
+}
+
+// sqlAndOutput holds a SQL statement and its output.
+type sqlAndOutput struct {
+	sql    string
+	output [][]string
+}
+
+// queryComparisonHelper is used to execute statements in query comparison
+// tests. It keeps track of each statement that is executed so they can be
+// logged in case of failure.
+type queryComparisonHelper struct {
+	conn       *gosql.DB
+	logStmt    func(string)
+	logFailure func(string, [][]string)
+	printStmt  func(string)
+	stmtNo     int
+
+	statements            []string
+	statementsAndExplains []sqlAndOutput
+}
+
+// runQuery runs the given query and returns the output. As a side effect, it
+// also saves the query, the query plan, and the output of running the query so
+// they can be logged in case of failure.
+func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
+	runQueryImpl := func(stmt string) ([][]string, error) {
+		rows, err := h.conn.Query(stmt)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		return sqlutils.RowsToStrMatrix(rows)
+	}
+
+	// First use EXPLAIN to try to get the query plan. This is best-effort, and
+	// only for the purpose of debugging, so ignore any errors.
+	explainStmt := "EXPLAIN (OPT, VERBOSE) " + stmt
+	explainRows, err := runQueryImpl(explainStmt)
+	if err == nil {
+		h.statementsAndExplains = append(
+			h.statementsAndExplains, sqlAndOutput{sql: explainStmt, output: explainRows},
+		)
+	}
+
+	// Now run the query and save the output.
+	h.statements = append(h.statements, stmt)
+	rows, err := runQueryImpl(stmt)
+	if err != nil {
+		return nil, err
+	}
+	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt, output: rows})
+	return rows, nil
+}
+
+// execStmt executes the given statement. As a side effect, it also saves the
+// statement so it can be logged in case of failure.
+func (h *queryComparisonHelper) execStmt(stmt string) error {
+	h.statements = append(h.statements, stmt)
+	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt})
+	_, err := h.conn.Exec(stmt)
+	return err
+}
+
+// logStatements logs all the queries and statements that were executed.
+func (h *queryComparisonHelper) logStatements() {
+	for _, stmt := range h.statements {
+		h.logStmt(stmt)
+		h.printStmt(stmt)
+	}
+}
+
+// logFailures logs all the queries and statements that were executed,
+// as well as the output rows and EXPLAIN output.
+func (h *queryComparisonHelper) logFailures() {
+	for _, stmtOrExplain := range h.statementsAndExplains {
+		h.logFailure(stmtOrExplain.sql, stmtOrExplain.output)
+	}
+}
+
+// makeError wraps the error with the given message and includes the number of
+// statements run so far.
+func (h *queryComparisonHelper) makeError(err error, msg string) error {
+	return errors.Wrapf(err, "%s. %d statements run", msg, h.stmtNo)
 }

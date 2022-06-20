@@ -58,7 +58,7 @@ var (
 	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
 	tlp             = flags.Bool("tlp", false, "last two statements in file are equivalent queries returning different results")
-	costfuzz        = flags.Bool("costfuzz", false, "last three statements in file are two identical queries separated by a setting change")
+	costfuzz        = flags.Bool("costfuzz", false, "last four statements in file are two identical queries separated by settings changes")
 )
 
 const description = `
@@ -73,8 +73,8 @@ produce different results. (Note that statements in the file must be
 separated by blank lines for -tlp to function correctly.)
 
 Another alternative mode of operation is enabled by the -costfuzz
-option: in which case the last three statements in the file must be two
-identical queries separated by a setting change, which produce different
+option: in which case the last four statements in the file must be two
+identical queries separated by two settings changes, which produce different
 results. (Note that statements in the file must be separated by blank
 lines for -costfuzz to function correctly.)
 
@@ -183,17 +183,18 @@ SELECT CASE
   END;`, unpartitioned, partitioned, tlpFailureError)
 	}
 
-	// If costfuzz mode is requested, then we remove the last three statements
+	// If costfuzz mode is requested, then we remove the last four statements
 	// from the input (statements are expected to be delimited by empty lines)
 	// which we then save for the costfuzz check.
 	if costfuzz {
 		lines := strings.Split(string(input), "\n")
 		lineIdx := len(lines) - 1
 		perturb, lineIdx := findPreviousQuery(lines, lineIdx)
-		setting, lineIdx := findPreviousQuery(lines, lineIdx)
+		setting1, lineIdx := findPreviousQuery(lines, lineIdx)
+		setting2, lineIdx := findPreviousQuery(lines, lineIdx)
 		control, lineIdx := findPreviousQuery(lines, lineIdx)
 		inputString = strings.Join(lines[:lineIdx], "\n")
-		// We make tlpCostfuzzCheck the original three control / setting / perturbed
+		// We make tlpCostfuzzCheck the original control / settings / perturbed
 		// statements, surrounded by sentinel statements.
 		tlpCostfuzzCheck = fmt.Sprintf(`
 SELECT '%[1]s';
@@ -209,7 +210,11 @@ SELECT '%[1]s';
 %[4]s;
 
 SELECT '%[1]s';
-`, costfuzzSep, control, setting, perturb)
+
+%[5]s;
+
+SELECT '%[1]s';
+`, costfuzzSep, control, setting1, setting2, perturb)
 	}
 
 	// Pretty print the input so the file size comparison is useful.
@@ -265,10 +270,10 @@ SELECT '%[1]s';
 		}
 		if costfuzz {
 			parts := bytes.Split(out, []byte(costfuzzSep))
-			if len(parts) != 5 {
+			if len(parts) != 6 {
 				if verbose {
 					logOriginalHint = func() {
-						logger.Printf("could not divide output into 5 parts")
+						logger.Printf("could not divide output into 6 parts:\n%s", string(out))
 					}
 				}
 				return false, logOriginalHint
@@ -278,7 +283,7 @@ SELECT '%[1]s';
 					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[3]))
 				}
 			}
-			return !bytes.Equal(parts[1], parts[3]), logOriginalHint
+			return !bytes.Equal(parts[1], parts[4]), logOriginalHint
 		}
 		if verbose {
 			logOriginalHint = func() {

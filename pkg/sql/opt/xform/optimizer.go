@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -125,14 +126,19 @@ func (o *Optimizer) Init(evalCtx *eval.Context, catalog cat.Catalog) {
 	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
-	seed := evalCtx.SessionData().TestingOptimizerRandomCostSeed
-	if seed != 0 {
+
+	if seed := evalCtx.SessionData().TestingOptimizerRandomSeed; seed != 0 {
 		o.rng = rand.New(rand.NewSource(seed))
-		// If we've been initialized with a random seed but not an explicit
-		// perturbation value, use the max perturbation. This is used for tests
-		// that set the seed with testing_optimizer_random_cost_seed, and will allow
-		// the coster to hop directly into its random costing mode.
-		evalCtx.TestingKnobs.OptimizerCostPerturbation = 1.0
+	}
+	if perturbation := evalCtx.SessionData().TestingOptimizerCostPerturbation; perturbation != 0 {
+		// If non-zero, the setting TestingOptimizerCostPerturbation should
+		// override the equivalent testing knob. This is needed for use by the
+		// costfuzz roachtest.
+		evalCtx.TestingKnobs.OptimizerCostPerturbation = perturbation
+	}
+	if o.rng == nil && (evalCtx.TestingKnobs.OptimizerCostPerturbation != 0 ||
+		evalCtx.TestingKnobs.DisableOptimizerRuleProbability != 0) {
+		o.rng, _ = randutil.NewPseudoRand()
 	}
 	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation, o.rng)
 	o.coster = &o.defaultCoster
