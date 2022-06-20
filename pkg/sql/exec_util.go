@@ -3270,6 +3270,10 @@ func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
 	m.data.TestingOptimizerCostPerturbation = val
 }
 
+func (m *sessionDataMutator) SetTestingOptimizerDisableRuleProbability(val float64) {
+	m.data.TestingOptimizerDisableRuleProbability = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
