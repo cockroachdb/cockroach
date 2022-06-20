@@ -119,6 +119,7 @@ func RegisterTests(r registry.Registry) {
 	registerTPCE(r)
 	registerTPCHConcurrency(r)
 	registerTPCHVec(r)
+	registerUnoptimizedQueryOracle(r)
 	registerKVBench(r)
 	registerTypeORM(r)
 	registerLoadSplits(r)
