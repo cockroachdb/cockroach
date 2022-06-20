@@ -144,6 +144,47 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			},
 		},
 		{
+			name: "gc-able data before lease start",
+			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
+				// Set up the following scenario :
+				//      gc threshold < pts record timestamp < lease start < pts record read at
+				// AND  pts record timestamp + gcttl < lease start
+				//
+				// We're simulating a protection record being read within the
+				// current lease interval, with a protection timestamp before
+				// the current lease start time but larger than the replica's gc
+				// threshold (i.e. the pts record applies to the replica).
+				// Finally, we want to make sure that the newly computed gc
+				// threshold is still less than the current lease start time --
+				// all of this serving as a regression test for #82954. In this
+				// scenario, we should still be able to GC data.
+
+				ts := r.store.Clock().Now()
+				tsMinus60s := ts.Add(-60*time.Second.Nanoseconds(), 0)
+				tsMinus30s := ts.Add(-30*time.Second.Nanoseconds(), 0)
+				tsPlus30s := ts.Add(5*time.Second.Nanoseconds(), 0)
+				const gcTTLSec = 10
+
+				mp.asOf = tsPlus30s
+				mp.protections = append(mp.protections, manualPTSReaderProtection{
+					sp:                   roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey},
+					protectionTimestamps: []hlc.Timestamp{tsMinus30s},
+				})
+				r.mu.Lock()
+				r.mu.state.GCThreshold = &tsMinus60s
+				r.mu.state.Lease.Start = ts.UnsafeToClockTimestamp()
+				r.mu.Unlock()
+
+				canGC, readAt, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(gcTTLSec))
+				require.NoError(t, err)
+				require.True(t, canGC)
+				require.Equal(t, tsPlus30s, readAt)
+				require.Equal(t, oldThreshold, tsMinus60s)
+				require.True(t, oldThreshold.Less(newThreshold))
+				require.Equal(t, tsMinus30s.Prev().Add(gcTTLSec*time.Second.Nanoseconds(), 0), gcTimestamp)
+			},
+		},
+		{
 			name: "earliest timestamp is picked when multiple records exist",
 			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
 				ts1 := r.store.Clock().Now().Add(-11*time.Second.Nanoseconds(), 0)
