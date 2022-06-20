@@ -11,15 +11,16 @@
 package tests
 
 import (
-	gosql "database/sql"
+	"context"
 	"fmt"
 	"math/rand"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,18 +37,14 @@ func registerCostFuzz(r registry.Registry) {
 	})
 }
 
+func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
+	runQueryComparison(ctx, t, c, &queryComparisonTest{name: "costfuzz", run: runCostFuzzQuery})
+}
+
 // runCostFuzzQuery executes the same query two times, once with normal costs
 // and once with randomly perturbed costs. If the results of the two executions
 // are not equal an error is returned.
-func runCostFuzzQuery(
-	conn *gosql.DB,
-	smither *sqlsmith.Smither,
-	rnd *rand.Rand,
-	logStmt func(string),
-	logFailure func(string, [][]string),
-	printStmt func(string),
-	stmtNo int,
-) error {
+func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparisonHelper) error {
 	// Ignore panics from Generate.
 	defer func() {
 		if r := recover(); r != nil {
@@ -55,66 +52,39 @@ func runCostFuzzQuery(
 		}
 	}()
 
-	runQuery := func(stmt string) ([][]string, error) {
-		rows, err := conn.Query(stmt)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-		return sqlutils.RowsToStrMatrix(rows)
-	}
-
 	stmt := smither.Generate()
-	explainStmt := "EXPLAIN (OPT, VERBOSE) " + stmt
 
-	// First, explain and run the statement without cost perturbation.
-	controlPlan, err := runQuery(explainStmt)
-	if err != nil {
-		// Skip statements that fail to explain with an error.
-		//nolint:returnerrcheck
-		return nil
-	}
-
-	controlRows, err := runQuery(stmt)
+	// First, run the statement without cost perturbation.
+	controlRows, err := h.runQuery(stmt)
 	if err != nil {
 		// Skip statements that fail with an error.
 		//nolint:returnerrcheck
 		return nil
 	}
 
-	seedStmt := fmt.Sprintf("SET testing_optimizer_random_cost_seed = %d", rnd.Int63())
-	if _, err := conn.Exec(seedStmt); err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
-		printStmt(stmt)
-		printStmt(seedStmt)
-		return errors.Wrapf(err, "failed to perturb costs. %d statements run", stmtNo)
+	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
+	if err := h.execStmt(seedStmt); err != nil {
+		h.logStatements()
+		return h.makeError(err, "failed to set random seed")
+	}
+	// Perturb costs such that an expression with cost c will be randomly assigned
+	// a new cost in the range [0, 2*c).
+	perturbCostsStmt := "SET testing_optimizer_cost_perturbation = 1.0"
+	if err := h.execStmt(perturbCostsStmt); err != nil {
+		h.logStatements()
+		return h.makeError(err, "failed to perturb costs")
 	}
 
-	// Then, re-explain and rerun the statement with cost perturbation.
-	perturbPlan, err := runQuery(explainStmt)
-	if err != nil {
-		// Skip statements that fail to explain with an error.
-		//nolint:returnerrcheck
-		return nil
-	}
-
-	perturbRows, err2 := runQuery(stmt)
+	// Then, rerun the statement with cost perturbation.
+	perturbRows, err2 := h.runQuery(stmt)
 	if err2 != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
 		es := err2.Error()
 		if strings.Contains(es, "internal error") {
-			logStmt(stmt)
-			logStmt(seedStmt)
-			logStmt(stmt)
-			logFailure(explainStmt, controlPlan)
-			logFailure(stmt, controlRows)
-			logFailure(seedStmt, nil)
-			logFailure(explainStmt, perturbPlan)
-			printStmt(seedStmt)
-			printStmt(stmt)
-			return errors.Wrapf(err2, "internal error while running perturbed statement. %d statements run", stmtNo)
+			h.logStatements()
+			h.logFailures()
+			return h.makeError(err, "internal error while running perturbed statement")
 		}
 		// Otherwise, skip perturbed statements that fail with a non-internal
 		// error. This could happen if the statement contains bad arguments to a
@@ -127,22 +97,12 @@ func runCostFuzzQuery(
 
 	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
 		// We have a mismatch in the perturbed vs control query outputs.
-		// Output the control plan and the perturbed plan, along with the seed, so
-		// that the perturbed query is reproducible.
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
-		logFailure(explainStmt, controlPlan)
-		logFailure(stmt, controlRows)
-		logFailure(seedStmt, nil)
-		logFailure(explainStmt, perturbPlan)
-		logFailure(stmt, perturbRows)
-		printStmt(seedStmt)
-		printStmt(stmt)
-		return errors.Newf(
-			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s\n%d statements run",
-			diff, stmt, stmtNo,
-		)
+		h.logStatements()
+		h.logFailures()
+		return h.makeError(errors.Newf(
+			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s\n",
+			diff, stmt,
+		), "")
 	}
 
 	// TODO(michae2): If we run into the "-0 flake" described in PR #79551 then
@@ -151,13 +111,15 @@ func runCostFuzzQuery(
 	// EXCEPT ALL the table contents. But this might be very slow.
 
 	// Finally, disable cost perturbation for the next statement.
-	resetSeedStmt := "RESET testing_optimizer_random_cost_seed"
-	if _, err := conn.Exec(resetSeedStmt); err != nil {
-		logStmt(stmt)
-		logStmt(seedStmt)
-		logStmt(stmt)
-		logStmt(resetSeedStmt)
-		return errors.Wrapf(err, "failed to disable cost perturbation. %d statements run", stmtNo)
+	resetSeedStmt := "RESET testing_optimizer_random_seed"
+	if err := h.execStmt(resetSeedStmt); err != nil {
+		h.logStatements()
+		return h.makeError(err, "failed to reset random seed")
+	}
+	resetPerturbCostsStmt := "RESET testing_optimizer_cost_perturbation"
+	if err := h.execStmt(resetPerturbCostsStmt); err != nil {
+		h.logStatements()
+		return h.makeError(err, "failed to disable cost perturbation")
 	}
 	return nil
 }

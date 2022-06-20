@@ -121,7 +121,8 @@ statement_timeout                                     0
 stub_catalog_tables                                   on
 synchronize_seqscans                                  on
 synchronous_commit                                    on
-testing_optimizer_random_cost_seed                    0
+testing_optimizer_cost_perturbation                   0
+testing_optimizer_random_seed                         0
 testing_vectorize_inject_panics                       off
 timezone                                              UTC
 tracing                                               off
