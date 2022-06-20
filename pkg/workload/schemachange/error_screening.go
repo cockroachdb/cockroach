@@ -550,17 +550,9 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 	columns []string,
 	colInfos []column,
 	row []string,
-) (bool, codesWithConditions, error) {
+) (bool, codesWithConditions, codesWithConditions, error) {
+	var expectedErrors codesWithConditions
 	var potentialErrors codesWithConditions
-	appendPotentialError := func(code pgcode.Code) {
-		potentialErrors = append(potentialErrors,
-			codesWithConditions{
-				{
-					code:      code,
-					condition: true,
-				},
-			}...)
-	}
 	// Put values to be inserted into a column name to value map to simplify lookups.
 	columnsToValues := map[string]string{}
 	for i := 0; i < len(columns); i++ {
@@ -579,14 +571,29 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		query.WriteString(typ)
 		query.WriteString(") IS NULL ")
 		query.WriteString("AS c FROM ( VALUES(")
+		// Second builder to ensure that no evaluating arithmetic doesn't lead
+		// to overflows, if the order during runtime is different.
+		queryEvalOrderCheck := strings.Builder{}
+		queryEvalOrderCheck.WriteString(query.String())
 		cols := strings.Builder{}
 		colIdx := 0
 		for colName, value := range columnsToValues {
 			if colIdx != 0 {
 				query.WriteString(",")
+				queryEvalOrderCheck.WriteString(",")
 				cols.WriteString(",")
 			}
+			nonNullValue := value
+			if value == "NULL" {
+				if colInfos[colIdx].typ.IsNumeric() {
+					// We intentionally use NULL in case any division operations are encountered.
+					// This reduces odds of extra overflows, but these will be evaluated as
+					// potential errors not expected ones.
+					nonNullValue = fmt.Sprintf("1:::%s", colInfos[colIdx].typ.SQLString())
+				}
+			}
 			query.WriteString(value)
+			queryEvalOrderCheck.WriteString(nonNullValue)
 			cols.WriteString(colName)
 			colIdx++
 		}
@@ -602,9 +609,11 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 				}
 				if colIdx != 0 {
 					query.WriteString(",")
+					queryEvalOrderCheck.WriteString(",")
 					cols.WriteString(",")
 				}
 				query.WriteString(col)
+				queryEvalOrderCheck.WriteString(col)
 				cols.WriteString(colInfo.name)
 				colIdx++
 			}
@@ -612,6 +621,9 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		query.WriteString(")) AS t(")
 		query.WriteString(cols.String())
 		query.WriteString(");")
+		queryEvalOrderCheck.WriteString(")) AS t(")
+		queryEvalOrderCheck.WriteString(cols.String())
+		queryEvalOrderCheck.WriteString(");")
 		isNull, err := og.scanBool(ctx, evalTx, query.String())
 		// Evaluating the expression generated a value, which can be either arithmetic
 		// or overflow errors.
@@ -624,11 +636,28 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			if !isValidGenerationError(pgErr.Code) {
 				return err
 			}
-			appendPotentialError(pgcode.MakeCode(pgErr.Code))
+			expectedErrors = expectedErrors.append(pgcode.MakeCode(pgErr.Code))
 		}
 		if isNull && !isNullable && !nullViolationAdded {
 			nullViolationAdded = true
-			appendPotentialError(pgcode.NotNullViolation)
+			expectedErrors = expectedErrors.append(pgcode.NotNullViolation)
+		}
+		// Re-run the another variant in case we have NULL values in arithmetic
+		// of expression, the evaluation order can differ depending on how variables
+		// get bound during the actual insert.
+		if err == nil && isNull {
+			if _, err := og.scanBool(ctx, evalTx, queryEvalOrderCheck.String()); err != nil {
+				var pgErr *pgconn.PgError
+				if !errors.As(err, &pgErr) {
+					_ = evalTx.Rollback(ctx)
+					return err
+				}
+				// Note: Invalid errors are allowed, since this is a heuristic. We replaced
+				// random NULL values with zero.
+				if isValidGenerationError(pgErr.Code) {
+					potentialErrors = potentialErrors.append(pgcode.MakeCode(pgErr.Code))
+				}
+			}
 		}
 		// Always rollback the context used to validate the expression, so the
 		// main transaction doesn't stall.
@@ -647,12 +676,12 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 		}
 		err := validateExpression(colInfo.generatedExpression, colInfo.typ.SQLString(), colInfo.nullable, false)
 		if err != nil {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 	}
 	// Any bad generated expression means we don't have to bother with indexes next,
 	// since we expect the insert to fail earlier.
-	if potentialErrors == nil {
+	if expectedErrors == nil {
 		// Validate unique constraint expressions that are backed by indexes.
 		constraints, err := og.scanStringArrayRows(ctx, tx, `
 WITH tab_json AS (
@@ -698,17 +727,17 @@ WITH tab_json AS (
 GROUP BY name;
 		`, tableName.String())
 		if err != nil {
-			return false, nil, err
+			return false, nil, nil, err
 		}
 
 		for _, constraint := range constraints {
 			err := validateExpression(constraint[0], "STRING", true, true)
 			if err != nil {
-				return false, nil, err
+				return false, nil, nil, err
 			}
 		}
 	}
-	return len(potentialErrors) > 0, potentialErrors, nil
+	return len(expectedErrors) > 0, expectedErrors, potentialErrors, nil
 }
 
 // generateColumn generates values for columns that are generated.
@@ -1207,7 +1236,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	}
 	checkSharedParentChildRows := ""
 	if len(parentAndChildSameQueryColumns) > 0 {
-		checkSharedParentChildRows = fmt.Sprintf("true = ANY (ARRAY [%s]) OR",
+		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) OR",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
 	return og.scanBool(ctx, tx, fmt.Sprintf(`
