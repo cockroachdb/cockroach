@@ -94,6 +94,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 				// Account for any rounding error in batchesPerWorker.
 				endIdx = table.InitialRows.NumBatches
 			}
+			table := table // copy for safe reference in Go routine
 			g.Go(func() error {
 				var insertStmtBuf bytes.Buffer
 				var params []interface{}
