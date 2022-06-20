@@ -5695,3 +5695,31 @@ func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
 			})
 	}
 }
+
+// TestMVCCExportToSSTSErrorsOnLargeKV verifies that MVCCExportToSST errors on a
+// single kv that is larger than max size.
+func TestMVCCExportToSSTSErrorsOnLargeKV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+	var testData = []testValue{value(key(1), "value1", ts(1000))}
+	require.NoError(t, fillInData(ctx, engine, testData))
+	summary, _, err := MVCCExportToSST(
+		ctx, st, engine, MVCCExportOptions{
+			StartKey:           MVCCKey{Key: key(1)},
+			EndKey:             key(3).Next(),
+			StartTS:            hlc.Timestamp{},
+			EndTS:              hlc.Timestamp{WallTime: 9999},
+			ExportAllRevisions: false,
+			TargetSize:         1,
+			MaxSize:            1,
+			StopMidKey:         true,
+		}, &MemFile{})
+	require.Equal(t, int64(0), summary.DataSize)
+	expectedErr := &ExceedMaxSizeError{}
+	require.ErrorAs(t, err, &expectedErr)
+}
