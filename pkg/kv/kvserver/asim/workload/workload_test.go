@@ -37,14 +37,13 @@ func summary(ops []LoadEvent, cycleLength int) summaryStats {
 	writes := 0
 	reads := 0
 	sizeSum := 0
-	distribution := make([]int, len(ops))
-	for i, op := range ops {
-		sizeSum += int(op.Size)
-		distribution[i] = int(op.Key)
-		if op.IsWrite {
-			writes++
-		} else {
-			reads++
+	distribution := make([]int, 0, 1)
+	for _, op := range ops {
+		sizeSum += int(op.ReadSize + op.WriteSize)
+		writes += int(op.Writes)
+		reads += int(op.Reads)
+		for i := 0; i < int(op.Reads)+int(op.Writes); i++ {
+			distribution = append(distribution, int(op.Key))
 		}
 	}
 	return summaryStats{
@@ -115,16 +114,12 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		workLoadGenerator.lastRun = start
 		end := start.Add(tc.duration)
 
-		done := false
-		ops := make([]LoadEvent, 0)
-		next := LoadEvent{}
-		for !done {
-			done, next = workLoadGenerator.GetNext(end)
-			ops = append(ops, next)
-		}
+		// Generate the workload events.
+		ops := workLoadGenerator.Tick(end)
+
 		stats := summary(ops, cycleLength)
 		count := stats.reads + stats.writes
-		require.Equal(t, 1+int(tc.rate)*(int(tc.duration)/int(time.Second)), count)
+		require.Equal(t, int(tc.rate)*(int(tc.duration)/int(time.Second)), count)
 		require.GreaterOrEqual(t, float64(stats.size)/float64(count), float64(tc.minSize))
 		require.LessOrEqual(t, stats.size/(count*1.0), tc.maxSize)
 		require.Equal(t, tc.expectedQuartiles, stats.quartiles)

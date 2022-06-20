@@ -47,8 +47,12 @@ type State interface {
 	Store(StoreID) (Store, bool)
 	// Stores returns all stores that exist in this state.
 	Stores() map[StoreID]Store
-	// StoreDescriptors returns the descriptors for all stores that exist in
-	// this state.
+	// TODO(kvoli,lidorcarmel): This method is O(replicas), as it computes the
+	// store descriptor at request time. In a 64 store simulator cluster, with
+	// 5000 replicas per store, this function accounted for 50% of the total
+	// runtime in profiling. We should investigate optimizing it, by way of
+	// incremental descriptor computation, when replicas, leases or load is
+	// changed.
 	StoreDescriptors() []roachpb.StoreDescriptor
 	// Nodes returns all nodes that exist in this state.
 	Nodes() map[NodeID]Node
@@ -107,7 +111,7 @@ type State interface {
 	// the targets of the LoadEvent. The store which contains this replica is
 	// likewise modified to reflect this in it's Capacity, held in the
 	// StoreDescriptor.
-	ApplyLoad(workload.LoadEvent)
+	ApplyLoad(workload.LoadBatch)
 	// UsageInfo returns the usage information for the Range with ID
 	// RangeID.
 	UsageInfo(RangeID) allocator.RangeUsageInfo
@@ -221,7 +225,7 @@ func (m *ManualSimClock) Set(tsNanos int64) {
 
 // Keys in the simulator are 64 bit integers. They are mapped to Keys in
 // cockroach as the decimal representation, with 0 padding such that they are
-// lexiographically ordered as strings. The simplification to limit keys to
+// lexicographically ordered as strings. The simplification to limit keys to
 // integers simplifies workload generation and testing.
 //
 // TODO(kvoli): This is a simplification. In order to replay workloads or use

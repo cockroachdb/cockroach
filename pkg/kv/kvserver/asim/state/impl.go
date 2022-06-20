@@ -95,6 +95,7 @@ func (rm *rmap) initFirstRange() {
 	rng := &rng{
 		rangeID:     rangeID,
 		startKey:    minKey,
+		endKey:      maxKey,
 		desc:        desc,
 		config:      defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
@@ -458,9 +459,11 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	}
 
 	// Set the predecessor (LHS) end key to the start key of the split (RHS).
+	predecessorRange.endKey = r.startKey
 	predecessorRange.desc.EndKey = r.startKey.ToRKey()
 
-	// Set the descriptor keys.
+	// Set the new range keys.
+	r.endKey = endKey
 	r.desc.EndKey = endKey.ToRKey()
 	r.desc.StartKey = r.startKey.ToRKey()
 
@@ -538,18 +541,38 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	return true
 }
 
-// ApplyLoad modifies the state to reflect the impact of the LoadEvent.
+// ApplyLoad modifies the state to reflect the impact of the LoadBatch.
 // This modifies specifically the leaseholder replica's RangeUsageInfo for
 // the targets of the LoadEvent.
-func (s *state) ApplyLoad(le workload.LoadEvent) {
-	rng := s.rangeFor(Key(le.Key))
-	if le.IsWrite {
-		// Note that deletes are not supported currently, also we are also assuming
-		// data is not compacted.
-		rng.size += le.Size
+func (s *state) ApplyLoad(lb workload.LoadBatch) {
+	n := len(lb)
+	if n < 1 {
+		return
 	}
-	s.load[rng.RangeID()].ApplyLoad(le)
+
+	// Iterate in descending order over the ranges. LoadBatch keys are in
+	// sorted in ascending order, we iterate backwards to also be in descending
+	// order. It must be the case that at each range we visit, start key for
+	// that range is not larger than the any key of the remaining load events.
+	iter := n - 1
+	max := &rng{startKey: Key(lb[iter].Key)}
+	s.ranges.rangeTree.DescendLessOrEqual(max, func(i btree.Item) bool {
+		next, _ := i.(*rng)
+		for iter > -1 && lb[iter].Key >= int64(next.startKey) {
+			s.applyLoad(next, lb[iter])
+			iter--
+		}
+		return iter > -1
+	})
+}
+
+func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
+	s.load[rng.rangeID].ApplyLoad(le)
 	s.usageInfo.ApplyLoad(rng, le)
+
+	// Note that deletes are not supported currently, we are also assuming data
+	// is not compacted.
+	rng.size += le.WriteSize
 }
 
 func (s *state) updateStoreCapacities() {
@@ -698,13 +721,13 @@ func (s *store) Replicas() map[RangeID]ReplicaID {
 
 // rng is an implementation of the Range interface.
 type rng struct {
-	rangeID     RangeID
-	startKey    Key
-	desc        roachpb.RangeDescriptor
-	config      roachpb.SpanConfig
-	replicas    map[StoreID]*replica
-	leaseholder ReplicaID
-	size        int64
+	rangeID          RangeID
+	startKey, endKey Key
+	desc             roachpb.RangeDescriptor
+	config           roachpb.SpanConfig
+	replicas         map[StoreID]*replica
+	leaseholder      ReplicaID
+	size             int64
 }
 
 // RangeID returns the ID of this range.
