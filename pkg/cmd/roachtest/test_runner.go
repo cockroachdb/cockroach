@@ -536,10 +536,9 @@ func (r *testRunner) runWorker(
 				return nil
 			}()
 			if err != nil {
-				// N.B. handle any error during reuse attempt as clusterCreateErr.
 				shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
 					c.Name(), err)
-				atomic.AddInt32(&r.numClusterErrs, 1)
+				// N.B. we do not count reuse attempt error toward clusterCreateErr.
 				// Let's attempt to create a fresh one.
 				testToRun.canReuseCluster = false
 			}
