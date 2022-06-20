@@ -141,6 +141,17 @@ func MakeDateFromPGEpoch(days int32) (Date, error) {
 	return Date{days: days}, nil
 }
 
+// MakeDateFromPGEpochClampFinite creates a Date from the number of days since
+// 2000-01-01, clamping to LowDate or HighDate if outside those bounds.
+func MakeDateFromPGEpochClampFinite(days int32) Date {
+	if days < lowDays {
+		return Date{days: lowDays}
+	} else if days > highDays {
+		return Date{days: highDays}
+	}
+	return Date{days: days}
+}
+
 // ToTime returns d as a time.Time. Non finite dates return an error.
 func (d Date) ToTime() (time.Time, error) {
 	if d.days == math.MinInt32 || d.days == math.MaxInt32 {

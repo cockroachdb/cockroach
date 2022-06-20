@@ -924,7 +924,7 @@ func (d *DFloat) Prev(ctx CompareContext) (Datum, bool) {
 		return nil, false
 	}
 	if f == math.Inf(-1) {
-		return dNaNFloat, true
+		return DNaNFloat, true
 	}
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(-1)))), true
 }
@@ -933,7 +933,7 @@ func (d *DFloat) Prev(ctx CompareContext) (Datum, bool) {
 func (d *DFloat) Next(ctx CompareContext) (Datum, bool) {
 	f := float64(*d)
 	if math.IsNaN(f) {
-		return dNegInfFloat, true
+		return DNegInfFloat, true
 	}
 	if f == math.Inf(+1) {
 		return nil, false
@@ -941,14 +941,20 @@ func (d *DFloat) Next(ctx CompareContext) (Datum, bool) {
 	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(+1)))), true
 }
 
-var dZeroFloat = NewDFloat(0.0)
-var dPosInfFloat = NewDFloat(DFloat(math.Inf(+1)))
-var dNegInfFloat = NewDFloat(DFloat(math.Inf(-1)))
-var dNaNFloat = NewDFloat(DFloat(math.NaN()))
+var (
+	// DZeroFloat is the DFloat for zero.
+	DZeroFloat = NewDFloat(0)
+	// DPosInfFloat is the DFloat for positive infinity.
+	DPosInfFloat = NewDFloat(DFloat(math.Inf(+1)))
+	// DNegInfFloat is the DFloat for negative infinity.
+	DNegInfFloat = NewDFloat(DFloat(math.Inf(-1)))
+	// DNaNFloat is the DFloat for NaN.
+	DNaNFloat = NewDFloat(DFloat(math.NaN()))
+)
 
 // IsMax implements the Datum interface.
 func (d *DFloat) IsMax(ctx CompareContext) bool {
-	return *d == *dPosInfFloat
+	return *d == *DPosInfFloat
 }
 
 // IsMin implements the Datum interface.
@@ -958,12 +964,12 @@ func (d *DFloat) IsMin(ctx CompareContext) bool {
 
 // Max implements the Datum interface.
 func (d *DFloat) Max(ctx CompareContext) (Datum, bool) {
-	return dPosInfFloat, true
+	return DPosInfFloat, true
 }
 
 // Min implements the Datum interface.
 func (d *DFloat) Min(ctx CompareContext) (Datum, bool) {
-	return dNaNFloat, true
+	return DNaNFloat, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -2553,7 +2559,7 @@ func MustMakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 	return ret
 }
 
-var dZeroTimestamp = &DTimestamp{}
+var DZeroTimestamp = &DTimestamp{}
 
 // time.Time formats.
 const (
@@ -2868,7 +2874,7 @@ func ParseDTimestampTZ(
 	return d, dependsOnContext, err
 }
 
-var dZeroTimestampTZ = &DTimestampTZ{}
+var DZeroTimestampTZ = &DTimestampTZ{}
 
 // AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
 // DTimestampTZ and a flag signifying whether the assertion was successful. The
@@ -5301,13 +5307,13 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	case types.IntFamily:
 		return DZero, nil
 	case types.FloatFamily:
-		return dZeroFloat, nil
+		return DZeroFloat, nil
 	case types.DecimalFamily:
 		return dZeroDecimal, nil
 	case types.DateFamily:
 		return dEpochDate, nil
 	case types.TimestampFamily:
-		return dZeroTimestamp, nil
+		return DZeroTimestamp, nil
 	case types.IntervalFamily:
 		return dZeroInterval, nil
 	case types.StringFamily:
@@ -5315,7 +5321,7 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 	case types.BytesFamily:
 		return dEmptyBytes, nil
 	case types.TimestampTZFamily:
-		return dZeroTimestampTZ, nil
+		return DZeroTimestampTZ, nil
 	case types.CollatedStringFamily:
 		return NewDCollatedString("", t.Locale(), collationEnv)
 	case types.OidFamily:
