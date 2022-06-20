@@ -7115,3 +7115,86 @@ SetTraceRecordingTypeRequest is the response for SetTraceRecordingType.
 
 
 
+## MetricsDashboards
+
+`GET /_admin/v1/metricdashboards`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| dashboards | [MetricsDashboardsResponse.Dashboard](#cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.server.serverpb.MetricsDashboardsResponse.Dashboard) | repeated | dashboards is a list of dashboards. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.server.serverpb.MetricsDashboardsResponse.Dashboard"></a>
+#### MetricsDashboardsResponse.Dashboard
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [string](#cockroach.server.serverpb.MetricsDashboardsResponse-string) |  | id is a uniq dashboard's identifier. | [reserved](#support-status) |
+| title | [string](#cockroach.server.serverpb.MetricsDashboardsResponse-string) |  | title is the user facing name of a dashboard that is used in Db Console. | [reserved](#support-status) |
+| charts | [MetricsDashboardsResponse.Chart](#cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.server.serverpb.MetricsDashboardsResponse.Chart) | repeated | charts is a collection of charts related to current dashboard. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.server.serverpb.MetricsDashboardsResponse.Chart"></a>
+#### MetricsDashboardsResponse.Chart
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| chartDescription | [cockroach.ts.catalog.IndividualChart](#cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.ts.catalog.IndividualChart) |  |  | [reserved](#support-status) |
+| metadata | [MetricsDashboardsResponse.Chart.Metadata](#cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.server.serverpb.MetricsDashboardsResponse.Chart.Metadata) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.MetricsDashboardsResponse-cockroach.server.serverpb.MetricsDashboardsResponse.Chart.Metadata"></a>
+#### MetricsDashboardsResponse.Chart.Metadata
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| tooltip | [string](#cockroach.server.serverpb.MetricsDashboardsResponse-string) |  |  | [reserved](#support-status) |
+| metricPerNode | [bool](#cockroach.server.serverpb.MetricsDashboardsResponse-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+

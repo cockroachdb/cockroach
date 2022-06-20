@@ -60,14 +60,14 @@ type sectionDescription struct {
 	// Charts describes the specifics of the charts you want to add to the
 	// section. At render time, users can choose to view individual charts
 	// or all charts at a given level of the hierarchy/organization.
-	Charts []chartDescription
+	Charts []ChartDescription
 }
 
-// chartDescription describes an individual chart.
+// ChartDescription describes an individual chart.
 // Only Title, Organization, and Metrics must be set; other values have useful
 // defaults based on the types of metrics.
 // During processing, these are converted in IndividualCharts (pkg/ts/catalog/chart_catalog.proto).
-type chartDescription struct {
+type ChartDescription struct {
 	// Title of the chart.
 	Title string
 	// Metrics to include in the chart using their util.metric.Metadata.name;
@@ -300,7 +300,7 @@ func createIndividualCharts(
 
 		ic := new(IndividualChart)
 
-		if err := ic.addMetrics(cd, metadata, strictBuf); err != nil {
+		if err := ic.AddMetrics(cd, metadata, strictBuf); err != nil {
 			return err
 		}
 
@@ -348,10 +348,10 @@ func createIndividualCharts(
 	return nil
 }
 
-// addMetrics sets the IndividualChart's Metric values by looking up the
-// chartDescription metrics in the metadata map.
-func (ic *IndividualChart) addMetrics(
-	cd chartDescription, metadata map[string]metric.Metadata, strictBuf *strings.Builder,
+// AddMetrics sets the IndividualChart's Metric values by looking up the
+// ChartDescription metrics in the metadata map.
+func (ic *IndividualChart) AddMetrics(
+	cd ChartDescription, metadata map[string]metric.Metadata, strictBuf *strings.Builder,
 ) error {
 	for _, x := range cd.Metrics {
 
@@ -413,7 +413,7 @@ func (ic *IndividualChart) addNames(organization []string) {
 
 // addDisplayProperties sets the IndividualChart's display properties, such as
 // its Downsampler and Aggregator.
-func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
+func (ic *IndividualChart) addDisplayProperties(cd ChartDescription) error {
 	// All metrics in a chart must have the same MetricType, so each
 	// IndividualChart has only one potential set of default values.
 	defaults := chartDefaultsPerMetricType[ic.Metrics[0].MetricType]
@@ -442,7 +442,7 @@ func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
 		for _, m := range ic.Metrics {
 			if m.PreferredUnits != pu {
 				return errors.Errorf(`Chart %s has metrics with different preferred 
-				units; need to specify Units in its chartDescription: %v`, cd.Title, ic)
+				units; need to specify Units in its ChartDescription: %v`, cd.Title, ic)
 			}
 		}
 
@@ -456,7 +456,7 @@ func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
 		for _, m := range ic.Metrics {
 			if m.AxisLabel != al {
 				return errors.Errorf(`Chart %s has metrics with different axis labels (%s vs %s); 
-				need to specify an AxisLabel in its chartDescription: %v`, al, m.AxisLabel, cd.Title, ic)
+				need to specify an AxisLabel in its ChartDescription: %v`, al, m.AxisLabel, cd.Title, ic)
 			}
 		}
 
@@ -467,7 +467,7 @@ func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
 	ds, ok := aggKey[cdFull.Downsampler]
 	if !ok {
 		return errors.Errorf(
-			"%s's chartDescription has an unrecognized Downsampler, %v", cdFull.Title, cdFull.Downsampler,
+			"%s's ChartDescription has an unrecognized Downsampler, %v", cdFull.Title, cdFull.Downsampler,
 		)
 	}
 	ic.Downsampler = &ds
@@ -475,7 +475,7 @@ func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
 	agg, ok := aggKey[cdFull.Aggregator]
 	if !ok {
 		return errors.Errorf(
-			"%s's chartDescription has an unrecognized Aggregator, %v", cdFull.Title, cdFull.Aggregator,
+			"%s's ChartDescription has an unrecognized Aggregator, %v", cdFull.Title, cdFull.Aggregator,
 		)
 	}
 	ic.Aggregator = &agg
@@ -483,7 +483,7 @@ func (ic *IndividualChart) addDisplayProperties(cd chartDescription) error {
 	der, ok := derKey[cdFull.Rate]
 	if !ok {
 		return errors.Errorf(
-			"%s's chartDescription has an unrecognized Rate, %v", cdFull.Title, cdFull.Rate,
+			"%s's ChartDescription has an unrecognized Rate, %v", cdFull.Title, cdFull.Rate,
 		)
 	}
 	ic.Derivative = &der

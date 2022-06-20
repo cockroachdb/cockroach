@@ -32,7 +32,7 @@ package catalog
 var charts = []sectionDescription{
 	{
 		Organization: [][]string{{Process, "Build Info"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Timestamp",
 				Downsampler: DescribeAggregator_MAX,
@@ -43,7 +43,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Certificates"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "CA Expiration",
 				Downsampler: DescribeAggregator_MAX,
@@ -96,7 +96,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Clocks"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Roundtrip Latency",
 				Metrics: []string{"round-trip-latency"},
@@ -105,7 +105,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "CPU"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Percentage",
 				Metrics: []string{
@@ -126,7 +126,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Network"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Packets",
 				Metrics: []string{
@@ -145,7 +145,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Node"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "ID",
 				Downsampler: DescribeAggregator_MAX,
@@ -162,7 +162,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Server", "cgo"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Calls",
 				Metrics: []string{"sys.cgocalls"},
@@ -178,7 +178,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Server", "go"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "goroutines",
 				Metrics: []string{"sys.goroutines", "sys.runnable.goroutines.per.cpu"},
@@ -194,7 +194,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Server", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "File Descriptors (FD)",
 				Metrics: []string{
@@ -217,7 +217,7 @@ var charts = []sectionDescription{
 			{Process, "Server", "Disk"},
 			{StorageLayer, "Host Disk"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "IOPS in Progress",
 				Metrics: []string{
@@ -251,7 +251,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{DistributionLayer, "DistSender"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Batches",
 				Metrics: []string{
@@ -465,7 +465,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{DistributionLayer, "RPC", "Heartbeats"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Overview",
 				Metrics: []string{
@@ -487,7 +487,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{DistributionLayer, "Gossip"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Active Connections",
 				Downsampler: DescribeAggregator_MAX,
@@ -524,7 +524,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Merge Queue"},
 			{ReplicationLayer, "Merge Queue"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Pending",
 				Downsampler: DescribeAggregator_MAX,
@@ -554,7 +554,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Ranges"},
 			{ReplicationLayer, "Ranges"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Overview",
 				Metrics: []string{
@@ -622,7 +622,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Rebalancing"},
 			{ReplicationLayer, "Leases"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Rebalancing Lease Transfers",
 				Metrics: []string{"rebalancing.lease.transfers"},
@@ -634,7 +634,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Rebalancing"},
 			{ReplicationLayer, "Ranges"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Range Rebalances",
 				Metrics: []string{"rebalancing.range.rebalances"},
@@ -645,7 +645,7 @@ var charts = []sectionDescription{
 		Organization: [][]string{
 			{DistributionLayer, "Rebalancing"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "QPS",
 				Metrics: []string{"rebalancing.queriespersecond"},
@@ -673,7 +673,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Rebalancing"},
 			{ReplicationLayer, "Leases"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Allocator Load-Based Lease Transfer Decisions",
 				Metrics: []string{
@@ -691,7 +691,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Rebalancing"},
 			{ReplicationLayer, "Replicas"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Allocator Load-Based Lease Transfer Decisions",
 				Metrics: []string{
@@ -709,7 +709,7 @@ var charts = []sectionDescription{
 			{DistributionLayer, "Split Queue"},
 			{ReplicationLayer, "Split Queue"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Pending",
 				Downsampler: DescribeAggregator_MAX,
@@ -735,7 +735,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{KVTransactionLayer, "Clocks"}}, Charts: []chartDescription{
+		Organization: [][]string{{KVTransactionLayer, "Clocks"}}, Charts: []ChartDescription{
 			{
 				Title:   "Roundtrip Latency",
 				Metrics: []string{"round-trip-latency"},
@@ -743,7 +743,7 @@ var charts = []sectionDescription{
 		},
 	},
 	{
-		Organization: [][]string{{KVTransactionLayer, "Prober"}}, Charts: []chartDescription{
+		Organization: [][]string{{KVTransactionLayer, "Prober"}}, Charts: []ChartDescription{
 			{
 				Title: "Availability",
 				Metrics: []string{
@@ -770,7 +770,7 @@ var charts = []sectionDescription{
 			{KVTransactionLayer, "Clocks"},
 			{Process, "Clocks"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Offsets",
 				Metrics: []string{
@@ -782,7 +782,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Follower Reads"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Closed Timestamp",
 				Metrics: []string{"kv.closed_timestamp.max_behind_nanos"},
@@ -795,7 +795,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Protected Timestamps", "Reconciliation"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Records Processed",
 				Metrics: []string{
@@ -814,7 +814,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "MVCC Garbage Collection (GC)", "Keys"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "AbortSpan",
 				Metrics: []string{
@@ -863,7 +863,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Current GC Pause Percent",
 				Metrics: []string{"sys.gc.pause.percent"},
@@ -880,7 +880,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Requests", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Latency",
 				Metrics: []string{"exec.latency"},
@@ -909,7 +909,7 @@ var charts = []sectionDescription{
 			{KVTransactionLayer, "Requests", "Backpressure"},
 			{ReplicationLayer, "Requests", "Backpressure"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Writes Waiting on Range Split",
 				Downsampler: DescribeAggregator_MAX,
@@ -921,7 +921,7 @@ var charts = []sectionDescription{
 	{
 		Organization: [][]string{
 			{KVTransactionLayer, "Requests", "Tenant Rate Limiting"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Requests Blocked on Tenant Rate Limiting",
 				Downsampler: DescribeAggregator_MAX,
@@ -966,7 +966,7 @@ var charts = []sectionDescription{
 			{ReplicationLayer, "Requests", "Slow"},
 			{DistributionLayer, "Requests", "Slow"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:       "Latch",
 				Downsampler: DescribeAggregator_MAX,
@@ -1002,7 +1002,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Storage"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:     "Counts",
 				AxisLabel: "MVCC Keys & Values",
@@ -1038,7 +1038,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Timestamp Cache"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Page Counts",
 				Metrics: []string{
@@ -1055,7 +1055,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "Intents"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Intent Resolver",
 				Metrics: []string{
@@ -1083,7 +1083,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "LockTable"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Locks",
 				Metrics: []string{
@@ -1116,7 +1116,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Deadlocks",
 				Metrics: []string{
@@ -1150,7 +1150,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Aborts",
 				Metrics: []string{"txn.aborts"},
@@ -1241,7 +1241,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{KVTransactionLayer, "Transactions", "Recovery"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Successes",
 				Metrics: []string{
@@ -1272,7 +1272,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Emitted Bytes",
 				Metrics: []string{
@@ -1401,7 +1401,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Stream Replication"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Currently Running",
 				Metrics: []string{"streaming.running"},
@@ -1447,7 +1447,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Consistency Checker Queue"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Pending",
 				Metrics: []string{"queue.consistency.pending"},
@@ -1470,7 +1470,7 @@ var charts = []sectionDescription{
 			{ReplicationLayer, "Garbage Collection"},
 			{StorageLayer, "Garbage Collection"},
 		},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Queue Pending",
 				Metrics: []string{"queue.gc.pending"},
@@ -1490,7 +1490,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Leases"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Stuck Acquisition Count",
 				Metrics: []string{"requests.slow.lease"},
@@ -1522,7 +1522,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Epoch Increment Count",
 				Metrics: []string{"liveness.epochincrements"},
@@ -1552,7 +1552,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Entry Cache"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Entries",
 				Metrics: []string{
@@ -1577,7 +1577,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Heartbeats"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "MsgHeartbeatResp Count",
 				Metrics: []string{"raft.rcvd.heartbeatresp"},
@@ -1594,7 +1594,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Latency"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Apply Committed",
 				Metrics: []string{"raft.process.applycommitted.latency"},
@@ -1619,7 +1619,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Log"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Entries Truncated",
 				Metrics: []string{"raftlog.truncated"},
@@ -1632,7 +1632,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Quota Pool Utilization (0-100)",
 				Metrics: []string{"raft.quota_pool.percent_used"},
@@ -1680,7 +1680,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Log Pending",
 				Metrics: []string{"queue.raftlog.pending"},
@@ -1715,7 +1715,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Receive Queue"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Dropped Entry Count",
 				Metrics: []string{
@@ -1744,7 +1744,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Heartbeat Count",
 				Metrics: []string{"raft.rcvd.heartbeat"},
@@ -1797,7 +1797,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Ranges"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Backpressued Writes Waiting on Split",
 				Metrics: []string{"requests.backpressure.split"},
@@ -1814,7 +1814,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Replica GC Queue"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Pending",
 				Metrics: []string{"queue.replicagc.pending"},
@@ -1838,7 +1838,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Replicas", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Count",
 				Metrics: []string{
@@ -1856,7 +1856,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Add Replica Count",
 				Metrics: []string{
@@ -1923,7 +1923,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Schema Changer"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Running",
 				Metrics: []string{"sql.schema_changer.running"},
@@ -1943,7 +1943,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "DistSQL", "Flows"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Active",
 				Metrics: []string{"sql.distsql.flows.active"},
@@ -1968,7 +1968,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Catalog", "SQL Leases"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Outstanding SQL Leases",
 				Metrics: []string{
@@ -1979,7 +1979,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Catalog", "Hydrated Descriptor Cache"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Cache Hits and Misses",
 				Metrics: []string{
@@ -1991,7 +1991,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Liveness"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Session Writes",
 				Metrics: []string{
@@ -2017,7 +2017,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "DistSQL"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Active Queries",
 				Metrics: []string{"sql.distsql.queries.active"},
@@ -2090,7 +2090,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Stats"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Memory usage for fingerprint storage",
 				Metrics: []string{"sql.stats.mem.max"},
@@ -2135,7 +2135,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Contention"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Transaction ID Cache Miss",
 				Metrics: []string{"sql.contention.txn_id_cache.miss"},
@@ -2160,7 +2160,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Bulk"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Current Memory Usage",
 				Metrics: []string{"sql.mem.bulk.current"},
@@ -2173,7 +2173,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Optimizer"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Fallback",
 				Metrics: []string{
@@ -2196,7 +2196,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Row-Level TTL"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Jobs Running",
 				Metrics: []string{
@@ -2227,7 +2227,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Session All",
 				Metrics: []string{"sql.mem.internal.session.max"},
@@ -2248,7 +2248,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL Session"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Current",
 				Metrics: []string{"sql.mem.sql.session.current"},
@@ -2261,7 +2261,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL Txn"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Current",
 				Metrics: []string{"sql.mem.sql.txn.current"},
@@ -2274,7 +2274,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL Memory"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Current",
 				Metrics: []string{"sql.mem.root.current"},
@@ -2287,7 +2287,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Temporary Objects Cleanup"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Active Cleaners",
 				Metrics: []string{"sql.temp_object_cleaner.active_cleaners"},
@@ -2304,7 +2304,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Active Connections",
 				Metrics: []string{
@@ -2407,7 +2407,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL", "DDL"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Counts",
 				Metrics: []string{
@@ -2428,7 +2428,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL", "DML"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Mix",
 				Metrics: []string{
@@ -2485,7 +2485,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL", "Transaction Control"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Transaction Control Mix",
 				Metrics: []string{
@@ -2554,7 +2554,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL", "Row Level TTL"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Active Range Deletes",
 				Metrics: []string{
@@ -2597,7 +2597,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "SQL", "Feature Flag"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Feature Flag Denials",
 				Metrics: []string{
@@ -2608,7 +2608,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{SQLLayer, "Guardrails"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Transaction Row Count Limit Violations",
 				Metrics: []string{
@@ -2645,7 +2645,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Size",
 				Metrics: []string{
@@ -2664,7 +2664,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Encryption at Rest"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Algorithm Enum",
 				Metrics: []string{"rocksdb.encryption.algorithm"},
@@ -2673,7 +2673,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Migrations"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "SSTables Marked for Compaction",
 				Metrics: []string{"storage.marked-for-compaction-files"},
@@ -2682,7 +2682,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Bloom Filter",
 				Metrics: []string{
@@ -2761,7 +2761,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "RocksDB", "SSTables"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Count",
 				Metrics: []string{"rocksdb.num-sstables"},
@@ -2786,7 +2786,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{DistributionLayer, "Bulk", "Egress"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Export Delays",
 				Metrics: []string{
@@ -2797,7 +2797,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:     "Counts",
 				AxisLabel: "MVCC Keys & Values",
@@ -2833,7 +2833,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{StorageLayer, "Storage", "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Capacity",
 				Metrics: []string{
@@ -2854,7 +2854,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Timeseries, "Maintenance Queue"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Pending",
 				Metrics: []string{"queue.tsmaintenance.pending"},
@@ -2874,7 +2874,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Timeseries, "Overview"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Count",
 				Metrics: []string{"timeseries.write.samples"},
@@ -2891,7 +2891,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Jobs, "Schedules", "Daemon"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Round",
 				Metrics: []string{
@@ -2913,7 +2913,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Jobs, "Schedules", "Backup"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Counts",
 				Metrics: []string{
@@ -2932,7 +2932,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Jobs, "Schedules", "SQL Stats"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Counts",
 				Metrics: []string{
@@ -2945,7 +2945,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Jobs, "Execution"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Active",
 				Metrics: []string{
@@ -3170,7 +3170,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Jobs, "Registry"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Jobs Registry Stats",
 				Metrics: []string{
@@ -3184,7 +3184,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Node", "Admission"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Work Queue Admission Counter",
 				Metrics: []string{
@@ -3260,7 +3260,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{Tenants, "Consumption"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title: "Total number of KV read/write requests",
 				Metrics: []string{
@@ -3295,7 +3295,7 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{{ReplicationLayer, "Latency"}},
-		Charts: []chartDescription{
+		Charts: []ChartDescription{
 			{
 				Title:   "Execution duration for read batch evaluation.",
 				Metrics: []string{"kv.replica_read_batch_evaluate.latency"},

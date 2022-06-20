@@ -52,12 +52,14 @@ var (
 		Help:        "Number of batches processed",
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
+		Title:       "Batches",
 	}
 	metaDistSenderPartialBatchCount = metric.Metadata{
 		Name:        "distsender.batches.partial",
 		Help:        "Number of partial batches processed after being divided on range boundaries",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
+		Title:       "Partial Batches",
 	}
 	metaDistSenderAsyncSentCount = metric.Metadata{
 		Name:        "distsender.batches.async.sent",

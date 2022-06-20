@@ -809,6 +809,35 @@ message ChartCatalogResponse {
   repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
+// MetricsDashboardsRequest requests a metrics dashboards configuration.
+message MetricsDashboardsRequest {
+}
+
+// MetricsDashboardsResponse returns a list of metric dashboard configurations.
+message MetricsDashboardsResponse {
+  message Chart {
+    message Metadata {
+      // tooltip contains text or HTML to render as a tooltip when user hovers a chart.
+      string tooltip = 1;
+      // metricPerNode flag indicates whether chart renders each metric per node or not.
+      bool metricPerNode = 2;
+    }
+    ts.catalog.IndividualChart chartDescription = 1;
+    Metadata metadata = 2;
+  }
+
+  message Dashboard {
+    // id is a uniq dashboard's identifier.
+    string id = 1;
+    // title is the user facing name of a dashboard that is used in Db Console.
+    string title = 2;
+    // charts is a collection of charts related to current dashboard.
+    repeated Chart charts = 3;
+  }
+  // dashboards is a list of dashboards.
+  repeated Dashboard dashboards = 1;
+}
+
 // CARequest requests the CA cert anchoring this service.
 message CARequest {
 }
@@ -1114,6 +1143,12 @@ service Admin {
     option (google.api.http) = {
       post: "/_admin/v1/settracerecordingtype"
       body: "*"
+    };
+  }
+
+  rpc MetricsDashboards(MetricsDashboardsRequest) returns (MetricsDashboardsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/metricdashboards"
     };
   }
 }

@@ -80,6 +80,8 @@ message ChartMetric {
   // should be of the same type to ensure the information displays behaves in
   // expected ways.
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
+  // title is a short human readable name of the metric.
+  optional string title = 7 [(gogoproto.nullable) = false];
 }
 
 // IndividualChart describes both the properties necessary to display

@@ -61,4 +61,6 @@ message Metadata {
   required Unit unit = 4 [(gogoproto.nullable) = false];
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
   repeated LabelPair labels = 6;
+  // title is a short human readable name of the metric.
+  optional string title = 7 [(gogoproto.nullable) = false];
 }

@@ -234,6 +234,22 @@ func (s *adminServer) ChartCatalog(
 	return resp, nil
 }
 
+func (s *adminServer) MetricsDashboards(
+	ctx context.Context, req *serverpb.MetricsDashboardsRequest,
+) (*serverpb.MetricsDashboardsResponse, error) {
+	metricsMetadata := s.server.recorder.GetMetricsMetadata()
+	dashboards, err := GenerateDashboards(metricsMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: test that all IndividualCharts include `Title` field
+	res := serverpb.MetricsDashboardsResponse{
+		Dashboards: dashboards,
+	}
+	return &res, nil
+}
+
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,

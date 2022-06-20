@@ -756,6 +756,7 @@ var (
 		Help:        "Number of DistSQL SELECT statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Title:       "Selects",
 	}
 	MetaDistSQLExecLatency = metric.Metadata{
 		Name:        "sql.distsql.exec.latency",
@@ -952,18 +953,21 @@ var (
 		Help:        "Number of SQL UPDATE statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Title:       "Updates",
 	}
 	MetaInsertExecuted = metric.Metadata{
 		Name:        "sql.insert.count",
 		Help:        "Number of SQL INSERT statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Title:       "Inserts",
 	}
 	MetaDeleteExecuted = metric.Metadata{
 		Name:        "sql.delete.count",
 		Help:        "Number of SQL DELETE statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Title:       "Deletes",
 	}
 	MetaSavepointExecuted = metric.Metadata{
 		Name:        "sql.savepoint.count",
