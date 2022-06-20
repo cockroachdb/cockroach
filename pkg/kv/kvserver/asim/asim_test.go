@@ -74,13 +74,13 @@ func testPreGossipStores(s state.State, exchange state.Exchange, at time.Time) {
 }
 
 // TestAllocatorSimulatorSpeed tests that the simulation runs at a rate of at
-// least 5 simulated minutes per wall clock second (1:600) for a 12 node
-// cluster, with 6000 replicas. The workload is generating 6000 keys per second
-// with a uniform distribution.
+// least 5 simulated minutes per wall clock second (1:50) for a 32 node
+// cluster, with 32000 replicas. The workload is generating 16000 keys per
+// second with a uniform distribution.
 // NB: In practice, on a single thread N2 GCP VM, this completes with a minimum
-// run of 40ms, approximately 12x faster (1:14000) than what this test asserts.
+// run of 750ms, approximately 16x faster (1:800) than what this test asserts.
 // The limit is set much higher due to --stress and inconsistent processor
-// speeds. The speedup is not linear w.r.t replica count.
+// speeds. The speedup is not linear w.r.t replica or store count.
 // TODO(kvoli,lidorcarmel): If this test flakes on CI --stress --race, decrease
 // the stores, or decrease replicasPerStore.
 func TestAllocatorSimulatorSpeed(t *testing.T) {
@@ -94,10 +94,10 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	gossipDelay := 100 * time.Millisecond
 	preGossipStart := start.Add(-interval - gossipDelay)
 
-	stores := 4
+	stores := 32
 	replsPerRange := 3
-	replicasPerStore := 300
-	// NB: We want 500 replicas per store, so the number of ranges required
+	replicasPerStore := 1000
+	// NB: We want 1000 replicas per store, so the number of ranges required
 	// will be 1/3 of the total replicas.
 	ranges := (replicasPerStore * stores) / replsPerRange
 
@@ -133,14 +133,19 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	// estimate here of performance, as any additional time over the minimum is
 	// noise in a run.
 	minRunTime := int64(math.MaxInt64)
+	requiredRunTime := 12 * time.Second.Nanoseconds()
 	samples := 5
 	for i := 0; i < samples; i++ {
 		if sampledRun := sample(); sampledRun < minRunTime {
 			minRunTime = sampledRun
 		}
+		// NB: When we satisfy the test required runtime, exit early to avoid
+		// additional runs.
+		if minRunTime < requiredRunTime {
+			break
+		}
 	}
 
 	fmt.Println(time.Duration(minRunTime).Seconds())
-	// TODO(lidor,kvoli): in CI this test takes many seconds, we need to optimize.
-	require.Less(t, minRunTime, 20*time.Second.Nanoseconds())
+	require.Less(t, minRunTime, requiredRunTime)
 }
