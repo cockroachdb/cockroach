@@ -733,7 +733,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
 			if err := storageparam.Set(
-				params.ctx,
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
@@ -767,7 +766,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
 			if err := storageparam.Reset(
-				params.ctx,
 				params.EvalContext(),
 				t.Params,
 				tablestorageparam.NewSetter(n.tableDesc),
