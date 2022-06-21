@@ -1245,13 +1245,17 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 					return false, err
 				}
 			}
+			// Skip over NULL values.
+			if parentValueInSameInsert == "NULL" || childValue == "NULL" {
+				continue
+			}
 			parentAndChildSameQueryColumns = append(parentAndChildSameQueryColumns,
 				fmt.Sprintf("%s = %s", parentValueInSameInsert, childValue))
 		}
 	}
 	checkSharedParentChildRows := ""
 	if len(parentAndChildSameQueryColumns) > 0 {
-		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) OR",
+		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) AND",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
 	return og.scanBool(ctx, tx, fmt.Sprintf(`
