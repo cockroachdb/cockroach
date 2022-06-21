@@ -1,0 +1,8 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT)
+----
+
+build
+ALTER TABLE t DROP COLUMN j
+----
+Xiang: What to expect???

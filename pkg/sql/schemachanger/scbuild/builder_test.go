@@ -89,7 +89,7 @@ func TestBuildDataDriven(t *testing.T) {
 			},
 		} {
 			t.Run(depsType.name, func(t *testing.T) {
-				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
 				defer s.Stopper().Stop(ctx)
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

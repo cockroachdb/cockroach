@@ -53,6 +53,20 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func TestXiangAlterTableDropColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET use_declarative_schema_changer='unsafe'`)
+	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY, j INT)`)
+	tdb.Exec(t, `ALTER TABLE t DROP COLUMN j`)
+}
+
 func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
