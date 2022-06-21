@@ -2579,7 +2579,6 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
 		appendStorageParam(`ttl`, `'on'`)
 		if ttl.HasDurationExpr() {
-			appendStorageParam(`ttl_automatic_column`, `'on'`)
 			appendStorageParam(`ttl_expire_after`, string(ttl.DurationExpr))
 		}
 		if ttl.HasExpirationExpr() {
