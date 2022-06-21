@@ -56,7 +56,6 @@ proto_library(
         "legacy_timestamp.proto",
         "timestamp.proto",
     ],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

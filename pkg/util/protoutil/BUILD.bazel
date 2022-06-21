@@ -46,7 +46,6 @@ go_test(
 proto_library(
     name = "protoutil_proto",
     srcs = ["clone.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

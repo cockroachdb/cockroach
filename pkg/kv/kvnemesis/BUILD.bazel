@@ -107,12 +107,11 @@ go_test(
 proto_library(
     name = "kvnemesis_proto",
     srcs = ["operations.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvpb:kvpb_proto",
-        "//pkg/roachpb:roachpb_proto",
-        "//pkg/util/hlc:hlc_proto",
+        "//kv/kvpb:kvpb_proto",
+        "//roachpb:roachpb_proto",
+        "//util/hlc:hlc_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -127,7 +126,7 @@ go_proto_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
-        "//pkg/util/hlc",
+        "//util/hlc:timestamp_proto",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
     ],

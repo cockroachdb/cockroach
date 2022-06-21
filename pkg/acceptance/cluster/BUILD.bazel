@@ -51,7 +51,6 @@ go_library(
 proto_library(
     name = "cluster_proto",
     srcs = ["testconfig.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

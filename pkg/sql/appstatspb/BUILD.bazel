@@ -23,7 +23,6 @@ go_test(
 proto_library(
     name = "appstatspb_proto",
     srcs = ["app_stats.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",

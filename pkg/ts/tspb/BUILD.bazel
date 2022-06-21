@@ -17,10 +17,9 @@ go_library(
 proto_library(
     name = "tspb_proto",
     srcs = ["timeseries.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:roachpb_proto",
+        "//roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@go_googleapis//google/api:annotations_proto",
     ],

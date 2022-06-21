@@ -6,10 +6,9 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "tracingservicepb_proto",
     srcs = ["tracing_service.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/tracing/tracingpb:tracingpb_proto",
+        "//util/tracing/tracingpb:tracingpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -21,7 +20,7 @@ go_proto_library(
     proto = ":tracingservicepb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/tracing/tracingpb",
+        "//util/tracing/tracingpb:recorded_span_proto",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

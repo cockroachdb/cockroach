@@ -6,14 +6,13 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "diagnosticspb_proto",
     srcs = ["diagnostics.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/build:build_proto",
-        "//pkg/config/zonepb:zonepb_proto",
-        "//pkg/roachpb:roachpb_proto",
-        "//pkg/sql/appstatspb:appstatspb_proto",
-        "//pkg/sql/catalog/descpb:descpb_proto",
+        "//build:build_proto",
+        "//config/zonepb:zonepb_proto",
+        "//roachpb:roachpb_proto",
+        "//sql/appstatspb:appstatspb_proto",
+        "//sql/catalog/descpb:descpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -25,12 +24,12 @@ go_proto_library(
     proto = ":diagnosticspb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//build:info_proto",
+        "//config/zonepb:zone_proto",
         "//pkg/base",  # keep
-        "//pkg/build",
-        "//pkg/config/zonepb",
         "//pkg/roachpb",
-        "//pkg/sql/appstatspb",
-        "//pkg/sql/catalog/descpb",
+        "//sql/appstatspb:app_stats_proto",
+        "//sql/catalog/descpb:structured_proto",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

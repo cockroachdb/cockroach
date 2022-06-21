@@ -6,10 +6,9 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "rspb_proto",
     srcs = ["summary.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/hlc:hlc_proto",
+        "//util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -21,7 +20,7 @@ go_proto_library(
     proto = ":rspb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/hlc",
+        "//util/hlc:timestamp_proto",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

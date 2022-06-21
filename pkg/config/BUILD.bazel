@@ -60,10 +60,9 @@ go_test(
 proto_library(
     name = "config_proto",
     srcs = ["system.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:roachpb_proto",
+        "//roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )

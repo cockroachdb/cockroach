@@ -9,8 +9,8 @@ proto_library(
         "key_registry.proto",
         "stats.proto",
     ],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
+    deps = ["//ccl/storageccl/engineccl/enginepbccl:enginepbccl_proto"],
 )
 
 go_proto_library(
@@ -19,6 +19,7 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl",
     proto = ":enginepbccl_proto",
     visibility = ["//visibility:public"],
+    deps = ["//ccl/storageccl/engineccl/enginepbccl:key_registry_proto"],
 )
 
 go_library(

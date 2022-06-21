@@ -30,7 +30,6 @@ go_test(
 proto_library(
     name = "baseccl_proto",
     srcs = ["encryption_options.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
 )
 
