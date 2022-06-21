@@ -13,6 +13,7 @@ package state
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -230,6 +231,20 @@ func (s *state) RangeCount() int64 {
 	return int64(len(s.ranges.rangeMap))
 }
 
+type replicaList []Replica
+
+func (r replicaList) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+func (r replicaList) Len() int {
+	return len(r)
+}
+
+func (r replicaList) Less(i, j int) bool {
+	return r[i].Range() < r[j].Range()
+}
+
 // Replicas returns all replicas that exist on a store.
 func (s *state) Replicas(storeID StoreID) []Replica {
 	replicas := []Replica{}
@@ -237,13 +252,17 @@ func (s *state) Replicas(storeID StoreID) []Replica {
 	if !ok {
 		return replicas
 	}
+
+	repls := replicaList{}
 	for rangeID := range store.Replicas() {
 		rng := s.ranges.rangeMap[rangeID]
 		if replica := rng.replicas[storeID]; replica != nil {
-			replicas = append(replicas, replica)
+			repls = append(repls, replica)
 		}
 	}
-	return replicas
+	sort.Sort(repls)
+
+	return repls
 }
 
 // AddNode modifies the state to include one additional node. This cannot
@@ -472,6 +491,11 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	ranges.rangeMap[r.rangeID] = r
 	s.load[r.rangeID] = &ReplicaLoadCounter{}
 
+	// Update the range size to be split 50/50 between the lhs and rhs.
+	// NB: This is a simplifying assumption.
+	predecessorRange.size /= 2
+	r.size = predecessorRange.size
+
 	// If there are existing replicas for the LHS of the split, then also
 	// create replicas on the same stores for the RHS.
 	for storeID, replica := range predecessorRange.replicas {
@@ -484,6 +508,15 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	}
 
 	return predecessorRange, r, true
+}
+
+func (s *state) RangeSpan(rangeID RangeID) (Key, Key, bool) {
+	rng := s.ranges.rangeMap[rangeID]
+	if rng == nil {
+		return InvalidKey, InvalidKey, false
+	}
+
+	return rng.startKey, rng.endKey, true
 }
 
 // TransferLease transfers the lease for the Range with ID RangeID, to the
