@@ -64,6 +64,14 @@ true
 false
 
 predtest
+false
+=>
+false
+----
+true
+└── remaining filters: none
+
+predtest
 1 = 3
 =>
 2 = 2
