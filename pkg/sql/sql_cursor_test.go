@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -110,15 +109,12 @@ func TestPrepareCursors(t *testing.T) {
 
 	// Make sure that we can use the automatic prepare support (when sending
 	// placeholders) to do the same thing.
-	// TODO (jordan): This currently doesn't work, because we don't fully walk
-	// the tree typechecking expressions when sending a DECLARE through the
-	// optimizer. See issue #77067.
-	// When this limitation is lifted, the rest of this test should be uncommented.
 	t.Run("prepare_declare_placeholder", func(t *testing.T) {
-		_, err = conn.ExecContext(ctx, "DECLARE foo CURSOR FOR SELECT 1 WHERE $1", true)
-		require.Contains(t, err.Error(), "could not determine data type of placeholder")
+		_, err = conn.ExecContext(ctx, "BEGIN TRANSACTION")
+		require.NoError(t, err)
 
-		skip.WithIssue(t, 77067, "placeholders in DECLARE not supported")
+		_, err = conn.ExecContext(ctx, "DECLARE foo CURSOR FOR SELECT 1 WHERE $1", true)
+		require.NoError(t, err)
 
 		stmt, err := conn.PrepareContext(ctx, "FETCH 1 foo")
 		require.NoError(t, err)
