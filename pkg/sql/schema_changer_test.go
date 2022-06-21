@@ -7604,7 +7604,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY) WITH (ttl_expire_after = '10 hours');`
 	id STRING NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_job_cron = '@hourly')`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_job_cron = '@hourly')`
 	)
 
 	testCases := []struct {

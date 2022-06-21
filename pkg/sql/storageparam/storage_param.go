@@ -33,7 +33,7 @@ type Setter interface {
 	// ALTER [TABLE | INDEX] ... WITH (...).
 	Set(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
 	// Reset is called during ALTER [TABLE | INDEX] ... RESET (...)
-	Reset(evalCtx *eval.Context, key string) error
+	Reset(ctx context.Context, evalCtx *eval.Context, key string) error
 	// RunPostChecks is called after all storage parameters have been set.
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
@@ -87,7 +87,7 @@ func Reset(
 ) error {
 	for _, p := range params {
 		telemetry.Inc(sqltelemetry.ResetTableStorageParameter(string(p)))
-		if err := paramObserver.Reset(evalCtx, string(p)); err != nil {
+		if err := paramObserver.Reset(ctx, evalCtx, string(p)); err != nil {
 			return err
 		}
 	}

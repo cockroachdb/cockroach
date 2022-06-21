@@ -142,7 +142,7 @@ func (po *Setter) Set(
 }
 
 // Reset implements the StorageParameterObserver interface.
-func (po *Setter) Reset(evalCtx *eval.Context, key string) error {
+func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
 	return errors.AssertionFailedf("non-implemented codepath")
 }
 

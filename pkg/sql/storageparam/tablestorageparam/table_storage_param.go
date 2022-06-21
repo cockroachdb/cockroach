@@ -33,8 +33,7 @@ import (
 
 // Setter observes storage parameters for tables.
 type Setter struct {
-	tableDesc          *tabledesc.Mutable
-	setAutomaticColumn bool
+	tableDesc *tabledesc.Mutable
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
@@ -47,12 +46,6 @@ func NewSetter(tableDesc *tabledesc.Mutable) *Setter {
 // RunPostChecks implements the Setter interface.
 func (po *Setter) RunPostChecks() error {
 	ttl := po.tableDesc.GetRowLevelTTL()
-	if po.setAutomaticColumn && (ttl == nil || ttl.DurationExpr == "") {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			`"ttl_expire_after" must be set if "ttl_automatic_column" is set`,
-		)
-	}
 	if err := tabledesc.ValidateRowLevelTTL(ttl); err != nil {
 		return err
 	}
@@ -108,15 +101,19 @@ func (po *Setter) getOrCreateRowLevelTTL() *catpb.RowLevelTTL {
 
 type tableParam struct {
 	onSet   func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
-	onReset func(po *Setter, evalCtx *eval.Context, key string) error
+	onReset func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error
 }
+
+var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer used. " +
+	"Setting ttl_expire_after automatically creates a TTL column. " +
+	"Resetting ttl_expire_after removes the automatically created column.")
 
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			return storageparam.SetFillFactor(evalCtx, key, datum)
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			// Operation is a no-op so do nothing.
 			return nil
 		},
@@ -144,7 +141,7 @@ var tableParams = map[string]tableParam{
 			}
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			// Operation is a no-op so do nothing.
 			return nil
 		},
@@ -170,26 +167,20 @@ var tableParams = map[string]tableParam{
 			}
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			po.tableDesc.RowLevelTTL = nil
 			return nil
 		},
 	},
+	// todo(wall): remove in 23.1
 	`ttl_automatic_column`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			setTrue, err := boolFromDatum(evalCtx, key, datum)
-			if err != nil {
-				return err
-			}
-			if setTrue {
-				po.setAutomaticColumn = true
-			} else {
-				return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
-			}
+			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlAutomaticColumnNotice)
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlAutomaticColumnNotice)
+			return nil
 		},
 	},
 	`ttl_expire_after`: {
@@ -226,7 +217,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			return errors.WithHintf(
 				pgerror.Newf(
 					pgcode.InvalidParameterValue,
@@ -249,7 +240,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.SelectBatchSize = val
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.SelectBatchSize = 0
 			}
@@ -269,7 +260,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.DeleteBatchSize = val
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeleteBatchSize = 0
 			}
@@ -289,7 +280,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.RangeConcurrency = val
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.RangeConcurrency = 0
 			}
@@ -309,7 +300,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.DeleteRateLimit = val
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeleteRateLimit = 0
 			}
@@ -326,7 +317,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.LabelMetrics = val
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.LabelMetrics = false
 			}
@@ -346,7 +337,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.DeletionCron = str
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.DeletionCron = ""
 			}
@@ -363,7 +354,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.Pause = b
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.Pause = false
 			}
@@ -383,7 +374,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.RowStatsPollInterval = d
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			if po.tableDesc.RowLevelTTL != nil {
 				po.tableDesc.RowLevelTTL.RowStatsPollInterval = 0
 			}
@@ -419,7 +410,7 @@ var tableParams = map[string]tableParam{
 			po.tableDesc.ExcludeDataFromBackup = excludeDataFromBackup
 			return nil
 		},
-		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			po.tableDesc.ExcludeDataFromBackup = false
 			return nil
 		},
@@ -472,7 +463,7 @@ func init() {
 			onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
-			onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+			onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 				return nil
 			},
 		}
@@ -540,7 +531,7 @@ func autoStatsFractionStaleRowsSettingFunc(
 	}
 }
 
-func autoStatsTableSettingResetFunc(po *Setter, evalCtx *eval.Context, key string) error {
+func autoStatsTableSettingResetFunc(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 	if po.tableDesc.AutoStatsSettings == nil {
 		return nil
 	}
@@ -580,7 +571,7 @@ func (po *Setter) Set(
 }
 
 // Reset implements the Setter interface.
-func (po *Setter) Reset(evalCtx *eval.Context, key string) error {
+func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
 	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
@@ -588,7 +579,7 @@ func (po *Setter) Reset(evalCtx *eval.Context, key string) error {
 		)
 	}
 	if p, ok := tableParams[key]; ok {
-		return p.onReset(po, evalCtx, key)
+		return p.onReset(ctx, po, evalCtx, key)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
