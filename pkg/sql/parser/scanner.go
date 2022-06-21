@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 )
 
-func makeScanner(str string) scanner.Scanner {
-	var s scanner.Scanner
+func makeSQLScanner(str string) scanner.SQLScanner {
+	var s scanner.SQLScanner
 	s.Init(str)
 	return s
 }
@@ -26,7 +26,7 @@ func makeScanner(str string) scanner.Scanner {
 // including the first semicolon that separates statements. If there is no
 // semicolon, returns ok=false.
 func SplitFirstStatement(sql string) (pos int, ok bool) {
-	s := makeScanner(sql)
+	s := makeSQLScanner(sql)
 	var lval = &sqlSymType{}
 	for {
 		s.Scan(lval)
@@ -41,7 +41,7 @@ func SplitFirstStatement(sql string) (pos int, ok bool) {
 
 // Tokens decomposes the input into lexical tokens.
 func Tokens(sql string) (tokens []TokenString, ok bool) {
-	s := makeScanner(sql)
+	s := makeSQLScanner(sql)
 	for {
 		var lval = &sqlSymType{}
 		s.Scan(lval)
@@ -59,7 +59,7 @@ func Tokens(sql string) (tokens []TokenString, ok bool) {
 // TokensIgnoreErrors decomposes the input into lexical tokens and
 // ignores errors.
 func TokensIgnoreErrors(sql string) (tokens []TokenString) {
-	s := makeScanner(sql)
+	s := makeSQLScanner(sql)
 	for {
 		var lval = &sqlSymType{}
 		s.Scan(lval)
