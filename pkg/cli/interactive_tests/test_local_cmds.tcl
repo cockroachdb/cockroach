@@ -266,6 +266,22 @@ eexpect Description
 eexpect root@
 end_test
 
+start_test "Check that the output of queries can be redirected to a file."
+send "\\o logs/query-output.txt\r"
+eexpect root@
+send "select 'hello world';\r"
+eexpect root@
+system "grep world logs/query-output.txt"
+end_test
+
+start_test "Check that the query output can be reset to stdout."
+send "\\o\r"
+eexpect root@
+send "select 'hel'||'lo';\r"
+eexpect "hello"
+eexpect root@
+end_test
+
 # Finally terminate with Ctrl+D.
 send_eof
 eexpect eof

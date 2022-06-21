@@ -11,7 +11,9 @@
 package clisqlshell
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"os"
 	"time"
 
@@ -53,6 +55,14 @@ type internalContext struct {
 	// stdout and stderr are where messages and errors/warnings go.
 	stdout *os.File
 	stderr *os.File
+
+	// queryOutputFile is the output file configured via \o.
+	// This can be the same as stdout (\o without argument).
+	// Note: we use .queryOutput for query execution, which
+	// is buffered (via queryOutputBuf).
+	queryOutputFile *os.File
+	queryOutputBuf  *bufio.Writer
+	queryOutput     io.Writer
 
 	// quitAfterExecStmts tells the shell whether to quit
 	// after processing the execStmts.
