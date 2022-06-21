@@ -1367,6 +1367,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Replan Count",
+				Metrics: []string{
+					"changefeed.replan_count",
+				},
+			},
+			{
 				Title: "Flushed Bytes",
 				Metrics: []string{
 					"changefeed.flushed_bytes",
