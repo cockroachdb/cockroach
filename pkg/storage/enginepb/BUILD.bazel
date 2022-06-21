@@ -12,10 +12,10 @@ proto_library(
         "mvcc3.proto",
         "rocksdb.proto",
     ],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/hlc:hlc_proto",
+        "//storage/enginepb:enginepb_proto",
+        "//util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -27,8 +27,10 @@ go_proto_library(
     proto = ":enginepb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/hlc",
         "//pkg/util/uuid",  # keep
+        "//storage/enginepb:mvcc3_proto",
+        "//util/hlc:legacy_timestamp_proto",
+        "//util/hlc:timestamp_proto",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

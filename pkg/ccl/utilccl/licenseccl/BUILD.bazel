@@ -18,7 +18,6 @@ go_library(
 proto_library(
     name = "licenseccl_proto",
     srcs = ["license.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

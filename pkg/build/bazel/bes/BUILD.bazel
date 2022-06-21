@@ -14,7 +14,6 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "build_event_stream_proto",
     srcs = ["build_event_stream.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build/bazel/bes/command_line:command_line_proto",

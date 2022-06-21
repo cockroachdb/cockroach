@@ -58,7 +58,6 @@ go_test(
 proto_library(
     name = "geoindex_proto",
     srcs = ["config.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

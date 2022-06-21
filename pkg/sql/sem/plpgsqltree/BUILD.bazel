@@ -1,0 +1,21 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "plpgsqltree",
+    srcs = [
+        "commons.go",
+        "constants.go",
+        "exception.go",
+        "statements.go",
+        "variable.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+    ],
+)
+
+get_x_data(name = "get_x_data")

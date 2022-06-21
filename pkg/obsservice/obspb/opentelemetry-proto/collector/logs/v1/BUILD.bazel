@@ -6,9 +6,8 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 proto_library(
     name = "v1_proto",
     srcs = ["logs_service.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:v1_proto"],
+    deps = ["//obsservice/obspb/opentelemetry-proto/logs/v1:v1_proto"],
 )
 
 go_proto_library(
@@ -17,7 +16,7 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1",
     proto = ":v1_proto",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs"],
+    deps = ["//obsservice/obspb/opentelemetry-proto/logs/v1:logs_proto"],
 )
 
 go_library(

@@ -22,7 +22,6 @@ go_library(
 proto_library(
     name = "admissionpb_proto",
     srcs = ["io_threshold.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

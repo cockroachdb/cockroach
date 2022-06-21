@@ -144,10 +144,9 @@ go_test(
 proto_library(
     name = "rpc_proto",
     srcs = ["heartbeat.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:roachpb_proto",
+        "//roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )

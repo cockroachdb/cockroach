@@ -7,7 +7,6 @@ load("//build:STRINGER.bzl", "stringer")
 proto_library(
     name = "tenantcapabilitiespb_proto",
     srcs = ["capabilities.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

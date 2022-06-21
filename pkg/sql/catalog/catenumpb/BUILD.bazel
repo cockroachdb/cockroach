@@ -10,7 +10,6 @@ proto_library(
         "encoded_datum.proto",
         "index.proto",
     ],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
 )

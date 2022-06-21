@@ -15,11 +15,10 @@ go_library(
 proto_library(
     name = "mtinfopb_proto",
     srcs = ["info.proto"],
-    strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvpb:kvpb_proto",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
+        "//kv/kvpb:kvpb_proto",
+        "//multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -31,8 +30,8 @@ go_proto_library(
     proto = ":mtinfopb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//multitenant/tenantcapabilities/tenantcapabilitiespb:capabilities_proto",
         "//pkg/kv/kvpb",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
