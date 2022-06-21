@@ -111,7 +111,7 @@ func (stmts Statements) StringWithFlags(flags tree.FmtFlags) string {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner    scanner.Scanner
+	scanner    scanner.SQLScanner
 	lexer      lexer
 	parserImpl sqlParserImpl
 	tokBuf     [8]sqlSymType
