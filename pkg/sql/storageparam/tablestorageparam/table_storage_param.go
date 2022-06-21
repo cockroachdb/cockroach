@@ -97,6 +97,14 @@ func floatFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (fl
 	return s, nil
 }
 
+func (po *Setter) getOrCreateRowLevelTTL() *catpb.RowLevelTTL {
+	rowLevelTTL := &po.tableDesc.RowLevelTTL
+	if *rowLevelTTL == nil {
+		*rowLevelTTL = &catpb.RowLevelTTL{}
+	}
+	return *rowLevelTTL
+}
+
 type tableParam struct {
 	onSet   func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	onReset func(po *Setter, evalCtx *tree.EvalContext, key string) error
@@ -146,13 +154,18 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if setTrue && po.tableDesc.RowLevelTTL == nil {
+			if setTrue {
 				// Set the base struct, but do not populate it.
 				// An error from runPostChecks will appear if the requisite fields are not set.
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
-			if !setTrue && po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL = nil
+				po.getOrCreateRowLevelTTL()
+			} else {
+				return errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`setting "ttl = 'off'" is not permitted`,
+					),
+					"use `RESET (ttl)` to remove TTL from the table",
+				)
 			}
 			return nil
 		},
@@ -169,8 +182,7 @@ var tableParams = map[string]tableParam{
 			}
 			if setTrue {
 				po.setAutomaticColumn = true
-			}
-			if !setTrue && po.tableDesc.RowLevelTTL != nil {
+			} else {
 				return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
 			}
 			return nil
@@ -209,10 +221,8 @@ var tableParams = map[string]tableParam{
 					key,
 				)
 			}
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
-			po.tableDesc.RowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
@@ -227,9 +237,6 @@ var tableParams = map[string]tableParam{
 	},
 	`ttl_select_batch_size`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -237,7 +244,8 @@ var tableParams = map[string]tableParam{
 			if err := tabledesc.ValidateTTLBatchSize(key, val); err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.SelectBatchSize = val
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.SelectBatchSize = val
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
@@ -249,9 +257,6 @@ var tableParams = map[string]tableParam{
 	},
 	`ttl_delete_batch_size`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -259,7 +264,8 @@ var tableParams = map[string]tableParam{
 			if err := tabledesc.ValidateTTLBatchSize(key, val); err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.DeleteBatchSize = val
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.DeleteBatchSize = val
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
@@ -271,9 +277,6 @@ var tableParams = map[string]tableParam{
 	},
 	`ttl_range_concurrency`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -281,7 +284,8 @@ var tableParams = map[string]tableParam{
 			if err := tabledesc.ValidateTTLRangeConcurrency(key, val); err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.RangeConcurrency = val
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.RangeConcurrency = val
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
@@ -293,9 +297,6 @@ var tableParams = map[string]tableParam{
 	},
 	`ttl_delete_rate_limit`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -303,7 +304,8 @@ var tableParams = map[string]tableParam{
 			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.DeleteRateLimit = val
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.DeleteRateLimit = val
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
@@ -315,26 +317,23 @@ var tableParams = map[string]tableParam{
 	},
 	`ttl_label_metrics`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			val, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.LabelMetrics = val
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.LabelMetrics = val
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
-			po.tableDesc.RowLevelTTL.LabelMetrics = false
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.LabelMetrics = false
+			}
 			return nil
 		},
 	},
 	`ttl_job_cron`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			str, err := paramparse.DatumAsString(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -342,7 +341,8 @@ var tableParams = map[string]tableParam{
 			if err := tabledesc.ValidateTTLCronExpr(key, str); err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.DeletionCron = str
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.DeletionCron = str
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
@@ -358,14 +358,14 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
-			po.tableDesc.RowLevelTTL.Pause = b
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.Pause = b
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
-			po.tableDesc.RowLevelTTL.Pause = false
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.Pause = false
+			}
 			return nil
 		},
 	},
@@ -375,17 +375,17 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
-			}
 			if err := tabledesc.ValidateTTLRowStatsPollInterval(key, d); err != nil {
 				return err
 			}
-			po.tableDesc.RowLevelTTL.RowStatsPollInterval = d
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.RowStatsPollInterval = d
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *tree.EvalContext, key string) error {
-			po.tableDesc.RowLevelTTL.RowStatsPollInterval = 0
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.RowStatsPollInterval = 0
+			}
 			return nil
 		},
 	},
