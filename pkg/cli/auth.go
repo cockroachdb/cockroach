@@ -182,7 +182,7 @@ func runLogout(cmd *cobra.Command, args []string) (resErr error) {
 		username)
 	return sqlExecCtx.RunQueryAndFormatResults(
 		context.Background(),
-		sqlConn, os.Stdout, stderr, logoutQuery)
+		sqlConn, os.Stdout, os.Stdout, stderr, logoutQuery)
 }
 
 var authListCmd = &cobra.Command{
@@ -214,7 +214,7 @@ SELECT username,
   FROM system.web_sessions`)
 	return sqlExecCtx.RunQueryAndFormatResults(
 		context.Background(),
-		sqlConn, os.Stdout, stderr, logoutQuery)
+		sqlConn, os.Stdout, os.Stdout, stderr, logoutQuery)
 }
 
 var authCmds = []*cobra.Command{
