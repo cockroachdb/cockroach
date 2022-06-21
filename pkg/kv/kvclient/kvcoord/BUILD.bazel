@@ -120,7 +120,6 @@ go_test(
         "send_test.go",
         "split_test.go",
         "transport_test.go",
-        "truncate_test.go",
         "txn_coord_sender_savepoints_test.go",
         "txn_coord_sender_server_test.go",
         "txn_coord_sender_test.go",
