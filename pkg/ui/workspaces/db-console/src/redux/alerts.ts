@@ -148,7 +148,11 @@ export const staggeredVersionWarningSelector = createSelector(
       return undefined;
     }
     const versionsText = Array.from(versionsMap)
-      .map(([k, v]) => `${v} nodes are running on ${k}`)
+      .map(([k, v]) =>
+        v === 1
+          ? `1 node is running on ${k}`
+          : `${v} nodes are running on ${k}`,
+      )
       .join(" and ")
       .concat(". ");
     return {
