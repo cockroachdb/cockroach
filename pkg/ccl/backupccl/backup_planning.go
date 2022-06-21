@@ -799,6 +799,10 @@ func writeBackupManifestCheckpoint(
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 ) error {
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "write-backup-manifest-checkpoint")
+	defer span.Finish()
+
 	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, storageURI, user)
 	if err != nil {
 		return err
