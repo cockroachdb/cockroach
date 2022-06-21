@@ -8,7 +8,7 @@ test       root  NULL  {}  NULL
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -50,7 +50,7 @@ public  users                            table  NULL  NULL
 public  web_sessions                     table  NULL  NULL
 public  zones                            table  NULL  NULL
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -93,7 +93,7 @@ public  zones                            table     NULL  NULL
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query I rowsort
 SELECT id FROM system.descriptor
 ----
@@ -142,7 +142,7 @@ SELECT id FROM system.descriptor
 104
 105
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query I rowsort
 SELECT id FROM system.descriptor
 ----
@@ -302,7 +302,7 @@ system  root   CONNECT  true
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query TTTTTB
 SHOW GRANTS ON system.*
 ----
@@ -562,7 +562,7 @@ system  public  zones                            root    INSERT  true
 system  public  zones                            root    SELECT  true
 system  public  zones                            root    UPDATE  true
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query TTTTTB
 SHOW GRANTS ON system.*
 ----
@@ -942,7 +942,7 @@ diagnostics.reporting.enabled
 sql.crdb_internal.table_row_statistics.as_of_time
 version
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query T
 SELECT name
 FROM system.settings
@@ -976,7 +976,7 @@ diagnostics.reporting.enabled                      true
 somesetting                                        somevalue
 sql.crdb_internal.table_row_statistics.as_of_time  -1µs
 
-onlyif config 3node-tenant
+onlyif config 3node-tenant-default-configs
 query TT
 SELECT name, value
 FROM system.settings
@@ -1022,7 +1022,7 @@ query error relation ".system.users" does not exist
 SELECT username FROM "".system.users WHERE username = 'root'
 
 # Verify that tenant_usage has a reduced TTL.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query T
 SELECT raw_config_sql FROM [ SHOW ZONE CONFIGURATION FOR TABLE system.tenant_usage ]
 ----

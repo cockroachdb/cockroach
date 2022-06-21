@@ -3104,7 +3104,7 @@ statement ok
 CREATE USER parentuser;
 GRANT parentuser TO testuser
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error session revival tokens are not supported on this cluster
 select crdb_internal.create_session_revival_token()
 
