@@ -2117,6 +2117,30 @@ project
       ├── constraint: /6/1: [/'bar' - /'bas')
       └── key: (1)
 
+# Regression test for #81906. A constrained scan should be generated over a
+# partial index with a predicate that is normalized to true. In this case, the
+# predicate is normalized to true because the column is NOT NULL.
+exec-ddl
+CREATE TABLE t81906 (
+  k INT PRIMARY KEY,
+  a INT NOT NULL,
+  INDEX (a) WHERE a IS NOT NULL
+)
+----
+
+opt
+SELECT k FROM t81906 WHERE a = 1
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan t81906@t81906_a_idx,partial
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/1: [/1 - /1]
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
