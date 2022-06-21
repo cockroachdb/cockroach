@@ -207,6 +207,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		if progress.Match < r.mu.proposalQuotaBaseIndex {
 			return
 		}
+		if sd, ok := r.store.allocator.StorePool.GetStoreDescriptor(rep.StoreID); ok && sd.Capacity.L0Sublevels > 20 {
+			return
+		}
 		if progress.Match > 0 && progress.Match < minIndex {
 			minIndex = progress.Match
 		}
