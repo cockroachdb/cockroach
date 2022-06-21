@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/errors"
 )
@@ -120,7 +121,8 @@ func IsRetryableError(err error) bool {
 
 	return (joberror.IsDistSQLRetryableError(err) ||
 		flowinfra.IsNoInboundStreamConnectionError(err) ||
-		errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)))
+		errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) ||
+		errors.Is(err, sql.ErrPlanChanged))
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
