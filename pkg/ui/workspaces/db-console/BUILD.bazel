@@ -1,5 +1,5 @@
 load("@npm_db_console//webpack-cli:index.bzl", webpack = "webpack_cli")
-load("@npm_db_console//karma:index.bzl", "karma_test")
+load("@npm_db_console//jest:index.bzl", "jest_test")
 load("@npm_db_console//stylint:index.bzl", "stylint_test")
 load("@build_bazel_rules_nodejs//:index.bzl", "nodejs_test")
 load("@npm_db_console//eslint:index.bzl", "eslint_test")
@@ -327,9 +327,9 @@ CCL_NOT_PROTO_CLIENT = glob(
     exclude = ["protos.*"],
 )
 
-KARMA_DEPS = [
+JEST_DEPS = [
     ":node_modules",
-    ".babelrc",
+    "babel.config.js",
     ".eslintrc.json",
     ".stylintrc",
     "assets",
@@ -337,38 +337,18 @@ KARMA_DEPS = [
     "fonts",
     "styl",
     "tsconfig.json",
-    "webpack.config.js",
-    "karma.conf.js",
+    "webpack.app.js",
+    "jest.config.js",
     "tests-loader.js",
     "//pkg/ui/workspaces/cluster-ui:cluster-ui",
     "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
     "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
 ] + SRC_NOT_PROTO_CLIENT + CCL_NOT_PROTO_CLIENT + DEPENDENCIES
 
-karma_test(
-    name = "karma",
-    data = KARMA_DEPS,
+jest_test(
+    name = "jest",
+    data = JEST_DEPS,
     templated_args = [
-        "start",
-        "$(execpath karma.conf.js)",
+        "$(rootpath jest.config.js)",
     ],
-    visibility = ["//visibility:public"],
-)
-
-karma_test(
-    name = "karma-watch",
-    data = KARMA_DEPS,
-    tags = [
-        # Reduce test startup times under ibazel by letting the karma process run between file changes
-        "ibazel_notify_changes",
-    ],
-    templated_args = [
-        "start",
-        "$(execpath karma.conf.js)",
-        # Reduce test startup times under ibazel by using the default karma watchers
-        "--auto-watch",
-        # Don't close the karma server after tests complete
-        "--no-single-run",
-    ],
-    visibility = ["//visibility:public"],
 )
