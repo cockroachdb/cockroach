@@ -37,7 +37,7 @@ SELECT pg_sleep(5) -- we need to sleep so that the 4.8s elapses and the SELECT *
 
 # Notices print twice -- once during planning and once during execution.
 # There's no nice way of reducing this to once without some hacks -- so left as is.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query T noticetrace
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 ----
@@ -79,33 +79,33 @@ SELECT * FROM t AS OF SYSTEM TIME '0'
 statement ok
 EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 # Regression test for out of bounds error during the type-checking of AOST with
 # a placeholder (#56488).
 statement error pq: no value provided for placeholder: \$1
 SELECT * FROM t AS OF SYSTEM TIME $1
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT with_min_timestamp('2020-01-15 15:16:17')
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT with_min_timestamp(statement_timestamp())
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT with_max_staleness('1s')
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp('2020-01-15 15:16:17')
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_min_timestamp can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(statement_timestamp())
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 statement error pgcode XXC01 with_max_staleness can only be used with a CCL distribution
 SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('1s'::interval)
 

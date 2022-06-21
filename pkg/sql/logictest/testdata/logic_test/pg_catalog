@@ -1075,7 +1075,7 @@ t6_pkey            6       NULL                                      NULL
 statement ok
 SET DATABASE = system
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query OOIBBBBBBBBBBTTTTTTI colnames
 SELECT *
 FROM pg_catalog.pg_index
@@ -1134,7 +1134,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7            0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
 
 # From #26504
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query OOI colnames
 SELECT indexrelid,
        (information_schema._pg_expandarray(indclass)).x AS operator_argument_type_oid,
@@ -4097,7 +4097,7 @@ SET DATABASE = test
 
 # We filter here because 'optimizer' will be different depending on which
 # configuration this logic test is running in, and session ID will vary.
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query TTTTTT colnames
 SELECT
   name, setting, category, short_desc, extra_desc, vartype
@@ -4218,7 +4218,7 @@ use_declarative_schema_changer                        on                  NULL  
 vectorize                                             on                  NULL      NULL        NULL        string
 xmloption                                             content             NULL      NULL        NULL        string
 
-skipif config 3node-tenant
+skipif config 3node-tenant-default-configs
 query TTTTTTT colnames
 SELECT
   name, setting, unit, context, enumvals, boot_val, reset_val

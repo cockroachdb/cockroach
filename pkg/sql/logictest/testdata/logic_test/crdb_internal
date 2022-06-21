@@ -1,6 +1,6 @@
 # 3node-tenant is blocked from running this file due to heavy reliance on
 # unavailable node IDs in this test.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant-default-configs
 
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal

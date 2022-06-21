@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant-default-configs
 
 # Test crdb_internal.kv_set_queue_active commands that target all stores on the
 # gateway node.
