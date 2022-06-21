@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -289,7 +290,7 @@ CREATE TABLE foo (
 				sqlDB.Exec(t, action)
 			}
 
-			targets := []jobspb.ChangefeedTargetSpecification{
+			targets := changefeedbase.Targets{
 				{
 					Type:       targetType,
 					TableID:    tableDesc.GetID(),
