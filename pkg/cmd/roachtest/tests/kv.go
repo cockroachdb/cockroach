@@ -797,7 +797,7 @@ func registerKVRangeLookups(r registry.Registry) {
 			defer close(doneWorkload)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"
 			if err = c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
-				return err
+				t.Fatalf("failed to pre-split ranges: %v", err)
 			}
 			close(doneInit)
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
