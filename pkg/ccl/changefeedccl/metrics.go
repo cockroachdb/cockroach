@@ -322,6 +322,13 @@ var (
 		Measurement: "Updates",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaChangefeedReplanMetrics = metric.Metadata{
+		Name:        "changefeed.replan_metrics",
+		Help:        "Number of replans triggered across all feeds",
+		Measurement: "Replans",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
@@ -501,6 +508,7 @@ type Metrics struct {
 	CheckpointHistNanos *metric.Histogram
 	FrontierUpdates     *metric.Counter
 	ThrottleMetrics     cdcutils.Metrics
+	ReplanMetrics       *metric.Counter
 
 	mu struct {
 		syncutil.Mutex
@@ -531,6 +539,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
 		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
+		ReplanMetrics:   metric.NewCounter(metaChangefeedReplanMetrics),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
