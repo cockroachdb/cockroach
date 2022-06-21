@@ -17,13 +17,13 @@ import (
 
 // ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
 func ValidateTable(
-	targets []jobspb.ChangefeedTargetSpecification,
+	targets changefeedbase.Targets,
 	tableDesc catalog.TableDescriptor,
 	canHandle changefeedbase.CanHandle,
 ) error {
 	var found bool
 	for _, cts := range targets {
-		var t jobspb.ChangefeedTargetSpecification
+		var t changefeedbase.Target
 		if cts.TableID == tableDesc.GetID() {
 			t = cts
 			found = true

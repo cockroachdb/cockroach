@@ -356,23 +356,23 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 	tolerances := opts.GetCanHandle()
-	for _, desc := range targetDescs {
-		if table, isTable := desc.(catalog.TableDescriptor); isTable {
-			if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
-				return nil, err
-			}
-			for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
-				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
-			}
-		}
-	}
-
 	details := jobspb.ChangefeedDetails{
 		Tables:               tables,
 		SinkURI:              sinkURI,
 		StatementTime:        statementTime,
 		EndTime:              endTime,
 		TargetSpecifications: targets,
+	}
+	specs := AllTargets(details)
+	for _, desc := range targetDescs {
+		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
+				return nil, err
+			}
+			for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
+				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
+			}
+		}
 	}
 
 	parsedSink, err := url.Parse(sinkURI)
@@ -1092,33 +1092,6 @@ func getChangefeedTargetName(
 		return getQualifiedTableName(ctx, execCfg, txn, desc)
 	}
 	return desc.GetName(), nil
-}
-
-// AllTargets gets all the targets listed in a ChangefeedDetails,
-// from the statement time name map in old protos
-// or the TargetSpecifications in new ones.
-func AllTargets(cd jobspb.ChangefeedDetails) (targets []jobspb.ChangefeedTargetSpecification) {
-	// TODO: Use a version gate for this once we have CDC version gates
-	if len(cd.TargetSpecifications) > 0 {
-		for _, ts := range cd.TargetSpecifications {
-			if ts.TableID > 0 {
-				if ts.StatementTimeName == "" {
-					ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
-				}
-				targets = append(targets, ts)
-			}
-		}
-	} else {
-		for id, t := range cd.Tables {
-			ct := jobspb.ChangefeedTargetSpecification{
-				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				TableID:           id,
-				StatementTimeName: t.StatementTimeName,
-			}
-			targets = append(targets, ct)
-		}
-	}
-	return
 }
 
 func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record) {

@@ -48,10 +48,10 @@ import (
 func makeTopic(name string) *tableDescriptorTopic {
 	id, _ := strconv.ParseUint(name, 36, 64)
 	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
-	spec := jobspb.ChangefeedTargetSpecification{
+	spec := changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
 		TableID:           desc.GetID(),
-		StatementTimeName: name,
+		StatementTimeName: changefeedbase.StatementTimeName(name),
 	}
 	return &tableDescriptorTopic{Metadata: makeMetadata(desc), spec: spec}
 }
@@ -162,7 +162,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// NB: compression added in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e, err := makeJSONEncoder(opts, []jobspb.ChangefeedTargetSpecification{})
+	e, err := makeJSONEncoder(opts, changefeedbase.Targets{})
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)

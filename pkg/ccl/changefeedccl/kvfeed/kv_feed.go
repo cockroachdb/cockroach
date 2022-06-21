@@ -44,7 +44,7 @@ type Config struct {
 	Spans                   []roachpb.Span
 	CheckpointSpans         []roachpb.Span
 	CheckpointTimestamp     hlc.Timestamp
-	Targets                 []jobspb.ChangefeedTargetSpecification
+	Targets                 changefeedbase.Targets
 	Writer                  kvevent.Writer
 	Metrics                 *kvevent.Metrics
 	OnBackfillCallback      func() func()

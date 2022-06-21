@@ -18,7 +18,6 @@ import (
 	"cloud.google.com/go/pubsub"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -152,7 +151,7 @@ func MakePubsubSink(
 	ctx context.Context,
 	u *url.URL,
 	encodingOpts changefeedbase.EncodingOptions,
-	targets []jobspb.ChangefeedTargetSpecification,
+	targets changefeedbase.Targets,
 ) (Sink, error) {
 
 	pubsubURL := sinkURL{URL: u, q: u.Query()}

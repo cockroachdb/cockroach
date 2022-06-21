@@ -225,8 +225,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	spans, err := ca.setupSpansAndFrontier()
 
-	endTime := ca.spec.Feed.EndTime
-	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
+	feed := makeChangefeedConfigFromJobDetails(ca.spec.Feed)
+
+	endTime := feed.EndTime
+	opts := feed.Opts
 
 	if err != nil {
 		ca.MoveToDraining(err)
@@ -235,7 +237,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	timestampOracle := &changeAggregatorLowerBoundOracle{
 		sf:                         ca.frontier.SpanFrontier(),
-		initialInclusiveLowerBound: ca.spec.Feed.StatementTime,
+		initialInclusiveLowerBound: feed.ScanTime,
 	}
 
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -305,7 +307,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	ca.eventConsumer, err = newKVEventToRowConsumer(
 		ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, ca.encoder, ca.spec.Feed, ca.knobs, ca.topicNamer)
+		ca.sink, ca.encoder, feed, ca.knobs, ca.topicNamer)
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.

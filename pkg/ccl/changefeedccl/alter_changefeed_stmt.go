@@ -364,7 +364,12 @@ func generateNewTargets(
 		newTargets[k] = newTarget
 		newTableDescs[targetSpec.TableID] = descResolver.DescByID[targetSpec.TableID]
 
-		originalSpecs[newTarget] = targetSpec
+		originalSpecs[newTarget] = jobspb.ChangefeedTargetSpecification{
+			Type:              targetSpec.Type,
+			TableID:           targetSpec.TableID,
+			FamilyName:        targetSpec.FamilyName,
+			StatementTimeName: string(targetSpec.StatementTimeName),
+		}
 	}
 
 	for _, cmd := range alterCmds {

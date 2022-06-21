@@ -389,7 +389,12 @@ func (s *bufferSink) Dial() error {
 // TODO (zinger): Make this a tuple or array datum if it can be
 // done without breaking backwards compatibility.
 func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
-	return s.alloc.NewDString(tree.DString(strings.Join(t.GetNameComponents(), ".")))
+	name, components := t.GetNameComponents()
+	if len(components) == 0 {
+		return s.alloc.NewDString(tree.DString(name))
+	}
+	strs := append([]string{string(name)}, components...)
+	return s.alloc.NewDString(tree.DString(strings.Join(strs, ".")))
 }
 
 type nullSink struct {

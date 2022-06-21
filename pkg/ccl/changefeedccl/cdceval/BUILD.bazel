@@ -42,6 +42,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/cdctest",
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/utilccl",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
