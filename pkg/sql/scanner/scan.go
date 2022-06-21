@@ -71,6 +71,11 @@ type Scanner struct {
 	quoted bool
 }
 
+// SQLScanner is a scanner with a SQL specific scan function
+type SQLScanner struct {
+	Scanner
+}
+
 // In returns the input string.
 func (s *Scanner) In() string {
 	return s.in
@@ -129,7 +134,7 @@ func (s *Scanner) finishString(buf []byte) string {
 }
 
 // Scan scans the next token and populates its information into lval.
-func (s *Scanner) Scan(lval ScanSymType) {
+func (s *SQLScanner) Scan(lval ScanSymType) {
 	lval.SetID(0)
 	lval.SetPos(int32(s.pos))
 	lval.SetStr("EOF")
@@ -1040,7 +1045,7 @@ outer:
 // HasMultipleStatements returns true if the sql string contains more than one
 // statements. An error is returned if an invalid token was encountered.
 func HasMultipleStatements(sql string) (multipleStmt bool, err error) {
-	var s Scanner
+	var s SQLScanner
 	var lval fakeSym
 	s.Init(sql)
 	count := 0
@@ -1061,7 +1066,7 @@ func HasMultipleStatements(sql string) (multipleStmt bool, err error) {
 
 // scanOne is a simplified version of (*Parser).scanOneStmt() for use
 // by HasMultipleStatements().
-func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
+func (s *SQLScanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 	// Scan the first token.
 	for {
 		s.Scan(lval)
@@ -1101,7 +1106,7 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 // LastLexicalToken returns the last lexical token. If the string has no lexical
 // tokens, returns 0 and ok=false.
 func LastLexicalToken(sql string) (lastTok int, ok bool) {
-	var s Scanner
+	var s SQLScanner
 	var lval fakeSym
 	s.Init(sql)
 	for {
@@ -1116,7 +1121,7 @@ func LastLexicalToken(sql string) (lastTok int, ok bool) {
 // FirstLexicalToken returns the first lexical token.
 // Returns 0 if there is no token.
 func FirstLexicalToken(sql string) (tok int) {
-	var s Scanner
+	var s SQLScanner
 	var lval fakeSym
 	s.Init(sql)
 	s.Scan(&lval)
@@ -1162,7 +1167,7 @@ type InspectToken struct {
 //
 // See TestInspect and the examples in testdata/inspect for more details.
 func Inspect(sql string) []InspectToken {
-	var s Scanner
+	var s SQLScanner
 	var lval fakeSym
 	var tokens []InspectToken
 	s.Init(sql)
@@ -1181,7 +1186,7 @@ func Inspect(sql string) []InspectToken {
 		// to find the normalized text of the identifier found so far.
 		if lval.id == lexbase.ERROR && s.lastAttemptedID == lexbase.IDENT && s.quoted {
 			maybeIdent := sql[tok.Start:tok.End] + "\""
-			var si Scanner
+			var si SQLScanner
 			si.Init(maybeIdent)
 			si.Scan(&lval)
 			if lval.id == lexbase.IDENT {
