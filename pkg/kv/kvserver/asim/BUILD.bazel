@@ -7,6 +7,7 @@ go_library(
         "metrics_tracker.go",
         "pacer.go",
         "replicate_queue.go",
+        "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
     visibility = ["//visibility:public"],

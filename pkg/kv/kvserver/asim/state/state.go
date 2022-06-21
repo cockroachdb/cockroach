@@ -96,6 +96,9 @@ type State interface {
 	// [Key, EndKey), on identical stores to the un-split Range's replicas. This
 	// fails if the Key given already exists as a StartKey.
 	SplitRange(Key) (Range, Range, bool)
+	// RangeSpan returns the [StartKey, EndKey) for the range with ID RangeID
+	// if it exists, otherwise it returns false.
+	RangeSpan(RangeID) (Key, Key, bool)
 	// SetSpanConfig set the span config for the Range with ID RangeID.
 	SetSpanConfig(RangeID, roachpb.SpanConfig) bool
 	// ValidTransfer returns whether transferring the lease for the Range with ID
@@ -241,6 +244,9 @@ const minKey Key = -1
 
 // maxKey is the maximum key in the keyspace.
 const maxKey Key = 9999999999
+
+// InvalidKey is a placeholder key that does not exist in the keyspace.
+const InvalidKey Key = -2
 
 // keyFmt is the formatter for representing keys as lexicographically ordered
 // strings.
