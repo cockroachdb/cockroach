@@ -67,13 +67,15 @@ Connection
   \c, \connect {[DB] [USER] [HOST] [PORT] | [URL]}
                     connect to a server or print the current connection URL.
                     (Omitted values reuse previous parameters. Use '-' to skip a field.)
-  \password [USERNAME]   
+  \password [USERNAME]
                     securely change the password for a user
 
 Input/Output
   \echo [STRING]    write the provided string to standard output.
   \i                execute commands from the specified file.
   \ir               as \i, but relative to the location of the current script.
+  \o [FILE]         send all query results to the specified file.
+  \qecho [STRING]   write the provided string to the query output stream (see \o).
 
 Informational
   \l                list all databases in the CockroachDB cluster.
@@ -1174,6 +1176,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\echo`:
 		fmt.Fprintln(c.iCtx.stdout, strings.Join(cmd[1:], " "))
 
+	case `\qecho`:
+		fmt.Fprintln(c.iCtx.queryOutput, strings.Join(cmd[1:], " "))
+		c.maybeFlushOutput()
+
 	case `\set`:
 		return c.handleSet(cmd[1:], loopState, errState)
 
@@ -1188,6 +1194,9 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\ir`:
 		return c.runInclude(cmd[1:], loopState, errState, true /* relative */)
+
+	case `\o`:
+		return c.runOpen(cmd[1:], loopState, errState)
 
 	case `\p`:
 		// This is analogous to \show but does not need a special case.
@@ -1793,10 +1802,12 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 				c.concatLines,
 			)
 		}
+		defer c.maybeFlushOutput()
 		return c.sqlExecCtx.RunQueryAndFormatResults(
 			ctx,
 			c.conn,
-			c.iCtx.stdout,
+			c.iCtx.queryOutput, // query output.
+			c.iCtx.stdout,      // timings.
 			c.iCtx.stderr,
 			q,
 		)
@@ -1831,8 +1842,12 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 				traceType = "kv"
 			}
 			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+				defer c.maybeFlushOutput()
 				return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
-					c.conn, c.iCtx.stdout, c.iCtx.stderr,
+					c.conn,
+					c.iCtx.queryOutput, // query output
+					c.iCtx.stdout,      // timings
+					c.iCtx.stderr,      // errors
 					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
 			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
@@ -1922,6 +1937,11 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn, cmdOut, cmdErr *os.File
 		}
 		switch state {
 		case cliStart:
+			defer func() {
+				if err := c.closeOutputFile(); err != nil {
+					fmt.Fprintf(cmdErr, "warning: closing output file: %v\n", err)
+				}
+			}()
 			cleanupFn, err := c.configurePreShellDefaults(cmdIn, cmdOut, cmdErr)
 			defer cleanupFn()
 			if err != nil {
@@ -1990,6 +2010,8 @@ func (c *cliState) configurePreShellDefaults(
 	cmdIn, cmdOut, cmdErr *os.File,
 ) (cleanupFn func(), err error) {
 	c.iCtx.stdout = cmdOut
+	c.iCtx.queryOutputFile = cmdOut
+	c.iCtx.queryOutput = cmdOut
 	c.iCtx.stderr = cmdErr
 
 	if c.sqlExecCtx.TerminalOutput {
@@ -2036,6 +2058,7 @@ func (c *cliState) configurePreShellDefaults(
 		// The readline library may have a custom file descriptor for stdout.
 		// Use that for further output.
 		c.iCtx.stdout = c.ins.Stdout()
+		c.iCtx.queryOutputFile = c.ins.Stdout()
 
 		// If the user has used bind -v or bind -l in their ~/.editrc,
 		// this will reset the standard bindings. However we really
@@ -2316,4 +2339,78 @@ func (c *cliState) getSessionVarValue(sessionVar string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func (c *cliState) runOpen(cmd []string, contState, errState cliStateEnum) (resState cliStateEnum) {
+	if len(cmd) > 1 {
+		return c.invalidSyntax(errState)
+	}
+
+	outputFile := "" // no file: reset to stdout
+	if len(cmd) == 1 {
+		outputFile = cmd[0]
+	}
+	if err := c.openOutputFile(outputFile); err != nil {
+		c.exitErr = err
+		fmt.Fprintf(c.iCtx.stderr, "%v\n", c.exitErr)
+		return errState
+	}
+	return contState
+}
+
+func (c *cliState) openOutputFile(file string) error {
+	var f *os.File
+	if file != "" {
+		// First check whether the new file can be opened.
+		// (We keep the previous one otherwise.)
+		// NB: permission 0666 mimics what psql does: fopen(file, "w").
+		var err error
+		f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+		if err != nil {
+			return err
+		}
+	}
+	// Close the previous file.
+	if err := c.closeOutputFile(); err != nil {
+		return err
+	}
+	if f != nil {
+		c.iCtx.queryOutputFile = f
+		c.iCtx.queryOutputBuf = bufio.NewWriter(f)
+		c.iCtx.queryOutput = c.iCtx.queryOutputBuf
+	}
+	return nil
+}
+
+func (c *cliState) maybeFlushOutput() {
+	if err := c.maybeFlushOutputInternal(); err != nil {
+		fmt.Fprintf(c.iCtx.stderr, "warning: flushing output file: %v", err)
+	}
+}
+
+func (c *cliState) maybeFlushOutputInternal() error {
+	if c.iCtx.queryOutputBuf == nil {
+		return nil
+	}
+	return c.iCtx.queryOutputBuf.Flush()
+}
+
+func (c *cliState) closeOutputFile() error {
+	if c.iCtx.queryOutputBuf == nil {
+		return nil
+	}
+	if err := c.maybeFlushOutputInternal(); err != nil {
+		return err
+	}
+	if c.iCtx.queryOutputFile == c.iCtx.stdout {
+		// Nothing to do.
+		return nil
+	}
+
+	// Close file and reset.
+	err := c.iCtx.queryOutputFile.Close()
+	c.iCtx.queryOutputFile = c.iCtx.stdout
+	c.iCtx.queryOutput = c.iCtx.stdout
+	c.iCtx.queryOutputBuf = nil
+	return err
 }
