@@ -8,14 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import {
-  contentModifiers,
-  StatisticType,
-} from "../statsTableUtil/statsTableUtil";
+import React, { useCallback, useState } from "react";
+import { StatisticType } from "../statsTableUtil/statsTableUtil";
 import classNames from "classnames/bind";
 import styles from "./sqlActivity.module.scss";
+import { Modal } from "../modal";
+import { Text } from "../text";
 
 const cx = classNames.bind(styles);
 
@@ -25,34 +23,38 @@ interface clearStatsProps {
 }
 
 const ClearStats = (props: clearStatsProps): React.ReactElement => {
-  let statsType = "";
-  switch (props.tooltipType) {
-    case "transaction":
-      statsType = contentModifiers.transactionCapital;
-      break;
-    case "statement":
-      statsType = contentModifiers.statementCapital;
-      break;
-    case "transactionDetails":
-      statsType = contentModifiers.statementCapital;
-      break;
-    default:
-      break;
-  }
-  const toolTipText = `${statsType} statistics are aggregated once an hour by default and organized by the start time. 
-  Statistics between two hourly intervals belong to the nearest hour rounded down. 
-  For example, a ${statsType} execution ending at 1:50 would have its statistics aggregated in the 1:00 interval 
-  start time. Clicking ‘reset SQL stats’ will reset SQL stats on the Statements and Transactions pages and 
-  crdb_internal tables.`;
+  const [visible, setVisible] = useState(false);
+  const onOkHandler = useCallback(() => {
+    props.resetSQLStats();
+    setVisible(false);
+  }, [props]);
+
+  const showModal = (): void => {
+    setVisible(true);
+  };
+
+  const onCancelHandler = useCallback(() => setVisible(false), []);
+
   return (
-    <Tooltip content={toolTipText} style="tableTitle">
-      <a
-        className={cx("action", "tooltip-info", "separator")}
-        onClick={props.resetSQLStats}
-      >
+    <>
+      <a className={cx("action", "separator")} onClick={showModal}>
         reset SQL stats
       </a>
-    </Tooltip>
+      <Modal
+        visible={visible}
+        onOk={onOkHandler}
+        onCancel={onCancelHandler}
+        okText="Continue"
+        cancelText="Cancel"
+        title="Do you want to reset SQL stats?"
+      >
+        <Text>
+          This action will reset SQL stats on the Statements and Transactions
+          pages and crdb_internal tables. Statistics will be cleared and
+          unrecoverable for all users across the entire cluster.
+        </Text>
+      </Modal>
+    </>
   );
 };
 
