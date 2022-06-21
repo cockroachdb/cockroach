@@ -81,6 +81,7 @@ DEPENDENCIES = [
     "@npm//highlight.js",
     "@npm//http-proxy-middleware",
     "@npm//identity-obj-proxy",
+    "@npm//jest-canvas-mock",
     "@npm//jest-environment-enzyme",
     "@npm//jest-enzyme",
     "@npm//jest-fetch-mock",
