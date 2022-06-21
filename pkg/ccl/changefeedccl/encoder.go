@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -43,7 +42,7 @@ type Encoder interface {
 }
 
 func getEncoder(
-	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
 ) (Encoder, error) {
 	switch opts.Format {
 	case changefeedbase.OptFormatJSON:

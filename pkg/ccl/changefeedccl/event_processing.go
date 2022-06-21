@@ -12,9 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -39,7 +37,7 @@ type kvEventToRowConsumer struct {
 	cursor   hlc.Timestamp
 	knobs    TestingKnobs
 	decoder  cdcevent.Decoder
-	details  jobspb.ChangefeedDetails
+	details  Changefeed
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -52,12 +50,12 @@ func newKVEventToRowConsumer(
 	cursor hlc.Timestamp,
 	sink Sink,
 	encoder Encoder,
-	details jobspb.ChangefeedDetails,
+	details Changefeed,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
 ) (*kvEventToRowConsumer, error) {
-	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
-	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, AllTargets(details), includeVirtual)
+	includeVirtual := details.Opts.IncludeVirtual()
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +78,7 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 			return topic, nil
 		}
 	}
-	for _, s := range AllTargets(c.details) {
+	for _, s := range c.details.Targets {
 		if s.TableID == eventMeta.TableID && (s.FamilyName == "" || s.FamilyName == eventMeta.FamilyName) {
 			topic, err := makeTopicDescriptorFromSpec(s, eventMeta)
 			if err != nil {
@@ -120,7 +118,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 	// Get prev value, if necessary.
 	prevRow, err := func() (cdcevent.Row, error) {
-		if _, withDiff := c.details.Opts[changefeedbase.OptDiff]; !withDiff {
+		if c.details.Opts.GetFilters().WithDiff {
 			return cdcevent.Row{}, nil
 		}
 		prevKV := roachpb.KeyValue{Key: ev.KV().Key, Value: ev.PrevValue()}

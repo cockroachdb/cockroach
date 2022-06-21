@@ -147,7 +147,7 @@ func TestTopicForEvent(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := kvEventToRowConsumer{
-				details:              tc.details,
+				details:              makeChangefeedFromJobDetails(tc.details),
 				topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 			}
 			tn, err := MakeTopicNamer(AllTargets(tc.details))

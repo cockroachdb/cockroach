@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -353,7 +352,7 @@ func makeCloudStorageSink(
 	// Using + rather than . here because some consumers may be relying on there being exactly
 	// one '.' in the filepath, and '+' shares with '-' the useful property of being
 	// lexicographically earlier than '.'.
-	tn, err := MakeTopicNamer([]jobspb.ChangefeedTargetSpecification{}, WithJoinByte('+'))
+	tn, err := MakeTopicNamer([]changefeedbase.Target{}, WithJoinByte('+'))
 	if err != nil {
 		return nil, err
 	}

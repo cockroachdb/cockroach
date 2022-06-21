@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -32,14 +31,14 @@ import (
 type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, wrapped, keyOnly, keyInValue, topicInValue bool
 
-	targets []jobspb.ChangefeedTargetSpecification
+	targets changefeedbase.Targets
 	buf     bytes.Buffer
 }
 
 var _ Encoder = &jsonEncoder{}
 
 func makeJSONEncoder(
-	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
 ) (*jsonEncoder, error) {
 	e := &jsonEncoder{
 		targets: targets,

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
@@ -22,7 +23,7 @@ type TopicDescriptor interface {
 	// GetNameComponents returns the names that should go into any string-based topic identifier.
 	// If the topic is a table, this will be the statement time name of the table, fully-qualified
 	// if that option was set when creating the changefeed.
-	GetNameComponents() []string
+	GetNameComponents() (changefeedbase.StatementTimeName, []string)
 	// GetTopicIdentifier returns a struct suitable for use as a unique key in a map containing
 	// all topics in a feed.
 	GetTopicIdentifier() TopicIdentifier
@@ -32,7 +33,7 @@ type TopicDescriptor interface {
 	GetVersion() descpb.DescriptorVersion
 	// GetTargetSpecification() returns the target specification for this topic.
 	// Currently this is assumed to be 1:1, or to be many: 1 for EachColumnFamily topics.
-	GetTargetSpecification() jobspb.ChangefeedTargetSpecification
+	GetTargetSpecification() changefeedbase.Target
 }
 
 // TopicIdentifier is a minimal set of fields that
@@ -51,7 +52,7 @@ type TopicNamer struct {
 	sanitize   func(string) string
 
 	// DisplayNames are initialized once from specs and may contain placeholder strings.
-	DisplayNames map[jobspb.ChangefeedTargetSpecification]string
+	DisplayNames map[changefeedbase.Target]string
 
 	// FullNames are generated whenever Name() is actually called (usually during sink.EmitRow).
 	// They do not contain placeholder strings.
@@ -113,12 +114,10 @@ func WithSanitizeFn(fn func(string) string) TopicNameOption {
 // MakeTopicNamer creates a TopicNamer.
 // specs are used to populate DisplayNames and the values iterated over in Each.
 // Add options using WithJoinByte, WithPrefix, WithSingleName, and/or WithSanitizeFn.
-func MakeTopicNamer(
-	specs []jobspb.ChangefeedTargetSpecification, opts ...TopicNameOption,
-) (*TopicNamer, error) {
+func MakeTopicNamer(specs []changefeedbase.Target, opts ...TopicNameOption) (*TopicNamer, error) {
 	tn := &TopicNamer{
 		join:         '.',
-		DisplayNames: make(map[jobspb.ChangefeedTargetSpecification]string, len(specs)),
+		DisplayNames: make(map[changefeedbase.Target]string, len(specs)),
 		FullNames:    make(map[TopicIdentifier]string),
 	}
 	for _, opt := range opts {
@@ -178,9 +177,7 @@ func (tn *TopicNamer) Each(fn func(string) error) error {
 // and should use placeholders if necessary. Only necessary in the
 // EACH_FAMILY case as in the COLUMN_FAMILY case we know the name from
 // the spec.
-func (tn *TopicNamer) makeName(
-	s jobspb.ChangefeedTargetSpecification, td TopicDescriptor,
-) (string, error) {
+func (tn *TopicNamer) makeName(s changefeedbase.Target, td TopicDescriptor) (string, error) {
 	switch s.Type {
 	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
 		return tn.nameFromComponents(s.StatementTimeName), nil
@@ -190,17 +187,20 @@ func (tn *TopicNamer) makeName(
 		if td == nil {
 			return tn.nameFromComponents(s.StatementTimeName, familyPlaceholder), nil
 		}
-		return tn.nameFromComponents(td.GetNameComponents()...), nil
+		name, components := td.GetNameComponents()
+		return tn.nameFromComponents(name, components...), nil
 	default:
 		return "", errors.AssertionFailedf("unrecognized type %s", s.Type)
 	}
 }
 
-func (tn *TopicNamer) makeDisplayName(s jobspb.ChangefeedTargetSpecification) (string, error) {
+func (tn *TopicNamer) makeDisplayName(s changefeedbase.Target) (string, error) {
 	return tn.makeName(s, nil /* no topic descriptor yet, use placeholders if needed */)
 }
 
-func (tn *TopicNamer) nameFromComponents(components ...string) string {
+func (tn *TopicNamer) nameFromComponents(
+	name changefeedbase.StatementTimeName, components ...string,
+) string {
 	// Use strings.Builder rather than strings.Join because the join
 	// character isn't used with the prefix, so we save a string copy this way.
 	var b strings.Builder
@@ -208,6 +208,7 @@ func (tn *TopicNamer) nameFromComponents(components ...string) string {
 	if tn.singleName != "" {
 		b.WriteString(tn.singleName)
 	} else {
+		b.WriteString(string(name))
 		for i, c := range components {
 			if i > 0 {
 				b.WriteByte(tn.join)
@@ -226,17 +227,13 @@ func (tn *TopicNamer) nameFromComponents(components ...string) string {
 
 type tableDescriptorTopic struct {
 	cdcevent.Metadata
-	spec                jobspb.ChangefeedTargetSpecification
-	nameComponentsCache []string
-	identifierCache     TopicIdentifier
+	spec            changefeedbase.Target
+	identifierCache TopicIdentifier
 }
 
 // GetNameComponents implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetNameComponents() []string {
-	if len(tdt.nameComponentsCache) == 0 {
-		tdt.nameComponentsCache = []string{tdt.spec.StatementTimeName}
-	}
-	return tdt.nameComponentsCache
+func (tdt *tableDescriptorTopic) GetNameComponents() (changefeedbase.StatementTimeName, []string) {
+	return tdt.spec.StatementTimeName, []string{}
 }
 
 // GetTopicIdentifier implements the TopicDescriptor interface
@@ -255,7 +252,7 @@ func (tdt *tableDescriptorTopic) GetVersion() descpb.DescriptorVersion {
 }
 
 // GetTargetSpecification implements the TopicDescriptor interface
-func (tdt *tableDescriptorTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
+func (tdt *tableDescriptorTopic) GetTargetSpecification() changefeedbase.Target {
 	return tdt.spec
 }
 
@@ -263,20 +260,13 @@ var _ TopicDescriptor = &tableDescriptorTopic{}
 
 type columnFamilyTopic struct {
 	cdcevent.Metadata
-	spec                jobspb.ChangefeedTargetSpecification
-	nameComponentsCache []string
-	identifierCache     TopicIdentifier
+	spec            changefeedbase.Target
+	identifierCache TopicIdentifier
 }
 
 // GetNameComponents implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetNameComponents() []string {
-	if len(cft.nameComponentsCache) == 0 {
-		cft.nameComponentsCache = []string{
-			cft.spec.StatementTimeName,
-			cft.FamilyName,
-		}
-	}
-	return cft.nameComponentsCache
+func (cft *columnFamilyTopic) GetNameComponents() (changefeedbase.StatementTimeName, []string) {
+	return cft.spec.StatementTimeName, []string{cft.FamilyName}
 }
 
 // GetTopicIdentifier implements the TopicDescriptor interface
@@ -296,7 +286,7 @@ func (cft *columnFamilyTopic) GetVersion() descpb.DescriptorVersion {
 }
 
 // GetTargetSpecification implements the TopicDescriptor interface
-func (cft *columnFamilyTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
+func (cft *columnFamilyTopic) GetTargetSpecification() changefeedbase.Target {
 	return cft.spec
 }
 
@@ -304,8 +294,10 @@ var _ TopicDescriptor = &columnFamilyTopic{}
 
 type noTopic struct{}
 
-func (n noTopic) GetNameComponents() []string {
-	return []string{}
+var noStatementTimeName changefeedbase.StatementTimeName = ""
+
+func (n noTopic) GetNameComponents() (changefeedbase.StatementTimeName, []string) {
+	return noStatementTimeName, []string{}
 }
 
 func (n noTopic) GetTopicIdentifier() TopicIdentifier {
@@ -316,14 +308,14 @@ func (n noTopic) GetVersion() descpb.DescriptorVersion {
 	return 0
 }
 
-func (n noTopic) GetTargetSpecification() jobspb.ChangefeedTargetSpecification {
-	return jobspb.ChangefeedTargetSpecification{}
+func (n noTopic) GetTargetSpecification() changefeedbase.Target {
+	return changefeedbase.Target{}
 }
 
 var _ TopicDescriptor = &noTopic{}
 
 func makeTopicDescriptorFromSpec(
-	s jobspb.ChangefeedTargetSpecification, src cdcevent.Metadata,
+	s changefeedbase.Target, src cdcevent.Metadata,
 ) (TopicDescriptor, error) {
 	switch s.Type {
 	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:

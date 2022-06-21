@@ -148,10 +148,10 @@ func (p *asyncProducerMock) outstanding() int {
 
 func topic(name string) *tableDescriptorTopic {
 	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
-	spec := jobspb.ChangefeedTargetSpecification{
+	spec := changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
 		TableID:           tableDesc.GetID(),
-		StatementTimeName: name,
+		StatementTimeName: changefeedbase.StatementTimeName(name),
 	}
 	return &tableDescriptorTopic{Metadata: makeMetadata(tableDesc), spec: spec}
 }
@@ -214,12 +214,12 @@ func makeTestKafkaSink(
 	}
 }
 
-func makeChangefeedTargets(targetNames ...string) []jobspb.ChangefeedTargetSpecification {
-	targets := make([]jobspb.ChangefeedTargetSpecification, len(targetNames))
+func makeChangefeedTargets(targetNames ...string) changefeedbase.Targets {
+	targets := make(changefeedbase.Targets, len(targetNames))
 	for i, name := range targetNames {
-		targets[i] = jobspb.ChangefeedTargetSpecification{
+		targets[i] = changefeedbase.Target{
 			TableID:           descpb.ID(i),
-			StatementTimeName: name,
+			StatementTimeName: changefeedbase.StatementTimeName(name),
 		}
 	}
 	return targets
@@ -407,10 +407,10 @@ func TestSQLSink(t *testing.T) {
 	overrideTopic := func(name string) *tableDescriptorTopic {
 		id, _ := strconv.ParseUint(name, 36, 64)
 		td := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
-		spec := jobspb.ChangefeedTargetSpecification{
+		spec := changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
 			TableID:           td.GetID(),
-			StatementTimeName: name,
+			StatementTimeName: changefeedbase.StatementTimeName(name),
 		}
 		return &tableDescriptorTopic{Metadata: makeMetadata(td), spec: spec}
 	}
@@ -427,7 +427,7 @@ func TestSQLSink(t *testing.T) {
 
 	fooTopic := overrideTopic(`foo`)
 	barTopic := overrideTopic(`bar`)
-	targets := []jobspb.ChangefeedTargetSpecification{
+	targets := changefeedbase.Targets{
 		fooTopic.GetTargetSpecification(),
 		barTopic.GetTargetSpecification(),
 	}
