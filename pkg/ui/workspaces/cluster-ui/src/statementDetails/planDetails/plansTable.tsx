@@ -18,6 +18,7 @@ import {
   longToInt,
   TimestampToMoment,
   RenderCount,
+  DATE_FORMAT_24_UTC,
 } from "../../util";
 
 export type PlanHashStats =
@@ -151,7 +152,7 @@ export function makeExplainPlanColumns(
       title: planDetailsTableTitles.lastExecTime(),
       cell: (item: PlanHashStats) =>
         TimestampToMoment(item.stats.last_exec_timestamp).format(
-          "MMM DD, YYYY HH:MM",
+          DATE_FORMAT_24_UTC,
         ),
       sort: (item: PlanHashStats) =>
         TimestampToMoment(item.stats.last_exec_timestamp).unix(),
