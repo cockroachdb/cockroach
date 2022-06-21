@@ -1,0 +1,61 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+sh_binary(
+    name = "plpgsql-gen",
+    srcs = ["plpgsql-gen.sh"],
+)
+
+# Define the target to auto-generate sql.go from the grammar file.
+genrule(
+    name = "plpgsql-goyacc",
+    srcs = [
+        "plpgsql.y",
+    ],
+    outs = ["plpgsql.go"],
+    cmd = """
+      $(location :plpgsql-gen) $(location plpgsql.y) \
+          $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
+          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
+    """,
+    exec_tools = [
+        ":plpgsql-gen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@org_golang_x_tools//cmd/goyacc",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "parser",
+    srcs = [
+        "lexer.go",
+        "parse.go",
+        "plpgsql.go",
+        "scanner.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/plpgsql/parser/lexbase",
+        "//pkg/sql/scanner",
+        "//pkg/sql/sem/plpgsqltree",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+exports_files(
+    [
+        "reserved_keywords.awk",
+        "plpgsql.y",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
