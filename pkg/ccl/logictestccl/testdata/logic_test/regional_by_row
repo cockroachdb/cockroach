@@ -1798,3 +1798,12 @@ SELECT pk, a, b, crdb_region_col, crdb_region_col1 FROM regional_by_row_table_as
 1  NULL  NULL  ca-central-1  ca-central-1
 2  NULL  NULL  us-east-1     ca-central-1
 3  NULL  NULL  us-east-1     ca-central-1
+
+# Regression for https://github.com/cockroachdb/cockroach/issues/83076
+# It tests that we should be able to create a unique, expression index
+# on a REGIONAL BY ROW table.
+statement ok
+CREATE TABLE regional_by_row_table_with_unique_expression_index(s STRING) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE UNIQUE INDEX idx ON regional_by_row_table_with_unique_expression_index(lower(s))
