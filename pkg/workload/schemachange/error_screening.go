@@ -604,7 +604,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 			nonNullValue := value
 			if value == "NULL" {
 				if colInfos[colIdx].typ.IsNumeric() {
-					nonNullValue = fmt.Sprintf("1:::%s", colInfos[colIdx].typ.SQLString())
+					nonNullValue = fmt.Sprintf("1::%s", colInfos[colIdx].typ.SQLString())
 				}
 			}
 			query.WriteString(value)
