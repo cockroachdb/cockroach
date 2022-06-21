@@ -589,7 +589,7 @@ func (og *operationGenerator) validateGeneratedExpressionsForInsert(
 					// We intentionally use NULL in case any division operations are encountered.
 					// This reduces odds of extra overflows, but these will be evaluated as
 					// potential errors not expected ones.
-					nonNullValue = fmt.Sprintf("1:::%s", colInfos[colIdx].typ.SQLString())
+					nonNullValue = fmt.Sprintf("1::%s", colInfos[colIdx].typ.SQLString())
 				}
 			}
 			query.WriteString(value)

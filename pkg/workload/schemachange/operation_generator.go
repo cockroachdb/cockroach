@@ -2316,6 +2316,10 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 				d = tree.NewDOid(randgen.RandColumnType(og.params.rng).Oid())
 			}
 			str := tree.AsStringWithFlags(d, tree.FmtParsable)
+			// For strings use the actual type, so that comparisons for NULL values are sane.
+			if col.typ.Family() == types.StringFamily {
+				str = strings.Replace(str, ":::STRING", fmt.Sprintf("::%s", col.typ.SQLString()), -1)
+			}
 			row = append(row, str)
 		}
 
