@@ -795,11 +795,11 @@ func registerKVRangeLookups(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
+			defer close(doneInit)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"
 			if err = c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
 				return err
 			}
-			close(doneInit)
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
