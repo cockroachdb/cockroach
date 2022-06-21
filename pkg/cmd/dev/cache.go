@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	bazelRemoteTarget = "@com_github_buchgr_bazel_remote//:bazel-remote"
-	cacheCleanFlag    = "clean"
-	cacheDownFlag     = "down"
-	cacheResetFlag    = "reset"
+	remoteCacheDisableFlag = "--remote_cache="
+	bazelRemoteTarget      = "@com_github_buchgr_bazel_remote//:bazel-remote"
+	cacheCleanFlag         = "clean"
+	cacheDownFlag          = "down"
+	cacheResetFlag         = "reset"
 
 	cachePidFilename = ".dev-cache.pid"
 	configFilename   = "config.yml"
@@ -136,11 +137,11 @@ func (d *dev) setUpCache(ctx context.Context) (string, error) {
 
 	log.Printf("Configuring cache...\n")
 
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", bazelRemoteTarget, nogoDisableFlag)
+	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", bazelRemoteTarget, nogoDisableFlag, remoteCacheDisableFlag)
 	if err != nil {
 		return "", err
 	}
-	bazelRemoteLoc, err := d.exec.CommandContextSilent(ctx, "bazel", "run", bazelRemoteTarget, nogoDisableFlag, "--run_under=//build/bazelutil/whereis")
+	bazelRemoteLoc, err := d.exec.CommandContextSilent(ctx, "bazel", "run", bazelRemoteTarget, nogoDisableFlag, "--run_under=//build/bazelutil/whereis", remoteCacheDisableFlag)
 	if err != nil {
 		return "", err
 	}

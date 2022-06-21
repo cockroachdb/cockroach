@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/cmd/reduce/reduce",
         "//pkg/cmd/reduce/reduce/reducesql",
+        "//pkg/util/envutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

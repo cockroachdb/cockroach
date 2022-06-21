@@ -31,6 +31,7 @@ const (
 	crossFlag       = "cross"
 	nogoDisableFlag = "--//build/toolchains:nogo_disable_flag"
 	geosTarget      = "//c-deps:libgeos"
+	devTarget       = "//pkg/cmd/dev:dev"
 )
 
 type buildTarget struct {
@@ -79,7 +80,7 @@ var buildTargetMapping = map[string]string{
 	"cockroach-oss":    "//pkg/cmd/cockroach-oss:cockroach-oss",
 	"cockroach-short":  "//pkg/cmd/cockroach-short:cockroach-short",
 	"crlfmt":           "@com_github_cockroachdb_crlfmt//:crlfmt",
-	"dev":              "//pkg/cmd/dev:dev",
+	"dev":              devTarget,
 	"docgen":           "//pkg/cmd/docgen:docgen",
 	"docs-issue-gen":   "//pkg/cmd/docs-issue-generation:docs-issue-generation",
 	"execgen":          "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
@@ -404,7 +405,7 @@ func (d *dev) getBasicBuildArgs(
 		} else {
 			buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "go_binary"})
 		}
-		if strings.HasPrefix(aliased, "//") {
+		if strings.HasPrefix(aliased, "//") && aliased != devTarget {
 			canDisableNogo = false
 		}
 	}

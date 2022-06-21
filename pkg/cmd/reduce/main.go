@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,21 +57,26 @@ var (
 	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
 	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
-	tlp             = flags.Bool("tlp", false, "last two non-empty lines in file are equivalent queries returning different results")
+	tlp             = flags.Bool("tlp", false, "last two statements in file are equivalent queries returning different results")
+	costfuzz        = flags.Bool("costfuzz", false, "last three statements in file are two identical queries separated by a setting change")
 )
 
-// TODO(michae2): Add -costfuzz mode which is aware that the last three
-// statements are two identical queries separated by a setting change.
-
 const description = `
-The reduce utility attempts to simplify SQL that produces an error in
-CockroachDB. The problematic SQL, specified via -file flag, is
-repeatedly reduced as long as it produces an error in the CockroachDB
-demo that matches the provided -contains regex.
+The reduce utility attempts to simplify SQL that produces specific
+output in CockroachDB. The problematic SQL, specified via -file flag, is
+repeatedly reduced as long as it produces results or errors in cockroach
+demo that match the provided -contains regex.
 
 An alternative mode of operation is enabled by specifying -tlp option:
 in such case the last two queries in the file must be equivalent and
-produce different results.
+produce different results. (Note that statements in the file must be
+separated by blank lines for -tlp to function correctly.)
+
+Another alternative mode of operation is enabled by the -costfuzz
+option: in which case the last three statements in the file must be two
+identical queries separated by a setting change, which produce different
+results. (Note that statements in the file must be separated by blank
+lines for -costfuzz to function correctly.)
 
 The following options are available:
 
@@ -91,12 +98,23 @@ func main() {
 		fmt.Printf("%s: -file must be provided\n\n", os.Args[0])
 		usage()
 	}
-	if *contains == "" && !*tlp {
-		fmt.Printf("%s: either -contains must be provided or -tlp flag specified\n\n", os.Args[0])
+	var modes int
+	if *contains != "" {
+		modes++
+	}
+	if *tlp {
+		modes++
+	}
+	if *costfuzz {
+		modes++
+	}
+
+	if modes != 1 {
+		fmt.Printf("%s: exactly one of -contains, -tlp, or -costfuzz must be specified\n\n", os.Args[0])
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp)
+	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp, *costfuzz)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -104,9 +122,23 @@ func main() {
 }
 
 func reduceSQL(
-	binary, contains string, file *string, workers int, verbose bool, chunkReductions int, tlp bool,
+	binary, contains string,
+	file *string,
+	workers int,
+	verbose bool,
+	chunkReductions int,
+	tlp, costfuzz bool,
 ) (string, error) {
-	const tlpFailureError = "TLP_FAILURE"
+	var settings string
+	if devLicense, ok := envutil.EnvString("COCKROACH_DEV_LICENSE", 0); ok {
+		settings += "SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';\n"
+		settings += fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s';\n", devLicense)
+	}
+
+	const (
+		tlpFailureError = "TLP_FAILURE"
+		costfuzzSep     = "COSTFUZZ_SEP"
+	)
 	if tlp {
 		contains = tlpFailureError
 	}
@@ -120,7 +152,7 @@ func reduceSQL(
 	}
 
 	inputString := string(input)
-	var tlpCheck string
+	var tlpCostfuzzCheck string
 
 	// If TLP check is requested, then we remove the last two queries from the
 	// input (each query is expected to be delimited by empty lines) which we
@@ -133,31 +165,14 @@ func reduceSQL(
 	if tlp {
 		lines := strings.Split(string(input), "\n")
 		lineIdx := len(lines) - 1
-		// findPreviousQuery return the query preceding lineIdx without a
-		// semicolon. Queries are expected to be delimited with empty lines.
-		findPreviousQuery := func() string {
-			// Skip empty lines.
-			for lines[lineIdx] == "" {
-				lineIdx--
-			}
-			lastQueryLineIdx := lineIdx
-			// Now skip over all lines comprising the query.
-			for lines[lineIdx] != "" {
-				lineIdx--
-			}
-			// lineIdx right now points at an empty line before the query.
-			query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], " ")
-			// Remove the semicolon.
-			return query[:len(query)-1]
-		}
-		partitioned := findPreviousQuery()
-		unpartitioned := findPreviousQuery()
+		partitioned, lineIdx := findPreviousQuery(lines, lineIdx)
+		unpartitioned, lineIdx := findPreviousQuery(lines, lineIdx)
 		inputString = strings.Join(lines[:lineIdx], "\n")
-		// tlpCheck is a query that will result in an error with tlpFailureError
-		// error message when unpartitioned and partitioned queries return
-		// different results (which is the case when there are rows in one
+		// We make tlpCostfuzzCheck a query that will result in an error with
+		// tlpFailureError error message when unpartitioned and partitioned queries
+		// return different results (which is the case when there are rows in one
 		// result set that are not present in the other).
-		tlpCheck = fmt.Sprintf(`
+		tlpCostfuzzCheck = fmt.Sprintf(`
 SELECT CASE
   WHEN
     (SELECT count(*) FROM ((%[1]s) EXCEPT ALL (%[2]s))) != 0
@@ -166,6 +181,35 @@ SELECT CASE
   THEN
     crdb_internal.force_error('', '%[3]s')
   END;`, unpartitioned, partitioned, tlpFailureError)
+	}
+
+	// If costfuzz mode is requested, then we remove the last three statements
+	// from the input (statements are expected to be delimited by empty lines)
+	// which we then save for the costfuzz check.
+	if costfuzz {
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		perturb, lineIdx := findPreviousQuery(lines, lineIdx)
+		setting, lineIdx := findPreviousQuery(lines, lineIdx)
+		control, lineIdx := findPreviousQuery(lines, lineIdx)
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// We make tlpCostfuzzCheck the original three control / setting / perturbed
+		// statements, surrounded by sentinel statements.
+		tlpCostfuzzCheck = fmt.Sprintf(`
+SELECT '%[1]s';
+
+%[2]s;
+
+SELECT '%[1]s';
+
+%[3]s;
+
+SELECT '%[1]s';
+
+%[4]s;
+
+SELECT '%[1]s';
+`, costfuzzSep, control, setting, perturb)
 	}
 
 	// Pretty print the input so the file size comparison is useful.
@@ -178,12 +222,12 @@ SELECT CASE
 	if verbose {
 		logger = log.New(os.Stderr, "", 0)
 		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
-		if tlp {
-			prettyTLPCheck, err := reducesql.Pretty(tlpCheck)
+		if tlp || costfuzz {
+			prettyTLPCheck, err := reducesql.Pretty(tlpCostfuzzCheck)
 			if err != nil {
 				return "", err
 			}
-			logger.Printf("\nTLP check query:\n%s\n\n", prettyTLPCheck)
+			logger.Printf("\nCheck query:\n%s\n\n", prettyTLPCheck)
 		}
 	}
 
@@ -200,14 +244,15 @@ SELECT CASE
 			"--empty",
 			"--disable-demo-license",
 			"--set=errexit=false",
+			"--format=tsv",
 		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
+		sql = settings + sql
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
 		}
-		// If -tlp was not specified, this is a noop, if it was specified, then
-		// we append the special TLP check query.
-		sql += tlpCheck
+		// If neither -tlp nor -costfuzz were specified, this is a noop.
+		sql += tlpCostfuzzCheck
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
 		switch {
@@ -217,6 +262,23 @@ SELECT CASE
 			}
 		case errors.HasType(err, (*os.PathError)(nil)):
 			log.Fatal(err)
+		}
+		if costfuzz {
+			parts := bytes.Split(out, []byte(costfuzzSep))
+			if len(parts) != 5 {
+				if verbose {
+					logOriginalHint = func() {
+						logger.Printf("could not divide output into 5 parts")
+					}
+				}
+				return false, logOriginalHint
+			}
+			if verbose {
+				logOriginalHint = func() {
+					logger.Printf("control and perturbed query results were the same: \n%v\n\n%v\n", string(parts[1]), string(parts[3]))
+				}
+			}
+			return !bytes.Equal(parts[1], parts[3]), logOriginalHint
 		}
 		if verbose {
 			logOriginalHint = func() {
@@ -236,4 +298,22 @@ SELECT CASE
 		reducesql.SQLPasses...,
 	)
 	return out, err
+}
+
+// findPreviousQuery return the query preceding lineIdx without a semicolon.
+// Queries are expected to be delimited with empty lines.
+func findPreviousQuery(lines []string, lineIdx int) (string, int) {
+	// Skip empty lines.
+	for lines[lineIdx] == "" {
+		lineIdx--
+	}
+	lastQueryLineIdx := lineIdx
+	// Now skip over all lines comprising the query.
+	for lines[lineIdx] != "" {
+		lineIdx--
+	}
+	// lineIdx right now points at an empty line before the query.
+	query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], " ")
+	// Remove the semicolon.
+	return query[:len(query)-1], lineIdx
 }
