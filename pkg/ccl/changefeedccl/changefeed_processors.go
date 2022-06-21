@@ -1272,6 +1272,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return nil
 	}
 	cf.lastProtectedTimestampUpdate = timeutil.Now()
+	cf.metrics.ProtectedTimeStamp = cf.lastProtectedTimestampUpdate
 
 	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
 

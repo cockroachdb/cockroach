@@ -322,6 +322,13 @@ var (
 		Measurement: "Updates",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaProtectedTimeStampBehindNanos = metric.Metadata{
+		Name:        "changefeed.protected_time_stamp_behind_nanos",
+		Help:        "Age of the oldest change feed. A Large number could indicate stale data.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
@@ -492,15 +499,17 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	AggMetrics          *AggMetrics
-	KVFeedMetrics       kvevent.Metrics
-	SchemaFeedMetrics   schemafeed.Metrics
-	Failures            *metric.Counter
-	ResolvedMessages    *metric.Counter
-	QueueTimeNanos      *metric.Counter
-	CheckpointHistNanos *metric.Histogram
-	FrontierUpdates     *metric.Counter
-	ThrottleMetrics     cdcutils.Metrics
+	AggMetrics                    *AggMetrics
+	KVFeedMetrics                 kvevent.Metrics
+	SchemaFeedMetrics             schemafeed.Metrics
+	Failures                      *metric.Counter
+	ResolvedMessages              *metric.Counter
+	QueueTimeNanos                *metric.Counter
+	CheckpointHistNanos           *metric.Histogram
+	FrontierUpdates               *metric.Counter
+	ThrottleMetrics               cdcutils.Metrics
+	ProtectedTimeStamp            time.Time
+	ProtectedTimeStampBehindNanos *metric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -547,6 +556,11 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		m.mu.Unlock()
 		return maxBehind.Nanoseconds()
 	})
+
+	m.ProtectedTimeStampBehindNanos = metric.NewFunctionalGauge(metaProtectedTimeStampBehindNanos, func() int64 {
+		return timeutil.Since(m.ProtectedTimeStamp).Nanoseconds()
+	})
+
 	return m
 }
 
