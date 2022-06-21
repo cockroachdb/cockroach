@@ -45,7 +45,7 @@ type parseNode struct {
 	defaultTransition *parseNode
 }
 
-func (t *parseNode) matches(stmts scanner.Scanner) bool {
+func (t *parseNode) matches(stmts scanner.SQLScanner) bool {
 	if t.abortMatch {
 		return false
 	}
