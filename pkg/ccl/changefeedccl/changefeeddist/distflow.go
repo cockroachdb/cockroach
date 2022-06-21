@@ -30,6 +30,21 @@ var ChangefeedResultTypes = []*types.T{
 	types.Bytes,  // value
 }
 
+var replanChangefeedThreshold = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"ccl.replan_flow_threshold",
+	"fraction of initial flow instances that would be added or updated above which a redistribution would occur (0=disabled)",
+	0.1,
+)
+
+var replanChangefeedFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"ccl.replan_flow_frequency",
+	"frequency at which changefeed checks to see if redistributing would change its physical execution plan",
+	time.Minute*2,
+	settings.PositiveDuration,
+)
+
 // StartDistChangefeed starts distributed changefeed execution.
 func StartDistChangefeed(
 	ctx context.Context,
@@ -45,90 +60,190 @@ func StartDistChangefeed(
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
 
+	// dsp := execCtx.DistSQLPlanner()
+	// evalCtx := execCtx.ExtendedEvalContext()
+	// planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
+	// 	sql.DistributionTypeAlways)
+
+	// var spanPartitions []sql.SpanPartition
+	// if details.SinkURI == `` {
+	// 	// Sinkless feeds get one ChangeAggregator on the gateway.
+	// 	spanPartitions = []sql.SpanPartition{{SQLInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
+	// } else {
+	// 	// All other feeds get a ChangeAggregator local on the leaseholder.
+	// 	var err error
+	// 	spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	// // Use the same checkpoint for all aggregators; each aggregator will only look at
+	// // spans that are assigned to it.
+	// // We could compute per-aggregator checkpoint, but that's probably an overkill.
+	// aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
+	// 	Spans:     checkpoint.Spans,
+	// 	Timestamp: checkpoint.Timestamp,
+	// }
+
+	// var checkpointSpanGroup roachpb.SpanGroup
+	// checkpointSpanGroup.Add(checkpoint.Spans...)
+
+	// aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
+	// for i, sp := range spanPartitions {
+	// 	watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
+	// 	for watchIdx, nodeSpan := range sp.Spans {
+	// 		initialResolved := initialHighWater
+	// 		if checkpointSpanGroup.Encloses(nodeSpan) {
+	// 			initialResolved = checkpoint.Timestamp
+	// 		}
+	// 		watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+	// 			Span:            nodeSpan,
+	// 			InitialResolved: initialResolved,
+	// 		}
+	// 	}
+
+	// 	aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
+	// 		Watches:    watches,
+	// 		Checkpoint: aggregatorCheckpoint,
+	// 		Feed:       details,
+	// 		UserProto:  execCtx.User().EncodeProto(),
+	// 		JobID:      jobID,
+	// 	}
+	// }
+
+	// // NB: This SpanFrontier processor depends on the set of tracked spans being
+	// // static. Currently there is no way for them to change after the changefeed
+	// // is created, even if it is paused and unpaused, but #28982 describes some
+	// // ways that this might happen in the future.
+	// changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
+	// 	TrackedSpans: trackedSpans,
+	// 	Feed:         details,
+	// 	JobID:        jobID,
+	// 	UserProto:    execCtx.User().EncodeProto(),
+	// }
+
+	// if knobs.OnDistflowSpec != nil {
+	// 	knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
+	// }
+
+	// aggregatorCorePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	// for i, sp := range spanPartitions {
+	// 	aggregatorCorePlacement[i].SQLInstanceID = sp.SQLInstanceID
+	// 	aggregatorCorePlacement[i].Core.ChangeAggregator = aggregatorSpecs[i]
+	// }
+
+	// p := planCtx.NewPhysicalPlan()
+	// p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, ChangefeedResultTypes, execinfrapb.Ordering{})
+	// p.AddSingleGroupStage(
+	// 	dsp.GatewayID(),
+	// 	execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
+	// 	execinfrapb.PostProcessSpec{},
+	// 	ChangefeedResultTypes,
+	// )
+
+	// p.PlanToStreamColMap = []int{1, 2, 3}
+	// dsp.FinalizePlan(planCtx, p)
+
+	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
+			sql.DistributionTypeAlways)
+	
+		var spanPartitions []sql.SpanPartition
+		if details.SinkURI == `` {
+			// Sinkless feeds get one ChangeAggregator on the gateway.
+			spanPartitions = []sql.SpanPartition{{SQLInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
+		} else {
+			// All other feeds get a ChangeAggregator local on the leaseholder.
+			var err error
+			spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+			if err != nil {
+				return err
+			}
+		}
+	
+		// Use the same checkpoint for all aggregators; each aggregator will only look at
+		// spans that are assigned to it.
+		// We could compute per-aggregator checkpoint, but that's probably an overkill.
+		aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
+			Spans:     checkpoint.Spans,
+			Timestamp: checkpoint.Timestamp,
+		}
+	
+		var checkpointSpanGroup roachpb.SpanGroup
+		checkpointSpanGroup.Add(checkpoint.Spans...)
+	
+		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
+		for i, sp := range spanPartitions {
+			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
+			for watchIdx, nodeSpan := range sp.Spans {
+				initialResolved := initialHighWater
+				if checkpointSpanGroup.Encloses(nodeSpan) {
+					initialResolved = checkpoint.Timestamp
+				}
+				watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+					Span:            nodeSpan,
+					InitialResolved: initialResolved,
+				}
+			}
+	
+			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
+				Watches:    watches,
+				Checkpoint: aggregatorCheckpoint,
+				Feed:       details,
+				UserProto:  execCtx.User().EncodeProto(),
+				JobID:      jobID,
+			}
+		}
+	
+		// NB: This SpanFrontier processor depends on the set of tracked spans being
+		// static. Currently there is no way for them to change after the changefeed
+		// is created, even if it is paused and unpaused, but #28982 describes some
+		// ways that this might happen in the future.
+		changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
+			TrackedSpans: trackedSpans,
+			Feed:         details,
+			JobID:        jobID,
+			UserProto:    execCtx.User().EncodeProto(),
+		}
+	
+		if knobs.OnDistflowSpec != nil {
+			knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
+		}
+	
+		aggregatorCorePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+		for i, sp := range spanPartitions {
+			aggregatorCorePlacement[i].SQLInstanceID = sp.SQLInstanceID
+			aggregatorCorePlacement[i].Core.ChangeAggregator = aggregatorSpecs[i]
+		}
+	
+		p := planCtx.NewPhysicalPlan()
+		p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, ChangefeedResultTypes, execinfrapb.Ordering{})
+		p.AddSingleGroupStage(
+			dsp.GatewayID(),
+			execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
+			execinfrapb.PostProcessSpec{},
+			ChangefeedResultTypes,
+		)
+	
+		p.PlanToStreamColMap = []int{1, 2, 3}
+		dsp.FinalizePlan(planCtx, p)
+		
+		return p, planCtx, nil
+	}
+
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
-		sql.DistributionTypeAlways)
 
-	var spanPartitions []sql.SpanPartition
-	if details.SinkURI == `` {
-		// Sinkless feeds get one ChangeAggregator on the gateway.
-		spanPartitions = []sql.SpanPartition{{SQLInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
-	} else {
-		// All other feeds get a ChangeAggregator local on the leaseholder.
-		var err error
-		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
-		if err != nil {
-			return err
-		}
-	}
 
-	// Use the same checkpoint for all aggregators; each aggregator will only look at
-	// spans that are assigned to it.
-	// We could compute per-aggregator checkpoint, but that's probably an overkill.
-	aggregatorCheckpoint := execinfrapb.ChangeAggregatorSpec_Checkpoint{
-		Spans:     checkpoint.Spans,
-		Timestamp: checkpoint.Timestamp,
-	}
 
-	var checkpointSpanGroup roachpb.SpanGroup
-	checkpointSpanGroup.Add(checkpoint.Spans...)
-
-	aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
-	for i, sp := range spanPartitions {
-		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
-		for watchIdx, nodeSpan := range sp.Spans {
-			initialResolved := initialHighWater
-			if checkpointSpanGroup.Encloses(nodeSpan) {
-				initialResolved = checkpoint.Timestamp
-			}
-			watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
-				Span:            nodeSpan,
-				InitialResolved: initialResolved,
-			}
-		}
-
-		aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
-			Watches:    watches,
-			Checkpoint: aggregatorCheckpoint,
-			Feed:       details,
-			UserProto:  execCtx.User().EncodeProto(),
-			JobID:      jobID,
-		}
-	}
-
-	// NB: This SpanFrontier processor depends on the set of tracked spans being
-	// static. Currently there is no way for them to change after the changefeed
-	// is created, even if it is paused and unpaused, but #28982 describes some
-	// ways that this might happen in the future.
-	changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
-		TrackedSpans: trackedSpans,
-		Feed:         details,
-		JobID:        jobID,
-		UserProto:    execCtx.User().EncodeProto(),
-	}
-
-	if knobs.OnDistflowSpec != nil {
-		knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
-	}
-
-	aggregatorCorePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
-	for i, sp := range spanPartitions {
-		aggregatorCorePlacement[i].SQLInstanceID = sp.SQLInstanceID
-		aggregatorCorePlacement[i].Core.ChangeAggregator = aggregatorSpecs[i]
-	}
-
-	p := planCtx.NewPhysicalPlan()
-	p.AddNoInputStage(aggregatorCorePlacement, execinfrapb.PostProcessSpec{}, ChangefeedResultTypes, execinfrapb.Ordering{})
-	p.AddSingleGroupStage(
-		dsp.GatewayID(),
-		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
-		execinfrapb.PostProcessSpec{},
-		ChangefeedResultTypes,
+	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
+		p,
+		makePlan,
+		execCtx,
+		sql.ReplanOnchangedFraction(func() float64 { return replanRestoreThreshold.Get(execCtx.ExecCfg().SV()) }),
+		func() time.Duration { return replanRestoreFrequency.Get(execCtx.ExecCfg().SV()) },
 	)
-
-	p.PlanToStreamColMap = []int{1, 2, 3}
-	dsp.FinalizePlan(planCtx, p)
 
 	resultRows := makeChangefeedResultWriter(resultsCh)
 	recv := sql.MakeDistSQLReceiver(
@@ -158,6 +273,7 @@ func StartDistChangefeed(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
+	// p is the physical plan, recv is the distsqlreceiver
 	dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)()
 	return resultRows.Err()
 }
