@@ -2408,11 +2408,22 @@ func (s *statusServer) HotRangesV2(
 		for nodeID, hr := range resp.HotRangesByNodeID {
 			for _, store := range hr.Stores {
 				for _, r := range store.HotRanges {
+					// skip meta- and system ranges.
+					if r.Desc.StartKey.Equal(roachpb.RKeyMin) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.Meta1Prefix) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.Meta2Prefix) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.SystemPrefix) {
+						continue
+					}
 					var (
 						dbName, tableName, indexName, schemaName string
 						replicaNodeIDs                           []roachpb.NodeID
 					)
 					_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
+					// Silently ignore range that belongs to pseudo tables (don't have table descriptors).
+					if keys.IsPseudoTableID(tableID) {
+						continue
+					}
 					if err != nil {
 						log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
 						continue

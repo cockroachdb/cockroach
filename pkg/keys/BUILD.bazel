@@ -11,6 +11,7 @@ go_library(
         "printer.go",
         "spans.go",
         "sql.go",
+        "util.go",
         ":gen-comment-type-stringer",  #keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/keys",
