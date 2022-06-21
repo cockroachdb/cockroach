@@ -2411,7 +2411,27 @@ func (s *statusServer) HotRangesV2(
 						dbName, tableName, indexName, schemaName string
 						replicaNodeIDs                           []roachpb.NodeID
 					)
+					for _, repl := range r.Desc.Replicas().Descriptors() {
+						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
+					}
 					_, tableID, err := s.sqlServer.execCfg.Codec.DecodeTablePrefix(r.Desc.StartKey.AsRawKey())
+
+					// don't add any table specific information for system or meta ranges.
+					if keys.IsPseudoTableID(tableID) ||
+						r.Desc.StartKey.Equal(roachpb.RKeyMin) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.Meta1Prefix) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.Meta2Prefix) ||
+						bytes.HasPrefix(r.Desc.StartKey, keys.SystemPrefix) {
+						ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
+							RangeID:           r.Desc.RangeID,
+							NodeID:            nodeID,
+							QPS:               r.QueriesPerSecond,
+							ReplicaNodeIds:    replicaNodeIDs,
+							LeaseholderNodeID: r.LeaseholderNodeID,
+							StoreID:           store.StoreID,
+						})
+						continue
+					}
 					if err != nil {
 						log.Warningf(ctx, "cannot decode tableID for range descriptor: %s. %s", r.Desc.String(), err.Error())
 						continue
@@ -2428,9 +2448,6 @@ func (s *statusServer) HotRangesV2(
 					_, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey())
 					if err == nil {
 						indexName = rangeReportMetas[tableID].indexNames[idxID]
-					}
-					for _, repl := range r.Desc.Replicas().Descriptors() {
-						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 					}
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
 						RangeID:           r.Desc.RangeID,
