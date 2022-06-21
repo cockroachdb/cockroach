@@ -1244,12 +1244,9 @@ insert uniq
       │    ├── values
       │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    └── (1, 1, 'bar')
-      │    ├── select
+      │    ├── scan uniq@u4,partial
       │    │    ├── columns: b:10!null
-      │    │    ├── scan uniq@u4,partial
-      │    │    │    └── columns: b:10
-      │    │    └── filters
-      │    │         └── b:10 = 1
+      │    │    └── constraint: /10: [/1 - /1]
       │    └── filters (true)
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:15]
