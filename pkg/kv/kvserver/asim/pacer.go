@@ -17,12 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 )
 
-const (
-	defaultLoopInterval     = 10 * time.Minute
-	defaultMinInterInterval = 10 * time.Millisecond
-	defaultMaxIterInterval  = 1 * time.Second
-)
-
 // ReplicaPacer controls the speed of considering a replica.
 type ReplicaPacer interface {
 	// Next returns the next replica for the current tick, if exists.
@@ -33,6 +27,8 @@ type ReplicaPacer interface {
 // replicas at a rate sufficient to complete iteration in the specified scan
 // loop interval.
 type ReplicaScanner struct {
+	// TOOD(kvoli): make this a function which returns the store's current
+	// replicas in state.
 	nextReplsFn        func() []state.Replica
 	repls              []state.Replica
 	start              time.Time
@@ -84,9 +80,9 @@ func (rp *ReplicaScanner) resetPacerLoop(tick time.Time) {
 	// Reset the counter and tracker vars.
 	rp.visited = 0
 
-	// If there are no replicas, we cannot determine the correct iteration
-	// interval, instead of waiting for the loop interval return early and try
-	// again on next check.
+	// If there are no replicas, we cannot determine the correct iter interval,
+	// instead of waiting for the loop interval return early and try again on next
+	// check.
 	if len(rp.repls) == 0 {
 		return
 	}

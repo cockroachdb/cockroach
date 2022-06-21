@@ -26,6 +26,10 @@ type Change interface {
 	Range() RangeID
 	// Delay returns the duration taken to complete this state change.
 	Delay() time.Duration
+	// Blocking indicates whether the change should wait for other changes on
+	// the same target to complete, or if other changes should be blocking on
+	// it.
+	Blocking() bool
 }
 
 // Changer takes state changes and applies them with delay.
@@ -46,6 +50,42 @@ type ReplicaChange struct {
 	RangeID     RangeID
 	Add, Remove StoreID
 	Wait        time.Duration
+}
+
+// RangeSplitChange contains information necessary to split a range at a given
+// key. It implements the change interface.
+type RangeSplitChange struct {
+	RangeID     RangeID
+	Leaseholder StoreID
+	SplitKey    Key
+	Wait        time.Duration
+}
+
+// Apply applies a change to the state.
+func (rsc *RangeSplitChange) Apply(s State) {
+	s.SplitRange(rsc.SplitKey)
+}
+
+// Target returns the recipient store of the change.
+func (rsc *RangeSplitChange) Target() StoreID {
+	return rsc.Leaseholder
+}
+
+// Range returns the range id the change is for.
+func (rsc *RangeSplitChange) Range() RangeID {
+	return rsc.RangeID
+}
+
+// Delay returns the duration taken to complete this state change.
+func (rsc *RangeSplitChange) Delay() time.Duration {
+	return rsc.Wait
+}
+
+// Blocking indicates whether the change should wait for other changes on
+// the same target to complete, or if other changes should be blocking on
+// it. Range splits do not block.
+func (rsc *RangeSplitChange) Blocking() bool {
+	return false
 }
 
 // Apply applies a replica change for a range. This is an implementation of the
@@ -106,6 +146,13 @@ func (rc *ReplicaChange) Delay() time.Duration {
 	return rc.Wait
 }
 
+// Blocking indicates whether the change should wait for other changes on
+// the same target to complete, or if other changes should be blocking on
+// it. Replica changes block.
+func (rc *ReplicaChange) Blocking() bool {
+	return true
+}
+
 // replicaChanger is an implementation of the changer interface, for replica
 // changes. It maintains a pending list of changes for ranges, applying changes
 // to state given the delay and other pending changes for the same receiver,
@@ -157,13 +204,17 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 	rc.pendingTickets[ticket] = change
 	rc.pendingRange[change.Range()] = ticket
 
-	// If there are pending changes for the target, we queue them and return
-	// the last completion timestamp + delay. Otherwise, there is no queuing
-	// and the change applies at tick + delay.
-	if lastAppliedAt, ok := rc.pendingTarget[change.Target()]; !ok || !lastAppliedAt.After(tick) {
-		rc.pendingTarget[change.Target()] = tick
+	completeAt := tick
+	if change.Blocking() {
+		// If there are pending changes for the target, we queue them and return
+		// the last completion timestamp + delay. Otherwise, there is no queuing
+		// and the change applies at tick + delay.
+		if lastAppliedAt, ok := rc.pendingTarget[change.Target()]; !ok || !lastAppliedAt.After(tick) {
+			rc.pendingTarget[change.Target()] = tick
+		}
+		completeAt = rc.pendingTarget[change.Target()]
 	}
-	completeAt := rc.pendingTarget[change.Target()].Add(change.Delay())
+	completeAt = completeAt.Add(change.Delay())
 
 	// Create a unique entry (completionTime, ticket) and append it to the
 	// completion queue.
