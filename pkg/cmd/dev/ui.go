@@ -451,7 +451,6 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 					"--silent",
 					"--cwd",
 					dirs.dbConsole,
-					"karma:watch",
 				)
 
 				env := append(os.Environ(), "BAZEL_TARGET=fake")
@@ -490,7 +489,7 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				)
 				args := append([]string{
 					"test",
-					"//pkg/ui/workspaces/db-console:karma",
+					"//pkg/ui/workspaces/db-console:jest",
 					"//pkg/ui/workspaces/cluster-ui:jest",
 				}, testOutputArg...)
 
