@@ -27,6 +27,7 @@ go_library(
     srcs = [
         "doc.go",
         "events.go",
+        "splittable.go",
         "sql_audit_events.go",
         ":gen-eventlog-channels-generated-go",  # keep
         ":gen-json-encode-generated-go",  # keep

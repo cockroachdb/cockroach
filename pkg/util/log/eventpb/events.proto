@@ -35,7 +35,7 @@ message CommonEventDetails {
 message CommonSQLEventDetails {
   // A normalized copy of the SQL statement that triggered the event.
   // The statement string contains a mix of sensitive and non-sensitive details (it is redactable).
-  string statement = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
+  string statement = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\" splittable:\"true\""];
 
   // The statement tag. This is separate from the statement string,
   // since the statement string can contain sensitive information. The
