@@ -82,7 +82,8 @@ type Span struct {
 // The Span slice for a particular access and scope contains non-overlapping
 // spans in increasing key order after calls to SortAndDedup.
 type SpanSet struct {
-	spans [NumSpanAccess][NumSpanScope][]Span
+	spans           [NumSpanAccess][NumSpanScope][]Span
+	allowUndeclared bool
 }
 
 var spanSetPool = sync.Pool{
@@ -111,6 +112,7 @@ func (s *SpanSet) Release() {
 			s.spans[sa][ss] = recycle
 		}
 	}
+	s.allowUndeclared = false
 	spanSetPool.Put(s)
 }
 
@@ -152,6 +154,7 @@ func (s *SpanSet) Copy() *SpanSet {
 			n.spans[sa][ss] = append(n.spans[sa][ss], s.spans[sa][ss]...)
 		}
 	}
+	n.allowUndeclared = s.allowUndeclared
 	return n
 }
 
@@ -204,6 +207,7 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 			s.spans[sa][ss] = append(s.spans[sa][ss], s2.spans[sa][ss]...)
 		}
 	}
+	s.allowUndeclared = s2.allowUndeclared
 	s.SortAndDedup()
 }
 
@@ -335,6 +339,12 @@ func (s *SpanSet) CheckAllowedAt(
 func (s *SpanSet) checkAllowed(
 	access SpanAccess, span roachpb.Span, check func(SpanAccess, Span) bool,
 ) error {
+	if s.allowUndeclared {
+		// If the request has specified that undeclared spans are allowed, do
+		// nothing.
+		return nil
+	}
+
 	scope := SpanGlobal
 	if (span.Key != nil && keys.IsLocal(span.Key)) ||
 		(span.EndKey != nil && keys.IsLocal(span.EndKey)) {
@@ -386,4 +396,11 @@ func (s *SpanSet) Validate() error {
 	}
 
 	return nil
+}
+
+// DisableUndeclaredAccessAssertions disables the assertions that prevent
+// undeclared access to spans. This is generally set by requests that rely on
+// other forms of synchronization for correctness (e.g. GCRequest).
+func (s *SpanSet) DisableUndeclaredAccessAssertions() {
+	s.allowUndeclared = true
 }
