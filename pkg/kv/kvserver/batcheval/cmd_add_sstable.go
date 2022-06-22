@@ -60,6 +60,7 @@ func declareKeysAddSSTable(
 		l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
 		latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 	}
+	latchSpans.DisableUndeclaredAccessAssertions()
 }
 
 // AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
@@ -349,7 +350,7 @@ func EvalAddSSTable(
 	// addition, and instead just use this key-only iterator. If a caller actually
 	// needs to know what data is there, it must issue its own real Scan.
 	if args.ReturnFollowingLikelyNonEmptySpanStart {
-		existingIter := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+		existingIter := readWriter.NewMVCCIterator(
 			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
 			storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,

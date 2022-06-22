@@ -814,19 +814,6 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 	}
 }
 
-// DisableReaderAssertions unwraps any storage.Reader implementations that may
-// assert access against a given SpanSet.
-func DisableReaderAssertions(reader storage.Reader) storage.Reader {
-	switch v := reader.(type) {
-	case ReadWriter:
-		return DisableReaderAssertions(v.r)
-	case *spanSetBatch:
-		return DisableReaderAssertions(v.r)
-	default:
-		return reader
-	}
-}
-
 // addLockTableSpans adds corresponding lock table spans for the declared
 // spans. This is to implicitly allow raw access to separated intents in the
 // lock table for any declared keys. Explicitly declaring lock table spans is
