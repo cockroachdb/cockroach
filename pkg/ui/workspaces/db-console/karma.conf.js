@@ -13,7 +13,7 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.app")(
+const webpackConfig = require("./webpack.config")(
   { dist: "ccl" },
   { mode: "development" },
 );

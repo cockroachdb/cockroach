@@ -11,6 +11,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
 import {
   ColumnDescriptor,
   SortedTable,

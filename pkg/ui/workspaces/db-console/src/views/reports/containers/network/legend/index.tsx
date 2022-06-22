@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import { Divider, Tooltip } from "antd";
+import "antd/lib/divider/style";
+import "antd/lib/tooltip/style";
 import { Chip } from "src/views/app/components/chip";
 import Modal from "src/views/app/components/modal";
 import { getDisplayName } from "src/redux/nodes";

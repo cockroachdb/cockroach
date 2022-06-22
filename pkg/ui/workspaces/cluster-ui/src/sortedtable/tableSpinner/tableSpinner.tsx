@@ -11,6 +11,8 @@
 import React from "react";
 import { Spinner } from "@cockroachlabs/icons";
 import { Spin, Icon } from "antd";
+import "antd/lib/spin/style";
+import "antd/lib/icon/style";
 import classNames from "classnames/bind";
 import styles from "./tableSpinner.module.scss";
 

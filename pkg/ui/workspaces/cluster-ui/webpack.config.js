@@ -12,6 +12,7 @@ const path = require("path");
 const webpack = require("webpack");
 const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
+const { ESBuildMinifyPlugin } = require("esbuild-loader");
 
 // tslint:disable:object-literal-sort-keys
 module.exports = (env, argv) => {
@@ -70,7 +71,7 @@ module.exports = (env, argv) => {
                 }
               },
             },
-            "sass-loader"
+            "sass-loader",
           ],
         },
         // Ant design styles defined as global styles with .scss files which don't follow
@@ -85,7 +86,13 @@ module.exports = (env, argv) => {
         {
           test: /\.(ts|js)x?$/,
           use: [
-            "babel-loader",
+            {
+              loader: "esbuild-loader",
+              options: {
+                loader: "tsx",
+                target: "es6",
+              },
+            },
             {
               loader: "astroturf/loader",
               options: {extension: ".module.scss"},
@@ -125,9 +132,27 @@ module.exports = (env, argv) => {
         },
         {
           test: /\.css$/,
-          use: ["style-loader", "css-loader"],
+          use: [
+            "style-loader",
+            "css-loader",
+            {
+              loader: "esbuild-loader",
+              options: {
+                loader: "css",
+                minify: true,
+              },
+            },
+          ],
           exclude: /node_modules/,
         },
+      ],
+    },
+
+    optimization: {
+      minimizer: [
+        new ESBuildMinifyPlugin({
+          target: "es6",
+        }),
       ],
     },
 

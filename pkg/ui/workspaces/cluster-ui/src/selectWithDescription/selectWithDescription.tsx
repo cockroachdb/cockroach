@@ -12,7 +12,8 @@ import React, { useState } from "react";
 import classNames from "classnames/bind";
 import { CaretUp, CaretDown } from "@cockroachlabs/icons";
 import { Radio } from "antd";
-import { RadioChangeEvent } from "antd/lib/radio";
+import "antd/lib/radio/style";
+import type { RadioChangeEvent } from "antd/lib/radio";
 import { Button } from "../button";
 
 import styles from "../statementsPage/statementTypeSelect.module.scss";

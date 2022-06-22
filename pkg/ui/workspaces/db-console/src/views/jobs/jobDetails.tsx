@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import { Col, Row } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import _ from "lodash";
 import Long from "long";
 import React from "react";

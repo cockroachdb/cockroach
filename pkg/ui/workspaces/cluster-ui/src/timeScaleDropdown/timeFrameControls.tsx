@@ -11,6 +11,8 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { Button, Tooltip } from "antd";
+import "antd/lib/button/style";
+import "antd/lib/tooltip/style";
 import { CaretLeft, CaretRight } from "@cockroachlabs/icons";
 import { ArrowDirection } from "./timeScaleTypes";
 

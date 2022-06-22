@@ -1,0 +1,30 @@
+{
+  "name": "@cockroachlabs/eslint-plugin-crdb",
+  "version": "1.0.0",
+  "description": "A set of eslint rules specific to the CockroachDB UI.",
+  "main": "dist/index.js",
+  "files": [
+    "dist/"
+  ],
+  "license": "BSL",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@bazel/typescript": "5.5.0",
+    "@bazel/worker": "5.5.0",
+    "@types/eslint": "^8.4.2",
+    "@typescript-eslint/parser": "^5.26.0",
+    "@typescript-eslint/utils": "^5.26.0",
+    "eslint": "^8.16.0",
+    "jest": "^28.1.0",
+    "ts-jest": "^28.0.3",
+    "typescript": "^4.7.2"
+  },
+  "peerDependencies": {
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^6.0.0 || ^7.0.0 || ^8.0.0"
+  }
+}

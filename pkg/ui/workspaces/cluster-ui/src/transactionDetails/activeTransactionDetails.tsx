@@ -18,6 +18,8 @@ import { SqlBox } from "src/sql/box";
 import classNames from "classnames/bind";
 import { Link, useHistory, match } from "react-router-dom";
 import { Col, Row } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import { SummaryCard } from "src/summaryCard";
 
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";

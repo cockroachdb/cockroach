@@ -41,6 +41,7 @@ def _seed_yarn_cache_impl(rctx):
         fail("Unable to seed yarn cache: " + res.stderr)
 
     paths = {
+        "eslint_plugin_crdb": "pkg/ui/workspaces/eslint_plugin_crdb",
         "protos": "pkg/ui/workspaces/db-console/src/js",
         "cluster_ui": "pkg/ui/workspaces/cluster-ui",
         "db_console": "pkg/ui/workspaces/db-console",
