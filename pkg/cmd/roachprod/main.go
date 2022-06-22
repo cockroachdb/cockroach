@@ -885,32 +885,31 @@ var getProvidersCmd = &cobra.Command{
 	},
 }
 
-var promStartCmd = &cobra.Command{
-	Use:   `prom-start <cluster> [<grafanaConfig>]`,
-	Short: `spins up a prometheus (and optionally a grafana instance) on the last node provided`,
-	Long: `by default, the prom on the lowest numbered node in the cluster
-and will scrape from all nodes provided. If a grafanaConfig is passed, 
-a grafana instance will also start.`,
+var grafanaStartCmd = &cobra.Command{
+	Use:   `grafana-start <cluster> [<grafanaConfig>]`,
+	Short: `spins up a prometheus and grafana instances on the last node provided`,
+	Long: `spins up a prometheus and grafana instances on the highest numbered node in the cluster
+and will scrape from all nodes in the cluster`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.StartPrometheus(context.Background(), roachprodLibraryLogger, args[0],
+		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
 			grafanaConfig)
 	}),
 }
 
-var promStopCmd = &cobra.Command{
+var grafanaStopCmd = &cobra.Command{
 	Use:   `prom-stop <cluster>`,
-	Short: `spins down prometheus (and grafana) instance on the last node provided`,
+	Short: `spins down prometheus and grafana instances on the last node in the cluster`,
 	Long: fmt.Sprintf(`spins down the prometheus and grafana instances on provided roachprod node and
 dumps the prometheus data into %s`, config.ClustersDir),
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.StopPrometheus(context.Background(), roachprodLibraryLogger, args[0])
+		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0])
 	}),
 }
 
 var grafanaURLCmd = &cobra.Command{
-	Use:   `grafana-url <cluster>`,
+	Use:   `grafanaurl <cluster>`,
 	Short: `returns a url to the grafana dashboard`,
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
@@ -976,8 +975,8 @@ func main() {
 		cachedHostsCmd,
 		versionCmd,
 		getProvidersCmd,
-		promStartCmd,
-		promStopCmd,
+		grafanaStartCmd,
+		grafanaStopCmd,
 		grafanaURLCmd,
 	)
 	setBashCompletionFunction()

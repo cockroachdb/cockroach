@@ -236,7 +236,7 @@ func initFlags() {
 
 	// TODO (msbutler): this flag should instead point to a relative file path that's check into
 	// the repo, not some random URL.
-	promStartCmd.Flags().StringVar(&grafanaConfig,
+	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
 		"grafana-config", "", "URL to grafana json config")
 
 	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,

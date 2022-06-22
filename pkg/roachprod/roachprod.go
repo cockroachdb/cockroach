@@ -1357,9 +1357,9 @@ func InitProviders() map[string]string {
 	return providersState
 }
 
-// StartPrometheus spins up a prometheus and grafana instance on the last node provided and scrapes
+// StartGrafana spins up a prometheus and grafana instance on the last node provided and scrapes
 // from all other nodes.
-func StartPrometheus(
+func StartGrafana(
 	ctx context.Context, l *logger.Logger, clusterName string, grafanaURL string,
 ) error {
 	if err := LoadClusters(); err != nil {
@@ -1369,7 +1369,10 @@ func StartPrometheus(
 	if err != nil {
 		return err
 	}
-	nodes := c.TargetNodes()
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return err
+	}
 
 	ips, err := IP(ctx, l, clusterName, true)
 	if err != nil {
@@ -1386,8 +1389,13 @@ func StartPrometheus(
 	if err := promCfg.WithNodeExporter(nodes, ips); err != nil {
 		return err
 	}
-	promCfg.WithGrafanaDashboard(grafanaURL)
 
+	// By default, spin up a grafana server
+	promCfg.Grafana.Enabled = true
+	if grafanaURL != "" {
+		promCfg.WithGrafanaDashboard(grafanaURL)
+
+	}
 	_, err = prometheus.Init(ctx, l, c, promCfg)
 	if err != nil {
 		return err
@@ -1402,9 +1410,9 @@ func StartPrometheus(
 	return nil
 }
 
-// StopPrometheus shuts down prometheus and grafana servers on the last node in
+// StopGrafana shuts down prometheus and grafana servers on the last node in
 // the cluster, if they exist.
-func StopPrometheus(ctx context.Context, l *logger.Logger, clusterName string) error {
+func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -1412,7 +1420,10 @@ func StopPrometheus(ctx context.Context, l *logger.Logger, clusterName string) e
 	if err != nil {
 		return err
 	}
-	nodes := c.TargetNodes()
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return err
+	}
 	if err := prometheus.Shutdown(ctx, c, l, nodes); err != nil {
 		return err
 	}
@@ -1429,7 +1440,10 @@ func GrafanaURL(
 	if err != nil {
 		return nil, err
 	}
-	nodes := c.TargetNodes()
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return nil, err
+	}
 	// grafana is assumed to be running on the last node in the target
 	grafanaNode := install.Nodes{nodes[len(nodes)-1]}
 

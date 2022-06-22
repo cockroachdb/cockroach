@@ -176,8 +176,8 @@ rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
 			`cd node_exporter &&
 sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		); err != nil {
-			// TODO: systemd-run cannot run on mac, so this likely errors when people
-			// attempt to run grafana-start on a local roachprod cluster
+			// TODO(msbutler): download binary for target platform. currently we
+			// hardcode downloading the linux binary.
 			return nil, errors.Wrap(err, "grafana-start currently cannot run on darwin")
 		}
 	}
@@ -377,12 +377,12 @@ func Shutdown(
 
 	if err := c.Run(ctx, l, os.Stdout, os.Stderr, promNode, "stop node exporter",
 		`sudo systemctl node_exporter|| echo 'Stopped node exporter'`); err != nil {
-		l.Printf("Failed to stop node exporter")
+		l.Printf("Failed to stop node exporter: %v", err)
 	}
 
 	if err := c.RepeatRun(ctx, l, os.Stdout, os.Stderr, nodes, "stop grafana",
 		`sudo systemctl stop grafana-server echo 'Stopped grafana'`); err != nil {
-		l.Printf("Failed to stop grafana server")
+		l.Printf("Failed to stop grafana server: %v", err)
 	}
 
 	if err := c.RepeatRun(

@@ -18,9 +18,12 @@ go_library(
 go_test(
     name = "prometheus_test",
     srcs = ["prometheus_test.go"],
+    data = glob(["testdata/**"]),
     embed = [":prometheus"],
     deps = [
         "//pkg/roachprod/install",
+        "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "@com_github_stretchr_testify//require",
     ],
 )
