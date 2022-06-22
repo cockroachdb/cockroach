@@ -13,13 +13,14 @@ package state
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStateUpdates(t *testing.T) {
-	s := NewState()
+	s := NewState(config.DefaultSimulationSettings())
 	node := s.AddNode()
 	s.AddStore(node.NodeID())
 	require.Equal(t, 1, len(s.Nodes()))
@@ -30,7 +31,7 @@ func TestStateUpdates(t *testing.T) {
 // for any replicas that existed on the pre-split range. It also checks that
 // the post-split keys are correct.
 func TestRangeSplit(t *testing.T) {
-	s := newState()
+	s := newState(config.DefaultSimulationSettings())
 	k1 := MinKey
 	r1 := s.rangeFor(k1)
 
@@ -57,7 +58,7 @@ func TestRangeSplit(t *testing.T) {
 }
 
 func TestRangeMap(t *testing.T) {
-	s := newState()
+	s := newState(config.DefaultSimulationSettings())
 
 	// Assert that the first range is correctly initialized upon creation of a
 	// new state.
@@ -93,7 +94,7 @@ func TestRangeMap(t *testing.T) {
 
 // TestValidTransfer asserts that ValidTransfer behaves correctly.
 func TestValidTransfer(t *testing.T) {
-	s := NewState()
+	s := NewState(config.DefaultSimulationSettings())
 
 	_, r1, _ := s.SplitRange(1)
 
@@ -126,7 +127,7 @@ func TestValidTransfer(t *testing.T) {
 // TestTransferLease asserts that the state is correctly updated following a
 // valid lease transfer.
 func TestTransferLease(t *testing.T) {
-	s := NewState()
+	s := NewState(config.DefaultSimulationSettings())
 
 	_, r1, _ := s.SplitRange(1)
 
@@ -154,7 +155,7 @@ func TestTransferLease(t *testing.T) {
 // TestValidReplicaTarget asserts that CanAddReplica and CanRemoveReplica
 // behave correctly under various scenarios.
 func TestValidReplicaTarget(t *testing.T) {
-	s := NewState()
+	s := NewState(config.DefaultSimulationSettings())
 
 	_, r1, _ := s.SplitRange(1)
 
@@ -193,7 +194,7 @@ func TestValidReplicaTarget(t *testing.T) {
 }
 
 func TestAddReplica(t *testing.T) {
-	s := NewState()
+	s := NewState(config.DefaultSimulationSettings())
 
 	_, r1, _ := s.SplitRange(1)
 	_, r2, _ := s.SplitRange(2)
@@ -218,7 +219,7 @@ func TestAddReplica(t *testing.T) {
 // TestWorkloadApply asserts that applying workload on a key, will be reflected
 // on the leaseholder for the range that key is contained within.
 func TestWorkloadApply(t *testing.T) {
-	s := NewState()
+	s := NewState(config.DefaultSimulationSettings())
 
 	n1 := s.AddNode()
 	s1, _ := s.AddStore(n1.NodeID())
@@ -261,4 +262,23 @@ func TestWorkloadApply(t *testing.T) {
 	require.Equal(t, expectedLoad, sc2)
 	expectedLoad.QueriesPerSecond *= 10
 	require.Equal(t, expectedLoad, sc3)
+}
+
+// TestKeyTranslation asserts that key encoding between roachpb keys and
+// simulator int64 keys are correct.
+func TestKeyTranslation(t *testing.T) {
+	for add := Key(1); add <= MaxKey; add *= 2 {
+		key := MinKey + add
+		rkey := key.ToRKey()
+		mappedKey := ToKey(rkey.AsRawKey())
+		require.Equal(
+			t,
+			key,
+			mappedKey,
+			"unexpected mapping %d (key) -> %s (rkey) -> %d (mapped)",
+			key,
+			rkey,
+			mappedKey,
+		)
+	}
 }
