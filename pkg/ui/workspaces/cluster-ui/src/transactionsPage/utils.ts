@@ -56,12 +56,14 @@ export const getStatementsByFingerprintIdAndTime = (
   timestamp: string | null,
   statements: Statement[],
 ): Statement[] => {
-  return statements?.filter(
-    s =>
-      (timestamp == null ||
-        (s.key?.aggregated_ts != null &&
-          timestamp == TimestampToString(s.key.aggregated_ts))) &&
-      statementFingerprintIds.some(id => id.eq(s.id)),
+  return (
+    statements?.filter(
+      (s) =>
+        (timestamp == null ||
+          (s.key?.aggregated_ts != null &&
+            timestamp == TimestampToString(s.key.aggregated_ts))) &&
+        statementFingerprintIds.some((id) => id.eq(s.id)),
+    ) || []
   );
 };
 

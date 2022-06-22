@@ -137,13 +137,12 @@ export class TransactionDetails extends React.Component<
       transaction?.stats_data?.statement_fingerprint_ids;
 
     const statementsForTransaction =
-      (statementFingerprintIds &&
-        getStatementsByFingerprintIdAndTime(
-          statementFingerprintIds,
-          aggregatedTs,
-          statements,
-        )) ||
-      [];
+      statementFingerprintIds &&
+      getStatementsByFingerprintIdAndTime(
+        statementFingerprintIds,
+        aggregatedTs,
+        statements,
+      );
 
     const transactionText =
       (statementFingerprintIds &&
@@ -378,7 +377,7 @@ export class TransactionDetails extends React.Component<
                   </Row>
                   <TableStatistics
                     pagination={pagination}
-                    totalCount={statementsForTransaction.length}
+                    totalCount={aggregatedStatements.length}
                     arrayItemName={
                       "statement fingerprints for this transaction"
                     }
@@ -405,7 +404,7 @@ export class TransactionDetails extends React.Component<
                 <Pagination
                   pageSize={pagination.pageSize}
                   current={pagination.current}
-                  total={statementsForTransaction.length}
+                  total={aggregatedStatements.length}
                   onChange={this.onChangePage}
                 />
               </React.Fragment>
