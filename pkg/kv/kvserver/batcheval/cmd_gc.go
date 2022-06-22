@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,35 +36,51 @@ func declareKeysGC(
 	latchSpans, _ *spanset.SpanSet,
 	_ time.Duration,
 ) {
-	// Intentionally don't call DefaultDeclareKeys: the key range in the header
-	// is usually the whole range (pending resolution of #7880).
 	gcr := req.(*roachpb.GCRequest)
-	for _, key := range gcr.Keys {
-		if keys.IsLocal(key.Key) {
-			latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key})
-		} else {
-			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key}, header.Timestamp)
-		}
+	// When GC-ing MVCC range key tombstones or individual range keys, we need to
+	// serialize with all writes that overlap the MVCC range tombstone, as well as
+	// the immediate left/right neighboring keys. This is because a range key
+	// write has non-local effects, i.e. it can fragment or merge other range keys
+	// at other timestamps and at its boundaries, and this has a non-commutative
+	// effect on MVCC stats -- if someone writes a new range key while we're GCing
+	// one below, the stats would come out wrong.
+	// Note that we only need to serialize with writers (including other GC
+	// processes) and not with readers (that are guaranteed to be above the GC
+	// threshold). To achieve this, we declare read-write access at
+	// hlc.MaxTimestamp which will not block any readers.
+	for _, span := range mergeAdjacentSpans(makeLookupBoundariesForGCRanges(
+		rs.GetStartKey().AsRawKey(), nil, gcr.RangeKeys,
+	)) {
+		latchSpans.AddMVCC(spanset.SpanReadWrite, span, hlc.MaxTimestamp)
 	}
-	// Extend the range key latches by feather to ensure MVCC stats
-	// computations correctly account for adjacent range keys tombstones if they
-	// need to be split.
-	// TODO(oleg): These latches are very broad and will be disruptive to read and
-	// write operations despite only accessing "stale" data. We should think of
-	// better integrating it with latchless GC approach.
-	for _, span := range mergeAdjacentSpans(makeLookupBoundariesForGCRanges(rs.GetStartKey().AsRawKey(),
-		nil, gcr.RangeKeys)) {
-		latchSpans.AddMVCC(spanset.SpanReadWrite, span,
-			header.Timestamp)
-	}
-	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
-	// send an empty request first to bump the thresholds, and then another one
-	// that actually does work but can avoid declaring these keys below.
-	if !gcr.Threshold.IsEmpty() {
-		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
-	}
+	// The RangeGCThresholdKey is only written to if the
+	// req.(*GCRequest).Threshold is set. However, we always declare an exclusive
+	// access over this key in order to serialize with other GC requests.
+	//
+	// Correctness:
+	// It is correct for a GC request to not declare exclusive access over the
+	// keys being GCed because of the following:
+	// 1. We define "correctness" to be the property that a reader reading at /
+	// around the GC threshold will either see the correct results or receive an
+	// error.
+	// 2. Readers perform their command evaluation over a stable snapshot of the
+	// storage engine. This means that the reader will not see the effects of a
+	// subsequent GC run as long as it created a Pebble iterator before the GC
+	// request.
+	// 3. A reader checks the in-memory GC threshold of a Replica after it has
+	// created this snapshot (i.e. after a Pebble iterator has been created).
+	// 4. If the in-memory GC threshold is above the timestamp of the read, the
+	// reader receives an error. Otherwise, the reader is guaranteed to see a
+	// state of the storage engine that hasn't been affected by the GC request [5].
+	// 5. GC requests bump the in-memory GC threshold of a Replica as a pre-apply
+	// side effect. This means that if a reader checks the in-memory GC threshold
+	// after it has created a Pebble iterator, it is impossible for the iterator
+	// to point to a storage engine state that has been affected by the GC
+	// request.
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
 	// Needed for Range bounds checks in calls to EvalContext.ContainsKey.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	latchSpans.DisableUndeclaredAccessAssertions()
 }
 
 // Create latches and merge adjacent.
@@ -171,9 +188,7 @@ func GC(
 		newThreshold := oldThreshold
 		updated := newThreshold.Forward(args.Threshold)
 
-		// Don't write the GC threshold key unless we have to. We also don't
-		// declare the key unless we have to (to allow the MVCC GC queue to
-		// batch requests more efficiently), and we must honor what we declare.
+		// Don't write the GC threshold key unless we have to.
 		if updated {
 			if err := MakeStateLoader(cArgs.EvalCtx).SetGCThreshold(
 				ctx, readWriter, cArgs.Stats, &newThreshold,
