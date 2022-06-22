@@ -13,15 +13,16 @@ package rpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestClientSSLSettings(t *testing.T) {
@@ -65,11 +66,12 @@ func TestClientSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID: roachpb.SystemTenantID,
-				Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
-				Stopper:  stopper,
-				Settings: cluster.MakeTestingClusterSettings(),
-				Config:   cfg,
+				TenantID:  roachpb.SystemTenantID,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: time.Nanosecond,
+				Stopper:   stopper,
+				Settings:  cluster.MakeTestingClusterSettings(),
+				Config:    cfg,
 			})
 
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
@@ -123,11 +125,12 @@ func TestServerSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID: roachpb.SystemTenantID,
-				Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
-				Stopper:  stopper,
-				Settings: cluster.MakeTestingClusterSettings(),
-				Config:   cfg,
+				TenantID:  roachpb.SystemTenantID,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: time.Nanosecond,
+				Stopper:   stopper,
+				Settings:  cluster.MakeTestingClusterSettings(),
+				Config:    cfg,
 			})
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())

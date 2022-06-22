@@ -90,7 +90,9 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
 		s3.Gossip(),
-		s3.GetNode().Descriptor, nil,
+		s3.GetNode().Descriptor,
+		s3.Clock(),
+		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
 
 	var spans []spanWithDir
@@ -199,7 +201,9 @@ func TestSpanResolver(t *testing.T) {
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
-		s.(*server.TestServer).GetNode().Descriptor, nil,
+		s.(*server.TestServer).GetNode().Descriptor,
+		s.Clock(),
+		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()
@@ -296,7 +300,8 @@ func TestMixedDirections(t *testing.T) {
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
-		nil,
+		s.Clock(),
+		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
 
 	ctx := context.Background()

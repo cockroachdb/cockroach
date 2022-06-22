@@ -83,11 +83,12 @@ func CreateTestStorePool(
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
-			Clock:    clock,
-			Stopper:  stopper,
-			Settings: st,
+			TenantID:  roachpb.SystemTenantID,
+			Config:    &base.Config{Insecure: true},
+			Clock:     clock.WallClock(),
+			MaxOffset: clock.MaxOffset(),
+			Stopper:   stopper,
+			Settings:  st,
 		})
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())

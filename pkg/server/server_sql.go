@@ -787,6 +787,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.podNodeDialer,
 			codec,
 			cfg.sqlInstanceProvider,
+			cfg.clock,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(

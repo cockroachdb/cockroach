@@ -1507,11 +1507,6 @@ func (oi *optIndex) Zone() cat.Zone {
 // Span is part of the cat.Index interface.
 func (oi *optIndex) Span() roachpb.Span {
 	desc := oi.tab.desc
-	// Tables up to MaxSystemConfigDescID are grouped in a single system config
-	// span.
-	if desc.GetID() <= keys.MaxSystemConfigDescID {
-		return keys.SystemConfigSpan
-	}
 	return desc.IndexSpan(oi.tab.codec, oi.idx.GetID())
 }
 

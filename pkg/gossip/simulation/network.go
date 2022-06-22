@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"google.golang.org/grpc"
 )
@@ -72,11 +72,12 @@ func NewNetwork(
 	}
 	n.RPCContext = rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
-			Clock:    hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */),
-			Stopper:  n.Stopper,
-			Settings: cluster.MakeTestingClusterSettings(),
+			TenantID:  roachpb.SystemTenantID,
+			Config:    &base.Config{Insecure: true},
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: 0,
+			Stopper:   n.Stopper,
+			Settings:  cluster.MakeTestingClusterSettings(),
 		})
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()

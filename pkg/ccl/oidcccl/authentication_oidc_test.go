@@ -34,10 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,11 +61,12 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(ctx,
 			rpc.ContextOptions{
-				TenantID: roachpb.SystemTenantID,
-				Config:   cfg,
-				Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
-				Stopper:  s.Stopper(),
-				Settings: s.ClusterSettings(),
+				TenantID:  roachpb.SystemTenantID,
+				Config:    cfg,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: 1,
+				Stopper:   s.Stopper(),
+				Settings:  s.ClusterSettings(),
 			})
 	}
 
@@ -96,11 +97,12 @@ func TestOIDCEnabled(t *testing.T) {
 
 	newRPCContext := func(cfg *base.Config) *rpc.Context {
 		return rpc.NewContext(ctx, rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   cfg,
-			Clock:    hlc.NewClockWithSystemTimeSource(1 /* maxOffset */),
-			Stopper:  s.Stopper(),
-			Settings: s.ClusterSettings(),
+			TenantID:  roachpb.SystemTenantID,
+			Config:    cfg,
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: 1,
+			Stopper:   s.Stopper(),
+			Settings:  s.ClusterSettings(),
 		})
 	}
 

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -137,6 +138,8 @@ type DistSQLPlanner struct {
 	// codec allows the DistSQLPlanner to determine whether it is creating plans
 	// for a system tenant or non-system tenant.
 	codec keys.SQLCodec
+
+	clock *hlc.Clock
 }
 
 // DistributionType is an enum defining when a plan should be distributed.
@@ -184,6 +187,7 @@ func NewDistSQLPlanner(
 	podNodeDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlInstanceProvider sqlinstance.Provider,
+	clock *hlc.Clock,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
 		planVersion:          planVersion,
@@ -205,6 +209,7 @@ func NewDistSQLPlanner(
 		metadataTestTolerance: execinfra.NoExplain,
 		sqlInstanceProvider:   sqlInstanceProvider,
 		codec:                 codec,
+		clock:                 clock,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -239,7 +244,7 @@ func (dsp *DistSQLPlanner) SetSQLInstanceInfo(desc roachpb.NodeDescriptor) {
 	dsp.gatewaySQLInstanceID = base.SQLInstanceID(desc.NodeID)
 	if dsp.spanResolver == nil {
 		sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, desc,
-			dsp.rpcCtx, ReplicaOraclePolicy)
+			dsp.clock, dsp.rpcCtx, ReplicaOraclePolicy)
 		dsp.SetSpanResolver(sr)
 	}
 }

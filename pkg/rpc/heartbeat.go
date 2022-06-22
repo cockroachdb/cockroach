@@ -41,8 +41,9 @@ func (r RemoteOffset) String() string {
 // clock to return the server time every heartbeat. It also keeps track of
 // remote clocks sent to it by storing them in the remoteClockMonitor.
 type HeartbeatService struct {
-	// Provides the nanosecond unix epoch timestamp of the processor.
-	clock *hlc.Clock
+	clock hlc.WallClock
+	// maxOffset is the maximum tolerated clock skew between nodes.
+	maxOffset time.Duration
 	// A pointer to the RemoteClockMonitor configured in the RPC Context,
 	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
@@ -162,8 +163,8 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// This check is ignored if either offset is set to 0 (for unittests).
 	// Note that we validated this connection already. Different clusters
 	// could very well have different max offsets.
-	mo, amo := hs.clock.MaxOffset(), time.Duration(args.OriginMaxOffsetNanos)
-	if mo != 0 && amo != 0 && mo != amo {
+	mo, amo := hs.maxOffset, time.Duration(args.OriginMaxOffsetNanos)
+	if hs.maxOffset != 0 && amo != 0 && mo != amo {
 		log.Fatalf(ctx, "locally configured maximum clock offset (%s) "+
 			"does not match that of node %s (%s)", mo, args.OriginAddr, amo)
 	}
@@ -180,7 +181,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.OriginAddr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
 		Pong:                           args.Ping,
-		ServerTime:                     hs.clock.PhysicalNow(),
+		ServerTime:                     hs.clock.Now().UnixNano(),
 		ServerVersion:                  hs.settings.Version.BinaryVersion(),
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,

@@ -430,11 +430,12 @@ func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID roachpb.TenantID
-	Config   *base.Config
-	Clock    *hlc.Clock
-	Stopper  *stop.Stopper
-	Settings *cluster.Settings
+	TenantID  roachpb.TenantID
+	Config    *base.Config
+	Clock     hlc.WallClock
+	MaxOffset time.Duration
+	Stopper   *stop.Stopper
+	Settings  *cluster.Settings
 	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	//
@@ -577,7 +578,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			clock: opts.Clock,
 		},
 		RemoteClocks: newRemoteClockMonitor(
-			opts.Clock, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
+			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval()),
 		rpcCompression:   enableRPCCompression,
 		MasterCtx:        masterCtx,
 		metrics:          makeMetrics(),
@@ -1662,7 +1663,7 @@ func (rpcCtx *Context) runHeartbeat(
 		updateHeartbeatState(&rpcCtx.metrics, state, heartbeatNotRunning)
 		setInitialHeartbeatDone()
 	}()
-	maxOffset := rpcCtx.Clock.MaxOffset()
+	maxOffset := rpcCtx.MaxOffset
 	maxOffsetNanos := maxOffset.Nanoseconds()
 
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
@@ -1708,7 +1709,7 @@ func (rpcCtx *Context) runHeartbeat(
 			}
 
 			var response *PingResponse
-			sendTime := rpcCtx.Clock.PhysicalTime()
+			sendTime := rpcCtx.Clock.Now()
 			ping := func(ctx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
@@ -1759,13 +1760,12 @@ func (rpcCtx *Context) runHeartbeat(
 
 			if err == nil {
 				everSucceeded = true
-				receiveTime := rpcCtx.Clock.PhysicalTime()
+				receiveTime := rpcCtx.Clock.Now()
 
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
-				maxOffset := rpcCtx.Clock.MaxOffset()
-				if pingDuration > maximumPingDurationMult*maxOffset {
+				if pingDuration > maximumPingDurationMult*rpcCtx.MaxOffset {
 					request.Offset.Reset()
 				} else {
 					// Offset and error are measured using the remote clock reading
@@ -1808,6 +1808,7 @@ func (rpcCtx *Context) runHeartbeat(
 func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	return &HeartbeatService{
 		clock:                                 rpcCtx.Clock,
+		maxOffset:                             rpcCtx.MaxOffset,
 		remoteClockMonitor:                    rpcCtx.RemoteClocks,
 		clusterName:                           rpcCtx.ClusterName(),
 		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,

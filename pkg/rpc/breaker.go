@@ -24,14 +24,20 @@ import (
 const maxBackoff = time.Second
 
 // breakerClock is an implementation of clock.Clock that internally uses an
-// hlc.Clock. It is used to bridge the hlc clock to the circuit breaker
+// hlc.WallClock. It is used to adapt the WallClock to the circuit breaker
 // clocks. Note that it only implements the After() and Now() methods needed by
 // circuit breakers and backoffs.
 type breakerClock struct {
-	clock *hlc.Clock
+	clock hlc.WallClock
 }
 
+var _ clock.Clock = &breakerClock{}
+
 func (c *breakerClock) After(d time.Duration) <-chan time.Time {
+	// TODO(andrei): This is broken, in that the returned timer has nothing to do
+	// with c.clock. Fix this once hlc.HybridManualClock implements
+	// timeutil.TimeSource, which will allow the breakerClock to wrap a
+	// timeutil.TimeSource, and not a
 	return time.After(d)
 }
 
@@ -40,7 +46,7 @@ func (c *breakerClock) AfterFunc(d time.Duration, f func()) *clock.Timer {
 }
 
 func (c *breakerClock) Now() time.Time {
-	return c.clock.PhysicalTime()
+	return c.clock.Now()
 }
 
 func (c *breakerClock) Sleep(d time.Duration) {
@@ -58,8 +64,6 @@ func (c *breakerClock) Ticker(d time.Duration) *clock.Ticker {
 func (c *breakerClock) Timer(d time.Duration) *clock.Timer {
 	panic("unimplemented")
 }
-
-var _ clock.Clock = &breakerClock{}
 
 // newBackOff creates a new exponential backoff properly configured for RPC
 // connection backoff.

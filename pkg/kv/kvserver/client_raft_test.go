@@ -1700,16 +1700,22 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			// Set to auto since we want the replication queue on.
 			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{},
+				},
+			},
 		})
+
 	defer tc.Stopper().Stop(ctx)
-	store := tc.GetFirstStoreFromServer(t, 0)
 
 	// Once we know our peers, trigger a scan.
+	store := tc.GetFirstStoreFromServer(t, 0)
 	if err := store.ForceReplicationScanAndProcess(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait until all ranges are upreplicated to all nodes.
+	// Wait until all under-replicated ranges are up-replicated to all nodes.
 	var replicaCount int64
 	testutils.SucceedsSoon(t, func() error {
 		var replicaCounts [numServers]int64
@@ -1717,7 +1723,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 			var err error
 			tc.GetFirstStoreFromServer(t, i).VisitReplicas(func(r *kvserver.Replica) bool {
 				replicaCounts[i]++
-				// Synchronize with the replica's raft processing goroutine.
 				r.RaftLock()
 				defer r.RaftUnlock()
 				if len(r.Desc().InternalReplicas) != 3 {

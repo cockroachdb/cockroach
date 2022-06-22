@@ -43,13 +43,14 @@ var (
 	// `system.span_configurations`.
 	SystemSpanConfigSpan = roachpb.Span{Key: SystemSpanConfigPrefix, EndKey: SystemSpanConfigKeyMax}
 
-	// SystemConfigSpan is the range of system objects which will be gossiped.
-	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}
+	// SystemDescriptorTableSpan is the span for the system.descriptor table.
+	SystemDescriptorTableSpan = roachpb.Span{Key: SystemSQLCodec.TablePrefix(DescriptorTableID), EndKey: SystemSQLCodec.TablePrefix(DescriptorTableID + 1)}
+	// SystemZonesTableSpan is the span for the system.zones table.
+	SystemZonesTableSpan = roachpb.Span{Key: SystemSQLCodec.TablePrefix(ZonesTableID), EndKey: SystemSQLCodec.TablePrefix(ZonesTableID + 1)}
 
 	// NoSplitSpans describes the ranges that should never be split.
 	// Meta1Span: needed to find other ranges.
 	// Meta2MaxSpan: between meta and system ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
-	// SystemConfigSpan: system objects which will be gossiped.
-	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan, SystemConfigSpan}
+	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan}
 )

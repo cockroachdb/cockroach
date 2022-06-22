@@ -298,7 +298,7 @@ func IsVirtualTable(id ID) bool {
 
 // IsSystemConfigID returns whether this ID is for a system config object.
 func IsSystemConfigID(id ID) bool {
-	return id > 0 && id <= keys.MaxSystemConfigDescID
+	return id == keys.DescriptorTableID || id == keys.ZonesTableID
 }
 
 // AnonymousTable is the empty table name, used when a data source

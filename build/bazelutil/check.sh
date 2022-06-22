@@ -10,8 +10,8 @@ pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
-pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mocks_generated_test.go . Cluster
-pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus Client
+pkg/roachprod/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mocks_generated_test.go . Cluster
+pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
 pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecachemock -destination=rangecachemock/mocks_generated.go . RangeDescriptorDB
 pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -destination=mocks_generated_test.go --package=rangefeed . DB
