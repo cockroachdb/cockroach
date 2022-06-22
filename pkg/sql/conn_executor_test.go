@@ -525,6 +525,43 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	}
 }
 
+func TestPrepareStatisticsMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+
+	// PREPARE a prepared statement.
+	stmt, err := sqlDB.Prepare("SELECT $1::int")
+	require.NoError(t, err)
+
+	// EXECUTE the prepared statement
+	_, err = stmt.Exec(3)
+	require.NoError(t, err)
+
+	// Verify that query and querySummary are equal in crdb_internal.statement_statistics.metadata.
+	rows, err := sqlDB.Query(`SELECT metadata->>'query', metadata->>'querySummary' FROM crdb_internal.statement_statistics WHERE metadata->>'query' LIKE 'SELECT $1::INT8'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	var query, summary string
+	for rows.Next() {
+		if err := rows.Scan(&query, &summary); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(query) < 1 {
+		t.Fatal("unable to retrieve query metadata")
+	}
+	if query != summary {
+		t.Fatalf("query is not consistent with querySummary")
+	}
+}
+
 func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

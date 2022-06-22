@@ -30,6 +30,9 @@ type PrepareMetadata struct {
 	// suitable for recording in statement statistics.
 	StatementNoConstants string
 
+	// StatementSummary is a summarized version of the query.
+	StatementSummary string
+
 	// Provides TypeHints and Types fields which contain placeholder typing
 	// information.
 	tree.PlaceholderTypesInfo
