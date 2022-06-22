@@ -12,20 +12,10 @@ import moment from "moment";
 import { TimeScale, TimeScaleOption, TimeScaleOptions } from "./timeScaleTypes";
 
 /**
- * defaultTimeScaleOptions is a preconfigured set of time scales that can be
+ * timeScale1hMinOptions is a preconfigured set of time scales with 1h minimum that can be
  * selected by the user.
  */
-export const defaultTimeScaleOptions: TimeScaleOptions = {
-  "Past 10 Minutes": {
-    windowSize: moment.duration(10, "minutes"),
-    windowValid: moment.duration(10, "seconds"),
-    sampleSize: moment.duration(10, "seconds"),
-  },
-  "Past 30 Minutes": {
-    windowSize: moment.duration(30, "minutes"),
-    windowValid: moment.duration(30, "seconds"),
-    sampleSize: moment.duration(30, "seconds"),
-  },
+export const timeScale1hMinOptions: TimeScaleOptions = {
   "Past 1 Hour": {
     windowSize: moment.duration(1, "hour"),
     windowValid: moment.duration(1, "minute"),
@@ -71,6 +61,24 @@ export const defaultTimeScaleOptions: TimeScaleOptions = {
     windowValid: moment.duration(20, "minutes"),
     sampleSize: moment.duration(1, "hour"),
   },
+};
+
+/**
+ * defaultTimeScaleOptions is a preconfigured set of time scales that can be
+ * selected by the user.
+ */
+export const defaultTimeScaleOptions: TimeScaleOptions = {
+  "Past 10 Minutes": {
+    windowSize: moment.duration(10, "minutes"),
+    windowValid: moment.duration(10, "seconds"),
+    sampleSize: moment.duration(10, "seconds"),
+  },
+  "Past 30 Minutes": {
+    windowSize: moment.duration(30, "minutes"),
+    windowValid: moment.duration(30, "seconds"),
+    sampleSize: moment.duration(30, "seconds"),
+  },
+  ...timeScale1hMinOptions,
 };
 
 export const defaultTimeScaleSelected: TimeScale = {
