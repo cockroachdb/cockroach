@@ -753,6 +753,11 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		)
 	}
 
+	if res.State != nil && res.State.GCThreshold != nil {
+		b.r.handleGCThresholdResult(ctx, res.State.GCThreshold)
+		res.State.GCThreshold = nil
+	}
+
 	if res.State != nil && res.State.TruncatedState != nil {
 		var err error
 		// Typically one should not be checking the cluster version below raft,
@@ -1286,11 +1291,6 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.RaftLogDelta += raftLogDelta
 			rResult.State.TruncatedState = nil
 			rResult.RaftExpectedFirstIndex = 0
-		}
-
-		if newThresh := rResult.State.GCThreshold; newThresh != nil {
-			sm.r.handleGCThresholdResult(ctx, newThresh)
-			rResult.State.GCThreshold = nil
 		}
 
 		if newVersion := rResult.State.Version; newVersion != nil {
