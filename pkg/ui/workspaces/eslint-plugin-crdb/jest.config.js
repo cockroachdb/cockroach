@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,10 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./sessionsPage";
-export { SessionDetails } from "./sessionDetails";
-export * from "./sessionsPageConnected";
-export * from "./sessionDetailsConnected";
-export { byteArrayToUuid } from "./sessionsTable";
-
-export type { SessionDetailsProps } from "./sessionDetails";
+/** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  testPathIgnorePatterns: [ "/node_modules/", "/dist/" ],
+};

@@ -16,6 +16,7 @@ const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const StringReplacePlugin = require("string-replace-webpack-plugin");
 const WebpackBar = require("webpackbar");
+const { ESBuildMinifyPlugin } = require("esbuild-loader");
 
 const proxyPrefixes = ["/_admin", "/_status", "/ts", "/login", "/logout"];
 function shouldProxy(reqPath) {
@@ -62,22 +63,6 @@ module.exports = (env, argv) => {
     modules.push("node_modules");
   }
 
-  // Exclude DLLPlugin when build with Bazel because bazel handles caching on its own
-  if (!isBazelBuild && !env.WEBPACK_WATCH && !env.WEBPACK_SERVE) {
-    plugins = plugins.concat([
-      // See "DLLs for speedy builds" in the README for details.
-      new webpack.DllReferencePlugin({
-        context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require(env.protos_manifest ||
-          `./protos.${env.dist}.manifest.json`),
-      }),
-      new webpack.DllReferencePlugin({
-        context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require(env.vendor_manifest || "./vendor.oss.manifest.json"),
-      }),
-    ]);
-  }
-
   const config = {
     context: __dirname,
     entry: [ "./src/index.tsx"],
@@ -102,7 +87,37 @@ module.exports = (env, argv) => {
 
     module: {
       rules: [
-        { test: /\.css$/, use: ["style-loader", "css-loader"] },
+        {
+          test: /\.css$/,
+          use: [
+            "style-loader",
+            "css-loader",
+            {
+              loader: "esbuild-loader",
+              options: {
+                loader: "css",
+                minify: true,
+              },
+            }
+          ]
+        },
+        // Preprocess LESS styles required by external components
+        // (react-select)
+        {
+          use: [
+            "style-loader",
+            "css-loader",
+            {
+              loader: "less-loader",
+              options: {
+                lessOptions: {
+                  javascriptEnabled: true
+                }
+              }
+            },
+          ],
+          test: /\.less$/,
+        },
         {
           test: /\.module\.styl$/,
           use: [
@@ -114,7 +129,6 @@ module.exports = (env, argv) => {
                 modules: {
                   localIdentName: "[local]--[hash:base64:5]",
                 },
-                importLoaders: 1,
               },
             },
             {
@@ -156,7 +170,15 @@ module.exports = (env, argv) => {
             /ccl\/src\/js/,
             /cluster-ui\/dist/,
           ],
-          use: ["cache-loader", "babel-loader"],
+          use: [
+            {
+              loader: "esbuild-loader",
+              options: {
+                loader: "js",
+                target: "es6",
+              },
+            }
+          ],
         },
         {
           test: /\.(ts|tsx)?$/,
@@ -168,9 +190,13 @@ module.exports = (env, argv) => {
             /cluster-ui\/dist/,
           ],
           use: [
-            "cache-loader",
-            "babel-loader",
-            { loader: "ts-loader", options: { happyPackMode: true } },
+            {
+              loader: "esbuild-loader",
+              options: {
+                loader: "tsx",
+                target: "es6",
+              },
+            },
           ],
         },
 
@@ -187,6 +213,14 @@ module.exports = (env, argv) => {
             /cluster-ui\/dist/,
           ],
         },
+      ],
+    },
+
+    optimization: {
+      minimizer: [
+        new ESBuildMinifyPlugin({
+          target: "es6",
+        }),
       ],
     },
 

@@ -10,7 +10,8 @@
 
 import React from "react";
 import { Pagination as AntPagination } from "antd";
-import { PaginationProps as AntPaginationProps } from "antd/lib/pagination";
+import "antd/lib/pagination/style";
+import type { PaginationProps as AntPaginationProps } from "antd/lib/pagination";
 import classNames from "classnames/bind";
 import styles from "./pagination.module.scss";
 

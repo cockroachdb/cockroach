@@ -10,7 +10,10 @@
 
 import React from "react";
 import { Button, Form, Input } from "antd";
-import { InputProps } from "antd/lib/input";
+import "antd/lib/button/style";
+import "antd/lib/form/style";
+import "antd/lib/input/style";
+import type { InputProps } from "antd/lib/input";
 import classNames from "classnames/bind";
 import { noop } from "lodash";
 import {

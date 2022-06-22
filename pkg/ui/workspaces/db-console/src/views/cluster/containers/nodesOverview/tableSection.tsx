@@ -12,6 +12,7 @@ import * as React from "react";
 import { connect } from "react-redux";
 import cn from "classnames";
 import { Icon } from "antd";
+import "antd/lib/icon/style";
 import { Action, Dispatch } from "redux";
 
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
