@@ -2145,7 +2145,7 @@ func (node *TargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.TenantID.Specified {
 		return p.row("TENANT", p.Doc(&node.TenantID))
 	}
-	if node.Tables.IsSequence {
+	if node.Tables.SequenceOnly {
 		return p.row("SEQUENCE", p.Doc(&node.Tables.TablePatterns))
 	}
 	return p.row("TABLE", p.Doc(&node.Tables.TablePatterns))
