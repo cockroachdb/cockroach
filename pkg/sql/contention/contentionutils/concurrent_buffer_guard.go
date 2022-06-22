@@ -116,13 +116,14 @@ func (c *ConcurrentBufferGuard) AtomicWrite(op bufferWriteOp) {
 // flushes the buffer.
 func (c *ConcurrentBufferGuard) ForceSync() {
 	c.flushSyncLock.Lock()
+	defer c.flushSyncLock.Unlock()
 	c.syncLocked()
-	c.flushSyncLock.Unlock()
 }
 
 func (c *ConcurrentBufferGuard) syncRLocked() {
 	// We upgrade the read-lock to a write-lock, then when we are done flushing,
 	// the lock is downgraded to a read-lock.
+	// Note: this looks incorrect, see https://github.com/cockroachdb/cockroach/issues/83080
 	c.flushSyncLock.RUnlock()
 	defer c.flushSyncLock.RLock()
 	c.flushSyncLock.Lock()

@@ -166,10 +166,11 @@ func New(
 func (s *Container) IterateAggregatedTransactionStats(
 	_ context.Context, _ *sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
-	var txnStat roachpb.TxnStats
-	s.txnCounts.mu.Lock()
-	txnStat = s.txnCounts.mu.TxnStats
-	s.txnCounts.mu.Unlock()
+	txnStat := func() roachpb.TxnStats {
+		s.txnCounts.mu.Lock()
+		defer s.txnCounts.mu.Unlock()
+		return s.txnCounts.mu.TxnStats
+	}()
 
 	err := visitor(s.appName, &txnStat)
 	if err != nil {
@@ -744,19 +745,26 @@ func (s *Container) MergeApplicationTransactionStats(
 // Add combines one Container into another. Add manages locks on a, so taking
 // a lock on a will cause a deadlock.
 func (s *Container) Add(ctx context.Context, other *Container) (err error) {
-	other.mu.Lock()
-	statMap := make(map[stmtKey]*stmtStats)
-	for k, v := range other.mu.stmts {
-		statMap[k] = v
-	}
-	other.mu.Unlock()
+	statMap := func() map[stmtKey]*stmtStats {
+		other.mu.Lock()
+		defer other.mu.Unlock()
+
+		statMap := make(map[stmtKey]*stmtStats)
+		for k, v := range other.mu.stmts {
+			statMap[k] = v
+		}
+		return statMap
+	}()
 
 	// Copy the statement stats for each statement key.
 	for k, v := range statMap {
-		v.mu.Lock()
-		statCopy := &stmtStats{}
-		statCopy.mu.data = v.mu.data
-		v.mu.Unlock()
+		statCopy := func() *stmtStats {
+			v.mu.Lock()
+			defer v.mu.Unlock()
+			statCopy := &stmtStats{}
+			statCopy.mu.data = v.mu.data
+			return statCopy
+		}()
 		statCopy.ID = v.ID
 		statMap[k] = statCopy
 	}
@@ -771,50 +779,61 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			continue
 		}
 
-		stats.mu.Lock()
+		func() {
+			stats.mu.Lock()
+			defer stats.mu.Unlock()
 
-		// If we created a new entry for the fingerprint, we check if we have
-		// exceeded our memory budget.
-		if created {
-			estimatedAllocBytes := stats.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
-			// We still want to continue this loop to merge stats that are already
-			// present in our map that do not require allocation.
-			s.mu.Lock()
-			if latestErr := s.mu.acc.Grow(ctx, estimatedAllocBytes); latestErr != nil {
-				stats.mu.Unlock()
-				// Instead of combining errors, we track the latest error occurred
-				// in this method. This is because currently the only type of error we
-				// can generate in this function is out of memory errors. Also since we
-				// do not abort after encountering such errors, combining many same
-				// errors is not helpful.
-				err = latestErr
-				delete(s.mu.stmts, k)
-				s.mu.Unlock()
-				continue
+			// If we created a new entry for the fingerprint, we check if we have
+			// exceeded our memory budget.
+			if created {
+				estimatedAllocBytes := stats.sizeUnsafe() + k.size() + 8 /* stmtKey hash */
+				// We still want to continue this loop to merge stats that are already
+				// present in our map that do not require allocation.
+				if latestErr := func() error {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					if growErr != nil {
+						delete(s.mu.stmts, k)
+					}
+					return growErr
+				}(); latestErr != nil {
+					// Instead of combining errors, we track the latest error occurred
+					// in this method. This is because currently the only type of error we
+					// can generate in this function is out of memory errors. Also since we
+					// do not abort after encountering such errors, combining many same
+					// errors is not helpful.
+					err = latestErr
+					return
+				}
 			}
-			s.mu.Unlock()
-		}
 
-		// Note that we don't need to take a lock on v because
-		// no other thread knows about v yet.
-		stats.mu.data.Add(&v.mu.data)
-		stats.mu.Unlock()
+			// Note that we don't need to take a lock on v because
+			// no other thread knows about v yet.
+			stats.mu.data.Add(&v.mu.data)
+		}()
 	}
 
 	// Do what we did above for the statMap for the txn Map now.
-	other.mu.Lock()
-	txnMap := make(map[roachpb.TransactionFingerprintID]*txnStats)
-	for k, v := range other.mu.txns {
-		txnMap[k] = v
-	}
-	other.mu.Unlock()
+	txnMap := func() map[roachpb.TransactionFingerprintID]*txnStats {
+		other.mu.Lock()
+		defer other.mu.Unlock()
+		txnMap := make(map[roachpb.TransactionFingerprintID]*txnStats)
+		for k, v := range other.mu.txns {
+			txnMap[k] = v
+		}
+		return txnMap
+	}()
 
 	// Copy the transaction stats for each txn key
 	for k, v := range txnMap {
-		v.mu.Lock()
-		txnCopy := &txnStats{}
-		txnCopy.mu.data = v.mu.data
-		v.mu.Unlock()
+		txnCopy := func() *txnStats {
+			v.mu.Lock()
+			defer v.mu.Unlock()
+			txnCopy := &txnStats{}
+			txnCopy.mu.data = v.mu.data
+			return txnCopy
+		}()
 		txnCopy.statementFingerprintIDs = v.statementFingerprintIDs
 		txnMap[k] = txnCopy
 	}
@@ -832,36 +851,49 @@ func (s *Container) Add(ctx context.Context, other *Container) (err error) {
 			continue
 		}
 
-		t.mu.Lock()
-		if created {
-			estimatedAllocBytes := t.sizeUnsafe() + k.Size() + 8 /* TransactionFingerprintID hash */
-			// We still want to continue this loop to merge stats that are already
-			// present in our map that do not require allocation.
-			s.mu.Lock()
-			if latestErr := s.mu.acc.Grow(ctx, estimatedAllocBytes); latestErr != nil {
-				t.mu.Unlock()
-				// We only track the latest error. See comment above for explanation.
-				err = latestErr
-				delete(s.mu.txns, k)
-				s.mu.Unlock()
-				continue
-			}
-			s.mu.Unlock()
-		}
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
 
-		t.mu.data.Add(&v.mu.data)
-		t.mu.Unlock()
+			if created {
+				estimatedAllocBytes := t.sizeUnsafe() + k.Size() + 8 /* TransactionFingerprintID hash */
+				// We still want to continue this loop to merge stats that are already
+				// present in our map that do not require allocation.
+				if latestErr := func() error {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+
+					growErr := s.mu.acc.Grow(ctx, estimatedAllocBytes)
+					if growErr != nil {
+						delete(s.mu.txns, k)
+					}
+					return growErr
+				}(); latestErr != nil {
+					// We only track the latest error. See comment above for explanation.
+					err = latestErr
+					return
+				}
+			}
+
+			// Note that we don't need to take a lock on v because
+			// no other thread knows about v yet.
+			t.mu.data.Add(&v.mu.data)
+		}()
 	}
 
 	// Create a copy of the other's transactions statistics.
-	other.txnCounts.mu.Lock()
-	txnStats := other.txnCounts.mu.TxnStats
-	other.txnCounts.mu.Unlock()
+	txnStats := func() roachpb.TxnStats {
+		other.txnCounts.mu.Lock()
+		defer other.txnCounts.mu.Unlock()
+		return other.txnCounts.mu.TxnStats
+	}()
 
 	// Merge the transaction stats.
-	s.txnCounts.mu.Lock()
-	s.txnCounts.mu.TxnStats.Add(txnStats)
-	s.txnCounts.mu.Unlock()
+	func(txnStats roachpb.TxnStats) {
+		s.txnCounts.mu.Lock()
+		defer s.txnCounts.mu.Unlock()
+		s.txnCounts.mu.TxnStats.Add(txnStats)
+	}(txnStats)
 
 	return err
 }

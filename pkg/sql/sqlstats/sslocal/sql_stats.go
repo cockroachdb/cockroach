@@ -155,6 +155,7 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 	// different application_names seen so far.
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Clear the per-apps maps manually,
 	// because any SQL session currently open has cached the
@@ -185,7 +186,6 @@ func (s *SQLStats) resetAndMaybeDumpStats(ctx context.Context, target Sink) (err
 		statsContainer.Clear(ctx)
 	}
 	s.mu.lastReset = timeutil.Now()
-	s.mu.Unlock()
 
 	return err
 }
