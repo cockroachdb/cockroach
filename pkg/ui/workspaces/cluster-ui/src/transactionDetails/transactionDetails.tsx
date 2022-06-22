@@ -205,16 +205,26 @@ export class TransactionDetails extends React.Component<
     const statementFingerprintIds =
       transaction?.stats_data?.statement_fingerprint_ids;
 
-    return (
-      (statementFingerprintIds &&
-        getStatementsByFingerprintId(statementFingerprintIds, statements)) ||
-      []
+    if (!statementFingerprintIds) {
+      return [];
+    }
+
+    // Get all the stmts matching the transaction's fingerprint ID. Then we filter
+    // by those statements actually associated with the current transaction.
+    const stmts = getStatementsByFingerprintId(
+      statementFingerprintIds,
+      statements,
+    ).filter(
+      s =>
+        s.key.key_data.transaction_fingerprint_id.toString() ===
+        this.props.transactionFingerprintId,
     );
+
+    return stmts;
   };
 
   render(): React.ReactElement {
-    const { error, nodeRegions, transaction, transactionFingerprintId } =
-      this.props;
+    const { error, nodeRegions, transaction } = this.props;
     const { latestTransactionText } = this.state;
     const statementsForTransaction = this.getStatementsForTransaction();
     const transactionStats = transaction?.stats_data?.stats;
@@ -273,12 +283,10 @@ export class TransactionDetails extends React.Component<
 
             const { isTenant, hasViewActivityRedactedRole } = this.props;
             const { sortSetting, pagination } = this.state;
-            const txnScopedStmts = statementsForTransaction.filter(
-              s =>
-                s.key.key_data.transaction_fingerprint_id.toString() ===
-                transactionFingerprintId,
+
+            const aggregatedStatements = aggregateStatements(
+              statementsForTransaction,
             );
-            const aggregatedStatements = aggregateStatements(txnScopedStmts);
             populateRegionNodeForStatements(
               aggregatedStatements,
               nodeRegions,
@@ -422,7 +430,7 @@ export class TransactionDetails extends React.Component<
                   </Row>
                   <TableStatistics
                     pagination={pagination}
-                    totalCount={statementsForTransaction.length}
+                    totalCount={aggregatedStatements.length}
                     arrayItemName={
                       "statement fingerprints for this transaction"
                     }
@@ -449,7 +457,7 @@ export class TransactionDetails extends React.Component<
                 <Pagination
                   pageSize={pagination.pageSize}
                   current={pagination.current}
-                  total={statementsForTransaction.length}
+                  total={aggregatedStatements.length}
                   onChange={this.onChangePage}
                 />
               </React.Fragment>
