@@ -91,7 +91,7 @@
 
 /pkg/cli/                    @cockroachdb/cli-prs
 # last-rule-wins so bulk i/o takes userfile.go even though cli-prs takes pkg/cli
-/pkg/cli/userfile.go         @cockroachdb/bulk-prs
+/pkg/cli/userfile.go         @cockroachdb/bulk-io
 /pkg/cli/auth.go             @cockroachdb/server-prs     @cockroachdb/prodsec @cockroachdb/cli-prs
 /pkg/cli/cert*.go            @cockroachdb/cli-prs        @cockroachdb/prodsec
 /pkg/cli/demo*.go            @cockroachdb/sql-experience @cockroachdb/server-prs @cockroachdb/cli-prs
@@ -99,7 +99,7 @@
 /pkg/cli/debug*.go           @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/debug_job_trace*.go @cockroachdb/jobs-prs
 /pkg/cli/doctor*.go          @cockroachdb/sql-schema     @cockroachdb/cli-prs
-/pkg/cli/import_test.go      @cockroachdb/bulk-prs       @cockroachdb/cli-prs
+/pkg/cli/import_test.go      @cockroachdb/bulk-io       @cockroachdb/cli-prs
 /pkg/cli/sql*.go             @cockroachdb/sql-experience @cockroachdb/cli-prs
 /pkg/cli/clisqlshell/        @cockroachdb/sql-experience @cockroachdb/cli-prs
 /pkg/cli/clisqlclient/       @cockroachdb/sql-experience @cockroachdb/cli-prs
@@ -159,17 +159,17 @@
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/ccl/streamingccl/       @cockroachdb/cdc-prs
-# last-rule-wins so *after* CDC takes most of streamingccl bulk-prs takes ingest pkg.
-/pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
+# last-rule-wins so *after* CDC takes most of streamingccl bulk-io takes ingest pkg.
+/pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-io
 
-/pkg/ccl/backupccl/          @cockroachdb/bulk-prs
-/pkg/ccl/backupccl/*_job.go  @cockroachdb/bulk-prs @cockroachdb/jobs-prs
-/pkg/sql/importer/           @cockroachdb/bulk-prs
-/pkg/ccl/importerccl/        @cockroachdb/bulk-prs
+/pkg/ccl/backupccl/          @cockroachdb/bulk-io
+/pkg/ccl/backupccl/*_job.go  @cockroachdb/bulk-io @cockroachdb/jobs-prs
+/pkg/sql/importer/           @cockroachdb/bulk-io
+/pkg/ccl/importerccl/        @cockroachdb/bulk-io
 /pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
-/pkg/ccl/storageccl/         @cockroachdb/bulk-prs
-/pkg/cloud/                  @cockroachdb/bulk-prs
-/pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
+/pkg/ccl/storageccl/         @cockroachdb/bulk-io
+/pkg/cloud/                  @cockroachdb/bulk-io
+/pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-io
 
 /pkg/geo/                    @cockroachdb/geospatial
 
@@ -194,7 +194,7 @@
 /pkg/base/                   @cockroachdb/server-prs
 /pkg/bench/                  @cockroachdb/sql-queries-noreview
 /pkg/bench/rttanalysis       @cockroachdb/sql-schema
-/pkg/blobs/                  @cockroachdb/bulk-prs
+/pkg/blobs/                  @cockroachdb/bulk-io
 /pkg/build/                  @cockroachdb/dev-inf
 /pkg/ccl/baseccl/            @cockroachdb/cli-prs
 /pkg/ccl/buildccl/           @cockroachdb/dev-inf
@@ -336,7 +336,7 @@
 /pkg/settings/               @cockroachdb/server-prs
 /pkg/spanconfig/             @cockroachdb/kv-prs
 /pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
-/pkg/streaming/              @cockroachdb/bulk-prs
+/pkg/streaming/              @cockroachdb/bulk-io
 /pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries
 /pkg/testutils/sqlutils/     @cockroachdb/sql-queries
