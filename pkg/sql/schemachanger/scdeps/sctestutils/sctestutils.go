@@ -67,6 +67,7 @@ func WithBuilderDependenciesFromTestServer(
 		scbuild.AuthorizationAccessor
 		scbuild.AstFormatter
 		scbuild.FeatureChecker
+		scbuild.SettingsReader
 	})
 
 	// Use "defaultdb" as current database.
@@ -83,6 +84,7 @@ func WithBuilderDependenciesFromTestServer(
 		planner,                            /* authAccessor */
 		planner,                            /* astFormatter */
 		planner,                            /* featureChecker */
+		planner,                            /* settingsReader*/
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */

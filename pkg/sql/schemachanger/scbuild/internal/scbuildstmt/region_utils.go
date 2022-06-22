@@ -221,13 +221,11 @@ func GenerateSubzoneSpans(
 	b BuildCtx, tableElts ElementResultSet, subzones []zonepb.Subzone, hasNewSubzones bool,
 ) ([]zonepb.SubzoneSpan, error) {
 	// Removing zone configs does not require a valid license.
-	/*	if hasNewSubzones {
-		org := ClusterOrganization.Get(&st.SV)
-		if err := base.CheckEnterpriseEnabled(st, logicalClusterID, org,
-			"replication zones on indexes or partitions"); err != nil {
+	if hasNewSubzones {
+		if err := b.CheckEnterpriseEnabled("replication zones on indexes or partitions"); err != nil {
 			return nil, err
 		}
-	}*/
+	}
 
 	// We already completely avoid creating subzone spans for dropped indexes.
 	// Whether this was intentional is a different story, but it turns out to be

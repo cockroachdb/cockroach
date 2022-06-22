@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/jobs",

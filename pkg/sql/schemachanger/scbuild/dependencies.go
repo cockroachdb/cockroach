@@ -74,6 +74,8 @@ type Dependencies interface {
 	DescriptorCommentCache() CommentCache
 
 	ZoneConfigReader() ZoneConfigReader
+
+	EnterpriseFeatureChecker() EnterpriseFeatureChecker
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating

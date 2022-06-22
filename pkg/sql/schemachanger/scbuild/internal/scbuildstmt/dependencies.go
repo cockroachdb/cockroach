@@ -36,6 +36,7 @@ type BuildCtx interface {
 	context.Context
 	ClusterAndSessionInfo
 	SchemaFeatureChecker
+	EnterpriseFeatureChecker
 	BuilderState
 	EventLogState
 	TreeAnnotator
@@ -298,4 +299,12 @@ type NameResolver interface {
 
 type ZoneConfigReader interface {
 	GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig
+}
+
+type EnterpriseFeatureChecker interface {
+	CheckEnterpriseEnabled(feature string) error
+}
+
+type SettingsReader interface {
+	GetClusterOrganization() string
 }

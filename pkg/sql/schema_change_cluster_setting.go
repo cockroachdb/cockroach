@@ -49,3 +49,7 @@ func checkSchemaChangeEnabled(
 func (p *planner) CheckFeature(ctx context.Context, featureName tree.SchemaFeatureName) error {
 	return checkSchemaChangeEnabled(ctx, p.ExecCfg(), string(featureName))
 }
+
+func (p *planner) GetClusterOrganization() string {
+	return ClusterOrganization.Get(p.ExecCfg().SV())
+}

@@ -54,12 +54,13 @@ func Build(
 		return scpb.CurrentState{}, err
 	}
 	b := buildCtx{
-		Context:              ctx,
-		Dependencies:         dependencies,
-		BuilderState:         bs,
-		EventLogState:        els,
-		TreeAnnotator:        an,
-		SchemaFeatureChecker: dependencies.FeatureChecker(),
+		Context:                  ctx,
+		Dependencies:             dependencies,
+		BuilderState:             bs,
+		EventLogState:            els,
+		TreeAnnotator:            an,
+		EnterpriseFeatureChecker: dependencies.EnterpriseFeatureChecker(),
+		SchemaFeatureChecker:     dependencies.FeatureChecker(),
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -112,6 +113,14 @@ type (
 
 type (
 	ZoneConfigReader = scbuildstmt.ZoneConfigReader
+)
+
+type (
+	EnterpriseFeatureChecker = scbuildstmt.EnterpriseFeatureChecker
+)
+
+type (
+	SettingsReader = scbuildstmt.SettingsReader
 )
 
 type elementState struct {
@@ -249,6 +258,7 @@ type buildCtx struct {
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
+	scbuildstmt.EnterpriseFeatureChecker
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
