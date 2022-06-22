@@ -123,5 +123,6 @@ func init() {
 				timer:      ts.NewTimer(),
 			}
 		},
+		jobs.UsesTenantCostControl,
 	)
 }
