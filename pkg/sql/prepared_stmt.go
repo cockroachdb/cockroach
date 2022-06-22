@@ -67,8 +67,7 @@ type PreparedStatement struct {
 	createdAt time.Time
 	// origin is the protocol in which this prepare statement was created.
 	// Used for reporting on `pg_prepared_statements`.
-	origin           PreparedStatementOrigin
-	StatementSummary string
+	origin PreparedStatementOrigin
 }
 
 // MemoryEstimate returns a rough estimate of the PreparedStatement's memory
