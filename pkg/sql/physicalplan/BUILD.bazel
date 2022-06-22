@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

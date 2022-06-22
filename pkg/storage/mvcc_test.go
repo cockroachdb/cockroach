@@ -4306,8 +4306,6 @@ func TestValidSplitKeys(t *testing.T) {
 		{roachpb.Key("a"), true},
 		{roachpb.Key("\xff"), true},
 		{roachpb.Key("\xff\x01"), true},
-		{keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID), false},
-		{keys.SystemSQLCodec.TablePrefix(keys.MaxSystemConfigDescID + 1), true},
 	}
 	for i, test := range testCases {
 		valid := IsValidSplitKey(test.key)
@@ -4431,17 +4429,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x02\x00"),
 				roachpb.Key("\x02\xff"),
 			},
-			expSplit:   nil,
-			expError:   false,
-			skipTenant: true,
-		},
-		// All system span cannot be split.
-		{
-			keys: []roachpb.Key{
-				addColFam(tablePrefix(1, "some", "data"), 1),
-				addColFam(tablePrefix(keys.MaxSystemConfigDescID, "blah"), 1),
-			},
-			rangeStart: keys.SystemSQLCodec.TablePrefix(1),
 			expSplit:   nil,
 			expError:   false,
 			skipTenant: true,

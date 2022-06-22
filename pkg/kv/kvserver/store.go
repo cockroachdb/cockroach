@@ -2100,12 +2100,6 @@ func (s *Store) startGossip() {
 			interval:    s.cfg.SentinelGossipTTL() / 2,
 		},
 		{
-			key:         keys.SystemConfigSpan.Key,
-			fn:          wakeReplica,
-			description: "system config",
-			interval:    systemDataGossipInterval,
-		},
-		{
 			key:         keys.NodeLivenessSpan.Key,
 			fn:          wakeReplica,
 			description: "node liveness",

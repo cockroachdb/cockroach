@@ -116,7 +116,6 @@ func TestPrettyPrint(t *testing.T) {
 		{keys.RangeMetaKey(roachpb.RKey(makeKey(keys.Meta2Prefix, roachpb.Key("foo")))).AsRawKey(), `/Meta1/"foo"`, revertSupportUnknown},
 
 		// table
-		{keys.SystemConfigSpan.Key, "/Table/SystemConfigSpan/Start", revertSupportUnknown},
 		{tenSysCodec.TablePrefix(111), "/Table/111", revertMustSupport},
 		{makeKey(tenSysCodec.TablePrefix(42), encoding.EncodeUvarintAscending(nil, 1)), `/Table/42/1`, revertMustSupport},
 		{makeKey(tenSysCodec.TablePrefix(42), roachpb.RKey("foo")), `/Table/42/"foo"`, revertSupportUnknown},
@@ -193,7 +192,7 @@ func TestPrettyPrint(t *testing.T) {
 
 		// tenant table
 		{ten5Codec.TenantPrefix(), "/Tenant/5", revertMustSupport},
-		{ten5Codec.TablePrefix(0), "/Tenant/5/Table/SystemConfigSpan/Start", revertSupportUnknown},
+		{ten5Codec.TablePrefix(0), "/Tenant/5/Table/0", revertSupportUnknown},
 		{ten5Codec.TablePrefix(50), "/Tenant/5/Table/50", revertMustSupport},
 		{ten5Codec.TablePrefix(111), "/Tenant/5/Table/111", revertMustSupport},
 		{makeKey(ten5Codec.TablePrefix(42), encoding.EncodeUvarintAscending(nil, 1)), `/Tenant/5/Table/42/1`, revertMustSupport},

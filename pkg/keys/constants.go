@@ -345,7 +345,7 @@ var (
 	// TODO(bdarnell): this should be either roachpb.Key or RKey, not []byte.
 	SystemConfigSplitKey = []byte(TableDataMin)
 	// SystemConfigTableDataMax is the end key of system config span.
-	SystemConfigTableDataMax = SystemSQLCodec.TablePrefix(MaxSystemConfigDescID + 1)
+	SystemConfigTableDataMax = SystemSQLCodec.TablePrefix(DeprecatedMaxSystemConfigDescID + 1)
 	//
 	// NamespaceTableMin is the start key of system.namespace, which is a system
 	// table that does not reside in the same range as other system tables.
@@ -364,10 +364,10 @@ var (
 // Various IDs used by the structured data layer.
 // NOTE: these must not change during the lifetime of a cluster.
 const (
-	// MaxSystemConfigDescID is the maximum system descriptor ID that will be
+	// DeprecatedMaxSystemConfigDescID is the maximum system descriptor ID that will be
 	// gossiped as part of the SystemConfig. Be careful adding new descriptors to
 	// this ID range.
-	MaxSystemConfigDescID = 10
+	DeprecatedMaxSystemConfigDescID = 10
 
 	// MaxReservedDescID is the maximum descriptor ID in the reserved range.
 	// In practice, what this means is that this is the highest-possible value
@@ -381,7 +381,7 @@ const (
 
 	// SystemDatabaseID and following are the database/table IDs for objects
 	// in the system span.
-	// NOTE: IDs must be <= MaxSystemConfigDescID.
+	// NOTE: IDs must be <= DeprecatedMaxSystemConfigDescID.
 	SystemDatabaseID = 1
 	// DeprecatedNamespaceTableID was the tableID for the system.namespace table
 	// for pre-20.1 clusters.

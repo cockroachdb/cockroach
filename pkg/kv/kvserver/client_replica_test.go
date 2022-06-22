@@ -3806,7 +3806,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 			sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = `+fmt.Sprint(val))
 			testutils.SucceedsSoon(t, func() error {
 				for i := 0; i < tc.NumServers(); i++ {
-					s, _ := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
+					s, _ := getFirstStoreReplica(t, tc.Server(i), keys.TableDataMin)
 					if kvserver.StrictGCEnforcement.Get(&s.ClusterSettings().SV) != val {
 						return errors.Errorf("expected %v, got %v", val, !val)
 					}
@@ -3900,7 +3900,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		tc.SplitRangeOrFatal(t, tableKey)
 		_, err := tc.AddVoters(tableKey, tc.Target(1), tc.Target(2))
 		require.NoError(t, err)
-		_, err = tc.AddVoters(keys.SystemConfigSpan.Key, tc.Target(1), tc.Target(2))
+		_, err = tc.AddVoters(keys.TableDataMin, tc.Target(1), tc.Target(2))
 		require.NoError(t, err)
 
 		setTableGCTTL(t, 1)

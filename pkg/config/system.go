@@ -363,13 +363,8 @@ func DecodeKeyIntoZoneIDAndSuffix(
 	if !ok {
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
-	} else if objectID <= keys.MaxSystemConfigDescID || isPseudoTableID(uint32(objectID)) {
-		// For now, you cannot set the zone config on gossiped tables. The only
-		// way to set a zone config on these tables is to modify config for the
-		// system database as a whole. This is largely because all the
-		// "system config" tables are colocated in the same range by default and
-		// thus couldn't be managed separately.
-		// Furthermore pseudo-table ids should be considered to be a part of the
+	} else if objectID <= keys.SystemDatabaseID || isPseudoTableID(uint32(objectID)) {
+		// Pseudo-table ids should be considered to be a part of the
 		// system database as they aren't real tables.
 		objectID = keys.SystemDatabaseID
 	}
@@ -557,13 +552,9 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	}
 
 	startID, _, ok := DecodeObjectID(keys.SystemSQLCodec, startKey)
-	if !ok || startID <= keys.MaxSystemConfigDescID {
-		// The start key is either:
-		// - not part of the structured data span
-		// - part of the system span
-		// In either case, start looking for splits at the first ID usable
-		// by the user data span.
-		startID = keys.MaxSystemConfigDescID + 1
+
+	if !ok || startID <= keys.SystemDatabaseID {
+		startID = keys.SystemDatabaseID
 	}
 
 	// Build key prefixes for sequential table IDs until we reach endKey. Note
@@ -739,7 +730,10 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 	}
 
 	var shouldSplit bool
-	if uint32(id) <= keys.MaxReservedDescID {
+	// For legacy reasons, if the ID is <= keys.DeprecatedMaxSystemConfigDescID,
+	// we check if there is a table to split on. There are no pseudo ranges
+	// below keys.DeprecatedMaxSystemConfigDescID.
+	if uint32(id) <= keys.MaxReservedDescID && uint32(id) > keys.DeprecatedMaxSystemConfigDescID {
 		// The ID might be one of the reserved IDs that refer to ranges but not any
 		// actual descriptors.
 		shouldSplit = true

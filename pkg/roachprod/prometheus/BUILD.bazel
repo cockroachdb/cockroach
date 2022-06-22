@@ -4,7 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "prometheus",
     srcs = ["prometheus.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus",
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/prometheus",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/option",

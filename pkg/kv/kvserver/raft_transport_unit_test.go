@@ -24,11 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -44,11 +44,12 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	rpcC := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
-			Config:   &base.Config{Insecure: true},
-			Clock:    hlc.NewClockWithSystemTimeSource(500 * time.Millisecond /* maxOffset */),
-			Stopper:  stopper,
-			Settings: st,
+			TenantID:  roachpb.SystemTenantID,
+			Config:    &base.Config{Insecure: true},
+			Clock:     &timeutil.DefaultTimeSource{},
+			MaxOffset: 500 * time.Millisecond,
+			Stopper:   stopper,
+			Settings:  st,
 		})
 	rpcC.StorageClusterID.Set(context.Background(), uuid.MakeV4())
 

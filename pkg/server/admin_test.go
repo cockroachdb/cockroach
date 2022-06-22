@@ -521,8 +521,8 @@ func TestAdminAPINonTableStats(t *testing.T) {
 			NodeCount:    3,
 		},
 		InternalUseStats: &serverpb.TableStatsResponse{
-			RangeCount:   10,
-			ReplicaCount: 12,
+			RangeCount:   11,
+			ReplicaCount: 15,
 			NodeCount:    3,
 		},
 	}
@@ -550,6 +550,7 @@ func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	require.NoError(t, testCluster.WaitForFullReplication())
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -596,21 +597,8 @@ func TestRangeCount(t *testing.T) {
 
 	exp := getRangeCountFromFullSpan()
 
-	sysDBMap := getSystemTableRangeCount()
-	{
-		// The tables below sit on the SystemConfigRange. For technical reason,
-		// their range count comes back as zero. Let's just use the descriptor
-		// table to count this range as they're not picked up by the "non-table
-		// data" neither.
-		for _, table := range []string{"public.descriptor", "public.settings", "public.zones"} {
-			n, ok := sysDBMap[table]
-			require.True(t, ok, table)
-			require.Zero(t, n, table)
-		}
-
-		sysDBMap["public.descriptor"] = 1
-	}
 	var systemTableRangeCount int64
+	sysDBMap := getSystemTableRangeCount()
 	for _, n := range sysDBMap {
 		systemTableRangeCount += n
 	}

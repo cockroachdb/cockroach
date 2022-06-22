@@ -13,9 +13,7 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -122,47 +120,6 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		}
 	}
 	return nil
-}
-
-var errSystemConfigIntent = errors.New("must retry later due to intent on SystemConfigSpan")
-
-// loadSystemConfig scans the system config span and returns the system
-// config.
-func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEntries, error) {
-	ba := roachpb.BatchRequest{}
-	ba.ReadConsistency = roachpb.INCONSISTENT
-	ba.Timestamp = r.store.Clock().Now()
-	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
-	// Call evaluateBatch instead of Send to avoid reacquiring latches.
-	rec := NewReplicaEvalContext(
-		ctx, r, todoSpanSet, false, /* requiresClosedTSOlderThanStorageSnap */
-	)
-	defer rec.Release()
-	rw := r.Engine().NewReadOnly(storage.StandardDurability)
-	defer rw.Close()
-
-	br, result, pErr := evaluateBatch(
-		ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, &ba, nil /* st */, uncertainty.Interval{}, true, /* readOnly */
-	)
-	if pErr != nil {
-		return nil, pErr.GoError()
-	}
-	if intents := result.Local.DetachEncounteredIntents(); len(intents) > 0 {
-		// There were intents, so what we read may not be consistent. Attempt
-		// to nudge the intents in case they're expired; next time around we'll
-		// hopefully have more luck.
-		// This is called from handleReadWriteLocalEvalResult (with raftMu
-		// locked), so disallow synchronous processing (which blocks that mutex
-		// for too long and is a potential deadlock).
-		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, false /* allowSync */); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
-		return nil, errSystemConfigIntent
-	}
-	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	sysCfg := &config.SystemConfigEntries{}
-	sysCfg.Values = kvs
-	return sysCfg, nil
 }
 
 // getLeaseForGossip tries to obtain a range lease. Only one of the replicas

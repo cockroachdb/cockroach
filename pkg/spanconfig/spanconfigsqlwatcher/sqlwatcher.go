@@ -279,18 +279,23 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		Key:    zoneTableStart,
 		EndKey: zoneTableStart.PrefixEnd(),
 	}
-
 	decoder := newZonesDecoder(s.codec)
 	handleEvent := func(ctx context.Context, ev *roachpb.RangeFeedValue) {
-		descID, err := decoder.DecodePrimaryKey(ev.Key)
-		if err != nil {
-			logcrash.ReportOrPanic(
-				ctx,
-				&s.settings.SV,
-				"sql watcher zones range feed error: %v",
-				err,
-			)
-			return
+		var descID descpb.ID
+		var err error
+		if keys.SystemZonesTableSpan.Key.Equal(ev.Key) {
+			descID = keys.ZonesTableID
+		} else {
+			descID, err = decoder.DecodePrimaryKey(ev.Key)
+			if err != nil {
+				logcrash.ReportOrPanic(
+					ctx,
+					&s.settings.SV,
+					"sql watcher zones range feed error: %v",
+					err,
+				)
+				return
+			}
 		}
 
 		rangefeedEvent := event{
