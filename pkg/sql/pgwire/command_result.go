@@ -12,7 +12,6 @@ package pgwire
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -462,6 +461,18 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 	// Keep track of the previous CmdPos so we can rewind if needed.
 	prevPos := r.conn.stmtBuf.AdvanceOne()
 	for {
+		// If the portal is immediately followed by a COMMIT, we can proceed and
+		// let the portal be destroyed at the end of the transaction.
+		if isCommit, err := r.isCommit(ctx); err != nil {
+			return err
+		} else if isCommit {
+			return r.rewindAndClosePortal(ctx, prevPos)
+		}
+		if shouldClose, err := r.shouldCloseUnnamedPortal(ctx); err != nil {
+			return err
+		} else if shouldClose {
+			return r.rewindAndClosePortal(ctx, prevPos)
+		}
 		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
 		if err != nil {
 			return err
@@ -508,17 +519,10 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 				return err
 			}
 		default:
-			// If the portal is immediately followed by a COMMIT, we can proceed and
-			// let the portal be destroyed at the end of the transaction.
-			if isCommit, err := r.isCommit(); err != nil {
-				return err
-			} else if isCommit {
-				return r.rewindAndClosePortal(ctx, prevPos)
-			}
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
-				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
+			return errors.WithDetailf(sql.ErrLimitedResultNotSupported,
+				"cannot perform operation %T while a different portal is open", c)
 		}
 		prevPos = curPos
 	}
@@ -526,9 +530,11 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 
 // isCommit checks if the statement buffer has a COMMIT at the current
 // position. It may either be (1) a COMMIT in the simple protocol, or (2) a
-// Parse/Bind/Execute sequence for a COMMIT query.
-func (r *limitedCommandResult) isCommit() (bool, error) {
-	cmd, _, err := r.conn.stmtBuf.CurCmd()
+// Parse/Bind/Execute sequence for a COMMIT query. This peeks ahead in the
+// statement buffer, but does not advance the position.
+func (r *limitedCommandResult) isCommit(ctx context.Context) (bool, error) {
+	cmd, curPos, err := r.conn.stmtBuf.CurCmd()
+	defer r.conn.stmtBuf.Rewind(ctx, curPos)
 	if err != nil {
 		return false, err
 	}
@@ -579,6 +585,57 @@ func (r *limitedCommandResult) isCommit() (bool, error) {
 		// This exec command must be for the portal that was just bound.
 		if execPortal.Name == commitPortalName {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// shouldCloseUnnamedPortal checks if the current portal is the unnamed portal
+// and if it should be closed. The Postgres docs specify that:
+// "An unnamed portal is destroyed at the end of the transaction, or as soon as
+// the next Bind statement specifying the unnamed portal as destination is
+// issued. (Note that a simple Query message also destroys the unnamed portal.)"
+// This function peeks ahead in the statement buffer, but does not advance the
+// position.
+func (r *limitedCommandResult) shouldCloseUnnamedPortal(ctx context.Context) (bool, error) {
+	if r.portalName != "" {
+		return false, nil
+	}
+	cmd, curPos, err := r.conn.stmtBuf.CurCmd()
+	defer r.conn.stmtBuf.Rewind(ctx, curPos)
+	if err != nil {
+		return false, err
+	}
+	// Case 1: Check if cmd is a simple query.
+	if _, ok := cmd.(sql.ExecStmt); ok {
+		return true, nil
+	}
+	// Case 2: Check if cmd is a Bind for an unnamed portal.
+	if bindStmt, ok := cmd.(sql.BindStmt); ok {
+		if bindStmt.PortalName == "" {
+			return true, nil
+		}
+	}
+	// Case 3: Check if cmd is a Prepare followed by a Bind for an unnamed portal.
+	if prepareStmt, ok := cmd.(sql.PrepareStmt); ok {
+		r.conn.stmtBuf.AdvanceOne()
+		cmd, _, err = r.conn.stmtBuf.CurCmd()
+		if err != nil {
+			return false, err
+		}
+		// Allow Describe, but just skip over it.
+		if _, ok := cmd.(sql.DescribeStmt); ok {
+			r.conn.stmtBuf.AdvanceOne()
+			cmd, _, err = r.conn.stmtBuf.CurCmd()
+			if err != nil {
+				return false, err
+			}
+		}
+		// The next cmd must be a bind command for the prepared statement.
+		if bindStmt, ok := cmd.(sql.BindStmt); ok {
+			if bindStmt.PreparedStatementName == prepareStmt.Name && bindStmt.PortalName == "" {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
