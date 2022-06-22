@@ -470,9 +470,9 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			}
 
 			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-				if streamingKnobs != nil {
-					if streamingKnobs.RunAfterReceivingEvent != nil {
-						streamingKnobs.RunAfterReceivingEvent(sip.Ctx)
+				if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
+					if err := streamingKnobs.RunAfterReceivingEvent(sip.Ctx); err != nil {
+						return nil, err
 					}
 				}
 			}
