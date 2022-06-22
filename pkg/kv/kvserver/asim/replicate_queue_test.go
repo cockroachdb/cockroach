@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,7 +61,7 @@ func TestReplicateQueue(t *testing.T) {
 	start := state.TestingStartTime()
 	ctx := context.Background()
 	testingStore := state.StoreID(1)
-	testSettings := DefaultSimulationSettings()
+	testSettings := config.DefaultSimulationSettings()
 
 	// NB: This test assumes 5s interval/changes for simplification purposes.
 	testSettings.StateExchangeInterval = 5 * time.Second
@@ -127,7 +128,7 @@ func TestReplicateQueue(t *testing.T) {
 			rq := NewReplicateQueue(
 				store.StoreID(),
 				changer,
-				ReplicaChangeDelayFn(testSettings),
+				testSettings.ReplicaChangeDelayFn(),
 				s.MakeAllocator(store.StoreID()),
 				start,
 			)
@@ -181,7 +182,8 @@ func TestReplicateQueue(t *testing.T) {
 func TestSplitQueue(t *testing.T) {
 	start := state.TestingStartTime()
 	ctx := context.Background()
-	testSettings := DefaultSimulationSettings()
+	testSettings := config.DefaultSimulationSettings()
+
 	// NB: This test assume 5 second split queue delays for simplification.
 	testSettings.SplitQueueDelay = 5 * time.Second
 
@@ -300,7 +302,7 @@ func TestSplitQueue(t *testing.T) {
 			sq := NewSplitQueue(
 				store.StoreID(),
 				changer,
-				RangeSplitDelayFn(testSettings),
+				testSettings.RangeSplitDelayFn(),
 				tc.splitThreshold,
 				start,
 			)

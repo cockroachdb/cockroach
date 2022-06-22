@@ -10,6 +10,8 @@
 
 package state
 
+import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+
 // SingleRegionConfig is a simple cluster config with a single region and 3
 // zones, all have the same number of nodes.
 var SingleRegionConfig = ClusterInfo{
@@ -109,7 +111,7 @@ type ClusterInfo struct {
 // LoadConfig loads a predefined configuration which contains cluster
 // information such as regions, zones, etc.
 func LoadConfig(c ClusterInfo) State {
-	s := newState()
+	s := newState(config.DefaultSimulationSettings())
 	// A new state has a single range - add the replica load for that range.
 	s.load[1] = &ReplicaLoadCounter{}
 	s.clusterinfo = c

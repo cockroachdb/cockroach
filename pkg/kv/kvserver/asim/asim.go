@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,7 +53,7 @@ func NewSimulator(
 	initialState state.State,
 	exchange state.Exchange,
 	changer state.Changer,
-	settings SimulationSettings,
+	settings *config.SimulationSettings,
 	metrics *MetricsTracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
@@ -62,14 +63,14 @@ func NewSimulator(
 		rqs[storeID] = NewReplicateQueue(
 			storeID,
 			changer,
-			ReplicaChangeDelayFn(settings),
+			settings.ReplicaChangeDelayFn(),
 			initialState.MakeAllocator(storeID),
 			start,
 		)
 		sqs[storeID] = NewSplitQueue(
 			storeID,
 			changer,
-			RangeSplitDelayFn(settings),
+			settings.RangeSplitDelayFn(),
 			settings.RangeSizeSplitThreshold,
 			start,
 		)
@@ -177,6 +178,23 @@ func (s *Simulator) tickStoreClocks(tick time.Time) {
 // processing.
 func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.State) {
 	for storeID := range state.Stores() {
+
+		// Tick the split queue.
+		s.sqs[storeID].Tick(ctx, tick, state)
+		// Tick the replicate queue.
+		s.rqs[storeID].Tick(ctx, tick, state)
+
+		// Tick changes that may have been enqueued with a lower completion
+		// than the current tick, from the queues.
+		s.changer.Tick(tick, state)
+
+		// Try adding suggested load splits that are pending for this store.
+		for _, rangeID := range state.LoadSplitterFor(storeID).ClearSplitKeys() {
+			if r, ok := state.LeaseHolderReplica(rangeID); ok {
+				s.sqs[storeID].MaybeAdd(ctx, r, state)
+			}
+		}
+
 		for {
 			r := s.pacers[storeID].Next(tick)
 			if r == nil {
@@ -189,15 +207,6 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 			if !r.HoldsLease() {
 				continue
 			}
-
-			// Tick the split queue.
-			s.sqs[storeID].Tick(ctx, tick, state)
-			// Tick the replicate queue.
-			s.rqs[storeID].Tick(ctx, tick, state)
-
-			// Tick changes that may have been enqueued with a lower completion
-			// than the current tick, from the queues.
-			s.changer.Tick(tick, state)
 
 			// Try adding the replica to the split queue.
 			s.sqs[storeID].MaybeAdd(ctx, r, state)
