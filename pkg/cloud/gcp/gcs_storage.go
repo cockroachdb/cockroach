@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -45,6 +46,12 @@ const (
 	CredentialsParam = "CREDENTIALS"
 	// AssumeRoleParam is the email of the service account to assume.
 	AssumeRoleParam = "ASSUME_ROLE"
+	// BearerTokenParam is the query parameter for a temporary bearer token. There
+	// is no refresh mechanism associated with this token, so it is up to the user
+	// to ensure that its TTL is longer than the duration of the job or query that
+	// is using the token. The job or query may irrecoverably fail if one of its
+	// tokens expire before completion.
+	BearerTokenParam = "BEARER_TOKEN"
 )
 
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
@@ -66,6 +73,7 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		Credentials:    uri.Query().Get(CredentialsParam),
 		AssumeRole:     uri.Query().Get(AssumeRoleParam),
+		BearerToken:    uri.Query().Get(BearerTokenParam),
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	return conf, nil
@@ -124,20 +132,23 @@ func makeGCSStorage(
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
-		if conf.Credentials == "" {
+		if conf.Credentials != "" {
+			authOption, err := createAuthOptionFromServiceAccountKey(conf.Credentials)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
+			}
+			credentialsOpt = append(credentialsOpt, authOption)
+		} else if conf.BearerToken != "" {
+			credentialsOpt = append(credentialsOpt, createAuthOptionFromBearerToken(conf.BearerToken))
+		} else {
 			return nil, errors.Errorf(
-				"%s must be set if %q is %q",
+				"%s or %s must be set if %q is %q",
 				CredentialsParam,
+				BearerTokenParam,
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 			)
 		}
-
-		authOption, err := createAuthOption(conf.Credentials)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error getting credentials from %s", CredentialsParam)
-		}
-		credentialsOpt = append(credentialsOpt, authOption)
 	}
 
 	opts := []option.ClientOption{option.WithScopes(scope)}
@@ -173,16 +184,23 @@ func makeGCSStorage(
 	}, nil
 }
 
-// createAuthOption creates an option.ClientOption for authentication with the given
-// credentials.
-func createAuthOption(credentials string) (option.ClientOption, error) {
-	// Credentials are passed in base64 encoded, so decode the credentials first.
-	credentialsJSON, err := base64.StdEncoding.DecodeString(credentials)
+// createAuthOptionFromServiceAccountKey creates an option.ClientOption for
+// authentication with the given Service Account key.
+func createAuthOptionFromServiceAccountKey(encodedKey string) (option.ClientOption, error) {
+	// Service Account keys are passed in base64 encoded, so decode it first.
+	credentialsJSON, err := base64.StdEncoding.DecodeString(encodedKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return option.WithCredentialsJSON(credentialsJSON), nil
+}
+
+// createAuthOptionFromBearerToken creates an option.ClientOption for
+// authentication with the given bearer token.
+func createAuthOptionFromBearerToken(bearerToken string) option.ClientOption {
+	token := &oauth2.Token{AccessToken: bearerToken}
+	return option.WithTokenSource(oauth2.StaticTokenSource(token))
 }
 
 // createImpersonateCredentials creates an option.ClientOption for
@@ -317,5 +335,5 @@ func (g *gcsStorage) Close() error {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_gs,
-		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam), "gs")
+		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam, BearerTokenParam), "gs")
 }
