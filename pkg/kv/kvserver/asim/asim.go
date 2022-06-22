@@ -138,17 +138,8 @@ func (s *Simulator) RunSim(ctx context.Context) {
 // tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 	for _, generator := range s.generators {
-		for {
-			done, event := generator.GetNext(tick)
-			if done {
-				break
-			}
-			// TODO(kvoli): When profiling, we see that the majority of time is
-			// spent iterating to find a range to apply load to for a load
-			// event. We should batch load for keys or find other ways to
-			// reduce time spent here.
-			s.state.ApplyLoad(event)
-		}
+		events := generator.Tick(tick)
+		s.state.ApplyLoad(events)
 	}
 }
 

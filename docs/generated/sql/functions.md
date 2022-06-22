@@ -3116,7 +3116,7 @@ table. Returns an error if validation fails.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>
 </span></td></tr>
-<tr><td><a name="crdb_internal.schedule_sql_stats_compaction"></a><code>crdb_internal.schedule_sql_stats_compaction(session: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to start a SQL stats compaction job.</p>
+<tr><td><a name="crdb_internal.schedule_sql_stats_compaction"></a><code>crdb_internal.schedule_sql_stats_compaction() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to start a SQL stats compaction job.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.serialize_session"></a><code>crdb_internal.serialize_session() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function serializes the variables in the current session.</p>
 </span></td></tr>
