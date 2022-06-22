@@ -12,6 +12,8 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -300,5 +302,12 @@ func (r *Replica) replicaUnavailableError(err error) error {
 
 	isLiveMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
 	ct := r.GetCurrentClosedTimestamp(context.Background())
-	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
+	var buf strings.Builder
+	for storeID, desc := range r.store.allocator.StorePool.GetStores() {
+		if buf.Len() > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "s%d: sublevels=%d", storeID, desc.Capacity.L0Sublevels)
+	}
+	return errors.Wrapf(replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct), "%s", buf.String())
 }

@@ -100,7 +100,6 @@ func runAdmissionControlFollowerOverload(
 
 	resetSystemdUnits := func() {
 		for _, cmd := range []string{"stop", "reset-failed"} {
-			_ = c.RunE(ctx, c.Node(3), "sudo", "systemctl", cmd, "fio-n3")
 			_ = c.RunE(ctx, c.Node(4), "sudo", "systemctl", cmd, "kv-n12")
 			_ = c.RunE(ctx, c.Node(4), "sudo", "systemctl", cmd, "kv-n3")
 		}
@@ -139,8 +138,6 @@ func runAdmissionControlFollowerOverload(
 	}
 
 	phaseDuration := 3 * time.Minute // TODO time.Hour
-	require.NoError(t, repeatRunE(ctx, t, c, c.Node(3), "download fio",
-		"sudo", "apt", "install", "-qyy", "fio", "iotop"))
 
 	nodes := c.Range(1, 3)
 	c.Put(ctx, t.Cockroach(), "cockroach")
@@ -219,15 +216,13 @@ func runAdmissionControlFollowerOverload(
 		// to EBS, see:
 		//
 		// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
-		//
-		// TODO(during review): actually run at 1mb/s, right now we're at 2mb/s still.
 		deployWorkload := `
 mkdir -p logs &&
 sudo systemd-run --property=Type=exec
 --property=StandardOutput=file:/home/ubuntu/logs/kv-n12.stdout.log
 --property=StandardError=file:/home/ubuntu/logs/kv-n12.stderr.log
 --remain-after-exit --unit kv-n12 -- ./cockroach workload run kv --read-percent 0
---max-rate 400 --concurrency 1000 --min-block-bytes 5000 --max-block-bytes 5000 --tolerate-errors {pgurl:1-2}`
+--max-rate 400 --concurrency 400 --min-block-bytes 2500 --max-block-bytes 2500 --tolerate-errors {pgurl:1-2}`
 		c.Run(ctx, c.Node(4), strings.Fields(deployWorkload)...)
 	}
 	if cfg.kv50N3 {
@@ -249,15 +244,10 @@ sudo systemd-run --property=Type=exec
 	wait(c.NewMonitor(ctx, nodes), phaseDuration)
 
 	if cfg.ioNemesis {
-		// Add 1000MiB/s of "badput", i.e. IO nemesis. These are pure writes. This
-		// doesn't block and will keep running even after the test tears down.
-		// 1000MiB/s should be enough to overwhelm any provisioned storage.
-		const deployFIO = `
-sudo systemd-run --property=Type=exec --remain-after-exit --unit fio-n3 -- fio --rw=write --name=test --direct=1 --bs=1024k --size 1mb
---ioengine=libaio --iodepth=4 --directory={store-dir}/auxiliary --rate=0,1000m --time_based --timeout 2400h
-`
-		c.Run(ctx, c.Node(3), strings.Fields(deployFIO)...)
-		t.L().Printf("deployed fio")
+		// Limit write throughput on s3 to 20mb/s. This is not enough to keep up
+		// with the workload, at least not in the long run, due to write amp.
+		c.Run(ctx, c.Node(3), "sudo", "systemctl", "set-property", "cockroach", "IOWriteBandwidthMax={store-dir} 20971520")
+		t.L().Printf("installed write throughput limit on n3")
 	}
 
 	wait(c.NewMonitor(ctx, nodes), phaseDuration)

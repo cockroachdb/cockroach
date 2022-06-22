@@ -75,9 +75,7 @@ func quotaPoolEnabledForRange(desc roachpb.RangeDescriptor) bool {
 	return !bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix)
 }
 
-var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
-	base.SlowRequestThreshold, quotapool.LogSlowAcquisition,
-)
+var l0LogEvery = log.Every(time.Second)
 
 func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
@@ -100,6 +98,18 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			if releaseQueueLen := len(r.mu.quotaReleaseQueue); releaseQueueLen != 0 {
 				log.Fatalf(ctx, "len(r.mu.quotaReleaseQueue) = %d, expected 0", releaseQueueLen)
 			}
+			slowFn := func(ctx context.Context, poolName string, req quotapool.Request, start time.Time) func() {
+				err := r.replicaUnavailableError(errors.Errorf("slow quota acquisition"))
+				r.mu.Lock()
+				err = errors.Wrapf(err, "baseIndex=", r.mu.proposalQuotaBaseIndex)
+				r.mu.Unlock()
+				log.Warningf(ctx, "XXX %s", err)
+				done := quotapool.LogSlowAcquisition(ctx, poolName, req, start)
+				return done
+			}
+			var logSlowRaftProposalQuotaAcquisition = quotapool.OnSlowAcquisition(
+				base.SlowRequestThreshold, slowFn,
+			)
 
 			// Raft may propose commands itself (specifically the empty
 			// commands when leadership changes), and these commands don't go
@@ -208,6 +218,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			return
 		}
 		if sd, ok := r.store.allocator.StorePool.GetStoreDescriptor(rep.StoreID); ok && sd.Capacity.L0Sublevels > 20 {
+			if l0LogEvery.ShouldLog() {
+				log.Infof(ctx, "XXX ignoring s%d (%+v) for quota pool due to L0Sublevels (base index=%d, applied=%d)", sd.StoreID, progress, r.mu.proposalQuotaBaseIndex, status.Applied)
+			}
 			return
 		}
 		if progress.Match > 0 && progress.Match < minIndex {
