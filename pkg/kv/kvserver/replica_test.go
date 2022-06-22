@@ -8398,56 +8398,6 @@ func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	}
 }
 
-// TestGCWithoutThreshold validates that GCRequest only declares the threshold
-// key if it is subject to change, and that it does not access this key if it
-// does not declare them.
-func TestGCWithoutThreshold(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	tc := &testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
-
-	for _, keyThresh := range []hlc.Timestamp{{}, {Logical: 1}} {
-		t.Run(fmt.Sprintf("thresh=%s", keyThresh), func(t *testing.T) {
-			var gc roachpb.GCRequest
-			var spans spanset.SpanSet
-
-			gc.Threshold = keyThresh
-			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil, 0)
-
-			expSpans := 1
-			if !keyThresh.IsEmpty() {
-				expSpans++
-			}
-			if numSpans := spans.Len(); numSpans != expSpans {
-				t.Fatalf("expected %d declared keys, found %d", expSpans, numSpans)
-			}
-
-			eng := storage.NewDefaultInMemForTesting()
-			defer eng.Close()
-
-			batch := eng.NewBatch()
-			defer batch.Close()
-			rw := spanset.NewBatch(batch, &spans)
-
-			var resp roachpb.GCResponse
-			if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
-				Args: &gc,
-				EvalCtx: NewReplicaEvalContext(
-					ctx, tc.repl, &spans, false, /* requiresClosedTSOlderThanStorageSnap */
-				),
-			}, &resp); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
-}
-
 // Test that, if the Raft command resulting from EndTxn request fails to be
 // processed/apply, then the LocalResult associated with that command is
 // cleared.
@@ -8516,6 +8466,96 @@ func TestFailureToProcessCommandClearsLocalResult(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestMVCCStatsGCCommutesWithWrites tests that the MVCCStats updates
+// corresponding to writes and GCs are commutative.
+//
+// This test does so by:
+// 1. Initially writing N versions of a key.
+// 2. Concurrently GC-ing the N-1 versions written in step 1 while writing N-1
+// new versions of the key.
+// 3. Checking that the MVCC stats after step 1 and step 2 are identical.
+func TestMVCCStatsGCCommutesWithWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	key := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, key)
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	repl, err := store.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+
+	write := func() hlc.Timestamp {
+		var ba roachpb.BatchRequest
+		put := putArgs(key, []byte("0"))
+		ba.Add(&put)
+		resp, pErr := store.TestSender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		return resp.Timestamp
+	}
+
+	// Write `numVersions` versions for a key.
+	const numVersions = 100
+	writeTimestamps := make([]hlc.Timestamp, 0, numVersions)
+	for i := 0; i < numVersions; i++ {
+		writeTimestamps = append(writeTimestamps, write())
+	}
+	var statsBefore enginepb.MVCCStats
+	// NB: We use SucceedsSoon because MVCCStats are only updated on command
+	// application.
+	testutils.SucceedsSoon(t, func() error {
+		statsBefore = repl.GetMVCCStats()
+		if statsBefore.ValCount != numVersions {
+			return errors.Newf(
+				"expected val count to be equal to %d; found %d", numVersions, statsBefore.ValCount,
+			)
+		}
+		return nil
+	})
+
+	// Now, we GC the first `numVersions-1` versions we wrote above while
+	// concurrently writing `numVersions-1` new versions.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for _, ts := range writeTimestamps[:numVersions-1] {
+			gcReq := gcArgs(key, key.Next(), gcKey(key, ts))
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), &gcReq)
+			require.Nil(t, pErr)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < numVersions-1; i++ {
+			write()
+		}
+	}()
+	wg.Wait()
+
+	var statsAfter enginepb.MVCCStats
+	testutils.SucceedsSoon(t, func() error {
+		statsAfter = repl.GetMVCCStats()
+		if statsAfter.ValCount != numVersions {
+			return errors.Newf(
+				"expected val count to be equal to %d; found %d", numVersions, statsAfter.ValCount,
+			)
+		}
+		return nil
+	})
+
+	// Zero out the `LastUpdateNanos` and `GCBytesAge` fields and compare the
+	// stats before and after. They must be identical.
+	statsBefore.LastUpdateNanos = 0
+	statsBefore.GCBytesAge = 0
+	statsAfter.LastUpdateNanos = 0
+	statsAfter.GCBytesAge = 0
+	require.Equal(t, statsBefore, statsAfter, "MVCC stats before and after diverge")
 }
 
 // TestBatchTimestampBelowGCThreshold verifies that commands below the replica
@@ -8783,6 +8823,16 @@ func TestGCThresholdRacesWithRead(t *testing.T) {
 			b, err := resp.(*roachpb.GetResponse).Value.GetBytes()
 			require.Nil(t, err)
 			require.Equal(t, va, b)
+
+			// Since the GC request does not acquire latches on the keys being GC'ed,
+			// they're not guaranteed to wait for these above Puts to get applied. So
+			// we separately ensure both these Puts have been applied by just trying
+			// to read the latest value @ ts2. These Get requests do indeed declare
+			// latches on the keys being read, so by the time they return, subsequent
+			// GC requests are guaranteed to see the latest keys.
+			gArgs = getArgs(key)
+			_, pErr = kv.SendWrappedWith(ctx, reader, h2, &gArgs)
+			require.Nil(t, pErr)
 
 			// Perform two actions concurrently:
 			//  1. GC up to ts2. This should remove the k@ts1 version.
