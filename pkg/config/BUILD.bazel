@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "config",
@@ -20,11 +21,10 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -41,11 +41,13 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/testutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
@@ -73,5 +75,16 @@ go_proto_library(
     deps = [
         "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+disallowed_imports_test(
+    src = "config",
+    disallowed_list = [
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/typedesc",
     ],
 )

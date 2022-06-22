@@ -144,6 +144,7 @@ describe("Index Details Page", function () {
           lastReset: moment(),
           indexRecommendations: [],
         },
+        breadcrumbItems: null,
       },
       false,
     );
@@ -196,6 +197,7 @@ describe("Index Details Page", function () {
         ),
         indexRecommendations: [],
       },
+      breadcrumbItems: null,
     });
   });
 });
