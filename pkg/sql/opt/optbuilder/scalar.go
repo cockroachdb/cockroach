@@ -522,6 +522,14 @@ func (b *Builder) buildFunction(
 		}
 	}
 
+	// TODO (Chengxiong): this doesn't really resolve, because at this point the "f.fn" has been set. and "f.Func" has been resolved.
+	// so let's do this:
+	// 1. check if the function has been resolved
+	// 2. get the Function Definition directly
+	if !f.Func.IsResolved() {
+		panic("Should have been resolved")
+	}
+
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
 		panic(err)

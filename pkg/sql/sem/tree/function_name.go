@@ -59,6 +59,17 @@ func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*Function
 	}
 }
 
+func (fn *ResolvableFunctionReference) IsResolved() bool {
+	if _, ok := fn.FunctionReference.(*FunctionDefinition); ok {
+		return true
+	}
+	return false
+}
+
+func (fn *ResolvableFunctionReference) ResolvedFunctionDefinition() *FunctionDefinition {
+	return fn.FunctionReference.(*FunctionDefinition)
+}
+
 // WrapFunction creates a new ResolvableFunctionReference
 // holding a pre-resolved function. Helper for grammar rules.
 func WrapFunction(n string) ResolvableFunctionReference {

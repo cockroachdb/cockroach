@@ -46,6 +46,10 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
+	// TODO (Chengxiong): this only need to search builtins
+	if !funcExpr.Func.IsResolved() {
+		panic("Should have been resolved")
+	}
 	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath)
 	if err != nil {
 		return nil, err

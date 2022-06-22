@@ -62,6 +62,10 @@ func ComputeColNameInternal(sp SearchPath, target Expr) (int, string, error) {
 		return ComputeColNameInternal(sp, e.Expr)
 
 	case *FuncExpr:
+		// TODO (Chengxiong) this just need a name
+		if !e.Func.IsResolved() {
+			panic("Should have been resolved")
+		}
 		fd, err := e.Func.Resolve(sp)
 		if err != nil {
 			return 0, "", err

@@ -63,6 +63,10 @@ func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType 
 	if !ok {
 		return funcTypeInvalid
 	}
+	if !fe.Func.IsResolved() {
+		panic("Should have been resolved")
+	}
+	// TODO (Chengxiong): this is only for builtin types
 	def, err := fe.Func.Resolve(searchPath)
 	if err != nil {
 		return funcTypeInvalid

@@ -33,6 +33,12 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			// aggregate function, but it can contain aggregate functions.
 			return true, expr
 		}
+		// TODO (Chengxiong) looks like this is only for builtin function
+		// We need to add logic like this:
+		// if not_builtin_function, return true, expr? in the first pass we need to return false?
+		if !t.Func.IsResolved() {
+			panic("Should have been resolved")
+		}
 		fd, err := t.Func.Resolve(&v.searchPath)
 		if err != nil {
 			return false, expr
