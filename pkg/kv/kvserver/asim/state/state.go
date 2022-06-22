@@ -12,6 +12,7 @@ package state
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -68,6 +69,12 @@ type State interface {
 	RangeCount() int64
 	// Replicas returns all replicas that exist on a store.
 	Replicas(StoreID) []Replica
+	// LeaseHolderReplica returns the replica which holds a lease for the range
+	// with ID RangeID, if the range exists, otherwise returning false.
+	LeaseHolderReplica(RangeID) (Replica, bool)
+	// LeaseholderStore returns the store which holds a lease for the range with ID
+	// RangeID, if the range and store exist, otherwise returning false.
+	LeaseholderStore(RangeID) (Store, bool)
 	// AddNode modifies the state to include one additional node. This cannot
 	// fail. The new Node is returned.
 	AddNode() Node
@@ -144,6 +151,8 @@ type State interface {
 	// the allocator and storepool should both be separated out of this
 	// interface, instead using it to populate themselves.
 	MakeAllocator(StoreID) allocatorimpl.Allocator
+	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
+	LoadSplitterFor(StoreID) LoadSplitter
 }
 
 // Node is a container for stores and is part of a cluster.
@@ -257,6 +266,18 @@ func (k Key) ToRKey() roachpb.RKey {
 	return roachpb.RKey(fmt.Sprintf(keyFmt, k))
 }
 
+// ToKey converts a roachpb formatted key into a simulator int64 key.
+func ToKey(key roachpb.Key) Key {
+	stringKey := key.String()
+	stringKey = stringKey[1 : len(stringKey)-1]
+	var convertedKey int64
+	convertedKey, err := strconv.ParseInt(stringKey, 10, 0)
+	if err != nil {
+		return InvalidKey
+	}
+	return Key(convertedKey)
+}
+
 // defaultSpanConfig is the span config applied by default to all ranges,
 // unless overwritten.
 var defaultSpanConfig roachpb.SpanConfig = roachpb.SpanConfig{
@@ -265,3 +286,7 @@ var defaultSpanConfig roachpb.SpanConfig = roachpb.SpanConfig{
 	NumReplicas:   3,
 	NumVoters:     3,
 }
+
+// FirstRangeID is the constant for the ID assigned to the first range within
+// the keyspace.
+const FirstRangeID = 1

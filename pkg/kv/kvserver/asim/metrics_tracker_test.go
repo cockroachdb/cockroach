@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/stretchr/testify/require"
@@ -105,7 +106,7 @@ func Example_rebalance() {
 func Example_workload() {
 	ctx := context.Background()
 	start := state.TestingStartTime()
-	settings := asim.DefaultSimulationSettings()
+	settings := config.DefaultSimulationSettings()
 	end := start.Add(200 * time.Second)
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)

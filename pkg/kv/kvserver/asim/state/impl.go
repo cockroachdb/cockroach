@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,10 +32,12 @@ type state struct {
 	nodes       map[NodeID]*node
 	stores      map[StoreID]*store
 	load        map[RangeID]ReplicaLoad
+	loadsplits  map[StoreID]LoadSplitter
 	ranges      *rmap
 	clusterinfo ClusterInfo
 	usageInfo   *ClusterUsageInfo
 	clock       ManualSimClock
+	settings    *config.SimulationSettings
 
 	// Unique ID generators for Nodes and Stores. These are incremented
 	// pre-assignment. So that IDs start from 1.
@@ -43,17 +46,19 @@ type state struct {
 }
 
 // NewState returns an implementation of the State interface.
-func NewState() State {
-	return newState()
+func NewState(settings *config.SimulationSettings) State {
+	return newState(settings)
 }
 
-func newState() *state {
+func newState(settings *config.SimulationSettings) *state {
 	return &state{
-		nodes:     make(map[NodeID]*node),
-		stores:    make(map[StoreID]*store),
-		load:      make(map[RangeID]ReplicaLoad),
-		ranges:    newRMap(),
-		usageInfo: newClusterUsageInfo(),
+		nodes:      make(map[NodeID]*node),
+		stores:     make(map[StoreID]*store),
+		load:       map[RangeID]ReplicaLoad{FirstRangeID: &ReplicaLoadCounter{}},
+		loadsplits: make(map[StoreID]LoadSplitter),
+		ranges:     newRMap(),
+		usageInfo:  newClusterUsageInfo(),
+		settings:   config.DefaultSimulationSettings(),
 	}
 }
 
@@ -301,6 +306,12 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	node.stores = append(node.stores, storeID)
 	s.stores[storeID] = store
 
+	// Add a range load splitter for this store.
+	s.loadsplits[storeID] = NewSplitDecider(s.settings.Seed,
+		s.settings.SplitQPSThresholdFn(),
+		s.settings.SplitQPSRetentionFn(),
+	)
+
 	return store, true
 }
 
@@ -489,21 +500,28 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	// Update the range map state.
 	ranges.rangeTree.ReplaceOrInsert(r)
 	ranges.rangeMap[r.rangeID] = r
-	s.load[r.rangeID] = &ReplicaLoadCounter{}
 
-	// Update the range size to be split 50/50 between the lhs and rhs.
+	// Update the range size to be split 50/50 between the lhs and rhs. Also
+	// split the replica load that is recorded 50/50 between the lhs and rhs.
 	// NB: This is a simplifying assumption.
 	predecessorRange.size /= 2
 	r.size = predecessorRange.size
+	if predecessorLoad, ok := s.load[predecessorRange.rangeID]; ok {
+		s.load[r.rangeID] = predecessorLoad.Split()
+	}
 
 	// If there are existing replicas for the LHS of the split, then also
 	// create replicas on the same stores for the RHS.
 	for storeID, replica := range predecessorRange.replicas {
 		s.AddReplica(rangeID, storeID)
-		// The successor range's leaseholder was on this store, copy the
-		// leaseholder store over for the new split range.
 		if replica.HoldsLease() {
+			// The successor range's leaseholder was on this store, copy the
+			// leaseholder store over for the new split range.
 			s.TransferLease(rangeID, storeID)
+
+			// Reset the recorded load split statistics on the predecessor
+			// range.
+			s.loadsplits[storeID].ResetRange(predecessorRange.rangeID)
 		}
 	}
 
@@ -532,9 +550,12 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 
 	// Remove the old leaseholder.
 	oldLeaseHolderID := rng.leaseholder
-	for _, repl := range rng.replicas {
+	for oldStoreID, repl := range rng.replicas {
 		if repl.replicaID == oldLeaseHolderID {
 			repl.holdsLease = false
+			// Reset the load stats on the old range, within the old
+			// leaseholder store.
+			s.loadsplits[oldStoreID].ResetRange(rangeID)
 		}
 	}
 
@@ -606,6 +627,14 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	// Note that deletes are not supported currently, we are also assuming data
 	// is not compacted.
 	rng.size += le.WriteSize
+
+	// Record the load against the splitter for the store which holds a lease
+	// for this range, if one exists.
+	store, ok := s.LeaseholderStore(rng.rangeID)
+	if !ok {
+		return
+	}
+	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
 }
 
 func (s *state) updateStoreCapacities() {
@@ -679,6 +708,42 @@ func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
 		func(addr string) (time.Duration, bool) { return 0, true },
 		nil,
 	)
+}
+
+// LeaseHolderReplica returns the replica which holds a lease for the range
+// with ID RangeID, if the range exists, otherwise returning false.
+func (s *state) LeaseHolderReplica(rangeID RangeID) (Replica, bool) {
+	rng, ok := s.ranges.rangeMap[rangeID]
+	if !ok {
+		return nil, false
+	}
+
+	for _, replica := range rng.replicas {
+		if replica.holdsLease {
+			return replica, true
+		}
+	}
+	return nil, false
+}
+
+// LeaseholderStore returns the store which holds a lease for the range with ID
+// RangeID, if the range and store exist, otherwise returning false.
+func (s *state) LeaseholderStore(rangeID RangeID) (Store, bool) {
+	replica, ok := s.LeaseHolderReplica(rangeID)
+	if !ok {
+		return nil, false
+	}
+
+	store, ok := s.stores[replica.StoreID()]
+	if !ok {
+		return nil, false
+	}
+	return store, true
+}
+
+// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
+func (s *state) LoadSplitterFor(storeID StoreID) LoadSplitter {
+	return s.loadsplits[storeID]
 }
 
 // node is an implementation of the Node interface.
