@@ -109,7 +109,16 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		}
 	}
 
-	return nil
+	ctx := cmd.Context()
+	env := os.Environ()
+	envvar := "COCKROACH_BAZEL_CHECK_FAST=1"
+	d.log.Printf("export %s", envvar)
+	env = append(env, envvar)
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	return d.exec.CommandContextWithEnv(ctx, env, filepath.Join(workspace, "build", "bazelutil", "check.sh"))
 }
 
 func (d *dev) generateBazel(cmd *cobra.Command) error {
