@@ -246,10 +246,7 @@ func writeFilesToMetadata(
 	defer fileSST.Close()
 
 	// Sort and write all of the files into a single file info SST.
-	sort.Slice(m.Files, func(i, j int) bool {
-		cmp := m.Files[i].Span.Key.Compare(m.Files[j].Span.Key)
-		return cmp < 0 || (cmp == 0 && strings.Compare(m.Files[i].Path, m.Files[j].Path) < 0)
-	})
+	sort.Sort(BackupFileDescriptors(m.Files))
 
 	for _, i := range m.Files {
 		b, err := protoutil.Marshal(&i)
