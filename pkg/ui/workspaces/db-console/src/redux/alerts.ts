@@ -148,13 +148,14 @@ export const staggeredVersionWarningSelector = createSelector(
       return undefined;
     }
     const versionsText = Array.from(versionsMap)
-      .map(([k, v]) => `${v} nodes are running on ${k}`)
-      .join(" and ")
+      .map(([k, v]) => (v === 1 ? `1 node on ${k}` : `${v} nodes on ${k}`))
+      .join(", ")
       .concat(". ");
     return {
       level: AlertLevel.WARNING,
       title: "Multiple versions of CockroachDB are running on this cluster.",
       text:
+        "Listed versions: " +
         versionsText +
         `You can see a list of all nodes and their versions below.
         This may be part of a normal rolling upgrade process, but should be investigated
