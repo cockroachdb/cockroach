@@ -726,6 +726,6 @@ func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &createStatsResumer{job: job}
 	}
-	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn)
-	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn, jobs.UsesTenantCostControl)
+	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn, jobs.UsesTenantCostControl)
 }

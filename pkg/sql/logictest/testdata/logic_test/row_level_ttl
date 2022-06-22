@@ -115,6 +115,10 @@ CREATE INDEX tbl_idx ON tbl (text)
 statement ok
 ROLLBACK
 
+# Cannot reset TTL with SET (ttl = off)
+statement error setting "ttl = 'off'" is not permitted
+ALTER TABLE tbl SET (ttl = 'off')
+
 # Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
 statement ok
 ALTER TABLE tbl RESET (ttl)
@@ -131,36 +135,6 @@ CREATE TABLE public.tbl (
 
 statement ok
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
-
-query I
-SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
-----
-0
-
-# Check the same thing with SET (ttl = off)
-statement ok
-DROP TABLE tbl
-
-statement ok
-CREATE TABLE tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes')
-
-statement ok
-ALTER TABLE tbl SET (ttl = 'off')
-
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
-----
-CREATE TABLE public.tbl (
-   id INT8 NOT NULL,
-   text STRING NULL,
-   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-   FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
-)
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -380,7 +354,8 @@ ACTIVE  @hourly  root
 
 statement ok
 CREATE TABLE no_ttl_table ();
-ALTER TABLE no_ttl_table SET (ttl = 'off');
+
+statement error unsetting TTL automatic column not yet implemented
 ALTER TABLE no_ttl_table SET (ttl_automatic_column = 'off')
 
 statement error "ttl_expire_after" must be set

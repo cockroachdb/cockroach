@@ -248,12 +248,13 @@ func (e *scheduledSQLStatsCompactionExecutor) GetCreateScheduleStatement(
 }
 
 func init() {
+	// Do not include the cost of stats compaction in tenant accounting.
 	jobs.RegisterConstructor(jobspb.TypeAutoSQLStatsCompaction, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &sqlStatsCompactionResumer{
 			job: job,
 			st:  settings,
 		}
-	})
+	}, jobs.DisablesTenantCostControl)
 
 	jobs.RegisterScheduledJobExecutorFactory(
 		tree.ScheduledSQLStatsCompactionExecutor.InternalName(),
