@@ -1537,8 +1537,8 @@ SELECT description
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				// Sequences and other table objects cannot be given a USAGE privilege,
 				// so we check for SELECT here instead. See privilege.TablePrivileges.
-				"USAGE":                    {Kind: privilege.SELECT},
-				"USAGE WITH GRANT OPTION":  {Kind: privilege.SELECT, GrantOption: true},
+				"USAGE":                    {Kind: privilege.USAGE},
+				"USAGE WITH GRANT OPTION":  {Kind: privilege.USAGE, GrantOption: true},
 				"SELECT":                   {Kind: privilege.SELECT},
 				"SELECT WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 				"UPDATE":                   {Kind: privilege.UPDATE},

@@ -6801,11 +6801,11 @@ opt_on_targets_roles:
 targets:
   IDENT
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
   }
 | col_name_keyword
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}}
   }
 | unreserved_keyword
   {
@@ -6842,26 +6842,26 @@ targets:
     // of increasing (or attempting to modify) the grey magic occurring
     // here.
     $$.val = tree.TargetList{
-      Tables: tree.TableAttrs{IsSequence: false, TablePatterns:tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}},
+      Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns:tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}},
       ForRoles: $1 == "role", // backdoor for "SHOW GRANTS ON ROLE" (no name list)
     }
   }
 | complex_table_pattern
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: tree.TablePatterns{$1.unresolvedName()}}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: tree.TablePatterns{$1.unresolvedName()}}}
   }
 | SEQUENCE table_pattern_list
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: true, TablePatterns: $2.tablePatterns()}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: true, TablePatterns: $2.tablePatterns()}}
   }
 | table_pattern ',' table_pattern_list
   {
     remainderPats := $3.tablePatterns()
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}}
   }
 | TABLE table_pattern_list
   {
-    $$.val = tree.TargetList{Tables: tree.TableAttrs{IsSequence: false, TablePatterns: $2.tablePatterns()}}
+    $$.val = tree.TargetList{Tables: tree.TableAttrs{SequenceOnly: false, TablePatterns: $2.tablePatterns()}}
   }
 // TODO(knz): This should learn how to parse more complex expressions
 // and placeholders.

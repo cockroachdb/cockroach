@@ -77,7 +77,7 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 			ctx.FormatNode(typ)
 		}
 	} else {
-		if tl.Tables.IsSequence {
+		if tl.Tables.SequenceOnly {
 			ctx.WriteString("SEQUENCE ")
 		} else {
 			ctx.WriteString("TABLE ")

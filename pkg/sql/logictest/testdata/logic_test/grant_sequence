@@ -221,3 +221,49 @@ DROP SEQUENCE to_drop_seq
 
 statement ok
 SET ROLE root
+
+subtest grant_on_mix_table_and_sequence
+
+statement ok
+CREATE SEQUENCE mix_seq
+
+statement ok
+CREATE TABLE mix_tab (x int)
+
+statement ok
+CREATE ROLE mix_u
+
+statement ok
+GRANT USAGE ON mix_seq TO mix_u WITH GRANT OPTION
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'mix_u';
+----
+NULL  mix_u  test  public  mix_seq  USAGE  YES  NO
+
+query B
+SELECT has_sequence_privilege('mix_u', 'mix_seq', 'USAGE WITH GRANT OPTION')
+----
+true
+
+statement ok
+GRANT SELECT, UPDATE ON mix_seq, mix_tab TO mix_u WITH GRANT OPTION
+
+statement error pq: invalid privilege type USAGE for table
+GRANT USAGE ON mix_seq, mix_tab TO mix_u WITH GRANT OPTION
+
+query TTTTTTTT
+SELECT * FROM information_schema.table_privileges WHERE grantee = 'mix_u';
+----
+NULL  mix_u  test  public  mix_seq  SELECT  YES  YES
+NULL  mix_u  test  public  mix_seq  UPDATE  YES  NO
+NULL  mix_u  test  public  mix_seq  USAGE   YES  NO
+NULL  mix_u  test  public  mix_tab  SELECT  YES  YES
+NULL  mix_u  test  public  mix_tab  UPDATE  YES  NO
+
+query BBB
+SELECT has_sequence_privilege('mix_u', 'mix_seq', 'USAGE WITH GRANT OPTION'),
+       has_sequence_privilege('mix_u', 'mix_seq', 'SELECT WITH GRANT OPTION'),
+       has_sequence_privilege('mix_u', 'mix_seq', 'UPDATE WITH GRANT OPTION')
+----
+true  true  true
