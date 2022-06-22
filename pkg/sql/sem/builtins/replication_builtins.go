@@ -12,6 +12,7 @@ package builtins
 
 import (
 	gojson "encoding/json"
+	"errors"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -76,7 +77,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"crdb_internal.stream_ingestion_stats": makeBuiltin(
+	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categoryStreamIngestion,
 			DistsqlBlocklist: true,
@@ -88,6 +89,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, errors.New("job_id cannot be specified with null argument")
+				}
 				mgr, err := streaming.GetStreamIngestManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -109,6 +113,42 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			Info: "This function can be used on the ingestion side to get a statistics summary " +
 				"of a stream ingestion job in json format.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"crdb_internal.stream_ingestion_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"job_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, errors.New("job_id cannot be specified with null argument")
+				}
+				mgr, err := streaming.GetStreamIngestManager(evalCtx)
+				if err != nil {
+					return nil, err
+				}
+				ingestionJobID := int64(tree.MustBeDInt(args[0]))
+				stats, err := mgr.GetStreamIngestionStats(evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				if err != nil {
+					return nil, err
+				}
+				rawStatus, err := protoutil.Marshal(stats)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawStatus)), nil
+			},
+			Info: "This function can be used on the ingestion side to get a statistics summary " +
+				"of a stream ingestion job.",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -159,6 +199,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
+				}
 				mgr, err := streaming.GetReplicationStreamManager(evalCtx)
 				if err != nil {
 					return nil, err
@@ -168,7 +211,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				sps, err := mgr.UpdateReplicationStreamProgress(evalCtx, streamID, frontier, evalCtx.Txn)
+				sps, err := mgr.HeartbeatReplicationStream(evalCtx, streamID, frontier, evalCtx.Txn)
 				if err != nil {
 					return nil, err
 				}
@@ -180,7 +223,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			Info: "This function can be used on the consumer side to heartbeat its replication progress to " +
 				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
-				"that indicates stream status (RUNNING, PAUSED, or STOPPED).",
+				"that indicates stream status (ACTIVE, PAUSED, INACTIVE, or STATUS_UNKNOWN_RETRY).",
 			Volatility: volatility.Volatile,
 		},
 	),

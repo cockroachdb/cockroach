@@ -29,8 +29,8 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 	return startReplicationStreamJob(evalCtx, txn, tenantID)
 }
 
-// UpdateReplicationStreamProgress implements streaming.ReplicationStreamManager interface.
-func (r *replicationStreamManagerImpl) UpdateReplicationStreamProgress(
+// HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 	evalCtx *eval.Context, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
 	return heartbeatReplicationStream(evalCtx, streamID, frontier, txn)

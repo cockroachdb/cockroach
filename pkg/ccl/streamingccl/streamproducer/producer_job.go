@@ -45,8 +45,8 @@ func makeProducerJobRecord(
 		Description: fmt.Sprintf("stream replication for tenant %d", tenantID),
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
-			ProtectedTimestampRecord: &ptsID,
-			Spans:                    []*roachpb.Span{makeTenantSpan(tenantID)},
+			ProtectedTimestampRecordID: &ptsID,
+			Spans:                      []*roachpb.Span{makeTenantSpan(tenantID)},
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration: timeutil.Now().Add(timeout),
@@ -101,7 +101,7 @@ func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 	execCfg := jobExec.ExecCfg()
 
 	// Releases the protected timestamp record.
-	ptr := p.job.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecord
+	ptr := p.job.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecordID
 	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, *ptr)
 		// In case that a retry happens, the record might have been released.

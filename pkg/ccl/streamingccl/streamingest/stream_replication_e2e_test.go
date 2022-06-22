@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -194,6 +196,16 @@ func configureClusterSettings(setting map[string]string) []string {
 	return res
 }
 
+func streamIngestionStats(
+	t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
+) *streampb.StreamIngestionStats {
+	stats, rawStats := &streampb.StreamIngestionStats{}, make([]byte, 0)
+	row := sqlRunner.QueryRow(t, "SELECT crdb_internal.stream_ingestion_stats($1)", ingestionJobID)
+	row.Scan(&rawStats)
+	require.NoError(t, protoutil.Unmarshal(rawStats, stats))
+	return stats
+}
+
 func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -253,7 +265,16 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 			sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 		})
 
+		stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		require.Equal(t, jobspb.StreamIngestionProgress_NotStarted, stats.IngestionProgress.CutoverStatus)
+		require.True(t, stats.IngestionProgress.CutoverTime.IsEmpty())
+
 		c.cutover(producerJobID, ingestionJobID, cutoverTime)
+		// Check if the cutover status is finished.
+		stats = streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		require.Equal(t, jobspb.StreamIngestionProgress_Finished, stats.IngestionProgress.CutoverStatus)
+		require.Equal(t, cutoverTime, stats.IngestionProgress.CutoverTime.GoTime())
+
 		c.compareResult("SELECT * FROM d.t1")
 		c.compareResult("SELECT * FROM d.t2")
 		c.compareResult("SELECT * FROM d.x")
@@ -316,6 +337,10 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
 
+	stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+	require.True(t, srcTime.Before(stats.ReplicationLagInfo.HighWatermark.GoTime()))
+	require.Equal(t, "", stats.ProducerError)
+
 	// Make producer job easily times out
 	c.srcSysSQL.ExecMultiple(t, configureClusterSettings(map[string]string{
 		`stream_replication.job_liveness_timeout`: `'100ms'`,
@@ -334,4 +359,9 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"0"}},
 		c.destTenantSQL.QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
+
+	// Confirm no cutover happens.
+	stats = streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+	require.True(t, stats.IngestionProgress.CutoverTime.IsEmpty())
+	require.Equal(t, jobspb.StreamIngestionProgress_NotStarted, stats.IngestionProgress.CutoverStatus)
 }

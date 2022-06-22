@@ -74,7 +74,7 @@ func startReplicationStreamJob(
 }
 
 // updateReplicationStreamProgress updates the job progress for an active replication
-// stream specified by 'streamID' and returns error if the stream is no longer active.
+// stream specified by 'streamID'.
 func updateReplicationStreamProgress(
 	ctx context.Context,
 	expiration time.Time,
@@ -102,7 +102,7 @@ func updateReplicationStreamProgress(
 				return nil
 			}
 
-			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecord
+			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecordID
 			ptsRecord, err := ptsProvider.GetRecord(ctx, txn, ptsID)
 			if err != nil {
 				return err
@@ -133,13 +133,31 @@ func updateReplicationStreamProgress(
 }
 
 // heartbeatReplicationStream updates replication stream progress and advances protected timestamp
-// record to the specified frontier.
+// record to the specified frontier. If 'frontier' is hlc.MaxTimestamp, returns the producer job
+// progress without updating it.
 func heartbeatReplicationStream(
 	evalCtx *eval.Context, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	expirationTime := timeutil.Now().Add(timeout)
+	// MaxTimestamp indicates not a real heartbeat, skip updating the producer
+	// job progress.
+	if frontier == hlc.MaxTimestamp {
+		var status streampb.StreamReplicationStatus
+		pj, err := execConfig.JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
+		if err != nil {
+			return status, err
+		}
+		payload := pj.Payload()
+		ptsRecord, err := execConfig.ProtectedTimestampProvider.GetRecord(evalCtx.Ctx(), txn,
+			*payload.GetStreamReplication().ProtectedTimestampRecordID)
+		if err != nil {
+			return streampb.StreamReplicationStatus{}, err
+		}
+		status.ProtectedTimestamp = &ptsRecord.Timestamp
+		return status, nil
+	}
 
 	return updateReplicationStreamProgress(evalCtx.Ctx(),
 		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, streamID, frontier, txn)
