@@ -1237,9 +1237,9 @@ func formatProgress(p float64) string {
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
 }
 
-// PutString into the specified file on the remote(s).
+// PutString into the specified file on the specified remote node(s).
 func (c *SyncedCluster) PutString(
-	ctx context.Context, l *logger.Logger, content string, dest string, mode os.FileMode,
+	ctx context.Context, l *logger.Logger, nodes Nodes, content string, dest string, mode os.FileMode,
 ) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "syncedCluster.PutString")
@@ -1261,11 +1261,13 @@ func (c *SyncedCluster) PutString(
 	// NB: we intentionally don't remove the temp files. This is because roachprod
 	// will symlink them when running locally.
 
-	return errors.Wrap(c.Put(ctx, l, src, dest), "syncedCluster.PutString")
+	return errors.Wrap(c.Put(ctx, l, nodes, src, dest), "syncedCluster.PutString")
 }
 
 // Put TODO(peter): document
-func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest string) error {
+func (c *SyncedCluster) Put(
+	ctx context.Context, l *logger.Logger, nodes Nodes, src string, dest string,
+) error {
 	// Check if source file exists and if it's a symlink.
 	var potentialSymlinkPath string
 	var err error
@@ -1296,24 +1298,24 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 			detail = " (scp)"
 		}
 	}
-	l.Printf("%s: putting%s %s %s\n", c.Name, detail, src, dest)
+	l.Printf("%s: putting%s %s %s on nodes %v\n", c.Name, detail, src, dest, nodes)
 
 	type result struct {
 		index int
 		err   error
 	}
 
-	results := make(chan result, len(c.Nodes))
-	lines := make([]string, len(c.Nodes))
+	results := make(chan result, len(nodes))
+	lines := make([]string, len(nodes))
 	var linesMu syncutil.Mutex
 	var wg sync.WaitGroup
-	wg.Add(len(c.Nodes))
+	wg.Add(len(nodes))
 
 	// Each destination for the copy needs a source to copy from. We create a
 	// channel that has capacity for each destination. If we try to add a source
 	// and the channel is full we can simply drop that source as we know we won't
 	// need to use it.
-	sources := make(chan int, len(c.Nodes))
+	sources := make(chan int, len(nodes))
 	pushSource := func(i int) {
 		select {
 		case sources <- i:
@@ -1327,7 +1329,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 	} else {
 		// In non-treedist mode, add the local source N times (once for each
 		// destination).
-		for range c.Nodes {
+		for range nodes {
 			pushSource(-1)
 		}
 	}
@@ -1339,16 +1341,16 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 		// Expand the destination to allow, for example, putting directly
 		// into {store-dir}.
 		e := expander{
-			node: c.Nodes[i],
+			node: nodes[i],
 		}
 		dest, err := e.expand(ctx, l, c, dest)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[i]), c.Host(c.Nodes[i]), dest), nil
+		return fmt.Sprintf("%s@%s:%s", c.user(nodes[i]), c.Host(nodes[i]), dest), nil
 	}
 
-	for i := range c.Nodes {
+	for i := range nodes {
 		go func(i int, dest string) {
 			defer wg.Done()
 
@@ -1356,7 +1358,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 				// Expand the destination to allow, for example, putting directly
 				// into {store-dir}.
 				e := expander{
-					node: c.Nodes[i],
+					node: nodes[i],
 				}
 				var err error
 				dest, err = e.expand(ctx, l, c, dest)
@@ -1381,7 +1383,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 				if filepath.IsAbs(dest) {
 					to = dest
 				} else {
-					to = filepath.Join(c.localVMDir(c.Nodes[i]), dest)
+					to = filepath.Join(c.localVMDir(nodes[i]), dest)
 				}
 				// Remove the destination if it exists, ignoring errors which we'll
 				// handle via the os.Symlink() call.
@@ -1479,7 +1481,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 		if !config.Quiet {
 			linesMu.Lock()
 			for i := range lines {
-				fmt.Fprintf(&writer, "  %2d: ", c.Nodes[i])
+				fmt.Fprintf(&writer, "  %2d: ", nodes[i])
 				if lines[i] != "" {
 					fmt.Fprintf(&writer, "%s", lines[i])
 				} else {
@@ -1497,7 +1499,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
-			l.Printf("  %2d: %s", c.Nodes[i], lines[i])
+			l.Printf("  %2d: %s", nodes[i], lines[i])
 		}
 		linesMu.Unlock()
 	}
@@ -1656,14 +1658,14 @@ func (c *SyncedCluster) Logs(
 }
 
 // Get TODO(peter): document
-func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
+func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) error {
 	// TODO(peter): Only get 10 nodes at a time. When a node completes, output a
 	// line indicating that.
 	var detail string
 	if !c.IsLocal() {
 		detail = " (scp)"
 	}
-	l.Printf("%s: getting%s %s %s\n", c.Name, detail, src, dest)
+	l.Printf("%s: getting%s %s %s on nodes %v\n", c.Name, detail, src, dest, nodes)
 
 	type result struct {
 		index int
@@ -1671,20 +1673,20 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 	}
 
 	var writer ui.Writer
-	results := make(chan result, len(c.Nodes))
-	lines := make([]string, len(c.Nodes))
+	results := make(chan result, len(nodes))
+	lines := make([]string, len(nodes))
 	var linesMu syncutil.Mutex
 
 	var wg sync.WaitGroup
-	for i := range c.Nodes {
+	for i := range nodes {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 
 			src := src
 			dest := dest
-			if len(c.Nodes) > 1 {
-				base := fmt.Sprintf("%d.%s", c.Nodes[i], filepath.Base(dest))
+			if len(nodes) > 1 {
+				base := fmt.Sprintf("%d.%s", nodes, filepath.Base(dest))
 				dest = filepath.Join(filepath.Dir(dest), base)
 			}
 
@@ -1696,7 +1698,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 
 			if c.IsLocal() {
 				if !filepath.IsAbs(src) {
-					src = filepath.Join(c.localVMDir(c.Nodes[i]), src)
+					src = filepath.Join(c.localVMDir(nodes[i]), src)
 				}
 
 				var copy func(src, dest string, info os.FileInfo) error
@@ -1767,7 +1769,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 				return
 			}
 
-			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(c.Nodes[0]), c.Host(c.Nodes[i]), src), dest)
+			err := c.scp(fmt.Sprintf("%s@%s:%s", c.user(nodes[0]), c.Host(nodes[i]), src), dest)
 			if err == nil {
 				// Make sure all created files and directories are world readable.
 				// The CRDB process intentionally sets a 0007 umask (resulting in
@@ -1834,7 +1836,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 		if !config.Quiet && l.File == nil {
 			linesMu.Lock()
 			for i := range lines {
-				fmt.Fprintf(&writer, "  %2d: ", c.Nodes[i])
+				fmt.Fprintf(&writer, "  %2d: ", nodes[i])
 				if lines[i] != "" {
 					fmt.Fprintf(&writer, "%s", lines[i])
 				} else {
@@ -1852,7 +1854,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
-			l.Printf("  %2d: %s", c.Nodes[i], lines[i])
+			l.Printf("  %2d: %s", nodes[i], lines[i])
 		}
 		linesMu.Unlock()
 	}

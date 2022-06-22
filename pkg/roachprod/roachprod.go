@@ -820,7 +820,7 @@ func Put(
 	if err != nil {
 		return err
 	}
-	return c.Put(ctx, l, src, dest)
+	return c.Put(ctx, l, c.Nodes, src, dest)
 }
 
 // Get copies a remote file from the nodes in a cluster.
@@ -834,7 +834,7 @@ func Get(l *logger.Logger, clusterName, src, dest string) error {
 	if err != nil {
 		return err
 	}
-	return c.Get(l, src, dest)
+	return c.Get(l, c.Nodes, src, dest)
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -878,43 +878,44 @@ func PgURL(
 	return urls, nil
 }
 
-// AdminURL generates admin UI URLs for the nodes in a cluster.
-func AdminURL(
-	l *logger.Logger, clusterName, path string, usePublicIPs, openInBrowser, secure bool,
-) ([]string, error) {
-	if err := LoadClusters(); err != nil {
-		return nil, err
-	}
-	c, err := newCluster(l, clusterName, install.SecureOption(secure))
-	if err != nil {
-		return nil, err
-	}
+type urlConfig struct {
+	path          string
+	usePublicIP   bool
+	openInBrowser bool
+	secure        bool
+	port          int
+}
 
+func urlGenerator(
+	c *install.SyncedCluster, l *logger.Logger, nodes install.Nodes, config urlConfig,
+) ([]string, error) {
 	var urls []string
-	for i, node := range c.TargetNodes() {
+	for i, node := range nodes {
 		host := vm.Name(c.Name, int(node)) + "." + gce.Subdomain
 
 		// verify DNS is working / fallback to IPs if not.
-		if i == 0 && !usePublicIPs {
+		if i == 0 && !config.usePublicIP {
 			if _, err := net.LookupHost(host); err != nil {
 				fmt.Fprintf(l.Stderr, "no valid DNS (yet?). might need to re-run `sync`?\n")
-				usePublicIPs = true
+				config.usePublicIP = true
 			}
 		}
 
-		if usePublicIPs {
+		if config.usePublicIP {
 			host = c.VMs[node-1].PublicIP
 		}
-		port := c.NodeUIPort(node)
+		if config.port == 0 {
+			config.port = c.NodeUIPort(node)
+		}
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
 		}
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
+		if !strings.HasPrefix(config.path, "/") {
+			config.path = "/" + config.path
 		}
-		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, path)
-		if openInBrowser {
+		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, config.port, config.path)
+		if config.openInBrowser {
 			if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
 				return nil, err
 			}
@@ -923,6 +924,26 @@ func AdminURL(
 		}
 	}
 	return urls, nil
+}
+
+// AdminURL generates admin UI URLs for the nodes in a cluster.
+func AdminURL(
+	l *logger.Logger, clusterName, path string, usePublicIP, openInBrowser, secure bool,
+) ([]string, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return nil, err
+	}
+	uConfig := urlConfig{
+		path:          path,
+		usePublicIP:   usePublicIP,
+		openInBrowser: openInBrowser,
+		secure:        secure,
+	}
+	return urlGenerator(c, l, c.TargetNodes(), uConfig)
 }
 
 // PprofOpts specifies the options needed by Pprof().
@@ -1336,8 +1357,9 @@ func InitProviders() map[string]string {
 	return providersState
 }
 
-// InitGrafana spins up a promethius and grafana instance on the provided nodes
-func InitGrafana(
+// StartPrometheus spins up a prometheus and grafana instance on the last node provided and scrapes
+// from all other nodes.
+func StartPrometheus(
 	ctx context.Context, l *logger.Logger, clusterName string, grafanaURL string,
 ) error {
 	if err := LoadClusters(); err != nil {
@@ -1353,9 +1375,11 @@ func InitGrafana(
 	if err != nil {
 		return err
 	}
-
+	// Configure the prometheus/grafana servers to run on the last node in the cluster
 	var promCfg prometheus.Config
-	promCfg.WithPrometheusNode(nodes[0])
+	promCfg.WithPrometheusNode(nodes[len(nodes)-1])
+
+	// Configure scraping on all nodes in the cluster
 	if err := promCfg.WithCluster(nodes, ips); err != nil {
 		return err
 	}
@@ -1364,19 +1388,23 @@ func InitGrafana(
 	}
 	promCfg.WithGrafanaDashboard(grafanaURL)
 
-	promNodeClusterName := strings.Split(clusterName, ":")[0] + ":" + fmt.Sprint(nodes[0])
-	promC, err := newCluster(l, promNodeClusterName)
+	_, err = prometheus.Init(ctx, l, c, promCfg)
 	if err != nil {
 		return err
 	}
-	_, err = prometheus.Init(ctx, l, c, promC, promCfg)
+	urls, err := GrafanaURL(ctx, l, clusterName, false)
 	if err != nil {
 		return err
+	}
+	for i, url := range urls {
+		fmt.Printf("Grafana dashboard %d: %s", i, url)
 	}
 	return nil
 }
 
-func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string) error {
+// StopPrometheus shuts down prometheus and grafana servers on the last node in
+// the cluster, if they exist.
+func StopPrometheus(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -1385,8 +1413,31 @@ func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string) erro
 		return err
 	}
 	nodes := c.TargetNodes()
-	if err := prometheus.StopPrometheus(ctx, c, l, nodes); err != nil {
+	if err := prometheus.Shutdown(ctx, c, l, nodes); err != nil {
 		return err
 	}
 	return nil
+}
+
+func GrafanaURL(
+	ctx context.Context, l *logger.Logger, clusterName string, openInBrowser bool,
+) ([]string, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	nodes := c.TargetNodes()
+	// grafana is assumed to be running on the last node in the target
+	grafanaNode := install.Nodes{nodes[len(nodes)-1]}
+
+	uConfig := urlConfig{
+		usePublicIP:   true,
+		openInBrowser: openInBrowser,
+		secure:        false,
+		port:          3000,
+	}
+	return urlGenerator(c, l, grafanaNode, uConfig)
 }

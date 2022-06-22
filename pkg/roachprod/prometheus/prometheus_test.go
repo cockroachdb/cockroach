@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,14 +27,13 @@ type clusterSpec struct {
 
 func TestMakeYAMLConfig(t *testing.T) {
 	testCases := []struct {
-		desc                  string
+		testfile              string
 		useWorkloadHelpers    bool
 		cluster               *clusterSpec
 		workloadScrapeConfigs []ScrapeConfig
-		expected              string
 	}{
 		{
-			desc:               "multiple scrape nodes",
+			testfile:           "multipleScrapeNodes.txt",
 			useWorkloadHelpers: false,
 			workloadScrapeConfigs: []ScrapeConfig{
 				{
@@ -63,27 +64,9 @@ func TestMakeYAMLConfig(t *testing.T) {
 					},
 				},
 			},
-			expected: `global:
-  scrape_interval: 10s
-  scrape_timeout: 5s
-scrape_configs:
-- job_name: workload0
-  static_configs:
-  - targets:
-    - 127.0.0.1:2002
-    - 127.0.0.3:2003
-    - 127.0.0.4:2003
-    - 127.0.0.5:2003
-  metrics_path: /b
-- job_name: workload1
-  static_configs:
-  - targets:
-    - 127.0.0.6:2009
-  metrics_path: /c
-`,
 		},
 		{
-			desc:               "using make commands",
+			testfile:           "usingMakeCommands.txt",
 			useWorkloadHelpers: true,
 			cluster: &clusterSpec{
 				nodes: install.Nodes{8, 9},
@@ -105,38 +88,11 @@ scrape_configs:
 					},
 				},
 			},
-			expected: `global:
-  scrape_interval: 10s
-  scrape_timeout: 5s
-scrape_configs:
-- job_name: workload0
-  static_configs:
-  - targets:
-    - 127.0.0.3:2005
-    - 127.0.0.4:2005
-    - 127.0.0.5:2005
-    - 127.0.0.6:2009
-  metrics_path: /
-- job_name: cockroach-n8
-  static_configs:
-  - labels:
-      node: "8"
-    targets:
-    - 127.0.0.8:26258
-  metrics_path: /_status/vars
-- job_name: cockroach-n9
-  static_configs:
-  - labels:
-      node: "9"
-    targets:
-    - 127.0.0.9:26258
-  metrics_path: /_status/vars
-`,
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
+		t.Run(tc.testfile, func(t *testing.T) {
 			var promCfg Config
 			for i, workloadConfig := range tc.workloadScrapeConfigs {
 				if tc.useWorkloadHelpers {
@@ -163,7 +119,7 @@ scrape_configs:
 				promCfg.ScrapeConfigs,
 			)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, cfg)
+			echotest.Require(t, cfg, testutils.TestDataPath(t, tc.testfile))
 		})
 	}
 }

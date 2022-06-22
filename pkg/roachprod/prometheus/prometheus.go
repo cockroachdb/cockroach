@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
@@ -27,7 +26,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const workloadPrometheusPort = 2112
+const defaultWorkloadPort = 2112
 
 // Client is an interface allowing queries against Prometheus.
 type Client interface {
@@ -59,11 +58,8 @@ type Config struct {
 	// ScrapeConfigs provides the configurations for each scraping instance
 	ScrapeConfigs []ScrapeConfig
 
-	// NodeExporter identifies each node in the cluster to scrape
+	// NodeExporter identifies each node in the cluster to scrape with the node exporter process
 	NodeExporter install.Nodes
-
-	// NodeExporter URLs
-	NodeExporterIPs []string
 
 	// Grafana provides the info to set up grafana
 	Grafana GrafanaConfig
@@ -83,10 +79,13 @@ type GrafanaConfig struct {
 }
 
 // WithWorkload sets up a scraping config for `workload` processes running on the given
-// node(s) and port. Chains for convenience.
+// node(s) and port. Chains for convenience. If port == 0, defaultWorkloadPort is used.
 func (cfg *Config) WithWorkload(name string, nodes install.Nodes, port int, ips []string) error {
 	if len(nodes) != len(ips) {
 		return errors.New("number of nodes must exactly match the number of ips")
+	}
+	if port == 0 {
+		port = defaultWorkloadPort
 	}
 	sn := ScrapeNode{Nodes: nodes, IPs: ips, Port: port}
 	for i := range cfg.ScrapeConfigs {
@@ -129,12 +128,25 @@ func (cfg *Config) WithGrafanaDashboard(url string) *Config {
 
 // WithNodeExporter causes node_exporter to be set up on the specified machines,
 // a separate process that sends hardware metrics to prometheus.
+// For more on the node exporter process, see https://prometheus.io/docs/guides/node-exporter/
 func (cfg *Config) WithNodeExporter(nodes install.Nodes, ips []string) error {
 	if len(nodes) != len(ips) {
 		return errors.New("number of nodes must exactly match the number of ips")
 	}
 	cfg.NodeExporter = nodes
-	cfg.NodeExporterIPs = ips
+	// Add a scrape config for each node exporter
+	for i, node := range cfg.NodeExporter {
+		s := strconv.Itoa(int(node))
+		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
+			JobName:     "node_exporter-" + s,
+			MetricsPath: "/metrics",
+			Labels:      map[string]string{"node": s},
+			ScrapeNodes: []ScrapeNode{{
+				Nodes: install.Nodes{node},
+				IPs:   []string{ips[i]},
+				Port:  9100}},
+		})
+	}
 	return nil
 }
 
@@ -145,11 +157,7 @@ type Prometheus struct {
 
 // Init creates a prometheus instance on the given cluster.
 func Init(
-	ctx context.Context,
-	l *logger.Logger,
-	c *install.SyncedCluster,
-	promC *install.SyncedCluster,
-	cfg Config,
+	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, cfg Config,
 ) (_ *Prometheus, _ error) {
 	if len(cfg.NodeExporter) > 0 {
 		if err := c.RepeatRun(ctx, l, os.Stdout, os.Stderr, cfg.NodeExporter,
@@ -168,24 +176,11 @@ rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
 			`cd node_exporter &&
 sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		); err != nil {
-			return nil, err
-		}
-
-		// Add a scrape config for each node exporter
-		for i, node := range cfg.NodeExporter {
-			s := strconv.Itoa(int(node))
-			cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
-				JobName:     "node_exporter-" + s,
-				MetricsPath: "/metrics",
-				Labels:      map[string]string{"node": s},
-				ScrapeNodes: []ScrapeNode{{
-					Nodes: install.Nodes{node},
-					IPs:   []string{cfg.NodeExporterIPs[i]},
-					Port:  9100}},
-			})
+			// TODO: systemd-run cannot run on mac, so this likely errors when people
+			// attempt to run grafana-start on a local roachprod cluster
+			return nil, errors.Wrap(err, "grafana-start currently cannot run on darwin")
 		}
 	}
-
 	if err := c.RepeatRun(
 		ctx,
 		l,
@@ -216,9 +211,10 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		return nil, err
 	}
 
-	if err := promC.PutString(
+	if err := c.PutString(
 		ctx,
 		l,
+		cfg.PrometheusNode,
 		yamlCfg,
 		"/tmp/prometheus/prometheus.yml",
 		0644,
@@ -233,7 +229,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		os.Stdout,
 		os.Stderr,
 		cfg.PrometheusNode,
-		"start-promethius",
+		"start-prometheus",
 		`cd /tmp/prometheus &&
 sudo systemd-run --unit prometheus --same-dir \
 	./prometheus --config.file=prometheus.yml --storage.tsdb.path=data/ --web.enable-admin-api`,
@@ -265,7 +261,7 @@ sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo
 		}
 
 		// Set up grafana config
-		if err := promC.PutString(ctx, l, `apiVersion: 1
+		if err := c.PutString(ctx, l, cfg.PrometheusNode, `apiVersion: 1
 
 datasources:
   - name: prometheusdata
@@ -276,7 +272,7 @@ datasources:
 			return nil, err
 		}
 
-		if err := promC.PutString(ctx, l, `apiVersion: 1
+		if err := c.PutString(ctx, l, cfg.PrometheusNode, `apiVersion: 1
 
 providers:
  - name: 'default'
@@ -289,7 +285,6 @@ providers:
 `, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0644); err != nil {
 			return nil, err
 		}
-
 		for idx, u := range cfg.Grafana.DashboardURLs {
 			cmd := fmt.Sprintf("curl -fsSL %s -o /var/lib/grafana/dashboards/%d.json", u, idx)
 			if err := c.Run(ctx, l, os.Stdout, os.Stderr, cfg.PrometheusNode, "download dashboard",
@@ -312,17 +307,21 @@ providers:
 // Snapshot takes a snapshot of prometheus and stores the snapshot and a script to spin up
 // a docker instance for it to the given directory.
 func Snapshot(
-	ctx context.Context, c *install.SyncedCluster, l *logger.Logger, nodes install.Nodes, dir string,
+	ctx context.Context,
+	c *install.SyncedCluster,
+	l *logger.Logger,
+	promNode install.Nodes,
+	dir string,
 ) error {
 	if err := c.Run(
 		ctx,
 		l,
 		os.Stdout,
 		os.Stderr,
-		nodes,
+		promNode,
 		"prometheus snapshot",
-		`curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
-	cd /tmp/prometheus && tar cvf prometheus-snapshot.tar.gz data/snapshots`,
+		fmt.Sprintf(`curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
+	cd /tmp/prometheus && tar cvf prometheus-snapshot.tar.gz data/snapshots && mkdir %v`, dir),
 	); err != nil {
 		return err
 	}
@@ -354,31 +353,36 @@ docker run --privileged -p 9090:9090 \
 
 	return c.Get(
 		l,
+		promNode,
 		"/tmp/prometheus/prometheus-snapshot.tar.gz",
 		dir,
 	)
 }
 
-func StopPrometheus(
+func Shutdown(
 	ctx context.Context, c *install.SyncedCluster, l *logger.Logger, nodes install.Nodes,
 ) error {
+
+	// We currently assume the last node contains the server.
+	promNode := install.Nodes{nodes[len(nodes)-1]}
 
 	dumpSnapshot := func(destDir string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		if err := Snapshot(ctx, c, l, nodes, destDir); err != nil {
+		if err := Snapshot(ctx, c, l, promNode, destDir); err != nil {
 			l.Printf("failed to get prometheus snapshot: %v", err)
 		}
 	}
-	dumpSnapshot(config.ClustersDir)
+	dumpSnapshot(fmt.Sprintf("/tmp/promDump%s", fmt.Sprint(time.Now().UnixMilli())))
 
-	// TODO(MB) ideally roachprod is smart enough to know which node is running the prom server.
-	// We currently assume the first 1st node contains the server.
-	promNode := install.Nodes{nodes[0]}
+	if err := c.Run(ctx, l, os.Stdout, os.Stderr, promNode, "stop node exporter",
+		`sudo systemctl node_exporter|| echo 'Stopped node exporter'`); err != nil {
+		l.Printf("Failed to stop node exporter")
+	}
 
-	if err := c.Run(ctx, l, os.Stdout, os.Stderr, promNode, "stop grafana",
-		`sudo systemctl stop grafana-server`); err != nil {
-		return err
+	if err := c.RepeatRun(ctx, l, os.Stdout, os.Stderr, nodes, "stop grafana",
+		`sudo systemctl stop grafana-server echo 'Stopped grafana'`); err != nil {
+		l.Printf("Failed to stop grafana server")
 	}
 
 	if err := c.RepeatRun(
@@ -390,7 +394,7 @@ func StopPrometheus(
 		"stop prometheus",
 		"sudo systemctl stop prometheus || echo 'Stopped prometheus'",
 	); err != nil {
-		return err
+		l.Printf("Failed to stop prometheus server")
 	}
 	return nil
 }
