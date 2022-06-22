@@ -58,6 +58,8 @@ var serverSQLAddr, serverSQLPort string
 var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var serverHTTPAdvertiseAddr, serverHTTPAdvertisePort string
+var serverServicesAddr, serverServicesPort string
+var serverServicesAdvertiseAddr, serverServicesAdvertisePort string
 var localityAdvertiseHosts localityList
 var startBackground bool
 var storeSpecs base.StoreSpecList
@@ -83,6 +85,11 @@ func initPreFlagsDefaults() {
 	// we want to override it with the `serverHTTPPort` if it's unset by
 	// the user.
 	serverHTTPAdvertisePort = ""
+
+	serverServicesAddr = ""
+	serverServicesPort = base.DefaultServicesPort
+	serverServicesAdvertiseAddr = ""
+	serverServicesAdvertisePort = ""
 
 	localityAdvertiseHosts = localityList{}
 
@@ -506,6 +513,11 @@ func init() {
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+
+		// Services.
+		cliflagcfg.BoolFlag(f, &serverCfg.EnableServices, cliflags.EnableServices)
+		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverServicesAddr, &serverServicesPort), cliflags.ListenServicesAddr)
+		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverServicesAdvertiseAddr, &serverServicesAdvertisePort), cliflags.ServicesAdvertiseAddr)
 	}
 
 	// Flags that apply to commands that start servers.
@@ -1095,6 +1107,28 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	}
 	serverCfg.HTTPAdvertiseAddr = net.JoinHostPort(serverHTTPAdvertiseAddr, serverHTTPAdvertisePort)
 
+	// Fill in the defaults for --services-addr.
+	if serverServicesAddr == "" {
+		serverServicesAddr = startCtx.serverListenAddr
+	}
+	serverCfg.ServicesAddr = net.JoinHostPort(serverServicesAddr, serverServicesPort)
+
+	if serverServicesAdvertiseAddr == "" {
+		if advSpecified {
+			serverServicesAdvertiseAddr = serverAdvertiseAddr
+		} else {
+			serverServicesAdvertiseAddr = serverServicesAddr
+		}
+	}
+	if serverServicesAdvertisePort == "" {
+		// We do not include the `if advSpecified` clause to mirror the
+		// logic above for `SQLAdvertiseAddr` which overrides the port from
+		// `serverAdvertisePort` because that port is *never* correct here,
+		// since it refers to SQL/gRPC connections.
+		serverServicesAdvertisePort = serverServicesPort
+	}
+	serverCfg.ServicesAdvertiseAddr = net.JoinHostPort(serverServicesAdvertiseAddr, serverServicesAdvertisePort)
+
 	// Fill the advertise port into the locality advertise addresses.
 	for i, a := range localityAdvertiseHosts {
 		host, port, err := addr.SplitHostPort(a.Address.AddressField, serverAdvertisePort)
@@ -1141,6 +1175,10 @@ func extraClientFlagInit() error {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+	if serverServicesAddr == "" {
+		serverServicesAddr = startCtx.serverListenAddr
+	}
+	serverCfg.ServicesAddr = net.JoinHostPort(serverServicesAddr, serverServicesPort)
 
 	// If CLI/SQL debug mode is requested, override the echo mode here,
 	// so that the initial client/server handshake reveals the SQL being

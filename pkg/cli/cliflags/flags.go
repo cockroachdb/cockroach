@@ -601,6 +601,45 @@ The port number should be the same as in --http-addr unless port
 forwarding is set up on an intermediate firewall/router.`,
 	}
 
+	EnableServices = FlagInfo{
+		Name:        "enable-services",
+		Description: `Enable web services.`,
+	}
+
+	ListenServicesAddr = FlagInfo{
+		Name: "services-addr",
+		Description: `
+The hostname or IP address to bind to for HTTP service requests.
+If left unspecified, the address part defaults to the setting of
+--listen-addr. The port number defaults to 14464.
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:14464 or [fe80::f6f2:::]:14464.`,
+	}
+
+	ServicesAdvertiseAddr = FlagInfo{
+		Name: "advertise-services-addr",
+		Description: `
+The HTTP address/hostname and port to advertise for services.
+<PRE>
+
+</PRE>
+If left unspecified, it defaults to the host setting of --advertise-addr
+and the port of --services-addr, which is 14464 by default. If advertise-addr
+is left unspecified, it defaults to the setting of services-addr. If the
+flag is unspecified as well as fallbacks, it defaults to the hostname as
+reported by the OS.
+<PRE>
+
+</PRE>
+An IPv6 address can also be specified with the notation [...], for
+example [::1]:14464 or [fe80::f6f2:::]:14464.
+<PRE>
+
+</PRE>
+The port number should be the same as in --services-addr unless port
+forwarding is set up on an intermediate firewall/router.`,
+	}
+
 	UnencryptedLocalhostHTTP = FlagInfo{
 		Name: "unencrypted-localhost-http",
 		Description: `

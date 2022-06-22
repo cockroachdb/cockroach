@@ -104,6 +104,9 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	baseCfg.SQLAdvertiseAddr = util.TestAddr.String()
 	baseCfg.SplitListenSQL = true
 	baseCfg.HTTPAddr = util.TestAddr.String()
+
+	baseCfg.ServicesAddr = util.TestAddr.String()
+
 	// Set standard user for intra-cluster traffic.
 	baseCfg.User = username.NodeUserName()
 	// Enable web session authentication.

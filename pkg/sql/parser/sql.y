@@ -880,10 +880,10 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
-%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
+%token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RULES RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
+%token <str> SERIALIZABLE SERVER SERVICE SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
@@ -957,6 +957,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <*tree.SetVar> set_or_reset_clause
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
+%type <tree.Statement> alter_service_stmt
 %type <tree.Statement> alter_unsupported_stmt
 
 // ALTER RANGE
@@ -1049,6 +1050,8 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
 %type <tree.Statement> create_schema_stmt
+%type <tree.Statement> create_service_stmt
+%type <*tree.Select>   opt_rules_from
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_view_stmt
@@ -1069,6 +1072,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
 %type <tree.Statement> drop_schema_stmt
+%type <tree.Statement> drop_service_stmt
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_type_stmt
 %type <tree.Statement> drop_view_stmt
@@ -1185,6 +1189,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
+%type <[]tree.KVOption> opt_with_default_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
 %type <tree.ShowBackupDetails> show_backup_details
@@ -1248,6 +1253,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name opt_in_database
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
+%type <str> service_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
@@ -1618,6 +1624,7 @@ alter_ddl_stmt:
 | alter_range_stmt              // EXTEND WITH HELP: ALTER RANGE
 | alter_partition_stmt          // EXTEND WITH HELP: ALTER PARTITION
 | alter_schema_stmt             // EXTEND WITH HELP: ALTER SCHEMA
+| alter_service_stmt            // EXTEND WITH HELP: ALTER SERVICE
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
@@ -3853,6 +3860,7 @@ create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_schema_stmt   // EXTEND WITH HELP: CREATE SCHEMA
+| create_service_stmt  // EXTEND WITH HELP: CREATE SERVICE
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
@@ -4093,6 +4101,7 @@ drop_ddl_stmt:
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
+| drop_service_stmt  // EXTEND WITH HELP: DROP SERVICE
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 
 // %Help: DROP VIEW - remove a view
@@ -7113,6 +7122,144 @@ alter_schema_stmt:
     }
   }
 | ALTER SCHEMA error // SHOW HELP: ALTER SCHEMA
+
+// %Help: CREATE SERVICE - create a new service
+// %Category: DDL
+// %Text:
+//   CREATE SERVICE myservice
+//     [WITH DEFAULT OPTIONS (...)]
+//     [USING RULES FROM ...];
+//
+// %SeeAlso: ALTER SERVICE, DROP SERVICE
+create_service_stmt:
+  CREATE SERVICE service_name opt_with_default_options opt_rules_from
+  {
+    $$.val = &tree.CreateService{
+       Service: tree.Name($3),
+       DefaultOptions: $4.kvOptions(),
+       Rules: $5.slct(),
+    }
+  }
+| CREATE SERVICE IF NOT EXISTS service_name opt_with_default_options opt_rules_from
+  {
+    $$.val = &tree.CreateService{
+       Service: tree.Name($6),
+       IfNotExists: true,
+       DefaultOptions: $7.kvOptions(),
+       Rules: $8.slct(),
+    }
+  }
+| CREATE SERVICE error // SHOW HELP: CREATE SERVICE
+
+opt_with_default_options:
+  /* EMPTY */
+  {
+    $$.val = nil
+  }
+| WITH DEFAULT OPTIONS '(' kv_option_list ')'
+  {
+    $$.val = $5.kvOptions()
+  }
+
+opt_rules_from:
+  /* EMPTY */
+  {
+    $$.val = (*tree.Select)(nil)
+  }
+| USING RULES FROM select_stmt
+  {
+    $$.val = $4.slct()
+  }
+
+// %Help: DROP SERVICE - remove a service
+// %Category: DDL
+// %Text: DROP SERVICE [IF EXISTS] <service_name> [, ...]
+drop_service_stmt:
+  DROP SERVICE name_list
+  {
+    $$.val = &tree.DropService{
+      Names: $3.nameList(),
+      IfExists: false,
+    }
+  }
+| DROP SERVICE IF EXISTS name_list
+  {
+    $$.val = &tree.DropService{
+      Names: $5.nameList(),
+      IfExists: true,
+    }
+  }
+| DROP SERVICE error // SHOW HELP: DROP SERVICE
+
+// %Help: ALTER SERVICE - alter an existing service
+// %Category: DDL
+// %Text:
+//
+// Commands:
+//   ALTER SERVICE ... RENAME TO <newservicename>
+//   ALTER SERVICE ... OWNER TO {<newowner> | CURRENT_USER | SESSION_USER }
+//   ALTER SERVICE ... REFRESH
+//   ALTER SERVICE ... SET DEFAULT OPTIONS (...)
+//   ALTER SERVICE ... USING RULES FROM ...
+alter_service_stmt:
+  ALTER SERVICE service_name OWNER TO role_spec
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceOwner{Owner: $6.roleSpec()}}
+  }
+| ALTER SERVICE IF EXISTS service_name OWNER TO role_spec
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceOwner{Owner: $8.roleSpec()}}
+  }
+| ALTER SERVICE service_name REFRESH
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceRefresh{}}
+  }
+| ALTER SERVICE IF EXISTS service_name REFRESH
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceRefresh{}}
+  }
+| ALTER SERVICE service_name RENAME TO service_name
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceRename{NewName: tree.Name($6)}}
+  }
+| ALTER SERVICE IF EXISTS service_name RENAME TO service_name
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceRename{NewName: tree.Name($8)}}
+  }
+| ALTER SERVICE service_name SET DEFAULT OPTIONS '(' kv_option_list ')'
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceSetDefaults{Opts: $8.kvOptions()}}
+  }
+| ALTER SERVICE IF EXISTS service_name SET DEFAULT OPTIONS '(' kv_option_list ')'
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceSetDefaults{Opts: $10.kvOptions()}}
+  }
+| ALTER SERVICE service_name DROP DEFAULT OPTIONS
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceSetDefaults{}}
+  }
+| ALTER SERVICE IF EXISTS service_name DROP DEFAULT OPTIONS
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceSetDefaults{}}
+  }
+| ALTER SERVICE service_name USING RULES FROM select_stmt
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceRules{Rules: $7.slct()}}
+  }
+| ALTER SERVICE IF EXISTS service_name USING RULES FROM select_stmt
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceRules{Rules: $9.slct()}}
+  }
+| ALTER SERVICE service_name DROP RULES
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($3), IfExists: false, Cmd: &tree.AlterServiceRules{}}
+  }
+| ALTER SERVICE IF EXISTS service_name DROP RULES
+  {
+    $$.val = &tree.AlterService{Service: tree.Name($5), IfExists: true, Cmd: &tree.AlterServiceRules{}}
+  }
+| ALTER SERVICE error // SHOW HELP: ALTER SERVICE
+
 
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
@@ -13769,6 +13916,8 @@ target_name:           unrestricted_name
 
 constraint_name:       name
 
+service_name:          name
+
 database_name:         name
 
 column_name:           name
@@ -14334,6 +14483,7 @@ unreserved_keyword:
 | ROUTINES
 | ROWS
 | RULE
+| RULES
 | RUNNING
 | SCHEDULE
 | SCHEDULES
@@ -14353,6 +14503,7 @@ unreserved_keyword:
 | SEQUENCE
 | SEQUENCES
 | SERVER
+| SERVICE
 | SESSION
 | SESSIONS
 | SET

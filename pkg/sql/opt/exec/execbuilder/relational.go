@@ -269,6 +269,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.DeleteExpr:
 		ep, err = b.buildDelete(t)
 
+	case *memo.AlterServiceExpr:
+		ep, err = b.buildAlterService(t)
+
+	case *memo.CreateServiceExpr:
+		ep, err = b.buildCreateService(t)
+
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 

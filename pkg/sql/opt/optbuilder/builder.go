@@ -302,6 +302,12 @@ func (b *Builder) buildStmt(
 	case *tree.CreateTable:
 		return b.buildCreateTable(stmt, inScope)
 
+	case *tree.CreateService:
+		return b.buildCreateService(stmt, inScope)
+
+	case *tree.AlterService:
+		return b.buildAlterService(stmt, inScope)
+
 	case *tree.CreateView:
 		return b.buildCreateView(stmt, inScope)
 

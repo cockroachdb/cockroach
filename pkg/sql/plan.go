@@ -148,6 +148,7 @@ type planNodeReadingOwnWrites interface {
 
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterSchemaNode{}
+var _ planNode = &alterServiceNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &alterTableOwnerNode{}
@@ -159,6 +160,7 @@ var _ planNode = &cancelSessionsNode{}
 var _ planNode = &changePrivilegesNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
+var _ planNode = &createServiceNode{}
 var _ planNode = &createSequenceNode{}
 var _ planNode = &createStatsNode{}
 var _ planNode = &createTableNode{}
@@ -172,6 +174,7 @@ var _ planNode = &distinctNode{}
 var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &dropSchemaNode{}
+var _ planNode = &dropServiceNode{}
 var _ planNode = &dropSequenceNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropTypeNode{}
@@ -226,6 +229,7 @@ var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
 
+var _ planNodeFastPath = &createServiceNode{}
 var _ planNodeFastPath = &deleteRangeNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
