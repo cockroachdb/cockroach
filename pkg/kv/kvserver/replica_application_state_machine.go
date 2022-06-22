@@ -753,6 +753,28 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		)
 	}
 
+	if res.State != nil && res.State.GCThreshold != nil {
+		// NB: The GCThreshold is a pre-apply side effect because readers rely on
+		// the invariant that the in-memory GC threshold is bumped before the actual
+		// garbage collection command is applied. This is because readers capture a
+		// snapshot of the storage engine state and then subsequently validate that
+		// snapshot by ensuring that the in-memory GC threshold is below the read's
+		// timestamp. Since the in-memory GC threshold is bumped before the GC
+		// command is applied, the reader is guaranteed to see the un-GC'ed, correct
+		// state of the engine if this validation succeeds.
+		//
+		// NB2: However, as of the time of writing this comment (June 2022),
+		// the mvccGCQueue issues GC requests in 2 phases: the first that simply
+		// bumps the in-memory GC threshold, and the second one that performs the
+		// actual garbage collection. This is just a historical quirk and might be
+		// changed soon.
+		//
+		// TODO(aayush): Update the comment above once we do make the mvccGCQueue
+		// issue GC requests in a single phase.
+		b.r.handleGCThresholdResult(ctx, res.State.GCThreshold)
+		res.State.GCThreshold = nil
+	}
+
 	if res.State != nil && res.State.TruncatedState != nil {
 		var err error
 		// Typically one should not be checking the cluster version below raft,
@@ -1286,11 +1308,6 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.RaftLogDelta += raftLogDelta
 			rResult.State.TruncatedState = nil
 			rResult.RaftExpectedFirstIndex = 0
-		}
-
-		if newThresh := rResult.State.GCThreshold; newThresh != nil {
-			sm.r.handleGCThresholdResult(ctx, newThresh)
-			rResult.State.GCThreshold = nil
 		}
 
 		if newVersion := rResult.State.Version; newVersion != nil {
