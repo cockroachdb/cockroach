@@ -563,12 +563,14 @@ func purgeOldVersions(
 	if t == nil {
 		return nil
 	}
-	t.mu.Lock()
-	if t.mu.maxVersionSeen < minVersion {
-		t.mu.maxVersionSeen = minVersion
-	}
-	empty := len(t.mu.active.data) == 0 && t.mu.acquisitionsInProgress == 0
-	t.mu.Unlock()
+	empty := func() bool {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if t.mu.maxVersionSeen < minVersion {
+			t.mu.maxVersionSeen = minVersion
+		}
+		return len(t.mu.active.data) == 0 && t.mu.acquisitionsInProgress == 0
+	}()
 	if empty && !dropped {
 		// We don't currently have a version on this descriptor, so no need to refresh
 		// anything.
@@ -576,10 +578,12 @@ func purgeOldVersions(
 	}
 
 	removeInactives := func(dropped bool) {
-		t.mu.Lock()
-		t.mu.takenOffline = dropped
-		leases := t.removeInactiveVersions()
-		t.mu.Unlock()
+		leases := func() []*storedLease {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			t.mu.takenOffline = dropped
+			return t.removeInactiveVersions()
+		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
 		}
@@ -1010,9 +1014,11 @@ func (m *Manager) SetDraining(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, t := range m.mu.descriptors {
-		t.mu.Lock()
-		leases := t.removeInactiveVersions()
-		t.mu.Unlock()
+		leases := func() []*storedLease {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			return t.removeInactiveVersions()
+		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
 		}
@@ -1175,21 +1181,27 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 		return
 	}
 	// Construct a list of descriptors needing their leases to be reacquired.
-	m.mu.Lock()
-	ids := make([]descpb.ID, 0, len(m.mu.descriptors))
-	var i int64
-	for k, desc := range m.mu.descriptors {
-		if i++; i > limit {
-			break
+	ids := func() []descpb.ID {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		ids := make([]descpb.ID, 0, len(m.mu.descriptors))
+		var i int64
+		for k, desc := range m.mu.descriptors {
+			if i++; i > limit {
+				break
+			}
+			takenOffline := func() bool {
+				desc.mu.Lock()
+				defer desc.mu.Unlock()
+				return desc.mu.takenOffline
+			}()
+			if !takenOffline {
+				ids = append(ids, k)
+			}
 		}
-		desc.mu.Lock()
-		takenOffline := desc.mu.takenOffline
-		desc.mu.Unlock()
-		if !takenOffline {
-			ids = append(ids, k)
-		}
-	}
-	m.mu.Unlock()
+		return ids
+	}()
 	// Limit the number of concurrent lease refreshes.
 	var wg sync.WaitGroup
 	for i := range ids {
@@ -1221,9 +1233,11 @@ func (m *Manager) refreshSomeLeases(ctx context.Context) {
 							log.Warningf(ctx, "error purging leases for descriptor %d: %s",
 								id, err)
 						}
-						m.mu.Lock()
-						delete(m.mu.descriptors, id)
-						m.mu.Unlock()
+						func() {
+							m.mu.Lock()
+							defer m.mu.Unlock()
+							delete(m.mu.descriptors, id)
+						}()
 					}
 				}
 			}); err != nil {
@@ -1344,10 +1358,11 @@ func (m *Manager) VisitLeases(
 			takenOffline := ts.mu.takenOffline
 
 			for _, state := range ts.mu.active.data {
-				state.mu.Lock()
-				lease := state.mu.lease
-				refCount := state.mu.refcount
-				state.mu.Unlock()
+				lease, refCount := func() (*storedLease, int) {
+					state.mu.Lock()
+					defer state.mu.Unlock()
+					return state.mu.lease, state.mu.refcount
+				}()
 
 				if lease == nil {
 					continue

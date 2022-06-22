@@ -1017,10 +1017,12 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if meta.BulkProcessorProgress != nil {
 			todoSpans = roachpb.SubtractSpans(todoSpans,
 				meta.BulkProcessorProgress.CompletedSpans)
-			mu.Lock()
-			mu.updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
-			copy(mu.updatedTodoSpans, todoSpans)
-			mu.Unlock()
+			func() {
+				mu.Lock()
+				defer mu.Unlock()
+				mu.updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
+				copy(mu.updatedTodoSpans, todoSpans)
+			}()
 
 			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
 				if err := updateJobDetails(); err != nil {

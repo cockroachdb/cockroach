@@ -209,26 +209,31 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
-	ts.mu.Lock()
-	ts.mu.stmtCount = 0
-	if txn == nil {
-		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
-		ts.mu.txn.SetDebugName(opName)
-		if err := ts.setPriorityLocked(priority); err != nil {
-			panic(err)
+	txnID = func() (txnID uuid.UUID) {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+
+		ts.mu.stmtCount = 0
+		if txn == nil {
+			ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
+			ts.mu.txn.SetDebugName(opName)
+			if err := ts.setPriorityLocked(priority); err != nil {
+				panic(err)
+			}
+		} else {
+			if priority != roachpb.UnspecifiedUserPriority {
+				panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
+			}
+			ts.mu.txn = txn
 		}
-	} else {
-		if priority != roachpb.UnspecifiedUserPriority {
-			panic(errors.AssertionFailedf("unexpected priority when using an existing txn: %s", priority))
-		}
-		ts.mu.txn = txn
-	}
-	txnID = ts.mu.txn.ID()
-	sp.SetTag("txn", attribute.StringValue(ts.mu.txn.ID().String()))
-	ts.mu.txnStart = timeutil.Now()
-	ts.mu.autoRetryCounter = 0
-	ts.mu.autoRetryReason = nil
-	ts.mu.Unlock()
+
+		txnID = ts.mu.txn.ID()
+		sp.SetTag("txn", attribute.StringValue(txnID.String()))
+		ts.mu.txnStart = timeutil.Now()
+		ts.mu.autoRetryCounter = 0
+		ts.mu.autoRetryReason = nil
+		return txnID
+	}()
 	if historicalTimestamp != nil {
 		if err := ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp); err != nil {
 			panic(err)
@@ -262,11 +267,14 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 
 	sp.Finish()
 	ts.Ctx = nil
-	ts.mu.Lock()
-	txnID = ts.mu.txn.ID()
-	ts.mu.txn = nil
-	ts.mu.txnStart = time.Time{}
-	ts.mu.Unlock()
+	txnID = func() (txnID uuid.UUID) {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		txnID = ts.mu.txn.ID()
+		ts.mu.txn = nil
+		ts.mu.txnStart = time.Time{}
+		return txnID
+	}()
 	ts.recordingThreshold = 0
 	return txnID
 }
@@ -293,8 +301,8 @@ func (ts *txnState) finishExternalTxn() {
 	}
 	ts.Ctx = nil
 	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	ts.mu.txn = nil
-	ts.mu.Unlock()
 }
 
 func (ts *txnState) setHistoricalTimestamp(

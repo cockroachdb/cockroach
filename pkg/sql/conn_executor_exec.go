@@ -306,9 +306,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
-	ex.state.mu.Lock()
-	ex.state.mu.stmtCount++
-	ex.state.mu.Unlock()
+	func(st *txnState) {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		st.mu.stmtCount++
+	}(&ex.state)
 
 	var timeoutTicker *time.Timer
 	queryTimedOut := false
@@ -1102,19 +1104,24 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, timeutil.Now())
 
-	ex.mu.Lock()
-	queryMeta, ok := ex.mu.ActiveQueries[stmt.QueryID]
-	if !ok {
-		ex.mu.Unlock()
-		panic(errors.AssertionFailedf("query %d not in registry", stmt.QueryID))
+	progAtomic, err := func() (*uint64, error) {
+		ex.mu.Lock()
+		defer ex.mu.Unlock()
+		queryMeta, ok := ex.mu.ActiveQueries[stmt.QueryID]
+		if !ok {
+			return nil, errors.AssertionFailedf("query %d not in registry", stmt.QueryID)
+		}
+		queryMeta.phase = executing
+		// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
+		queryMeta.isDistributed = distributePlan.WillDistribute()
+		progAtomic := &queryMeta.progressAtomic
+		flags := planner.curPlan.flags
+		queryMeta.isFullScan = flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
+		return progAtomic, nil
+	}()
+	if err != nil {
+		panic(err)
 	}
-	queryMeta.phase = executing
-	// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
-	queryMeta.isDistributed = distributePlan.WillDistribute()
-	progAtomic := &queryMeta.progressAtomic
-	flags := planner.curPlan.flags
-	queryMeta.isFullScan = flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
-	ex.mu.Unlock()
 
 	// We need to set the "exec done" flag early because
 	// curPlan.close(), which will need to observe it, may be closed
@@ -2029,20 +2036,19 @@ func (ex *connExecutor) addActiveQuery(
 		hidden:        hidden,
 	}
 	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	ex.mu.ActiveQueries[queryID] = qm
-	ex.mu.Unlock()
 }
 
 func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Statement) {
 	ex.mu.Lock()
+	defer ex.mu.Unlock()
 	_, ok := ex.mu.ActiveQueries[queryID]
 	if !ok {
-		ex.mu.Unlock()
 		panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 	}
 	delete(ex.mu.ActiveQueries, queryID)
 	ex.mu.LastActiveQuery = ast
-	ex.mu.Unlock()
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed
