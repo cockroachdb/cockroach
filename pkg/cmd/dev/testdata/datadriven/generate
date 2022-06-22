@@ -2,12 +2,18 @@ exec
 dev gen protobuf
 ----
 bazel run //pkg/gen:go_proto
+export COCKROACH_BAZEL_CHECK_FAST=1
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/check.sh
 
 exec
 dev gen bazel
 ----
 bazel info workspace --color=no
 crdb-checkout/build/bazelutil/bazel-generate.sh
+export COCKROACH_BAZEL_CHECK_FAST=1
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/check.sh
 
 exec
 dev generate bazel --mirror --force
@@ -16,11 +22,17 @@ bazel info workspace --color=no
 export COCKROACH_BAZEL_CAN_MIRROR=1
 export COCKROACH_BAZEL_FORCE_GENERATE=1
 crdb-checkout/build/bazelutil/bazel-generate.sh
+export COCKROACH_BAZEL_CHECK_FAST=1
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/check.sh
 
 exec
 dev generate go_nocgo
 ----
 bazel run //pkg/gen:code
+export COCKROACH_BAZEL_CHECK_FAST=1
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/check.sh
 
 exec
 dev generate docs
@@ -29,6 +41,9 @@ bazel run //pkg/gen:docs
 bazel info workspace --color=no
 crdb-checkout/build/bazelutil/generate_redact_safe.sh
 echo "" > crdb-checkout/docs/generated/redact_safe.md
+export COCKROACH_BAZEL_CHECK_FAST=1
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/check.sh
 
 exec
 dev gen go_nocgo docs
@@ -37,3 +52,6 @@ bazel run //pkg/gen
 bazel info workspace --color=no
 crdb-checkout/build/bazelutil/generate_redact_safe.sh
 echo "" > crdb-checkout/docs/generated/redact_safe.md
+export COCKROACH_BAZEL_CHECK_FAST=1
+bazel info workspace --color=no
+crdb-checkout/build/bazelutil/check.sh
