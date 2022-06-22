@@ -509,7 +509,9 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 		name              string
 		preEnts, postEnts []raftpb.Entry
 		ss                []string
+		// Expectations.
 		size              int64
+		nonSideloadedSize int64
 	}
 
 	// Intentionally ignore the fact that real calls would always have an
@@ -520,13 +522,12 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			preEnts:  nil,
 			postEnts: nil,
 			ss:       nil,
-			size:     0,
 		},
 		{
-			name:     "v1",
-			preEnts:  []raftpb.Entry{entV1Reg, entV1SST},
-			postEnts: []raftpb.Entry{entV1Reg, entV1SST},
-			size:     0,
+			name:              "v1",
+			preEnts:           []raftpb.Entry{entV1Reg, entV1SST},
+			postEnts:          []raftpb.Entry{entV1Reg, entV1SST},
+			nonSideloadedSize: int64(len(entV1Reg.Data) + len(entV1SST.Data)),
 		},
 		{
 			name:     "v2",
@@ -536,11 +537,12 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			size:     int64(len(addSST.Data)),
 		},
 		{
-			name:     "mixed",
-			preEnts:  []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
-			postEnts: []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
-			ss:       []string{"i13.t99"},
-			size:     int64(len(addSST.Data)),
+			name:              "mixed",
+			preEnts:           []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
+			postEnts:          []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
+			ss:                []string{"i13.t99"},
+			size:              int64(len(addSST.Data)),
+			nonSideloadedSize: int64(len(entV1Reg.Data) + len(entV1SST.Data)),
 		},
 	}
 
@@ -550,13 +552,19 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(t, eng)
-			postEnts, size, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
+			postEnts, numSideloaded, size, nonSideloadedSize, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(addSST.Data) == 0 {
 				t.Fatal("invocation mutated original AddSSTable struct in memory")
 			}
+			require.Equal(t, test.nonSideloadedSize, nonSideloadedSize)
+			var expNumSideloaded int
+			if test.size > 0 {
+				expNumSideloaded = 1
+			}
+			require.Equal(t, expNumSideloaded, numSideloaded)
 			if !reflect.DeepEqual(postEnts, test.postEnts) {
 				t.Fatalf("result differs from expected: %s", pretty.Diff(postEnts, test.postEnts))
 			}
@@ -579,25 +587,6 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testutils.RunTrueAndFalse(t, "InMem", func(t *testing.T, engineInMem bool) {
-		var eng storage.Engine
-		if engineInMem {
-			eng = storage.NewDefaultInMemForTesting()
-		} else {
-			var cleanup func()
-			ctx := context.Background()
-			cleanup, eng = newOnDiskEngine(ctx, t)
-			defer cleanup()
-		}
-		defer eng.Close()
-		testRaftSSTableSideloadingProposal(t, eng)
-	})
-}
-
-// TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
-func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
