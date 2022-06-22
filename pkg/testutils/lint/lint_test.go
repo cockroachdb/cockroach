@@ -2180,6 +2180,7 @@ func TestLint(t *testing.T) {
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
+			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepthInternal\(\): format argument is not a constant expression`),
 			// roachprod/logger is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/roachprod/logger/log\.go:.*format argument is not a constant expression`),
