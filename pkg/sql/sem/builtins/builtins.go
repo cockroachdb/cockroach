@@ -6644,7 +6644,7 @@ table's zone configuration this will return NULL.`,
 			Category: categorySystemInfo,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"session", types.Bytes}},
+			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if evalCtx.SQLStatsController == nil {

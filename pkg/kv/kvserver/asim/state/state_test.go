@@ -235,7 +235,7 @@ func TestWorkloadApply(t *testing.T) {
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
-			s.ApplyLoad(workload.LoadEvent{Key: key})
+			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Reads: 1}})
 		}
 	}
 

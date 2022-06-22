@@ -41,13 +41,10 @@ type ReplicaLoadCounter struct {
 
 // ApplyLoad applies a load event onto a replica load counter.
 func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
-	if le.IsWrite {
-		rl.WriteBytes += le.Size
-		rl.WriteKeys++
-	} else {
-		rl.ReadBytes += le.Size
-		rl.ReadKeys++
-	}
+	rl.ReadBytes += le.ReadSize
+	rl.ReadKeys += le.Reads
+	rl.WriteBytes += le.WriteSize
+	rl.WriteKeys += le.Writes
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -131,11 +128,11 @@ func (u *ClusterUsageInfo) ApplyLoad(r *rng, le workload.LoadEvent) {
 		// allocator implementation details, and ReplicaLoadCounter tries to follow
 		// the logic of the production code were, for example, read QPS is applied
 		// to all replicas.
-		s.WriteBytes += le.Size
-		s.WriteKeys++
+		s.WriteBytes += le.WriteSize
+		s.WriteKeys += le.Writes
 		if rep.holdsLease {
-			s.ReadBytes += le.Size
-			s.ReadKeys++
+			s.ReadBytes += le.ReadSize
+			s.ReadKeys += le.Reads
 		}
 	}
 }

@@ -975,7 +975,7 @@ func (tc *TestCluster) SwapVoterWithNonVoter(
 
 // SwapVoterWithNonVoterOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) SwapVoterWithNonVoterOrFatal(
-	t *testing.T, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+	t testing.TB, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
 ) *roachpb.RangeDescriptor {
 	afterDesc, err := tc.SwapVoterWithNonVoter(startKey, voterTarget, nonVoterTarget)
 
@@ -1011,7 +1011,7 @@ func (tc *TestCluster) RebalanceVoter(
 
 // RebalanceVoterOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) RebalanceVoterOrFatal(
-	ctx context.Context, t *testing.T, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+	ctx context.Context, t testing.TB, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
 ) *roachpb.RangeDescriptor {
 	afterDesc, err := tc.RebalanceVoter(ctx, startKey, src, dest)
 	if err != nil {

@@ -11,25 +11,46 @@
 package workload
 
 import (
-	"container/list"
 	"math/rand"
+	"sort"
 	"time"
 )
 
 // LoadEvent represent a key access that generates load against the database.
 // TODO(kvoli): The single key interface is expensive when parsed. Consider
-// pre-aggregating load events into batches to ammortize this cost.
+// pre-aggregating load events into batches to amortize this cost.
 type LoadEvent struct {
-	IsWrite bool
-	Size    int64
-	Key     int64
+	Key       int64
+	Writes    int64
+	WriteSize int64
+	Reads     int64
+	ReadSize  int64
+}
+
+// LoadBatch is a sorted list of load events.
+type LoadBatch []LoadEvent
+
+// Less is part of the sort interface.
+func (lb LoadBatch) Less(i, j int) bool {
+	return lb[i].Key < lb[j].Key
+}
+
+// Swap is part of the sort interface.
+func (lb LoadBatch) Swap(i, j int) {
+	lb[i], lb[j] = lb[j], lb[i]
+}
+
+// Len is part of the sort interface.
+func (lb LoadBatch) Len() int {
+	return len(lb)
 }
 
 // Generator generates a workload where each op contains: key,
 // op type (e.g., read/write), size.
 type Generator interface {
-	// GetNext returns a LoadEvent which happens before or at maxTime, if exists.
-	GetNext(maxTime time.Time) (done bool, event LoadEvent)
+	// Tick returns the load events up till time tick, from the last time the
+	// workload generator was called.
+	Tick(tick time.Time) LoadBatch
 }
 
 // RandomGenerator generates random operations within some limits.
@@ -42,7 +63,6 @@ type RandomGenerator struct {
 	readRatio      float64
 	maxSize        int
 	minSize        int
-	opBuffer       list.List
 }
 
 // NewRandomGenerator returns a generator that generates random operations
@@ -82,21 +102,9 @@ func newRandomGenerator(
 	}
 }
 
-// GetNext is part of the WorkloadGenerator interface.
-func (rwg *RandomGenerator) GetNext(maxTime time.Time) (done bool, event LoadEvent) {
-	rwg.maybeUpdateBuffer(maxTime)
-	if next := rwg.opBuffer.Front(); next != nil {
-		rwg.opBuffer.Remove(next)
-		return false, next.Value.(LoadEvent)
-	}
-	return true, LoadEvent{}
-}
-
-// maybeUpdateBuffer checks the elapsed duration since last generating
-// operations and the maxTime passed in. If the duration multiplied by the rate
-// of operations per second is greater than or equal to 1, the operation buffer
-// is updated with new generated operations.
-func (rwg *RandomGenerator) maybeUpdateBuffer(maxTime time.Time) {
+// Tick returns the load events up till time tick, from the last time the
+// workload generator was called.
+func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
 	elapsed := maxTime.Sub(rwg.lastRun).Seconds()
 	count := int(elapsed * rwg.rollsPerSecond)
 	// Do not attempt to generate additional load events if the elapsed
@@ -105,29 +113,52 @@ func (rwg *RandomGenerator) maybeUpdateBuffer(maxTime time.Time) {
 	// generated if the rate of load events is less than the interval at which
 	// this function is called.
 	if count < 1 {
-		return
+		return LoadBatch{}
 	}
+	// TODO(kvoli): In profiling, this map constitutes the majority of the run
+	// time when sampling (40%). We should investigate using an array that
+	// never decreases in size, where an index represents a key. In practice,
+	// this would avoid the need for hashing and dynamic allocation. Assuming
+	// the key span is small, this would produce better result. We could revert
+	// to using a map when the rate/keyspan is low and the distribution is
+	// sparse (e.g. zipfian distribution).
+	next := make(map[int64]LoadEvent)
 
 	// Here we skew slightly towards writes to take the difference in rounding.
 	reads := int(float64(count) * rwg.readRatio)
 	writes := count - reads
+
+	// We aggregate write and reads that occur on the same key. This reduces
+	// the number of distinct load events when there is a high collision rate.
 	for read := 0; read < reads; read++ {
-		rwg.opBuffer.PushBack(
-			LoadEvent{
-				Size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
-				IsWrite: false,
-				Key:     rwg.keyGenerator.readKey(),
-			})
+		size := int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize)
+		key := rwg.keyGenerator.readKey()
+		event := next[key]
+		event.Reads++
+		event.ReadSize += size
+		next[key] = event
 	}
+
 	for write := 0; write < writes; write++ {
-		rwg.opBuffer.PushBack(
-			LoadEvent{
-				Size:    int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize),
-				IsWrite: true,
-				Key:     rwg.keyGenerator.writeKey(),
-			})
+		size := int64(rwg.rand.Intn(rwg.maxSize-rwg.minSize+1) + rwg.minSize)
+		key := rwg.keyGenerator.writeKey()
+		event := next[key]
+		event.Writes++
+		event.WriteSize += size
+		next[key] = event
 	}
+
+	ret := make(LoadBatch, len(next))
+	i := 0
+	for k, v := range next {
+		v.Key = k
+		ret[i] = v
+		i++
+	}
+
+	sort.Sort(ret)
 	rwg.lastRun = maxTime
+	return ret
 }
 
 // KeyGenerator generates read and write keys.

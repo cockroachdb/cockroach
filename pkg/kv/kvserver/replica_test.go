@@ -616,6 +616,9 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		tsc := TestStoreConfig(clock)
 		var leaseAcquisitionTrap atomic.Value
 		tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
+		// We're transferring the lease to a bogus replica, so disable protection
+		// which would otherwise notice this and reject the lease transfer.
+		tsc.TestingKnobs.AllowLeaseTransfersWhenTargetMayNeedSnapshot = true
 		tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp, _ roachpb.StoreID, _ roachpb.RangeID) *roachpb.Error {
 			val := leaseAcquisitionTrap.Load()
 			if val == nil {

@@ -114,7 +114,7 @@ type TestClusterInterface interface {
 	// RebalanceVoterOrFatal rebalances a voting replica from src to dest but wil
 	// fatal if it fails.
 	RebalanceVoterOrFatal(
-		ctx context.Context, t *testing.T, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
+		ctx context.Context, t testing.TB, startKey roachpb.Key, src, dest roachpb.ReplicationTarget,
 	) *roachpb.RangeDescriptor
 
 	// SwapVoterWithNonVoter atomically "swaps" the voting replica located on
@@ -129,7 +129,7 @@ type TestClusterInterface interface {
 	// SwapVoterWithNonVoterOrFatal is the same as SwapVoterWithNonVoter but will
 	// fatal if it fails.
 	SwapVoterWithNonVoterOrFatal(
-		t *testing.T, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+		t testing.TB, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
 	) *roachpb.RangeDescriptor
 
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
@@ -157,6 +157,12 @@ type TestClusterInterface interface {
 	TransferRangeLease(
 		rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 	) error
+
+	// TransferRangeLeaseOrFatal is the same as TransferRangeLease but will fatal
+	// if it fails.
+	TransferRangeLeaseOrFatal(
+		t testing.TB, rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+	)
 
 	// MoveRangeLeaseNonCooperatively performs a non-cooperative transfer of the
 	// lease for a range from whoever has it to a particular store. That store
