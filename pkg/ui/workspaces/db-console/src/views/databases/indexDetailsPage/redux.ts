@@ -67,6 +67,7 @@ export const mapStateToProps = createSelector(
         lastReset: util.TimestampToMoment(stats?.data?.last_reset),
         indexRecommendations,
       },
+      breadcrumbItems: null,
     };
   },
 );

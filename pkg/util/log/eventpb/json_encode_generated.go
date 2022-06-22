@@ -12,8 +12,6 @@ import (
 
 var safeRe1 = regexp.MustCompile(`^root|node$`)
 
-var safeRe2 = regexp.MustCompile(`^\$.*$`)
-
 // AppendJSONFields implements the EventPayload interface.
 func (m *AdminQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
@@ -1658,14 +1656,7 @@ func (m *CommonSQLEventDetails) AppendJSONFields(printComma bool, b redact.Redac
 		}
 		printComma = true
 		b = append(b, "\"ApplicationName\":\""...)
-
-		if safeRe2.MatchString(m.ApplicationName) {
-			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ApplicationName)))))
-		} else {
-			b = append(b, redact.StartMarker()...)
-			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ApplicationName)))))
-			b = append(b, redact.EndMarker()...)
-		}
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ApplicationName)))
 		b = append(b, '"')
 	}
 

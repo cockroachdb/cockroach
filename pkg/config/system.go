@@ -21,10 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ObjectID is an identifier for an object (e.g. database or table)
@@ -153,7 +152,7 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		// configs through proper channels.
 		//
 		// Getting here outside tests is impossible.
-		desc := tabledesc.NewBuilder(&descpb.TableDescriptor{}).BuildImmutable().DescriptorProto()
+		desc := &descpb.Descriptor{Union: &descpb.Descriptor_Table{Table: &descpb.TableDescriptor{}}}
 		var val roachpb.Value
 		if err := val.SetProto(desc); err != nil {
 			panic(err)
@@ -746,11 +745,35 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 		shouldSplit = true
 	} else {
 		desc := s.getSystemTenantDesc(keys.SystemSQLCodec.DescMetadataKey(uint32(id)))
-		shouldSplit = desc != nil && systemschema.ShouldSplitAtDesc(desc)
+		shouldSplit = desc != nil && ShouldSplitAtDesc(desc)
 	}
 	// Populate the cache.
 	s.mu.Lock()
 	s.mu.shouldSplitCache[id] = shouldSplit
 	s.mu.Unlock()
 	return shouldSplit
+}
+
+// ShouldSplitAtDesc determines whether a specific descriptor should be
+// considered for a split. Only plain tables are considered for split.
+func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
+	var desc descpb.Descriptor
+	if err := rawDesc.GetProto(&desc); err != nil {
+		return false
+	}
+	switch t := desc.GetUnion().(type) {
+	case *descpb.Descriptor_Table:
+		if t.Table.IsView() && !t.Table.MaterializedView() {
+			return false
+		}
+		return true
+	case *descpb.Descriptor_Database:
+		return false
+	case *descpb.Descriptor_Type:
+		return false
+	case *descpb.Descriptor_Schema:
+		return false
+	default:
+		panic(errors.AssertionFailedf("unexpected descriptor type %#v", &desc))
+	}
 }
