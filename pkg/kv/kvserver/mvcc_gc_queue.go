@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -611,10 +612,29 @@ func (mgcq *mvccGCQueue) process(
 		return false, err
 	}
 
-	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
-	log.Eventf(ctx, "GC score after GC: %s", makeMVCCGCQueueScore(
-		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold))
+	scoreAfter := makeMVCCGCQueueScore(
+		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold)
+	log.VEventf(ctx, 2, "MVCC stats after GC: %+v", repl.GetMVCCStats())
+	log.VEventf(ctx, 2, "GC score after GC: %s", scoreAfter)
 	updateStoreMetricsWithGCInfo(mgcq.store.metrics, info)
+	// If the score after running through the queue indicates that this
+	// replica should be re-queued for GC it most likely means that there
+	// is something wrong with the stats. One such known issue is
+	// https://github.com/cockroachdb/cockroach/issues/82920. To fix this we
+	// recompute stats, it's an expensive operation but it's better to recompute
+	// them then to spin the GC queue.
+	if scoreAfter.ShouldQueue {
+		log.Infof(ctx, "triggering stats re-computation")
+		req := roachpb.RecomputeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
+		}
+		var b kv.Batch
+		b.AddRawRequest(&req)
+		err := repl.store.db.Run(ctx, &b)
+		if err != nil {
+			log.Errorf(ctx, "Failed to recompute stats with error=%s", err)
+		}
+	}
 	return true, nil
 }
 
