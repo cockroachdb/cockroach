@@ -40,7 +40,7 @@ require (
 	github.com/cockroachdb/apd/v3 v3.1.0
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
-	github.com/cockroachdb/cockroach-go/v2 v2.2.6
+	github.com/cockroachdb/cockroach-go/v2 v2.2.14
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
 	github.com/cockroachdb/datadriven v1.0.1
 	github.com/cockroachdb/errors v1.9.0
@@ -93,7 +93,7 @@ require (
 	github.com/jackc/pgconn v1.12.1
 	github.com/jackc/pgproto3/v2 v2.3.0
 	github.com/jackc/pgtype v1.11.0
-	github.com/jackc/pgx/v4 v4.16.0
+	github.com/jackc/pgx/v4 v4.16.1
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20210709222130-81f5df3faab8
@@ -159,7 +159,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
+	golang.org/x/sys v0.0.0-20220622161953-175b2fd9d664
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac

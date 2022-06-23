@@ -1,0 +1,29 @@
+# LogicTest: cockroach-go-testserver
+
+query I
+SELECT 1
+----
+1
+
+query T
+SELECT crdb_internal.node_executable_version()
+----
+21.2
+
+upgrade 0
+
+upgrade 1
+
+upgrade 2
+
+# TODO(richardjcai): This will fail everytime we add a version
+# Also the upgrade will fail with the next major upgrade, be smarter here.
+query B
+SELECT crdb_internal.node_executable_version() SIMILAR TO '22.1-%%'
+----
+true
+
+query I
+SELECT 1
+----
+1

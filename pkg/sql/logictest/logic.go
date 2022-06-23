@@ -38,6 +38,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -66,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -575,6 +577,10 @@ type testClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	disableLocalityOptimizedSearch bool
+
+	useCockroachGoTestserver bool
+
+	cockroachBinaryVersion string
 }
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -982,6 +988,12 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:                 3,
 		backupRestoreProbability: envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0),
 		isCCLConfig:              true,
+	},
+	{
+		name:                     "cockroach-go-testserver",
+		useCockroachGoTestserver: true,
+		cockroachBinaryVersion:   "v21.2.12",
+		bootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
 	},
 }
 
@@ -1472,6 +1484,8 @@ type logicTest struct {
 	// cluster is the test cluster against which we are testing. This cluster
 	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
+	// testserverCluster is the testserver cluster. This uses real binaries.
+	testserverCluster testserver.TestServer
 	// sharedIODir is the ExternalIO directory that is shared between all clusters
 	// created in the same logicTest. It is populated during setup() of the logic
 	// test.
@@ -1660,13 +1674,28 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 		nodeIdx = nodeIdxOverride
 	}
 
-	addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
-	if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
-		addr = t.tenantAddrs[nodeIdx]
+	var addr string
+	var pgURL url.URL
+	var pgUser string
+	var cleanupFunc func()
+	if t.cfg.useCockroachGoTestserver {
+		pgUser = strings.TrimPrefix(user, "host-cluster-")
+		pgURL = *t.testserverCluster.PGURL()
+		// Hack to update user.
+		// TODO(richardjcai): Make PGURL take a user OR add method
+		// to testserver to return addr.
+		pgURL.User = url.User(pgUser)
+		cleanupFunc = func() {}
+	} else {
+		addr = t.cluster.Server(nodeIdx).ServingSQLAddr()
+		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
+			addr = t.tenantAddrs[nodeIdx]
+		}
+		pgUser = strings.TrimPrefix(user, "host-cluster-")
+		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
+		pgURL.Path = "test"
 	}
-	pgUser := strings.TrimPrefix(user, "host-cluster-")
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
-	pgURL.Path = "test"
+
 	db := t.openDB(pgURL)
 
 	// The default value for extra_float_digits assumed by tests is
@@ -1678,9 +1707,11 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 	// The default setting for index_recommendations_enabled is true. We do not
 	// want to display index recommendations in logic tests, so we disable them
-	// here.
-	if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
-		t.Fatal(err)
+	// here. This is only applicable if the bootstrap version is >= 22.1.
+	if !t.cfg.useCockroachGoTestserver {
+		if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.clients[user] = db
 	t.db = db
@@ -1706,6 +1737,54 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	})
 
 	return gosql.OpenDB(connector)
+}
+
+func (t *logicTest) newTestServerCluster(binaryPath string) {
+	var localBinary string
+	var upgradeBinary string
+	var found bool
+	if bazel.BuiltWithBazel() {
+		localBinary, found = bazel.FindBinary("pkg/cmd/cockroach", "cockroach")
+		if !found {
+			t.Fatal(errors.New("BuiltWithBazel: cockroach binary not found"))
+		}
+	} else {
+		// We're unable to find the name in PATH and "name" is a relative path:
+		// look in the cockroach repo.
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			gopath = filepath.Join(os.Getenv("HOME"), "go")
+		}
+
+		localBinary = gopath + "/src/github.com/cockroachdb/cockroach/cockroach"
+	}
+
+	if binaryPath == "" {
+		binaryPath = localBinary
+	} else {
+		// Use the local binary path as the upgrade version if the
+		// binary path is specified.
+		upgradeBinary = localBinary
+	}
+
+	opts := []testserver.TestServerOpt{
+		testserver.ThreeNodeOpt(),
+		testserver.StoreOnDiskOpt(),
+		testserver.CockroachBinaryPathOpt(binaryPath),
+	}
+
+	if upgradeBinary != "" {
+		opts = append(opts, testserver.UpgradeCockroachBinaryPathOpt(upgradeBinary))
+	}
+
+	ts, err := testserver.NewTestServer(opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.testserverCluster = ts
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(username.RootUser, 0 /* nodeIdxOverride */))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
@@ -2195,7 +2274,24 @@ func (t *logicTest) setup(
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
-	t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
+	if cfg.useCockroachGoTestserver {
+		var binaryPath string
+		var err error
+		if cfg.cockroachBinaryVersion != "" {
+			binaryPath, err = binfetcher.Download(context.Background(), binfetcher.Options{
+				Binary:  "cockroach",
+				Dir:     tempExternalIODir,
+				Version: cfg.cockroachBinaryVersion,
+				GOOS:    runtime.GOOS,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		t.newTestServerCluster(binaryPath)
+	} else {
+		t.newCluster(serverArgs, t.clusterOpts, t.tenantClusterSettingOverrideOpts)
+	}
 
 	// Only create the test database on the initial cluster, since cluster restore
 	// expects an empty cluster.
@@ -3431,6 +3527,24 @@ func (t *logicTest) processSubtest(
 			}
 			t.traceStop()
 
+		case "upgrade":
+			if len(fields) != 2 {
+				return errors.Errorf("traceon requires a filename argument, found: %v", fields)
+			}
+			if t.testserverCluster == nil {
+				return errors.Errorf("not a cockroach-go/testserver cluster")
+			}
+			nodeNum, err := strconv.Atoi(fields[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := t.testserverCluster.UpgradeNode(nodeNum); err != nil {
+				t.Fatal(err)
+			}
+			if err := t.testserverCluster.WaitForInitFinishForNode(nodeNum); err != nil {
+				t.Fatal(err)
+			}
+
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.line+subtest.lineLineIndexIntoFile, cmd,
@@ -4212,8 +4326,14 @@ func (t *logicTest) validateAfterTestCompletion() error {
 
 	// Ensure that all of the created descriptors can round-trip through json.
 	{
-		rows, err := t.db.Query(
-			`
+		// If `useCockroachGoTestserver` is true and we do an upgrade,
+		// this may fail if we're inbetween migrations running that
+		// upgrade the descriptors.
+		// TODO(richardcai): Should we wait until all migrations are
+		// done? The migrations can take up to in the order of minutes.
+		if !t.cfg.useCockroachGoTestserver {
+			rows, err := t.db.Query(
+				`
 SELECT encode(descriptor, 'hex') AS descriptor
   FROM system.descriptor
  WHERE descriptor
@@ -4226,17 +4346,18 @@ SELECT encode(descriptor, 'hex') AS descriptor
             )
         );
 `,
-		)
-		if err != nil {
-			return errors.Wrap(err, "failed to test for descriptor JSON round-trip")
-		}
-		rowsMat, err := sqlutils.RowsToStrMatrix(rows)
-		if err != nil {
-			return errors.Wrap(err, "failed read rows from descriptor JSON round-trip")
-		}
-		if len(rowsMat) > 0 {
-			return errors.Errorf("some descriptors did not round-trip:\n%s",
-				sqlutils.MatrixToStr(rowsMat))
+			)
+			if err != nil {
+				return errors.Wrap(err, "failed to test for descriptor JSON round-trip")
+			}
+			rowsMat, err := sqlutils.RowsToStrMatrix(rows)
+			if err != nil {
+				return errors.Wrap(err, "failed read rows from descriptor JSON round-trip")
+			}
+			if len(rowsMat) > 0 {
+				return errors.Errorf("some descriptors did not round-trip:\n%s",
+					sqlutils.MatrixToStr(rowsMat))
+			}
 		}
 	}
 
