@@ -34,7 +34,7 @@ func makeComparableValue(val interface{}) (typedValue, error) {
 	}
 	typ := vv.Type()
 	switch {
-	case isIntKind(typ.Kind()):
+	case isIntKind(typ.Kind()), isUintKind(typ.Kind()):
 		// We need to allocate a new pointer.
 		compType := getComparableType(typ)
 		vvNew := reflect.New(vv.Type())
@@ -45,7 +45,7 @@ func makeComparableValue(val interface{}) (typedValue, error) {
 		}, nil
 	case typ.Kind() == reflect.Ptr:
 		switch {
-		case isIntKind(typ.Elem().Kind()):
+		case isIntKind(typ.Elem().Kind()), isUintKind(typ.Elem().Kind()):
 			compType := getComparableType(typ.Elem())
 			return typedValue{
 				typ:   vv.Type().Elem(),

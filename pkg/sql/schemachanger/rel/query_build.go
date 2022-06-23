@@ -217,6 +217,12 @@ func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 			panic(err)
 		}
 		return p.fillSlot(slot{typedValue: tv}, false)
+	case notValueExpr:
+		tv, err := makeComparableValue(v.value)
+		if err != nil {
+			panic(err)
+		}
+		return p.fillSlot(slot{not: tv}, false)
 	default:
 		panic(errors.AssertionFailedf("unknown expr type %T", rawValue))
 	}
