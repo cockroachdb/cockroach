@@ -1255,7 +1255,17 @@ func (sc *SchemaChanger) distColumnBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.FractionProgressed(ctx, txn, jobs.FractionUpdater(fractionCompleted)); err != nil {
+				// Note that this explicitly uses a nil txn, which will lead to a new
+				// transaction being created as a part of this update. In general, the
+				// transaction in scope here is dubious: it exists, presumably, for the
+				// purpose of holding descriptor leases, but it isn't used in any of
+				// the writing logic of performing the backfill chunk. If we were to
+				// use it here, we'd place a lock on the jobs table which would not be
+				// released until the backfill chunk finished. That migh be quite a
+				// long time.
+				if err := sc.job.FractionProgressed(
+					ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted),
+				); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
 			}
