@@ -39,6 +39,12 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 //      expression in the usual way, since that would trigger premature
 //      evaluation.
 //
+//      However, there is a notable exception to this guarantee. When a branch
+//      is an uncorrelated subquery, it will be evaluated if a previous
+//      conditional does not evaluate to true at optimization-time. This is due
+//      to the fact that subqueries are eagerly evaluated when query execution
+//      begins. See #20298.
+//
 //   2. Volatile expressions are never treated as constant expressions, even
 //      though they do not depend on other columns in the query:
 //

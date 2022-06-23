@@ -523,79 +523,19 @@ statement ok
 SET TIME ZONE 'UTC'
 
 ## Test for to_timestamp without implicit type conversion
-query T
-SELECT to_timestamp(1646906263.123456)
+query TTT
+SELECT to_timestamp(1646906263.123456), to_timestamp(1646906263), to_timestamp('1646906263.123456')
 ----
-2022-03-10 09:57:43.123456 +0000 UTC
-
-query T
-SELECT to_timestamp('1646906263.123456')
-----
-2022-03-10 09:57:43.123456 +0000 UTC
-
-## Test for to_timestamp with implicit type conversion to int
-query T
-SELECT to_timestamp(1646906263.123456::INT)
-----
-2022-03-10 09:57:43 +0000 UTC
-
-query T
-SELECT to_timestamp(32767::INT2)
-----
-1970-01-01 09:06:07 +0000 UTC
-
-query T
-SELECT to_timestamp(1646906263.123456::INT4)
-----
-2022-03-10 09:57:43 +0000 UTC
-
-query T
-SELECT to_timestamp(1646906263.123456::INT8)
-----
-2022-03-10 09:57:43 +0000 UTC
-
-## Test for to_timestamp with implicit type conversion to float
-query T
-SELECT to_timestamp(1646906263.123456::FLOAT)
-----
-2022-03-10 09:57:43.123456 +0000 UTC
-
-query T
-SELECT to_timestamp(1646906263.123456::REAL)
-----
-2022-03-10 09:57:43.123456 +0000 UTC
-
-query T
-SELECT to_timestamp(1646906263.123456::DOUBLE PRECISION)
-----
-2022-03-10 09:57:43.123456 +0000 UTC
-
-## Test for to_timestamp with implicit type conversion to decimal
-query T
-SELECT to_timestamp(1646906263.123456::DECIMAL)
-----
-2022-03-10 09:57:43.123456 +0000 UTC
+2022-03-10 09:57:43.123456 +0000 UTC  2022-03-10 09:57:43 +0000 UTC  2022-03-10 09:57:43.123456 +0000 UTC
 
 ## Test for to_timestamp with positive and negative infinities
-query T
-SELECT to_timestamp('infinity'::DECIMAL)
+query TT
+SELECT to_timestamp('infinity'), to_timestamp('-infinity')
 ----
-294276-12-31 23:59:59.999999 +0000 UTC
-
-query T
-SELECT to_timestamp('-infinity'::DECIMAL)
-----
--4713-11-24 00:00:00 +0000 UTC
+294276-12-31 23:59:59.999999 +0000 UTC  -4713-11-24 00:00:00 +0000 UTC
 
 ## Test for to_timestamp with NULL
 query T
 SELECT to_timestamp(NULL)
 ----
 NULL
-
-## Test for invalid inputs
-statement error to_timestamp\(\): invalid input for type text
-SELECT to_timestamp('invalid')
-
-statement error unknown signature: to_timestamp\(\)
-SELECT to_timestamp()
