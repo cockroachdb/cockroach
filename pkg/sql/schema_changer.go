@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2381,6 +2382,9 @@ type GCJobTestingKnobs struct {
 	// protected timestamp status of a table or an index. The protection status is
 	// passed in along with the jobID.
 	RunAfterIsProtectedCheck func(jobID jobspb.JobID, isProtected bool)
+
+	// Notifier is used to optionally inject a new gcjobnotifier.Notifier.
+	Notifier *gcjobnotifier.Notifier
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
