@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "localbin",
+    srcs = ["localbinary.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/localbin",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/build/bazel"],
+)
