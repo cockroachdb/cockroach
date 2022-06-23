@@ -247,6 +247,16 @@ sudo systemd-run --property=Type=exec
 	if cfg.ioNemesis {
 		// Limit write throughput on s3 to 20mb/s. This is not enough to keep up
 		// with the workload, at least not in the long run, due to write amp.
+		//
+		// NB: I happen to have tested this on RAID0 and it doesn't quite behave
+		// as expected: the limit will be set on the `md0` device:
+		//
+		//   nvme1n1     259:0    0   500G  0 disk
+		//   └─md0         9:0    0 872.3G  0 raid0 /mnt/data1
+		//   nvme2n1     259:1    0 372.5G  0 disk
+		//   └─md0         9:0    0 872.3G  0 raid0 /mnt/data1
+		//
+		// and so the actual write throttle is about 2x what was set.
 		c.Run(ctx, c.Node(3), "sudo", "systemctl", "set-property", "cockroach", "'IOWriteBandwidthMax={store-dir} 20971520'")
 		t.L().Printf("installed write throughput limit on n3")
 	}
