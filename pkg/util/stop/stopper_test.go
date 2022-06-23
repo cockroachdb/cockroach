@@ -304,7 +304,8 @@ func TestStopperNumTasks(t *testing.T) {
 func TestStopperRunTaskPanic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ch := make(chan interface{})
-	s := stop.NewStopper(stop.OnPanic(func(v interface{}) {
+	s := stop.NewStopper(stop.OnPanic(func(ctx context.Context, v interface{}) {
+		log.Infof(ctx, "recovering from panic")
 		ch <- v
 	}))
 	defer s.Stop(context.Background())
@@ -331,11 +332,13 @@ func TestStopperRunTaskPanic(t *testing.T) {
 			)
 		},
 	} {
-		go test()
-		recovered := <-ch
-		if recovered != ch {
-			t.Errorf("%d: unexpected recovered value: %+v", i, recovered)
-		}
+		t.Run("", func(t *testing.T) {
+			go test()
+			recovered := <-ch
+			if recovered != ch {
+				t.Errorf("%d: unexpected recovered value: %+v", i, recovered)
+			}
+		})
 	}
 }
 
