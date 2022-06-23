@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -115,7 +117,7 @@ func EncodePartialIndexKey(
 			containsNull = true
 		}
 
-		dir, err := keyCol.Direction.ToEncodingDirection()
+		dir, err := catalogkeys.IndexColumnEncodingDirection(keyCol.Direction)
 		if err != nil {
 			return nil, false, err
 		}
@@ -127,11 +129,11 @@ func EncodePartialIndexKey(
 	return key, containsNull, nil
 }
 
-type directions []descpb.IndexDescriptor_Direction
+type directions []catpb.IndexColumn_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {
 	if i < len(d) {
-		return d[i].ToEncodingDirection()
+		return catalogkeys.IndexColumnEncodingDirection(d[i])
 	}
 	return encoding.Ascending, nil
 }
@@ -343,7 +345,7 @@ func MakeKeyFromEncDatums(
 
 	for i, val := range values {
 		encoding := descpb.DatumEncoding_ASCENDING_KEY
-		if keyCols[i].Direction == descpb.IndexDescriptor_DESC {
+		if keyCols[i].Direction == catpb.IndexColumn_DESC {
 			encoding = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		if val.IsNull() {
@@ -412,7 +414,7 @@ func DecodeIndexKey(
 	codec keys.SQLCodec,
 	types []*types.T,
 	vals []EncDatum,
-	colDirs []descpb.IndexDescriptor_Direction,
+	colDirs []catpb.IndexColumn_Direction,
 	key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	key, err := codec.StripTenantPrefix(key)
@@ -435,7 +437,7 @@ func DecodeIndexKey(
 // used will default to encoding.Ascending.
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
-	types []*types.T, vals []EncDatum, directions []descpb.IndexDescriptor_Direction, key []byte,
+	types []*types.T, vals []EncDatum, directions []catpb.IndexColumn_Direction, key []byte,
 ) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
@@ -443,7 +445,7 @@ func DecodeKeyVals(
 	}
 	for j := range vals {
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == descpb.IndexDescriptor_DESC) {
+		if directions != nil && (directions[j] == catpb.IndexColumn_DESC) {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error
@@ -464,7 +466,7 @@ func DecodeKeyValsUsingSpec(
 	for j := range vals {
 		c := keyCols[j]
 		enc := descpb.DatumEncoding_ASCENDING_KEY
-		if c.Direction == descpb.IndexDescriptor_DESC {
+		if c.Direction == catpb.IndexColumn_DESC {
 			enc = descpb.DatumEncoding_DESCENDING_KEY
 		}
 		var err error

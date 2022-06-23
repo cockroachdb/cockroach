@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -183,8 +183,8 @@ CREATE TABLE db.t (
 		KeyColumnIDs:      []descpb.ColumnID{1},
 		KeyColumnNames:    []string{"i"},
 		StoreColumnNames:  []string{},
-		KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-			descpb.IndexDescriptor_ASC,
+		KeyColumnDirections: []catpb.IndexColumn_Direction{
+			catpb.IndexColumn_ASC,
 		},
 		ConstraintID:                3,
 		UseDeletePreservingEncoding: true,
@@ -211,12 +211,18 @@ CREATE TABLE db.t (
 				return []scop.Op{
 					&scop.MakeAddedTempIndexDeleteOnly{
 						Index: scpb.Index{
-							TableID:             table.ID,
-							IndexID:             indexToAdd.ID,
-							KeyColumnIDs:        []catid.ColumnID{1},
-							KeyColumnDirections: []scpb.Index_Direction{scpb.Index_ASC},
+							TableID: table.ID,
+							IndexID: indexToAdd.ID,
 						},
 						IsSecondaryIndex: true,
+					},
+					&scop.AddColumnToIndex{
+						TableID:   table.ID,
+						ColumnID:  1,
+						IndexID:   indexToAdd.ID,
+						Kind:      scpb.IndexColumn_KEY,
+						Direction: catpb.IndexColumn_ASC,
+						Ordinal:   0,
 					},
 				}
 			},
@@ -278,14 +284,34 @@ func TestSchemaChanger(t *testing.T) {
 					scpb.ToPublic,
 					&scpb.PrimaryIndex{
 						Index: scpb.Index{
-							TableID:             fooTable.GetID(),
-							IndexID:             2,
-							KeyColumnIDs:        []catid.ColumnID{1},
-							KeyColumnDirections: []scpb.Index_Direction{scpb.Index_ASC},
-							StoringColumnIDs:    []catid.ColumnID{2},
-							IsUnique:            true,
-							SourceIndexID:       1,
+							TableID:       fooTable.GetID(),
+							IndexID:       2,
+							IsUnique:      true,
+							SourceIndexID: 1,
 						},
+					},
+					metadata,
+				),
+				scpb.MakeTarget(
+					scpb.ToPublic,
+					&scpb.IndexColumn{
+						TableID:   fooTable.GetID(),
+						IndexID:   2,
+						ColumnID:  1,
+						Ordinal:   0,
+						Direction: catpb.IndexColumn_ASC,
+						Kind:      scpb.IndexColumn_KEY,
+					},
+					metadata,
+				),
+				scpb.MakeTarget(
+					scpb.ToPublic,
+					&scpb.IndexColumn{
+						TableID:  fooTable.GetID(),
+						IndexID:  2,
+						ColumnID: 2,
+						Ordinal:  0,
+						Kind:     scpb.IndexColumn_STORED,
 					},
 					metadata,
 				),
@@ -330,12 +356,22 @@ func TestSchemaChanger(t *testing.T) {
 					scpb.ToAbsent,
 					&scpb.PrimaryIndex{
 						Index: scpb.Index{
-							TableID:             fooTable.GetID(),
-							IndexID:             1,
-							KeyColumnIDs:        []catid.ColumnID{1},
-							KeyColumnDirections: []scpb.Index_Direction{scpb.Index_ASC},
-							IsUnique:            true,
+							TableID:  fooTable.GetID(),
+							IndexID:  1,
+							IsUnique: true,
 						},
+					},
+					metadata,
+				),
+				scpb.MakeTarget(
+					scpb.ToPublic,
+					&scpb.IndexColumn{
+						TableID:   fooTable.GetID(),
+						IndexID:   1,
+						ColumnID:  1,
+						Ordinal:   0,
+						Direction: catpb.IndexColumn_ASC,
+						Kind:      scpb.IndexColumn_KEY,
 					},
 					metadata,
 				),

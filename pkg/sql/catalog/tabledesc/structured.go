@@ -679,7 +679,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		idx := descpb.IndexDescriptor{
 			Unique:              true,
 			KeyColumnNames:      []string{col.Name},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 		}
 		if err := desc.AddPrimaryIndex(idx); err != nil {
 			return err

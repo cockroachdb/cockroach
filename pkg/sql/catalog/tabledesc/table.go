@@ -207,7 +207,7 @@ func MakeColumnDefDescs(
 			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{string(d.Name)},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 			}
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
@@ -218,7 +218,7 @@ func MakeColumnDefDescs(
 			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{
 				Unique:              true,
 				KeyColumnNames:      []string{shardColName, string(d.Name)},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
 					Name:         shardColName,

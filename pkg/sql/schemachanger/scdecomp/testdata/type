@@ -139,45 +139,27 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
-      compositeColumnIds: []
       constraintId: 1
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      keySuffixColumnIds: []
       sharding: null
       sourceIndexId: 0
-      storingColumnIds:
-      - 2
-      - 4
-      - 5
       tableId: 108
       temporaryIndexId: 0
   Status: PUBLIC
 - SecondaryIndex:
     embeddedIndex:
-      compositeColumnIds: []
       constraintId: 0
       indexId: 2
       isConcurrently: false
       isCreatedExplicitly: false
       isInverted: false
       isUnique: false
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 2
-      keySuffixColumnIds:
-      - 1
       sharding: null
       sourceIndexId: 0
-      storingColumnIds: []
       tableId: 108
       temporaryIndexId: 0
   Status: PUBLIC
@@ -467,6 +449,54 @@ ElementState:
       usesTypeIds: []
     indexId: 2
     isRelationBeingDropped: false
+    tableId: 108
+  Status: PUBLIC
+- IndexColumn:
+    columnId: 1
+    direction: ASC
+    indexId: 1
+    kind: KEY
+    ordinal: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexColumn:
+    columnId: 1
+    direction: ASC
+    indexId: 2
+    kind: KEY_SUFFIX
+    ordinal: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexColumn:
+    columnId: 2
+    direction: ASC
+    indexId: 1
+    kind: STORED
+    ordinal: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexColumn:
+    columnId: 2
+    direction: ASC
+    indexId: 2
+    kind: KEY
+    ordinal: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexColumn:
+    columnId: 4
+    direction: ASC
+    indexId: 1
+    kind: STORED
+    ordinal: 1
+    tableId: 108
+  Status: PUBLIC
+- IndexColumn:
+    columnId: 5
+    direction: ASC
+    indexId: 1
+    kind: STORED
+    ordinal: 2
     tableId: 108
   Status: PUBLIC
 - ConstraintName:

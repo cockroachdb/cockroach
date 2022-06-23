@@ -467,6 +467,30 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
+- from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
 - from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -629,6 +653,18 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 106}, DROPPED]
+  to:   [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 106}, DROPPED]
@@ -1042,6 +1078,9 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
     [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT

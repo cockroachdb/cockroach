@@ -146,18 +146,6 @@ func (m *visitor) removeMutation(
 	return cpy, nil
 }
 
-func columnNamesFromIDs(tbl *tabledesc.Mutable, columnIDs descpb.ColumnIDs) ([]string, error) {
-	storeColNames := make([]string, 0, len(columnIDs))
-	for _, colID := range columnIDs {
-		column, err := tbl.FindColumnWithID(colID)
-		if err != nil {
-			return nil, err
-		}
-		storeColNames = append(storeColNames, column.GetName())
-	}
-	return storeColNames, nil
-}
-
 // MutationSelector defines a predicate on a catalog.Mutation with no
 // side-effects.
 type MutationSelector func(mutation catalog.Mutation) (matches bool)

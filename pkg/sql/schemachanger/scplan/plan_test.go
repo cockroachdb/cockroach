@@ -51,7 +51,9 @@ func TestPlanDataDriven(t *testing.T) {
 	ctx := context.Background()
 
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		})
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)

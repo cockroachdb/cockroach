@@ -17,6 +17,7 @@ go_library(
         "//pkg/keys",  # keep
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog",  # keep
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colmem",  # keep

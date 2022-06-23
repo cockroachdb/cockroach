@@ -159,7 +159,7 @@ type Index interface {
 	NumKeyColumns() int
 	GetKeyColumnID(columnOrdinal int) descpb.ColumnID
 	GetKeyColumnName(columnOrdinal int) string
-	GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
+	GetKeyColumnDirection(columnOrdinal int) catpb.IndexColumn_Direction
 
 	CollectKeyColumnIDs() TableColSet
 	CollectKeySuffixColumnIDs() TableColSet

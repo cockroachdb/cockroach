@@ -145,6 +145,8 @@ upsert descriptor #108
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    - ABSENT
@@ -179,6 +181,8 @@ upsert descriptor #108
   +    - 21
   +    - 22
   +    - 23
+  +    - 24
+  +    - 25
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -397,17 +401,30 @@ upsert descriptor #108
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 1
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          ordinal: 1
+  +          tableId: 108
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            - ASC
-  +            keyColumnIds:
-  +            - 2
-  +            - 1
   +            tableId: 108
   +      metadata:
   +        sourceElementId: 1
@@ -538,6 +555,8 @@ upsert descriptor #108
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    - ABSENT
@@ -572,6 +591,8 @@ upsert descriptor #108
   -    - 21
   -    - 22
   -    - 23
+  -    - 24
+  -    - 25
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -790,17 +811,30 @@ upsert descriptor #108
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 1
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          ordinal: 1
+  -          tableId: 108
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            - ASC
-  -            keyColumnIds:
-  -            - 2
-  -            - 1
   -            tableId: 108
   -      metadata:
   -        sourceElementId: 1
@@ -967,6 +1001,7 @@ upsert descriptor #109
   +    - WRITE_ONLY
   +    - ABSENT
   +    - ABSENT
+  +    - ABSENT
   +    - VALIDATED
   +    - ABSENT
   +    jobId: "1"
@@ -997,6 +1032,7 @@ upsert descriptor #109
   +    - 16
   +    - 17
   +    - 18
+  +    - 19
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1167,15 +1203,20 @@ upsert descriptor #109
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 109
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            tableId: 109
   +      metadata:
   +        sourceElementId: 1
@@ -1258,6 +1299,7 @@ upsert descriptor #109
   -    - WRITE_ONLY
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
   -    - VALIDATED
   -    - ABSENT
   -    jobId: "1"
@@ -1288,6 +1330,7 @@ upsert descriptor #109
   -    - 16
   -    - 17
   -    - 18
+  -    - 19
   -    targets:
   -    - elementProto:
   -        namespace:
@@ -1458,15 +1501,20 @@ upsert descriptor #109
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 109
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            tableId: 109
   -      metadata:
   -        sourceElementId: 1

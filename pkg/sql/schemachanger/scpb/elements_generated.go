@@ -544,6 +544,37 @@ func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target T
 	return current, target, element
 }
 
+func (e IndexColumn) element() {}
+
+// ForEachIndexColumn iterates over elements of type IndexColumn.
+func ForEachIndexColumn(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexColumn),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*IndexColumn); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindIndexColumn finds the first element of type IndexColumn.
+func FindIndexColumn(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexColumn) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*IndexColumn); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e IndexComment) element() {}
 
 // ForEachIndexComment iterates over elements of type IndexComment.

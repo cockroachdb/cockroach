@@ -64,9 +64,17 @@ StatementPhase stage 1 of 1 with 23 MutationType ops
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -642,6 +650,70 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
+- from: [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
+- from: [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
+  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
+  kind: SameStagePrecedence
+  rule: dependents removed after index no longer public
 - from: [IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -831,6 +903,38 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
+  to:   [IndexColumn:{DescID: 109, ColumnID: 5, IndexID: 1}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [Table:{DescID: 109}, DROPPED]
   to:   [IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -982,8 +1086,13 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 114, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 114, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 114, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 114, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 114, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 114, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndexPartial:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
