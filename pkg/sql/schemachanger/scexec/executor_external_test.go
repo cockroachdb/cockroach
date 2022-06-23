@@ -282,45 +282,12 @@ func TestSchemaChanger(t *testing.T) {
 			targets := []scpb.Target{
 				scpb.MakeTarget(
 					scpb.ToPublic,
-					&scpb.PrimaryIndex{
-						Index: scpb.Index{
-							TableID:       fooTable.GetID(),
-							IndexID:       2,
-							IsUnique:      true,
-							SourceIndexID: 1,
-						},
-					},
-					metadata,
-				),
-				scpb.MakeTarget(
-					scpb.ToPublic,
 					&scpb.IndexColumn{
 						TableID:       fooTable.GetID(),
-						IndexID:       2,
-						ColumnID:      1,
-						OrdinalInKind: 0,
-						Direction:     catpb.IndexColumn_ASC,
-						Kind:          scpb.IndexColumn_KEY,
-					},
-					metadata,
-				),
-				scpb.MakeTarget(
-					scpb.ToPublic,
-					&scpb.IndexColumn{
-						TableID:       fooTable.GetID(),
-						IndexID:       2,
+						IndexID:       1,
 						ColumnID:      2,
 						OrdinalInKind: 0,
 						Kind:          scpb.IndexColumn_STORED,
-					},
-					metadata,
-				),
-				scpb.MakeTarget(
-					scpb.ToPublic,
-					&scpb.IndexName{
-						TableID: fooTable.GetID(),
-						IndexID: 2,
-						Name:    "new_primary_key",
 					},
 					metadata,
 				),
@@ -352,47 +319,12 @@ func TestSchemaChanger(t *testing.T) {
 					},
 					metadata,
 				),
-				scpb.MakeTarget(
-					scpb.ToAbsent,
-					&scpb.PrimaryIndex{
-						Index: scpb.Index{
-							TableID:  fooTable.GetID(),
-							IndexID:  1,
-							IsUnique: true,
-						},
-					},
-					metadata,
-				),
-				scpb.MakeTarget(
-					scpb.ToPublic,
-					&scpb.IndexColumn{
-						TableID:       fooTable.GetID(),
-						IndexID:       1,
-						ColumnID:      1,
-						OrdinalInKind: 0,
-						Direction:     catpb.IndexColumn_ASC,
-						Kind:          scpb.IndexColumn_KEY,
-					},
-					metadata,
-				),
-				scpb.MakeTarget(
-					scpb.ToAbsent,
-					&scpb.IndexName{
-						TableID: fooTable.GetID(),
-						IndexID: 1,
-						Name:    "primary",
-					},
-					metadata,
-				),
 			}
 			current := []scpb.Status{
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
-				scpb.Status_ABSENT,
-				scpb.Status_PUBLIC,
-				scpb.Status_PUBLIC,
 			}
 			initial := scpb.CurrentState{
 				TargetState: scpb.TargetState{Statements: stmts, Targets: targets},
@@ -425,9 +357,6 @@ func TestSchemaChanger(t *testing.T) {
 			scpb.Status_PUBLIC,
 			scpb.Status_PUBLIC,
 			scpb.Status_PUBLIC,
-			scpb.Status_PUBLIC,
-			scpb.Status_ABSENT,
-			scpb.Status_ABSENT,
 		}, after.Current)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
