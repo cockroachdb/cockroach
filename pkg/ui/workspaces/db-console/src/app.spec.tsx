@@ -25,12 +25,12 @@ import { NodeGraphs } from "src/views/cluster/containers/nodeGraphs";
 import { NodeOverview } from "src/views/cluster/containers/nodeOverview";
 import { Logs } from "src/views/cluster/containers/nodeLogs";
 import { EventPageUnconnected } from "src/views/cluster/containers/events";
-import { JobsTable } from "src/views/jobs";
 import { DatabasesPage } from "src/views/databases/databasesPage";
 import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
 import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
 import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
 import {
+  JobsPage,
   StatementsPage,
   StatementDetails,
   TransactionsPage,
@@ -237,7 +237,7 @@ describe("Routing to", () => {
   describe("'/jobs' path", () => {
     it("routes to <JobsTable> component", () => {
       navigateToPath("/jobs");
-      assert.lengthOf(appWrapper.find(JobsTable), 1);
+      assert.lengthOf(appWrapper.find(JobsPage), 1);
     });
   });
 
