@@ -350,6 +350,42 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 		// TODO(postamar): can this even be possible?
 		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
 	}
+	// As a special case, if we have a new column which has no computed
+	// expression and no default value, then we can just add it to the
+	// current primary index; there's no need to build a new index as
+	// it would have exactly the same data as the current index.
+	//
+	// Note that it's not totally obvious that this is safe. In particular,
+	// if we were to fail the schema change, we'd need to roll back. Rolling
+	// back the addition of this new column to the primary index is only safe
+	// if no value was ever written to the column. Fortunately, we know that
+	// the only case that this column ever gets data written to it is if it
+	// becomes public and the only way the column becomes public is if the
+	// schema change makes it to the non-revertible phase (this is true because
+	// making a new column public is not revertible).
+	//
+	// If ever we were to change how we encoded NULLs, perhaps so that we could
+	// intepret a missing value as an arbitrary default expression, we'd need
+	// to revisit this optimization.
+	//
+	// TODO(ajwerner): The above comment is incorrect in that we don't mark
+	// the marking of a column public as non-revertible. In cases with more
+	// than a single statement or more complex schema changes in a transaction
+	// this is buggy. We need to change that but it causes other tests, namely
+	// in cdc, to fail because it leads to the new primary index being published
+	// to public before the column is published as public. We'll need to figure
+	// out how to make sure that that happens atomically. Leaving that for a
+	// follow-up change in order to get this in.
+	if spec.def == nil && spec.colType.ComputeExpr == nil {
+		b.Add(&scpb.IndexColumn{
+			TableID:       spec.tbl.TableID,
+			IndexID:       existing.IndexID,
+			ColumnID:      spec.col.ColumnID,
+			OrdinalInKind: getNextStoredIndexColumnOrdinal(allTargets, existing),
+			Kind:          scpb.IndexColumn_STORED,
+		})
+		return existing
+	}
 	// Drop all existing primary index elements.
 	b.Drop(existing)
 	var existingName *scpb.IndexName
