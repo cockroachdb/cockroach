@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["s3proxy.go"],
+    importpath = "github.com/buchgr/bazel-remote/cache/s3proxy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cache:go_default_library",
+        "//config:go_default_library",
+        "@com_github_minio_minio_go_v7//:go_default_library",
+        "@com_github_minio_minio_go_v7//pkg/credentials:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus/promauto:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["s3proxy_test.go"],
+    embed = [":go_default_library"],
+    deps = ["//cache:go_default_library"],
+)

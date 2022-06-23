@@ -1,0 +1,4 @@
+package acme.v1;
+
+option php_namespace = "foo";
+option php_metadata_namespace = "foo";

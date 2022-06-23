@@ -1,0 +1,18 @@
+language: go
+sudo: false
+
+go:
+  - 1.5
+  - 1.6
+
+before_install:
+  - ./install_protoc.sh
+  - export PATH=$PATH:$HOME/soft/protobuf
+
+install:
+  - go get github.com/stretchr/testify
+  - go get github.com/gogo/protobuf/protoc-gen-gogo
+  - go get github.com/golang/protobuf/protoc-gen-go
+
+script:
+ - make test

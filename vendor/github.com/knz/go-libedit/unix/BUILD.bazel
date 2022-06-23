@@ -1,0 +1,151 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+cc_library(
+    name = "libedit_unix_cdeps",
+    srcs = select({
+        "@io_bazel_rules_go//go/platform:android": glob([
+            "src/*.c",
+            "src/*.h",
+        ]),
+        "@io_bazel_rules_go//go/platform:linux": glob([
+            "src/*.c",
+            "src/*.h",
+        ]),
+        "//conditions:default": glob([
+            "shim/**/*.c",
+            "shim/**/*.h",
+        ]),
+    }),
+    hdrs = select({
+        "@io_bazel_rules_go//go/platform:android": glob([
+            "src/*.h",
+            "src/*.c",
+        ]),
+        "@io_bazel_rules_go//go/platform:linux": glob([
+            "src/*.h",
+            "src/*.c",
+        ]),
+        "//conditions:default": glob([
+            "shim/**/*.h",
+            "shim/**/*.c",
+        ]),
+    }),
+    deps = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "@com_github_knz_go_libedit//unix/src/c-libedit:c-libedit",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "@com_github_knz_go_libedit//unix/src/c-libedit:c-libedit",
+        ],
+        "//conditions:default": [],
+    }),
+    strip_include_prefix = select({
+        "@io_bazel_rules_go//go/platform:android": "src",
+        "@io_bazel_rules_go//go/platform:linux": "src",
+        "//conditions:default": "shim",
+    }),
+    copts = ["-DGO_LIBEDIT_NO_BUILD"],
+)
+
+go_library(
+    name = "unix",
+    srcs = [
+        "c_editline.c",
+        "c_editline.h",
+        "editline_unix.go",
+        "stub_find_word_to_complete.h",
+        "stub_fn_complete.h",
+        "wrap-chared.c",
+        "wrap-chartype.c",
+        "wrap-common.c",
+        "wrap-el.c",
+        "wrap-eln.c",
+        "wrap-emacs.c",
+        "wrap-filecomplete.c",
+        "wrap-hist.c",
+        "wrap-history.c",
+        "wrap-historyn.c",
+        "wrap-keymacro.c",
+        "wrap-map.c",
+        "wrap-parse.c",
+        "wrap-prompt.c",
+        "wrap-read.c",
+        "wrap-readline.c",
+        "wrap-refresh.c",
+        "wrap-search.c",
+        "wrap-sig.c",
+        "wrap-strlcat.c",
+        "wrap-strlcpy.c",
+        "wrap-terminal.c",
+        "wrap-tokenizer.c",
+        "wrap-tokenizern.c",
+        "wrap-tty.c",
+        "wrap-unvis.c",
+        "wrap-vi.c",
+        "wrap-vis.c",
+        "wrap-wcsdup.c",
+    ],
+    cdeps = [
+        ":libedit_unix_cdeps",
+    ],
+    cgo = True,
+    clinkopts = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "-lncurses",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "-ledit",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "-ledit",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "-ledit",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "-ledit",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-lncurses",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "-ledit",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "-ledit",
+        ],
+        "//conditions:default": [],
+    }),
+    copts = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "-Iunix/src -Iunix/src/c-libedit -Iunix/src/c-libedit/editline -Iunix/src/c-libedit/linux-build -D_GNU_SOURCE",
+            "-Wno-unused-result -Wno-pointer-sign",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "-Iunix/shim",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "-Iunix/shim",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "-Iunix/shim",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "-Iunix/shim",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-Iunix/src -Iunix/src/c-libedit -Iunix/src/c-libedit/editline -Iunix/src/c-libedit/linux-build -D_GNU_SOURCE",
+            "-Wno-unused-result -Wno-pointer-sign",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "-Iunix/shim",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "-Iunix/shim",
+        ],
+        "//conditions:default": [],
+    }),
+    importpath = "github.com/knz/go-libedit/unix",
+    visibility = ["//visibility:public"],
+    deps = ["//common"],
+)

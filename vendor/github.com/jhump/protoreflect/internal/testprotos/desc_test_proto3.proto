@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+package testprotos;
+
+import "desc_test1.proto";
+import "pkg/desc_test_pkg.proto";
+
+enum Proto3Enum {
+	UNKNOWN = 0;
+	VALUE1 = 1;
+	VALUE2 = 2;
+}
+
+message TestRequest {
+	repeated Proto3Enum foo = 1;
+	string bar = 2;
+	TestMessage baz = 3;
+	TestMessage.NestedMessage.AnotherNestedMessage snafu = 4;
+	map<string, bool> flags = 5;
+	map<string, TestMessage> others = 6;
+}
+
+message TestResponse {
+	AnotherTestMessage atm = 1;
+	repeated int32 vs = 2;
+}
+
+service TestService {
+	rpc DoSomething (TestRequest) returns (jhump.protoreflect.desc.Bar);
+	rpc DoSomethingElse (stream TestMessage) returns (TestResponse);
+	rpc DoSomethingAgain (jhump.protoreflect.desc.Bar) returns (stream AnotherTestMessage);
+	rpc DoSomethingForever (stream TestRequest) returns (stream TestResponse);
+}

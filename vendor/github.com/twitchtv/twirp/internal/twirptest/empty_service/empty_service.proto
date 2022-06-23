@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package twirp.internal.twirptest.emptyservice;
+
+// Test to make sure that a service with no methods doesn't break.
+option go_package = "/empty_service";
+
+service Empty{}

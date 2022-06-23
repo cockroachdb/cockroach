@@ -1,0 +1,20 @@
+language: go
+sudo: false
+
+go:
+  - 1.x
+  - master
+
+install:
+  - go get github.com/golang-commonmark/html
+  - go get github.com/golang-commonmark/linkify
+  - go get github.com/golang-commonmark/mdurl
+  - go get github.com/golang-commonmark/puny
+  - go get github.com/opennota/wd
+  - go get github.com/russross/blackfriday
+  - go build ./...
+
+script:
+  - test -z "$(gofmt -l . | tee /dev/stderr)"
+  - go test -v ./...
+

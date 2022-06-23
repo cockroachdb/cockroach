@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package a;
+
+message One {
+  int32 success = 1;
+  int32 success_two = 2;
+  int32 Fail = 3;
+  int32 FailTwo = 4;
+  int32 failThree = 5;
+  int32 fail_four_ = 6;
+  int32 _fail_five = 7;
+}
+
+message Two {
+  message Three {
+    message Four {
+      int32 success = 1;
+      int32 success_two = 2;
+      int32 Fail = 3;
+      int32 FailTwo = 4;
+      int32 failThree = 5;
+      int32 fail_four_ = 6;
+      int32 _fail_five = 7;
+    }
+    int32 success = 1;
+    int32 success_two = 2;
+    int32 Fail = 3;
+    int32 FailTwo = 4;
+    int32 failThree = 5;
+    int32 fail_four_ = 6;
+    int32 _fail_five = 7;
+  }
+}
+
+message Five {
+  int32 success1 = 1;
+  int32 success_2 = 2;
+  int32 success3_1 = 3;
+  int32 success_4_1 = 4;
+}

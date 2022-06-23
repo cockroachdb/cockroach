@@ -1,0 +1,9 @@
+dist: trusty
+language: go
+go:
+  - 1.12.x
+  - tip
+
+install: true
+
+script: make build test lint

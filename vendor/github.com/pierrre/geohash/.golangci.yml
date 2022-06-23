@@ -1,0 +1,28 @@
+run:
+  deadline: "10m"
+linters:
+  disable-all: true
+  enable:
+    - "bodyclose"
+    - "deadcode"
+    - "errcheck"
+    - "gocyclo"
+    - "gofmt"
+    - "goimports"
+    - "golint"
+    - "govet"
+    - "ineffassign"
+    - "megacheck"
+    - "misspell"
+    - "nakedret"
+    - "structcheck"
+    - "unconvert"
+    - "unparam"
+    - "varcheck"
+linters-settings:
+  gocyclo:
+    min-complexity: 10
+issues:
+  exclude-use-default: false
+  max-per-linter: 0
+  max-same-issues: 0

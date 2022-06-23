@@ -1,0 +1,28 @@
+syntax = "proto2";
+
+package a;
+
+message One {
+  option message_set_wire_format = false;
+  option no_standard_descriptor_accessor = true;
+}
+
+message Three {
+  message Four {
+    message Five {
+      option no_standard_descriptor_accessor = true;
+    }
+    message Six {
+      option message_set_wire_format = true;
+      extensions 4 to max;
+    }
+  }
+  message Seven {
+    option message_set_wire_format = false;
+  }
+  message Eight {
+    option message_set_wire_format = true;
+    extensions 4 to max;
+  }
+  option no_standard_descriptor_accessor = true;
+}

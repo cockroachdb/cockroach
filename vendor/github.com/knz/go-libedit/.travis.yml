@@ -1,0 +1,7 @@
+language: go
+matrix:
+  include:
+    - os: osx
+      osx_image: xcode8.3
+    - os: linux
+      dist: trusty

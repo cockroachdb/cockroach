@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+
+service One {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service One2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service Two2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service Three2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service Three {
+  rpc Foo(stream google.protobuf.Any) returns (google.protobuf.Any) {}
+  rpc Bar(google.protobuf.Any) returns (stream google.protobuf.Any) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+service Four {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}
+
+service Four2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}

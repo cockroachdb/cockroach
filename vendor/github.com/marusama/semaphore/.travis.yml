@@ -1,0 +1,21 @@
+language: go
+
+go:
+- 1.8.x
+- 1.9.x
+- 1.10.x
+- 1.11.x
+- 1.x
+- master
+
+branches:
+  only:
+  - master
+
+install:
+- go get golang.org/x/tools/cmd/cover
+- go get github.com/mattn/goveralls
+
+script:
+- go test -v -covermode=count -coverprofile=coverage.out
+- $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN

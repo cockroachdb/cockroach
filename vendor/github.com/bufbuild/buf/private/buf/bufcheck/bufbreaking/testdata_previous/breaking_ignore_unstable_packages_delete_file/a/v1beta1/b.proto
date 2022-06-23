@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package a.v1beta1;
+
+message B {}
+
+enum BEnum {
+  B_ENUM_UNSPECIFIED = 0;
+}
+
+service BService{}

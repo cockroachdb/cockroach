@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "disk.go",
+        "lru.go",
+    ],
+    importpath = "github.com/buchgr/bazel-remote/cache/disk",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cache:go_default_library",
+        "//genproto/build/bazel/remote/execution/v2:go_default_library",
+        "//utils/tempfile:go_default_library",
+        "@com_github_djherbis_atime//:go_default_library",
+        "@com_github_golang_protobuf//proto:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus/promauto:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "disk_test.go",
+        "lru_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//cache:go_default_library",
+        "//cache/httpproxy:go_default_library",
+        "//genproto/build/bazel/remote/execution/v2:go_default_library",
+        "//utils:go_default_library",
+        "@com_github_golang_protobuf//proto:go_default_library",
+    ],
+)

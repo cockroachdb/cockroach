@@ -1,0 +1,17 @@
+syntax = "proto2";
+
+package a;
+
+message One2 {
+  option no_standard_descriptor_accessor = true;
+}
+
+message Two {
+  option no_standard_descriptor_accessor = true;
+}
+
+
+message Nine {
+  option message_set_wire_format = true;
+  extensions 4 to max;
+}

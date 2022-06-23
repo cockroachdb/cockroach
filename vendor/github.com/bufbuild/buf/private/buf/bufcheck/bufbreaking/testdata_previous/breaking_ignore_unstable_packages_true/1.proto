@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+enum One {
+  ONE_UNSPECIFIED = 0;
+}
+
+enum Two {
+  TWO_UNSPECIFIED = 0;
+}
+
+message Three {
+  message Four {
+    enum Five {
+      FIVE_UNSPECIFIED = 0;
+    }
+    enum Six {
+      SIX_UNSPECIFIED = 0;
+    }
+  }
+  enum Seven {
+    SEVEN_UNSPECIFIED = 0;
+  }
+  enum Eight {
+    EIGHT_UNSPECIFIED = 0;
+  }
+}

@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package a;
+
+message Two {
+  reserved 100 to 200;
+  reserved 300;
+  reserved "foo";
+  int32 one = 1;
+  int32 two = 2;
+  int32 three = 3;
+}
+
+message Three {
+  message Four {
+    message Five {
+      reserved 100 to 200;
+      reserved 300;
+      reserved "foo";
+      int32 one = 1;
+      int32 two = 2;
+      int32 three = 3;
+    }
+    message Six {
+      reserved 4 to 5, 100 to 200;
+      reserved 300, 301, 1000 to max;
+      reserved "foo", "bar";
+      reserved "baz";
+      int32 one = 1;
+      int32 two = 2;
+      int32 three = 3;
+    }
+  }
+  message Seven {
+    reserved 100 to 200;
+    reserved 300;
+    reserved "foo";
+    int32 one = 1;
+    int32 two = 2;
+    int32 three = 3;
+  }
+  message Eight {
+    reserved 4 to 5, 100 to 200;
+    reserved 300, 301, 1000 to max;
+    reserved "foo", "bar";
+    reserved "baz";
+    int32 one = 1;
+    int32 two = 2;
+    int32 three = 3;
+  }
+  int32 one = 1;
+  int32 two = 2;
+  int32 three = 3;
+}

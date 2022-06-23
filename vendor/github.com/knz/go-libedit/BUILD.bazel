@@ -1,0 +1,67 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/knz/go-libedit
+gazelle(name = "gazelle")
+
+go_library(
+    name = "go-libedit",
+    srcs = [
+        "common.go",
+        "editline_other.go",
+        "editline_unix.go",
+        "version_check.go",
+    ],
+    importpath = "github.com/knz/go-libedit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "//other",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "//other",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "//other",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "//other",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "//other",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "//other",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//other",
+        ],
+        "//conditions:default": [],
+    }),
+)

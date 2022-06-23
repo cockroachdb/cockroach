@@ -1,0 +1,126 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
+load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+gazelle(
+    name = "gazelle",
+    prefix = "github.com/buchgr/bazel-remote",
+)
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/buchgr/bazel-remote",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//cache:go_default_library",
+        "//cache/disk:go_default_library",
+        "//cache/gcsproxy:go_default_library",
+        "//cache/httpproxy:go_default_library",
+        "//cache/s3proxy:go_default_library",
+        "//config:go_default_library",
+        "//server:go_default_library",
+        "//utils/idle:go_default_library",
+        "//utils/rlimit:go_default_library",
+        "@com_github_abbot_go_http_auth//:go_default_library",
+        "@com_github_grpc_ecosystem_go_grpc_prometheus//:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus/promhttp:go_default_library",
+        "@com_github_slok_go_http_metrics//metrics/prometheus:go_default_library",
+        "@com_github_slok_go_http_metrics//middleware:go_default_library",
+        "@com_github_slok_go_http_metrics//middleware/std:go_default_library",
+        "@com_github_urfave_cli_v2//:go_default_library",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//credentials:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "bazel-remote",
+    embed = [":go_default_library"],
+    pure = "on",
+    static = "on",
+    visibility = ["//visibility:public"],
+    x_defs = {"main.gitCommit": "{STABLE_GIT_COMMIT}"},
+)
+
+# The distroless static container image's nonroot user id.
+BAZEL_REMOTE_USER_ID = 65532
+
+go_image(
+    name = "bazel-remote-base",
+    embed = [":go_default_library"],
+    goarch = "amd64",
+    goos = "linux",
+    pure = "on",
+    static = "on",
+    visibility = ["//visibility:private"],
+    x_defs = {"main.gitCommit": "{STABLE_GIT_COMMIT}"},
+)
+
+go_image(
+    name = "bazel-remote-base-arm64",
+    embed = [":go_default_library"],
+    goarch = "arm64",
+    goos = "linux",
+    pure = "on",
+    static = "on",
+    visibility = ["//visibility:private"],
+    x_defs = {"main.gitCommit": "{STABLE_GIT_COMMIT}"},
+)
+
+container_image(
+    name = "bazel-remote-image",
+    base = ":bazel-remote-base",
+    cmd = ["--max_size=5"],
+    entrypoint = [
+        "/app/bazel-remote-base.binary",
+        "--port=8080",
+        "--dir=/data",
+
+        # Listen on all addresses, not just 127.0.0.1, so this can
+        # be reached from outside the container (with a -p mapping).
+        "--profile_host=",
+        # Specify a port to enable the profiling http server.
+        "--profile_port=6060",
+    ],
+    ports = ["8080"],
+    tars = [
+        "//docker:data_dir_tar",
+    ],
+    user = str(BAZEL_REMOTE_USER_ID),
+    visibility = ["//visibility:public"],
+)
+
+container_image(
+    name = "bazel-remote-image-arm64",
+    base = ":bazel-remote-base-arm64",
+    cmd = ["--max_size=1"],
+    entrypoint = [
+        "/app/bazel-remote-base-arm64.binary",
+        "--port=8080",
+        "--dir=/data",
+
+        # Listen on all addresses, not just 127.0.0.1, so this can
+        # be reached from outside the container (with a -p mapping).
+        "--profile_host=",
+        # Specify a port to enable the profiling http server.
+        "--profile_port=6060",
+    ],
+    ports = ["8080"],
+    tars = [
+        "//docker:data_dir_tar",
+    ],
+    user = str(BAZEL_REMOTE_USER_ID),
+    visibility = ["//visibility:public"],
+)
+
+container_push(
+    name = "push_to_dockerhub",
+    format = "Docker",
+    image = ":bazel-remote-image",
+    registry = "index.docker.io",
+    repository = "buchgr/bazel-remote-cache",
+    tag = "latest",
+    visibility = ["//visibility:public"],
+)

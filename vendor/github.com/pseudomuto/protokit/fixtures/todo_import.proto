@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+// This is really just in place to make sure imported files are included in the parsed result.
+package com.pseudomuto.protokit.v1;
+
+// Details for list items
+message ListItemDetails {
+  string notes = 1; // Some notes for the item
+}
+
+// A dummy enum to ensure importing works.
+enum ListItemDetailEnum {
+  DEFAULT = 0; // The default value.
+}

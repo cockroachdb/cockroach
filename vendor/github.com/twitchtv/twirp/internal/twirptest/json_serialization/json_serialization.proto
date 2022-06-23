@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+// Test JSON serialization for all types of fields
+option go_package = "/json_serialization";
+
+service JSONSerialization{
+  rpc EchoJSON(Msg) returns (Msg) {}
+}
+
+message Msg {
+  string query = 1;
+  int32 page_number = 2;
+  double hell = 3;
+  enum FooBar {
+    FOO = 0;
+    BAR = 1;
+  }
+  FooBar foobar = 4;
+  repeated string snippets = 5;
+
+  bool all_empty = 6;
+}
+
+message Result {
+
+}

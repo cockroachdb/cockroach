@@ -1,0 +1,118 @@
+syntax = "proto2";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+package testprotos;
+
+message UnaryFields {
+	optional int32 i = 1;
+	optional int64 j = 2;
+	optional sint32 k = 3;
+	optional sint64 l = 4;
+	optional uint32 m = 5;
+	optional uint64 n = 6;
+	optional fixed32 o = 7;
+	optional fixed64 p = 8;
+	optional sfixed32 q = 9;
+	optional sfixed64 r = 10;
+	optional float s = 11;
+	optional double t = 12;
+	optional bytes u = 13;
+	optional string v = 14;
+	optional bool w = 15;
+
+	optional RepeatedFields x = 16;
+	optional group GroupY = 17 {
+		optional string ya = 171;
+		optional int32 yb = 172;
+	}
+	optional TestEnum z = 18;
+}
+
+enum TestEnum {
+	INVALID = 0;
+	FIRST = 1;
+	SECOND = 2;
+	THIRD = 3;
+}
+
+message RepeatedFields {
+	repeated int32 i = 1;
+	repeated int64 j = 2;
+	repeated sint32 k = 3;
+	repeated sint64 l = 4;
+	repeated uint32 m = 5;
+	repeated uint64 n = 6;
+	repeated fixed32 o = 7;
+	repeated fixed64 p = 8;
+	repeated sfixed32 q = 9;
+	repeated sfixed64 r = 10;
+	repeated float s = 11;
+	repeated double t = 12;
+	repeated bytes u = 13;
+	repeated string v = 14;
+	repeated bool w = 15;
+
+	repeated UnaryFields x = 16;
+	repeated group GroupY = 17 {
+		optional string ya = 171;
+		optional int32 yb = 172;
+	}
+	repeated TestEnum z = 18;
+}
+
+message RepeatedPackedFields {
+	repeated int32 i = 1 [packed = true];
+	repeated int64 j = 2 [packed = true];
+	repeated sint32 k = 3 [packed = true];
+	repeated sint64 l = 4 [packed = true];
+	repeated uint32 m = 5 [packed = true];
+	repeated uint64 n = 6 [packed = true];
+	repeated fixed32 o = 7 [packed = true];
+	repeated fixed64 p = 8 [packed = true];
+	repeated sfixed32 q = 9 [packed = true];
+	repeated sfixed64 r = 10 [packed = true];
+	repeated float s = 11 [packed = true];
+	repeated double t = 12 [packed = true];
+	repeated bool u = 13 [packed = true];
+
+	repeated group GroupY = 14 {
+		repeated int32 yb = 141 [packed = true];
+	}
+	repeated TestEnum v = 15 [packed = true];
+}
+
+message MapKeyFields {
+	map<int32,string> i = 1;
+	map<int64,string> j = 2;
+	map<sint32,string> k = 3;
+	map<sint64,string> l = 4;
+	map<uint32,string> m = 5;
+	map<uint64,string> n = 6;
+	map<fixed32,string> o = 7;
+	map<fixed64,string> p = 8;
+	map<sfixed32,string> q = 9;
+	map<sfixed64,string> r = 10;
+	map<string,string> s = 11;
+	map<bool,string> t = 12;
+}
+
+message MapValFields {
+	map<string,int32> i = 1;
+	map<string,int64> j = 2;
+	map<string,sint32> k = 3;
+	map<string,sint64> l = 4;
+	map<string,uint32> m = 5;
+	map<string,uint64> n = 6;
+	map<string,fixed32> o = 7;
+	map<string,fixed64> p = 8;
+	map<string,sfixed32> q = 9;
+	map<string,sfixed64> r = 10;
+	map<string,float> s = 11;
+	map<string,double> t = 12;
+	map<string,bytes> u = 13;
+	map<string,string> v = 14;
+	map<string,bool> w = 15;
+	map<string,UnaryFields> x = 16;
+	map<string,TestEnum> y = 17;
+}

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package a;
+
+option java_package = "bar";
+option java_outer_classname = "bar";
+option java_multiple_files = false;
+option go_package = "bar";
+option objc_class_prefix = "bar";
+option csharp_namespace = "bar";
+option swift_prefix = "bar";
+option php_class_prefix = "bar";
+option php_namespace = "bar";
+option php_metadata_namespace = "bar";
+option ruby_package = "bar";
+
+option java_string_check_utf8 = false;
+option optimize_for = SPEED;
+option cc_generic_services = false;
+option java_generic_services = false;
+option py_generic_services = false;
+option php_generic_services = false;
+option cc_enable_arenas = false;

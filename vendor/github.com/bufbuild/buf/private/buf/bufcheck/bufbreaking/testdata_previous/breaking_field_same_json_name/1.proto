@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package a;
+
+message One {
+  int32 one = 1 [json_name = "foo"];
+  int32 two = 2 [json_name = "" ];
+  int32 three = 3;
+  repeated int32 four = 4 [json_name = "foo"];
+  repeated int32 five = 5 [json_name = "" ];
+  repeated int32 six = 6;
+  map<int32, int32> seven = 7 [json_name = "foo"];
+  map<int32, int32> eight = 8 [json_name = "" ];
+  map<int32, int32> nine = 9;
+}
+
+message Two {
+  int32 one = 1 [json_name = "foo"];
+  int32 two = 2 [json_name = "" ];
+  int32 three = 3;
+  repeated int32 four = 4 [json_name = "foo"];
+  repeated int32 five = 5 [json_name = "" ];
+  repeated int32 six = 6;
+  map<int32, int32> seven = 7 [json_name = "foo"];
+  map<int32, int32> eight = 8 [json_name = "" ];
+  map<int32, int32> nine = 9;
+}
+
+message Three {
+  message Four {
+    message Five {
+      int32 one = 1 [json_name = "foo"];
+      int32 two = 2 [json_name = "" ];
+      int32 three = 3;
+      repeated int32 four = 4 [json_name = "foo"];
+      repeated int32 five = 5 [json_name = "" ];
+      repeated int32 six = 6;
+      map<int32, int32> seven = 7 [json_name = "foo"];
+      map<int32, int32> eight = 8 [json_name = "" ];
+      map<int32, int32> nine = 9;
+    }
+    message Six {
+      int32 one = 1 [json_name = "foo"];
+      int32 two = 2 [json_name = "" ];
+      int32 three = 3;
+      repeated int32 four = 4 [json_name = "foo"];
+      repeated int32 five = 5 [json_name = "" ];
+      repeated int32 six = 6;
+      map<int32, int32> seven = 7 [json_name = "foo"];
+      map<int32, int32> eight = 8 [json_name = "" ];
+      map<int32, int32> nine = 9;
+    }
+  }
+  message Seven {
+    int32 one = 1 [json_name = "foo"];
+    int32 two = 2 [json_name = "" ];
+    int32 three = 3;
+    repeated int32 four = 4 [json_name = "foo"];
+    repeated int32 five = 5 [json_name = "" ];
+    repeated int32 six = 6;
+    map<int32, int32> seven = 7 [json_name = "foo"];
+    map<int32, int32> eight = 8 [json_name = "" ];
+    map<int32, int32> nine = 9;
+  }
+  message Eight {
+    int32 one = 1 [json_name = "foo"];
+    int32 two = 2 [json_name = "" ];
+    int32 three = 3;
+    repeated int32 four = 4 [json_name = "foo"];
+    repeated int32 five = 5 [json_name = "" ];
+    repeated int32 six = 6;
+    map<int32, int32> seven = 7 [json_name = "foo"];
+    map<int32, int32> eight = 8 [json_name = "" ];
+    map<int32, int32> nine = 9;
+  }
+}
+
+message Nine {
+  oneof foo {
+    int32 one = 1 [json_name = "foo"];
+    int32 two = 2 [json_name = "" ];
+    int32 three = 3;
+  }
+}

@@ -1,0 +1,51 @@
+ignoreGeneratedHeader = false
+severity = "warning"
+confidence = 0.8
+errorCode = 1
+warningCode = 1
+
+[rule.blank-imports]
+[rule.context-as-argument]
+[rule.context-keys-type]
+[rule.dot-imports]
+[rule.error-return]
+[rule.error-strings]
+[rule.error-naming]
+[rule.exported]
+[rule.if-return]
+[rule.increment-decrement]
+[rule.var-naming]
+[rule.var-declaration]
+[rule.package-comments]
+[rule.range]
+[rule.receiver-naming]
+[rule.time-naming]
+[rule.unexported-return]
+[rule.indent-error-flow]
+[rule.errorf]
+[rule.empty-block]
+[rule.superfluous-else]
+[rule.unused-parameter]
+[rule.unreachable-code]
+[rule.redefines-builtin-id]
+
+# The White Box Testing Blog suggests acceptable metrics for Cyclomatic Complexity,
+# 1-10 - simple, not much risk
+# 11-20 - complex, low risk
+# 21-50 - too complex, medium risk, attention
+# More than 50 - too complex, can't test , high risk
+
+# Configuration of the `cyclomatic` rule. Here we specify that
+# the rule should fail if it detects code with higher complexity than 20.
+[rule.cyclomatic]
+  arguments = [20]
+
+# Configuration of the `argument-limit` rule. Here we specify that
+# the rule should fail if the input arguments exceed 6.
+[rule.argument-limit]
+  arguments = [6]
+
+# Configuration of the `function-result-limit` rule. Here we specify that
+# the rule should fail if the returned results exceed 3.
+[rule.function-result-limit]
+  arguments = [3]

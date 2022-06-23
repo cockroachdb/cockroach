@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package a;
+
+enum Foo {
+  FOO_UNSPECIFIED = 0;
+  FOO_ONE = 1;
+  FOO_TWO = 2;
+}
+
+enum Bar {
+  option allow_alias = true;
+  BAR_UNSPECIFIED = 0;
+  BAR_ONE = 1;
+  BAR_TWO = 1;
+}
+
+enum Baz {
+  option allow_alias = true;
+  BAZ_UNSPECIFIED = 0;
+  BAZ_ONE = 1;
+  BAZ_TWO = 1;
+}
+
+enum Bat {
+  option allow_alias = false;
+  BAT_UNSPECIFIED = 0;
+  BAT_ONE = 1;
+  BAT_TWO = 2;
+}
+
+message One {
+  message Two {
+    enum Foo {
+      FOO_UNSPECIFIED = 0;
+      FOO_ONE = 1;
+      FOO_TWO = 2;
+    }
+
+    enum Bar {
+      option allow_alias = true;
+      BAR_UNSPECIFIED = 0;
+      BAR_ONE = 1;
+      BAR_TWO = 1;
+    }
+
+    enum Baz {
+      option allow_alias = true;
+      BAZ_UNSPECIFIED = 0;
+      BAZ_ONE = 1;
+      BAZ_TWO = 1;
+    }
+
+    enum Bat {
+      option allow_alias = false;
+      BAT_UNSPECIFIED = 0;
+      BAT_ONE = 1;
+      BAT_TWO = 2;
+    }
+  }
+  enum Foo {
+    FOO_UNSPECIFIED = 0;
+    FOO_ONE = 1;
+    FOO_TWO = 2;
+  }
+
+  enum Bar {
+    option allow_alias = true;
+    BAR_UNSPECIFIED = 0;
+    BAR_ONE = 1;
+    BAR_TWO = 1;
+  }
+
+  enum Baz {
+    option allow_alias = true;
+    BAZ_UNSPECIFIED = 0;
+    BAZ_ONE = 1;
+    BAZ_TWO = 1;
+  }
+
+  enum Bat {
+    option allow_alias = false;
+    BAT_UNSPECIFIED = 0;
+    BAT_ONE = 1;
+    BAT_TWO = 2;
+  }
+}

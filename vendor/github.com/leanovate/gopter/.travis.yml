@@ -1,0 +1,12 @@
+sudo: false
+language: go
+go:
+- 1.x
+script: make all coverage refreshGodoc
+before_install:
+  - pip install --user codecov
+after_success:
+  - codecov
+notifications:
+  slack:
+    secure: M0PgOUB0Kzn0maWtd6NNtiKYINxMY/7zgbbDpb8mAa6NTPYuypEYkUgmo6HC74BzDWSjkJaLQOeZrumrOuJUKbGdT+eEYR1pXColp2qb/WxnSCAwlL9iM/k7pj6nIRUdlP7l6WX0QB/DNh+BC/9STHrcSKjBpUu38oO9CwT7klSj2hfPMjzcx7EO4f8pjSfwCrIyYbANKxLzP0lr4PcbdY/ZeGbc8R5/m9torzPjS2YXDl0tQQ7pvSS8UVToLfL0m+omp9A/lOu0n6FpdNIkof2Eu9qWJqsI7jy+Pi+8DGbfEyxSLKAhDiTn0nfO/5nwqWIBhUaVACBDxpaH6ewpiuMbs4RO+wNaEEuVEH8QMKZOx9PGgnzNJ3zZ5Hfm+FP8zBrwrKlsjUoy31waGFjgua2ne4X0wa+Ld4iFEsj+XoMKa1oxRKRXYFhyEywalwgBVjXH2+ZCMlFGV3QxaV5gVuYcfEuNQ4pOlJpk+WSgm7yfXEX2qosOk2p91yGyX2Msbe3B7Ov3PXVzs2CshIsYasHr46pLplMvG6Z+712TPsrFS0zhb8FAsm/Vd7xX2xxmNS/uffh3RgFzeZxg8S9/ObVq+JBkZAtK4j0SwLVsOkjI4W3yUVgfxvhnAM1iLzzeSyD64BSo1VyUZu1eSJ9YxJ1+K6ldo0u0hj2VHwO1vUE=

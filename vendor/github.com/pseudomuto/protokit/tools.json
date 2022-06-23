@@ -1,0 +1,13 @@
+{
+  "Tools": [
+    {
+      "Repository": "github.com/golang/dep/cmd/dep",
+      "Commit": "37d9ea0ac16f0e0a05afc3b60e1ac8c364b6c329"
+    },
+    {
+      "Repository": "github.com/haya14busa/goverage",
+      "Commit": "eec3514a20b55dca311300eeb08fe5c8ab9ab781"
+    }
+  ],
+  "RetoolVersion": "1.3.5"
+}

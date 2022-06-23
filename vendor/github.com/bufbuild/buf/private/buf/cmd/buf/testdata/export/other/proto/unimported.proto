@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+// This file isn't imported so if we just export proto/ it should not appear.
+
+package request;
+
+message NotImported {
+  string name = 1;
+}

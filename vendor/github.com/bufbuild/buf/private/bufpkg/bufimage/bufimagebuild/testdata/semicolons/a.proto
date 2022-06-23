@@ -1,0 +1,41 @@
+syntax="proto3";;;;
+;;;
+;package a;;;;;
+;
+;;;;import "google/protobuf/descriptor.proto";
+;;
+;
+;;extend google.protobuf.FileOptions {
+	bool foo = 9999999;
+}
+;
+;message Bar {
+	;;;option deprecated = true;;;;
+	;;;;
+	int32 one = 1;;;;
+	;repeated bool two = 2 [deprecated = true];;
+	map<string, string> three = 3 [
+		deprecated = false
+	];;;;
+};;;;
+;;
+;enum Baz {
+	;;;;option deprecated = true;;;;
+
+	;DEFAULT = 0;;;;
+	ONE = 1;;;
+	TWO = 2;;;;
+};;;
+;;
+;service BatService {
+;	;option deprecated = true;;;;
+;
+	;rpc Bam(Bar) returns (Other);;;
+;
+	rpc Ban(Other) returns (Bar) {
+	;	;option deprecated = true;;;;
+	};;;;
+};;;;
+;
+;
+;;;;message Other{;;;};;;;;

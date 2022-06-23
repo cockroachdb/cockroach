@@ -1,0 +1,73 @@
+linters:
+  enable:
+  - asciicheck
+  - bodyclose
+  - deadcode
+  - depguard
+  - dogsled
+  - dupl
+  - errcheck
+  - exhaustive
+  - exportloopref
+  - forbidigo
+  - gocognit
+  - goconst
+  - gocritic
+  - gocyclo
+  - godot
+  - goerr113
+  - gofmt
+  - gofumpt
+  - goimports
+  - golint
+  - gomodguard
+  - goprintffuncname
+  - gosec
+  - gosimple
+  - govet
+  - ineffassign
+  - interfacer
+  - maligned
+  - makezero
+  - misspell
+  - nakedret
+  - nestif
+  - noctx
+  - nolintlint
+  - prealloc
+  - predeclared
+  - rowserrcheck
+  - scopelint
+  - sqlclosecheck
+  - staticcheck
+  - structcheck
+  - stylecheck
+  - typecheck
+  - unconvert
+  - unparam
+  - unused
+  - varcheck
+  - whitespace
+  disable:
+  - funlen
+  - gochecknoglobals
+  - godox
+  - gomnd
+  - lll
+  - testpackage
+  - wsl
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/twpayne/go-kml
+
+issues:
+  exclude-rules:
+  - linters:
+    - dupl
+    - scopelint
+    path: "_test\\.go"
+  - linters:
+    - forbidigo
+    - gosec
+    path: "internal/"

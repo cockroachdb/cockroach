@@ -1,0 +1,1 @@
+#include "libedit-terminal.c"

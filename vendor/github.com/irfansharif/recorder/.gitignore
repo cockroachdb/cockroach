@@ -1,0 +1,5 @@
+recorder-fuzz.zip
+suppressions
+crashers
+corpus/*
+!/corpus/golden*

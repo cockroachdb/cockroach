@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package b;
+
+message One {}
+
+message Two {
+  enum EnumOne {
+    ENUM_ONE_UNSPECIFIED = 0;
+  }
+}
+
+message Three {
+  message Four {
+    message Five {
+      enum EnumOne {
+        ENUM_ONE_UNSPECIFIED = 0;
+      }
+    }
+    message Six {}
+  }
+  message Seven {
+    enum EnumOne {
+      ENUM_ONE_UNSPECIFIED = 0;
+    }
+  }
+  message Eight {}
+}
+
+message Nine {}
+
+enum EnumOne {
+  ENUM_ONE_UNSPECIFIED = 0;
+}
+
+enum EnumTwo {
+  ENUM_TWO_UNSPECIFIED = 0;
+}
+
+service Foo {}
+service Bar {}
+service Baz {}

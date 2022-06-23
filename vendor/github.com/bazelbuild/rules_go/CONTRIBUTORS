@@ -1,0 +1,25 @@
+# People who have agreed to one of the CLAs and can contribute patches.
+# The AUTHORS file lists the copyright holders; this file
+# lists people.  For example, Google employees are listed here
+# but not in AUTHORS, because Google holds the copyright.
+#
+# https://developers.google.com/open-source/cla/individual
+# https://developers.google.com/open-source/cla/corporate
+#
+# Names should be added to this file as:
+#     Name <email address>
+
+Benjamin Staffin <benley@gmail.com>
+Brian Silverman <bsilver16384@gmail.com>
+Damien Martin-Guillerez <dmarting@google.com>
+David Chen <dzc@google.com>
+David Santiago <david.santiago@gmail.com>
+Han-Wen Nienhuys <hanwen@google.com>
+Ian Cottrell <iancottrell@google.com>
+Jake Voytko <jake@reviewninja.com>
+Jay Conrod <jayconrod@google.com>
+Josh Powell <powelljo@us.ibm.com>
+Justine Alexandra Roberts Tunney <jart@google.com>
+Kristina Chodorow <kchodorow@google.com>
+Lukacs Berki <lberki@google.com>
+Yuki Yugui Sonoda <yugui@yugui.jp>

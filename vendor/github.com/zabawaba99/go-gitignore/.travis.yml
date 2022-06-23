@@ -1,0 +1,62 @@
+language: go
+
+go:
+  - 1.9
+  - 1.10
+  - tip
+
+matrix:
+  allow_failures:
+    - go: tip
+  fast_finish: true
+
+before_install:
+  # linting tools
+  - go get github.com/golang/lint/golint
+  - go get github.com/fzipp/gocyclo
+
+  # code coverage
+  - go get github.com/axw/gocov/gocov
+  - go get github.com/mattn/goveralls
+  - if ! go get code.google.com/p/go.tools/cmd/cover; then go get golang.org/x/tools/cmd/cover; fi
+
+install:
+  # make sure stuff actually builds
+  - go build
+
+script:
+  # ensure everything is formatted all pretty like
+  - if gofmt -l -s . | grep '**.go'; then exit 1; fi
+  # vet out possible issues
+  - go vet ./...
+  # run tests
+  - go get -t
+  - go test -a -race -v ./...
+
+after_success:
+  - |
+    echo "mode: count" > profile.cov
+    for dir in $(find . -maxdepth 10 -not -path 'vendor' -not -path './.git*' -not -path '*/_*' -type d);
+    do
+    if ls $dir/*.go &> /dev/null; then
+      go test -covermode=count -coverprofile=$dir/profile.tmp $dir
+      if [ -f $dir/profile.tmp ]
+      then
+        cat $dir/profile.tmp | tail -n +2 >> profile.cov
+        rm $dir/profile.tmp
+      fi
+    fi
+    done
+    go tool cover -func profile.cov
+    goveralls -coverprofile=profile.cov -service=travis-ci -repotoken=$COVERALLS -v
+
+after_script:
+  # check possible styling errors
+  - golint ./...
+  # check for potentially complex functions but don't false build
+  - gocyclo -over 15 . || true
+  # refresh godocs in case there were api changes
+  - |
+    if [[ "$TRAVIS_PULL_REQUEST" == "false" ]] && [[ "$TRAVIS_BRANCH" == "master" ]]; then
+      go list ./... | xargs -n 1 -I{} curl http://godoc.org/-/refresh -d path={}
+    fi

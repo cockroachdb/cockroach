@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package a;
+
+enum Success {
+  SUCCESS_UNSPECIFIED = 0;
+}
+
+enum SuccessTwo {
+  SUCCESS_TWO_UNSPECIFIED = 0;
+}
+
+enum SuccessFOOThree {
+  SUCCESS_FOO_THREE_UNSPECIFIED = 0;
+}
+enum fail {
+  FAIL_UNSPECIFIED = 0;
+}
+enum failTwo {
+  FAIL_TWO_UNSPECIFIED = 0;
+}
+enum fail_three {
+  FAIL_THREE_UNSPECIFIED = 0;
+}
+enum Fail_four {
+  FAIL_FOUR_UNSPECIFIED = 0;
+}
+
+message Foo {
+  message Bar {
+    enum Success {
+      SUCCESS_UNSPECIFIED = 0;
+    }
+
+    enum SuccessTwo {
+      SUCCESS_TWO_UNSPECIFIED = 0;
+    }
+
+    enum SuccessFOOThree {
+      SUCCESS_FOO_THREE_UNSPECIFIED = 0;
+    }
+    enum fail {
+      FAIL_UNSPECIFIED = 0;
+    }
+    enum failTwo {
+      FAIL_TWO_UNSPECIFIED = 0;
+    }
+    enum fail_three {
+      FAIL_THREE_UNSPECIFIED = 0;
+    }
+    enum Fail_four {
+      FAIL_FOUR_UNSPECIFIED = 0;
+    }
+  }
+  enum Success {
+    SUCCESS_UNSPECIFIED = 0;
+  }
+
+  enum SuccessTwo {
+    SUCCESS_TWO_UNSPECIFIED = 0;
+  }
+
+  enum SuccessFOOThree {
+    SUCCESS_FOO_THREE_UNSPECIFIED = 0;
+  }
+  enum fail {
+    FAIL_UNSPECIFIED = 0;
+  }
+  enum failTwo {
+    FAIL_TWO_UNSPECIFIED = 0;
+  }
+  enum fail_three {
+    FAIL_THREE_UNSPECIFIED = 0;
+  }
+  enum Fail_four {
+    FAIL_FOUR_UNSPECIFIED = 0;
+  }
+}

@@ -1,0 +1,12 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "localbin",
+    srcs = ["localbinary.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/localbin",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/build/bazel"],
+)
+
+get_x_data(name = "get_x_data")

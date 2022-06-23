@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+// No package name
+
+option go_package = "github.com/twitchtv/twirp/internal/twirptest/no_package_name";
+
+message Msg {}
+
+service Svc {
+  rpc Send(Msg) returns(Msg);
+}

@@ -1,0 +1,16 @@
+language: go
+
+go:
+  - 1.x
+  - tip
+
+env:
+  global:
+    - STRESS_TEST_DURATION=15s
+
+script:
+  - go test -v -race
+
+matrix:
+  allow_failures:
+    - go: tip

@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package twirp.internal.gen.typemap.testdata.public_reimporter;
+
+import public "public_reimporter.proto";
+
+message ServiceMsg {
+  public_importer.PublicImporterMsgA a = 1;
+  public_importer.PublicImporterMsgB b = 2;
+  root_pkg.RootMsg c = 3;
+  importer.ImporterMsg d = 4;
+}
+
+message Parent {
+  message NestedOuter{
+    message NestedInner{}
+  }
+}
+
+service EmptyService {}
+
+service ServiceWithOneMethod{
+  // Method1 leading
+  rpc Method1(root_pkg.RootMsg) returns (importer.ImporterMsg);
+  // Method1 trailing
+}
+
+// ServiceWithManyMethods leading
+service ServiceWithManyMethods{
+  // Method1 leading
+  rpc Method1(root_pkg.RootMsg) returns (importer.ImporterMsg);
+  // Method2 leading
+  rpc Method2(Parent) returns (Parent.NestedOuter);
+  // Method2 trailing
+
+  rpc Method3(importer.ImporterMsg.ImporterInner) returns (Parent.NestedOuter.NestedInner);
+}

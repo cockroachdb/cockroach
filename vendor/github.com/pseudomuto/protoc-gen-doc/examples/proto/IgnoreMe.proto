@@ -1,0 +1,14 @@
+/**
+ * This file should be ignored when making example docs.
+ *
+ */
+syntax = "proto3";
+
+package com.example;
+
+/**
+ * This message should be ignored when making example docs.
+ */
+message Ignored {
+  string name = 2;
+}

@@ -1,0 +1,6 @@
+package acme.weather;
+
+option java_multiple_files = true;
+option java_string_check_utf8 = false;
+option java_package = "foo";
+option java_outer_classname = "foo";

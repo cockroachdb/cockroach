@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package a;
+
+import "b/b.proto";
+import "c/c.proto";
+
+message A {
+    b.B b = 1;
+    c.C c = 2;
+}

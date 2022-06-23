@@ -1,0 +1,32 @@
+language: go
+
+env:
+  global:
+    - PROTOC_RELEASE="https://github.com/google/protobuf/releases/download/v3.5.1/protoc-3.5.1-linux-x86_64.zip"
+    - PROTOC_TARGET="${HOME}/protoc"
+    - PATH="${PROTOC_TARGET}/bin:${PATH}"
+
+go:
+  - 1.10.x
+  - master
+
+cache:
+  - "${HOME}/protoc"
+  - "${GOPATH}/src/github.com/pseudomuto/protokit/_tools"
+  - "${GOPATH}/src/github.com/pseudomuto/protokit/vendor"
+
+install:
+  - if [ ! -d "${PROTOC_TARGET}" ]; then curl -fsSL "${PROTOC_RELEASE}" > "${PROTOC_TARGET}.zip"; fi
+  - if [ -f "${PROTOC_TARGET}.zip" ]; then unzip "${PROTOC_TARGET}.zip" -d "${PROTOC_TARGET}"; fi
+  - go get github.com/golang/protobuf/{proto,protoc-gen-go}
+  - go get github.com/twitchtv/retool
+  - make setup
+
+script:
+  - make test-ci
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
+
+notifications:
+  email: false

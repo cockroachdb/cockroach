@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package a;
+
+enum One {
+  ONE_UNSPECIFIED = 0;
+  ONE_ONE = 1;
+  ONE_TWO = 2;
+}
+
+enum Two {
+  TWO_UNSPECIFIED = 0;
+  TWO_ONE = 1;
+  TWO_TWO = 2;
+}
+
+message Three {
+  message Four {
+    enum Five {
+      FIVE_UNSPECIFIED = 0;
+      FIVE_ONE = 1;
+      FIVE_TWO = 2;
+    }
+    enum Six {
+      SIX_UNSPECIFIED = 0;
+      SIX_ONE = 1;
+      SIX_TWO = 2;
+    }
+  }
+  enum Seven {
+    SEVEN_UNSPECIFIED = 0;
+    SEVEN_ONE = 1;
+    SEVEN_TWO = 2;
+  }
+  enum Eight {
+    EIGHT_UNSPECIFIED = 0;
+    EIGHT_ONE = 1;
+    EIGHT_TWO = 2;
+  }
+}
+
+enum Nine {
+  NINE_UNSPECIFIED = 0;
+  NINE_ONE = 1;
+  NINE_TWO = 2;
+}
+
+enum Ten {
+  option allow_alias = true;
+  TEN_UNSPECIFIED = 0;
+  TEN_ONE = 1;
+  TEN_TWO = 1;
+}
+
+enum Eleven {
+  option allow_alias = true;
+  ELEVEN_UNSPECIFIED = 0;
+  ELEVEN_ONE = 1;
+  ELEVEN_TWO = 1;
+}
+
+enum Twelve {
+  option allow_alias = true;
+  TWELVE_UNSPECIFIED = 0;
+  TWELVE_ONE = 1;
+  TWELVE_TWO = 1;
+}

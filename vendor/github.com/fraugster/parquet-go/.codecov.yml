@@ -1,0 +1,8 @@
+# The patch diff coverage report in pull requests is confusing at best so its
+# disabled. Note that normal coverage is still collected.
+
+coverage:
+  status:
+    patch:
+      default:
+        enabled: no

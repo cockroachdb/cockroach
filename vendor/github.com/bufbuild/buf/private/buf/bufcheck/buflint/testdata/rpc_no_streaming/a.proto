@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/empty.proto";
+
+service Foo {
+  rpc NoStreaming(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc RequestStreaming(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc ResponseStreaming(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+  rpc BothStreaming(stream google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}

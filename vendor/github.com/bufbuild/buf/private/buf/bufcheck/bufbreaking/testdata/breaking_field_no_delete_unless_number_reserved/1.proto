@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package a;
+
+message Two {
+  reserved 3 ;
+
+  int32 one = 1;
+}
+
+message Three {
+  message Four {
+    message Five {
+      reserved 3 ;
+
+      int32 one = 1;
+    }
+    message Six {
+      int32 one = 1;
+      int32 two = 2;
+      int32 three = 3;
+    }
+  }
+  message Seven {
+    reserved 3 ;
+
+    int32 one = 1;
+  }
+  message Eight {
+    int32 one = 1;
+    int32 changed_name = 2;
+    int32 three = 3;
+  }
+  int32 one = 1;
+}
+
+message Ten {
+  reserved 2 to 3;
+  reserved 5 to max;
+  int32 one = 1;
+  int32 four = 4;
+}

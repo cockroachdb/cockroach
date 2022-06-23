@@ -1,0 +1,88 @@
+/** Messages describing manufacturers / vehicles. */
+syntax = "proto2";
+
+package com.example;
+
+/**
+ * Represents a manufacturer of cars.
+ */
+message Manufacturer {
+  /**
+   * Manufacturer category. A manufacturer may be either inhouse or external.
+   */
+  enum Category {
+    CATEGORY_INHOUSE  = 0;  /** The manufacturer is inhouse. */
+    CATEGORY_EXTERNAL = 1; /** The manufacturer is external. */
+  }
+
+  required int32 id       = 1; /** The unique manufacturer ID. */
+  required string code    = 2; /** A manufacturer code, e.g. "DKL4P". */
+  optional string details = 3; /** Manufacturer details (minimum orders et.c.). */
+
+  /** Manufacturer category. */
+  optional Category category = 4 [default = CATEGORY_EXTERNAL];
+
+  extensions 100 to max;
+}
+
+// File-level extensions can also be documented:
+
+extend Manufacturer {
+  /** Manufacturer country. */
+  optional string country = 100 [default = "China"];
+}
+
+/**
+ * Represents a vehicle model.
+ */
+message Model {
+  required string id         = 1; /** The unique model ID. */
+  required string model_code = 2; /** The car model code, e.g. "PZ003". */
+  required string model_name = 3; /** The car model name, e.g. "Z3". */
+
+  required sint32 daily_hire_rate_dollars = 4; /// Dollars per day.
+  required sint32 daily_hire_rate_cents   = 5; /// Cents per day.
+
+  extensions 100 to max;
+}
+
+/**
+ * Represents a vehicle that can be hired.
+ */
+message Vehicle {
+  /**
+   * Represents a vehicle category. E.g. "Sedan" or "Truck".
+   */
+  message Category {
+    required string code        = 1; /// Category code. E.g. "S".
+    required string description = 2; /// Category name. E.g. "Sedan".
+  }
+
+  required int32 id          = 1; /** Unique vehicle ID. */
+  required Model model       = 2; /** Vehicle model. */
+  required string reg_number = 3; /** Vehicle registration number. */
+  optional sint32 mileage    = 4; /** Current vehicle mileage, if known. */
+  optional Category category = 5; /** Vehicle category. */
+
+  // Doc comments for fields can come before or
+  // after the field definition. And just like
+  // comments for messages / enums, they can be
+  // multi-paragraph:
+
+  /**
+   * Dollars per day.
+   */
+  optional sint32 daily_hire_rate_dollars = 6 [default = 50];
+
+  /**
+   * Cents per day.
+   */
+  optional sint32 daily_hire_rate_cents = 7;
+
+  // Nested extensions can also be documented:
+
+  extend Model {
+    /** Vehicle model series. */
+    optional string series = 100;
+  }
+}

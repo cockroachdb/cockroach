@@ -1,0 +1,7 @@
+.idea
+.DS_Store
+*.swp
+*.test
+
+# Files output by tests
+/bin

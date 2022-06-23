@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "rlimit_darwin.go",
+        "rlimit_unix.go",
+        "rlimit_windows.go",
+    ],
+    importpath = "github.com/buchgr/bazel-remote/utils/rlimit",
+    visibility = ["//visibility:public"],
+)

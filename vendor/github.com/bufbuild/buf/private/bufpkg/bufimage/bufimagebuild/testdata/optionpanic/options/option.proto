@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package options;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FileOptions {
+  MyOption my_option = 9999;
+}
+
+message MyOption {
+  repeated MyArray my_array = 1;
+}
+
+message MyArray {
+  message TestMessage {
+  }
+  map<string, TestMessage> my_map = 1;
+}

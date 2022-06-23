@@ -1,0 +1,9 @@
+language: go
+go_import_path: github.com/pkg/profile
+go:
+  - 1.13.x
+  - 1.14.x
+  - tip
+
+script:
+  - go test -race github.com/pkg/profile

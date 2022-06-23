@@ -1,0 +1,17 @@
+go_import_path: github.com/kevinburke/go-bindata
+
+language: go
+
+go:
+  # go vet --all doesn't work with 1.8 or 1.7
+  - '1.11.x'
+  - master
+
+script:
+  # Travis CI checks out with a file mode of 664. We want 644 (which is what the
+  # testdata outputs have). This is the dumbest way to accomplish that.
+  - find testdata/in -type f | xargs chmod 0644
+  - make ci
+  - make bench
+
+sudo: false

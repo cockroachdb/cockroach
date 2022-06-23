@@ -1,0 +1,282 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/empty.proto";
+
+enum EnumFoo {
+  ENUM_FOO_UNSPECIFIED = 0;
+  ENUM_FOO_ONE = 1;
+}
+
+message MessageFoo {
+  message MessageBar {
+    enum Foo {
+      FOO_UNSPECIFIED = 0;
+      FOO_ONE = 1;
+    }
+    message MessageBaz {
+      int64 foo = 1;
+      oneof bar {
+        int64 baz = 2;
+      }
+    }
+    int64 foo = 1;
+    oneof bar {
+      int64 baz = 2;
+    }
+  }
+  enum Foo {
+    FOO_UNSPECIFIED = 0;
+    FOO_ONE = 1;
+  }
+  int64 foo = 1;
+  oneof bar {
+    int64 baz = 2;
+  }
+}
+
+service ServiceFoo {
+  rpc MethodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+// comment
+enum EnumFoo2 {
+  // comment
+  ENUM_FOO2_UNSPECIFIED = 0;
+  // comment
+  ENUM_FOO2_ONE = 1;
+}
+
+// comment
+message MessageFoo2 {
+  // comment
+  message MessageBar {
+  // comment
+    enum Foo {
+  // comment
+      FOO_UNSPECIFIED = 0;
+  // comment
+      FOO_ONE = 1;
+    }
+    // comment
+    message MessageBaz {
+      // comment
+      int64 foo = 1;
+      // comment
+      oneof bar {
+        // comment
+        int64 baz = 2;
+      }
+    }
+        // comment
+    int64 foo = 1;
+        // comment
+    oneof bar {
+        // comment
+      int64 baz = 2;
+    }
+  }
+  // comment
+  enum Foo {
+    // comment
+    FOO_UNSPECIFIED = 0;
+    // comment
+    FOO_ONE = 1;
+  }
+  // comment
+  int64 foo = 1;
+  // comment
+  oneof bar {
+    // comment
+    int64 baz = 2;
+  }
+}
+
+// comment
+service ServiceFoo2 {
+  // comment
+  rpc MethodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  // comment
+  rpc MethodBar(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+enum EnumFoo3 {
+  ENUM_FOO3_UNSPECIFIED = 0; // bad comment
+  ENUM_FOO3_ONE = 1; // bad comment
+} // bad comment
+
+message MessageFoo3 {
+  message MessageBar {
+    enum Foo {
+      FOO_UNSPECIFIED = 0; // bad comment
+      FOO_ONE = 1; // bad comment
+    } // bad comment
+    message MessageBaz {
+      int64 foo = 1; // bad comment
+      oneof bar { // bad comment
+        int64 baz = 2; // bad comment
+      } // bad comment
+    }
+    int64 foo = 1; // bad comment
+    oneof bar { // bad comment
+      int64 baz = 2; // bad comment
+    } // bad comment
+  } // bad comment
+  enum Foo { // bad comment
+    FOO_UNSPECIFIED = 0; // bad comment
+    FOO_ONE = 1; // bad comment
+  } // bad comment
+  int64 foo = 1; // bad comment
+  oneof bar { // bad comment
+    int64 baz = 2; // bad comment
+  } // bad comment
+}
+
+service ServiceFoo3 {
+  rpc MethodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {} // bad comment
+  rpc MethodBar(google.protobuf.Empty) returns (google.protobuf.Empty); // bad comment
+}
+
+//
+enum EnumFoo4 {
+  //
+  ENUM_FOO4_UNSPECIFIED = 0;
+  //
+  ENUM_FOO4_ONE = 1;
+}
+
+//
+message MessageFoo4 {
+  //
+  message MessageBar {
+  //
+    enum Foo {
+  //
+      FOO_UNSPECIFIED = 0;
+  //
+      FOO_ONE = 1;
+    }
+    //
+    message MessageBaz {
+      //
+      int64 foo = 1;
+      //
+      oneof bar {
+        //
+        int64 baz = 2;
+      }
+    }
+        //
+    int64 foo = 1;
+        //
+    oneof bar {
+        //
+      int64 baz = 2;
+    }
+  }
+  //
+  enum Foo {
+    //
+    FOO_UNSPECIFIED = 0;
+    //
+    FOO_ONE = 1;
+  }
+  //
+  int64 foo = 1;
+  //
+  oneof bar {
+    //
+    int64 baz = 2;
+  }
+}
+
+//
+service ServiceFoo4 {
+  //
+  rpc MethodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  //
+  rpc MethodBar(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+/*   */
+enum EnumFoo5 {
+  /*   */
+  ENUM_FOO5_UNSPECIFIED = 0;
+  /*   */
+  ENUM_FOO5_ONE = 1;
+}
+
+/*   */
+message MessageFoo5 {
+  /*   */
+  message MessageBar {
+  /*   */
+    enum Foo {
+  /*   */
+      FOO_UNSPECIFIED = 0;
+  /*   */
+      FOO_ONE = 1;
+    }
+    /*   */
+    message MessageBaz {
+      /*   */
+      int64 foo = 1;
+      /*   */
+      oneof bar {
+        /*   */
+        int64 baz = 2;
+      }
+    }
+        /*   */
+    int64 foo = 1;
+        /*   */
+    oneof bar {
+        /*   */
+      int64 baz = 2;
+    }
+  }
+  /*   */
+  enum Foo {
+    /*   */
+    FOO_UNSPECIFIED = 0;
+    /*   */
+    FOO_ONE = 1;
+  }
+  /*   */
+  int64 foo = 1;
+  /*   */
+  oneof bar {
+    /*   */
+    int64 baz = 2;
+  }
+}
+
+/*   */
+service ServiceFoo5 {
+  /*   */
+  rpc MethodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  /*   */
+  rpc MethodBar(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+message Baz {
+  map<int64, string> one = 1;
+}
+
+// comment
+service ServiceFoo6 {
+  // this method should pass lint
+  rpc MethodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  //buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE this method should fail lint
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  rpc MethodBar(google.protobuf.Empty) returns (google.protobuf.Empty);
+  //buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE this method should also fail lint
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  //
+  rpc MethodBaz(google.protobuf.Empty) returns (google.protobuf.Empty);
+  //buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // this method should pass lint
+  rpc MethodBat(google.protobuf.Empty) returns (google.protobuf.Empty);
+}

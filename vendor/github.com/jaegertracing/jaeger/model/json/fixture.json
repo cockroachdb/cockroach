@@ -1,0 +1,102 @@
+{
+  "traceID": "abc0",
+  "spans": [
+    {
+      "traceID": "abc0",
+      "spanID": "abc0",
+      "operationName": "root-span",
+      "references": null,
+      "startTime": 1000,
+      "duration": 500,
+      "tags": null,
+      "logs": null,
+      "processID": "p1",
+      "warnings": null
+    },
+    {
+      "traceID": "abc0",
+      "spanID": "123",
+      "operationName": "span1",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "abc0",
+          "spanID": "abc0"
+        }
+      ],
+      "startTime": 1000,
+      "duration": 500,
+      "tags": [
+        {
+          "key": "error",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "key": "int64",
+          "type": "int64",
+          "value": 123
+        },
+        {
+          "key": "float64",
+          "type": "float64",
+          "value": 123.567
+        },
+        {
+          "key": "binary",
+          "type": "binary",
+          "value": "AQ=="
+        }
+      ],
+      "logs": [
+        {
+          "timestamp": 1400,
+          "fields": [
+            {
+              "key": "error",
+              "type": "string",
+              "value": "something bad happened"
+            }
+          ]
+        }
+      ],
+      "processID": "p2",
+      "warnings": null
+    },
+    {
+      "traceID": "abc0",
+      "spanID": "567",
+      "operationName": "span2",
+      "references": [
+        {
+          "refType": "FOLLOWS_FROM",
+          "traceID": "abc0",
+          "spanID": "abc0"
+        }
+      ],
+      "startTime": 1000,
+      "duration": 500,
+      "tags": null,
+      "logs": null,
+      "processID": "p2",
+      "warnings": null
+    }
+  ],
+  "processes": {
+    "p1": {
+      "serviceName": "service_1",
+      "tags": null
+    },
+    "p2": {
+      "serviceName": "service_2",
+      "tags": [
+        {
+          "key": "host",
+          "type": "string",
+          "value": "google.com"
+        }
+      ]
+    }
+  },
+  "warnings": null
+}

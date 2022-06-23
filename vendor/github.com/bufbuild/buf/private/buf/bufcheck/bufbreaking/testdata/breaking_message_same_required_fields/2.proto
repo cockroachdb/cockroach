@@ -1,0 +1,7 @@
+syntax = "proto2";
+
+package a;
+
+message One2 {
+  required string two = 2;
+}

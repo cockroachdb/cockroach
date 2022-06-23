@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package example;
+
+import "request.proto";
+
+message RPC {
+    request.Request request = 1;
+}

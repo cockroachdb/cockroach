@@ -1,0 +1,5 @@
+// comment
+
+syntax = "proto2";
+
+package a;

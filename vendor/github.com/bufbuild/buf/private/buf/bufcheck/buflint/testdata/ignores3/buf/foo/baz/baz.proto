@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package buf.foo.baz;
+
+message Foo {
+  int64 oneTwo = 1;
+}
+
+message bar {
+  int64 three = 3;
+}
+
+enum baz {
+  BAZ_UNSPECIFIED = 0;
+}

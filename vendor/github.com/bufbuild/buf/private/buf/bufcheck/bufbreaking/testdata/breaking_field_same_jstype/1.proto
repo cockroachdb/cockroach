@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package a;
+
+message Two {
+  int64 one = 1 [jstype = JS_NUMBER];
+  int64 two = 2;
+}
+
+message Three {
+  message Four {
+    message Five {
+      int64 one = 1 [jstype = JS_NUMBER];
+      int64 two = 2;
+    }
+    message Six {
+      int64 one = 1;
+      int64 two = 2;
+    }
+  }
+  message Seven {
+    int64 one = 1 [jstype = JS_NUMBER];
+    int64 two = 2 [jstype = JS_NORMAL];
+  }
+  message Eight {
+    int64 one = 1;
+    int64 two = 2;
+  }
+  int64 one = 1;
+  int64 two = 2;
+}

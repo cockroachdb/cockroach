@@ -1,0 +1,14 @@
+run:
+  timeout: 6m
+  issues-exit-code: 1
+linters:
+  disable-all: true
+  enable:
+    - goimports
+    - govet
+    - interfacer
+    - misspell
+    - structcheck
+    - unconvert
+issues:
+  new: true

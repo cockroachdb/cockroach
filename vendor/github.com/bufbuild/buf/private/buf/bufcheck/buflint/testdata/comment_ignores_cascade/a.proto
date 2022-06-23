@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+// To team members: I am sorry you have to read such a bad file.
+// To others: Do the opposite of whatever this file does.
+
+package a;
+
+import "google/protobuf/empty.proto";
+
+// buf:lint:ignore ENUM_PASCAL_CASE
+// buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+// buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+enum enumFoo {
+  // buf:lint:ignore ENUM_NO_ALLOW_ALIAS
+  option allow_alias = true;
+  enumFooNone = 0;
+  enumFooOne = 1;
+  enumFooTwo = 1;
+}
+
+// buf:lint:ignore MESSAGE_PASCAL_CASE
+// buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+// buf:lint:ignore ONEOF_LOWER_SNAKE_CASE
+message messageFoo {
+  // buf:lint:ignore MESSAGE_PASCAL_CASE
+  // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+  // buf:lint:ignore ONEOF_LOWER_SNAKE_CASE
+  message messageBar {
+    // buf:lint:ignore MESSAGE_PASCAL_CASE
+    // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+    // buf:lint:ignore ONEOF_LOWER_SNAKE_CASE
+    message messageBaz {
+      // buf:lint:ignore ENUM_PASCAL_CASE
+      // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+      enum enumFoo {
+        // buf:lint:ignore ENUM_NO_ALLOW_ALIAS
+        option allow_alias = true;
+        // buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+        enumFooNone = 0;
+        enumFooOne = 1;
+        enumFooTwo = 1;
+      }
+      int64 Foo = 1;
+      oneof Bar {
+        int64 Baz = 2;
+      }
+    }
+    int64 Foo = 1;
+    oneof Bar {
+      int64 Baz = 2;
+    }
+  }
+  int64 Foo = 1;
+  oneof Bar {
+    int64 Baz = 2;
+  }
+}
+
+// buf:lint:ignore SERVICE_PASCAL_CASE
+// buf:lint:ignore RPC_PASCAL_CASE
+// buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+// buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+service serviceFoo {
+  rpc methodFoo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+// buf:lint:ignore SERVICE_PASCAL_CASE
+service serviceBar {
+  // buf:lint:ignore RPC_PASCAL_CASE
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  rpc methodBar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}

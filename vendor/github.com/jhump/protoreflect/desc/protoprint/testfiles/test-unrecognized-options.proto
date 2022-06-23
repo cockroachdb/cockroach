@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+
+message Test {
+}
+
+message Foo {
+  repeated Bar bar = 1;
+
+  message Bar {
+    Baz baz = 1;
+
+    string name = 2;
+  }
+
+  enum Baz {
+    ZERO = 0;
+
+    FROB = 1;
+
+    NITZ = 2;
+  }
+}
+
+service TestService {
+  rpc Get ( Test ) returns ( Test ) {
+    option (foo) = { bar:<baz:FROB name:"abc"> bar:<baz:NITZ name:"xyz"> };
+  }
+}
+
+extend google.protobuf.MethodOptions {
+  Foo foo = 54321;
+}

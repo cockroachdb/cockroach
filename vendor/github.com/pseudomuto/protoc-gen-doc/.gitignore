@@ -1,0 +1,8 @@
+/_tools
+/coverage.txt
+/dist
+/gen_fixtures
+/protoc-gen-doc
+/test/*.dat
+/vendor
+/tmp/

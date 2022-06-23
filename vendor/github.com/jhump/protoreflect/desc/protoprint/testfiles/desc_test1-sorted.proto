@@ -1,0 +1,146 @@
+syntax = "proto2";
+
+package testprotos;
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+// Comment for AnotherTestMessage
+message AnotherTestMessage {
+   // Comment for dne
+   optional TestMessage.NestedMessage.AnotherNestedMessage.YetAnotherNestedMessage.DeeplyNestedEnum dne = 1;
+
+   // Comment for map_field1
+   map<int32, string> map_field1 = 2;
+
+   // Comment for map_field2
+   map<int64, float> map_field2 = 3;
+
+   // Comment for map_field3
+   map<uint32, bool> map_field3 = 4;
+
+   // Comment for map_field4
+   map<string, AnotherTestMessage> map_field4 = 5;
+
+   // Comment for RockNRoll
+   optional group RockNRoll = 6 {
+      // Comment for beatles
+      optional string beatles = 1;
+
+      // Comment for stones
+      optional string stones = 2;
+
+      // Comment for doors
+      optional string doors = 3;
+   }
+
+   // Comment for atmoo
+   oneof atmoo {
+      // Comment for str
+      string str = 7;
+
+      // Comment for int
+      int64 int = 8;
+   }
+
+   // Comment for WithOptions
+   optional group WithOptions = 9 [deprecated = true] {
+   }
+
+   extensions 100 to 200;
+}
+
+// Comment for TestMessage
+message TestMessage {
+   // Comment for nm
+   optional NestedMessage nm = 1;
+
+   // Comment for anm
+   optional NestedMessage.AnotherNestedMessage anm = 2;
+
+   // Comment for yanm
+   optional NestedMessage.AnotherNestedMessage.YetAnotherNestedMessage yanm = 3;
+
+   // Comment for ne
+   repeated NestedEnum ne = 4;
+
+   // Comment for NestedMessage
+   message NestedMessage {
+      // Comment for anm
+      optional AnotherNestedMessage anm = 1;
+
+      // Comment for yanm
+      optional AnotherNestedMessage.YetAnotherNestedMessage yanm = 2;
+
+      // Comment for AnotherNestedMessage
+      message AnotherNestedMessage {
+         // Comment for yanm
+         repeated YetAnotherNestedMessage yanm = 1;
+
+         // Comment for YetAnotherNestedMessage
+         message YetAnotherNestedMessage {
+            // Comment for foo
+            optional string foo = 1;
+
+            // Comment for bar
+            optional int32 bar = 2;
+
+            // Comment for baz
+            optional bytes baz = 3;
+
+            // Comment for dne
+            optional DeeplyNestedEnum dne = 4;
+
+            // Comment for anm
+            optional AnotherNestedMessage anm = 5;
+
+            // Comment for nm
+            optional NestedMessage nm = 6;
+
+            // Comment for tm
+            optional TestMessage tm = 7;
+
+            // Comment for DeeplyNestedEnum
+            enum DeeplyNestedEnum {
+               // Comment for VALUE1
+               VALUE1 = 1;
+
+               // Comment for VALUE2
+               VALUE2 = 2;
+            }
+         }
+
+         // Comment for AnotherTestMessage extensions (1)
+         extend AnotherTestMessage {
+            // Comment for flags
+            repeated bool flags = 200 [packed = true];
+         }
+      }
+   }
+
+   // Comment for NestedEnum
+   enum NestedEnum {
+      // Comment for VALUE1
+      VALUE1 = 1;
+
+      // Comment for VALUE2
+      VALUE2 = 2;
+   }
+}
+
+// Comment for AnotherTestMessage extensions (2)
+extend AnotherTestMessage {
+   // Comment for xtm
+   optional TestMessage xtm = 100;
+
+   // Comment for xs
+   optional string xs = 101;
+}
+
+// Comment for AnotherTestMessage extensions (3)
+extend AnotherTestMessage {
+   // Comment for xi
+   optional int32 xi = 102;
+
+   // Comment for xui
+   optional uint64 xui = 103;
+}

@@ -1,0 +1,63 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "grpc.go",
+        "grpc_ac.go",
+        "grpc_asset.go",
+        "grpc_basic_auth.go",
+        "grpc_bytestream.go",
+        "grpc_cas.go",
+        "grpc_idle_timeout.go",
+        "http.go",
+    ],
+    importpath = "github.com/buchgr/bazel-remote/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cache:go_default_library",
+        "//cache/disk:go_default_library",
+        "//genproto/build/bazel/remote/asset/v1:go_default_library",
+        "//genproto/build/bazel/remote/execution/v2:go_default_library",
+        "//genproto/build/bazel/semver:go_default_library",
+        "//utils/idle:go_default_library",
+        "@com_github_abbot_go_http_auth//:go_default_library",
+        "@com_github_golang_protobuf//jsonpb:go_default_library_gen",
+        "@com_github_golang_protobuf//proto:go_default_library",
+        "@com_github_mostynb_go_grpc_compression//snappy:go_default_library",
+        "@com_github_mostynb_go_grpc_compression//zstd:go_default_library",
+        "@go_googleapis//google/bytestream:bytestream_go_proto",
+        "@go_googleapis//google/rpc:code_go_proto",
+        "@go_googleapis//google/rpc:status_go_proto",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//encoding/gzip:go_default_library",
+        "@org_golang_google_grpc//metadata:go_default_library",
+        "@org_golang_google_grpc//peer:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "grpc_asset_test.go",
+        "grpc_test.go",
+        "http_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//cache:go_default_library",
+        "//cache/disk:go_default_library",
+        "//genproto/build/bazel/remote/asset/v1:go_default_library",
+        "//genproto/build/bazel/remote/execution/v2:go_default_library",
+        "//utils:go_default_library",
+        "@com_github_golang_protobuf//proto:go_default_library",
+        "@com_github_google_uuid//:go_default_library",
+        "@go_googleapis//google/bytestream:bytestream_go_proto",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+        "@org_golang_google_grpc//test/bufconn:go_default_library",
+    ],
+)

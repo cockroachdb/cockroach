@@ -1,0 +1,2 @@
+option cc_enable_arenas = false;
+option optimize_for = LITE_RUNTIME;

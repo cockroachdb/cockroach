@@ -1,0 +1,3 @@
+package acme.weather.foo_bar.v1;
+
+option php_namespace = "foo";

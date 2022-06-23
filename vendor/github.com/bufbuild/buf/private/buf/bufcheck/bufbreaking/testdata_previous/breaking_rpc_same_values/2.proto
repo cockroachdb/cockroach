@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/empty.proto";
+
+service One2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service Two2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service Three2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(stream google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (stream google.protobuf.Empty) {}
+}
+
+service Four2 {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option idempotency_level = IDEMPOTENCY_UNKNOWN;
+  }
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}

@@ -1,0 +1,41 @@
+# Directories
+/.vagrant
+/.idea
+/build
+
+# Files
+.DS_Store
+/*.iml
+*.h
+
+# Editor swap files
+*.swp
+*.swo
+*.swn
+
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+*.exe
+*.test
+*.prof
+*.pyc
+*.swp
+
+# Example binaries
+examples/df/df
+examples/df/df.exe
+examples/free/free
+examples/free/free.exe
+examples/ps/ps
+examples/ps/ps.exe
+examples/ss/ss
+examples/ss/ss.exe
+examples/uptime/uptime
+examples/uptime/uptime.exe
+
+# Test Data
+cgroup/testdata/*
+!cgroup/testdata/*.zip
+

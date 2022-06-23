@@ -1,0 +1,43 @@
+syntax = "proto2";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+package testprotos;
+
+import "desc_test1.proto";
+import "pkg/desc_test_pkg.proto";
+import "nopkg/desc_test_nopkg.proto";
+
+message Frobnitz {
+	optional TestMessage a = 1;
+	optional AnotherTestMessage b = 2;
+	oneof abc {
+		TestMessage.NestedMessage c1 = 3;
+		TestMessage.NestedEnum c2 = 4;
+	}
+	optional TestMessage.NestedMessage d = 5;
+	optional TestMessage.NestedEnum e = 6 [default = VALUE2];
+	repeated string f = 7 [deprecated = true];
+	oneof def {
+		int32 g1 = 8;
+		sint32 g2 = 9;
+		uint32 g3 = 10;
+	}
+}
+
+message Whatchamacallit {
+	required jhump.protoreflect.desc.Foo foos = 1;
+}
+
+message Whatzit {
+	repeated jhump.protoreflect.desc.Bar gyzmeau = 1;
+}
+
+extend TopLevel {
+	optional TopLevel otl = 100;
+
+	optional group GroupX = 104 {
+		optional int64 groupxi = 1041;
+		optional string groupxs = 1042;
+	}
+}

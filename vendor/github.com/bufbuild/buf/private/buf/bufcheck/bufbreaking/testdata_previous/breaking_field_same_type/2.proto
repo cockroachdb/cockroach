@@ -1,0 +1,55 @@
+syntax = "proto2";
+
+package a;
+
+import "1.proto";
+
+message One2 {
+  optional int32 one = 1;
+  optional One two = 2;
+  repeated int32 three = 3;
+  repeated One four = 4;
+}
+
+message Two2 {
+  optional int32 one = 1;
+  optional One two = 2;
+  repeated int32 three = 3;
+  repeated One four = 4;
+}
+
+message Three2 {
+  message Four2 {
+    message Five2 {
+      optional int32 one = 1;
+      optional One two = 2;
+      repeated int32 three = 3;
+      repeated One four = 4;
+    }
+    message Six2 {
+      optional int32 one = 1;
+      optional One two = 2;
+      repeated int32 three = 3;
+      repeated One four = 4;
+    }
+  }
+  message Seven2 {
+    optional int32 one = 1;
+    optional One two = 2;
+    repeated int32 three = 3;
+    repeated One four = 4;
+  }
+  message Eight2 {
+    optional int32 one = 1;
+    optional One two = 2;
+    repeated int32 three = 3;
+    repeated One four = 4;
+  }
+}
+
+message Nine2 {
+  oneof foo {
+    int32 one = 1;
+    One two = 2;
+  }
+}

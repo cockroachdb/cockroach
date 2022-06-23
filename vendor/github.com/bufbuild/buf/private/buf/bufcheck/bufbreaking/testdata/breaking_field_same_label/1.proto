@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package a;
+
+import "2.proto";
+
+message Two {
+  repeated int64 one = 1;
+  repeated Two two = 2;
+  int64 three = 3;
+  Two four = 4;
+  int32 five = 5;
+  int32 six = 6;
+}
+
+message Three {
+  message Four {
+    message Five {
+      repeated int64 one = 1;
+      repeated Two two = 2;
+      int64 three = 3;
+      Two four = 4;
+      int32 five = 5;
+      int32 six = 6;
+    }
+    message Six {
+      int32 one = 1;
+      One two = 2;
+      repeated int32 three = 3;
+      repeated One four = 4;
+      map<int32, int32> five = 5;
+      map<int32, One> six = 6;
+    }
+  }
+  message Seven {
+    repeated int64 one = 1;
+    repeated Two two = 2;
+    int64 three = 3;
+    Two four = 4;
+    int32 five = 5;
+    int32 six = 6;
+  }
+  message Eight {
+    int32 one = 1;
+    One two = 2;
+    repeated int32 three = 3;
+    repeated One four = 4;
+    map<int32, int32> five = 5;
+    map<int32, One> six = 6;
+  }
+}
