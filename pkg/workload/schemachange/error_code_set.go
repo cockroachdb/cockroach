@@ -62,6 +62,15 @@ type codesWithConditions []struct {
 	condition bool
 }
 
+func (c codesWithConditions) append(code pgcode.Code) codesWithConditions {
+	return append(c, codesWithConditions{
+		{
+			code:      code,
+			condition: true,
+		},
+	}...)
+}
+
 func (c codesWithConditions) add(s errorCodeSet) {
 	for _, cc := range c {
 		if cc.condition {

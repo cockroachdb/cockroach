@@ -2316,6 +2316,10 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 				d = tree.NewDOid(randgen.RandColumnType(og.params.rng).Oid())
 			}
 			str := tree.AsStringWithFlags(d, tree.FmtParsable)
+			// For strings use the actual type, so that comparisons for NULL values are sane.
+			if col.typ.Family() == types.StringFamily {
+				str = strings.Replace(str, ":::STRING", fmt.Sprintf("::%s", col.typ.SQLString()), -1)
+			}
 			row = append(row, str)
 		}
 
@@ -2324,10 +2328,12 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (sq stri
 	// Verify that none of the generated expressions will blow up on this insert.
 	anyInvalidInserts := false
 	for _, row := range rows {
-		invalidInsert, generatedErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, colNames, allColumns, row)
+		invalidInsert, generatedErrors, potentialErrors, err := og.validateGeneratedExpressionsForInsert(ctx, tx, tableName, colNames, allColumns, row)
 		if err != nil {
 			return "", err
 		}
+		// We may have errors that are possible, but not guaranteed.
+		potentialErrors.add(og.potentialExecErrors)
 		if invalidInsert {
 			generatedErrors.add(og.expectedExecErrors)
 			// We will be pessimistic and assume that other column related errors can
