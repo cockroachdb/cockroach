@@ -15,7 +15,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -44,12 +43,7 @@ type fileSSTSink struct {
 	dest cloud.ExternalStorage
 	conf sstSinkConf
 
-	queue []exportedSpan
-	// queueCap is the maximum byte size that the queue can grow to.
-	queueCap int64
-	// queueSize is the current byte size of the queue.
-	queueSize int
-
+	buf     sstReorderBuffer
 	sst     storage.SSTWriter
 	ctx     context.Context
 	cancel  func()
@@ -68,6 +62,21 @@ type fileSSTSink struct {
 		sizeFlushes int
 		spanGrows   int
 	}
+}
+
+type writeFn func(context.Context, exportedSpan) error
+type sstReorderBuffer interface {
+	push(context.Context, exportedSpan, writeFn) error
+	flush(context.Context, writeFn) error
+	close(context.Context)
+}
+
+type sstQueue struct {
+	queue []exportedSpan
+	// queueCap is the maximum byte size that the queue can grow to.
+	queueCap int64
+	// queueSize is the current byte size of the queue.
+	queueSize int
 
 	memAcc struct {
 		ba            *mon.BoundAccount
@@ -75,18 +84,14 @@ type fileSSTSink struct {
 	}
 }
 
-func makeFileSSTSink(
-	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *mon.BoundAccount,
-) (*fileSSTSink, error) {
-	s := &fileSSTSink{conf: conf, dest: dest}
-	s.memAcc.ba = backupMem
-
+func newSSTQueue(ctx context.Context, maxSize int64, mon *mon.BoundAccount) (*sstQueue, error) {
+	s := &sstQueue{}
+	s.memAcc.ba = mon
 	// Reserve memory for the file buffer. Incrementally reserve memory in chunks
 	// upto a maximum of the `SmallFileBuffer` cluster setting value. If we fail
 	// to grow the bound account at any stage, use the buffer size we arrived at
 	// prior to the error.
 	incrementSize := int64(32 << 20)
-	maxSize := backupbase.SmallFileBuffer.Get(s.conf.settings)
 	for {
 		if s.queueCap >= maxSize {
 			break
@@ -110,6 +115,69 @@ func makeFileSSTSink(
 	return s, nil
 }
 
+func (s *sstQueue) push(ctx context.Context, resp exportedSpan, write writeFn) error {
+	s.queue = append(s.queue, resp)
+	s.queueSize += len(resp.dataSST)
+
+	if s.queueSize >= int(s.queueCap) {
+		s.sortQueue()
+		// Drain the first half.
+		drain := len(s.queue) / 2
+		if drain < 1 {
+			drain = 1
+		}
+		for i := range s.queue[:drain] {
+			if err := write(ctx, s.queue[i]); err != nil {
+				return err
+			}
+			s.queueSize -= len(s.queue[i].dataSST)
+		}
+
+		// Shift down the remainder of the queue and slice off the tail.
+		copy(s.queue, s.queue[drain:])
+		s.queue = s.queue[:len(s.queue)-drain]
+	}
+	return nil
+}
+
+func (s *sstQueue) flush(ctx context.Context, write writeFn) error {
+	s.sortQueue()
+	for i := range s.queue {
+		if err := write(ctx, s.queue[i]); err != nil {
+			return err
+		}
+	}
+	s.queue = nil
+	return nil
+}
+
+func (s *sstQueue) close(ctx context.Context) {
+	// Release the memory reserved for the file buffer.
+	s.memAcc.ba.Shrink(ctx, s.memAcc.reservedBytes)
+	s.memAcc.reservedBytes = 0
+}
+
+func (s *sstQueue) sortQueue() {
+	sort.Slice(s.queue, func(i, j int) bool {
+		return s.queue[i].metadata.Span.Key.Compare(s.queue[j].metadata.Span.Key) < 0
+	})
+}
+
+type noopBuf struct{}
+
+func (n *noopBuf) close(context.Context) {}
+func (n *noopBuf) push(ctx context.Context, resp exportedSpan, write writeFn) error {
+	return write(ctx, resp)
+}
+func (n *noopBuf) flush(context.Context, writeFn) error { return nil }
+
+func makeFileSSTSink(
+	conf sstSinkConf, dest cloud.ExternalStorage, buf sstReorderBuffer,
+) (*fileSSTSink, error) {
+	s := &fileSSTSink{conf: conf, dest: dest, buf: buf}
+	return s, nil
+}
+
 func (s *fileSSTSink) Close() error {
 	if log.V(1) && s.ctx != nil {
 		log.Infof(s.ctx, "backup sst sink recv'd %d files, wrote %d (%d due to size, %d due to re-ordering), %d recv files extended prior span",
@@ -119,9 +187,7 @@ func (s *fileSSTSink) Close() error {
 		s.cancel()
 	}
 
-	// Release the memory reserved for the file buffer.
-	s.memAcc.ba.Shrink(s.ctx, s.memAcc.reservedBytes)
-	s.memAcc.reservedBytes = 0
+	s.buf.close(s.ctx)
 	if s.out != nil {
 		return s.out.Close()
 	}
@@ -135,40 +201,13 @@ func (s *fileSSTSink) Close() error {
 // When the queue length or sum of the data sizes in it exceeds thresholds the
 // queue is sorted and the first half is flushed.
 func (s *fileSSTSink) push(ctx context.Context, resp exportedSpan) error {
-	s.queue = append(s.queue, resp)
-	s.queueSize += len(resp.dataSST)
-
-	if s.queueSize >= int(s.queueCap) {
-		sort.Slice(s.queue, func(i, j int) bool {
-			return s.queue[i].metadata.Span.Key.Compare(s.queue[j].metadata.Span.Key) < 0
-		})
-
-		// Drain the first half.
-		drain := len(s.queue) / 2
-		if drain < 1 {
-			drain = 1
-		}
-		for i := range s.queue[:drain] {
-			if err := s.write(ctx, s.queue[i]); err != nil {
-				return err
-			}
-			s.queueSize -= len(s.queue[i].dataSST)
-		}
-
-		// Shift down the remainder of the queue and slice off the tail.
-		copy(s.queue, s.queue[drain:])
-		s.queue = s.queue[:len(s.queue)-drain]
-	}
-	return nil
+	return s.buf.push(ctx, resp, s.write)
 }
 
 func (s *fileSSTSink) flush(ctx context.Context) error {
-	for i := range s.queue {
-		if err := s.write(ctx, s.queue[i]); err != nil {
-			return err
-		}
+	if err := s.buf.flush(ctx, s.write); err != nil {
+		return err
 	}
-	s.queue = nil
 	return s.flushFile(ctx)
 }
 
@@ -235,6 +274,16 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 	return nil
 }
 
+func (s *fileSSTSink) extendsLastSpan(resp exportedSpan) bool {
+	span := resp.metadata.Span
+	if l := len(s.flushedFiles) - 1; l > 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
+		s.flushedFiles[l].EndTime.EqOrdering(resp.metadata.EndTime) &&
+		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
+		return true
+	}
+	return false
+}
+
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	s.stats.files++
 
@@ -249,6 +298,16 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 				s.outName, s.flushedSize, span, last,
 			)
 			s.stats.oooFlushes++
+			if err := s.flushFile(ctx); err != nil {
+				return err
+			}
+		}
+	}
+
+	if allowUnderfill.Get(s.conf.settings) {
+		// If this span won't extend the existing span and we are already relatively
+		// close to the boundary, just flush.
+		if !s.extendsLastSpan(resp) && float64(s.flushedSize) > float64(targetFileSize.Get(s.conf.settings))*0.80 {
 			if err := s.flushFile(ctx); err != nil {
 				return err
 			}
@@ -295,9 +354,8 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	// If this span extended the last span added -- that is, picked up where it
 	// ended and has the same time-bounds -- then we can simply extend that span
 	// and add to its entry counts. Otherwise we need to record it separately.
-	if l := len(s.flushedFiles) - 1; l > 0 && s.flushedFiles[l].Span.EndKey.Equal(span.Key) &&
-		s.flushedFiles[l].EndTime.EqOrdering(resp.metadata.EndTime) &&
-		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
+	if s.extendsLastSpan(resp) {
+		l := len(s.flushedFiles) - 1
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
 		s.stats.spanGrows++

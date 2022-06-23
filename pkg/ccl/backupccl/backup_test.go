@@ -405,6 +405,26 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	})
 }
 
+// TestBackupManifestFileCount tests that we don't get more than 1 file per node
+// in a case where we know that the entire dataset should fit inside the
+// file_sst_sink reorder buffer.
+func TestBackupManifestFileCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SELECT crdb_internal.set_vmodule('file_sst_sink=3')")
+	sqlDB.Exec(t, "BACKUP INTO 'userfile:///backup'")
+	rows := sqlDB.QueryRow(t, "SELECT count(distinct(path)) FROM [SHOW BACKUP FILES FROM LATEST IN 'userfile:///backup']")
+	var count int
+	rows.Scan(&count)
+	require.True(t, multiNode <= count)
+	files := sqlDB.QueryStr(t, "SHOW BACKUP FILES FROM LATEST IN 'userfile:///backup'")
+	t.Logf("FILES: %v", files)
+}
+
 func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 54599, "flaky test")
