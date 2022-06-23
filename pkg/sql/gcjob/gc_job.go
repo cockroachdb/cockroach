@@ -180,9 +180,16 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 	}()
 	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
-	execCfg := p.ExecCfg()
 
-	if err := p.ExecCfg().JobRegistry.CheckPausepoint("gcjob.before_resume"); err != nil {
+	// Clone the ExecConfig so that fields can be overwritten for testing knobs.
+	execCfg := *p.ExecCfg()
+	if n := execCfg.GCJobTestingKnobs.Notifier; n != nil {
+		execCfg.GCJobNotifier = n
+	}
+	// Use the same SystemConfigProvider as the notifier.
+	execCfg.SystemConfig = execCfg.GCJobNotifier.SystemConfigProvider()
+
+	if err := execCfg.JobRegistry.CheckPausepoint("gcjob.before_resume"); err != nil {
 		return err
 	}
 
@@ -191,12 +198,12 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 			return err
 		}
 	}
-	details, progress, err := initDetailsAndProgress(ctx, execCfg, r.job.ID())
+	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job.ID())
 	if err != nil {
 		return err
 	}
 
-	if err := maybeUnsplitRanges(ctx, execCfg, r.job.ID(), details, progress); err != nil {
+	if err := maybeUnsplitRanges(ctx, &execCfg, r.job.ID(), details, progress); err != nil {
 		return err
 	}
 
@@ -221,10 +228,10 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		if details.Tenant == nil {
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			expired, earliestDeadline = refreshTables(
-				ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job.ID(), progress,
+				ctx, &execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job.ID(), progress,
 			)
 		} else {
-			expired, earliestDeadline, err = refreshTenant(ctx, execCfg, details.Tenant.DropTime, details, progress)
+			expired, earliestDeadline, err = refreshTenant(ctx, &execCfg, details.Tenant.DropTime, details, progress)
 			if err != nil {
 				return err
 			}
@@ -233,16 +240,16 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 
 		if expired {
 			// Some elements have been marked as DELETING so save the progress.
-			persistProgress(ctx, execCfg, r.job.ID(), progress, runningStatusGC(progress))
+			persistProgress(ctx, &execCfg, r.job.ID(), progress, runningStatusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 				if err := fn(r.job.ID()); err != nil {
 					return err
 				}
 			}
-			if err := performGC(ctx, execCfg, details, progress); err != nil {
+			if err := performGC(ctx, &execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, execCfg, r.job.ID(), progress, sql.RunningStatusWaitingGC)
+			persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0

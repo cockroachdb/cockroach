@@ -60,6 +60,12 @@ func New(
 	return n
 }
 
+// SystemConfigProvider provides access to the notifier's underlying
+// SystemConfigProvider.
+func (n *Notifier) SystemConfigProvider() config.SystemConfigProvider {
+	return n.provider
+}
+
 func noopFunc() {}
 
 // AddNotifyee should be called prior to the first reading of the system config.

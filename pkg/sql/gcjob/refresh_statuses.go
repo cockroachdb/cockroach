@@ -92,8 +92,15 @@ func updateStatusForGCElements(
 ) (expired, missing bool, timeToNextTrigger time.Time) {
 	defTTL := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	cfg := execCfg.SystemConfig.GetSystemConfig()
+	// If the system config is nil, it means we have not seen an initial system
+	// config. Because we register for notifications when the system config
+	// changes before we get here, we'll get notified to update statuses as soon
+	// a new configuration is available. If we were to proceed, we'd hit a nil
+	// pointer panic.
+	if cfg == nil {
+		return false, false, maxDeadline
+	}
 	protectedtsCache := execCfg.ProtectedTimestampProvider
-
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
