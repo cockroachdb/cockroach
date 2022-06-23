@@ -31,6 +31,10 @@ func (v valueExpr) encoded() interface{} {
 	return valueForYAML(v.value)
 }
 
+func (v notValueExpr) encoded() interface{} {
+	return valueForYAML(v.value)
+}
+
 func (a anyExpr) encoded() interface{} {
 	ret := make([]interface{}, 0, len(a))
 	for _, v := range a {
@@ -95,9 +99,14 @@ func clauseStr(lhs string, rhs expr) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	op := "="
-	if _, isAny := rhs.(anyExpr); isAny {
+	var op string
+	switch rhs.(type) {
+	case valueExpr, Var:
+		op = "="
+	case anyExpr:
 		op = "IN"
+	case notValueExpr:
+		op = "!="
 	}
 	return fmt.Sprintf("%s %s %s", lhs, op, rhsStr), nil
 }
