@@ -281,7 +281,26 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 			for idx, c := range allConns {
 				if err := c.PingContext(ctx); err != nil {
 					logStmt(stmt)
-					t.Fatalf("ping node %d: %v\nprevious sql:\n%s;", idx+1, err, stmt)
+					nodeID := idx + 1
+					errStr := fmt.Sprintf("ping node %d: %v\n", nodeID, err)
+					hintStr := fmt.Sprintf(
+						"HINT: node likely crashed, check logs in artifacts > logs/%d.unredacted\n",
+						nodeID,
+					)
+
+					var sb strings.Builder
+					// Print the error message and a hint.
+					sb.WriteString(errStr)
+					sb.WriteString(hintStr)
+					// Print the previous SQL.
+					sb.WriteString(fmt.Sprintf("previous sql:\n%s;", stmt))
+					// Print the error message and hint again because
+					// github-post prunes the top of the error message away when
+					// the SQL is too long.
+					sb.WriteString(errStr)
+					sb.WriteString(hintStr)
+
+					t.Fatalf(sb.String())
 				}
 			}
 		}
