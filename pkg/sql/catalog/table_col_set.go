@@ -53,6 +53,16 @@ func (s TableColSet) ForEach(f func(col descpb.ColumnID)) {
 	s.set.ForEach(func(i int) { f(descpb.ColumnID(i)) })
 }
 
+// SubsetOf returns true if s is a subset of other.
+func (s TableColSet) SubsetOf(other TableColSet) bool {
+	return s.set.SubsetOf(other.set)
+}
+
+// Difference returns the column IDs in s which are not in other.
+func (s TableColSet) Difference(other TableColSet) TableColSet {
+	return TableColSet{set: s.set.Difference(other.set)}
+}
+
 // Ordered returns a slice with all the descpb.ColumnIDs in the set, in
 // increasing order.
 func (s TableColSet) Ordered() []descpb.ColumnID {
