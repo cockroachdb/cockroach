@@ -97,7 +97,7 @@ func ShouldStartDefaultTestTenant(t testing.TB) bool {
 		t.Fatal("invalid setting of tenantMode flag")
 	}
 
-	if rand.Float64() > probabilityOfStartingDefaultTestTenant {
+	if rand.Float64() > probabilityOfStartingDefaultTestTenant || skip.UnderBench() {
 		return false
 	}
 
