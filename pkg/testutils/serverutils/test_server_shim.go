@@ -78,7 +78,13 @@ const (
 // If both the environment variable and the test flag are set, the environment
 // variable wins out.
 func ShouldStartDefaultTestTenant(t testing.TB) bool {
-	const defaultProbabilityOfStartingTestTenant = 0.5
+	var defaultProbabilityOfStartingTestTenant = 0.5
+	if skip.UnderBench() {
+		// Until #83461 is resolved, we want to make sure that we don't use the
+		// multi-tenant setup so that the comparison against old single-tenant
+		// SHAs in the benchmarks is fair.
+		defaultProbabilityOfStartingTestTenant = 0
+	}
 	var probabilityOfStartingDefaultTestTenant float64
 
 	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
@@ -101,12 +107,16 @@ func ShouldStartDefaultTestTenant(t testing.TB) bool {
 		return false
 	}
 
-	// We're starting the default SQL server (i.e. we're running this test in a
-	// tenant). Log this for easier debugging.
-	log.Shout(context.Background(), severity.INFO,
-		"Running test with the default test tenant. "+
-			"If you are only seeing a test case failure when this message appears, there may be a "+
-			"problem with your test case running within tenants.")
+	if !skip.UnderBench() {
+		// We're starting the default SQL server (i.e. we're running this test
+		// in a tenant). Log this for easier debugging unless we're running a
+		// benchmark (because these INFO messages would break the benchstat
+		// utility).
+		log.Shout(context.Background(), severity.INFO,
+			"Running test with the default test tenant. "+
+				"If you are only seeing a test case failure when this message appears, there may be a "+
+				"problem with your test case running within tenants.")
+	}
 
 	return true
 }
