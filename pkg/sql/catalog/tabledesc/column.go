@@ -267,13 +267,13 @@ type columnCache struct {
 
 type indexColumnCache struct {
 	all          []catalog.Column
-	allDirs      []descpb.IndexDescriptor_Direction
+	allDirs      []catpb.IndexColumn_Direction
 	key          []catalog.Column
-	keyDirs      []descpb.IndexDescriptor_Direction
+	keyDirs      []catpb.IndexColumn_Direction
 	stored       []catalog.Column
 	keySuffix    []catalog.Column
 	full         []catalog.Column
-	fullDirs     []descpb.IndexDescriptor_Direction
+	fullDirs     []catpb.IndexColumn_Direction
 	keyAndSuffix []descpb.IndexFetchSpec_KeyColumn
 }
 
@@ -371,7 +371,7 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic
 	nKeySuffix := len(idx.KeySuffixColumnIDs)
 	nStored := len(idx.StoreColumnIDs)
 	nAll := nKey + nKeySuffix + nStored
-	ic.allDirs = make([]descpb.IndexDescriptor_Direction, nAll)
+	ic.allDirs = make([]catpb.IndexColumn_Direction, nAll)
 	// Only copy key column directions, others will remain at ASC (default value).
 	copy(ic.allDirs, idx.KeyColumnDirections)
 	ic.all = make([]catalog.Column, 0, nAll)

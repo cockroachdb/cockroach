@@ -33,6 +33,15 @@ joinOnConstraintID(a, b, desc-id, constraint-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ConstraintID] = $constraint-id
     - $b[ConstraintID] = $constraint-id
+indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
+    - $index[IndexID] = $index-id
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index-column[DescID] = $_
+    - joinOnColumnID($column, $index-column, $table-id, $column-id)
+    - joinOnIndexID($index, $index-column, $table-id, $index-id)
+columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):
+    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
+    - $index[SourceIndexID] != 0
 
 oprules
 ----

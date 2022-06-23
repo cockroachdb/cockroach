@@ -74,7 +74,7 @@ func TestIndexForDisplay(t *testing.T) {
 		ID:                  0x0,
 		KeyColumnNames:      []string{"a", "b"},
 		KeyColumnIDs:        descpb.ColumnIDs{1, 2},
-		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC},
+		KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_DESC},
 	}
 
 	// UNIQUE INDEX baz (a ASC, b DESC)
@@ -99,8 +99,8 @@ func TestIndexForDisplay(t *testing.T) {
 	expressionIndex := baseIndex
 	expressionIndex.KeyColumnNames = []string{"a", "d", "b"}
 	expressionIndex.KeyColumnIDs = descpb.ColumnIDs{1, 4, 2}
-	expressionIndex.KeyColumnDirections = []descpb.IndexDescriptor_Direction{
-		descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_DESC, descpb.IndexDescriptor_ASC,
+	expressionIndex.KeyColumnDirections = []catpb.IndexColumn_Direction{
+		catpb.IndexColumn_ASC, catpb.IndexColumn_DESC, catpb.IndexColumn_ASC,
 	}
 
 	// Hash Sharded INDEX baz (a)

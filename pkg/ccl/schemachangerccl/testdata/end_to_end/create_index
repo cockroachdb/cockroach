@@ -13,7 +13,7 @@ CREATE INDEX id1
 checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
      formatVersion: 3
@@ -114,10 +114,16 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    currentStatuses:
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
@@ -135,20 +141,47 @@ upsert descriptor #104
   +    - 2
   +    - 3
   +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    - 8
+  +    - 9
+  +    - 10
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          ordinal: 1
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 2
+  +          kind: STORED
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
   +    - elementProto:
   +        secondaryIndex:
   +          embeddedIndex:
   +            indexId: 2
-  +            keyColumnDirections:
-  +            - ASC
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            - 2
   +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 3
   +            tableId: 104
   +            temporaryIndexId: 3
   +      metadata:
@@ -183,21 +216,42 @@ upsert descriptor #104
   +        temporaryIndex:
   +          embeddedIndex:
   +            indexId: 3
-  +            keyColumnDirections:
-  +            - ASC
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            - 2
   +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 3
   +            tableId: 104
   +          isUsingSecondaryEncoding: true
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 3
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 3
+  +          ordinal: 1
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 3
+  +          kind: STORED
+  +          tableId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
   +    - elementProto:
   +        indexPartitioning:
   +          indexId: 3
@@ -241,7 +295,7 @@ upsert descriptor #104
   -    - DELETE_ONLY
   +    - WRITE_ONLY
        - PUBLIC
-       jobId: "1"
+       - PUBLIC
   ...
      formatVersion: 3
      id: 104
@@ -272,8 +326,8 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   -    - BACKFILL_ONLY
   +    - DELETE_ONLY
        - ABSENT
@@ -304,8 +358,8 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   -    - DELETE_ONLY
   +    - MERGE_ONLY
        - ABSENT
@@ -344,8 +398,8 @@ begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
        - PUBLIC
@@ -450,7 +504,7 @@ upsert descriptor #104
   -    - WRITE_ONLY
   +    - TRANSIENT_DELETE_ONLY
        - PUBLIC
-       jobId: "1"
+       - PUBLIC
   ...
        - money
        version: 4
@@ -486,7 +540,13 @@ upsert descriptor #104
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
@@ -503,20 +563,47 @@ upsert descriptor #104
   -    - 2
   -    - 3
   -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    - 8
+  -    - 9
+  -    - 10
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          ordinal: 1
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 2
+  -          kind: STORED
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
   -    - elementProto:
   -        secondaryIndex:
   -          embeddedIndex:
   -            indexId: 2
-  -            keyColumnDirections:
-  -            - ASC
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            - 2
   -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 3
   -            tableId: 104
   -            temporaryIndexId: 3
   -      metadata:
@@ -551,21 +638,42 @@ upsert descriptor #104
   -        temporaryIndex:
   -          embeddedIndex:
   -            indexId: 3
-  -            keyColumnDirections:
-  -            - ASC
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            - 2
   -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 3
   -            tableId: 104
   -          isUsingSecondaryEncoding: true
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 3
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 3
+  -          ordinal: 1
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 3
+  -          kind: STORED
+  -          tableId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
   -    - elementProto:
   -        indexPartitioning:
   -          indexId: 3

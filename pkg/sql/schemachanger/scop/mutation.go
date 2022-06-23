@@ -541,3 +541,16 @@ type RefreshStats struct {
 	mutationOp
 	TableID descpb.ID
 }
+
+// AddColumnToIndex mutates an index to add a column to it.
+// The column should already exist on the table and so should
+// the index.
+type AddColumnToIndex struct {
+	mutationOp
+	TableID   descpb.ID
+	ColumnID  descpb.ColumnID
+	IndexID   descpb.IndexID
+	Kind      scpb.IndexColumn_Kind
+	Direction catpb.IndexColumn_Direction
+	Ordinal   uint32
+}

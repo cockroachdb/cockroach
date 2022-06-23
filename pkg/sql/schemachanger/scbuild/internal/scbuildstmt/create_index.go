@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -84,6 +86,16 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			}
 
 		case *scpb.PrimaryIndex:
+			// TODO(ajwerner): This is too simplistic. We should build a better
+			// vocabulary around the possible primary indexes in play. There are
+			// at most going to be 3, and at least there is going to be 1. If
+			// there are no column set changes, or there's just additions of
+			// nullable columns there'll be just one. If there are only either
+			// adds or drops, but not both, there will be two, the initial and
+			// the final. If there are both adds and drops, then there will be
+			// 3, including an intermediate primary index which is keyed on the
+			// initial primary key and include the union of all of the added and
+			// dropped columns.
 			if target == scpb.ToPublic {
 				source = t
 			}
@@ -130,6 +142,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	// Set key column IDs and directions.
 	keyColNames := make([]string, len(n.Columns))
+	var newIndexColumns []*scpb.IndexColumn
+	var keyColIDs catalog.TableColSet
+	indexID := nextRelationIndexID(b, relation)
 	for i, columnNode := range n.Columns {
 		colName := columnNode.Column.String()
 		if columnNode.Expr != nil {
@@ -151,22 +166,50 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			panic(colinfo.NewUndefinedColumnError(colName))
 		}
 		keyColNames[i] = colName
-		index.KeyColumnIDs = append(index.KeyColumnIDs, columnID)
-		direction := scpb.Index_ASC
+		direction := catpb.IndexColumn_ASC
 		if columnNode.Direction == tree.Descending {
-			direction = scpb.Index_DESC
+			direction = catpb.IndexColumn_DESC
 		}
-		index.KeyColumnDirections = append(index.KeyColumnDirections, direction)
+		ic := &scpb.IndexColumn{
+			TableID:   index.TableID,
+			IndexID:   indexID,
+			ColumnID:  columnID,
+			Ordinal:   uint32(i),
+			Kind:      scpb.IndexColumn_KEY,
+			Direction: direction,
+		}
+		newIndexColumns = append(newIndexColumns, ic)
+		keyColIDs.Add(columnID)
 	}
 	// Set the key suffix column IDs.
-	keyColIDs := catalog.MakeTableColSet(index.KeyColumnIDs...)
-	for _, id := range source.KeyColumnIDs {
-		if !keyColIDs.Contains(id) {
-			index.KeySuffixColumnIDs = append(index.KeySuffixColumnIDs, id)
+	// We want to find the key column IDs
+	var keySuffixColumns []*scpb.IndexColumn
+	scpb.ForEachIndexColumn(relationElements, func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn,
+	) {
+		if e.IndexID != source.IndexID || keyColIDs.Contains(e.ColumnID) ||
+			e.Kind != scpb.IndexColumn_KEY {
+			return
 		}
+		keySuffixColumns = append(keySuffixColumns, e)
+	})
+	sort.Slice(keySuffixColumns, func(i, j int) bool {
+		return keySuffixColumns[i].Ordinal < keySuffixColumns[j].Ordinal
+	})
+	for i, c := range keySuffixColumns {
+		ic := &scpb.IndexColumn{
+			TableID:   index.TableID,
+			IndexID:   indexID,
+			ColumnID:  c.ColumnID,
+			Ordinal:   uint32(i),
+			Kind:      scpb.IndexColumn_KEY_SUFFIX,
+			Direction: c.Direction,
+		}
+		newIndexColumns = append(newIndexColumns, ic)
 	}
+
 	// Set the storing column IDs.
-	for _, storingNode := range n.Storing {
+	for i, storingNode := range n.Storing {
 		var columnID catid.ColumnID
 		scpb.ForEachColumnName(relationElements, func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ColumnName) {
 			if target == scpb.ToPublic && tree.Name(e.Name) == storingNode {
@@ -176,7 +219,14 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if columnID == 0 {
 			panic(colinfo.NewUndefinedColumnError(storingNode.String()))
 		}
-		index.StoringColumnIDs = append(index.StoringColumnIDs, columnID)
+		c := &scpb.IndexColumn{
+			TableID:  index.TableID,
+			IndexID:  indexID,
+			ColumnID: columnID,
+			Ordinal:  uint32(i),
+			Kind:     scpb.IndexColumn_STORED,
+		}
+		newIndexColumns = append(newIndexColumns, c)
 	}
 	// Set up sharding.
 	if n.Sharded != nil {
@@ -196,6 +246,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	// and made a new primary key above.
 	index.SourceIndexID = source.IndexID
 	index.IndexID = nextRelationIndexID(b, relation)
+	for _, ic := range newIndexColumns {
+		ic.IndexID = index.IndexID
+		b.Add(ic)
+	}
 	tempIndexID := index.IndexID + 1 // this is enforced below
 	index.TemporaryIndexID = tempIndexID
 	sec := &scpb.SecondaryIndex{Index: index}
@@ -227,6 +281,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		))
 	}
 	b.AddTransient(temp)
+	for _, ic := range newIndexColumns {
+		tic := protoutil.Clone(ic).(*scpb.IndexColumn)
+		tic.IndexID = tempIndexID
+		b.Add(tic)
+	}
 	if n.PartitionByIndex.ContainsPartitions() {
 		b.Add(&scpb.IndexPartitioning{
 			TableID: temp.TableID,

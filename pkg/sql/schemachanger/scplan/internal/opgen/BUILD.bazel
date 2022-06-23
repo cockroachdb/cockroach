@@ -22,6 +22,7 @@ go_library(
         "opgen_database_role_setting.go",
         "opgen_enum_type.go",
         "opgen_foreign_key_constraint.go",
+        "opgen_index_column.go",
         "opgen_index_comment.go",
         "opgen_index_name.go",
         "opgen_index_partitioning.go",

@@ -20,7 +20,7 @@ increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -131,13 +131,18 @@ upsert descriptor #106
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -156,17 +161,27 @@ upsert descriptor #106
   +    - 6
   +    - 7
   +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -223,18 +238,31 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: PUBLIC
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 2
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 106
   +            temporaryIndexId: 3
   +      metadata:
@@ -256,18 +284,31 @@ upsert descriptor #106
   +            constraintId: 1
   +            indexId: 3
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 3
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 3
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -288,7 +329,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 7 with 4 MutationType ops
+## PostCommitPhase stage 1 of 6 with 4 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -302,8 +343,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -331,14 +372,14 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
-update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 2 of 6 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+## PostCommitPhase stage 2 of 6 with 1 BackfillType op
 backfill indexes [2] from index #1 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+## PostCommitPhase stage 3 of 6 with 3 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -367,10 +408,10 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 4 of 6 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+## PostCommitPhase stage 4 of 6 with 3 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -399,18 +440,18 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
-update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 6 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
-## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+## PostCommitPhase stage 5 of 6 with 1 BackfillType op
 merge temporary indexes [3] into backfilled indexes [2] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 1 ValidationType op
+## PostCommitPhase stage 6 of 6 with 1 ValidationType op
 validate forward indexes [2] in table #106
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 7 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -428,19 +469,24 @@ upsert descriptor #106
   ...
          userName: root
        currentStatuses:
-  +    - VALIDATED
   +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+       - PUBLIC
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
        - PUBLIC
        - PUBLIC
+  ...
+       - PUBLIC
        - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
-  +    - PUBLIC
-       - WRITE_ONLY
-       jobId: "1"
+  -    - WRITE_ONLY
+  +    - TRANSIENT_DELETE_ONLY
+       - PUBLIC
+       - PUBLIC
   ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
            statementTag: ALTER TABLE
@@ -491,8 +537,9 @@ upsert descriptor #106
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+  -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
+  +    state: DELETE_ONLY
   +  - direction: DROP
        index:
   -      constraintId: 3
@@ -550,26 +597,26 @@ upsert descriptor #106
   -  version: "5"
   +  version: "6"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #106
   ...
-         userName: root
        currentStatuses:
-  -    - VALIDATED
+       - ABSENT
+  -    - WRITE_ONLY
   +    - DELETE_ONLY
        - ABSENT
        - PUBLIC
   ...
        - PUBLIC
        - PUBLIC
-  -    - WRITE_ONLY
-  +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+  -    - TRANSIENT_DELETE_ONLY
+  +    - TRANSIENT_ABSENT
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -577,12 +624,33 @@ upsert descriptor #106
   -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
-     - direction: ADD
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 3
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_3_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - j
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
      - direction: DROP
        index:
   ...
@@ -597,10 +665,13 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "6"
   +  version: "7"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
+create job #2 (non-cancelable: true): "GC for "
+  descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending"
 commit transaction #10
+notified job registry to adopt jobs: [2]
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -609,6 +680,7 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    currentStatuses:
+  -    - ABSENT
   -    - DELETE_ONLY
   -    - ABSENT
   -    - PUBLIC
@@ -617,7 +689,11 @@ upsert descriptor #106
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
-  -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - TRANSIENT_ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -635,17 +711,27 @@ upsert descriptor #106
   -    - 6
   -    - 7
   -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -702,18 +788,31 @@ upsert descriptor #106
   -        subWorkId: 1
   -      targetStatus: PUBLIC
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 2
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 106
   -            temporaryIndexId: 3
   -      metadata:
@@ -735,18 +834,31 @@ upsert descriptor #106
   -            constraintId: 1
   -            indexId: 3
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 3
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 3
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -755,33 +867,6 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000010"
   -  mutations:
-  -  - direction: ADD
-  -    index:
-  -      constraintId: 3
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 3
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_3_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      storeColumnNames:
-  -      - j
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -814,11 +899,11 @@ upsert descriptor #106
   -  version: "7"
   +  version: "8"
 write *eventpb.FinishSchemaChange to event log for descriptor 106
-create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
+create job #3 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #11
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase
 
 test
@@ -831,7 +916,7 @@ increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #106
   ...
        - 1
@@ -880,10 +965,8 @@ upsert descriptor #106
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
-  +      - 2
   +      - 3
   +      storeColumnNames:
-  +      - j
   +      - k
   +      unique: true
   +      version: 4
@@ -908,10 +991,8 @@ upsert descriptor #106
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
-  +      - 2
   +      - 3
   +      storeColumnNames:
-  +      - j
   +      - k
   +      unique: true
   +      useDeletePreservingEncoding: true
@@ -947,13 +1028,21 @@ upsert descriptor #106
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -972,7 +1061,34 @@ upsert descriptor #106
   +    - 6
   +    - 7
   +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
@@ -980,12 +1096,6 @@ upsert descriptor #106
   +            indexId: 2
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -1042,20 +1152,42 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: PUBLIC
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 4
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 4
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 4
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 2
   +            indexId: 4
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 2
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 106
   +            temporaryIndexId: 5
   +      metadata:
@@ -1078,19 +1210,41 @@ upsert descriptor #106
   +            indexId: 5
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 2
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 5
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 5
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 5
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -1111,7 +1265,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 7 with 4 MutationType ops
+## PostCommitPhase stage 1 of 6 with 4 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -1125,8 +1279,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -1154,14 +1308,14 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "9"
   +  version: "10"
-update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 2 of 6 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+## PostCommitPhase stage 2 of 6 with 1 BackfillType op
 backfill indexes [4] from index #2 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+## PostCommitPhase stage 3 of 6 with 3 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -1190,10 +1344,10 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "10"
   +  version: "11"
-update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 4 of 6 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+## PostCommitPhase stage 4 of 6 with 3 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -1222,18 +1376,18 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "11"
   +  version: "12"
-update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 6 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
-## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+## PostCommitPhase stage 5 of 6 with 1 BackfillType op
 merge temporary indexes [5] into backfilled indexes [4] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 1 ValidationType op
+## PostCommitPhase stage 6 of 6 with 1 ValidationType op
 validate forward indexes [4] in table #106
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 7 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -1251,19 +1405,30 @@ upsert descriptor #106
   ...
          userName: root
        currentStatuses:
-  +    - VALIDATED
   +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+       - PUBLIC
+       - PUBLIC
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
        - PUBLIC
        - PUBLIC
+  ...
+       - PUBLIC
+       - PUBLIC
+  +    - TRANSIENT_DELETE_ONLY
        - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
-  +    - PUBLIC
-       - WRITE_ONLY
+  -    - WRITE_ONLY
+       - PUBLIC
+       - PUBLIC
+  -    - PUBLIC
        jobId: "1"
+       relevantStatements:
   ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN k INT8 NOT NULL DEFAULT 42
            statementTag: ALTER TABLE
@@ -1314,8 +1479,9 @@ upsert descriptor #106
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+  -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
+  +    state: DELETE_ONLY
   +  - direction: DROP
        index:
   -      constraintId: 5
@@ -1336,11 +1502,11 @@ upsert descriptor #106
          partitioning: {}
          sharded: {}
          storeColumnIds:
-         - 2
   -      - 3
+  +      - 2
          storeColumnNames:
-         - j
   -      - k
+  +      - j
          unique: true
   -      useDeletePreservingEncoding: true
          version: 4
@@ -1359,11 +1525,12 @@ upsert descriptor #106
        interleave: {}
        keyColumnDirections:
   ...
+       sharded: {}
        storeColumnIds:
-       - 2
+  -    - 2
   +    - 3
        storeColumnNames:
-       - j
+  -    - j
   +    - k
        unique: true
        version: 4
@@ -1373,26 +1540,26 @@ upsert descriptor #106
   -  version: "12"
   +  version: "13"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #106
   ...
-         userName: root
-       currentStatuses:
-  -    - VALIDATED
+       - ABSENT
+       - ABSENT
+  -    - WRITE_ONLY
   +    - DELETE_ONLY
        - ABSENT
        - PUBLIC
   ...
        - PUBLIC
        - PUBLIC
-  -    - WRITE_ONLY
-  +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+  -    - TRANSIENT_DELETE_ONLY
+  +    - TRANSIENT_ABSENT
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -1400,12 +1567,33 @@ upsert descriptor #106
   -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
-     - direction: ADD
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 5
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 5
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_5_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 3
+  -      storeColumnNames:
+  -      - k
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
      - direction: DROP
        index:
   ...
@@ -1420,10 +1608,13 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "13"
   +  version: "14"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
+create job #2 (non-cancelable: true): "GC for "
+  descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending"
 commit transaction #10
+notified job registry to adopt jobs: [2]
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -1432,6 +1623,8 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
   -    - DELETE_ONLY
   -    - ABSENT
   -    - PUBLIC
@@ -1440,7 +1633,13 @@ upsert descriptor #106
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
-  -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - TRANSIENT_ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -1458,7 +1657,34 @@ upsert descriptor #106
   -    - 6
   -    - 7
   -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
@@ -1466,12 +1692,6 @@ upsert descriptor #106
   -            indexId: 2
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -1528,20 +1748,42 @@ upsert descriptor #106
   -        subWorkId: 1
   -      targetStatus: PUBLIC
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 4
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 4
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 4
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 2
   -            indexId: 4
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 2
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 106
   -            temporaryIndexId: 5
   -      metadata:
@@ -1564,19 +1806,41 @@ upsert descriptor #106
   -            indexId: 5
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 2
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 5
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 5
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 5
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -1585,35 +1849,6 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000010"
   -  mutations:
-  -  - direction: ADD
-  -    index:
-  -      constraintId: 5
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 5
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_5_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      - 3
-  -      storeColumnNames:
-  -      - j
-  -      - k
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 2
@@ -1650,11 +1885,11 @@ upsert descriptor #106
   -  version: "14"
   +  version: "15"
 write *eventpb.FinishSchemaChange to event log for descriptor 106
-create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN k INT8 NOT NULL DEFAULT 42"
+create job #3 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN k INT8 NOT NULL DEFAULT 42"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #11
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase
 
 
@@ -1668,7 +1903,7 @@ increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 8 MutationType ops
+## StatementPhase stage 1 of 1 with 14 MutationType ops
 upsert descriptor #106
   ...
        - 2
@@ -1720,12 +1955,8 @@ upsert descriptor #106
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
-  +      - 2
-  +      - 3
   +      - 4
   +      storeColumnNames:
-  +      - j
-  +      - k
   +      - l
   +      unique: true
   +      version: 4
@@ -1750,12 +1981,8 @@ upsert descriptor #106
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnIds:
-  +      - 2
-  +      - 3
   +      - 4
   +      storeColumnNames:
-  +      - j
-  +      - k
   +      - l
   +      unique: true
   +      useDeletePreservingEncoding: true
@@ -1815,13 +2042,21 @@ upsert descriptor #106
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -1840,7 +2075,34 @@ upsert descriptor #106
   +    - 6
   +    - 7
   +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 4
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 4
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
@@ -1848,13 +2110,6 @@ upsert descriptor #106
   +            indexId: 4
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -1913,21 +2168,42 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: PUBLIC
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 6
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 6
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 4
+  +          indexId: 6
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 4
   +            indexId: 6
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 4
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
-  +            - 4
   +            tableId: 106
   +            temporaryIndexId: 7
   +      metadata:
@@ -1950,20 +2226,41 @@ upsert descriptor #106
   +            indexId: 7
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 4
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
-  +            - 4
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 7
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 7
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 4
+  +          indexId: 7
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -2004,7 +2301,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 7 with 5 MutationType ops
+## PostCommitPhase stage 1 of 6 with 5 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -2018,8 +2315,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -2061,14 +2358,14 @@ upsert descriptor #107
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
-update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 2 of 6 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+## PostCommitPhase stage 2 of 6 with 1 BackfillType op
 backfill indexes [6] from index #4 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 7 with 4 MutationType ops
+## PostCommitPhase stage 3 of 6 with 4 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -2111,10 +2408,10 @@ upsert descriptor #107
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 4 of 6 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 4 of 7 with 4 MutationType ops
+## PostCommitPhase stage 4 of 6 with 4 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -2157,18 +2454,18 @@ upsert descriptor #107
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
-update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+update progress of schema change job #1: "PostCommitPhase stage 5 of 6 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
-## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+## PostCommitPhase stage 5 of 6 with 1 BackfillType op
 merge temporary indexes [7] into backfilled indexes [6] in table #106
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 1 ValidationType op
+## PostCommitPhase stage 6 of 6 with 1 ValidationType op
 validate forward indexes [6] in table #106
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 7 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -2188,19 +2485,30 @@ upsert descriptor #106
   ...
          userName: root
        currentStatuses:
-  +    - VALIDATED
   +    - ABSENT
+  +    - ABSENT
+  +    - WRITE_ONLY
+  +    - ABSENT
+       - PUBLIC
+       - PUBLIC
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
        - PUBLIC
        - PUBLIC
+  ...
+       - PUBLIC
+       - PUBLIC
+  +    - TRANSIENT_DELETE_ONLY
        - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
-  +    - PUBLIC
-       - WRITE_ONLY
+  -    - WRITE_ONLY
+       - PUBLIC
+       - PUBLIC
+  -    - PUBLIC
        jobId: "1"
+       relevantStatements:
   ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
            statementTag: ALTER TABLE
@@ -2253,8 +2561,9 @@ upsert descriptor #106
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+  -    state: DELETE_AND_WRITE_ONLY
   -  - direction: ADD
+  +    state: DELETE_ONLY
   +  - direction: DROP
        index:
   -      constraintId: 7
@@ -2274,14 +2583,12 @@ upsert descriptor #106
   +      name: crdb_internal_index_4_name_placeholder
          partitioning: {}
          sharded: {}
-  ...
-         - 2
-         - 3
+         storeColumnIds:
   -      - 4
+  +      - 3
          storeColumnNames:
-         - j
-         - k
   -      - l
+  +      - k
          unique: true
   -      useDeletePreservingEncoding: true
          version: 4
@@ -2300,12 +2607,12 @@ upsert descriptor #106
        interleave: {}
        keyColumnDirections:
   ...
-       - 2
-       - 3
+       sharded: {}
+       storeColumnIds:
+  -    - 3
   +    - 4
        storeColumnNames:
-       - j
-       - k
+  -    - k
   +    - l
        unique: true
        version: 4
@@ -2335,26 +2642,26 @@ upsert descriptor #107
   -  version: "5"
   +  version: "6"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
 upsert descriptor #106
   ...
-         userName: root
-       currentStatuses:
-  -    - VALIDATED
+       - ABSENT
+       - ABSENT
+  -    - WRITE_ONLY
   +    - DELETE_ONLY
        - ABSENT
        - PUBLIC
   ...
        - PUBLIC
        - PUBLIC
-  -    - WRITE_ONLY
-  +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+  -    - TRANSIENT_DELETE_ONLY
+  +    - TRANSIENT_ABSENT
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -2362,12 +2669,33 @@ upsert descriptor #106
   -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
-     - direction: ADD
-  ...
-         version: 4
-       mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
-  +    state: DELETE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 7
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 7
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_7_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 4
+  -      storeColumnNames:
+  -      - l
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
      - direction: DROP
        index:
   ...
@@ -2396,10 +2724,13 @@ upsert descriptor #107
      unexposedParentSchemaId: 105
   -  version: "6"
   +  version: "7"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
+create job #2 (non-cancelable: true): "GC for "
+  descriptor IDs: [106]
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending"
 commit transaction #10
+notified job registry to adopt jobs: [2]
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -2408,6 +2739,8 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
   -    - DELETE_ONLY
   -    - ABSENT
   -    - PUBLIC
@@ -2416,7 +2749,13 @@ upsert descriptor #106
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
-  -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - TRANSIENT_ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -2434,7 +2773,34 @@ upsert descriptor #106
   -    - 6
   -    - 7
   -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 4
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 4
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
@@ -2442,13 +2808,6 @@ upsert descriptor #106
   -            indexId: 4
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -2507,21 +2866,42 @@ upsert descriptor #106
   -        subWorkId: 1
   -      targetStatus: PUBLIC
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 6
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 6
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 4
+  -          indexId: 6
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 4
   -            indexId: 6
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 4
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
-  -            - 4
   -            tableId: 106
   -            temporaryIndexId: 7
   -      metadata:
@@ -2544,20 +2924,41 @@ upsert descriptor #106
   -            indexId: 7
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 4
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
-  -            - 4
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 7
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 7
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 4
+  -          indexId: 7
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -2566,37 +2967,6 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000010"
   -  mutations:
-  -  - direction: ADD
-  -    index:
-  -      constraintId: 7
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 7
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_7_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnIds:
-  -      - 2
-  -      - 3
-  -      - 4
-  -      storeColumnNames:
-  -      - j
-  -      - k
-  -      - l
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 4
@@ -2616,10 +2986,8 @@ upsert descriptor #106
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnIds:
-  -      - 2
   -      - 3
   -      storeColumnNames:
-  -      - j
   -      - k
   -      unique: true
   -      version: 4
@@ -2658,9 +3026,9 @@ upsert descriptor #107
   -  version: "7"
   +  version: "8"
 write *eventpb.FinishSchemaChange to event log for descriptor 106
-create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
+create job #3 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #11
-notified job registry to adopt jobs: [2]
+notified job registry to adopt jobs: [3]
 # end PostCommitPhase

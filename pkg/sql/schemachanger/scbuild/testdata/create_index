@@ -5,39 +5,57 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id1
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       indexId: 3
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
     isUsingSecondaryEncoding: true
 
@@ -45,43 +63,61 @@ build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name) STORING (money)
 ----
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: id2, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id2
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
       isConcurrently: true
       isInverted: true
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       indexId: 3
       isConcurrently: true
       isInverted: true
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
     isUsingSecondaryEncoding: true
 
@@ -91,6 +127,40 @@ CREATE INDEX id3
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: id3, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
@@ -108,34 +178,18 @@ CREATE INDEX id3
     partitioning:
       numColumns: 1
     tableId: 104
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 2
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       indexId: 3
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
     isUsingSecondaryEncoding: true
 
@@ -165,6 +219,108 @@ CREATE INDEX id4
         oid: 23
         width: 32
     tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 4
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 5
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    indexId: 1
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 4
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 5
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 3
+    indexId: 1
+    kind: STORED
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 2
+    kind: STORED
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 3
+    kind: STORED
+    ordinal: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 4
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 5
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 4
+    indexId: 2
+    kind: STORED
+    ordinal: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 4
+    indexId: 3
+    kind: STORED
+    ordinal: 2
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: id4, IndexID: 4}, PUBLIC], ABSENT]
   details:
     indexId: 4
@@ -186,41 +342,20 @@ CREATE INDEX id4
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
-      storingColumnIds:
-      - 2
-      - 3
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
-      - 3
-      - 4
       tableId: 104
       temporaryIndexId: 3
-- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       indexId: 4
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sharding:
         columnNames:
         - id
@@ -229,36 +364,20 @@ CREATE INDEX id4
         name: crdb_internal_id_name_shard_8
         shardBuckets: 8
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
       temporaryIndexId: 5
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
-      - 3
-      - 4
       tableId: 104
-- [[TemporaryIndex:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       indexId: 5
-      keyColumnDirections:
-      - ASC
-      - ASC
-      keyColumnIds:
-      - 1
-      - 2
       sharding:
         columnNames:
         - id
@@ -267,7 +386,5 @@ CREATE INDEX id4
         name: crdb_internal_id_name_shard_8
         shardBuckets: 8
       sourceIndexId: 1
-      storingColumnIds:
-      - 3
       tableId: 104
     isUsingSecondaryEncoding: true

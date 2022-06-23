@@ -186,6 +186,15 @@ IndexComment :  TableID
 IndexComment :  IndexID
 IndexComment :  Comment
 
+object IndexColumn
+
+IndexColumn :  TableID
+IndexColumn :  IndexID
+IndexColumn :  ColumnID
+IndexColumn :  Ordinal
+IndexColumn :  Kind
+IndexColumn :  Direction
+
 object ConstraintName
 
 ConstraintName :  TableID
@@ -279,6 +288,10 @@ SecondaryIndex <|-- IndexPartitioning
 SecondaryIndex <|-- SecondaryIndexPartial
 PrimaryIndex <|-- IndexComment
 SecondaryIndex <|-- IndexComment
+PrimaryIndex <|-- IndexColumn
+SecondaryIndex <|-- IndexColumn
+TemporaryIndex <|-- IndexColumn
+Column <|-- IndexColumn
 UniqueWithoutIndexConstraint <|-- ConstraintName
 CheckConstraint <|-- ConstraintName
 ForeignKeyConstraint <|-- ConstraintName

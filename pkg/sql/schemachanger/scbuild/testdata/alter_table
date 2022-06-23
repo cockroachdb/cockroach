@@ -25,6 +25,33 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
         width: 64
     isNullable: true
     tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -41,39 +68,23 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
 
 build
@@ -105,6 +116,33 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
         width: 64
     isNullable: true
     tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -121,39 +159,23 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
 
 build
@@ -212,6 +234,45 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
         width: 64
     isNullable: true
     tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -228,41 +289,23 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
-      - 3
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
-      - 3
       tableId: 104
 
 build
@@ -290,6 +333,33 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
         width: 64
     isNullable: true
     tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    kind: STORED
+    tableId: 104
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -306,39 +376,23 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
 
 setup
@@ -389,6 +443,78 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
         width: 64
     isNullable: true
     tableId: 105
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    indexId: 1
+    kind: STORED
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 2
+    kind: STORED
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 1
+    indexId: 3
+    kind: STORED
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  details:
+    columnId: 2
+    indexId: 1
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 2
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    indexId: 3
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 2
+    kind: STORED
+    tableId: 105
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    indexId: 3
+    kind: STORED
+    tableId: 105
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
@@ -415,24 +541,14 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
       temporaryIndexId: 3
 - [[PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
@@ -441,55 +557,29 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
       constraintId: 1
       indexId: 1
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 2
-      storingColumnIds:
-      - 1
       tableId: 105
-- [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 2
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 1
-      - 3
       tableId: 105
       temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 1
       sourceIndexId: 1
-      storingColumnIds:
-      - 2
       tableId: 104
-- [[TemporaryIndex:{DescID: 105, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
+- [[TemporaryIndex:{DescID: 105, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   details:
     embeddedIndex:
       constraintId: 1
       indexId: 3
       isUnique: true
-      keyColumnDirections:
-      - ASC
-      keyColumnIds:
-      - 2
       sourceIndexId: 1
-      storingColumnIds:
-      - 1
-      - 3
       tableId: 105
