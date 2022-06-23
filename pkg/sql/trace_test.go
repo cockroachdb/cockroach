@@ -638,7 +638,11 @@ func TestTraceDistSQL(t *testing.T) {
 	require.True(t, ok, "table reader span not found")
 	require.Empty(t, rec.OrphanSpans())
 	// Check that the table reader indeed came from a remote note.
-	require.Equal(t, "2", sp.Tags["node"])
+	anonTagGroup := sp.FindTagGroup("")
+	require.NotNil(t, anonTagGroup)
+	val, ok := anonTagGroup.FindTag("node")
+	require.True(t, ok)
+	require.Equal(t, "2", val)
 }
 
 // Test the sql.trace.stmt.enable_threshold cluster setting.

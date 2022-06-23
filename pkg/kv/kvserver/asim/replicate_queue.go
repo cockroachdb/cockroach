@@ -22,10 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// ReplicateQueue presents an interface to interact with a single consumer
+// RangeQueue presents an interface to interact with a single consumer
 // queue, which processes replicas for replication updates if they meet the
 // criteria.
-type ReplicateQueue interface {
+// TODO(kvoli): When replicas are enqueued into multiple queues, and they are
+// processed in the same Tick() - both pushing state updates to the state
+// changer, then only one will be successful, as there may be at most one
+// pending change per range. The split queue currently goes first and therefore
+// has priority over the replication queue. We should implement a wait or retry
+// next tick mechanism to address this, to match the real code.
+type RangeQueue interface {
 	// MaybeAdd proposes a replica for inclusion into the ReplicateQueue, if it
 	// meets the criteria it is enqueued.
 	MaybeAdd(ctx context.Context, repl state.Replica, state state.State) bool
@@ -97,32 +103,43 @@ func (pq *priorityQueue) Pop() interface{} {
 	return item
 }
 
-// replicateQueue is an implementation of the ReplicateQueue interface.
-type replicateQueue struct {
+// baseQueue is an implementation of the ReplicateQueue interface.
+type baseQueue struct {
 	priorityQueue
-	allocator    allocatorimpl.Allocator
-	storeID      state.StoreID
-	stateChanger state.Changer
-	next         time.Time
-	// TOOD(kvoli): Delay is used as a fixed delay we pass for all replica
-	// changes. In the future we should pass in a delay function which returns
-	// a duration given the size of the range, snapshot rates and overload.
-	delay time.Duration
+	storeID        state.StoreID
+	stateChanger   state.Changer
+	next, lastTick time.Time
+}
+
+type replicateQueue struct {
+	baseQueue
+	allocator allocatorimpl.Allocator
+	delay     func(rangeSize int64, add bool) time.Duration
+}
+
+type splitQueue struct {
+	baseQueue
+	splitThreshold int64
+	delay          func() time.Duration
 }
 
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
 	stateChanger state.Changer,
-	delay time.Duration,
+	delay func(rangeSize int64, add bool) time.Duration,
 	allocator allocatorimpl.Allocator,
-) ReplicateQueue {
+	start time.Time,
+) RangeQueue {
 	return &replicateQueue{
-		priorityQueue: priorityQueue{items: make([]*replicaItem, 0, 1)},
-		allocator:     allocator,
-		storeID:       storeID,
-		stateChanger:  stateChanger,
-		delay:         delay,
+		baseQueue: baseQueue{
+			priorityQueue: priorityQueue{items: make([]*replicaItem, 0, 1)},
+			storeID:       storeID,
+			stateChanger:  stateChanger,
+			next:          start,
+		},
+		delay:     delay,
+		allocator: allocator,
 	}
 }
 
@@ -158,34 +175,39 @@ func (rq *replicateQueue) MaybeAdd(
 // on the action taken. Replicas in the queue are processed in order of
 // priority, then in FIFO order on ties. The Tick function currently only
 // supports processing ConsiderRebalance actions on replicas.
-// TODO(kvoli,lidorcarmel): Support taking additional actions, beyond consider rebalance.
+// TODO(kvoli,lidorcarmel): Support taking additional actions, beyond consider
+// rebalance.
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
-	if tick.Before(rq.next) || rq.priorityQueue.Len() == 0 {
-		return
+	if rq.lastTick.After(rq.next) {
+		rq.next = rq.lastTick
 	}
 
-	item := heap.Pop(rq).(*replicaItem)
-	if item == nil {
-		return
+	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
+		item := heap.Pop(rq).(*replicaItem)
+		if item == nil {
+			return
+		}
+
+		rng, ok := s.Range(state.RangeID(item.rangeID))
+		if !ok {
+			return
+		}
+
+		action, _ := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
+
+		switch action {
+		case allocatorimpl.AllocatorConsiderRebalance:
+			rq.considerRebalance(ctx, rq.next, rng, s)
+		case allocatorimpl.AllocatorNoop:
+			return
+		default:
+			log.Infof(ctx, "s%d: allocator action %s for range %s is unsupported by the simulator "+
+				"replicate queue, ignoring.", rq.storeID, action, rng)
+			return
+		}
 	}
 
-	rng, ok := s.Range(state.RangeID(item.rangeID))
-	if !ok {
-		return
-	}
-
-	action, _ := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
-
-	switch action {
-	case allocatorimpl.AllocatorConsiderRebalance:
-		rq.considerRebalance(ctx, tick, rng, s)
-	case allocatorimpl.AllocatorNoop:
-		return
-	default:
-		log.Infof(ctx, "s%d: allocator action %s for range %s is unsupported by the simulator "+
-			"replicate queue, ignoring.", rq.storeID, action, rng)
-		return
-	}
+	rq.lastTick = tick
 }
 
 // considerRebalance simulates the logic of the replicate queue when given a
@@ -220,9 +242,127 @@ func (rq *replicateQueue) considerRebalance(
 		RangeID: state.RangeID(rng.Descriptor().RangeID),
 		Add:     state.StoreID(add.StoreID),
 		Remove:  state.StoreID(remove.StoreID),
-		Wait:    rq.delay,
+		Wait:    rq.delay(rng.Size(), true),
 	}
 	if completeAt, ok := rq.stateChanger.Push(tick, &change); ok {
 		rq.next = completeAt
 	}
+}
+
+// NewSplitQueue returns a new split queue, implementing the range queue
+// interface.
+func NewSplitQueue(
+	storeID state.StoreID,
+	stateChanger state.Changer,
+	delay func() time.Duration,
+	splitThreshold int64,
+	start time.Time,
+) RangeQueue {
+	return &splitQueue{
+		baseQueue: baseQueue{
+			priorityQueue: priorityQueue{items: make([]*replicaItem, 0, 1)},
+			storeID:       storeID,
+			stateChanger:  stateChanger,
+			next:          start,
+		},
+		delay:          delay,
+		splitThreshold: splitThreshold,
+	}
+}
+
+// MaybeAdd proposes a range for being split. If it meets the criteria it is
+// enqueued.
+func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state state.State) bool {
+	priority := sq.shouldSplit(replica.Range(), state)
+	if priority < 1 {
+		return false
+	}
+
+	rng, _ := state.Range(replica.Range())
+
+	heap.Push(sq, &replicaItem{
+		rangeID:   roachpb.RangeID(replica.Range()),
+		replicaID: replica.Descriptor().ReplicaID,
+		priority:  float64(rng.Size()) / float64(sq.splitThreshold),
+	})
+	return true
+}
+
+// Tick proceses updates in the split queue. Only one range is processed at a
+// time and the duration taken to process a replica depends on the action
+// taken. Replicas in the queue are processed in order of priority, then in
+// FIFO order on ties. The tick currently only considers size based range
+// splitting.
+func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	if sq.lastTick.After(sq.next) {
+		sq.next = sq.lastTick
+	}
+
+	for !tick.Before(sq.next) && sq.priorityQueue.Len() != 0 {
+		item := heap.Pop(sq).(*replicaItem)
+		if item == nil {
+			return
+		}
+
+		rng, ok := s.Range(state.RangeID(item.rangeID))
+		if !ok {
+			return
+		}
+
+		// Check whether the range satifies the split criteria, since it may have
+		// changed since it was enqueued.
+		if sq.shouldSplit(rng.RangeID(), s) < 1 {
+			return
+		}
+
+		splitKey, ok := findKeySpanSplit(s, rng.RangeID())
+		if !ok {
+			return
+		}
+
+		change := state.RangeSplitChange{
+			RangeID:     state.RangeID(rng.Descriptor().RangeID),
+			Leaseholder: sq.storeID,
+			SplitKey:    splitKey,
+			Wait:        sq.delay(),
+		}
+
+		if completeAt, ok := sq.stateChanger.Push(sq.next, &change); ok {
+			sq.next = completeAt
+		}
+	}
+
+	sq.lastTick = tick
+}
+
+// shouldSplit returns whether a range should be split into two. When the
+// floating point number returned is greater than or equal to 1, it should be
+// split with that priority, else it shouldn't.
+func (sq *splitQueue) shouldSplit(rangeID state.RangeID, s state.State) float64 {
+	rng, ok := s.Range(rangeID)
+	if !ok {
+		return 0
+	}
+
+	return float64(rng.Size()) / float64(sq.splitThreshold)
+}
+
+// findKeySpanSplit returns a key that may be used for splitting a range into
+// two. It will return the key that divides the range into an equal number of
+// keys on the lhs and rhs.
+func findKeySpanSplit(s state.State, rangeID state.RangeID) (state.Key, bool) {
+	start, end, ok := s.RangeSpan(rangeID)
+	if !ok {
+		return start, false
+	}
+
+	delta := end - start
+	// The range is not splittable, it contains only a single key already. e.g.
+	// [0, 1) is not splittable, whilst [0, 2) may be split into [0,1) [1,2).
+	if delta < 2 {
+		return start, false
+	}
+
+	splitKey := start + delta/2
+	return splitKey, true
 }
