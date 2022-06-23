@@ -322,6 +322,13 @@ var (
 		Measurement: "Updates",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaProtectedTimeStampBehindNanos = metric.Metadata{
+		Name:        "changefeed.protected_time_stamp_behind_nanos",
+		Help:        "Age of the oldest change feed. A Large number could indicate stale data.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
@@ -504,10 +511,12 @@ type Metrics struct {
 
 	mu struct {
 		syncutil.Mutex
-		id       int
-		resolved map[int]hlc.Timestamp
+		id                  int
+		resolved            map[int]hlc.Timestamp
+		protectedTimeStamps map[int]time.Time
 	}
-	MaxBehindNanos *metric.Gauge
+	MaxBehindNanos                *metric.Gauge
+	ProtectedTimeStampBehindNanos *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -534,19 +543,34 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
-	m.mu.id = 1 // start the first id at 1 so we can detect initialization
+	m.mu.id = 1 // start the first id at 1, so we can detect initialization
 	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {
 		now := timeutil.Now()
 		var maxBehind time.Duration
 		m.mu.Lock()
+		defer m.mu.Unlock()
 		for _, resolved := range m.mu.resolved {
 			if behind := now.Sub(resolved.GoTime()); behind > maxBehind {
 				maxBehind = behind
 			}
 		}
-		m.mu.Unlock()
 		return maxBehind.Nanoseconds()
 	})
+
+	m.mu.protectedTimeStamps = make(map[int]time.Time)
+	m.ProtectedTimeStampBehindNanos = metric.NewFunctionalGauge(metaProtectedTimeStampBehindNanos, func() int64 {
+		now := timeutil.Now()
+		maxBehind := now
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		for _, timeStamp := range m.mu.protectedTimeStamps {
+			if timeStamp.Before(maxBehind) {
+				maxBehind = timeStamp
+			}
+		}
+		return now.Sub(maxBehind).Nanoseconds()
+	})
+
 	return m
 }
 

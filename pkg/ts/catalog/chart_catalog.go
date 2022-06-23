@@ -1335,6 +1335,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Protected Timestamp Behind Nanos",
+				Metrics: []string{
+					"changefeed.protected_time_stamp_behind_nanos",
+				},
+			},
+			{
 				Title: "Currently Running",
 				Metrics: []string{
 					"changefeed.running",

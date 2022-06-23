@@ -983,17 +983,19 @@ func (cf *changeFrontier) close() {
 }
 
 // closeMetrics de-registers from the progress registry that powers
-// `changefeed.max_behind_nanos`. This method is idempotent.
+// `changefeed.max_behind_nanos` and
+// `changefeed.protected_time_stamp_behind_nanos`. This method is idempotent.
 func (cf *changeFrontier) closeMetrics() {
-	// Delete this feed from the MaxBehindNanos metric so it's no longer
-	// considered by the gauge.
+	// Delete this feed from the MaxBehindNanos and ProtectedTimeStampBehindNanos
+	// metric, so they are no longer considered by the gauges.
 	cf.metrics.mu.Lock()
+	defer cf.metrics.mu.Unlock()
 	if cf.metricsID > 0 {
 		cf.sliMetrics.RunningCount.Dec(1)
 	}
 	delete(cf.metrics.mu.resolved, cf.metricsID)
+	delete(cf.metrics.mu.protectedTimeStamps, cf.metricsID)
 	cf.metricsID = -1
-	cf.metrics.mu.Unlock()
 }
 
 // Next is part of the RowSource interface.
@@ -1272,6 +1274,11 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return nil
 	}
 	cf.lastProtectedTimestampUpdate = timeutil.Now()
+
+	// update the protected time stamp metric map.
+	cf.metrics.mu.Lock()
+	cf.metrics.mu.protectedTimeStamps[cf.metricsID] = cf.lastProtectedTimestampUpdate
+	cf.metrics.mu.Unlock()
 
 	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
 
