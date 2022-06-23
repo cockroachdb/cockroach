@@ -51,7 +51,7 @@ import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
-import JobsPage from "src/views/jobs";
+import JobsPage from "src/views/jobs/jobsPage";
 import JobDetails from "src/views/jobs/jobDetails";
 import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 import Certificates from "src/views/reports/containers/certificates";
@@ -153,7 +153,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 {/* events & jobs */}
                 <Route path="/events" component={EventPage} />
                 <Route exact path="/jobs" component={JobsPage} />
-                <Route path="/jobs/:id" component={JobDetails} />
+                <Route path={"/jobs/:id"} component={JobDetails} />
 
                 {/* databases */}
                 <Route exact path="/databases" component={DatabasesPage} />

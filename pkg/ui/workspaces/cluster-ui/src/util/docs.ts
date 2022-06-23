@@ -28,6 +28,7 @@ export const adminUILoginNoVersion = docsURLNoVersion(
 );
 export const startFlags = docsURL("start-a-node.html#flags");
 export const pauseJob = docsURL("pause-job.html");
+export const resumeJob = docsURL("resume-job.html");
 export const cancelJob = docsURL("cancel-job.html");
 export const enableNodeMap = docsURL("enable-node-map.html");
 export const configureReplicationZones = docsURL(
@@ -45,6 +46,7 @@ export const keyValuePairs = docsURL(
 );
 export const databaseTable = docsURL("ui-databases-page.html");
 export const jobTable = docsURL("ui-jobs-page.html");
+export const jobStatus = docsURL("ui-jobs-page.html#job-status");
 export const statementsTable = docsURL("ui-statements-page.html");
 export const statementDiagnostics = docsURL(
   "ui-statements-page.html#diagnostics",
