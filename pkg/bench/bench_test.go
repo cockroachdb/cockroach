@@ -221,12 +221,12 @@ func BenchmarkTableResolution(b *testing.B) {
 	for _, createTempTables := range []bool{false, true} {
 		b.Run(fmt.Sprintf("temp_schema_exists:%t", createTempTables), func(b *testing.B) {
 			benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-				defer func() {
+				defer func(createTempTables bool) {
 					db.Exec(b, `DROP TABLE IF EXISTS bench.tbl`)
 					if createTempTables {
 						db.Exec(b, `DROP TABLE IF EXISTS bench.pg_temp.temp_tbl`)
 					}
-				}()
+				}(createTempTables)
 
 				db.Exec(b, `
 			USE bench;
@@ -301,13 +301,13 @@ func runBenchmarkInsert(b *testing.B, db *sqlutils.SQLRunner, count int) {
 func runBenchmarkInsertFK(b *testing.B, db *sqlutils.SQLRunner, count int) {
 	for _, nFks := range []int{1, 5, 10} {
 		b.Run(fmt.Sprintf("nFks=%d", nFks), func(b *testing.B) {
-			defer func() {
+			defer func(nFks int) {
 				dropStmt := "DROP TABLE IF EXISTS bench.insert"
 				for i := 0; i < nFks; i++ {
 					dropStmt += fmt.Sprintf(",bench.fk%d", i)
 				}
 				db.Exec(b, dropStmt)
-			}()
+			}(nFks)
 
 			for i := 0; i < nFks; i++ {
 				db.Exec(b, fmt.Sprintf(`CREATE TABLE bench.fk%d (k INT PRIMARY KEY)`, i))

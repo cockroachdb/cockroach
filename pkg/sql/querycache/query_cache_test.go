@@ -278,7 +278,7 @@ func BenchmarkWorstCase(b *testing.B) {
 					wg.Add(numWorkers)
 					for i := 0; i < numWorkers; i++ {
 						workerID := i
-						go func() {
+						go func(mitigation bool) {
 							var s Session
 							s.Init()
 							cd := CachedData{Memo: &memo.Memo{}}
@@ -295,7 +295,7 @@ func BenchmarkWorstCase(b *testing.B) {
 								c.Add(&s, &cd)
 							}
 							wg.Done()
-						}()
+						}(mitigation)
 					}
 					wg.Wait()
 				})

@@ -327,9 +327,9 @@ GRANT admin TO has_admin2;
 			// Start a query with the target user.
 			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
 			defer targetDB.Close()
-			go func() {
+			go func(shouldSucceed bool) {
 				var errRE string
-				if tc.shouldSucceed {
+				if shouldSucceed {
 					errRE = "query execution canceled"
 				} else {
 					// The query should survive until the connection gets torn down at the
@@ -341,7 +341,7 @@ GRANT admin TO has_admin2;
 					t.Errorf("expected error '%s', got: %v", errRE, err)
 				}
 				wg.Done()
-			}()
+			}(tc.shouldSucceed)
 
 			// Retrieve the query ID.
 			var queryID string

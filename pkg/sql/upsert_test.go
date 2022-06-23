@@ -187,12 +187,13 @@ func TestConcurrentUpsert(t *testing.T) {
 	}
 
 	for _, test := range testCases {
+		updateStmt := test.updateStmt
 		t.Run(test.name, func(t *testing.T) {
 			g, ctx := errgroup.WithContext(context.Background())
 			for i := 0; i < 2; i++ {
 				g.Go(func() error {
 					for j := 0; j < 100; j++ {
-						if _, err := sqlDB.DB.ExecContext(ctx, test.updateStmt, j); err != nil {
+						if _, err := sqlDB.DB.ExecContext(ctx, updateStmt, j); err != nil {
 							return err
 						}
 					}

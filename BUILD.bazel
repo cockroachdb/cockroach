@@ -189,6 +189,7 @@ nogo(
             "//pkg/testutils/lint/passes/grpcstatuswithdetails",
             "//pkg/testutils/lint/passes/hash",
             "//pkg/testutils/lint/passes/leaktestcall",
+            "//pkg/testutils/lint/passes/loopvarcapture",
             "//pkg/testutils/lint/passes/nilness",
             "//pkg/testutils/lint/passes/nocopy",
             "//pkg/testutils/lint/passes/returncheck",

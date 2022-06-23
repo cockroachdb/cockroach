@@ -831,10 +831,10 @@ USE t;
 				// Perform the alter table command asynchronously; this will be interrupted.
 				rbrErrCh := make(chan error, 1)
 				performInterrupt = true
-				go func() {
-					_, err := sqlDB.Exec(rbrChange.cmd)
+				go func(cmd string) {
+					_, err := sqlDB.Exec(cmd)
 					rbrErrCh <- err
-				}()
+				}(rbrChange.cmd)
 
 				// Wait for the backfill to start.
 				<-interruptStartCh
@@ -884,10 +884,10 @@ USE t;
 				performInterrupt = true
 
 				regionChangeErr := make(chan error, 1)
-				go func() {
-					_, err := sqlDB.Exec(regionChange.cmd)
+				go func(cmd string) {
+					_, err := sqlDB.Exec(cmd)
 					regionChangeErr <- err
-				}()
+				}(regionChange.cmd)
 
 				// Wait for the enum change to start.
 				<-interruptStartCh
