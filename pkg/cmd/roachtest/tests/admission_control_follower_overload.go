@@ -33,12 +33,13 @@ func registerAdmissionControlFollowerOverload(r registry.Registry) {
 			Name:    "admission/follower-overload/" + subtest,
 			Owner:   registry.OwnerKV,
 			Timeout: 3 * time.Hour,
-			// Don't re-use the cluster, since we're deploying a disk nemesis which isn't
-			// guaranteed to be shut down by termination of this test.
+			// Don't re-use the cluster, since we don't have any conventions about
+			// `wipe` removing any custom systemd units.
+			//
 			// NB: use 16vcpu machines to avoid getting anywhere close to EBS bandwidth limits
 			// on AWS, see:
 			// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
-			Cluster: r.MakeClusterSpec(4, spec.CPU(16), spec.ReuseNone(), spec.AvoidSSD(), spec.SSD(0), spec.MultipleStores(true)),
+			Cluster: r.MakeClusterSpec(4, spec.CPU(16), spec.ReuseNone(), spec.AvoidSSD(), spec.RAID0(false)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runAdmissionControlFollowerOverload(ctx, t, c, cfg)
 			},
