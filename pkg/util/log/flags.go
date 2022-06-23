@@ -16,7 +16,6 @@ import (
 	"io/fs"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -289,7 +288,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(secLoggersCtx, fileSinkInfo, fc.CommonSinkConfig.Buffering)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
 		// Start the GC process. This ensures that old capture files get
@@ -306,7 +305,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(secLoggersCtx, fluentSinkInfo, fc.CommonSinkConfig.Buffering)
 		attachSinkInfo(fluentSinkInfo, &fc.Channels)
 	}
 
@@ -319,7 +318,7 @@ func ApplyConfig(config logconfig.Config) (resFn func(), err error) {
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig)
+		attachBufferWrapper(secLoggersCtx, httpSinkInfo, fc.CommonSinkConfig.Buffering)
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
@@ -401,38 +400,24 @@ func (l *sinkInfo) applyFilters(chs logconfig.ChannelFilters) {
 	}
 }
 
-func attachBufferWrapper(ctx context.Context, s *sinkInfo, c logconfig.CommonSinkConfig) {
-	b := c.Buffering
-	if b.IsNone() {
+// attachBufferWrapper modifies s, wrapping its sink in a bufferedSink unless
+// bufConfig.IsNone().
+//
+// ctx needs to be canceled to stop the bufferedSink internal goroutines.
+func attachBufferWrapper(
+	ctx context.Context, s *sinkInfo, bufConfig logconfig.CommonBufferSinkConfigWrapper,
+) {
+	if bufConfig.IsNone() {
 		return
 	}
-
-	errCallback := func(err error) {
-		// TODO(knz): explain which sink is encountering the error in the
-		// error message.
-		// See: https://github.com/cockroachdb/cockroach/issues/72461
-		Ops.Errorf(context.Background(), "logging error: %v", err)
-	}
-	if s.criticality {
-		// TODO(knz): explain which sink is encountering the error in the
-		// error message.
-		// See: https://github.com/cockroachdb/cockroach/issues/72461
-		errCallback = func(err error) {
-			Ops.Errorf(context.Background(), "logging error: %v", err)
-
-			logging.mu.Lock()
-			f := logging.mu.exitOverride.f
-			logging.mu.Unlock()
-
-			code := s.sink.exitCode()
-			if f != nil {
-				f(code, err)
-			} else {
-				exit.WithCode(code)
-			}
-		}
-	}
-	s.sink = newBufferSink(ctx, s.sink, *b.MaxStaleness, int(*b.FlushTriggerSize), int32(*b.MaxInFlight), errCallback)
+	bs := newBufferedSink(
+		s.sink,
+		*bufConfig.MaxStaleness,
+		uint64(*bufConfig.FlushTriggerSize),
+		uint64(*bufConfig.MaxBufferSize),
+		s.criticality /* crashOnAsyncFlushErr */)
+	bs.Start(ctx)
+	s.sink = bs
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.
