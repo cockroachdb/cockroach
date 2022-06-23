@@ -39,9 +39,10 @@ func (sqlExecCtx *Context) RunQuery(
 
 // RunQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
+// Timings is enabled are written to 'tw'.
 // Errors and warnings, if any, are printed to 'ew'.
 func (sqlExecCtx *Context) RunQueryAndFormatResults(
-	ctx context.Context, conn clisqlclient.Conn, w, ew io.Writer, fn clisqlclient.QueryFn,
+	ctx context.Context, conn clisqlclient.Conn, w, tw, ew io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(ctx, conn)
@@ -113,7 +114,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 		} else if !more {
 			// We must call maybeShowTimes after rows has been closed, which is after
 			// NextResultSet returns false.
-			sqlExecCtx.maybeShowTimes(ctx, conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
+			sqlExecCtx.maybeShowTimes(ctx, conn, tw, ew, isMultiStatementQuery, startTime, queryCompleteTime)
 			return nil
 		}
 	}
