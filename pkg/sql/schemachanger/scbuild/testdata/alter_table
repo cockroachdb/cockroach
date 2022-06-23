@@ -25,67 +25,12 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
         width: 64
     isNullable: true
     tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    indexId: 1
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 2
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 3
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    indexId: 2
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 3
-    kind: STORED
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  details:
     indexId: 1
-    name: foo_pkey
+    kind: STORED
     tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    indexId: 2
-    name: foo_pkey
-    tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 1
-      isUnique: true
-      tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 2
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
-      temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 3
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -443,143 +388,15 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
         width: 64
     isNullable: true
     tableId: 105
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    indexId: 1
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 2
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 3
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 2
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 3
-    kind: STORED
-    tableId: 104
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    columnId: 1
-    indexId: 1
-    kind: STORED
-    tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 2
-    kind: STORED
-    tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 1
-    indexId: 3
-    kind: STORED
-    tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT]
   details:
     columnId: 2
     indexId: 1
-    tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 2
-    tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 2
-    indexId: 3
-    tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT]
+    kind: STORED
+    tableId: 104
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 1}, PUBLIC], ABSENT]
   details:
     columnId: 3
-    indexId: 2
+    indexId: 1
     kind: STORED
     tableId: 105
-- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT]
-  details:
-    columnId: 3
-    indexId: 3
-    kind: STORED
-    tableId: 105
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    indexId: 1
-    name: foo_pkey
-    tableId: 104
-- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    indexId: 2
-    name: foo_pkey
-    tableId: 104
-- [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 1}, ABSENT], PUBLIC]
-  details:
-    indexId: 1
-    name: bar_pkey
-    tableId: 105
-- [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, PUBLIC], ABSENT]
-  details:
-    indexId: 2
-    name: bar_pkey
-    tableId: 105
-- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 1
-      isUnique: true
-      tableId: 104
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 2
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
-      temporaryIndexId: 3
-- [[PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 1
-      isUnique: true
-      tableId: 105
-- [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 1, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 2
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 105
-      temporaryIndexId: 3
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 3
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 104
-- [[TemporaryIndex:{DescID: 105, IndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  details:
-    embeddedIndex:
-      constraintId: 1
-      indexId: 3
-      isUnique: true
-      sourceIndexId: 1
-      tableId: 105

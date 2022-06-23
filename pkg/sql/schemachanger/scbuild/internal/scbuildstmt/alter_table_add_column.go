@@ -350,6 +350,20 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 		// TODO(postamar): can this even be possible?
 		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
 	}
+	// As a special case, if we have a new column which has no computed
+	// expression and no default value, then we can just add it to the
+	// current primary index; there's no need to build a new index as
+	// it would have exactly the same data as the current index.
+	if spec.def == nil && spec.colType.ComputeExpr == nil {
+		b.Add(&scpb.IndexColumn{
+			TableID:  spec.tbl.TableID,
+			IndexID:  existing.IndexID,
+			ColumnID: spec.col.ColumnID,
+			Ordinal:  getNextStoredIndexColumnOrdinal(allTargets, existing),
+			Kind:     scpb.IndexColumn_STORED,
+		})
+		return existing
+	}
 	// Drop all existing primary index elements.
 	b.Drop(existing)
 	var existingName *scpb.IndexName

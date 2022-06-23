@@ -647,10 +647,10 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     embeddedIndex:
-      constraintId: 2
-      indexId: 2
+      constraintId: 1
+      indexId: 1
       isConcurrently: false
-      isCreatedExplicitly: true
+      isCreatedExplicitly: false
       isInverted: false
       isUnique: true
       sharding: null
@@ -787,14 +787,14 @@ ElementState:
     tableId: 104
   Status: PUBLIC
 - IndexName:
-    indexId: 2
+    indexId: 1
     name: parent_pkey
     tableId: 104
   Status: PUBLIC
 - IndexColumn:
     columnId: 1
     direction: ASC
-    indexId: 2
+    indexId: 1
     kind: KEY
     ordinal: 0
     tableId: 104
@@ -802,7 +802,7 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
-    indexId: 2
+    indexId: 1
     kind: STORED
     ordinal: 0
     tableId: 104
