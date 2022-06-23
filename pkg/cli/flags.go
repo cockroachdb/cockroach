@@ -758,6 +758,7 @@ func init() {
 				"For details, see: "+build.MakeIssueURL(53404))
 
 		cliflagcfg.BoolFlag(f, &demoCtx.disableEnterpriseFeatures, cliflags.DemoNoLicense)
+		cliflagcfg.BoolFlag(f, &demoCtx.DefaultEnableRangefeeds, cliflags.DemoEnableRangefeeds)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
 		// TODO(knz): Currently the multitenant UX for 'demo' is not

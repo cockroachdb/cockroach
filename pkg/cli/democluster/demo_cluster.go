@@ -1217,6 +1217,26 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 	return nil
 }
 
+func (c *transientCluster) SetClusterSetting(ctx context.Context, setting string, value interface{}) error {
+	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* isTenant */)
+	if err != nil {
+		return err
+	}
+	db, err := gosql.Open("postgres", storageURL.ToPQ().String())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = '%v'", setting, value))
+	if err != nil {
+		return err
+	}
+	if c.demoCtx.Multitenant {
+		_, err = db.Exec(fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = '%v'", setting, value))
+	}
+	return err
+}
+
 func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 	if err := c.maybeEnableMultiTenantMultiRegion(ctx); err != nil {
 		return err
