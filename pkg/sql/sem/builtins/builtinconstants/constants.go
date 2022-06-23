@@ -54,3 +54,20 @@ const (
 	CategorySystemRepair        = "System repair"
 	CategoryStreamIngestion     = "Stream Ingestion"
 )
+
+const (
+	// GatewayRegionBuiltinName is the name for the builtin that returns the gateway
+	// region of the current node.
+	GatewayRegionBuiltinName = "gateway_region"
+	// DefaultToDatabasePrimaryRegionBuiltinName is the name for the builtin that
+	// takes in a region and returns it if it is a valid region on the database.
+	// Otherwise, it returns the primary region.
+	DefaultToDatabasePrimaryRegionBuiltinName = "default_to_database_primary_region"
+	// RehomeRowBuiltinName is the name for the builtin that rehomes a row to the
+	// user's gateway region, defaulting to the database primary region.
+	RehomeRowBuiltinName = "rehome_row"
+)
+
+// NodeIDBits is the number of bits stored in the lower portion of
+// GenerateUniqueInt.
+const NodeIDBits = 15
