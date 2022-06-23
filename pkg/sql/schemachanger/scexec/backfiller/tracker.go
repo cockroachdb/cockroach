@@ -398,6 +398,8 @@ func (b *Tracker) collectProgressForCheckpointFlush() (
 	backfillProgress []scexec.BackfillProgress,
 	mergeProgress []scexec.MergeProgress,
 ) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	for _, p := range b.mu.backfillProgress {
 		if p.needsCheckpointFlush {
 			needsFlush = true
