@@ -932,7 +932,7 @@ increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 8 MutationType ops
 delete schema namespace entry {104 0 sc} -> 107
 delete object namespace entry {104 107 e} -> 109
 delete object namespace entry {104 107 _e} -> 110
@@ -1108,6 +1108,7 @@ upsert descriptor #109
   +    - ABSENT
   +    - DROPPED
   +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -1122,6 +1123,7 @@ upsert descriptor #109
   +    - 10
   +    - 11
   +    - 12
+  +    - 13
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1177,6 +1179,15 @@ upsert descriptor #109
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        enumTypeValue:
+  +          logicalRepresentation: b
+  +          physicalRepresentation: gA==
+  +          typeId: 109
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        objectParent:
   +          objectId: 109
   +          parentSchemaId: 107
@@ -1217,13 +1228,13 @@ upsert descriptor #110
   +        statement: DROP SCHEMA db.sc CASCADE
   +        statementTag: DROP SCHEMA
   +    targetRanks:
-  +    - 13
   +    - 14
   +    - 15
   +    - 16
   +    - 17
   +    - 18
   +    - 19
+  +    - 20
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1628,7 +1639,7 @@ checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 56 MutationType ops
+## StatementPhase stage 1 of 1 with 57 MutationType ops
 delete database namespace entry {0 0 db1} -> 111
 delete schema namespace entry {111 0 public} -> 112
 delete schema namespace entry {111 0 sc1} -> 113
@@ -4345,6 +4356,7 @@ upsert descriptor #123
   +    - ABSENT
   +    - DROPPED
   +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -4359,6 +4371,7 @@ upsert descriptor #123
   +    - 179
   +    - 180
   +    - 181
+  +    - 182
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4414,6 +4427,15 @@ upsert descriptor #123
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
+  +        enumTypeValue:
+  +          logicalRepresentation: a
+  +          physicalRepresentation: gA==
+  +          typeId: 123
+  +      metadata:
+  +        sourceElementId: 7
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
   +        objectParent:
   +          objectId: 123
   +          parentSchemaId: 113
@@ -4453,13 +4475,13 @@ upsert descriptor #124
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 182
   +    - 183
   +    - 184
   +    - 185
   +    - 186
   +    - 187
   +    - 188
+  +    - 189
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -4578,7 +4600,6 @@ upsert descriptor #125
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 189
   +    - 190
   +    - 191
   +    - 192
@@ -4599,6 +4620,7 @@ upsert descriptor #125
   +    - 207
   +    - 208
   +    - 209
+  +    - 210
   +    targets:
   +    - elementProto:
   +        namespace:

@@ -20,7 +20,6 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.TableZoneConfig) scop.Op {
 					return &scop.SetZoneConfig{
 						DescriptorID: this.TableID,

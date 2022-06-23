@@ -1511,7 +1511,7 @@ checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete object namespace entry {104 106 crdb_internal_region} -> 105
 delete schema namespace entry {104 0 public} -> 106
@@ -1669,7 +1669,9 @@ upsert descriptor #104
   +    - elementProto:
   +        databaseRegionConfig:
   +          databaseId: 104
+  +          primaryRegion: us-east1
   +          regionEnumTypeId: 105
+  +          survivalGoal: 1
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -1695,6 +1697,7 @@ upsert descriptor #105
   +    - ABSENT
   +    - DROPPED
   +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -1709,6 +1712,7 @@ upsert descriptor #105
   +    - 19
   +    - 20
   +    - 21
+  +    - 22
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -1759,6 +1763,15 @@ upsert descriptor #105
   +        enumType:
   +          arrayTypeId: 107
   +          isMultiRegion: true
+  +          typeId: 105
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        enumTypeValue:
+  +          logicalRepresentation: us-east2
+  +          physicalRepresentation: gA==
   +          typeId: 105
   +      metadata:
   +        sourceElementId: 3
@@ -1900,13 +1913,13 @@ upsert descriptor #107
   +        statement: DROP DATABASE multi_region_test_db CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 22
   +    - 23
   +    - 24
   +    - 25
   +    - 26
   +    - 27
   +    - 28
+  +    - 29
   +    targets:
   +    - elementProto:
   +        namespace:

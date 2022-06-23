@@ -444,6 +444,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: Precedence
   rule: dependents removed before column
 - from: [EnumType:{DescID: 111}, DROPPED]
+  to:   [EnumTypeValue:{DescID: 111}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before dependent element removal
+- from: [EnumType:{DescID: 111}, DROPPED]
   to:   [Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
@@ -1003,7 +1007,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 37 MutationType ops
+StatementPhase stage 1 of 1 with 38 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -1119,6 +1123,7 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[EnumType:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
+    [[EnumTypeValue:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[ObjectParent:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
@@ -1208,6 +1213,8 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
       TableID: 110
     *scop.MarkDescriptorAsDropped
       DescID: 111
+    *scop.NotImplemented
+      ElementType: scpb.EnumTypeValue
     *scop.MarkDescriptorAsDropped
       DescID: 112
     *scop.MarkDescriptorAsDropped

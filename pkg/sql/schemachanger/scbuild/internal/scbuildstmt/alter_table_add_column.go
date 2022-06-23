@@ -246,9 +246,6 @@ func alterTableAddColumn(
 				dbRegionConfig,
 				tbl.TableID,
 				applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDsForZoneConfig...))
-
-			/*	panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported %v", dbRegionConfig))*/
 		}
 	}
 
