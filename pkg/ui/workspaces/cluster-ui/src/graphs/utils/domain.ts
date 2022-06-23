@@ -64,10 +64,10 @@ export class AxisDomain {
   // label returns the label for the axis.
   label = "";
   // tickFormat returns a function used to format the tick values for display.
-  tickFormat: (n: number) => string = n => n.toString();
+  tickFormat: (n: number) => string = (n) => n.toString();
   // guideFormat returns a function used to format the axis values in the
   // chart's interactive guideline.
-  guideFormat: (n: number) => string = n => n.toString();
+  guideFormat: (n: number) => string = (n) => n.toString();
 
   // constructs a new AxisDomain with the given minimum and maximum value, with
   // ticks placed at intervals of the given increment in between the min and
@@ -98,18 +98,7 @@ export class AxisDomain {
 }
 
 const countIncrementTable = [
-  0.1,
-  0.2,
-  0.25,
-  0.3,
-  0.4,
-  0.5,
-  0.6,
-  0.7,
-  0.75,
-  0.8,
-  0.9,
-  1.0,
+  0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0,
 ];
 
 // converts a number from raw format to abbreviation k,m,b,t
@@ -271,7 +260,7 @@ const timeIncrementDurations = [
   moment.duration(24, "h"),
   moment.duration(1, "week"),
 ];
-const timeIncrements: number[] = timeIncrementDurations.map(inc =>
+const timeIncrements: number[] = timeIncrementDurations.map((inc) =>
   inc.asMilliseconds(),
 );
 
