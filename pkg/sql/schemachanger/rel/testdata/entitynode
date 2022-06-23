@@ -338,4 +338,54 @@ queries:
             results:
                 - [a]
             unsatisfiableIndexes: [1, 2, 3, 4, 5, 6]
+        e[i8] != 1:
+            query:
+                - $e[Type] = '*entitynodetest.entity'
+                - $e[i8] != 1
+            entities: [$e]
+            result-vars: [$e]
+            results:
+                - [b]
+                - [c]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+        e != a:
+            query:
+                - $e[Type] = '*entitynodetest.entity'
+                - '$e != {i8: 1, pi8: 1, i16: 1}'
+            entities: [$e]
+            result-vars: [$e]
+            results:
+                - [b]
+                - [c]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+        e[i8] = v; v != 1:
+            query:
+                - $e[Type] = '*entitynodetest.entity'
+                - $e[i8] = $v
+                - $v != 1
+            entities: [$e]
+            result-vars: [$e, $v]
+            results:
+                - [b, 2]
+                - [c, 2]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+        e[i8] = v; v != 2:
+            query:
+                - $e[Type] = '*entitynodetest.entity'
+                - $e[i8] = $v
+                - $v != 2
+            entities: [$e]
+            result-vars: [$e, $v]
+            results:
+                - [a, 1]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
+        e[i8] = v; v != int16(2):
+            query:
+                - $e[Type] = '*entitynodetest.entity'
+                - $e[i8] = $v
+                - $v != 2
+            entities: [$e]
+            result-vars: [$e, $v]
+            results: []
+            unsatisfiableIndexes: [1, 2, 3, 5, 6]
 comparisons: []
