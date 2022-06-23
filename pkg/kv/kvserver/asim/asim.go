@@ -31,7 +31,11 @@ type Simulator struct {
 	generators []workload.Generator
 
 	pacers map[state.StoreID]ReplicaPacer
-	rqs    map[state.StoreID]ReplicateQueue
+
+	// Store replicate queues.
+	rqs map[state.StoreID]RangeQueue
+	// Store split queues.
+	sqs map[state.StoreID]RangeQueue
 
 	state    state.State
 	changer  state.Changer
@@ -48,23 +52,32 @@ func NewSimulator(
 	initialState state.State,
 	exchange state.Exchange,
 	changer state.Changer,
-	changeDelay time.Duration,
+	settings SimulationSettings,
 	metrics *MetricsTracker,
 ) *Simulator {
 	pacers := make(map[state.StoreID]ReplicaPacer)
-	rqs := make(map[state.StoreID]ReplicateQueue)
+	rqs := make(map[state.StoreID]RangeQueue)
+	sqs := make(map[state.StoreID]RangeQueue)
 	for storeID := range initialState.Stores() {
 		rqs[storeID] = NewReplicateQueue(
 			storeID,
 			changer,
-			changeDelay,
+			ReplicaChangeDelayFn(settings),
 			initialState.MakeAllocator(storeID),
+			start,
+		)
+		sqs[storeID] = NewSplitQueue(
+			storeID,
+			changer,
+			RangeSplitDelayFn(settings),
+			settings.RangeSizeSplitThreshold,
+			start,
 		)
 		pacers[storeID] = NewScannerReplicaPacer(
 			initialState.NextReplicasFn(storeID),
-			defaultLoopInterval,
-			defaultMinInterInterval,
-			defaultMaxIterInterval,
+			settings.PacerLoopInterval,
+			settings.PacerMinIterInterval,
+			settings.PacerMaxIterIterval,
 		)
 	}
 
@@ -76,6 +89,7 @@ func NewSimulator(
 		state:      initialState,
 		changer:    changer,
 		rqs:        rqs,
+		sqs:        sqs,
 		pacers:     pacers,
 		exchange:   exchange,
 		metrics:    metrics,
@@ -95,13 +109,13 @@ func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
 // RunSim runs a simulation until GetNextTickTime() is done. A simulation is
 // executed by "ticks" - we run a full tick and then move to next one. In each
 // tick we first apply the state changes such as adding or removing Nodes, then
-// we apply the load changes such as updating the QPS for replicas, and last, we
-// run the actual allocator code. The input for the allocator is the state we
-// updated, and the operations recommended by the allocator (rebalances,
+// we apply the load changes such as updating the QPS for replicas, and last,
+// we run the actual allocator code. The input for the allocator is the state
+// we updated, and the operations recommended by the allocator (rebalances,
 // adding/removing replicas, etc.) are applied on a new state. This means that
 // the allocators view a stale state without the recent updates form other
-// allocators. Note that we are currently ignoring gossip delays, meaning all
-// allocators view the exact same state in each tick.
+// allocators. Note that we are currently ignoring asymmetric gossip delays,
+// meaning all allocators view the exact same state in each tick.
 //
 // TODO: simulation run settings should be loaded from a config such as a yaml
 // file or a "datadriven" style file.
@@ -128,7 +142,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		stateForAlloc := s.state
 
 		// Simulate the replicate queue logic.
-		s.tickReplicateQueue(ctx, tick, stateForAlloc)
+		s.tickQueues(ctx, tick, stateForAlloc)
 
 		// Print tick metrics.
 		s.tickMetrics(ctx, tick)
@@ -138,8 +152,8 @@ func (s *Simulator) RunSim(ctx context.Context) {
 // tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 	for _, generator := range s.generators {
-		events := generator.Tick(tick)
-		s.state.ApplyLoad(events)
+		event := generator.Tick(tick)
+		s.state.ApplyLoad(event)
 	}
 }
 
@@ -158,10 +172,10 @@ func (s *Simulator) tickStoreClocks(tick time.Time) {
 	s.state.TickClock(tick)
 }
 
-// tickReplicateQueue iterates over the next replicas for each store to
+// tickQueues iterates over the next replicas for each store to
 // consider. It then enqueues each of these and ticks the replicate queue for
 // processing.
-func (s *Simulator) tickReplicateQueue(ctx context.Context, tick time.Time, state state.State) {
+func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.State) {
 	for storeID := range state.Stores() {
 		for {
 			r := s.pacers[storeID].Next(tick)
@@ -176,11 +190,19 @@ func (s *Simulator) tickReplicateQueue(ctx context.Context, tick time.Time, stat
 				continue
 			}
 
-			// Try adding the replica to the replicate queue.
-			s.rqs[storeID].MaybeAdd(ctx, r, state)
-
+			// Tick the split queue.
+			s.sqs[storeID].Tick(ctx, tick, state)
 			// Tick the replicate queue.
 			s.rqs[storeID].Tick(ctx, tick, state)
+
+			// Tick changes that may have been enqueued with a lower completion
+			// than the current tick, from the queues.
+			s.changer.Tick(tick, state)
+
+			// Try adding the replica to the split queue.
+			s.sqs[storeID].MaybeAdd(ctx, r, state)
+			// Try adding the replica to the replicate queue.
+			s.rqs[storeID].MaybeAdd(ctx, r, state)
 		}
 	}
 }

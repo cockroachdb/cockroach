@@ -20,12 +20,27 @@ import (
 
 const testingDelay = 5 * time.Second
 
-func testMakeReplicaChange(add, remove StoreID) ReplicaChange {
-	change := ReplicaChange{}
-	change.Wait = testingDelay
-	change.Add = add
-	change.Remove = remove
-	return change
+func testMakeReplicaChange(add, remove StoreID, rangeKey Key) func(s State) Change {
+	return func(s State) Change {
+		rng := s.RangeFor(rangeKey)
+		change := ReplicaChange{}
+		change.Wait = testingDelay
+		change.Add = add
+		change.Remove = remove
+		change.RangeID = rng.RangeID()
+		return &change
+	}
+}
+
+func testMakeRangeSplitChange(splitKey Key) func(s State) Change {
+	return func(s State) Change {
+		rng := s.RangeFor(splitKey)
+		change := RangeSplitChange{}
+		change.Wait = testingDelay
+		change.RangeID = rng.RangeID()
+		change.SplitKey = splitKey
+		return &change
+	}
 }
 
 func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
@@ -34,6 +49,23 @@ func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
 	// We split that and use the rhs, range 2.
 	rng, _ := state.Range(RangeID(2))
 	return state, rng
+}
+
+func testGetAllReplLocations(
+	state State, excludedRanges map[RangeID]bool,
+) (map[int64][]int, map[int64][]int) {
+	rmapView := make(map[int64][]int)
+	storeView := make(map[int64][]int)
+	for rangeID, rng := range state.Ranges() {
+		if _, ok := excludedRanges[rangeID]; ok {
+			continue
+		}
+		rmap, stores := testGetReplLocations(state, rng)
+		start, _, _ := state.RangeSpan(rangeID)
+		rmapView[int64(start)] = rmap
+		storeView[int64(start)] = stores
+	}
+	return rmapView, storeView
 }
 
 func testGetReplLocations(state State, r Range) ([]int, []int) {
@@ -65,7 +97,7 @@ func TestReplicaChange(t *testing.T) {
 		desc                string
 		initRepls           map[StoreID]int
 		initLease           int
-		change              ReplicaChange
+		change              func(s State) Change
 		expectedReplicas    []int
 		expectedLeaseholder int
 	}{
@@ -73,7 +105,7 @@ func TestReplicaChange(t *testing.T) {
 			desc:                "add replica",
 			initRepls:           map[StoreID]int{1: 1, 2: 0},
 			initLease:           1,
-			change:              testMakeReplicaChange(2, 0),
+			change:              testMakeReplicaChange(2, 0, 2),
 			expectedReplicas:    []int{1, 2},
 			expectedLeaseholder: 1,
 		},
@@ -81,7 +113,7 @@ func TestReplicaChange(t *testing.T) {
 			desc:                "remove replica",
 			initRepls:           map[StoreID]int{1: 1, 2: 1},
 			initLease:           1,
-			change:              testMakeReplicaChange(0, 2),
+			change:              testMakeReplicaChange(0, 2, 2),
 			expectedReplicas:    []int{1},
 			expectedLeaseholder: 1,
 		},
@@ -89,7 +121,7 @@ func TestReplicaChange(t *testing.T) {
 			desc:                "move replica s2 -> s3",
 			initRepls:           map[StoreID]int{1: 1, 2: 1, 3: 0},
 			initLease:           1,
-			change:              testMakeReplicaChange(3, 2),
+			change:              testMakeReplicaChange(3, 2, 2),
 			expectedReplicas:    []int{1, 3},
 			expectedLeaseholder: 1,
 		},
@@ -97,7 +129,7 @@ func TestReplicaChange(t *testing.T) {
 			desc:                "move replica s1 -> s2, moves lease",
 			initRepls:           map[StoreID]int{1: 1, 2: 0},
 			initLease:           1,
-			change:              testMakeReplicaChange(2, 1),
+			change:              testMakeReplicaChange(2, 1, 2),
 			expectedReplicas:    []int{2},
 			expectedLeaseholder: 2,
 		},
@@ -105,7 +137,7 @@ func TestReplicaChange(t *testing.T) {
 			desc:                "fails remove leaseholder",
 			initRepls:           map[StoreID]int{1: 1},
 			initLease:           1,
-			change:              testMakeReplicaChange(0, 1),
+			change:              testMakeReplicaChange(0, 1, 2),
 			expectedReplicas:    []int{1},
 			expectedLeaseholder: 1,
 		},
@@ -113,7 +145,7 @@ func TestReplicaChange(t *testing.T) {
 			desc:                "fails remove no such store",
 			initRepls:           map[StoreID]int{1: 1, 2: 1},
 			initLease:           1,
-			change:              testMakeReplicaChange(0, 5),
+			change:              testMakeReplicaChange(0, 5, 2),
 			expectedReplicas:    []int{1, 2},
 			expectedLeaseholder: 1,
 		},
@@ -123,8 +155,8 @@ func TestReplicaChange(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			state, r := testMakeReplicaState(tc.initRepls)
 			state.TransferLease(r.RangeID(), StoreID(tc.initLease))
-			tc.change.RangeID = r.RangeID()
-			tc.change.Apply(state)
+			change := tc.change(state)
+			change.Apply(state)
 			replLocations, _ := testGetReplLocations(state, r)
 			leaseholder := -1
 			for storeID, repl := range r.Replicas() {
@@ -136,7 +168,6 @@ func TestReplicaChange(t *testing.T) {
 			require.Equal(t, tc.expectedLeaseholder, leaseholder)
 		})
 	}
-
 }
 
 // TestReplicaStateChanger asserts that the replica changer maintains:
@@ -150,20 +181,20 @@ func TestReplicaStateChanger(t *testing.T) {
 		desc               string
 		initRepls          map[StoreID]int
 		ticks              []int64
-		pushes             map[int64]ReplicaChange
-		expected           map[int64][]int
+		pushes             map[int64]func(s State) Change
+		expected           map[int64]map[int64][]int
 		expectedTimestamps []int64
 	}{
 		{
 			desc:      "move s1 -> s2",
 			initRepls: map[StoreID]int{1: 1, 2: 0},
 			ticks:     []int64{5, 10},
-			pushes: map[int64]ReplicaChange{
-				5: testMakeReplicaChange(2, 1),
+			pushes: map[int64]func(s State) Change{
+				5: testMakeReplicaChange(2, 1, 2),
 			},
-			expected: map[int64][]int{
-				5:  {1},
-				10: {2},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1}},
+				10: {0: {2}},
 			},
 			expectedTimestamps: []int64{10},
 		},
@@ -171,14 +202,14 @@ func TestReplicaStateChanger(t *testing.T) {
 			desc:      "move s1 -> s2 -> s3",
 			initRepls: map[StoreID]int{1: 1, 2: 0, 3: 0},
 			ticks:     []int64{5, 10, 15},
-			pushes: map[int64]ReplicaChange{
-				5:  testMakeReplicaChange(2, 1),
-				10: testMakeReplicaChange(3, 2),
+			pushes: map[int64]func(s State) Change{
+				5:  testMakeReplicaChange(2, 1, 2),
+				10: testMakeReplicaChange(3, 2, 2),
 			},
-			expected: map[int64][]int{
-				5:  {1},
-				10: {2},
-				15: {3},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1}},
+				10: {0: {2}},
+				15: {0: {3}},
 			},
 			expectedTimestamps: []int64{10, 15},
 		},
@@ -186,16 +217,16 @@ func TestReplicaStateChanger(t *testing.T) {
 			desc:      "move (complex) (1,2,3) -> (4,5,6)",
 			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1, 4: 0, 5: 0, 6: 0},
 			ticks:     []int64{5, 10, 15, 20},
-			pushes: map[int64]ReplicaChange{
-				5:  testMakeReplicaChange(6, 1),
-				10: testMakeReplicaChange(5, 2),
-				15: testMakeReplicaChange(4, 3),
+			pushes: map[int64]func(s State) Change{
+				5:  testMakeReplicaChange(6, 1, 2),
+				10: testMakeReplicaChange(5, 2, 2),
+				15: testMakeReplicaChange(4, 3, 2),
 			},
-			expected: map[int64][]int{
-				5:  {1, 2, 3},
-				10: {2, 3, 6},
-				15: {3, 5, 6},
-				20: {4, 5, 6},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {2, 3, 6}},
+				15: {0: {3, 5, 6}},
+				20: {0: {4, 5, 6}},
 			},
 			expectedTimestamps: []int64{10, 15, 20},
 		},
@@ -203,37 +234,133 @@ func TestReplicaStateChanger(t *testing.T) {
 			desc:      "non-allowed change during pending",
 			initRepls: map[StoreID]int{1: 1, 2: 0, 3: 0},
 			ticks:     []int64{5, 6, 15},
-			pushes: map[int64]ReplicaChange{
+			pushes: map[int64]func(s State) Change{
 				// NB: change at tick 6 will be ignored as there is already a
 				// pending change (1->2).
-				5: testMakeReplicaChange(2, 1),
-				6: testMakeReplicaChange(3, 1),
+				5: testMakeReplicaChange(2, 1, 2),
+				6: testMakeReplicaChange(3, 1, 2),
 			},
-			expected: map[int64][]int{
-				5:  {1},
-				6:  {1},
-				15: {2},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1}},
+				6:  {0: {1}},
+				15: {0: {2}},
 			},
 			expectedTimestamps: []int64{10},
+		},
+		{
+			desc:      "split range  [1] -> [1,100)[100,+)",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
+			ticks:     []int64{5, 10},
+			pushes: map[int64]func(s State) Change{
+				5: testMakeRangeSplitChange(100),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {1, 2, 3}, 100: {1, 2, 3}},
+			},
+			expectedTimestamps: []int64{10},
+		},
+		{
+			desc:      "split range  [1] -> [1,100)[100,+) -> [1,50)[50,100)[100,+)",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
+			ticks:     []int64{5, 10, 15},
+			pushes: map[int64]func(s State) Change{
+				5:  testMakeRangeSplitChange(100),
+				10: testMakeRangeSplitChange(50),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {1, 2, 3}, 100: {1, 2, 3}},
+				15: {0: {1, 2, 3}, 50: {1, 2, 3}, 100: {1, 2, 3}},
+			},
+			expectedTimestamps: []int64{10, 15},
+		},
+		{
+			desc:      "split range  [1] -> [1,100)[100,+), move replica [100,+):s1 -> s4",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1, 4: 0},
+			ticks:     []int64{5, 10, 15},
+			pushes: map[int64]func(s State) Change{
+				5:  testMakeRangeSplitChange(100),
+				10: testMakeReplicaChange(4, 1, 100),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {1, 2, 3}, 100: {1, 2, 3}},
+				15: {0: {1, 2, 3}, 100: {2, 3, 4}},
+			},
+			expectedTimestamps: []int64{10, 15},
+		},
+		{
+			desc:      "overlapping split -> replica changes are blocked",
+			initRepls: map[StoreID]int{1: 1, 2: 0},
+			ticks:     []int64{5, 6, 15},
+			pushes: map[int64]func(s State) Change{
+				// NB: Two changes affect the same range (move & split), only
+				// one concurrent change per range may be enqueued at any time.
+				5: testMakeRangeSplitChange(100),
+				6: testMakeReplicaChange(2, 1, 100),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1}},
+				6:  {0: {1}},
+				15: {0: {1}, 100: {1}},
+			},
+			expectedTimestamps: []int64{10},
+		},
+		{
+			desc:      "overlapping replica -> split changes are blocked",
+			initRepls: map[StoreID]int{1: 1, 2: 0},
+			ticks:     []int64{5, 6, 15},
+			pushes: map[int64]func(s State) Change{
+				// NB: Two changes affect the same range (move & split), only
+				// one concurrent change per range may be enqueued at any time.
+				5: testMakeReplicaChange(2, 1, 100),
+				6: testMakeRangeSplitChange(100),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1}},
+				6:  {0: {1}},
+				15: {0: {2}},
+			},
+			expectedTimestamps: []int64{10},
+		},
+		{
+			desc:      "range splits don't block on the leaseholder store's other changes",
+			initRepls: map[StoreID]int{1: 1, 2: 0},
+			ticks:     []int64{5, 10, 11, 20},
+			pushes: map[int64]func(s State) Change{
+				// NB: The change at tick 10 and 11 overlap in their "delay"
+				// but on the same leaseholder store. Splits do not block
+				// on replica changes, so it can go through.
+				5:  testMakeRangeSplitChange(100),
+				10: testMakeReplicaChange(2, 1, 0),
+				11: testMakeRangeSplitChange(200),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1}},
+				10: {0: {1}, 100: {1}},
+				11: {0: {1}, 100: {1}},
+				20: {0: {2}, 100: {1}, 200: {1}},
+			},
+			expectedTimestamps: []int64{10, 15, 16},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			changer := NewReplicaChanger()
-			state, r := testMakeReplicaState(tc.initRepls)
-			results := make(map[int64][]int)
+			state, _ := testMakeReplicaState(tc.initRepls)
+			results := make(map[int64]map[int64][]int)
 			tsResults := make([]int64, 0, 1)
 
 			for _, tick := range tc.ticks {
 				changer.Tick(OffsetTick(start, tick), state)
 				if change, ok := tc.pushes[tick]; ok {
-					change.RangeID = r.RangeID()
-					if ts, ok := changer.Push(OffsetTick(start, tick), &change); ok {
+					if ts, ok := changer.Push(OffsetTick(start, tick), change(state)); ok {
 						tsResults = append(tsResults, ReverseOffsetTick(start, ts))
 					}
 				}
-				rmapView, storeView := testGetReplLocations(state, r)
+				rmapView, storeView := testGetAllReplLocations(state, map[RangeID]bool{1: true})
 				require.Equal(t, rmapView, storeView, "RangeMap state and the Store state have different values")
 				results[tick] = rmapView
 			}

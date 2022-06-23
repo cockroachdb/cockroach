@@ -1870,7 +1870,24 @@ func countIndexRowsAndMaybeCheckUniqueness(
 		if err != nil {
 			return 0, err
 		}
-		desc = fakeDesc
+		// Mark all the columns accessible if they are not.
+		// This is to fix a bug when attempting to create a unique, expression
+		// index on a REGIONAL BY table -- the accompanying expression column
+		// is inaccessible, but later we check for uniqueness on this column
+		// via a SQL `SELECT` query, which then errors out.
+		// Such a fix is safe since this copy ('fakeDesc') is only used
+		// internally for validation.
+		// See https://github.com/cockroachdb/cockroach/issues/83076 for details.
+		mut, ok := fakeDesc.(*tabledesc.Mutable)
+		if !ok {
+			mut = tabledesc.NewBuilder(fakeDesc.TableDesc()).BuildCreatedMutableTable()
+		}
+		for i := range mut.Columns {
+			if col := &mut.Columns[i]; col.Inaccessible {
+				col.Inaccessible = false
+			}
+		}
+		desc = mut.ImmutableCopy().(catalog.TableDescriptor)
 	}
 
 	// Retrieve the row count in the index.

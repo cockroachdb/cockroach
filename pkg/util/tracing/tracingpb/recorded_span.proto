@@ -58,8 +58,24 @@ message RecordedSpan {
   uint64 parent_span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
   // Operation name.
   string operation = 4;
+
   // Tags associated with the span.
+  // Deprecated. Avoid new uses. Prefer tag_groups.
+  // TODO(benbardin): Remove the tags field for 23.1.
   map<string, string> tags = 6;
+
+  // tag_groups describes tags associated with the span, potentially in a
+  // shallow structured hierarchy.
+  //
+  // A span may have at most one "anonymous" tag group, that is, a tag group
+  // without a Name. This is not enforced in the protobuf definition, but is
+  // expected in code.
+  //
+  // The tags in an anonymous group are not necessarily related, and should
+  // instead be treated as independent, top-level items. These tags are
+  // stored in a tag group for convenience.
+  repeated TagGroup tag_groups = 18 [(gogoproto.nullable) = false];
+
   // Time when the span was started.
   google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
                                             (gogoproto.stdtime) = true];
@@ -103,7 +119,25 @@ message RecordedSpan {
   // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
+  // Next ID: 19
+
   reserved 5,10,11;
+}
+
+message TagGroup {
+  // May be empty. If so, indicates that contained Tags should be treated as
+  // top-level.
+  //
+  // If a value is instead present here, indicates that this group is a
+  // structured collection of related tags.
+  string name = 1;
+
+  repeated Tag tags = 2 [(gogoproto.nullable) = false];
+}
+
+message Tag {
+  string key = 1;
+  string value = 2;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all
@@ -113,7 +147,12 @@ message RecordedSpan {
 // See RecordedSpan for the description of the fields.
 message NormalizedSpan {
   string operation = 1;
+
+  // Deprecated. Avoid new uses. Prefer tag_groups.
+  // TODO(benbardin): Deprecate the tags field for 23.1.
   map<string, string> tags = 2;
+
+  repeated TagGroup tag_groups = 8 [(gogoproto.nullable) = false];
   google.protobuf.Timestamp start_time = 3 [(gogoproto.nullable) = false,
                                            (gogoproto.stdtime) = true];
   google.protobuf.Duration duration = 4 [(gogoproto.nullable) = false,

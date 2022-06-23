@@ -296,7 +296,9 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
-	require.Equal(t, "1", rec[0].Tags["_dropped"])
+	val, ok := rec[0].FindTagGroup("").FindTag("_dropped")
+	require.True(t, ok)
+	require.Equal(t, "1", val)
 
 	first := rec[0].StructuredRecords[0]
 	last := rec[0].StructuredRecords[len(rec[0].StructuredRecords)-1]
@@ -345,7 +347,9 @@ func TestSpanRecordLimit(t *testing.T) {
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Logs, numLogs)
-	require.Equal(t, rec[0].Tags["_dropped"], "1")
+	val, ok := rec[0].FindTagGroup("").FindTag("_dropped")
+	require.True(t, ok)
+	require.Equal(t, val, "1")
 
 	first := rec[0].Logs[0]
 	last := rec[0].Logs[len(rec[0].Logs)-1]
@@ -544,15 +548,25 @@ func TestSpanTags(t *testing.T) {
 	require.IsType(t, testExpandingTag{}, tag)
 
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
-	tags := rec[0].Tags
-	require.Contains(t, tags, "tag")
-	require.Contains(t, tags, "lazy tag")
-	require.NotContains(t, tags, "lazy expanding tag")
-	require.Contains(t, tags, "exp1")
-	require.Contains(t, tags, "exp2")
-	require.Equal(t, tags["exp1"], "1")
-	require.Equal(t, tags["exp2"], "2")
-	require.Equal(t, tags["lazy tag"], "lazy stringer")
+
+	anonTagGroup := rec[0].FindTagGroup("")
+	_, ok = anonTagGroup.FindTag("tag")
+	require.True(t, ok)
+
+	val, ok := anonTagGroup.FindTag("lazy tag")
+	require.True(t, ok)
+	require.Equal(t, "lazy stringer", val)
+
+	lazyExpandingTagGroup := rec[0].FindTagGroup("lazy expanding tag")
+	require.NotNil(t, lazyExpandingTagGroup)
+
+	val, ok = lazyExpandingTagGroup.FindTag("exp1")
+	require.True(t, ok)
+	require.Equal(t, "1", val)
+
+	val, ok = lazyExpandingTagGroup.FindTag("exp2")
+	require.True(t, ok)
+	require.Equal(t, "2", val)
 }
 
 // TestSpanTagsInRecordings verifies that tags added before a recording started
@@ -578,20 +592,31 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	sp.SetRecordingType(tracingpb.RecordingVerbose)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 5) // _unfinished:1 _verbose:1 foo:tagbar foo1:1 foor2:bar2
-	_, ok := rec[0].Tags["foo"]
+
+	require.Len(t, rec[0].TagGroups, 1)
+	anonTagGroup := rec[0].FindTagGroup("")
+	require.Len(t, anonTagGroup.Tags, 5) // _unfinished:1 _verbose:1 foo:tagbar foo1:1 foor2:bar2
+
+	_, ok := anonTagGroup.FindTag("foo")
 	require.True(t, ok)
-	_, ok = rec[0].Tags["foo2"]
+
+	_, ok = anonTagGroup.FindTag("foo2")
 	require.True(t, ok)
+
 	require.Equal(t, 1, int(counter))
 
 	// Verify that subsequent tags are also captured.
 	sp.SetTag("foo3", attribute.StringValue("bar3"))
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].Tags, 6)
-	_, ok = rec[0].Tags["foo3"]
+
+	require.Len(t, rec[0].TagGroups, 1)
+	anonTagGroup = rec[0].FindTagGroup("")
+	require.Len(t, anonTagGroup.Tags, 6)
+
+	_, ok = anonTagGroup.FindTag("foo3")
 	require.True(t, ok)
+
 	require.Equal(t, 2, int(counter))
 }
 
@@ -604,19 +629,28 @@ func TestVerboseTag(t *testing.T) {
 
 	sp.SetRecordingType(tracingpb.RecordingStructured)
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
-	_, ok := rec[0].Tags["_verbose"]
+	anonymousTagGroup := rec[0].FindTagGroup("")
+	ok := anonymousTagGroup != nil
+	if ok {
+		_, ok = anonymousTagGroup.FindTag("_verbose")
+	}
 	require.False(t, ok)
 
 	// The tag is present while the span is recording verbosely.
 	sp.SetRecordingType(tracingpb.RecordingVerbose)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
-	_, ok = rec[0].Tags["_verbose"]
+
+	_, ok = rec[0].FindTagGroup("").FindTag("_verbose")
 	require.True(t, ok)
 
 	// After we stop recording, the tag goes away.
 	sp.SetRecordingType(tracingpb.RecordingStructured)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
-	_, ok = rec[0].Tags["_verbose"]
+	anonymousTagGroup = rec[0].FindTagGroup("")
+	ok = anonymousTagGroup != nil
+	if ok {
+		_, ok = anonymousTagGroup.FindTag("_verbose")
+	}
 	require.False(t, ok)
 }
 

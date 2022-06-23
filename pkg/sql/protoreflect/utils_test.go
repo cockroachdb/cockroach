@@ -86,7 +86,25 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 			pbname: "cockroach.util.tracing.tracingpb.RecordedSpan",
 			message: &tracingpb.RecordedSpan{
 				TraceID: 123,
-				Tags:    map[string]string{"one": "1", "two": "2", "three": "3"},
+				TagGroups: []tracingpb.TagGroup{
+					{
+						Name: "",
+						Tags: []tracingpb.Tag{
+							{
+								Key:   "one",
+								Value: "1",
+							},
+							{
+								Key:   "two",
+								Value: "2",
+							},
+							{
+								Key:   "three",
+								Value: "3",
+							},
+						},
+					},
+				},
 				StructuredRecords: []tracingpb.StructuredRecord{{
 					Time:    timeutil.NowNoMono(),
 					Payload: makeAny(t, &descpb.ColumnDescriptor{Name: "bogus stats"})}},

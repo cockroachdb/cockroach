@@ -28,17 +28,18 @@ import (
 
 func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
+	settings := asim.DefaultSimulationSettings()
 	start := state.TestingStartTime()
 	end := start.Add(1000 * time.Second)
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
 	rwg[0] = testCreateWorkloadGenerator(start, 1, 10)
 	m := asim.NewMetricsTracker(os.Stdout)
-	exchange := state.NewFixedDelayExhange(start, interval, interval)
+	exchange := state.NewFixedDelayExhange(start, settings.StateExchangeInterval, settings.StateExchangeDelay)
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, interval, m)
+	sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, settings, m)
 	sim.RunSim(ctx)
 }
 
@@ -78,7 +79,7 @@ func testPreGossipStores(s state.State, exchange state.Exchange, at time.Time) {
 // cluster, with 32000 replicas. The workload is generating 16000 keys per
 // second with a uniform distribution.
 // NB: In practice, on a single thread N2 GCP VM, this completes with a minimum
-// run of 750ms, approximately 16x faster (1:800) than what this test asserts.
+// run of 1350ms, approximately 16x faster (1:444) than what this test asserts.
 // The limit is set much higher due to --stress and inconsistent processor
 // speeds. The speedup is not linear w.r.t replica or store count.
 // TODO(kvoli,lidorcarmel): If this test flakes on CI --stress --race, decrease
@@ -86,13 +87,12 @@ func testPreGossipStores(s state.State, exchange state.Exchange, at time.Time) {
 func TestAllocatorSimulatorSpeed(t *testing.T) {
 	ctx := context.Background()
 	start := state.TestingStartTime()
+	settings := asim.DefaultSimulationSettings()
 
 	// Run each simulation for 5 minutes.
 	end := start.Add(5 * time.Minute)
 	interval := 10 * time.Second
-	changeDelay := 5 * time.Second
-	gossipDelay := 100 * time.Millisecond
-	preGossipStart := start.Add(-interval - gossipDelay)
+	preGossipStart := start.Add(-settings.StateExchangeInterval - settings.StateExchangeDelay)
 
 	stores := 32
 	replsPerRange := 3
@@ -104,7 +104,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	sample := func() int64 {
 		rwg := make([]workload.Generator, 1)
 		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(ranges))
-		exchange := state.NewFixedDelayExhange(preGossipStart, interval, gossipDelay)
+		exchange := state.NewFixedDelayExhange(preGossipStart, settings.StateExchangeInterval, settings.StateExchangeDelay)
 		changer := state.NewReplicaChanger()
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
@@ -122,7 +122,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 
 		s := state.NewTestStateReplDistribution(ranges, replicaDistribution, replsPerRange)
 		testPreGossipStores(s, exchange, preGossipStart)
-		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, changeDelay, m)
+		sim := asim.NewSimulator(start, end, interval, rwg, s, exchange, changer, settings, m)
 
 		startTime := timeutil.Now()
 		sim.RunSim(ctx)
@@ -133,7 +133,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	// estimate here of performance, as any additional time over the minimum is
 	// noise in a run.
 	minRunTime := int64(math.MaxInt64)
-	requiredRunTime := 12 * time.Second.Nanoseconds()
+	requiredRunTime := 20 * time.Second.Nanoseconds()
 	samples := 5
 	for i := 0; i < samples; i++ {
 		if sampledRun := sample(); sampledRun < minRunTime {

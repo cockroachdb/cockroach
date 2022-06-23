@@ -954,12 +954,19 @@ func TestContentionEventTracer(t *testing.T) {
 	require.NotZero(t, h.tag.mu.waitStart)
 	require.Empty(t, events)
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
-	require.Contains(t, rec[0].Tags, tagNumLocks)
-	require.Equal(t, "1", rec[0].Tags[tagNumLocks])
-	require.Contains(t, rec[0].Tags, tagWaited)
-	require.Contains(t, rec[0].Tags, tagWaitKey)
-	require.Contains(t, rec[0].Tags, tagWaitStart)
-	require.Contains(t, rec[0].Tags, tagLockHolderTxn)
+	lockTagGroup := rec[0].FindTagGroup(tagContentionTracer)
+	require.NotNil(t, lockTagGroup)
+	val, ok := lockTagGroup.FindTag(tagNumLocks)
+	require.True(t, ok)
+	require.Equal(t, "1", val)
+	_, ok = lockTagGroup.FindTag(tagWaited)
+	require.True(t, ok)
+	_, ok = lockTagGroup.FindTag(tagWaitKey)
+	require.True(t, ok)
+	_, ok = lockTagGroup.FindTag(tagWaitStart)
+	require.True(t, ok)
+	_, ok = lockTagGroup.FindTag(tagLockHolderTxn)
+	require.True(t, ok)
 
 	// Another event for the same txn/key should not mutate
 	// or emitLocked an event.
@@ -1000,11 +1007,22 @@ func TestContentionEventTracer(t *testing.T) {
 	require.Len(t, events, 3)
 	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
 	rec = sp.GetRecording(tracingpb.RecordingVerbose)
-	require.Equal(t, "3", rec[0].Tags[tagNumLocks])
-	require.Contains(t, rec[0].Tags, tagWaited)
-	require.NotContains(t, rec[0].Tags, tagWaitKey)
-	require.NotContains(t, rec[0].Tags, tagWaitStart)
-	require.NotContains(t, rec[0].Tags, tagLockHolderTxn)
+	lockTagGroup = rec[0].FindTagGroup(tagContentionTracer)
+	require.NotNil(t, lockTagGroup)
+
+	val, ok = lockTagGroup.FindTag(tagNumLocks)
+	require.True(t, ok)
+	require.Equal(t, "3", val)
+
+	_, ok = lockTagGroup.FindTag(tagWaited)
+	require.True(t, ok)
+
+	_, ok = lockTagGroup.FindTag(tagWaitKey)
+	require.False(t, ok)
+	_, ok = lockTagGroup.FindTag(tagWaitStart)
+	require.False(t, ok)
+	_, ok = lockTagGroup.FindTag(tagLockHolderTxn)
+	require.False(t, ok)
 
 	// Create a new tracer on the same span and check that the new tracer
 	// incorporates the info of the old one.
