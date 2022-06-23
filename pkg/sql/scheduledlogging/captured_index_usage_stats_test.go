@@ -292,16 +292,16 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	)
 
 	for _, e := range entries {
-		if strings.Contains(e.Message, `"IndexName":"‹test_table_pkey›"`) {
+		if strings.Contains(e.Message, `"IndexName":"test_table_pkey"`) {
 			numEntriesForTestTablePrimaryKeyIndex++
 		}
-		if strings.Contains(e.Message, `"IndexName":"‹test_table_letter_idx›"`) {
+		if strings.Contains(e.Message, `"IndexName":"test_table_letter_idx"`) {
 			numEntriesForTestTableLetterIndex++
 		}
-		if strings.Contains(e.Message, `"TableName":"‹test2_table_pkey›"`) {
+		if strings.Contains(e.Message, `"IndexName":"test2_table_pkey"`) {
 			numEntriesForTest2TablePrimaryKeyIndex++
 		}
-		if strings.Contains(e.Message, `"TableName":"‹test2_table_letter_idx›"`) {
+		if strings.Contains(e.Message, `"IndexName":"test2_table_letter_idx"`) {
 			numEntriesForTest2TableLetterIndex++
 		}
 		// Check that the entry has a tag for a node ID of 1.
