@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -68,7 +69,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 				for i := 0; i < overload.Types.Length(); i++ {
 					// Find the sequence name arg.
 					argName := argTypes[i].Name
-					if argName == builtins.SequenceNameArg {
+					if argName == builtinconstants.SequenceNameArg {
 						arg := funcExpr.Exprs[i]
 						if seqIdentifier := getSequenceIdentifier(arg); seqIdentifier != nil {
 							return seqIdentifier, nil

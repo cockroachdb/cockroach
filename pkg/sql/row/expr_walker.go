@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -650,13 +650,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		override: makeBuiltinOverride(
 			tree.FunDefs["nextval"],
 			tree.Overload{
-				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.String}},
+				Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.String}},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextVal,
 			},
 			tree.Overload{
-				Types:      tree.ArgTypes{{builtins.SequenceNameArg, types.RegClass}},
+				Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.RegClass}},
 				ReturnType: tree.FixedReturnType(types.Int),
 				Info:       "Advances the value of the sequence and returns the final value.",
 				Fn:         importNextValByID,

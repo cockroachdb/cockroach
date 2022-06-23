@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -64,14 +65,14 @@ func initGeneratorBuiltins() {
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
 		Class:    tree.GeneratorClass,
-		Category: categoryGenerator,
+		Category: builtinconstants.CategoryGenerator,
 	}
 }
 
 func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
 		Class:        tree.GeneratorClass,
-		Category:     categoryGenerator,
+		Category:     builtinconstants.CategoryGenerator,
 		ReturnLabels: returnLabels,
 	}
 }
@@ -332,7 +333,7 @@ var generators = map[string]builtinDefinition{
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.GeneratorClass,
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
@@ -357,7 +358,7 @@ var generators = map[string]builtinDefinition{
 	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.GeneratorClass,
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
@@ -373,7 +374,7 @@ var generators = map[string]builtinDefinition{
 	"crdb_internal.payloads_for_span": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.GeneratorClass,
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
@@ -388,7 +389,7 @@ var generators = map[string]builtinDefinition{
 	"crdb_internal.payloads_for_trace": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.GeneratorClass,
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
@@ -1423,7 +1424,7 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 
 var jsonPopulateProps = tree.FunctionProperties{
 	Class:    tree.GeneratorClass,
-	Category: categoryGenerator,
+	Category: builtinconstants.CategoryGenerator,
 	// The typical way to call json_populate_record is to send NULL::atype as the
 	// first argument, so we have to accept nullable args.
 	NullableArgs: true,

@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -46,7 +47,7 @@ func initPgcryptoBuiltins() {
 var pgcryptoBuiltins = map[string]builtinDefinition{
 
 	"crypt": makeBuiltin(
-		tree.FunctionProperties{Category: categoryCrypto},
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"password", types.String}, {"salt", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -65,7 +66,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	),
 
 	"digest": makeBuiltin(
-		tree.FunctionProperties{Category: categoryCrypto},
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -109,7 +110,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	"gen_random_uuid": generateRandomUUID4Impl,
 
 	"gen_salt": makeBuiltin(
-		tree.FunctionProperties{Category: categoryCrypto},
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -142,7 +143,7 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 	),
 
 	"hmac": makeBuiltin(
-		tree.FunctionProperties{Category: categoryCrypto},
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"data", types.String}, {"key", types.String}, {"type", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
