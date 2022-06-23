@@ -44,6 +44,12 @@ type valueExpr struct {
 
 func (v valueExpr) expr() {}
 
+type notValueExpr struct {
+	value interface{}
+}
+
+func (v notValueExpr) expr() {}
+
 type anyExpr []interface{}
 
 func (a anyExpr) expr() {}

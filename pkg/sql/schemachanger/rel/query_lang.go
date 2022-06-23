@@ -37,6 +37,15 @@ func (v Var) AttrEq(a Attr, value interface{}) Clause {
 	return makeTriple(v, a, valueExpr{value: value})
 }
 
+// AttrNeq constrains the entity bound to v to not have the provided value for
+// the specified attr. Note that, perhaps surprisingly, if the entity's
+// attribute takes on a value of a different type than the passed value, a
+// contradiction will be found; the entity's attribute must be bound, and it
+// must be bound to a value of the same type as the provided value.
+func (v Var) AttrNeq(a Attr, value interface{}) Clause {
+	return makeTriple(v, a, notValueExpr{value: value})
+}
+
 // AttrIn constrains the entity bound to v to have a value for
 // the specified attr in the set of provided values.
 func (v Var) AttrIn(a Attr, values ...interface{}) Clause {
@@ -57,6 +66,15 @@ func (v Var) Eq(value interface{}) Clause {
 // In returns a clause enforcing that the var is one of the value provided.
 func (v Var) In(disjuncts ...interface{}) Clause {
 	return eqDecl{v, (anyExpr)(disjuncts)}
+}
+
+// Neq returns a clause enforcing that the var is not equal to the value
+// provided. Note that, perhaps surprisingly, if the variable takes on a
+// value of a different type than the passed value, it will be deemed a
+// contradiction; the variable must be bound, and it must be bound
+// to a value of the same type as the provided value.
+func (v Var) Neq(value interface{}) Clause {
+	return eqDecl{v, notValueExpr{value: value}}
 }
 
 // Type returns a clause enforcing that the variable has one of the types
