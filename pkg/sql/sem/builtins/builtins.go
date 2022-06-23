@@ -118,19 +118,6 @@ func categorizeType(t *types.T) string {
 	}
 }
 
-const (
-	// GatewayRegionBuiltinName is the name for the builtin that returns the gateway
-	// region of the current node.
-	GatewayRegionBuiltinName = "gateway_region"
-	// DefaultToDatabasePrimaryRegionBuiltinName is the name for the builtin that
-	// takes in a region and returns it if it is a valid region on the database.
-	// Otherwise, it returns the primary region.
-	DefaultToDatabasePrimaryRegionBuiltinName = "default_to_database_primary_region"
-	// RehomeRowBuiltinName is the name for the builtin that rehomes a row to the
-	// user's gateway region, defaulting to the database primary region.
-	RehomeRowBuiltinName = "rehome_row"
-)
-
 var digitNames = [...]string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 
 const regexpFlagInfo = `
@@ -6193,7 +6180,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	GatewayRegionBuiltinName: makeBuiltin(
+	builtinconstants.GatewayRegionBuiltinName: makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategoryMultiRegion,
 			// We should always evaluate this built-in at the gateway.
@@ -6217,7 +6204,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Volatility: volatility.Stable,
 		},
 	),
-	DefaultToDatabasePrimaryRegionBuiltinName: makeBuiltin(
+	builtinconstants.DefaultToDatabasePrimaryRegionBuiltinName: makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
@@ -6245,7 +6232,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			volatility.Stable,
 		),
 	),
-	RehomeRowBuiltinName: makeBuiltin(
+	builtinconstants.RehomeRowBuiltinName: makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -8498,10 +8485,6 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 	return tree.NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
-// NodeIDBits is the number of bits stored in the lower portion of
-// GenerateUniqueInt.
-const NodeIDBits = 15
-
 // GenerateUniqueUnorderedID creates a unique int64 composed of the current time
 // at a 10-microsecond granularity and the instance-id. The top-bit is left
 // empty so that negative values are not returned. The 48 bits following after
@@ -8560,7 +8543,7 @@ func GenerateUniqueInt(instanceID base.SQLInstanceID) tree.DInt {
 func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
 	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
 	// in the timestamp portion of the final value instead of always setting them.
-	id := (timestamp << NodeIDBits) ^ uint64(instanceID)
+	id := (timestamp << builtinconstants.NodeIDBits) ^ uint64(instanceID)
 	return tree.DInt(id)
 }
 

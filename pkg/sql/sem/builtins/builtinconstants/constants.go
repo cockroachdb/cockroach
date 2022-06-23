@@ -14,6 +14,9 @@ import "time"
 
 // SequenceNameArg represents the name of sequence (string) arguments in
 // builtin functions.
+// Namely, it exists to classify overloads of functions which in postgres
+// only take `REGCLASS`, but in cockroach db take both `REGCLASS` and
+// `STRING` because we need to be backwards compatible.
 const SequenceNameArg = "sequence_name"
 
 // DefaultFollowerReadDuration represents the default time span back from the
@@ -54,3 +57,20 @@ const (
 	CategorySystemRepair        = "System repair"
 	CategoryStreamIngestion     = "Stream Ingestion"
 )
+
+const (
+	// GatewayRegionBuiltinName is the name for the builtin that returns the gateway
+	// region of the current node.
+	GatewayRegionBuiltinName = "gateway_region"
+	// DefaultToDatabasePrimaryRegionBuiltinName is the name for the builtin that
+	// takes in a region and returns it if it is a valid region on the database.
+	// Otherwise, it returns the primary region.
+	DefaultToDatabasePrimaryRegionBuiltinName = "default_to_database_primary_region"
+	// RehomeRowBuiltinName is the name for the builtin that rehomes a row to the
+	// user's gateway region, defaulting to the database primary region.
+	RehomeRowBuiltinName = "rehome_row"
+)
+
+// NodeIDBits is the number of bits stored in the lower portion of
+// GenerateUniqueInt.
+const NodeIDBits = 15

@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2766,10 +2766,10 @@ func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
 func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	return &tree.CastExpr{
 		Expr: &tree.FuncExpr{
-			Func: tree.WrapFunction(builtins.DefaultToDatabasePrimaryRegionBuiltinName),
+			Func: tree.WrapFunction(builtinconstants.DefaultToDatabasePrimaryRegionBuiltinName),
 			Exprs: []tree.Expr{
 				&tree.FuncExpr{
-					Func: tree.WrapFunction(builtins.GatewayRegionBuiltinName),
+					Func: tree.WrapFunction(builtinconstants.GatewayRegionBuiltinName),
 				},
 			},
 		},
@@ -2784,7 +2784,7 @@ func maybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree
 	if evalCtx.SessionData().AutoRehomingEnabled {
 		return &tree.CastExpr{
 			Expr: &tree.FuncExpr{
-				Func: tree.WrapFunction(builtins.RehomeRowBuiltinName),
+				Func: tree.WrapFunction(builtinconstants.RehomeRowBuiltinName),
 			},
 			Type:       &tree.OIDTypeReference{OID: enumOid},
 			SyntaxMode: tree.CastShort,
