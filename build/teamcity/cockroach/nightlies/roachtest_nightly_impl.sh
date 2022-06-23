@@ -19,6 +19,8 @@ if [ -z "${TESTS}" ]; then
   exit 123
 fi
 
+exit 12
+
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
   --cloud="${CLOUD}" \
