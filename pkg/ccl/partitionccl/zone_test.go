@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -314,7 +315,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				directions := []encoding.Direction{encoding.Ascending /* index ID */}
 				for i := 0; i < idx.NumKeyColumns(); i++ {
 					cd := idx.GetKeyColumnDirection(i)
-					ed, err := cd.ToEncodingDirection()
+					ed, err := catalogkeys.IndexColumnEncodingDirection(cd)
 					if err != nil {
 						t.Fatal(err)
 					}

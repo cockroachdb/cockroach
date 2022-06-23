@@ -20,7 +20,7 @@ increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -131,13 +131,18 @@ upsert descriptor #106
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -156,17 +161,27 @@ upsert descriptor #106
   +    - 6
   +    - 7
   +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 1
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -223,18 +238,31 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: PUBLIC
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 1
   +            indexId: 2
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 106
   +            temporaryIndexId: 3
   +      metadata:
@@ -256,18 +284,31 @@ upsert descriptor #106
   +            constraintId: 1
   +            indexId: 3
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 3
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 3
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -302,8 +343,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -426,8 +467,8 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-         userName: root
        currentStatuses:
+       - PUBLIC
   +    - VALIDATED
   +    - ABSENT
        - PUBLIC
@@ -435,12 +476,14 @@ upsert descriptor #106
   -    - WRITE_ONLY
        - PUBLIC
        - PUBLIC
+  ...
+       - PUBLIC
        - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
   +    - PUBLIC
        - WRITE_ONLY
-       jobId: "1"
+       - PUBLIC
   ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
            statementTag: ALTER TABLE
@@ -550,26 +593,29 @@ upsert descriptor #106
   -  version: "5"
   +  version: "6"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
 upsert descriptor #106
   ...
          userName: root
        currentStatuses:
+  -    - PUBLIC
   -    - VALIDATED
-  +    - DELETE_ONLY
        - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+       - PUBLIC
        - PUBLIC
   ...
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
   +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -577,7 +623,10 @@ upsert descriptor #106
   -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
-     - direction: ADD
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+         constraintId: 3
   ...
          version: 4
        mutationId: 1
@@ -609,6 +658,7 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    currentStatuses:
+  -    - ABSENT
   -    - DELETE_ONLY
   -    - ABSENT
   -    - PUBLIC
@@ -617,7 +667,11 @@ upsert descriptor #106
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -635,17 +689,27 @@ upsert descriptor #106
   -    - 6
   -    - 7
   -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 1
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -702,18 +766,31 @@ upsert descriptor #106
   -        subWorkId: 1
   -      targetStatus: PUBLIC
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 1
   -            indexId: 2
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 106
   -            temporaryIndexId: 3
   -      metadata:
@@ -735,18 +812,31 @@ upsert descriptor #106
   -            constraintId: 1
   -            indexId: 3
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 3
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 3
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -755,7 +845,7 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000010"
   -  mutations:
-  -  - direction: ADD
+  -  - direction: DROP
   -    index:
   -      constraintId: 3
   -      createdExplicitly: true
@@ -831,7 +921,7 @@ increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #106
   ...
        - 1
@@ -947,13 +1037,21 @@ upsert descriptor #106
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -972,7 +1070,34 @@ upsert descriptor #106
   +    - 6
   +    - 7
   +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 2
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
@@ -980,12 +1105,6 @@ upsert descriptor #106
   +            indexId: 2
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -1042,20 +1161,43 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: PUBLIC
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 4
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 4
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 4
+  +          kind: STORED
+  +          ordinalInKind: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 2
   +            indexId: 4
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 2
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 106
   +            temporaryIndexId: 5
   +      metadata:
@@ -1078,19 +1220,42 @@ upsert descriptor #106
   +            indexId: 5
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 2
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 5
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 5
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 5
+  +          kind: STORED
+  +          ordinalInKind: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -1125,8 +1290,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -1249,8 +1414,8 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   +    - VALIDATED
   +    - ABSENT
        - PUBLIC
@@ -1258,12 +1423,14 @@ upsert descriptor #106
   -    - WRITE_ONLY
        - PUBLIC
        - PUBLIC
+  ...
+       - PUBLIC
        - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
   +    - PUBLIC
        - WRITE_ONLY
-       jobId: "1"
+       - PUBLIC
   ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN k INT8 NOT NULL DEFAULT 42
            statementTag: ALTER TABLE
@@ -1373,26 +1540,31 @@ upsert descriptor #106
   -  version: "12"
   +  version: "13"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #106
   ...
          userName: root
        currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
   -    - VALIDATED
-  +    - DELETE_ONLY
        - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+       - PUBLIC
        - PUBLIC
   ...
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
   +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -1400,7 +1572,10 @@ upsert descriptor #106
   -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
-     - direction: ADD
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+         constraintId: 5
   ...
          version: 4
        mutationId: 1
@@ -1432,6 +1607,8 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
   -    - DELETE_ONLY
   -    - ABSENT
   -    - PUBLIC
@@ -1440,7 +1617,13 @@ upsert descriptor #106
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -1458,7 +1641,34 @@ upsert descriptor #106
   -    - 6
   -    - 7
   -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 2
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
@@ -1466,12 +1676,6 @@ upsert descriptor #106
   -            indexId: 2
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -1528,20 +1732,43 @@ upsert descriptor #106
   -        subWorkId: 1
   -      targetStatus: PUBLIC
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 4
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 4
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 4
+  -          kind: STORED
+  -          ordinalInKind: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 2
   -            indexId: 4
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 2
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 106
   -            temporaryIndexId: 5
   -      metadata:
@@ -1564,19 +1791,42 @@ upsert descriptor #106
   -            indexId: 5
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 2
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 5
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 5
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 5
+  -          kind: STORED
+  -          ordinalInKind: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -1585,7 +1835,7 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000010"
   -  mutations:
-  -  - direction: ADD
+  -  - direction: DROP
   -    index:
   -      constraintId: 5
   -      createdExplicitly: true
@@ -1668,7 +1918,7 @@ increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 8 MutationType ops
+## StatementPhase stage 1 of 1 with 16 MutationType ops
 upsert descriptor #106
   ...
        - 2
@@ -1815,13 +2065,24 @@ upsert descriptor #106
   +    currentStatuses:
   +    - PUBLIC
   +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - PUBLIC
   +    - BACKFILL_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -1840,7 +2101,48 @@ upsert descriptor #106
   +    - 6
   +    - 7
   +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
+  +    - 17
+  +    - 18
+  +    - 19
   +    targets:
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 4
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 4
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 4
+  +          kind: STORED
+  +          ordinalInKind: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
@@ -1848,13 +2150,6 @@ upsert descriptor #106
   +            indexId: 4
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -1913,21 +2208,54 @@ upsert descriptor #106
   +        subWorkId: 1
   +      targetStatus: PUBLIC
   +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 6
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 6
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 6
+  +          kind: STORED
+  +          ordinalInKind: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 4
+  +          indexId: 6
+  +          kind: STORED
+  +          ordinalInKind: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
   +        primaryIndex:
   +          embeddedIndex:
   +            constraintId: 4
   +            indexId: 6
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 4
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
-  +            - 4
   +            tableId: 106
   +            temporaryIndexId: 7
   +      metadata:
@@ -1950,20 +2278,53 @@ upsert descriptor #106
   +            indexId: 7
   +            isCreatedExplicitly: true
   +            isUnique: true
-  +            keyColumnDirections:
-  +            - ASC
-  +            keyColumnIds:
-  +            - 1
   +            sourceIndexId: 4
-  +            storingColumnIds:
-  +            - 2
-  +            - 3
-  +            - 4
   +            tableId: 106
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: TRANSIENT_ABSENT
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 1
+  +          indexId: 7
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 2
+  +          indexId: 7
+  +          kind: STORED
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 3
+  +          indexId: 7
+  +          kind: STORED
+  +          ordinalInKind: 1
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexColumn:
+  +          columnId: 4
+  +          indexId: 7
+  +          kind: STORED
+  +          ordinalInKind: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -2018,8 +2379,8 @@ upsert descriptor #106
        - ABSENT
   -    - DELETE_ONLY
   +    - WRITE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -2186,8 +2547,8 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-         userName: root
-       currentStatuses:
+       - PUBLIC
+       - PUBLIC
   +    - VALIDATED
   +    - ABSENT
        - PUBLIC
@@ -2195,12 +2556,14 @@ upsert descriptor #106
   -    - WRITE_ONLY
        - PUBLIC
        - PUBLIC
+  ...
+       - PUBLIC
        - PUBLIC
   -    - MERGE_ONLY
   -    - ABSENT
   +    - PUBLIC
        - WRITE_ONLY
-       jobId: "1"
+       - PUBLIC
   ...
            statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
            statementTag: ALTER TABLE
@@ -2335,26 +2698,33 @@ upsert descriptor #107
   -  version: "5"
   +  version: "6"
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 upsert descriptor #106
   ...
          userName: root
        currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - VALIDATED
-  +    - DELETE_ONLY
        - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+       - PUBLIC
        - PUBLIC
   ...
        - PUBLIC
        - PUBLIC
   -    - WRITE_ONLY
   +    - TRANSIENT_DELETE_ONLY
-       jobId: "1"
-       relevantStatements:
+       - PUBLIC
+       - PUBLIC
   ...
      formatVersion: 3
      id: 106
@@ -2362,7 +2732,10 @@ upsert descriptor #106
   -    wallTime: "1640995200000000009"
   +  modificationTime: {}
      mutations:
-     - direction: ADD
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+         constraintId: 7
   ...
          version: 4
        mutationId: 1
@@ -2408,6 +2781,9 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    - DELETE_ONLY
   -    - ABSENT
   -    - PUBLIC
@@ -2416,7 +2792,15 @@ upsert descriptor #106
   -    - PUBLIC
   -    - PUBLIC
   -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    - TRANSIENT_DELETE_ONLY
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -2434,7 +2818,48 @@ upsert descriptor #106
   -    - 6
   -    - 7
   -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
+  -    - 17
+  -    - 18
+  -    - 19
   -    targets:
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 4
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 4
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 4
+  -          kind: STORED
+  -          ordinalInKind: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
   -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
@@ -2442,13 +2867,6 @@ upsert descriptor #106
   -            indexId: 4
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -2507,21 +2925,54 @@ upsert descriptor #106
   -        subWorkId: 1
   -      targetStatus: PUBLIC
   -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 6
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 6
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 6
+  -          kind: STORED
+  -          ordinalInKind: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 4
+  -          indexId: 6
+  -          kind: STORED
+  -          ordinalInKind: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
   -        primaryIndex:
   -          embeddedIndex:
   -            constraintId: 4
   -            indexId: 6
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 4
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
-  -            - 4
   -            tableId: 106
   -            temporaryIndexId: 7
   -      metadata:
@@ -2544,20 +2995,53 @@ upsert descriptor #106
   -            indexId: 7
   -            isCreatedExplicitly: true
   -            isUnique: true
-  -            keyColumnDirections:
-  -            - ASC
-  -            keyColumnIds:
-  -            - 1
   -            sourceIndexId: 4
-  -            storingColumnIds:
-  -            - 2
-  -            - 3
-  -            - 4
   -            tableId: 106
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: TRANSIENT_ABSENT
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 1
+  -          indexId: 7
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 2
+  -          indexId: 7
+  -          kind: STORED
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 3
+  -          indexId: 7
+  -          kind: STORED
+  -          ordinalInKind: 1
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexColumn:
+  -          columnId: 4
+  -          indexId: 7
+  -          kind: STORED
+  -          ordinalInKind: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
      families:
      - columnIds:
   ...
@@ -2566,7 +3050,7 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000010"
   -  mutations:
-  -  - direction: ADD
+  -  - direction: DROP
   -    index:
   -      constraintId: 7
   -      createdExplicitly: true

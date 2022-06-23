@@ -33,6 +33,21 @@ joinOnConstraintID(a, b, desc-id, constraint-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ConstraintID] = $constraint-id
     - $b[ConstraintID] = $constraint-id
+index-dependents(index, dep, table-id, index-id):
+    - $dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.TemporaryIndex', '*scpb.SecondaryIndex']
+    - joinOnIndexID($dep, $index, $table-id, $index-id)
+indexContainsColumn(index, column, index-column, table-id, column-id, index-id):
+    - $index[IndexID] = $index-id
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index-column[DescID] = $_
+    - joinOnColumnID($column, $index-column, $table-id, $column-id)
+    - joinOnIndexID($index, $index-column, $table-id, $index-id)
+sourceIndexNotSet(index):
+    - $index[SourceIndexID] != 0
+columnInPrimaryIndexSwap(index, column, index-column, table-id, column-id, index-id):
+    - indexContainsColumn($index, $column, $index-column, $table-id, $column-id, $index-id)
+    - sourceIndexNotSet($index)
 
 oprules
 ----
@@ -72,8 +87,8 @@ oprules
   from: index-dep-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - $index-dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex']
+    - $index-dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexColumn']
     - joinOnDescID($relation, $index, $relation-id)
     - joinOnIndexID($index, $index-dep, $relation-id, $index-id)
     - joinTarget($relation, $relation-target)

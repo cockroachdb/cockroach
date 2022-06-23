@@ -29,6 +29,7 @@ go_test(
         "//pkg/geo/geoindex",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect/test",
         "//pkg/sql/types",

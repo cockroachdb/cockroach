@@ -17,6 +17,7 @@ import "config/zonepb/zone.proto";
 import "util/hlc/timestamp.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/privilege.proto";
+import "sql/catalog/catpb/index.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
@@ -324,11 +325,6 @@ message InterleaveDescriptor {
 //   store_column_ids:       5      // w
 message IndexDescriptor {
   option (gogoproto.equal) = true;
-  // The direction of a column in the index.
-  enum Direction {
-    ASC = 0;
-    DESC = 1;
-  }
 
   // The type of the index.
   enum Type {
@@ -356,7 +352,7 @@ message IndexDescriptor {
   repeated string key_column_names = 4;
 
   // The sort direction of each column in key_column_names.
-  repeated Direction key_column_directions = 8;
+  repeated cockroach.sql.catalog.catpb.IndexColumn.Direction key_column_directions = 8;
 
   // An ordered list of column names which the index stores in addition to the
   // columns which are explicitly part of the index (STORING clause).

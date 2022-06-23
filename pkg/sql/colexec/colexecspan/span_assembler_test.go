@@ -241,7 +241,7 @@ func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"a", "b", "c"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
 		},
 		Indexes: []descpb.IndexDescriptor{
@@ -250,7 +250,7 @@ func makeTable(useColFamilies bool) (catalog.TableDescriptor, error) {
 				ID:                  2,
 				Unique:              true,
 				KeyColumnNames:      []string{"c", "a", "b"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{3, 1, 2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 			},

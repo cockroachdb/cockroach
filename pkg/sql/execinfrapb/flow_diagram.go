@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -164,7 +165,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		keyDirs := make([]encoding.Direction, len(tr.FetchSpec.KeyAndSuffixColumns))
 		for i := range keyDirs {
 			keyDirs[i] = encoding.Ascending
-			if tr.FetchSpec.KeyAndSuffixColumns[i].Direction == descpb.IndexDescriptor_DESC {
+			if tr.FetchSpec.KeyAndSuffixColumns[i].Direction == catpb.IndexColumn_DESC {
 				keyDirs[i] = encoding.Descending
 			}
 		}

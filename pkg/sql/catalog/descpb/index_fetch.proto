@@ -15,7 +15,7 @@ option go_package = "descpb";
 
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
-import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/catpb/index.proto";
 import "geo/geoindex/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
@@ -44,7 +44,7 @@ message IndexFetchSpec {
   // KeyColumn describes a column that is encoded using the key encoding.
   message KeyColumn {
     optional Column column = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
-    optional IndexDescriptor.Direction direction = 2 [(gogoproto.nullable) = false];
+    optional catalog.catpb.IndexColumn.Direction direction = 2 [(gogoproto.nullable) = false];
 
     // IsComposite is true if this column can have a composite encoding (i.e. it
     // can appear in the value in addition to the key).

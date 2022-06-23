@@ -40,7 +40,7 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
-			return err
+			return errors.Wrapf(err, "%T: %v", op, op)
 		}
 	}
 

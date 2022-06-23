@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -94,10 +95,10 @@ func decodeTableKeyToCol(
 	rowIdx int,
 	valType *types.T,
 	key []byte,
-	dir descpb.IndexDescriptor_Direction,
+	dir catpb.IndexColumn_Direction,
 	scratch []byte,
 ) (_ []byte, _ bool, retScratch []byte, _ error) {
-	if (dir != descpb.IndexDescriptor_ASC) && (dir != descpb.IndexDescriptor_DESC) {
+	if (dir != catpb.IndexColumn_ASC) && (dir != catpb.IndexColumn_DESC) {
 		return nil, false, scratch, errors.AssertionFailedf("invalid direction: %d", redact.Safe(dir))
 	}
 	var isNull bool
@@ -115,7 +116,7 @@ func decodeTableKeyToCol(
 	switch valType.Family() {
 	case types.BoolFamily:
 		var i int64
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
@@ -123,7 +124,7 @@ func decodeTableKeyToCol(
 		vecs.BoolCols[colIdx][rowIdx] = i != 0
 	case types.IntFamily, types.DateFamily:
 		var i int64
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
@@ -138,7 +139,7 @@ func decodeTableKeyToCol(
 		}
 	case types.FloatFamily:
 		var f float64
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
 		} else {
 			rkey, f, err = encoding.DecodeFloatDescending(key)
@@ -146,14 +147,14 @@ func decodeTableKeyToCol(
 		vecs.Float64Cols[colIdx][rowIdx] = f
 	case types.DecimalFamily:
 		var d apd.Decimal
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, scratch[:0])
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, scratch[:0])
 		}
 		vecs.DecimalCols[colIdx][rowIdx] = d
 	case types.BytesFamily, types.StringFamily, types.UuidFamily:
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			// We ask for the deep copy to be made so that scratch doesn't
 			// reference the memory of key - this allows us to return scratch
 			// to the caller to be reused. The deep copy additionally ensures
@@ -169,7 +170,7 @@ func decodeTableKeyToCol(
 		vecs.BytesCols[colIdx].Set(rowIdx, scratch)
 	case types.TimestampFamily, types.TimestampTZFamily:
 		var t time.Time
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
@@ -177,7 +178,7 @@ func decodeTableKeyToCol(
 		vecs.TimestampCols[colIdx][rowIdx] = t
 	case types.IntervalFamily:
 		var d duration.Duration
-		if dir == descpb.IndexDescriptor_ASC {
+		if dir == catpb.IndexColumn_ASC {
 			rkey, d, err = encoding.DecodeDurationAscending(key)
 		} else {
 			rkey, d, err = encoding.DecodeDurationDescending(key)
@@ -201,7 +202,7 @@ func decodeTableKeyToCol(
 	default:
 		var d tree.Datum
 		encDir := encoding.Ascending
-		if dir == descpb.IndexDescriptor_DESC {
+		if dir == catpb.IndexColumn_DESC {
 			encDir = encoding.Descending
 		}
 		d, rkey, err = keyside.Decode(da, valType, key, encDir)

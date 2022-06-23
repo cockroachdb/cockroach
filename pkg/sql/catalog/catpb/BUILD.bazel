@@ -8,6 +8,7 @@ proto_library(
     name = "catpb_proto",
     srcs = [
         "catalog.proto",
+        "index.proto",
         "privilege.proto",
     ],
     strip_import_prefix = "/pkg",

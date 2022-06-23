@@ -88,6 +88,8 @@ type MutationVisitor interface {
 	RemoveDatabaseRoleSettings(context.Context, RemoveDatabaseRoleSettings) error
 	DeleteSchedule(context.Context, DeleteSchedule) error
 	RefreshStats(context.Context, RefreshStats) error
+	AddColumnToIndex(context.Context, AddColumnToIndex) error
+	RemoveColumnFromIndex(context.Context, RemoveColumnFromIndex) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -418,4 +420,14 @@ func (op DeleteSchedule) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op RefreshStats) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RefreshStats(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddColumnToIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddColumnToIndex(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveColumnFromIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnFromIndex(ctx, op)
 }
