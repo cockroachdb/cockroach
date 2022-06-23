@@ -17,11 +17,12 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/errors"
 )
 
-func untar(r io.Reader, destFile *os.File) error {
+func untar(r io.Reader, destFile *os.File, binary string) error {
 	tarReader := tar.NewReader(r)
 
 	done := false
@@ -37,6 +38,12 @@ func untar(r io.Reader, destFile *os.File) error {
 		case tar.TypeDir:
 			continue
 		case tar.TypeReg:
+			if binary != "" {
+				// Only untar the binary.
+				if filepath.Base(header.Name) != binary {
+					continue
+				}
+			}
 			if done {
 				return errors.New("archive contains more than one file")
 			}
@@ -55,7 +62,7 @@ func untar(r io.Reader, destFile *os.File) error {
 	return nil
 }
 
-func unzip(r io.Reader, destFile *os.File) error {
+func unzip(r io.Reader, destFile *os.File, binary string) error {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return err
@@ -67,6 +74,12 @@ func unzip(r io.Reader, destFile *os.File) error {
 
 	done := false
 	for _, f := range zipReader.File {
+		if binary != "" {
+			// Only untar the binary.
+			if filepath.Base(f.Name) != binary {
+				continue
+			}
+		}
 		if done {
 			return errors.New("archive contains more than one file")
 		}
