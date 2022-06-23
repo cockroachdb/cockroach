@@ -1411,8 +1411,11 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 			t.Fatal(err)
 		}
 		newLease, _ := l.replica0.GetLease()
-		if !origLease.Equivalent(newLease) {
-			t.Fatalf("original lease %v and new lease %v not equivalent", origLease, newLease)
+		if origLease.Equivalent(newLease) {
+			t.Fatalf("original lease %v and new lease %v still equivalent", origLease, newLease)
+		}
+		if !newLease.OwnedBy(l.replica0.StoreID()) {
+			t.Fatalf("wrong owner for lease %v ", newLease)
 		}
 	}
 
@@ -1729,6 +1732,9 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	// Transfer the lease from node1 to node2.
 	node1Before := tc.Servers[0].Clock().Now()
 	tc.TransferRangeLeaseOrFatal(t, *replica2.Desc(), tc.Target(1))
+	// Even though the AdminTransferLease is synchronous from the perspective of
+	// the sender, it takes time for it to be applied by the receiver, so need to
+	// wait for that.
 	testutils.SucceedsSoon(t, func() error {
 		lease, _ := replica2.GetLease()
 		if lease.Replica.NodeID != replica2.NodeID() {
@@ -2105,8 +2111,7 @@ func TestRemoveLeaseholder(t *testing.T) {
 	// We start with having the range under test on (1,2,3).
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
-	// Make sure the lease is on 1.
-	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(0))
+	// Verify the lease is on 1.
 	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
 	require.NoError(t, err)
 	require.Equal(t, tc.Target(0), leaseHolder)

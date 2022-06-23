@@ -861,7 +861,9 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 
 	for _, key := range startKeys {
 		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(key))
-		tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
+		if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
+			tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(1))
+		}
 		testutils.SucceedsSoon(t, func() error {
 			if !repl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 				return errors.Errorf("Expected lease to transfer to server 1 for replica %s", repl)
