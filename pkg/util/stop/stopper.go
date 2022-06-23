@@ -237,11 +237,8 @@ func NewStopper(options ...Option) *Stopper {
 	return s
 }
 
-// Recover is used internally by Stopper to provide a hook for recovery of
-// panics on goroutines started by the Stopper. It can also be invoked
-// explicitly (via "defer s.Recover()") on goroutines that are created outside
-// of Stopper.
-func (s *Stopper) Recover(ctx context.Context) {
+// recover reports the current panic, if any, any panics again.
+func (s *Stopper) recover(ctx context.Context) {
 	if r := recover(); r != nil {
 		if s.onPanic != nil {
 			s.onPanic(ctx, r)
@@ -321,7 +318,7 @@ func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.C
 	}
 
 	// Call f.
-	defer s.Recover(ctx)
+	defer s.recover(ctx)
 	defer s.runPostlude()
 
 	f(ctx)
@@ -338,7 +335,7 @@ func (s *Stopper) RunTaskWithErr(
 	}
 
 	// Call f.
-	defer s.Recover(ctx)
+	defer s.recover(ctx)
 	defer s.runPostlude()
 
 	return f(ctx)
@@ -483,7 +480,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 	go func() {
 		defer sp.Finish()
 		defer s.runPostlude()
-		defer s.Recover(ctx)
+		defer s.recover(ctx)
 		if alloc != nil {
 			defer alloc.Release()
 		}
@@ -533,7 +530,7 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	defer func() {
-		s.Recover(ctx)
+		s.recover(ctx)
 		unregister(s)
 		close(s.stopped)
 	}()
@@ -591,7 +588,7 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	defer time.AfterFunc(2*time.Minute, func() {
 		log.DumpStacks(ctx, "slow quiesce")
 	}).Stop()
-	defer s.Recover(ctx)
+	defer s.recover(ctx)
 
 	func() {
 		s.mu.Lock()
