@@ -26,6 +26,10 @@ work-Fuzz*
 # vendoring by `go mod vendor` may produce this file temporarily
 /.vendor.tmp.*
 
+# Instrumentation artifacts.
+/instrument*
+.instrumentor_exclusions.tmp
+
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
 
