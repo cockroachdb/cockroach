@@ -39,16 +39,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
-		// In order to keep more things constant throughout the different test
-		// runs, we disable range merges and range movements.
 		conn := c.Conn(ctx, t.L(), 1)
-		if _, err := conn.Exec("SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '24h';"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := conn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
-			t.Fatal(err)
-		}
-
 		if lowerRefreshSpansBytes {
 			// Temporarily lower a KV setting to its previous default to confirm
 			// that the new value of 4MiB is, indeed, the root cause of the
@@ -58,14 +49,16 @@ func registerTPCHConcurrency(r registry.Registry) {
 				t.Fatal(err)
 			}
 		}
-
 		if disableStreamer {
 			if _, err := conn.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = false;"); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)), c.Range(1, numNodes-1)); err != nil {
+		if err := loadTPCHDataset(
+			ctx, t, c, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)),
+			c.Range(1, numNodes-1), true, /* disableMergeQueue */
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
