@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -73,14 +74,14 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID:                  1,
 			KeyColumnIDs:        primaryColumnIDs,
-			KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(primaryColumnIDs)),
+			KeyColumnDirections: make([]catpb.IndexColumn_Direction, len(primaryColumnIDs)),
 		},
 		Indexes: []descpb.IndexDescriptor{{
 			ID:                  2,
 			KeyColumnIDs:        secondaryColumnIDs,
 			KeySuffixColumnIDs:  primaryColumnIDs,
 			Unique:              true,
-			KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(secondaryColumnIDs)),
+			KeyColumnDirections: make([]catpb.IndexColumn_Direction, len(secondaryColumnIDs)),
 			Type:                secondaryType,
 		}},
 	}
@@ -679,10 +680,10 @@ func ExtractIndexKey(
 		return nil, err
 	}
 	extraValues := make([]EncDatum, index.NumKeySuffixColumns())
-	dirs = make([]descpb.IndexDescriptor_Direction, index.NumKeySuffixColumns())
+	dirs = make([]catpb.IndexColumn_Direction, index.NumKeySuffixColumns())
 	for i := 0; i < index.NumKeySuffixColumns(); i++ {
 		// Implicit columns are always encoded Ascending.
-		dirs[i] = descpb.IndexDescriptor_ASC
+		dirs[i] = catpb.IndexColumn_ASC
 	}
 	extraKey := key
 	if index.IsUnique() {

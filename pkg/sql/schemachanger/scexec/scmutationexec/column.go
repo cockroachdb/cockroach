@@ -94,6 +94,7 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_ADD,
 	)
 }
 
@@ -150,6 +151,7 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_DROP,
 	)
 }
 
