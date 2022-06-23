@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -102,48 +103,16 @@ var (
 	errChrValueTooLarge = pgerror.Newf(pgcode.InvalidParameterValue,
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
 	errStringTooLarge = pgerror.Newf(pgcode.ProgramLimitExceeded,
-		"requested length too large, exceeds %s", humanizeutil.IBytes(maxAllocatedStringSize))
+		"requested length too large, exceeds %s", humanizeutil.IBytes(builtinconstants.MaxAllocatedStringSize))
 	errInvalidNull = pgerror.New(pgcode.InvalidParameterValue, "input cannot be NULL")
-	// SequenceNameArg represents the name of sequence (string) arguments in
-	// builtin functions.
-	SequenceNameArg = "sequence_name"
-)
-
-const defaultFollowerReadDuration = -4800 * time.Millisecond
-
-const maxAllocatedStringSize = 128 * 1024 * 1024
-
-const errInsufficientArgsFmtString = "unknown signature: %s()"
-
-const (
-	categoryArray               = "Array"
-	categoryComparison          = "Comparison"
-	categoryCompatibility       = "Compatibility"
-	categoryCrypto              = "Cryptographic"
-	categoryDateAndTime         = "Date and time"
-	categoryEnum                = "Enum"
-	categoryFullTextSearch      = "Full Text Search"
-	categoryGenerator           = "Set-returning"
-	categoryTrigram             = "Trigrams"
-	categoryFuzzyStringMatching = "Fuzzy String Matching"
-	categoryIDGeneration        = "ID generation"
-	categoryJSON                = "JSONB"
-	categoryMultiRegion         = "Multi-region"
-	categoryMultiTenancy        = "Multi-tenancy"
-	categorySequences           = "Sequence"
-	categorySpatial             = "Spatial"
-	categoryString              = "String and byte"
-	categorySystemInfo          = "System info"
-	categorySystemRepair        = "System repair"
-	categoryStreamIngestion     = "Stream Ingestion"
 )
 
 func categorizeType(t *types.T) string {
 	switch t.Family() {
 	case types.DateFamily, types.IntervalFamily, types.TimestampFamily, types.TimestampTZFamily:
-		return categoryDateAndTime
+		return builtinconstants.CategoryDateAndTime
 	case types.StringFamily, types.BytesFamily:
-		return categoryString
+		return builtinconstants.CategoryString
 	default:
 		return strings.ToUpper(t.String())
 	}
@@ -207,7 +176,9 @@ func GetBuiltinProperties(name string) (*tree.FunctionProperties, []tree.Overloa
 func defProps() tree.FunctionProperties { return tree.FunctionProperties{} }
 
 // arrayProps is used below for array functions.
-func arrayProps() tree.FunctionProperties { return tree.FunctionProperties{Category: categoryArray} }
+func arrayProps() tree.FunctionProperties {
+	return tree.FunctionProperties{Category: builtinconstants.CategoryArray}
+}
 
 // arrayPropsNullableArgs is used below for array functions that accept NULLs as arguments.
 func arrayPropsNullableArgs() tree.FunctionProperties {
@@ -250,7 +221,7 @@ var builtins = map[string]builtinDefinition{
 	"char_length":      lengthImpls(false /* includeBitOverload */),
 	"character_length": lengthImpls(false /* includeBitOverload */),
 
-	"bit_length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"bit_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(_ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(len(s) * 8)), nil
@@ -277,7 +248,7 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
-	"octet_length": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"octet_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(_ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(len(s))), nil
@@ -306,7 +277,7 @@ var builtins = map[string]builtinDefinition{
 
 	// TODO(pmattis): What string functions should also support types.Bytes?
 
-	"lower": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"lower": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDString(strings.ToLower(s)), nil
@@ -317,7 +288,7 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
-	"unaccent": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"unaccent": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				var b strings.Builder
@@ -337,7 +308,7 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
-	"upper": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"upper": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDString(strings.ToUpper(s)), nil
@@ -348,7 +319,7 @@ var builtins = map[string]builtinDefinition{
 		),
 	),
 
-	"prettify_statement": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"prettify_statement": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				formattedStmt, err := prettyStatement(tree.DefaultPrettyCfg(), s)
@@ -407,7 +378,7 @@ var builtins = map[string]builtinDefinition{
 						continue
 					}
 					length += len(string(tree.MustBeDString(d)))
-					if length > maxAllocatedStringSize {
+					if length > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
 					buffer.WriteString(string(tree.MustBeDString(d)))
@@ -433,7 +404,7 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
-					return nil, pgerror.Newf(pgcode.UndefinedFunction, errInsufficientArgsFmtString, "concat_ws")
+					return nil, pgerror.Newf(pgcode.UndefinedFunction, builtinconstants.ErrInsufficientArgsFmtString, "concat_ws")
 				}
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -447,7 +418,7 @@ var builtins = map[string]builtinDefinition{
 						continue
 					}
 					length += len(prefix) + len(string(tree.MustBeDString(d)))
-					if length > maxAllocatedStringSize {
+					if length > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
 					// Note: we can't use the range index here because that
@@ -471,7 +442,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_from": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"convert_from": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.Bytes}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -504,7 +475,7 @@ var builtins = map[string]builtinDefinition{
 		}),
 
 	// https://www.postgresql.org/docs/10/static/functions-string.html#FUNCTIONS-STRING-OTHER
-	"convert_to": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"convert_to": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"enc", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -537,7 +508,7 @@ var builtins = map[string]builtinDefinition{
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
-	"get_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"get_bit": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"bit_string", types.VarBit}, {"index", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -577,7 +548,7 @@ var builtins = map[string]builtinDefinition{
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
-	"get_byte": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"get_byte": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"byte_string", types.Bytes}, {"index", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -596,7 +567,7 @@ var builtins = map[string]builtinDefinition{
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
-	"set_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"set_bit": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"bit_string", types.VarBit},
@@ -658,7 +629,7 @@ var builtins = map[string]builtinDefinition{
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
-	"set_byte": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"set_byte": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"byte_string", types.Bytes},
@@ -704,7 +675,7 @@ var builtins = map[string]builtinDefinition{
 
 	"uuid_generate_v1": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -727,7 +698,7 @@ var builtins = map[string]builtinDefinition{
 
 	"uuid_generate_v1mc": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -748,7 +719,7 @@ var builtins = map[string]builtinDefinition{
 
 	"uuid_generate_v3": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"namespace", types.Uuid}, {"name", types.String}},
@@ -768,7 +739,7 @@ var builtins = map[string]builtinDefinition{
 
 	"uuid_generate_v5": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"namespace", types.Uuid}, {"name", types.String}},
@@ -823,7 +794,7 @@ var builtins = map[string]builtinDefinition{
 
 	"gen_random_ulid": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -1185,7 +1156,7 @@ var builtins = map[string]builtinDefinition{
 				} else if ln/count != len(s) {
 					// Detect overflow and trigger an error.
 					return nil, errStringTooLarge
-				} else if ln > maxAllocatedStringSize {
+				} else if ln > builtinconstants.MaxAllocatedStringSize {
 					return nil, errStringTooLarge
 				}
 
@@ -1296,7 +1267,7 @@ var builtins = map[string]builtinDefinition{
 		},
 	),
 
-	"ascii": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"ascii": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(_ *eval.Context, s string) (tree.Datum, error) {
 				for _, ch := range s {
@@ -1309,7 +1280,7 @@ var builtins = map[string]builtinDefinition{
 			volatility.Immutable,
 		)),
 
-	"chr": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	"chr": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1392,7 +1363,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"to_hex": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1428,7 +1399,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"to_english": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1466,7 +1437,7 @@ var builtins = map[string]builtinDefinition{
 
 	// The SQL parser coerces POSITION to STRPOS.
 	"strpos": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload2(
 			"input",
 			"find",
@@ -1552,7 +1523,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"lpad": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1589,7 +1560,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"rpad": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1700,7 +1671,7 @@ var builtins = map[string]builtinDefinition{
 	"reverse": makeBuiltin(defProps(),
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
-				if len(s) > maxAllocatedStringSize {
+				if len(s) > builtinconstants.MaxAllocatedStringSize {
 					return nil, errStringTooLarge
 				}
 				runes := []rune(s)
@@ -1733,7 +1704,7 @@ var builtins = map[string]builtinDefinition{
 					// Largest result is if there are no replacements.
 					maxResultLen = int64(len(input))
 				}
-				if maxResultLen > maxAllocatedStringSize {
+				if maxResultLen > builtinconstants.MaxAllocatedStringSize {
 					return nil, errStringTooLarge
 				}
 				result := strings.Replace(input, from, to, -1)
@@ -2018,7 +1989,7 @@ var builtins = map[string]builtinDefinition{
 	// quote_nullable is the same as quote_literal but accepts NULL arguments.
 	"quote_nullable": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryString,
+			Category:     builtinconstants.CategoryString,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -2154,7 +2125,7 @@ var builtins = map[string]builtinDefinition{
 
 	"unique_rowid": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2173,7 +2144,7 @@ var builtins = map[string]builtinDefinition{
 
 	"unordered_unique_rowid": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2194,12 +2165,12 @@ var builtins = map[string]builtinDefinition{
 
 	"nextval": makeBuiltin(
 		tree.FunctionProperties{
-			Category:             categorySequences,
+			Category:             builtinconstants.CategorySequences,
 			DistsqlBlocklist:     true,
 			HasSequenceArguments: true,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{SequenceNameArg, types.String}},
+			Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -2217,7 +2188,7 @@ var builtins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}},
+			Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.RegClass}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
@@ -2234,12 +2205,12 @@ var builtins = map[string]builtinDefinition{
 
 	"currval": makeBuiltin(
 		tree.FunctionProperties{
-			Category:             categorySequences,
+			Category:             builtinconstants.CategorySequences,
 			DistsqlBlocklist:     true,
 			HasSequenceArguments: true,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{SequenceNameArg, types.String}},
+			Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -2257,7 +2228,7 @@ var builtins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}},
+			Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.RegClass}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
@@ -2274,7 +2245,7 @@ var builtins = map[string]builtinDefinition{
 
 	"lastval": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySequences,
+			Category: builtinconstants.CategorySequences,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2295,12 +2266,12 @@ var builtins = map[string]builtinDefinition{
 	// See https://github.com/cockroachdb/cockroach/issues/21564
 	"setval": makeBuiltin(
 		tree.FunctionProperties{
-			Category:             categorySequences,
+			Category:             builtinconstants.CategorySequences,
 			DistsqlBlocklist:     true,
 			HasSequenceArguments: true,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{SequenceNameArg, types.String}, {"value", types.Int}},
+			Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.String}, {"value", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -2321,7 +2292,7 @@ var builtins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}, {"value", types.Int}},
+			Types:      tree.ArgTypes{{builtinconstants.SequenceNameArg, types.RegClass}, {"value", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oid := tree.MustBeDOid(args[0])
@@ -2338,7 +2309,7 @@ var builtins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{SequenceNameArg, types.String}, {"value", types.Int}, {"is_called", types.Bool},
+				{builtinconstants.SequenceNameArg, types.String}, {"value", types.Int}, {"is_called", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2362,7 +2333,7 @@ var builtins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{SequenceNameArg, types.RegClass}, {"value", types.Int}, {"is_called", types.Bool},
+				{builtinconstants.SequenceNameArg, types.RegClass}, {"value", types.Int}, {"is_called", types.Bool},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -2387,7 +2358,7 @@ var builtins = map[string]builtinDefinition{
 
 	"greatest": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryComparison,
+			Category:     builtinconstants.CategoryComparison,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -2403,7 +2374,7 @@ var builtins = map[string]builtinDefinition{
 
 	"least": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryComparison,
+			Category:     builtinconstants.CategoryComparison,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -2421,7 +2392,7 @@ var builtins = map[string]builtinDefinition{
 
 	"experimental_strftime": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryDateAndTime,
+			Category: builtinconstants.CategoryDateAndTime,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Timestamp}, {"extract_format", types.String}},
@@ -2478,7 +2449,7 @@ var builtins = map[string]builtinDefinition{
 
 	"experimental_strptime": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryDateAndTime,
+			Category: builtinconstants.CategoryDateAndTime,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.String}, {"format", types.String}},
@@ -2652,7 +2623,7 @@ var builtins = map[string]builtinDefinition{
 	//               2022-03-10 09:57:43.123456+00
 	//
 	"to_timestamp": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
@@ -2774,7 +2745,7 @@ leaseholder for a given range.
 Note that this function requires an enterprise license on a CCL distribution to
 return a result that is less likely the closest replica. It is otherwise
 hardcoded as %s from the statement time, which may not result in reading from the
-nearest replica.`, defaultFollowerReadDuration),
+nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -2846,7 +2817,7 @@ nearest replica.`, defaultFollowerReadDuration),
 
 	"cluster_logical_timestamp": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -2905,7 +2876,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"timeofday": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -2925,7 +2896,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// TODO(knz,otan): Remove in 20.2.
 	"extract_duration": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -2998,7 +2969,7 @@ value if you rely on the HLC for accuracy.`,
 	// > respectively.)
 	//
 	"date_trunc": makeBuiltin(
-		tree.FunctionProperties{Category: categoryDateAndTime},
+		tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
@@ -3785,39 +3756,39 @@ value if you rely on the HLC for accuracy.`,
 	})),
 
 	// Full text search functions.
-	"ts_match_qv":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_match_vq":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"tsvector_cmp":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"tsvector_concat":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_debug":                       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_headline":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_lexize":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"websearch_to_tsquery":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"array_to_tsvector":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"get_current_ts_config":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"numnode":                        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"plainto_tsquery":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"phraseto_tsquery":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"querytree":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"setweight":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"strip":                          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"to_tsquery":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"to_tsvector":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"json_to_tsvector":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"jsonb_to_tsvector":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_delete":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_filter":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_rank":                        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_rank_cd":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"ts_rewrite":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"tsquery_phrase":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"tsvector_to_array":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"tsvector_update_trigger":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
-	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: categoryFullTextSearch}),
+	"ts_match_qv":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_match_vq":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"tsvector_cmp":                   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"tsvector_concat":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_debug":                       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_headline":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_lexize":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"websearch_to_tsquery":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"array_to_tsvector":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"get_current_ts_config":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"numnode":                        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"plainto_tsquery":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"phraseto_tsquery":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"querytree":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"setweight":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"strip":                          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"to_tsquery":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"to_tsvector":                    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"json_to_tsvector":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"jsonb_to_tsvector":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_delete":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_filter":                      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_rank":                        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_rank_cd":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"ts_rewrite":                     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"tsquery_phrase":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"tsvector_to_array":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"tsvector_update_trigger":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
+	"tsvector_update_trigger_column": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 7821, Category: builtinconstants.CategoryFullTextSearch}),
 
 	// Fuzzy String Matching
 	"soundex": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -3834,7 +3805,7 @@ value if you rely on the HLC for accuracy.`,
 	// but this name matches the name in PostgreSQL.
 	// See https://www.postgresql.org/docs/current/fuzzystrmatch.html"
 	"difference": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -3883,24 +3854,24 @@ value if you rely on the HLC for accuracy.`,
 				"charge for each edit operation. Maximum input length is 255 characters.",
 			Volatility: volatility.Immutable,
 		}),
-	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
-	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
-	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
 	// similar to the behavior of the JSONB data type in Postgres.
 
-	"json_to_recordset":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: categoryJSON}),
-	"jsonb_to_recordset": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: categoryJSON}),
+	"json_to_recordset":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: builtinconstants.CategoryJSON}),
+	"jsonb_to_recordset": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Category: builtinconstants.CategoryJSON}),
 
-	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
-	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
-	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
-	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
-	"jsonb_path_query":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
-	"jsonb_path_query_array": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
-	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: categoryJSON}),
+	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_query":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_query_array": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
@@ -4154,7 +4125,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.datums_to_bytes": makeBuiltin(
 		tree.FunctionProperties{
-			Category:             categorySystemInfo,
+			Category:             builtinconstants.CategorySystemInfo,
 			NullableArgs:         true,
 			Undocumented:         true,
 			CompositeInsensitive: true,
@@ -4301,7 +4272,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Enum functions.
 	"enum_first": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},
+		tree.FunctionProperties{NullableArgs: true, Category: builtinconstants.CategoryEnum},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.IdentityReturnType(0),
@@ -4322,7 +4293,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"enum_last": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},
+		tree.FunctionProperties{NullableArgs: true, Category: builtinconstants.CategoryEnum},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.IdentityReturnType(0),
@@ -4343,7 +4314,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"enum_range": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: categoryEnum},
+		tree.FunctionProperties{NullableArgs: true, Category: builtinconstants.CategoryEnum},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.ArrayOfFirstNonNullReturnType(),
@@ -4446,7 +4417,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"version": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4460,7 +4431,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"current_database": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4484,7 +4455,7 @@ value if you rely on the HLC for accuracy.`,
 	// SQL client against a pg server.
 	"current_schema": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -4521,7 +4492,7 @@ value if you rely on the HLC for accuracy.`,
 	// pg_catalog and pg_temp (if one exists).
 	"current_schemas": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -4557,7 +4528,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"current_user": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4574,7 +4545,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"session_user": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4593,7 +4564,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Get the current trace ID.
 	"crdb_internal.trace_id": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -4626,7 +4597,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Toggles all spans of the requested trace to verbose or non-verbose.
 	"crdb_internal.set_trace_verbose": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"trace_id", types.Int},
@@ -4678,7 +4649,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.locality_value": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"key", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4702,7 +4673,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.cluster_setting_encoded_default": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4733,7 +4704,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.decode_cluster_setting": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"setting", types.String},
@@ -4774,7 +4745,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.node_executable_version": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4788,7 +4759,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.active_version": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -4810,7 +4781,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.is_at_least_version": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"version", types.String}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -4838,7 +4809,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.approximate_timestamp": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Decimal}},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
@@ -4851,7 +4822,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.cluster_id": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Uuid),
@@ -4864,7 +4835,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.node_id": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -4881,7 +4852,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.cluster_name": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4895,7 +4866,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.create_tenant": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryMultiTenancy,
+			Category:     builtinconstants.CategoryMultiTenancy,
 			NullableArgs: true,
 			Undocumented: true,
 		},
@@ -4923,7 +4894,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.create_join_token": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -4941,7 +4912,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryMultiTenancy,
+			Category:     builtinconstants.CategoryMultiTenancy,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -4990,7 +4961,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"crdb_internal.encode_key": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"table_id", types.Int},
@@ -5029,7 +5000,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.force_error": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},
@@ -5059,7 +5030,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.notice": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -5101,7 +5072,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.force_assertion_error": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -5121,7 +5092,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.void_func": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -5136,7 +5107,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.force_panic": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -5169,7 +5140,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.force_log_fatal": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"msg", types.String}},
@@ -5202,7 +5173,7 @@ value if you rely on the HLC for accuracy.`,
 	// different than the current statement's transaction.
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Interval}},
@@ -5224,7 +5195,7 @@ value if you rely on the HLC for accuracy.`,
 	// Fetches the corresponding lease_holder for the request key.
 	"crdb_internal.lease_holder": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"key", types.Bytes}},
@@ -5252,7 +5223,7 @@ value if you rely on the HLC for accuracy.`,
 	// Identity function which is marked as impure to avoid constant folding.
 	"crdb_internal.no_constant_folding": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.Any}},
@@ -5269,7 +5240,7 @@ value if you rely on the HLC for accuracy.`,
 	// fields.
 	"crdb_internal.pretty_key": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5292,7 +5263,7 @@ value if you rely on the HLC for accuracy.`,
 	// fields.
 	"crdb_internal.pretty_span": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5317,7 +5288,7 @@ value if you rely on the HLC for accuracy.`,
 	// Return statistics about a range.
 	"crdb_internal.range_stats": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5357,7 +5328,7 @@ value if you rely on the HLC for accuracy.`,
 	// Returns NULL if none is found.
 	// Errors if there is no permission for the current user to view the descriptor.
 	"crdb_internal.get_namespace_id": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"parent_id", types.Int}, {"name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -5414,7 +5385,7 @@ value if you rely on the HLC for accuracy.`,
 	// Returns NULL if none is found.
 	// Errors if there is no permission for the current user to view the descriptor.
 	"crdb_internal.get_database_id": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -5442,7 +5413,7 @@ value if you rely on the HLC for accuracy.`,
 	// Returns NULL if a zone configuration is not found.
 	// Errors if there is no permission for the current user to view the zone config.
 	"crdb_internal.get_zone_config": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"namespace_id", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
@@ -5466,7 +5437,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
@@ -5498,7 +5469,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.get_vmodule": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -5523,7 +5494,7 @@ value if you rely on the HLC for accuracy.`,
 	// generated for a value.
 	"crdb_internal.num_geo_inverted_index_entries": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categorySystemInfo,
+			Category:     builtinconstants.CategorySystemInfo,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -5576,7 +5547,7 @@ value if you rely on the HLC for accuracy.`,
 	// generated for a value.
 	"crdb_internal.num_inverted_index_entries": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categorySystemInfo,
+			Category:     builtinconstants.CategorySystemInfo,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -5652,7 +5623,7 @@ value if you rely on the HLC for accuracy.`,
 	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
 	"crdb_internal.is_admin": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -5678,7 +5649,7 @@ value if you rely on the HLC for accuracy.`,
 	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
 	"crdb_internal.has_role_option": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -5709,7 +5680,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.assignment_cast": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 			// The idiomatic usage of this function is to "pass" a target type T
 			// by passing NULL::T, so we must allow NULL arguments.
 			NullableArgs: true,
@@ -5739,7 +5710,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.round_decimal_values": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5800,7 +5771,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.completed_migrations": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -5827,7 +5798,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.unsafe_upsert_descriptor": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 			Undocumented:     true,
 		},
@@ -5871,7 +5842,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.unsafe_delete_descriptor": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 			Undocumented:     true,
 		},
@@ -5913,7 +5884,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.unsafe_upsert_namespace_entry": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 			Undocumented:     true,
 		},
@@ -5969,7 +5940,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.unsafe_delete_namespace_entry": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 			Undocumented:     true,
 		},
@@ -6026,7 +5997,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Returns true iff the given sqlliveness session is not expired.
 	"crdb_internal.sql_liveness_is_alive": makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiTenancy},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiTenancy},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"session_id", types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6047,7 +6018,7 @@ value if you rely on the HLC for accuracy.`,
 		// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
 		// changes are deployed to all Cockroach Cloud serverless hosts.
 		tree.FunctionProperties{
-			Category:     categoryMultiTenancy,
+			Category:     builtinconstants.CategoryMultiTenancy,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -6073,7 +6044,7 @@ value if you rely on the HLC for accuracy.`,
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
 	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryMultiTenancy,
+			Category:     builtinconstants.CategoryMultiTenancy,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -6117,7 +6088,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.compact_engine_span": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 			Undocumented:     true,
 		},
@@ -6154,7 +6125,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.increment_feature_counter": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categorySystemInfo,
+			Category:     builtinconstants.CategorySystemInfo,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -6177,7 +6148,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"num_nulls": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryComparison,
+			Category:     builtinconstants.CategoryComparison,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -6200,7 +6171,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"num_nonnulls": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryComparison,
+			Category:     builtinconstants.CategoryComparison,
 			NullableArgs: true,
 		},
 		tree.Overload{
@@ -6224,7 +6195,7 @@ value if you rely on the HLC for accuracy.`,
 
 	GatewayRegionBuiltinName: makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryMultiRegion,
+			Category: builtinconstants.CategoryMultiRegion,
 			// We should always evaluate this built-in at the gateway.
 			DistsqlBlocklist: true,
 		},
@@ -6247,7 +6218,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 	),
 	DefaultToDatabasePrimaryRegionBuiltinName: makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(evalCtx.Context)
@@ -6275,7 +6246,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		),
 	),
 	RehomeRowBuiltinName: makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -6311,7 +6282,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 	),
 	"crdb_internal.validate_multi_region_zone_configs": makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6331,7 +6302,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 	),
 	"crdb_internal.reset_multi_region_zone_configs_for_table": makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"id", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6353,7 +6324,7 @@ table.`,
 		},
 	),
 	"crdb_internal.reset_multi_region_zone_configs_for_database": makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"id", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6375,7 +6346,7 @@ enabled.`,
 		},
 	),
 	"crdb_internal.filter_multiregion_fields_from_zone_config_sql": makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{Category: builtinconstants.CategoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *eval.Context, s string) (tree.Datum, error) {
 				stmt, err := parser.ParseOne(s)
@@ -6411,7 +6382,7 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.reset_index_usage_stats": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
@@ -6440,7 +6411,7 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.reset_sql_stats": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
@@ -6473,7 +6444,7 @@ table's zone configuration this will return NULL.`,
 	// for table %d"
 	"crdb_internal.force_delete_table_data": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemRepair,
+			Category: builtinconstants.CategorySystemRepair,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"id", types.Int}},
@@ -6494,7 +6465,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.serialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -6509,7 +6480,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.deserialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"session", types.Bytes}},
@@ -6525,7 +6496,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.create_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -6539,7 +6510,7 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.validate_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"token", types.Bytes}},
@@ -6555,7 +6526,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.validate_ttl_scheduled_jobs": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -6570,7 +6541,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.repair_ttl_table_scheduled_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
@@ -6589,7 +6560,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.check_password_hash_format": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"password", types.Bytes}},
@@ -6613,7 +6584,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.schedule_sql_stats_compaction": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -6636,7 +6607,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_all_tables": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -6655,7 +6626,7 @@ in the current database. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_table": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"table_name", types.String}},
@@ -6679,7 +6650,7 @@ table. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraint": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"table_name", types.String}, {"constraint_name", types.String}},
@@ -6705,7 +6676,7 @@ table. Returns an error if validation fails.`,
 	),
 	"crdb_internal.is_constraint_active": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySystemInfo,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"table_name", types.String}, {"constraint_name", types.String}},
@@ -6736,7 +6707,7 @@ active for the current transaction.`,
 
 	"crdb_internal.kv_set_queue_active": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true, // applicable only on the gateway
 			Undocumented:     true,
 		},
@@ -6816,7 +6787,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 
 	"crdb_internal.kv_enqueue_replica": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemRepair,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true, // applicable only on the gateway
 			Undocumented:     true,
 		},
@@ -6974,7 +6945,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 
 	"crdb_internal.request_statement_bundle": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 		tree.Overload{
@@ -7040,7 +7011,7 @@ expires until the statement bundle is collected`,
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
-	b := makeBuiltin(tree.FunctionProperties{Category: categoryString},
+	b := makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		stringOverload1(
 			func(_ *eval.Context, s string) (tree.Datum, error) {
 				return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
@@ -7072,7 +7043,7 @@ var lengthImpls = func(incBitOverload bool) builtinDefinition {
 	return b
 }
 
-var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
+var substringImpls = makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
 	tree.Overload{
 		Types: tree.ArgTypes{
 			{"input", types.String},
@@ -7307,7 +7278,7 @@ func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (
 
 var generateRandomUUID4Impl = makeBuiltin(
 	tree.FunctionProperties{
-		Category: categoryIDGeneration,
+		Category: builtinconstants.CategoryIDGeneration,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{},
@@ -7326,7 +7297,7 @@ var generateRandomUUID4Impl = makeBuiltin(
 
 var uuidV4Impl = makeBuiltin(
 	tree.FunctionProperties{
-		Category: categoryIDGeneration,
+		Category: builtinconstants.CategoryIDGeneration,
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{},
@@ -7342,7 +7313,7 @@ var uuidV4Impl = makeBuiltin(
 func generateConstantUUIDImpl(id uuid.UUID, info string) builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryIDGeneration,
+			Category: builtinconstants.CategoryIDGeneration,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
@@ -7462,7 +7433,7 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 func txnTSImplBuiltin(preferTZOverload bool) builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryDateAndTime,
+			Category: builtinconstants.CategoryDateAndTime,
 		},
 		txnTSOverloads(preferTZOverload)...,
 	)
@@ -7471,7 +7442,7 @@ func txnTSImplBuiltin(preferTZOverload bool) builtinDefinition {
 func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryDateAndTime,
+			Category: builtinconstants.CategoryDateAndTime,
 		},
 		txnTSWithPrecisionOverloads(preferTZOverload)...,
 	)
@@ -7766,7 +7737,7 @@ var jsonTypeOfImpl = tree.Overload{
 
 func jsonProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Category: categoryJSON,
+		Category: builtinconstants.CategoryJSON,
 	}
 }
 
@@ -8025,7 +7996,7 @@ func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 	tupleOverload.DistsqlBlocklist = true
 	overloads = append(overloads, tupleOverload)
 	return builtinDefinition{
-		props:     tree.FunctionProperties{Category: categoryArray},
+		props:     tree.FunctionProperties{Category: builtinconstants.CategoryArray},
 		overloads: overloads,
 	}
 }
@@ -8635,7 +8606,7 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 }
 
 var extractBuiltin = makeBuiltin(
-	tree.FunctionProperties{Category: categoryDateAndTime},
+	tree.FunctionProperties{Category: builtinconstants.CategoryDateAndTime},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
 		ReturnType: tree.FixedReturnType(types.Float),
@@ -9371,7 +9342,7 @@ func padMaybeTruncate(s string, length int, fill string) (ok bool, slen int, ret
 }
 
 func lpad(s string, length int, fill string) (string, error) {
-	if length > maxAllocatedStringSize {
+	if length > builtinconstants.MaxAllocatedStringSize {
 		return "", errStringTooLarge
 	}
 	ok, slen, ret := padMaybeTruncate(s, length, fill)
@@ -9389,7 +9360,7 @@ func lpad(s string, length int, fill string) (string, error) {
 }
 
 func rpad(s string, length int, fill string) (string, error) {
-	if length > maxAllocatedStringSize {
+	if length > builtinconstants.MaxAllocatedStringSize {
 		return "", errStringTooLarge
 	}
 	ok, slen, ret := padMaybeTruncate(s, length, fill)
@@ -9441,7 +9412,7 @@ func recentTimestamp(ctx *eval.Context) (time.Time, error) {
 			ctx.Context,
 			pgnotice.Newf("follower reads disabled because you are running a non-CCL distribution"),
 		)
-		return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
+		return ctx.StmtTimestamp.Add(builtinconstants.DefaultFollowerReadDuration), nil
 	}
 	offset, err := EvalFollowerReadOffset(ctx.ClusterID, ctx.Settings)
 	if err != nil {
@@ -9450,7 +9421,7 @@ func recentTimestamp(ctx *eval.Context) (time.Time, error) {
 			ctx.ClientNoticeSender.BufferClientNotice(
 				ctx.Context, pgnotice.Newf("follower reads disabled: %s", err.Error()),
 			)
-			return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
+			return ctx.StmtTimestamp.Add(builtinconstants.DefaultFollowerReadDuration), nil
 		}
 		return time.Time{}, err
 	}
