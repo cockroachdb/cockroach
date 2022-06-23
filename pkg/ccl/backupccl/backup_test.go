@@ -1453,62 +1453,6 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 	checkInProgressBackupRestore(t, checkFraction, checkFraction)
 }
 
-func TestBackupRestoreCheckpointing(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 33357)
-
-	defer func(oldInterval time.Duration) {
-		BackupCheckpointInterval = oldInterval
-	}(BackupCheckpointInterval)
-	BackupCheckpointInterval = 0
-
-	var checkpointPath string
-
-	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.dir, ip.name, backupProgressDirectory+"/"+backupManifestCheckpointName)
-		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
-		if err != nil {
-			return errors.Wrap(err, "error while reading checkpoint")
-		}
-		var checkpointDesc BackupManifest
-		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
-			return errors.Wrap(err, "error while unmarshalling checkpoint")
-		}
-		if len(checkpointDesc.Files) == 0 {
-			return errors.Errorf("empty backup checkpoint descriptor")
-		}
-		return nil
-	}
-
-	checkRestore := func(ctx context.Context, ip inProgressState) error {
-		jobID, err := ip.latestJobID()
-		if err != nil {
-			return err
-		}
-		highWaterMark, err := getHighWaterMark(jobID, ip.DB)
-		if err != nil {
-			return err
-		}
-		low := keys.SystemSQLCodec.TablePrefix(ip.backupTableID)
-		high := keys.SystemSQLCodec.TablePrefix(ip.backupTableID + 1)
-		if bytes.Compare(highWaterMark, low) <= 0 || bytes.Compare(highWaterMark, high) >= 0 {
-			return errors.Errorf("expected high-water mark %v to be between %v and %v",
-				highWaterMark, low, high)
-		}
-		return nil
-	}
-
-	checkInProgressBackupRestore(t, checkBackup, checkRestore)
-
-	if _, err := os.Stat(checkpointPath); err == nil {
-		t.Fatalf("backup checkpoint descriptor at %s not cleaned up", checkpointPath)
-	} else if !oserror.IsNotExist(err) {
-		t.Fatal(err)
-	}
-}
-
 func createAndWaitForJob(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
@@ -1684,25 +1628,6 @@ func TestBackupRestoreResume(t *testing.T) {
 			sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank`),
 		)
 	})
-}
-
-func getHighWaterMark(jobID jobspb.JobID, sqlDB *gosql.DB) (roachpb.Key, error) {
-	var progressBytes []byte
-	if err := sqlDB.QueryRow(
-		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
-	).Scan(&progressBytes); err != nil {
-		return nil, err
-	}
-	var payload jobspb.Progress
-	if err := protoutil.Unmarshal(progressBytes, &payload); err != nil {
-		return nil, err
-	}
-	switch d := payload.Details.(type) {
-	case *jobspb.Progress_Restore:
-		return d.Restore.HighWater, nil
-	default:
-		return nil, errors.Errorf("unexpected job details type %T", d)
-	}
 }
 
 // TestBackupRestoreControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
@@ -6591,8 +6516,8 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	resetStateVars()
 
 	tenant10.Exec(t, `
-CREATE DATABASE baz; 
-CREATE TABLE baz.bar(i int primary key, v string); 
+CREATE DATABASE baz;
+CREATE TABLE baz.bar(i int primary key, v string);
 INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
 	var id2 int
 	tenant10.QueryRow(t, "SELECT 'baz.bar'::regclass::int").Scan(&id2)
@@ -9730,11 +9655,6 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The regular interval is a minute which would require us to take a
-	// very large backup in order to get more than one checkpoint. Instead,
-	// lower the interval and change it back to normal after the test.
-	resetCheckpointInterval := TestingShortBackupCheckpointInterval(BackupCheckpointInterval)
-	defer resetCheckpointInterval()
 	var numCheckpointsWritten int
 
 	// Set the testing knob so we count each time we write a checkpoint.
@@ -9754,6 +9674,10 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	const userfile = "'userfile:///a'"
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
+
+	// The regular interval is a minute which would require us to take a
+	// very large backup in order to get more than one checkpoint.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.checkpoint_interval = '10ms'")
 
 	query := fmt.Sprintf("BACKUP INTO %s", userfile)
 	sqlDB.Exec(t, query)

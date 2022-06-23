@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -52,18 +53,11 @@ import (
 
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
-var BackupCheckpointInterval = time.Minute
-
-// TestingShortBackupCheckpointInterval sets the BackupCheckpointInterval
-// to a shorter interval for testing purposes, so we can see multiple
-// checkpoints written without having extremely large backups. It returns
-// a function which resets the checkpoint interval to the old interval.
-func TestingShortBackupCheckpointInterval(oldInterval time.Duration) func() {
-	BackupCheckpointInterval = time.Millisecond * 10
-	return func() {
-		BackupCheckpointInterval = oldInterval
-	}
-}
+var BackupCheckpointInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"bulkio.backup.checkpoint_interval",
+	"the minimum time between writing progress checkpoints during a backup",
+	time.Minute)
 
 var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
@@ -231,14 +225,14 @@ func backup(
 			for i := int32(0); i < progDetails.CompletedSpans; i++ {
 				requestFinishedCh <- struct{}{}
 			}
-			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
+
+			interval := BackupCheckpointInterval.Get(&execCtx.ExecCfg().Settings.SV)
+			if timeutil.Since(lastCheckpoint) > interval {
 				resumerSpan.RecordStructured(&BackupProgressTraceEvent{
 					TotalNumFiles:     numBackedUpFiles,
 					TotalEntryCounts:  backupManifest.EntryCounts,
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
-
-				lastCheckpoint = timeutil.Now()
 
 				err := writeBackupManifestCheckpoint(
 					ctx, defaultURI, encryption, backupManifest, execCtx.ExecCfg(), execCtx.User(),
@@ -246,7 +240,7 @@ func backup(
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
 				}
-
+				lastCheckpoint = timeutil.Now()
 				if execCtx.ExecCfg().TestingKnobs.AfterBackupCheckpoint != nil {
 					execCtx.ExecCfg().TestingKnobs.AfterBackupCheckpoint()
 				}
