@@ -501,7 +501,7 @@ type TableDescriptor interface {
 	IndexKeyColumns(idx Index) []Column
 	// IndexKeyColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index.
-	IndexKeyColumnDirections(idx Index) []descpb.IndexDescriptor_Direction
+	IndexKeyColumnDirections(idx Index) []catpb.IndexColumn_Direction
 	// IndexKeySuffixColumns returns a slice of Column interfaces containing all
 	// key suffix columns in the specified Index.
 	IndexKeySuffixColumns(idx Index) []Column
@@ -512,7 +512,7 @@ type TableDescriptor interface {
 	// IndexFullColumnDirections returns a slice of column directions for all
 	// key columns in the specified Index, plus all key suffix columns if that
 	// index is not a unique index.
-	IndexFullColumnDirections(idx Index) []descpb.IndexDescriptor_Direction
+	IndexFullColumnDirections(idx Index) []catpb.IndexColumn_Direction
 	// IndexStoredColumns returns a slice of Column interfaces containing all
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column

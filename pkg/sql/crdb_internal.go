@@ -2836,9 +2836,9 @@ CREATE TABLE crdb_internal.index_columns (
 		storing := tree.NewDString("storing")
 		extra := tree.NewDString("extra")
 		composite := tree.NewDString("composite")
-		idxDirMap := map[descpb.IndexDescriptor_Direction]tree.Datum{
-			descpb.IndexDescriptor_ASC:  tree.NewDString(descpb.IndexDescriptor_ASC.String()),
-			descpb.IndexDescriptor_DESC: tree.NewDString(descpb.IndexDescriptor_DESC.String()),
+		idxDirMap := map[catpb.IndexColumn_Direction]tree.Datum{
+			catpb.IndexColumn_ASC:  tree.NewDString(catpb.IndexColumn_ASC.String()),
+			catpb.IndexColumn_DESC: tree.NewDString(catpb.IndexColumn_DESC.String()),
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,

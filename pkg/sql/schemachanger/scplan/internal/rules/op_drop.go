@@ -124,10 +124,12 @@ func init() {
 			index.el.Type(
 				(*scpb.PrimaryIndex)(nil),
 				(*scpb.SecondaryIndex)(nil),
+				(*scpb.TemporaryIndex)(nil),
 			),
 			dep.el.Type(
 				(*scpb.IndexName)(nil),
 				(*scpb.IndexPartitioning)(nil),
+				(*scpb.IndexColumn)(nil),
 			),
 
 			joinOnDescID(relation.el, index.el, relationID),

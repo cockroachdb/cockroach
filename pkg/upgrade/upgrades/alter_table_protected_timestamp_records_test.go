@@ -133,8 +133,8 @@ func getDeprecatedProtectedTimestampRecordsDescriptor() *descpb.TableDescriptor 
 			Unique:         true,
 			KeyColumnNames: []string{"id"},
 			KeyColumnIDs:   []descpb.ColumnID{1},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
+			KeyColumnDirections: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
 			},
 		},
 		NextIndexID:    2,

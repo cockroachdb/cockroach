@@ -2657,7 +2657,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 							return nil, err
 						}
 					}
-					if idx.GetKeyColumnDirection(j) == descpb.IndexDescriptor_DESC {
+					if idx.GetKeyColumnDirection(j) == catpb.IndexColumn_DESC {
 						elem.Direction = tree.Descending
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)

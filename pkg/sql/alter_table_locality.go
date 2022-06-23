@@ -404,7 +404,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	newColumnID *descpb.ColumnID,
 	newColumnDefaultExpr *string,
 	pkColumnNames []string,
-	pkColumnDirections []descpb.IndexDescriptor_Direction,
+	pkColumnDirections []catpb.IndexColumn_Direction,
 ) error {
 	// Preserve the same PK columns - implicit partitioning will be added in
 	// AlterPrimaryKey.
@@ -414,9 +414,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 			Column: tree.Name(col),
 		}
 		switch dir := pkColumnDirections[i]; dir {
-		case descpb.IndexDescriptor_ASC:
+		case catpb.IndexColumn_ASC:
 			cols[i].Direction = tree.Ascending
-		case descpb.IndexDescriptor_DESC:
+		case catpb.IndexColumn_DESC:
 			cols[i].Direction = tree.Descending
 		default:
 			return errors.AssertionFailedf("unknown direction: %v", dir)

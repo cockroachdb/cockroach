@@ -615,9 +615,9 @@ func (p *planner) shouldCreateIndexes(
 			return true, nil
 		}
 		if (elem.Direction == tree.Ascending &&
-			oldPK.GetKeyColumnDirection(idx) != descpb.IndexDescriptor_ASC) ||
+			oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_ASC) ||
 			(elem.Direction == tree.Descending &&
-				oldPK.GetKeyColumnDirection(idx) != descpb.IndexDescriptor_DESC) {
+				oldPK.GetKeyColumnDirection(idx) != catpb.IndexColumn_DESC) {
 			return true, nil
 		}
 	}
@@ -655,7 +655,7 @@ func shouldCopyPrimaryKey(
 
 	columnIDsAndDirsWithoutSharded := func(idx *descpb.IndexDescriptor) (
 		columnIDs descpb.ColumnIDs,
-		columnDirs []descpb.IndexDescriptor_Direction,
+		columnDirs []catpb.IndexColumn_Direction,
 	) {
 		for i, colName := range idx.KeyColumnNames {
 			if colName != idx.Sharded.Name {
