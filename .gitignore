@@ -29,6 +29,10 @@ work-Fuzz*
 # The Observability Service binary.
 /obsservice
 
+# Instrumentation artifacts.
+/instrument*
+.instrumentor_exclusions.tmp
+
 # Custom or private env vars (e.g. internal keys, access tokens, etc).
 customenv.mk
 
