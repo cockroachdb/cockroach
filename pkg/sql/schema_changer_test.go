@@ -8307,3 +8307,65 @@ func TestVirtualColumnNotAllowedInPkeyBefore22_1(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "pq: cannot use virtual column \"b\" in primary key", err.Error())
 }
+
+// TestColumnBackfillProcessingDoesNotHoldLockOnJobsTable is a
+// regression test to ensure that when the column backfill progresses
+// to the next backfill chunk and it needs to update its progress, it
+// does not hold a lock on the jobs table for the duration of processing
+// the next chunk.
+func TestColumnBackfillProcessingDoesNotHoldLockOnJobsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	chCh := make(chan chan error)
+	params.Knobs.DistSQL = &execinfra.TestingKnobs{
+		RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+			ch := make(chan error)
+			chCh <- ch
+			return <-ch
+		},
+	}
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		BackfillChunkSize:       1,
+		WriteCheckpointInterval: time.Nanosecond,
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	tdb.Exec(t, "INSERT INTO foo SELECT * FROM generate_series(1, 10)")
+	tdb.Exec(t, "ALTER TABLE foo SPLIT AT SELECT * FROM generate_series(1, 9)")
+	errCh := make(chan error)
+	go func() {
+		_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
+ALTER TABLE foo ADD COLUMN j INT DEFAULT 42;
+`)
+		errCh <- err
+	}()
+	// Wait for one iteration.
+	close(<-chCh)
+	// Wait for another iteration.
+	ch := <-chCh
+	// Ensure that the progress has been set to something non-zero, and
+	// that a lock has not been held.
+	tdb.CheckQueryResults(t, `
+SELECT fraction_completed > 0
+  FROM crdb_internal.jobs
+ WHERE description LIKE '%ADD COLUMN j INT8 DEFAULT 42'`,
+		[][]string{{"true"}})
+	close(ch)
+	for {
+		select {
+		case ch := <-chCh:
+			close(ch)
+		case err := <-errCh:
+			require.NoError(t, err)
+			return
+		}
+	}
+}
