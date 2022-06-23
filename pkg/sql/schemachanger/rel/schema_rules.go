@@ -34,17 +34,20 @@ func (sc *Schema) ForEachRule(f func(def RuleDef)) {
 	}
 }
 
-// Rule1 is a rule with one input variable.
-type Rule1 = func(a Var) Clause
-
-// Rule2 is a rule with two input variables.
-type Rule2 = func(a, b Var) Clause
-
-// Rule3 is a rule with three input variables.
-type Rule3 = func(a, b, c Var) Clause
-
-// Rule4 is a rule with four input variables.
-type Rule4 = func(a, b, c, d Var) Clause
+type (
+	// Rule1 is a rule with one variable.
+	Rule1 = func(a Var) Clause
+	// Rule2 is a rule with two variables.
+	Rule2 = func(a, b Var) Clause
+	// Rule3 is a rule with three variables.
+	Rule3 = func(a, b, c Var) Clause
+	// Rule4 is a rule with four variables.
+	Rule4 = func(a, b, c, d Var) Clause
+	// Rule5 is a rule with five variables.
+	Rule5 = func(a, b, c, d, e Var) Clause
+	// Rule6 is a rule with six variables.
+	Rule6 = func(a, b, c, d, e, f Var) Clause
+)
 
 // Def1 defines a Rule1.
 func (sc *Schema) Def1(name string, a Var, def func(a Var) Clauses) Rule1 {
@@ -64,6 +67,18 @@ func (sc *Schema) Def3(name string, a, b, c Var, def func(a, b, c Var) Clauses) 
 // Def4 defines a Rule4.
 func (sc *Schema) Def4(name string, a, b, c, d Var, def func(a, b, c, d Var) Clauses) Rule4 {
 	return sc.rule(name, def, a, b, c, d).(Rule4)
+}
+
+// Def5 defines a Rule5.
+func (sc *Schema) Def5(name string, a, b, c, d, e Var, def func(a, b, c, d, e Var) Clauses) Rule5 {
+	return sc.rule(name, def, a, b, c, d, e).(Rule5)
+}
+
+// Def6 defines a Rule6.
+func (sc *Schema) Def6(
+	name string, a, b, c, d, e, f Var, def func(a, b, c, d, e, f Var) Clauses,
+) Rule6 {
+	return sc.rule(name, def, a, b, c, d, e, f).(Rule6)
 }
 
 var (

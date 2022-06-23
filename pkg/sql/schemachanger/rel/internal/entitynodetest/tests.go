@@ -537,6 +537,81 @@ var (
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
 				},
+				{
+					Name: "e[i8] != 1",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrNeq(i8, int8(1)),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{b},
+						{c},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "e != a",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").Neq(a),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e"},
+					Results: [][]interface{}{
+						{b},
+						{c},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "e[i8] = v; v != 1",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrEqVar(i8, "v"),
+						v("v").Neq(int8(1)),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e", "v"},
+					Results: [][]interface{}{
+						{b, int8(2)},
+						{c, int8(2)},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "e[i8] = v; v != 2",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrEqVar(i8, "v"),
+						v("v").Neq(int8(2)),
+					},
+					Entities: []rel.Var{"e"},
+					ResVars:  []v{"e", "v"},
+					Results: [][]interface{}{
+						{a, int8(1)},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					// This case flexes the semantics of Neq to note that Neq forces
+					// the variable to bind to the same type as the value. In an ideal
+					// world this would give you a type error.
+					//
+					// TODO(ajwerner): Make type checking more strict such that this
+					// leads to an error.
+					Name: "e[i8] = v; v != int16(2)",
+					Query: rel.Clauses{
+						v("e").Type((*entity)(nil)),
+						v("e").AttrEqVar(i8, "v"),
+						v("v").Neq(int16(2)),
+					},
+					Entities:             []rel.Var{"e"},
+					ResVars:              []v{"e", "v"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
 			},
 		},
 	}
