@@ -8,14 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package seqexpr
+package seqexpr_test
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -23,13 +25,13 @@ import (
 func TestGetSequenceFromFunc(t *testing.T) {
 	testData := []struct {
 		expr     string
-		expected *SeqIdentifier
+		expected *seqexpr.SeqIdentifier
 	}{
-		{`nextval('seq')`, &SeqIdentifier{SeqName: "seq"}},
-		{`nextval(123::REGCLASS)`, &SeqIdentifier{SeqID: 123}},
-		{`nextval(123)`, &SeqIdentifier{SeqID: 123}},
-		{`nextval(123::OID::REGCLASS)`, &SeqIdentifier{SeqID: 123}},
-		{`nextval(123::OID)`, &SeqIdentifier{SeqID: 123}},
+		{`nextval('seq')`, &seqexpr.SeqIdentifier{SeqName: "seq"}},
+		{`nextval(123::REGCLASS)`, &seqexpr.SeqIdentifier{SeqID: 123}},
+		{`nextval(123)`, &seqexpr.SeqIdentifier{SeqID: 123}},
+		{`nextval(123::OID::REGCLASS)`, &seqexpr.SeqIdentifier{SeqID: 123}},
+		{`nextval(123::OID)`, &seqexpr.SeqIdentifier{SeqID: 123}},
 	}
 
 	ctx := context.Background()
@@ -48,7 +50,7 @@ func TestGetSequenceFromFunc(t *testing.T) {
 			if !ok {
 				t.Fatal("Expr is not a FuncExpr")
 			}
-			identifier, err := GetSequenceFromFunc(funcExpr)
+			identifier, err := seqexpr.GetSequenceFromFunc(funcExpr, builtins.GetBuiltinProperties)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,15 +70,15 @@ func TestGetSequenceFromFunc(t *testing.T) {
 func TestGetUsedSequences(t *testing.T) {
 	testData := []struct {
 		expr     string
-		expected []SeqIdentifier
+		expected []seqexpr.SeqIdentifier
 	}{
-		{`nextval('seq')`, []SeqIdentifier{
+		{`nextval('seq')`, []seqexpr.SeqIdentifier{
 			{SeqName: "seq"},
 		}},
-		{`nextval(123::REGCLASS)`, []SeqIdentifier{
+		{`nextval(123::REGCLASS)`, []seqexpr.SeqIdentifier{
 			{SeqID: 123},
 		}},
-		{`nextval(123::REGCLASS) + nextval('seq')`, []SeqIdentifier{
+		{`nextval(123::REGCLASS) + nextval('seq')`, []seqexpr.SeqIdentifier{
 			{SeqID: 123},
 			{SeqName: "seq"},
 		}},
@@ -94,7 +96,7 @@ func TestGetUsedSequences(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			identifiers, err := GetUsedSequences(typedExpr)
+			identifiers, err := seqexpr.GetUsedSequences(typedExpr, builtins.GetBuiltinProperties)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -145,7 +147,7 @@ func TestReplaceSequenceNamesWithIDs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			newExpr, err := ReplaceSequenceNamesWithIDs(typedExpr, namesToID)
+			newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(typedExpr, namesToID, builtins.GetBuiltinProperties)
 			if err != nil {
 				t.Fatal(err)
 			}

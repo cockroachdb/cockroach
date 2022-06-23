@@ -120,7 +120,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 	"crdb_internal.stream_ingestion_stats_pb": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 
