@@ -247,7 +247,7 @@ sudo systemd-run --property=Type=exec
 	if cfg.ioNemesis {
 		// Limit write throughput on s3 to 20mb/s. This is not enough to keep up
 		// with the workload, at least not in the long run, due to write amp.
-		c.Run(ctx, c.Node(3), "sudo", "systemctl", "set-property", "cockroach", "IOWriteBandwidthMax={store-dir} 20971520")
+		c.Run(ctx, c.Node(3), "sudo", "systemctl", "set-property", "cockroach", "'IOWriteBandwidthMax={store-dir} 20971520'")
 		t.L().Printf("installed write throughput limit on n3")
 	}
 
