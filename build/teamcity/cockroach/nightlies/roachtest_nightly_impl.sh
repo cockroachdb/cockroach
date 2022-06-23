@@ -15,6 +15,10 @@ source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
 
+if [ -z "${TESTS}" ]; then
+  exit 123
+fi
+
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
   --cloud="${CLOUD}" \
