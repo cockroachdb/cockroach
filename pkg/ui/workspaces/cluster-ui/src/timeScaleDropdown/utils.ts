@@ -10,6 +10,8 @@
 
 import moment from "moment";
 import { TimeScale, TimeScaleOption, TimeScaleOptions } from "./timeScaleTypes";
+import { dateFormat, timeFormat } from "./timeScaleDropdown";
+import React from "react";
 
 /**
  * defaultTimeScaleOptions is a preconfigured set of time scales that can be
@@ -138,4 +140,18 @@ export const findClosestTimeScale = (
   return closestWindowSizeSeconds === seconds
     ? data[0]
     : { ...data[0], key: "Custom" };
+};
+
+export const timeScaleToString = (ts: TimeScale): string => {
+  const [start, end] = toRoundedDateRange(ts);
+  const endDayIsToday = moment.utc(end).isSame(moment.utc(), "day");
+  const startEndOnSameDay = end.isSame(start, "day");
+  const omitDayFormat = endDayIsToday && startEndOnSameDay;
+  const dateStart = omitDayFormat ? "" : start.format(dateFormat);
+  const dateEnd =
+    omitDayFormat || startEndOnSameDay ? "" : end.format(dateFormat);
+  const timeStart = start.format(timeFormat);
+  const timeEnd = end.format(timeFormat);
+
+  return `${dateStart} ${timeStart} to ${dateEnd} ${timeEnd} (UTC)`;
 };
