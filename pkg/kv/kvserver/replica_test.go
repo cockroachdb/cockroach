@@ -2465,14 +2465,14 @@ func TestReplicaLatchingInconsistent(t *testing.T) {
 
 			// An inconsistent read to the key won't wait.
 			cmd2Done := make(chan *roachpb.Error)
-			go func() {
+			go func(rc roachpb.ReadConsistencyType) {
 				args := getArgs(key)
 
 				_, pErr := tc.SendWrappedWith(roachpb.Header{
 					ReadConsistency: rc,
 				}, &args)
 				cmd2Done <- pErr
-			}()
+			}(rc)
 
 			select {
 			case pErr := <-cmd2Done:

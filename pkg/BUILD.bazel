@@ -437,6 +437,7 @@ ALL_TESTS = [
     "//pkg/testutils/lint/passes/forbiddenmethod:forbiddenmethod_test",
     "//pkg/testutils/lint/passes/hash:hash_test",
     "//pkg/testutils/lint/passes/leaktestcall:leaktestcall_test",
+    "//pkg/testutils/lint/passes/loopvarcapture:loopvarcapture_test",
     "//pkg/testutils/lint/passes/nilness:nilness_test",
     "//pkg/testutils/lint/passes/nocopy:nocopy_test",
     "//pkg/testutils/lint/passes/passesutil:passesutil_test",

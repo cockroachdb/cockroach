@@ -166,9 +166,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 				// We must try the non-txn put or get in a goroutine because
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
-				go func() {
+				go func(i int, args roachpb.Request) {
 					var err error
-					if _, ok := test.args.(*roachpb.GetRequest); ok {
+					if _, ok := args.(*roachpb.GetRequest); ok {
 						_, err = db.Get(nonTxnCtx, key)
 					} else {
 						err = db.Put(nonTxnCtx, key, "value")
@@ -179,8 +179,8 @@ func TestClientRetryNonTxn(t *testing.T) {
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
-						i, test.args.Method())
-				}()
+						i, args.Method())
+				}(i, test.args)
 				// Block until the non-transactional client has pushed us at
 				// least once.
 				testutils.SucceedsSoon(t, func() error {

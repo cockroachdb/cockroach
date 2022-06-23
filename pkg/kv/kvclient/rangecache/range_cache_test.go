@@ -887,7 +887,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					blocked = ch
 				}
 
-				go func(ctx context.Context) {
+				go func(ctx context.Context, reverseScan bool) {
 					defer wg.Done()
 					var desc *roachpb.RangeDescriptor
 					// Each request goes to a different key.
@@ -895,11 +895,10 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, db.cache.tracer, "test")
 					defer getRecAndFinish()
 					tok, err := db.cache.lookupInternal(
-						ctx, key, oldToken,
-						tc.reverseScan)
+						ctx, key, oldToken, reverseScan)
 					require.NoError(t, err)
 					desc = tok.Desc()
-					if tc.reverseScan {
+					if reverseScan {
 						if !desc.ContainsKeyInverted(key) {
 							t.Errorf("desc %s does not contain exclusive end key %s", desc, key)
 						}
@@ -916,7 +915,7 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 								key, expLog, rec)
 						}
 					}
-				}(ctx)
+				}(ctx, tc.reverseScan)
 
 				// If we're expecting this request to block, wait for that.
 				if blocked != nil {

@@ -256,6 +256,10 @@ func TestInboxShutdown(t *testing.T) {
 				drainScenario = drainMetaNotCalled
 			}
 			for _, runRunWithStreamGoroutine := range []bool{false, true} {
+				// copy loop variables so they can be safelyreferenced in Go routines
+				cancel, runNextGoroutine, runRunWithStreamGoroutine :=
+					cancel, runNextGoroutine, runRunWithStreamGoroutine
+
 				if runNextGoroutine == false && runRunWithStreamGoroutine == true {
 					// This is sort of like a remote node connecting to the inbox, but the
 					// inbox will never be spawned. This is dealt with by another part of
