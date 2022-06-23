@@ -6854,7 +6854,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 				{"queue_name", types.String},
 				{"skip_should_queue", types.Bool},
 			},
-			ReturnType: tree.FixedReturnType(types.Bool),
+			ReturnType: tree.FixedReturnType(types.String), // empty on success, error string otherwise
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
 				if err != nil {
@@ -6882,14 +6882,14 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 					}
 					return err
 				}); err != nil {
-					return nil, err
+					return tree.NewDString(err.Error()), nil
 				}
 
 				if !foundRepl {
-					return nil, errors.Errorf("replica with range id %s not found on this node", rangeID)
+					return tree.NewDString(fmt.Sprintf("replica with range id %s not found on this node", rangeID)), nil
 				}
 
-				return tree.DBoolTrue, nil
+				return tree.NewDString(""), nil
 			},
 			Info: `Enqueue the replica with the given range ID into the named queue, on the
 store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'split',
