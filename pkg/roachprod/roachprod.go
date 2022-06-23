@@ -1360,8 +1360,15 @@ func InitProviders() map[string]string {
 // StartGrafana spins up a prometheus and grafana instance on the last node provided and scrapes
 // from all other nodes.
 func StartGrafana(
-	ctx context.Context, l *logger.Logger, clusterName string, grafanaURL string,
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	grafanaURL string,
+	promCfg *prometheus.Config, // passed iff grafanaURL is empty
 ) error {
+	if grafanaURL != "" && promCfg != nil {
+		return errors.New("cannot pass grafanaURL and a non empty promCfg")
+	}
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -1374,29 +1381,22 @@ func StartGrafana(
 		return err
 	}
 
-	ips, err := IP(ctx, l, clusterName, true)
-	if err != nil {
-		return err
-	}
-	// Configure the prometheus/grafana servers to run on the last node in the cluster
-	var promCfg prometheus.Config
-	promCfg.WithPrometheusNode(nodes[len(nodes)-1])
+	if promCfg == nil {
+		promCfg = &prometheus.Config{}
+		// Configure the prometheus/grafana servers to run on the last node in the cluster
+		promCfg.WithPrometheusNode(nodes[len(nodes)-1])
 
-	// Configure scraping on all nodes in the cluster
-	if err := promCfg.WithCluster(nodes, ips); err != nil {
-		return err
-	}
-	if err := promCfg.WithNodeExporter(nodes, ips); err != nil {
-		return err
-	}
+		// Configure scraping on all nodes in the cluster
+		promCfg.WithCluster(nodes)
+		promCfg.WithNodeExporter(nodes)
 
-	// By default, spin up a grafana server
-	promCfg.Grafana.Enabled = true
-	if grafanaURL != "" {
-		promCfg.WithGrafanaDashboard(grafanaURL)
-
+		// By default, spin up a grafana server
+		promCfg.Grafana.Enabled = true
+		if grafanaURL != "" {
+			promCfg.WithGrafanaDashboard(grafanaURL)
+		}
 	}
-	_, err = prometheus.Init(ctx, l, c, promCfg)
+	_, err = prometheus.Init(ctx, l, c, *promCfg)
 	if err != nil {
 		return err
 	}
@@ -1412,7 +1412,7 @@ func StartGrafana(
 
 // StopGrafana shuts down prometheus and grafana servers on the last node in
 // the cluster, if they exist.
-func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string) error {
+func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string, dumpDir string) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -1424,7 +1424,7 @@ func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string) erro
 	if err != nil {
 		return err
 	}
-	if err := prometheus.Shutdown(ctx, c, l, nodes); err != nil {
+	if err := prometheus.Shutdown(ctx, c, l, nodes, dumpDir); err != nil {
 		return err
 	}
 	return nil

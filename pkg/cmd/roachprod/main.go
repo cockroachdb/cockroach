@@ -893,18 +893,18 @@ and will scrape from all nodes in the cluster`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
-			grafanaConfig)
+			grafanaConfig, nil)
 	}),
 }
 
 var grafanaStopCmd = &cobra.Command{
-	Use:   `prom-stop <cluster>`,
+	Use:   `grafana-stop <cluster>`,
 	Short: `spins down prometheus and grafana instances on the last node in the cluster`,
-	Long: fmt.Sprintf(`spins down the prometheus and grafana instances on provided roachprod node and
-dumps the prometheus data into %s`, config.ClustersDir),
+	Long: `spins down the prometheus and grafana instances on provided roachprod node and
+dumps the prometheus data at the root of the last node in the cluster`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0])
+		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0], "")
 	}),
 }
 
@@ -921,6 +921,7 @@ var grafanaURLCmd = &cobra.Command{
 		for _, url := range urls {
 			fmt.Println(url)
 		}
+		fmt.Println("username: admin; pwd: admin")
 		return nil
 	}),
 }

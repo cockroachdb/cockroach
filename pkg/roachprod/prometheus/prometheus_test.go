@@ -20,16 +20,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type clusterSpec struct {
-	nodes install.Nodes
-	ips   []string
+var nodeIPMap = map[install.Node]string{
+	install.Node(1): "127.0.0.1",
+	install.Node(2): "127.0.0.2",
+	install.Node(3): "127.0.0.3",
+	install.Node(4): "127.0.0.4",
+	install.Node(5): "127.0.0.5",
+	install.Node(6): "127.0.0.6",
+	install.Node(7): "127.0.0.7",
+	install.Node(8): "127.0.0.8",
+	install.Node(9): "127.0.0.9",
 }
 
 func TestMakeYAMLConfig(t *testing.T) {
 	testCases := []struct {
 		testfile              string
 		useWorkloadHelpers    bool
-		cluster               *clusterSpec
+		cluster               install.Nodes
 		workloadScrapeConfigs []ScrapeConfig
 	}{
 		{
@@ -41,14 +48,20 @@ func TestMakeYAMLConfig(t *testing.T) {
 					MetricsPath: "/b",
 					ScrapeNodes: []ScrapeNode{
 						{
-							Nodes: install.Nodes{1},
-							IPs:   []string{"127.0.0.1"},
-							Port:  2002,
+							Node: install.Node(1),
+							Port: 2002,
 						},
 						{
-							Nodes: install.Nodes{3, 4, 5},
-							IPs:   []string{"127.0.0.3", "127.0.0.4", "127.0.0.5"},
-							Port:  2003,
+							Node: install.Node(3),
+							Port: 2003,
+						},
+						{
+							Node: install.Node(4),
+							Port: 2003,
+						},
+						{
+							Node: install.Node(5),
+							Port: 2003,
 						},
 					},
 				},
@@ -57,9 +70,8 @@ func TestMakeYAMLConfig(t *testing.T) {
 					MetricsPath: "/c",
 					ScrapeNodes: []ScrapeNode{
 						{
-							Nodes: install.Nodes{6},
-							IPs:   []string{"127.0.0.6"},
-							Port:  2009,
+							Node: install.Node(6),
+							Port: 2009,
 						},
 					},
 				},
@@ -68,22 +80,25 @@ func TestMakeYAMLConfig(t *testing.T) {
 		{
 			testfile:           "usingMakeCommands.txt",
 			useWorkloadHelpers: true,
-			cluster: &clusterSpec{
-				nodes: install.Nodes{8, 9},
-				ips:   []string{"127.0.0.8", "127.0.0.9"},
-			},
+			cluster:            install.Nodes{8, 9},
 			workloadScrapeConfigs: []ScrapeConfig{
 				{
 					ScrapeNodes: []ScrapeNode{
 						{
-							Nodes: install.Nodes{3, 4, 5},
-							IPs:   []string{"127.0.0.3", "127.0.0.4", "127.0.0.5"},
-							Port:  2005,
+							Node: install.Node(3),
+							Port: 2005,
 						},
 						{
-							Nodes: install.Nodes{6},
-							IPs:   []string{"127.0.0.6"},
-							Port:  2009,
+							Node: install.Node(4),
+							Port: 2005,
+						},
+						{
+							Node: install.Node(5),
+							Port: 2005,
+						},
+						{
+							Node: install.Node(6),
+							Port: 2009,
 						},
 					},
 				},
@@ -96,28 +111,23 @@ func TestMakeYAMLConfig(t *testing.T) {
 			var promCfg Config
 			for i, workloadConfig := range tc.workloadScrapeConfigs {
 				if tc.useWorkloadHelpers {
-					if len(workloadConfig.ScrapeNodes) == 1 {
-						err := promCfg.WithWorkload(
+					for _, scrapeNode := range workloadConfig.ScrapeNodes {
+						// test appending to same workload
+						promCfg.WithWorkload(
 							"workload"+fmt.Sprint(i),
-							workloadConfig.ScrapeNodes[0].Nodes,
-							workloadConfig.ScrapeNodes[0].Port,
-							workloadConfig.ScrapeNodes[0].IPs)
-						require.NoError(t, err)
-					} else {
-						promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs,
-							MakeWorkloadScrapeConfig("workload"+fmt.Sprint(i), workloadConfig.ScrapeNodes))
+							scrapeNode.Node,
+							scrapeNode.Port)
 					}
+
 				} else {
 					promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, workloadConfig)
 				}
 
 			}
 			if tc.cluster != nil {
-				require.NoError(t, promCfg.WithCluster(tc.cluster.nodes, tc.cluster.ips))
+				promCfg.WithCluster(tc.cluster)
 			}
-			cfg, err := makeYAMLConfig(
-				promCfg.ScrapeConfigs,
-			)
+			cfg, err := makeYAMLConfig(promCfg.ScrapeConfigs, nodeIPMap)
 			require.NoError(t, err)
 			echotest.Require(t, cfg, testutils.TestDataPath(t, tc.testfile))
 		})

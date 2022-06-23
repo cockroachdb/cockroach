@@ -41,6 +41,7 @@ var (
 	wipePreserveCerts     bool
 	grafanaConfig         string
 	grafanaurlOpen        bool
+	grafanaDumpDir        string
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -241,6 +242,9 @@ func initFlags() {
 
 	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
 		"open", false, "open the grafana dashboard url on the browser")
+
+	grafanaStopCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
+		"the absolute path to dump prometheus data to. If empty, no data will get dumped")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),

@@ -35,12 +35,11 @@ type Client interface {
 
 // ScrapeNode is a node to scrape from.
 type ScrapeNode struct {
-	Nodes install.Nodes
-	IPs   []string
-	Port  int
+	Node install.Node
+	Port int
 }
 
-// ScrapeConfig represents a single instance of scraping.
+// ScrapeConfig represents a single instance of scraping, identified by the jobName
 // Note how workload scrapes are set up differently than CRDB binary scrapes.
 type ScrapeConfig struct {
 	JobName     string
@@ -78,26 +77,43 @@ type GrafanaConfig struct {
 	DashboardURLs []string
 }
 
-// WithWorkload sets up a scraping config for `workload` processes running on the given
-// node(s) and port. Chains for convenience. If port == 0, defaultWorkloadPort is used.
-func (cfg *Config) WithWorkload(name string, nodes install.Nodes, port int, ips []string) error {
-	if len(nodes) != len(ips) {
-		return errors.New("number of nodes must exactly match the number of ips")
+// WithWorkload sets up a scraping config for a single `workload` running on the
+// given node and port. If the workload is in the config, the node and port will be
+// added to the workload's scrape config (i.e. allows for chaining). If port == 0,
+//defaultWorkloadPort is used.
+func (cfg *Config) WithWorkload(workloadName string, nodes install.Node, port int) *Config {
+
+	// Find the workload's scrapeConfig, if it exists.
+	var sc *ScrapeConfig
+	for i := range cfg.ScrapeConfigs {
+		existing := &cfg.ScrapeConfigs[i]
+		// A workload scrape config name is unique.
+		if existing.JobName == workloadName {
+			sc = existing
+			break
+		}
 	}
 	if port == 0 {
 		port = defaultWorkloadPort
 	}
-	sn := ScrapeNode{Nodes: nodes, IPs: ips, Port: port}
-	for i := range cfg.ScrapeConfigs {
-		sc := &cfg.ScrapeConfigs[i]
-		// A workload scrape config name is unique
-		if sc.JobName == name {
-			sc.ScrapeNodes = append(sc.ScrapeNodes, sn)
-			return nil
-		}
+	sn := ScrapeNode{Node: nodes, Port: port}
+	if sc == nil {
+		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeWorkloadScrapeConfig(workloadName, "/", []ScrapeNode{sn}))
+	} else {
+		sc.ScrapeNodes = append(sc.ScrapeNodes, sn)
 	}
-	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeWorkloadScrapeConfig(name, []ScrapeNode{sn}))
 	return nil
+}
+
+// MakeWorkloadScrapeConfig creates a scrape config for a workload.
+func MakeWorkloadScrapeConfig(
+	jobName string, metricsPath string, scrapeNodes []ScrapeNode,
+) ScrapeConfig {
+	return ScrapeConfig{
+		JobName:     jobName,
+		MetricsPath: metricsPath,
+		ScrapeNodes: scrapeNodes,
+	}
 }
 
 // WithPrometheusNode specifies the node to set up prometheus on.
@@ -108,12 +124,9 @@ func (cfg *Config) WithPrometheusNode(node install.Node) *Config {
 
 // WithCluster adds scraping for a CockroachDB cluster running on the given nodes.
 // Chains for convenience.
-func (cfg *Config) WithCluster(nodes install.Nodes, ips []string) error {
-	if len(nodes) != len(ips) {
-		return errors.New("number of nodes must exactly match the number of ips")
-	}
-	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeInsecureCockroachScrapeConfig(nodes, ips)...)
-	return nil
+func (cfg *Config) WithCluster(nodes install.Nodes) *Config {
+	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeInsecureCockroachScrapeConfig(nodes)...)
+	return cfg
 }
 
 // WithGrafanaDashboard adds links to dashboards to provision into Grafana. See
@@ -129,25 +142,43 @@ func (cfg *Config) WithGrafanaDashboard(url string) *Config {
 // WithNodeExporter causes node_exporter to be set up on the specified machines,
 // a separate process that sends hardware metrics to prometheus.
 // For more on the node exporter process, see https://prometheus.io/docs/guides/node-exporter/
-func (cfg *Config) WithNodeExporter(nodes install.Nodes, ips []string) error {
-	if len(nodes) != len(ips) {
-		return errors.New("number of nodes must exactly match the number of ips")
-	}
+func (cfg *Config) WithNodeExporter(nodes install.Nodes) *Config {
 	cfg.NodeExporter = nodes
-	// Add a scrape config for each node exporter
-	for i, node := range cfg.NodeExporter {
+	// Add a scrape config for each node running node_exporter
+	for _, node := range cfg.NodeExporter {
 		s := strconv.Itoa(int(node))
 		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
 			JobName:     "node_exporter-" + s,
 			MetricsPath: "/metrics",
 			Labels:      map[string]string{"node": s},
 			ScrapeNodes: []ScrapeNode{{
-				Nodes: install.Nodes{node},
-				IPs:   []string{ips[i]},
-				Port:  9100}},
+				Node: node,
+				Port: 9100}},
 		})
 	}
-	return nil
+	return cfg
+}
+
+// MakeInsecureCockroachScrapeConfig creates a scrape config for each
+// cockroach node. All nodes are assumed to be insecure and running on
+// port 26258.
+func MakeInsecureCockroachScrapeConfig(nodes install.Nodes) []ScrapeConfig {
+	var sl []ScrapeConfig
+	for _, node := range nodes {
+		s := strconv.Itoa(int(node))
+		sl = append(sl, ScrapeConfig{
+			JobName:     "cockroach-n" + s,
+			MetricsPath: "/_status/vars",
+			Labels:      map[string]string{"node": s},
+			ScrapeNodes: []ScrapeNode{
+				{
+					Node: node,
+					Port: 26258,
+				},
+			},
+		})
+	}
+	return sl
 }
 
 // Prometheus contains metadata of a running instance of prometheus.
@@ -206,7 +237,11 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		return nil, err
 	}
 	// create and upload prom config
-	yamlCfg, err := makeYAMLConfig(cfg.ScrapeConfigs)
+	nodeIPs, err := makeNodeIPMap(c)
+	if err != nil {
+		return nil, err
+	}
+	yamlCfg, err := makeYAMLConfig(cfg.ScrapeConfigs, nodeIPs)
 	if err != nil {
 		return nil, err
 	}
@@ -320,8 +355,8 @@ func Snapshot(
 		os.Stderr,
 		promNode,
 		"prometheus snapshot",
-		fmt.Sprintf(`curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
-	cd /tmp/prometheus && tar cvf prometheus-snapshot.tar.gz data/snapshots && mkdir %v`, dir),
+		`curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
+	cd /tmp/prometheus && tar cvf prometheus-snapshot.tar.gz data/snapshots`,
 	); err != nil {
 		return err
 	}
@@ -348,7 +383,7 @@ docker run --privileged -p 9090:9090 \
     --storage.tsdb.path=/prometheus \
     --web.enable-admin-api
 `), 0755); err != nil {
-		return err
+		return errors.Wrap(err, "failed to write docker script")
 	}
 
 	return c.Get(
@@ -359,29 +394,36 @@ docker run --privileged -p 9090:9090 \
 	)
 }
 
+// Shutdown stops all prom and grafana processes and, if dumpDir is passed,
+// will download dump of prometheus data to the machine executing the roachprod binary.
 func Shutdown(
-	ctx context.Context, c *install.SyncedCluster, l *logger.Logger, nodes install.Nodes,
+	ctx context.Context,
+	c *install.SyncedCluster,
+	l *logger.Logger,
+	nodes install.Nodes,
+	dumpDir string,
 ) error {
 
 	// We currently assume the last node contains the server.
 	promNode := install.Nodes{nodes[len(nodes)-1]}
 
-	dumpSnapshot := func(destDir string) {
+	dumpSnapshot := func(dumpDir string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		if err := Snapshot(ctx, c, l, promNode, destDir); err != nil {
+		if err := Snapshot(ctx, c, l, promNode, dumpDir); err != nil {
 			l.Printf("failed to get prometheus snapshot: %v", err)
 		}
 	}
-	dumpSnapshot(fmt.Sprintf("/tmp/promDump%s", fmt.Sprint(time.Now().UnixMilli())))
-
-	if err := c.Run(ctx, l, os.Stdout, os.Stderr, promNode, "stop node exporter",
-		`sudo systemctl node_exporter|| echo 'Stopped node exporter'`); err != nil {
+	if dumpDir != "" {
+		dumpSnapshot(dumpDir)
+	}
+	if err := c.Run(ctx, l, os.Stdout, os.Stderr, nodes, "stop node exporter",
+		`sudo systemctl stop node_exporter || echo 'Stopped node exporter'`); err != nil {
 		l.Printf("Failed to stop node exporter: %v", err)
 	}
 
-	if err := c.RepeatRun(ctx, l, os.Stdout, os.Stderr, nodes, "stop grafana",
-		`sudo systemctl stop grafana-server echo 'Stopped grafana'`); err != nil {
+	if err := c.Run(ctx, l, os.Stdout, os.Stderr, promNode, "stop grafana",
+		`sudo systemctl stop grafana-server || echo 'Stopped grafana'`); err != nil {
 		l.Printf("Failed to stop grafana server: %v", err)
 	}
 
@@ -408,8 +450,20 @@ const (
 	DefaultScrapeTimeout = 5 * time.Second
 )
 
+func makeNodeIPMap(c *install.SyncedCluster) (map[install.Node]string, error) {
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return nil, err
+	}
+	nodeIP := make(map[install.Node]string)
+	for i, n := range nodes {
+		nodeIP[n] = c.VMs[nodes[i]-1].PublicIP
+	}
+	return nodeIP, nil
+}
+
 // makeYAMLConfig creates a prometheus YAML config for the server to use.
-func makeYAMLConfig(scrapeConfigs []ScrapeConfig) (string, error) {
+func makeYAMLConfig(scrapeConfigs []ScrapeConfig, nodeIPs map[install.Node]string) (string, error) {
 	type yamlStaticConfig struct {
 		Labels  map[string]string `yaml:",omitempty"`
 		Targets []string
@@ -436,9 +490,7 @@ func makeYAMLConfig(scrapeConfigs []ScrapeConfig) (string, error) {
 	for _, scrapeConfig := range scrapeConfigs {
 		var targets []string
 		for _, scrapeNode := range scrapeConfig.ScrapeNodes {
-			for _, ip := range scrapeNode.IPs {
-				targets = append(targets, fmt.Sprintf("%s:%d", ip, scrapeNode.Port))
-			}
+			targets = append(targets, fmt.Sprintf("%s:%d", nodeIPs[scrapeNode.Node], scrapeNode.Port))
 		}
 
 		cfg.ScrapeConfigs = append(
@@ -457,37 +509,4 @@ func makeYAMLConfig(scrapeConfigs []ScrapeConfig) (string, error) {
 	}
 	ret, err := yaml.Marshal(&cfg)
 	return string(ret), err
-}
-
-// MakeWorkloadScrapeConfig creates a scrape config for a workload.
-func MakeWorkloadScrapeConfig(jobName string, scrapeNodes []ScrapeNode) ScrapeConfig {
-	return ScrapeConfig{
-		JobName:     jobName,
-		MetricsPath: "/",
-		ScrapeNodes: scrapeNodes,
-	}
-}
-
-// MakeInsecureCockroachScrapeConfig creates a scrape config for each
-// cockroach node. All nodes are assumed to be insecure and running on
-// port 26258.
-func MakeInsecureCockroachScrapeConfig(nodes install.Nodes, ips []string) []ScrapeConfig {
-	var sl []ScrapeConfig
-	for i, node := range nodes {
-		s := strconv.Itoa(int(node))
-		sl = append(sl, ScrapeConfig{
-			JobName:     "cockroach-n" + s,
-			MetricsPath: "/_status/vars",
-			Labels:      map[string]string{"node": s},
-			ScrapeNodes: []ScrapeNode{
-				{
-					Nodes: install.Nodes{node},
-					IPs:   []string{ips[i]},
-					Port:  26258,
-				},
-			},
-		})
-	}
-
-	return sl
 }
