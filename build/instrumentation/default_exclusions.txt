@@ -1,0 +1,26 @@
+# Packages to exclude
+pkg/acceptance
+pkg/bench
+pkg/build
+pkg/compose
+pkg/docs
+pkg/gen
+pkg/release
+pkg/roachprod
+pkg/testutils
+pkg/ui
+pkg/util/buildutil
+pkg/util/envutil
+
+# Other dirs to exclude
+bin
+build
+c-deps
+cloud
+docs
+githooks
+lib
+licenses
+monitoring
+scripts
+tools

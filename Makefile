@@ -1075,6 +1075,65 @@ bench benchshort: TESTTIMEOUT := $(BENCHTIMEOUT)
 # that longer running benchmarks can skip themselves.
 benchshort: override TESTFLAGS += -benchtime=1ns -short
 
+# ANTITHESIS INSTRUMENTATION
+# NB: This currently requires the Antithesis Go Instrumentation Package to be
+# installed (default path at /opt/antithesis), and libvoidstar.so symlinked
+# into /usr/lib prior to instrumenting and building.
+# TODO(sarkesian): remove requirement to symlink libvoidstar.so
+ANTITHESIS ?= /opt/antithesis
+INSTRUMENTOR_BIN ?= $(ANTITHESIS)/bin/goinstrumentor
+INSTRUMENTOR_EXCLUDE_VENDOR ?=
+instrumentation-deps = $(if $(filter instrumentshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
+
+## Output path for instrumented code and symbols when running instrumented builds, e.g. "$HOME/tmp". Must be outside the repository.
+INSTRUMENTATION_TMP :=
+
+.PHONY: instrument
+instrument: ## Build the CockroachDB binary using Antithesis instrumentation.
+
+.PHONY: instrumentshort
+instrumentshort: ## Build the CockroachDB binary using Antithesis instrumentation, without the admin UI.
+
+.PHONY: instrumentation-prereqs
+instrumentation-prereqs:
+ifeq (, $(shell which $(INSTRUMENTOR_BIN)))
+	$(error $(INSTRUMENTOR_BIN) not found, please install Antithesis Instrumentor)
+endif
+ifeq (, $(wildcard /usr/lib/libvoidstar.so))
+	$(error /usr/lib/libvoidstar.so not found, please install Antithesis Instrumentor)
+endif
+ifndef INSTRUMENTATION_TMP
+	$(error INSTRUMENTATION_TMP must be defined with `make $@`)
+endif
+
+.instrumentor_exclusions.tmp:
+	@echo "regenerating $@"
+	VENDOR_EXCLUDE_ALL=$(INSTRUMENTOR_EXCLUDE_VENDOR) ./build/instrumentation/gen_exclusions.sh > $@
+
+.PHONY: instrumentcode
+instrumentcode: instrumentation-prereqs $(instrumentation-deps) .instrumentor_exclusions.tmp
+	rm -rf $(INSTRUMENTATION_TMP)
+	mkdir -p $(INSTRUMENTATION_TMP)
+	$(INSTRUMENTOR_BIN) -exclude .instrumentor_exclusions.tmp -stderrthreshold=WARNING \
+		-antithesis $(ANTITHESIS)/instrumentation/go/wrappers . $(INSTRUMENTATION_TMP)
+
+instrument instrumentshort: instrumentation-prereqs instrumentcode
+	./build/instrumentation/vendor_antithesis.sh $(INSTRUMENTATION_TMP)
+	cd $(INSTRUMENTATION_TMP)/customer && \
+		$(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	cp $(INSTRUMENTATION_TMP)/customer/$@ ./$@
+	ln -sf $@ cockroach-instrumented
+
+.PHONY: cleaninstrument
+cleaninstrument: ## Clean up instrumentation artifacts and instrumented code.
+cleaninstrument:
+ifdef INSTRUMENTATION_TMP
+	rm -rf $(INSTRUMENTATION_TMP)
+endif
+	rm -f .instrumentor_exclusions.tmp
+	for f in instrument*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
+	rm -f cockroach-instrumented
+
 .PHONY: check test testshort testrace testdeadlock testlogic testbaselogic testccllogic testoptlogic bench benchshort
 test: ## Run tests.
 check test testshort testrace testdeadlock bench benchshort:
@@ -1670,7 +1729,7 @@ cleanshort:
 
 .PHONY: clean
 clean: ## Like cleanshort, but also includes C++ artifacts, Bazel artifacts, and the go build cache.
-clean: cleanshort clean-c-deps
+clean: cleanshort clean-c-deps cleaninstrument
 	rm -rf build/defs.mk*
 	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f -name 'zcgo_flags*.go' -exec rm {} +
