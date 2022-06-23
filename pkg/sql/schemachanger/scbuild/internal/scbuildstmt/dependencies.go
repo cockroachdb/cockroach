@@ -13,11 +13,9 @@ package scbuildstmt
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -297,14 +295,16 @@ type NameResolver interface {
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
 }
 
-type ZoneConfigReader interface {
-	GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig
-}
-
+// EnterpriseFeatureChecker checks if an enterprise license is
+// setup.
 type EnterpriseFeatureChecker interface {
+	// CheckEnterpriseEnabled checks if an enterprise license is present
+	// for a certain feature.
 	CheckEnterpriseEnabled(feature string) error
 }
 
+// SettingsReader reads cluster settings.
 type SettingsReader interface {
+	// GetClusterOrganization reads the cluster_organization setting.
 	GetClusterOrganization() string
 }

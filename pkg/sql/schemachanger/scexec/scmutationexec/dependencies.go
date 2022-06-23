@@ -113,5 +113,5 @@ type MutationVisitorStateUpdater interface {
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
 
-	SetZoneConfig(id descpb.ID, config *zonepb.ZoneConfig) error
+	SetZoneConfig(tbl catalog.TableDescriptor, config *zonepb.ZoneConfig) error
 }

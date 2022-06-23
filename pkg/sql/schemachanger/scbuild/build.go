@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -112,14 +113,19 @@ type (
 )
 
 type (
-	ZoneConfigReader = scbuildstmt.ZoneConfigReader
+	// ZoneConfigReader supports reading raw zone config information
+	// from storage.
+	ZoneConfigReader = scdecomp.ZoneConfigReader
 )
 
 type (
+	// EnterpriseFeatureChecker checks if an enterprise license is
+	// setup.
 	EnterpriseFeatureChecker = scbuildstmt.EnterpriseFeatureChecker
 )
 
 type (
+	// SettingsReader reads cluster settings.
 	SettingsReader = scbuildstmt.SettingsReader
 )
 

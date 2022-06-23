@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/regionutils",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/sem/catid",

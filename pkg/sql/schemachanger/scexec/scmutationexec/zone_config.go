@@ -17,5 +17,9 @@ import (
 )
 
 func (m *visitor) SetZoneConfig(ctx context.Context, op scop.SetZoneConfig) error {
-	return m.s.SetZoneConfig(op.DescriptorID, op.ZoneConfig)
+	tbl, err := m.checkOutTable(ctx, op.DescriptorID)
+	if err != nil {
+		return err
+	}
+	return m.s.SetZoneConfig(tbl, op.ZoneConfig)
 }

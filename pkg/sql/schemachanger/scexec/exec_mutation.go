@@ -600,7 +600,9 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 	return nil
 }
 
-func (mvs *mutationVisitorState) SetZoneConfig(id descpb.ID, config *zonepb.ZoneConfig) error {
-	mvs.zoneConfigsToUpdate[id] = config
+func (mvs *mutationVisitorState) SetZoneConfig(
+	tbl catalog.TableDescriptor, config *zonepb.ZoneConfig,
+) error {
+	mvs.zoneConfigsToUpdate[tbl.GetID()] = config
 	return nil
 }

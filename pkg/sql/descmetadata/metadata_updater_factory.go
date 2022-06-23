@@ -13,6 +13,7 @@ package descmetadata
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -29,6 +30,7 @@ type MetadataUpdaterFactory struct {
 	ieFactory         sqlutil.SessionBoundInternalExecutorFactory
 	collectionFactory *descs.CollectionFactory
 	settings          *settings.Values
+	codec             keys.SQLCodec
 }
 
 // NewMetadataUpdaterFactory creates a new comment updater factory.
@@ -36,11 +38,13 @@ func NewMetadataUpdaterFactory(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 	collectionFactory *descs.CollectionFactory,
 	settings *settings.Values,
+	codec keys.SQLCodec,
 ) scexec.DescriptorMetadataUpdaterFactory {
 	return MetadataUpdaterFactory{
 		ieFactory:         ieFactory,
 		collectionFactory: collectionFactory,
 		settings:          settings,
+		codec:             codec,
 	}
 }
 
@@ -61,5 +65,6 @@ func (mf MetadataUpdaterFactory) NewMetadataUpdater(
 		ie:                mf.ieFactory(ctx, modifiedSessionData),
 		collectionFactory: mf.collectionFactory,
 		cacheEnabled:      sessioninit.CacheEnabled.Get(mf.settings),
+		codec:             mf.codec,
 	}
 }

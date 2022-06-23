@@ -1,14 +1,20 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package scbuildstmt
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionutils"
@@ -189,17 +195,14 @@ func prepareZoneConfigWrites(
 	zone *zonepb.ZoneConfig,
 	hasNewSubzones bool,
 ) {
-	if len(zone.Subzones) > 0 {
-		var err error
-		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			b, tbl, zone.Subzones, hasNewSubzones)
-		if err != nil {
+	// The spans themselves will be generated with the metadata update.
+	if hasNewSubzones && len(zone.Subzones) > 0 {
+		// Removing zone configs does not require a valid license.
+		if err := b.CheckEnterpriseEnabled("replication zones on indexes or partitions"); err != nil {
 			panic(err)
 		}
-	} else {
-		// To keep the Subzone and SubzoneSpan arrays consistent
-		zone.SubzoneSpans = nil
 	}
+
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		scpb.ForEachTableZoneConfig(tbl,
 			func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableZoneConfig) {
@@ -215,119 +218,4 @@ func prepareZoneConfigWrites(
 		TableID:      targetID,
 		ZoneConfig:   zone,
 	})
-}
-
-func GenerateSubzoneSpans(
-	b BuildCtx, tableElts ElementResultSet, subzones []zonepb.Subzone, hasNewSubzones bool,
-) ([]zonepb.SubzoneSpan, error) {
-	// Removing zone configs does not require a valid license.
-	if hasNewSubzones {
-		if err := b.CheckEnterpriseEnabled("replication zones on indexes or partitions"); err != nil {
-			return nil, err
-		}
-	}
-
-	// We already completely avoid creating subzone spans for dropped indexes.
-	// Whether this was intentional is a different story, but it turns out to be
-	// pretty sane. Dropped elements may refer to dropped types and we aren't
-	// necessarily in a position to deal with those dropped types. Add a special
-	// case to avoid generating any subzone spans in the face of being dropped.
-	_, target, tbl := scpb.FindTable(tableElts)
-	if target == scpb.ToAbsent {
-		return nil, nil
-	}
-
-	//a := &tree.DatumAlloc{}
-
-	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
-	subzoneIndexByPartition := make(map[string]int32)
-	for i, subzone := range subzones {
-		if len(subzone.PartitionName) > 0 {
-			subzoneIndexByPartition[subzone.PartitionName] = int32(i)
-		} else {
-			subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)] = int32(i)
-		}
-	}
-
-	var indexCovering covering.Covering
-	var partitionCoverings []covering.Covering
-	forEachIndex := func(tableID catid.DescID, indexID catid.IndexID) {
-		_, indexSubzoneExists := subzoneIndexByIndexID[indexID]
-		if indexSubzoneExists {
-			idxKey := b.IndexPrefix(tableID, indexID)
-			idxSpan := roachpb.Span{
-				Key:    idxKey,
-				EndKey: idxKey.PrefixEnd(),
-			}
-			// Each index starts with a unique prefix, so (from a precedence
-			// perspective) it's safe to append them all together.
-			indexCovering = append(indexCovering, covering.Range{
-				Start: idxSpan.Key, End: idxSpan.EndKey,
-				Payload: zonepb.Subzone{IndexID: uint32(indexID)},
-			})
-		}
-
-		/*	var emptyPrefix []tree.Datum
-			indexPartitionCoverings, err := indexCoveringsForPartitioning(
-				a, codec, tableDesc, idx, idx.GetPartitioning(), subzoneIndexByPartition, emptyPrefix)
-			if err != nil {
-				return err
-			}
-			// The returned indexPartitionCoverings are sorted with highest
-			// precedence first. They all start with the index prefix, so cannot
-			// overlap with the partition coverings for any other index, so (from a
-			// precedence perspective) it's safe to append them all together.
-			partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
-		*/
-	}
-	scpb.ForEachSecondaryIndex(tableElts,
-		func(current scpb.Status, target scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-			if target != scpb.ToPublic {
-				return
-			}
-			forEachIndex(idx.TableID, idx.IndexID)
-		})
-	scpb.ForEachPrimaryIndex(tableElts,
-		func(current scpb.Status, target scpb.TargetStatus, idx *scpb.PrimaryIndex) {
-			if target != scpb.ToPublic {
-				return
-			}
-			forEachIndex(idx.TableID, idx.IndexID)
-		})
-
-	// OverlapCoveringMerge returns the payloads for any coverings that overlap
-	// in the same order they were input. So, we require that they be ordered
-	// with highest precedence first, so the first payload of each range is the
-	// one we need.
-	ranges := covering.OverlapCoveringMerge(append(partitionCoverings, indexCovering))
-
-	// NB: This assumes that none of the indexes are interleaved, which is
-	// checked in PartitionDescriptor validation.
-	sharedPrefix := b.TablePrefix(tbl.TableID)
-
-	var subzoneSpans []zonepb.SubzoneSpan
-	for _, r := range ranges {
-		payloads := r.Payload.([]interface{})
-		if len(payloads) == 0 {
-			continue
-		}
-		subzoneSpan := zonepb.SubzoneSpan{
-			Key:    bytes.TrimPrefix(r.Start, sharedPrefix),
-			EndKey: bytes.TrimPrefix(r.End, sharedPrefix),
-		}
-		var ok bool
-		if subzone := payloads[0].(zonepb.Subzone); len(subzone.PartitionName) > 0 {
-			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[subzone.PartitionName]
-		} else {
-			subzoneSpan.SubzoneIndex, ok = subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)]
-		}
-		if !ok {
-			continue
-		}
-		if bytes.Equal(subzoneSpan.Key.PrefixEnd(), subzoneSpan.EndKey) {
-			subzoneSpan.EndKey = nil
-		}
-		subzoneSpans = append(subzoneSpans, subzoneSpan)
-	}
-	return subzoneSpans, nil
 }

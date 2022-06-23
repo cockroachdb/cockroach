@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -36,6 +37,7 @@ type metadataUpdater struct {
 	ie                sqlutil.InternalExecutor
 	collectionFactory *descs.CollectionFactory
 	cacheEnabled      bool
+	codec             keys.SQLCodec
 }
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
@@ -195,11 +197,28 @@ func (mu metadataUpdater) SetZoneConfig(
 			"DELETE FROM system.zones WHERE id = $1", id)
 		return err
 	}
-	bytes, err := protoutil.Marshal(zone)
-	if err != nil {
-		return err
-	}
-	_, err = mu.ie.Exec(ctx, "update-zone", mu.txn,
-		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", id, bytes)
-	return err
+
+	return mu.collectionFactory.Txn(ctx, mu.ie, mu.txn.DB(),
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+
+			if len(zone.Subzones) != 0 {
+				tbl, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+				if err != nil {
+					return err
+				}
+				zone.SubzoneSpans, err = regionutils.GenerateSubzoneSpans(mu.codec, tbl, zone.Subzones)
+				if err != nil {
+					return err
+				}
+			}
+
+			bytes, err := protoutil.Marshal(zone)
+			if err != nil {
+				return err
+			}
+			_, err = mu.ie.Exec(ctx, "update-zone", mu.txn,
+				"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", id, bytes)
+			return err
+		})
+
 }

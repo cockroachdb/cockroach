@@ -46,7 +46,10 @@ type CommentGetter interface {
 	GetConstraintComment(ctx context.Context, tableID catid.DescID, constraintID catid.ConstraintID) (comment string, ok bool, err error)
 }
 
+// ZoneConfigReader supports reading raw zone config information
+// from storage.
 type ZoneConfigReader interface {
+	// GetZoneConfigRaw reads the raw zone config from storage.
 	GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig
 }
 

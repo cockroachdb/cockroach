@@ -1,3 +1,13 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package regionutils
 
 import (
@@ -8,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// getNumVotersAndNumReplicas computes the number of voters and the total number
+// GetNumVotersAndNumReplicas computes the number of voters and the total number
 // of replicas needed for a given region config.
 func GetNumVotersAndNumReplicas(
 	regionConfig multiregion.RegionConfig,
@@ -68,7 +78,7 @@ func maxFailuresBeforeUnavailability(numVoters int32) int32 {
 	return ((numVoters + 1) / 2) - 1
 }
 
-func MakeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
+func makeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 	return zonepb.Constraint{
 		Type:  zonepb.Constraint_REQUIRED,
 		Key:   "region",
@@ -76,7 +86,7 @@ func MakeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 	}
 }
 
-// synthesizeVoterConstraints generates a ConstraintsConjunction clause
+// SynthesizeVoterConstraints generates a ConstraintsConjunction clause
 // representing the `voter_constraints` field to be set for the primary region
 // of a multi-region database or the home region of a table/partition in such a
 // database.
@@ -126,7 +136,7 @@ func SynthesizeVoterConstraints(
 				// |   +------------+  |      |  +------------+   |
 				// +-------------------+      +-------------------+
 				//
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			},
 		}, nil
 	case descpb.SurvivalGoal_REGION_FAILURE:
@@ -166,7 +176,7 @@ func SynthesizeVoterConstraints(
 				// +--------------------+   +-------------------+    +--------------------+
 				//
 				NumReplicas: maxFailuresBeforeUnavailability(numVoters),
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			},
 		}, nil
 	default:
@@ -186,7 +196,7 @@ func SynthesizeReplicaConstraints(
 			// Constrain at least 1 (voting or non-voting) replica per region.
 			constraints[i] = zonepb.ConstraintsConjunction{
 				NumReplicas: 1,
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			}
 		}
 		return constraints, nil
@@ -208,16 +218,16 @@ func SynthesizeReplicaConstraints(
 	}
 }
 
-// synthesizeLeasePreferences generates a LeasePreferences clause representing
+// SynthesizeLeasePreferences generates a LeasePreferences clause representing
 // the `lease_preferences` field to be set for the primary region of a
 // multi-region database or the home region of a table in such a database.
 func SynthesizeLeasePreferences(region catpb.RegionName) []zonepb.LeasePreference {
 	return []zonepb.LeasePreference{
-		{Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)}},
+		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
 	}
 }
 
-// addConstraintsForSuperRegion updates the ZoneConfig.Constraints field such
+// AddConstraintsForSuperRegion updates the ZoneConfig.Constraints field such
 // that every replica is guaranteed to be constrained to a region within the
 // super region.
 // If !regionConfig.IsMemberOfExplicitSuperRegion(affinityRegion), and error
@@ -240,7 +250,7 @@ func AddConstraintsForSuperRegion(
 		for _, region := range regions {
 			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
 				NumReplicas: 1,
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			})
 		}
 		return nil
@@ -266,7 +276,7 @@ func AddConstraintsForSuperRegion(
 			}
 			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
 				NumReplicas: n,
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			})
 		}
 		return nil
