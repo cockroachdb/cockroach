@@ -193,12 +193,16 @@ func Download(ctx context.Context, opts Options) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := untar(r, destFile); err != nil {
+		if err := untar(r, destFile, opts.Binary); err != nil {
 			_ = destFile.Truncate(0)
 			return "", err
 		}
 	case strings.HasSuffix(opts.URL.Path, ".zip"):
-		if err := unzip(resp.Body, destFile); err != nil {
+		binary := opts.Binary
+		if opts.GOOS == "windows" {
+			binary += ".exe"
+		}
+		if err := unzip(resp.Body, destFile, binary); err != nil {
 			_ = destFile.Truncate(0)
 			return "", err
 		}
