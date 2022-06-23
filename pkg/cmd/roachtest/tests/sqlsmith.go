@@ -266,11 +266,12 @@ func registerSQLSmith(r registry.Registry) {
 
 	register := func(setup, setting string) {
 		r.Add(registry.TestSpec{
-			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			// NB: sqlsmith failures should never block a release.
+			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Owner:   registry.OwnerSQLQueries,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Timeout: time.Minute * 20,
+			// NB: sqlsmith failures should never block a release.
+			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
