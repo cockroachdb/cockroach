@@ -1216,15 +1216,6 @@ func calculateFootprint(
 	numIncompleteGets, numIncompleteScans int,
 	numGetResults, numScanResults int,
 ) {
-	// Note that we cannot use Size() methods that are automatically generated
-	// by the protobuf library because they account for things differently from
-	// how the memory usage is accounted for by the KV layer for the purposes of
-	// tracking TargetBytes limit.
-
-	// getRequestScratch and scanRequestScratch are used to calculate
-	// the size of requests when we set the ResumeSpans on them.
-	var getRequestScratch roachpb.GetRequest
-	var scanRequestScratch roachpb.ScanRequest
 	for i, resp := range br.Responses {
 		reply := resp.GetInner()
 		switch req.reqs[i].GetInner().(type) {
@@ -1232,8 +1223,7 @@ func calculateFootprint(
 			get := reply.(*roachpb.GetResponse)
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				getRequestScratch.SetSpan(*get.ResumeSpan)
-				resumeReqsMemUsage += int64(getRequestScratch.Size())
+				resumeReqsMemUsage += requestSize(get.ResumeSpan.Key, get.ResumeSpan.EndKey)
 				numIncompleteGets++
 			} else {
 				// This Get was completed.
@@ -1250,8 +1240,7 @@ func calculateFootprint(
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
-				scanRequestScratch.SetSpan(*scan.ResumeSpan)
-				resumeReqsMemUsage += int64(scanRequestScratch.Size())
+				resumeReqsMemUsage += requestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
 				numIncompleteScans++
 			}
 		}
@@ -1536,28 +1525,4 @@ var zeroInt32Slice []int32
 
 func init() {
 	zeroInt32Slice = make([]int32, 1<<10)
-}
-
-const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
-
-func requestsMemUsage(reqs []roachpb.RequestUnion) (memUsage int64) {
-	for _, r := range reqs {
-		memUsage += int64(r.Size())
-	}
-	return memUsage
-}
-
-// getResponseSize calculates the size of the GetResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
-func getResponseSize(get *roachpb.GetResponse) int64 {
-	if get.Value == nil {
-		return 0
-	}
-	return int64(len(get.Value.RawBytes))
-}
-
-// scanResponseSize calculates the size of the ScanResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
-func scanResponseSize(scan *roachpb.ScanResponse) int64 {
-	return scan.NumBytes
 }
