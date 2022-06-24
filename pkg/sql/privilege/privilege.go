@@ -45,7 +45,7 @@ const (
 	ZONECONFIG           Kind = 10
 	CONNECT              Kind = 11
 	RULE                 Kind = 12
-	MODIFYCLUSTERSETTING Kind = 13 // SYSTEM CLUSTER PRIVILEGE.
+	MODIFYCLUSTERSETTING Kind = 13
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
