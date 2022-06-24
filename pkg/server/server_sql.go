@@ -405,9 +405,19 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.AmbientCtx,
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
 	)
-	cfg.sqlInstanceProvider = instanceprovider.New(
-		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
-	)
+	// If the node id is already populated, we only need to create a placeholder
+	// instance provider without initializing the instance, since this is not a
+	// SQL pod server.
+	_, isNotSQLPod := cfg.nodeIDContainer.OptionalNodeID()
+	if isNotSQLPod {
+		cfg.sqlInstanceProvider = instanceprovider.NewPlaceholder(
+			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.rangeFeedFactory, cfg.clock,
+		)
+	} else {
+		cfg.sqlInstanceProvider = instanceprovider.New(
+			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
+		)
+	}
 
 	if !codec.ForSystemTenant() {
 		// In a multi-tenant environment, use the sqlInstanceProvider to resolve
@@ -1157,7 +1167,7 @@ func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) er
 	return nil
 }
 
-func (s *SQLServer) initInstanceID(ctx context.Context) error {
+func (s *SQLServer) setInstanceID(ctx context.Context) error {
 	if _, ok := s.sqlIDContainer.OptionalNodeID(); ok {
 		// sqlIDContainer has already been initialized with a node ID,
 		// we don't need to initialize a SQL instance ID in this case
@@ -1186,8 +1196,8 @@ func (s *SQLServer) preStart(
 	socketFile string,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-	// The sqlliveness and sqlinstance subsystem should be started first to ensure instance ID is
-	// initialized prior to any other systems that need it.
+	// The sqlliveness and sqlinstance subsystem should be started first to ensure
+	// the instance ID is initialized prior to any other systems that need it.
 	if err := s.startSQLLivenessAndInstanceProviders(ctx); err != nil {
 		return err
 	}
@@ -1198,7 +1208,7 @@ func (s *SQLServer) preStart(
 	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
 		return err
 	}
-	if err := s.initInstanceID(ctx); err != nil {
+	if err := s.setInstanceID(ctx); err != nil {
 		return err
 	}
 	s.connManager = connManager

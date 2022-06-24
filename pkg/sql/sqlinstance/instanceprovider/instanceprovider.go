@@ -35,7 +35,55 @@ type writer interface {
 	ReleaseInstanceID(ctx context.Context, instanceID base.SQLInstanceID) error
 }
 
-// provider implements the sqlinstance.Provider interface for access to the sqlinstance subsystem.
+// placeholderProvider implements the sqlinstance.Provider interface as a
+// placeholder for an instance provider, when an instance provider must be
+// instantiated for a non-SQL instance. It starts a Reader to provide the
+// AddressResolver interface, but otherwise throws unsupported errors.
+type placeholderProvider struct {
+	*instancestorage.Reader
+}
+
+func NewPlaceholder(
+	stopper *stop.Stopper,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	slProvider sqlliveness.Provider,
+	f *rangefeed.Factory,
+	clock *hlc.Clock,
+) sqlinstance.Provider {
+	storage := instancestorage.NewStorage(db, codec, slProvider)
+	reader := instancestorage.NewReader(storage, slProvider.CachedReader(), f, codec, clock, stopper)
+	p := &placeholderProvider{
+		Reader: reader,
+	}
+	return p
+}
+
+// Start implements the sqlinstance.Provider interface.
+func (p *placeholderProvider) Start(ctx context.Context) error {
+	err := p.Reader.Start(ctx)
+	return err
+}
+
+// Instance implements the sqlinstance.Provider interface.
+func (p *placeholderProvider) Instance(
+	ctx context.Context,
+) (_ base.SQLInstanceID, _ sqlliveness.SessionID, err error) {
+	return base.SQLInstanceID(0), "", sqlinstance.NotASQLInstanceError
+}
+
+// GetInstance implements the AddressResolver interface.
+func (p *placeholderProvider) GetInstance(context.Context, base.SQLInstanceID) (sqlinstance.InstanceInfo, error) {
+	return sqlinstance.InstanceInfo{}, sqlinstance.NotASQLInstanceError
+}
+
+// GetAllInstances implements the AddressResolver interface.
+func (p *placeholderProvider) GetAllInstances(context.Context) ([]sqlinstance.InstanceInfo, error) {
+	return nil, sqlinstance.NotASQLInstanceError
+}
+
+// provider implements the sqlinstance.Provider interface for access to the
+// sqlinstance subsystem.
 type provider struct {
 	*instancestorage.Reader
 	storage      writer
@@ -81,6 +129,12 @@ func (p *provider) Start(ctx context.Context) error {
 	if p.started() {
 		return p.initError
 	}
+	// Initialize the instance. We need to do this before starting the reader, so
+	// that the reader sees the instance.
+	if err := p.initAndWait(ctx); err != nil {
+		return err
+	}
+
 	if err := p.Reader.Start(ctx); err != nil {
 		p.initOnce.Do(func() {
 			p.initError = err
@@ -106,21 +160,31 @@ func (p *provider) Instance(
 	if !p.started() {
 		return base.SQLInstanceID(0), "", sqlinstance.NotStartedError
 	}
-
-	p.maybeInitialize()
 	select {
 	case <-ctx.Done():
 		return base.SQLInstanceID(0), "", ctx.Err()
 	case <-p.stopper.ShouldQuiesce():
 		return base.SQLInstanceID(0), "", stop.ErrUnavailable
 	case <-p.initialized:
+		return p.instanceID, p.sessionID, p.initError
+	}
+}
+
+func (p *provider) initAndWait(ctx context.Context) error {
+	p.maybeInitialize()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-p.initialized:
 		if p.initError == nil {
 			log.Ops.Infof(ctx, "created SQL instance %d", p.instanceID)
 		} else {
 			log.Ops.Warningf(ctx, "error creating SQL instance: %s", p.initError)
 		}
-		return p.instanceID, p.sessionID, p.initError
 	}
+	return p.initError
 }
 
 func (p *provider) maybeInitialize() {
@@ -138,6 +202,8 @@ func (p *provider) maybeInitialize() {
 }
 
 func (p *provider) initialize(ctx context.Context) error {
+	// TODO(harding): Need to test that we're an authenticated tenant before this
+	// point, otherwise Session may never return.
 	session, err := p.session.Session(ctx)
 	if err != nil {
 		return errors.Wrap(err, "constructing session")
