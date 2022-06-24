@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate stringer -type=Kind
+//go:generate stringer -type=Kind -linecomment
 
 // Kind defines a privilege. This is output by the parser,
 // and used to generate the privilege bitfields in the PrivilegeDescriptor.
