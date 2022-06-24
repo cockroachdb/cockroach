@@ -101,6 +101,8 @@ type RelExpr interface {
 	setNext(e RelExpr)
 }
 
+type RelExprs []RelExpr
+
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
 // properties, like FiltersExpr and ProjectionsExpr. These expressions are also
 // tagged with the ScalarProps tag.

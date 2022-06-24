@@ -209,6 +209,9 @@ type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
 // rightColumns passed to ConstructApplyJoin (in order).
 type ApplyJoinPlanRightSideFn func(ef Factory, leftRow tree.Datums) (Plan, error)
 
+// TODO
+type RoutinePlanFn func(ef Factory, args tree.Datums) (Plan, error)
+
 // Cascade describes a cascading query. The query uses a node created by
 // ConstructBuffer as an input; it should only be triggered if this buffer is
 // not empty.

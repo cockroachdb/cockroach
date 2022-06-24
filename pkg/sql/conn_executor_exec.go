@@ -139,10 +139,10 @@ func (ex *connExecutor) execStmt(
 				"stmt.no.constants", stmtNoConstants,
 			)
 			pprof.Do(ctx, labels, func(ctx context.Context) {
-				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
+				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, tree.RoutineArgs{}, res, canAutoCommit)
 			})
 		} else {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
+			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, tree.RoutineArgs{}, res, canAutoCommit)
 		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
@@ -268,6 +268,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	parserStmt parser.Statement,
 	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
+	rArgs tree.RoutineArgs,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
@@ -667,6 +668,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
+	p.extendedEvalCtx.RoutineArgs = rArgs
 	p.stmt = stmt
 	p.cancelChecker.Reset(ctx)
 

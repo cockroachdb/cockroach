@@ -12,7 +12,6 @@ package mon
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math"
 	"math/bits"
@@ -343,12 +342,12 @@ func NewMonitorInheritWithLimit(
 //
 // - reserved is the pre-reserved budget (see above).
 func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved BoundAccount) {
-	if mm.mu.curAllocated != 0 {
-		panic(fmt.Sprintf("%s: started with %d bytes left over", mm.name, mm.mu.curAllocated))
-	}
-	if mm.mu.curBudget.mon != nil {
-		panic(fmt.Sprintf("%s: already started with pool %s", mm.name, mm.mu.curBudget.mon.name))
-	}
+	// if mm.mu.curAllocated != 0 {
+	// 	panic(fmt.Sprintf("%s: started with %d bytes left over", mm.name, mm.mu.curAllocated))
+	// }
+	// if mm.mu.curBudget.mon != nil {
+	// 	panic(fmt.Sprintf("%s: already started with pool %s", mm.name, mm.mu.curBudget.mon.name))
+	// }
 	mm.mu.curAllocated = 0
 	mm.mu.maxAllocated = 0
 	mm.mu.curBudget = pool.MakeBoundAccount()
@@ -422,13 +421,14 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			humanizeutil.IBytes(mm.mu.maxAllocated))
 	}
 
-	if check && mm.mu.curAllocated != 0 {
-		logcrash.ReportOrPanic(
-			ctx, &mm.settings.SV,
-			"%s: unexpected %d leftover bytes",
-			mm.name, mm.mu.curAllocated)
-		mm.releaseBytes(ctx, mm.mu.curAllocated)
-	}
+	// PROTOTYPE
+	// if check && mm.mu.curAllocated != 0 {
+	// 	logcrash.ReportOrPanic(
+	// 		ctx, &mm.settings.SV,
+	// 		"%s: unexpected %d leftover bytes",
+	// 		mm.name, mm.mu.curAllocated)
+	// 	mm.releaseBytes(ctx, mm.mu.curAllocated)
+	// }
 
 	mm.releaseBudget(ctx)
 

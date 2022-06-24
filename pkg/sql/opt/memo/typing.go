@@ -226,6 +226,8 @@ func init() {
 			typingFuncMap[op] = typeAsWindow
 		}
 	}
+
+	typingFuncMap[opt.RoutineOp] = typeRoutine
 }
 
 // typeVariable returns the type of a variable expression, which is stored in
@@ -349,6 +351,11 @@ func typeCoalesce(e opt.ScalarExpr) *types.T {
 func typeCase(e opt.ScalarExpr) *types.T {
 	caseExpr := e.(*CaseExpr)
 	return InferWhensType(caseExpr.Whens, caseExpr.OrElse)
+}
+
+// typeRoutine returns the type of a routine.
+func typeRoutine(e opt.ScalarExpr) *types.T {
+	return e.(*RoutineExpr).Typ
 }
 
 // typeWhen returns the type of a WHEN <condval> THEN <expr> clause inside a

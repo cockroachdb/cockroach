@@ -14,6 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -67,6 +70,8 @@ func init() {
 		// Subquery operators.
 		opt.ExistsOp:   (*Builder).buildExistsSubquery,
 		opt.SubqueryOp: (*Builder).buildSubquery,
+
+		opt.RoutineOp: (*Builder).buildRoutine,
 	}
 
 	for _, op := range opt.BoolOperators {
@@ -642,4 +647,136 @@ func (b *Builder) addSubquery(
 	// by index (1-based).
 	exprNode.Idx = len(b.subqueries)
 	return exprNode
+}
+
+// func (b *Builder) buildRoutine(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+// 	routine := scalar.(*memo.RoutineExpr)
+// 	args := make(tree.TypedExprs, len(routine.Args))
+// 	var err error
+// 	for i := range args {
+// 		args[i], err = b.buildScalar(ctx, routine.Args[i])
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+// 	return &tree.Routine{
+// 		ArgNames:   routine.ArgNames,
+// 		Args:       args,
+// 		Statements: routine.Statements,
+// 		Typ:        routine.Typ,
+// 	}, nil
+// }
+
+func (b *Builder) buildRoutine(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
+	routine := scalar.(*memo.RoutineExpr)
+
+	args := make(tree.TypedExprs, len(routine.Args))
+	var err error
+	for i := range args {
+		args[i], err = b.buildScalar(ctx, routine.Args[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// routineProps := routine.Relational()
+	// Make a copy of the required props for the statement.
+	// TODO(mgartner): I think I'll need some _real_ required physical props to
+	// ensure that the column presentation is correct..
+	// routineRequiredProps := *routine.Statement.RequiredPhysical()
+	routineRequiredProps := &physical.Required{}
+
+	// The right-hand side will produce the output columns in order.
+	// routineRequiredProps.Presentation = b.makePresentation(rightProps.OutputCols)
+
+	// leftBoundCols is the set of columns that this apply join binds.
+	// leftBoundCols := leftProps.OutputCols.Intersection(rightProps.OuterCols)
+	// leftBoundColMap is a map from opt.ColumnID to opt.ColumnOrdinal that maps
+	// a column bound by the left side of this apply join to the column ordinal
+	// in the left side that contains the binding.
+	// var leftBoundColMap opt.ColMap
+	// for col, ok := leftBoundCols.Next(0); ok; col, ok = leftBoundCols.Next(col + 1) {
+	// 	v, ok := leftPlan.outputCols.Get(int(col))
+	// 	if !ok {
+	// 		return execPlan{}, fmt.Errorf("couldn't find binding column %d in left output columns", col)
+	// 	}
+	// 	leftBoundColMap.Set(int(col), v)
+	// }
+
+	// Now, the cool part! We set up an ApplyJoinPlanRightSideFn which plans the
+	// right side given a particular left side row. We do this planning in a
+	// separate memo, but we use the same exec.Factory.
+	//
+	// Note: we put o outside of the function so we allocate it only once.
+	var o xform.Optimizer
+	planFn := func(ref tree.RoutineExecFactory, args tree.Datums) (tree.RoutinePlan, error) {
+		ef := ref.(exec.Factory)
+		o.Init(b.evalCtx, b.catalog)
+		f := o.Factory()
+
+		// Copy the expression into a new memo, replacing each argument
+		// reference with a value from args.
+		var replaceFn norm.ReplaceFunc
+		replaceFn = func(e opt.Expr) opt.Expr {
+			if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
+				idx := placeholder.Value.(*tree.Placeholder).Idx
+				d := args[idx]
+				return f.ConstructConstVal(d, placeholder.DataType())
+			}
+			return f.CopyAndReplaceDefault(e, replaceFn)
+		}
+		f.CopyAndReplace(routine.Statement, routineRequiredProps, replaceFn)
+
+		// TODO: This is a hack because for some reason, routineRequiredProps
+		// does not have a required presentation and during optimization
+		// routine.Statement's columns are completed pruned.
+		o.DisableOptimizations()
+
+		newRightSide, err := o.Optimize()
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO(mgartner): Is it safe to use b.factory instead of a new ef
+		// exec.Factory here? Probably not when using EXPLAIN...
+		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb.disableTelemetry = true
+		// eb.withExprs = withExprs
+		plan, err := eb.Build()
+		if err != nil {
+			if errors.IsAssertionFailure(err) {
+				// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the inner
+				// expression.
+				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes
+				explainOpt := o.FormatExpr(newRightSide, fmtFlags)
+				err = errors.WithDetailf(err, "newRightSide:\n%s", explainOpt)
+			}
+			return nil, err
+		}
+		return plan, nil
+	}
+
+	// The right plan will always produce the columns in the presentation, in
+	// the same order.
+	// var rightOutputCols opt.ColMap
+	// for i := range rightRequiredProps.Presentation {
+	// 	rightOutputCols.Set(int(rightRequiredProps.Presentation[i].ID), i)
+	// }
+	// allCols := joinOutputMap(leftPlan.outputCols, rightOutputCols)
+
+	// ep := execPlan{outputCols: outputCols}
+
+	// ep.root, err = b.factory.ConstructRoutine(
+	// 	joinType,
+	// 	leftPlan.root,
+	// 	b.presentationToResultColumns(rightRequiredProps.Presentation),
+	// 	planRightSideFn,
+	// )
+
+	return &tree.Routine{
+		Args:     args,
+		ArgNames: routine.ArgNames,
+		PlanFn:   planFn,
+		Typ:      routine.Typ,
+	}, nil
 }

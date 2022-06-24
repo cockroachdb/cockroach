@@ -325,6 +325,12 @@ func (h *hasher) HashString(val string) {
 	}
 }
 
+func (h *hasher) HashStringList(val []string) {
+	for _, s := range val {
+		h.HashString(s)
+	}
+}
+
 func (h *hasher) HashByte(val byte) {
 	h.HashRune(rune(val))
 }
@@ -780,6 +786,18 @@ func (h *hasher) IsRuneEqual(l, r rune) bool {
 
 func (h *hasher) IsStringEqual(l, r string) bool {
 	return l == r
+}
+
+func (h *hasher) IsStringListEqual(l, r []string) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if !h.IsStringEqual(l[i], r[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsByteEqual(l, r byte) bool {

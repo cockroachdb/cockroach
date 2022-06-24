@@ -62,6 +62,11 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 		// WHERE clause, it will be transformed to an Exists operator, so this case
 		// only occurs when the Any is nested, in a projection, etc.
 		return !t.Input.Relational().OuterCols.Empty()
+
+	case *memo.RoutineExpr:
+		// TODO(mgartner): Immutable and stable scalar routines should hoisted
+		// so that they can be inlined.
+		return false
 	}
 
 	// If HasHoistableSubquery is true for any child, then it's true for this

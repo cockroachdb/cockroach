@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -516,6 +517,50 @@ func (b *Builder) buildAnyScalar(
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
+
+	if f.IsUDF {
+		b.routineArgs = []string{"n"}
+		ogPlaceholders := b.semaCtx.Placeholders
+		ogKeepPlaceholders := b.KeepPlaceholders
+		b.KeepPlaceholders = true
+		args := make(memo.ScalarListExpr, len(f.Exprs))
+		typs := make(tree.PlaceholderTypes, len(f.Exprs))
+		for i, pexpr := range f.Exprs {
+			args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+			typs[i] = args[i].DataType()
+		}
+		b.semaCtx.Placeholders.Init(len(f.Exprs), typs)
+
+		// Hard code the definition of a user-defined function "udf()".
+		stmtStrs := []string{"SELECT n + 2"}
+		stmts := make(memo.RelExprs, len(stmtStrs))
+		for i := range stmts {
+			expr, err := parser.ParseOne(stmtStrs[i])
+			if err != nil {
+				panic(err)
+			}
+			outScope = b.buildRoutineStmt(expr.AST)
+			stmts[i] = outScope.expr
+		}
+
+		out = b.factory.ConstructRoutine(
+			stmts[0],
+			args,
+			&memo.RoutinePrivate{
+				Name:     "udf",
+				ArgNames: []string{"n"},
+				// Statements: stmts,
+				Typ: types.Int,
+			},
+		)
+
+		// Restore placeholders.
+		b.semaCtx.Placeholders = ogPlaceholders
+		b.KeepPlaceholders = ogKeepPlaceholders
+
+		return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+	}
+
 	if f.WindowDef != nil {
 		if inScope.inAgg {
 			panic(sqlerrors.NewWindowInAggError())

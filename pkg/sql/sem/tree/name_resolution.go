@@ -200,6 +200,12 @@ func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefini
 	// independently of the database/catalog prefix.
 	function, prefix := n.Parts[0], n.Parts[1]
 
+	if function == "udf" {
+		return &FunctionDefinition{
+			Name: "udf",
+		}, nil
+	}
+
 	if d := resolveFn(function); d != nil && prefix == "" {
 		// Fast path: return early.
 		return d, nil

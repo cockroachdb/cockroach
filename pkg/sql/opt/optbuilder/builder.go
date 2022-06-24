@@ -145,6 +145,10 @@ type Builder struct {
 	// (without ON CONFLICT) or false otherwise. All mutated tables will have an
 	// entry in the map.
 	areAllTableMutationsSimpleInserts map[cat.StableID]bool
+
+	// Keeps track of routine arguments if the expression being built is inside
+	// a routine.
+	routineArgs []string
 }
 
 // New creates a new Builder structure initialized with the given
@@ -244,6 +248,15 @@ func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) 
 	outScope.expr = b.buildWiths(outScope.expr, b.ctes)
 	b.ctes = prevCTEs
 	return outScope
+}
+
+// TODO
+func (b *Builder) buildRoutineStmt(stmt tree.Statement) (outScope *scope) {
+	// A "root" statement cannot refer to anything from an enclosing query, so we
+	// always start with an empty scope.
+	inScope := b.allocScope()
+	inScope.atRoot = true
+	return b.buildStmt(stmt, nil /* desiredTypes */, inScope)
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -458,6 +471,15 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 			}
 		}
 	}
+}
+
+func (b *Builder) routineArgIdx(arg tree.Name) (idx int, ok bool) {
+	for i := range b.routineArgs {
+		if b.routineArgs[i] == string(arg) {
+			return i, true
+		}
+	}
+	return -1, false
 }
 
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that

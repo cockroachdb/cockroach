@@ -377,6 +377,12 @@ func (ep *DummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+func (ep *DummyEvalPlanner) EvalRoutine(
+	ctx context.Context, expr *tree.Routine, args tree.RoutineArgs,
+) (tree.Datum, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveTypeByOID(_ context.Context, _ oid.Oid) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)

@@ -750,3 +750,7 @@ define AlterRangeRelocate {
     toStoreID tree.TypedExpr
     fromStoreID tree.TypedExpr
 }
+
+# define Routine {
+#     PlanFn exec.ApplyJoinPlanRightSideFn
+# }

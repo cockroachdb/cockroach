@@ -29,7 +29,9 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 	// function call by execbuilder. Formatting it as such would be confusing in
 	// an opt tree, because it would look like a FunctionExpr. So we print the
 	// full nodes instead.
-	if !onlyScalarsWithoutAssignmentCasts(scalar) {
+	//
+	// Also, print the full nodes if the scalar contains a routine.
+	if !onlyScalarsWithoutOps(scalar, []opt.Operator{opt.AssignmentCastOp, opt.RoutineOp}) {
 		return ""
 	}
 
@@ -64,12 +66,20 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 	return fmtCtx.String()
 }
 
-func onlyScalarsWithoutAssignmentCasts(expr opt.Expr) bool {
-	if !opt.IsScalarOp(expr) || expr.Op() == opt.AssignmentCastOp {
+func onlyScalarsWithoutOps(expr opt.Expr, ops []opt.Operator) bool {
+	includedInOps := func(op opt.Operator) bool {
+		for i := range ops {
+			if op == ops[i] {
+				return true
+			}
+		}
+		return false
+	}
+	if !opt.IsScalarOp(expr) || includedInOps(expr.Op()) {
 		return false
 	}
 	for i, n := 0, expr.ChildCount(); i < n; i++ {
-		if !onlyScalarsWithoutAssignmentCasts(expr.Child(i)) {
+		if !onlyScalarsWithoutOps(expr.Child(i), ops) {
 			return false
 		}
 	}

@@ -1565,6 +1565,9 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 	BuildSharedProps(item.Fn, &scalar.Shared, b.evalCtx)
 }
 
+// func (b *logicalPropsBuilder) buildRoutineProps(udf *RoutineExpr, rel *props.Relational) {
+// }
+
 // BuildSharedProps fills in the shared properties derived from the given
 // expression's subtree. It will only recurse into a child when it is not
 // already caching properties.
@@ -1613,6 +1616,10 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 		if t.Op() == opt.AnyOp && hasOuterCols(e.Child(1)) {
 			shared.HasCorrelatedSubquery = true
 		}
+
+	case *RoutineExpr:
+		// TODO(mgartner): This should probably be separate from HasSubquery.
+		shared.HasSubquery = true
 
 	case *FunctionExpr:
 		shared.VolatilitySet.Add(t.Overload.Volatility)

@@ -1994,6 +1994,15 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	}, nil
 }
 
+// ConstructApplyJoin is part of the exec.Factory interface.
+// func (ef *execFactory) ConstructRoutine(planFn exec.RoutinePlanFn) (exec.Node, error) {
+// 	return new
+// 	leftSrc := asDataSource(left)
+// 	pred := makePredicate(joinType, leftSrc.columns, rightColumns)
+// 	pred.onCond = pred.iVarHelper.Rebind(onCond)
+// 	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
+// }
+
 // ConstructControlJobs is part of the exec.Factory interface.
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
