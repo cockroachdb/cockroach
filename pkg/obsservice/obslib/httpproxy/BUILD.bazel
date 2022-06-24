@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "httpproxy",
+    srcs = ["reverseproxy.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/exit",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_cmux//:cmux",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

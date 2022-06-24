@@ -52,6 +52,10 @@ obsservice --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui
   one created with `cockroach cert create-ca`). If specified, HTTP requests are
   only proxied to CRDB nodes that present certificates signed by this CA. If not
   specified, the system's CA list is used.
+- `--sink-pgurl` is the connection string for the sink cluster. If the pgurl
+  contains a database name, that database will be used; otherwise `obsservice`
+  will be used. If not specified, a connection to a local cluster will be
+  attempted.
 
 ## Functionality
 
@@ -62,6 +66,11 @@ The Obs Service will reverse-proxy all HTTP routes it doesn't handle itself to
 CRDB. Currently the Obs Service doesn't handle any routes (other than
 `/debug/pprof/*`, which exposes the Obs Service's own pprof endpoints), so all
 requests are forwarded.
+
+The Obs Service connects to a sink cluster identified by `--sink-pgurl`. The
+required schema is automatically created using SQL migrations run with
+[goose](https://github.com/pressly/goose). The state of migrations in a sink
+cluster can be inspected through the `observice.obs_admin.migrations` table.
 
 ## Licensing
 
