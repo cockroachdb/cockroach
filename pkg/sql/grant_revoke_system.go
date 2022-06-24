@@ -40,7 +40,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 
 	// Get the privilege path for this grant.
 	systemPrivilegeObject := n.makeSystemPrivilegeObject()
-	if err := catprivilege.ValidateSystemPrivilegeObject(systemPrivilegeObject); err != nil {
+	if err := catprivilege.ValidateSyntheticPrivilegeObject(systemPrivilegeObject); err != nil {
 		return err
 	}
 	syntheticPrivDesc, err := systemPrivilegeObject.GetPrivilegeDescriptor(params.ctx, params.p)
@@ -132,9 +132,9 @@ func (*changeNonDescriptorBackedPrivilegesNode) Next(runParams) (bool, error) { 
 func (*changeNonDescriptorBackedPrivilegesNode) Values() tree.Datums          { return tree.Datums{} }
 func (*changeNonDescriptorBackedPrivilegesNode) Close(context.Context)        {}
 
-func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject() catalog.SystemPrivilegeObject {
+func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject() catalog.SyntheticPrivilegeObject {
 	switch n.grantOn {
-	case privilege.System:
+	case privilege.Global:
 		return catalog.SystemClusterPrivilegeObject
 	default:
 		panic(errors.AssertionFailedf("unknown grant on object %v", n.grantOn))

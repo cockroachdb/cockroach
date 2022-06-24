@@ -238,7 +238,7 @@ func IsOwner(privilegeObject catalog.PrivilegeObject, role username.SQLUsername)
 	switch p := privilegeObject.(type) {
 	case catalog.Descriptor:
 		return role == getOwnerOfDesc(p)
-	case catalog.SystemPrivilegeObject:
+	case catalog.SyntheticPrivilegeObject:
 		return role.IsAdminRole()
 	default:
 		panic(errors.AssertionFailedf("unknown privilege object type %v", privilegeObject))

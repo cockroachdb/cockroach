@@ -34,5 +34,6 @@ go_test(
 stringer(
     name = "gen-kind-stringer",
     src = "privilege.go",
+    additional_args = ["-linecomment"],
     typ = "Kind",
 )

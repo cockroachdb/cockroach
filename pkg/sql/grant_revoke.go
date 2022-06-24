@@ -447,7 +447,7 @@ func (p *planner) getGrantOnObject(
 		return privilege.Type, nil
 	case targets.System:
 		incIAMFunc(sqltelemetry.OnSystem)
-		return privilege.System, nil
+		return privilege.Global, nil
 	default:
 		composition, err := p.getTablePatternsComposition(ctx, targets)
 		if err != nil {
