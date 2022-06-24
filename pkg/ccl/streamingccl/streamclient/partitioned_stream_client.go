@@ -200,12 +200,15 @@ func (p *partitionedStreamClient) Subscribe(
 }
 
 // Complete implements the streamclient.Client interface.
-func (p *partitionedStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+func (p *partitionedStreamClient) Complete(
+	ctx context.Context, streamID streaming.StreamID, ingestionCutover bool,
+) error {
 	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return err
 	}
-	row := conn.QueryRowContext(ctx, `SELECT crdb_internal.complete_replication_stream($1)`, streamID)
+	row := conn.QueryRowContext(ctx,
+		`SELECT crdb_internal.complete_replication_stream($1, $2)`, streamID, ingestionCutover)
 	if row.Err() != nil {
 		return errors.Wrap(row.Err(), "Error in completing a replication stream")
 	}

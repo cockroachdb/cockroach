@@ -192,7 +192,7 @@ INSERT INTO d.t2 VALUES (2);
 	require.ErrorIs(t, cg.Wait(), context.Canceled)
 
 	// Testing client.Complete()
-	err = client.Complete(ctx, streaming.StreamID(999))
+	err = client.Complete(ctx, streaming.StreamID(999), true)
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job %d: not found in system.jobs table", 999)), err)
 
 	// Makes producer job exit quickly.
@@ -201,7 +201,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'
 `)
 	streamID, err = client.Create(ctx, h.Tenant.ID)
 	require.NoError(t, err)
-	require.NoError(t, client.Complete(ctx, streamID))
+	require.NoError(t, client.Complete(ctx, streamID, true))
 	h.SysDB.CheckQueryResultsRetry(t,
 		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})
 }

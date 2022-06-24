@@ -24,9 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -457,5 +462,74 @@ USE d;
 			testAddSSTable(t, initialScan, addSSTableBeforeRangefeed, fmt.Sprintf("x%d", tableNum))
 			tableNum++
 		}
+	}
+}
+
+func TestCompleteStreamReplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	h, cleanup := streamingtest.NewReplicationHelper(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+			DisableDefaultTestTenant: true,
+		},
+		serverutils.TestTenantID())
+	defer cleanup()
+	// Make the producer job times out fast and fastly tracks ingestion cutover signal.
+	h.SysDB.ExecMultiple(t,
+		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '2s';",
+		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
+
+	var timedOutStreamID int
+	row := h.SysDB.QueryRow(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
+	row.Scan(&timedOutStreamID)
+	jobutils.WaitForJobToFail(t, h.SysDB, jobspb.JobID(timedOutStreamID))
+
+	// Makes the producer job not easily time out.
+	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10m';")
+	testCompleteStreamReplication := func(t *testing.T, ingestionCutover bool) {
+		// Verify no error when completing a timed out replication stream.
+		h.SysDB.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
+			timedOutStreamID, ingestionCutover)
+
+		// Create a new replication stream and complete it.
+		var streamID int
+		row := h.SysDB.QueryRow(t, "SELECT crdb_internal.start_replication_stream($1)", h.Tenant.ID.ToUint64())
+		row.Scan(&streamID)
+		jobutils.WaitForJobToRun(t, h.SysDB, jobspb.JobID(streamID))
+		h.SysDB.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)", streamID, ingestionCutover)
+
+		if ingestionCutover {
+			jobutils.WaitForJobToSucceed(t, h.SysDB, jobspb.JobID(streamID))
+		} else {
+			jobutils.WaitForJobToCancel(t, h.SysDB, jobspb.JobID(streamID))
+		}
+		// Verify protected timestamp record gets released.
+		jr := h.SysServer.JobRegistry().(*jobs.Registry)
+		pj, err := jr.LoadJob(ctx, jobspb.JobID(streamID))
+		require.NoError(t, err)
+		payload := pj.Payload()
+		ptrID := payload.GetStreamReplication().ProtectedTimestampRecordID
+
+		require.ErrorIs(t, h.SysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ptp := h.SysServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+			_, err = ptp.GetRecord(ctx, txn, *ptrID)
+			return err
+		}), protectedts.ErrNotExists)
+	}
+
+	for _, tc := range []struct {
+		testName         string
+		ingestionCutover bool
+	}{
+		{"complete-with-ingestion-cutover", true},
+		{"complete-without-ingestion-cutover", false},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			testCompleteStreamReplication(t, tc.ingestionCutover)
+		})
 	}
 }

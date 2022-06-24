@@ -73,8 +73,9 @@ type ReplicationStreamManager interface {
 	) (*streampb.ReplicationStreamSpec, error)
 
 	// CompleteReplicationStream completes a replication stream job on the producer side.
+	// 'ingestionCutover' indicates whether the stream ingestion has been cutover.
 	CompleteReplicationStream(
-		evalCtx *eval.Context, txn *kv.Txn, streamID StreamID,
+		evalCtx *eval.Context, txn *kv.Txn, streamID StreamID, ingestionCutover bool,
 	) error
 }
 

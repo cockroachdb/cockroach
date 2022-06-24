@@ -61,6 +61,22 @@ type producerJobResumer struct {
 	timer      timeutil.TimerI
 }
 
+// Releases the protected timestamp record associated with the producer
+// job if it exists.
+func (p *producerJobResumer) releaseProtectedTimestamp(
+	ctx context.Context, executorConfig *sql.ExecutorConfig,
+) error {
+	ptr := p.job.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecordID
+	return executorConfig.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := executorConfig.ProtectedTimestampProvider.Release(ctx, txn, *ptr)
+		// In case that a retry happens, the record might have been released.
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil
+		}
+		return err
+	})
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExec := execCtx.(sql.JobExecContext)
@@ -85,8 +101,8 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 				return err
 			}
 			// The job completes successfully if the ingestion has been cut over.
-			if p := j.Progress(); p.GetStreamReplication().IngestionCutOver {
-				return nil
+			if prog := j.Progress(); prog.GetStreamReplication().IngestionCutOver {
+				return p.releaseProtectedTimestamp(ctx, execCfg)
 			}
 			if isTimedOut(j) {
 				return errors.Errorf("replication stream %d timed out", p.job.ID())
@@ -99,17 +115,8 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 func (p *producerJobResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
-
 	// Releases the protected timestamp record.
-	ptr := p.job.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecordID
-	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, *ptr)
-		// In case that a retry happens, the record might have been released.
-		if errors.Is(err, exec.ErrNotFound) {
-			return nil
-		}
-		return err
-	})
+	return p.releaseProtectedTimestamp(ctx, execCfg)
 }
 
 func init() {
