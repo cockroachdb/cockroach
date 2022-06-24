@@ -14,26 +14,47 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
+type testBatchReceiver struct {
+	batches  []coldata.Batch
+	metadata []*execinfrapb.ProducerMetadata
+}
+
+var _ execinfra.BatchReceiver = &testBatchReceiver{}
+
+func (t *testBatchReceiver) ProducerDone() {}
+
+func (t *testBatchReceiver) PushBatch(
+	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	status := execinfra.NeedMoreRows
+	if batch != nil {
+		t.batches = append(t.batches, batch)
+	} else if meta != nil {
+		t.metadata = append(t.metadata, meta)
+	} else {
+		status = execinfra.ConsumerClosed
+	}
+	return status
+}
+
 // TestVectorizedMetaPropagation tests whether metadata is correctly propagated
-// alongside columnar operators. It sets up the following "flow":
-// RowSource -> metadataTestSender -> columnarizer -> noopOperator ->
-// -> materializer -> metadataTestReceiver. Metadata propagation is hooked up
-// manually from the columnarizer into the materializer similar to how it is
-// done in setupVectorizedFlow.
+// in the vectorized flows. It creates a colexecop.Operator as well as a
+// colexecop.MetadataSource which are hooked up into the BatchFlowCoordinator in
+// the same way as in vectorizedFlowCreator.setupFlow.
 func TestVectorizedMetaPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -46,73 +67,43 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 
-	nRows := 10
-	nCols := 1
+	nBatches := 10
 	typs := types.OneIntCol
 
-	input := distsqlutils.NewRowBuffer(typs, randgen.MakeIntRows(nRows, nCols), distsqlutils.RowBufferArgs{})
-	mtsSpec := execinfrapb.ProcessorCoreUnion{
-		MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
-			ID: uuid.MakeV4().String(),
+	// Prepare the input operator.
+	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, 1 /* capacity */)
+	batch.SetLength(1)
+	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+	source.ResetBatchesToReturn(nBatches)
+
+	// Setup the metadata source.
+	expectedMetadata := []execinfrapb.ProducerMetadata{{RowNum: &execinfrapb.RemoteProducerMetadata_RowNum{LastMsg: true}}}
+	drainMetaCbCalled := false
+	metadataSource := colexectestutils.CallbackMetadataSource{
+		DrainMetaCb: func() []execinfrapb.ProducerMetadata {
+			if drainMetaCbCalled {
+				return nil
+			}
+			drainMetaCbCalled = true
+			return expectedMetadata
 		},
 	}
-	mts, err := execinfra.NewMetadataTestSender(
-		&flowCtx,
-		0,
-		input,
-		&execinfrapb.PostProcessSpec{},
-		nil,
-		uuid.MakeV4().String(),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 1, mts)
-	noop := colexecop.NewNoop(col)
-	mat := colexec.NewMaterializer(
+	output := &testBatchReceiver{}
+	f := colflow.NewBatchFlowCoordinator(
 		&flowCtx,
-		2, /* processorID */
+		0, /* processorID */
 		colexecargs.OpWithMetaInfo{
-			Root:            noop,
-			MetadataSources: colexecop.MetadataSources{col},
+			Root:            source,
+			MetadataSources: colexecop.MetadataSources{metadataSource},
 		},
-		typs,
+		output,
+		func() {}, /* cancelFlow */
 	)
+	f.Run(context.Background())
 
-	mtr, err := execinfra.NewMetadataTestReceiver(
-		&flowCtx,
-		3,
-		mat,
-		&execinfrapb.PostProcessSpec{},
-		nil,
-		[]string{mtsSpec.MetadataTestSender.ID},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mtr.Start(ctx)
-
-	rowCount, metaCount := 0, 0
-	for {
-		row, meta := mtr.Next()
-		if row == nil && meta == nil {
-			break
-		}
-		if row != nil {
-			rowCount++
-		} else if meta.Err != nil {
-			t.Fatal(meta.Err)
-		} else {
-			metaCount++
-		}
-	}
-	if rowCount != nRows {
-		t.Fatalf("expected %d rows but %d received", nRows, rowCount)
-	}
-	if metaCount != nRows+1 {
-		// metadataTestSender sends a meta after each row plus an additional one to
-		// indicate the last meta.
-		t.Fatalf("expected %d meta but %d received", nRows+1, metaCount)
-	}
+	// Ensure that the expected number of batches and metadata objects have been
+	// pushed into the output.
+	require.Equal(t, nBatches, len(output.batches))
+	require.Equal(t, len(expectedMetadata), len(output.metadata))
 }
