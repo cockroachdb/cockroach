@@ -105,13 +105,17 @@ func (cb *ColumnBackfiller) initCols(desc catalog.TableDescriptor) {
 
 // init performs initialization operations that are shared across the local
 // and distributed initialization procedures for the ColumnBackfiller.
+//
+// txn might be nil, in which case it will need to be set on the fetcher later.
 func (cb *ColumnBackfiller) init(
+	txn *kv.Txn,
 	evalCtx *eval.Context,
 	defaultExprs []tree.TypedExpr,
 	computedExprs []tree.TypedExpr,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 	rowMetrics *rowinfra.Metrics,
+	traceKV bool,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -153,9 +157,11 @@ func (cb *ColumnBackfiller) init(
 	return cb.fetcher.Init(
 		evalCtx.Context,
 		row.FetcherInitArgs{
+			Txn:        txn,
 			Alloc:      &cb.alloc,
 			MemMonitor: cb.mon,
 			Spec:       &spec,
+			TraceKV:    traceKV,
 		},
 	)
 }
@@ -165,11 +171,13 @@ func (cb *ColumnBackfiller) init(
 // is occurring on the gateway as part of the user's transaction.
 func (cb *ColumnBackfiller) InitForLocalUse(
 	ctx context.Context,
+	txn *kv.Txn,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
 	rowMetrics *rowinfra.Metrics,
+	traceKV bool,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -190,7 +198,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
+	return cb.init(txn, evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, traceKV)
 }
 
 // InitForDistributedUse initializes a ColumnBackfiller for use as part of a
@@ -247,7 +255,8 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	rowMetrics := flowCtx.GetRowMetrics()
-	return cb.init(evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics)
+	// The txn will be set on the fetcher in RunColumnBackfillChunk.
+	return cb.init(nil /* txn */, evalCtx, defaultExprs, computedExprs, desc, mon, rowMetrics, flowCtx.TraceKV)
 }
 
 // Close frees the resources used by the ColumnBackfiller.
@@ -299,6 +308,12 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		panic("only column data should be modified, but the rowUpdater is configured otherwise")
 	}
 
+	// Update the fetcher to use the new txn.
+	if err := cb.fetcher.SetTxn(txn); err != nil {
+		log.Errorf(ctx, "scan error during SetTxn: %s", err)
+		return roachpb.Key{}, err
+	}
+
 	// Get the next set of rows.
 	//
 	// Running the scan and applying the changes in many transactions
@@ -308,9 +323,9 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := cb.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
+		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-		chunkSize, traceKV, false, /* forceProductionKVBatchSize */
+		chunkSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
@@ -801,18 +816,20 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	if err := fetcher.Init(
 		ib.evalCtx.Context,
 		row.FetcherInitArgs{
+			Txn:        txn,
 			Alloc:      &ib.alloc,
 			MemMonitor: ib.mon,
 			Spec:       &spec,
+			TraceKV:    traceKV,
 		},
 	); err != nil {
 		return nil, nil, 0, err
 	}
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, nil, /* spanIDs */
+		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-		initBufferSize, traceKV, false, /* forceProductionKVBatchSize */
+		initBufferSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, 0, err
@@ -976,8 +993,9 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	entries, key, memUsedBuildingChunk, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp,
-		chunkSize, traceKV)
+	entries, key, memUsedBuildingChunk, err := ib.BuildIndexEntriesChunk(
+		ctx, txn, tableDesc, sp, chunkSize, traceKV,
+	)
 	if err != nil {
 		return nil, err
 	}

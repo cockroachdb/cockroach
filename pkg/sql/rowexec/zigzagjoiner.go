@@ -13,7 +13,6 @@ package rowexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -451,18 +450,19 @@ func (z *zigzagJoiner) setupInfo(
 	info.spanBuilder.InitWithFetchSpec(flowCtx.EvalCtx, flowCtx.Codec(), &info.fetchSpec)
 
 	// Setup the Fetcher.
-	// NB: zigzag joins are disabled when a row-level locking clause is
-	// supplied, so there is no locking strength on ZigzagJoinerSpec.
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
 		row.FetcherInitArgs{
-			LockStrength:   spec.LockingStrength,
-			LockWaitPolicy: spec.LockingWaitPolicy,
-			LockTimeout:    flowCtx.EvalCtx.SessionData().LockTimeout,
-			Alloc:          &info.alloc,
-			MemMonitor:     flowCtx.EvalCtx.Mon,
-			Spec:           &spec.FetchSpec,
+			Txn:                        flowCtx.Txn,
+			LockStrength:               spec.LockingStrength,
+			LockWaitPolicy:             spec.LockingWaitPolicy,
+			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
+			Alloc:                      &info.alloc,
+			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			Spec:                       &spec.FetchSpec,
+			TraceKV:                    flowCtx.TraceKV,
+			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
 		return err
@@ -612,7 +612,7 @@ func (z *zigzagJoiner) emitFromContainers() (rowenc.EncDatumRow, error) {
 // nextRow fetches the nextRow to emit from the join. It iterates through all
 // sides until a match is found then emits the results of the match one result
 // at a time.
-func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatumRow, error) {
+func (z *zigzagJoiner) nextRow(ctx context.Context) (rowenc.EncDatumRow, error) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
 			return nil, err
@@ -645,13 +645,10 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 
 		err = curInfo.fetcher.StartScan(
 			ctx,
-			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
-			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 		if err != nil {
 			return nil, err
@@ -788,13 +785,10 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 		curInfo := &z.infos[z.side]
 		err := curInfo.fetcher.StartScan(
 			z.Ctx,
-			z.FlowCtx.Txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
-			z.FlowCtx.TraceKV,
-			z.EvalCtx.TestingKnobs.ForceProductionValues,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)
@@ -818,7 +812,7 @@ func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			z.MoveToDraining(err)
 			break
 		}
-		row, err := z.nextRow(z.Ctx, z.FlowCtx.Txn)
+		row, err := z.nextRow(z.Ctx)
 		if err != nil {
 			z.MoveToDraining(err)
 			break
