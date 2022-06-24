@@ -71,6 +71,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary), install.SecureOption(true))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
+	tenantStartOpt := createTenantOtherTenantIDs([]int{11, 12, 13, 14})
 
 	const tenant11HTTPPort, tenant11SQLPort = 8011, 20011
 	const tenant11ID = 11
@@ -85,7 +86,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	runner.QueryRow(t, "SHOW CLUSTER SETTING version").Scan(&initialVersion)
 
 	const tenantNode = 2
-	tenant11 := createTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11HTTPPort, tenant11SQLPort)
+	tenant11 := createTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11HTTPPort, tenant11SQLPort, tenantStartOpt)
 	tenant11.start(ctx, t, c, predecessorBinary)
 	defer tenant11.stop(ctx, t, c)
 
@@ -129,7 +130,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant12ID)
 
 	t.Status("starting tenant 12 server with older binary")
-	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
+	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort, tenantStartOpt)
 	tenant12.start(ctx, t, c, predecessorBinary)
 	defer tenant12.stop(ctx, t, c)
 
@@ -151,7 +152,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant13ID)
 
 	t.Status("starting tenant 13 server with new binary")
-	tenant13 := createTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort)
+	tenant13 := createTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort, tenantStartOpt)
 	tenant13.start(ctx, t, c, currentBinary)
 	defer tenant13.stop(ctx, t, c)
 
@@ -261,7 +262,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant14ID)
 
 	t.Status("verifying the tenant 14 works and has the proper version")
-	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort)
+	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort, tenantStartOpt)
 	tenant14.start(ctx, t, c, currentBinary)
 	defer tenant14.stop(ctx, t, c)
 	verifySQL(t, tenant14.pgURL,
