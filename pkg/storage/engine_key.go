@@ -289,3 +289,11 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 	copy(k.Version[1:], lk.TxnUUID)
 	return k, buf
 }
+
+// EngineRangeKeyValue is a raw value for a general range key as stored in the
+// engine. It consists of a version (suffix) and corresponding value. The range
+// key bounds are not included, but are surfaced via EngineRangeBounds().
+type EngineRangeKeyValue struct {
+	Version []byte
+	Value   []byte
+}

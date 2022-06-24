@@ -154,11 +154,18 @@ func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(MVCCRangeKey) error {
 	panic("not implemented")
 }
 
-// ExperimentalClearAllMVCCRangeKeys implements the Writer interface.
+// ExperimentalClearAllRangeKeys implements the Writer interface.
 //
 // TODO(erikgrinaker): This must clear range keys when SSTs support them.
-func (fw *SSTWriter) ExperimentalClearAllMVCCRangeKeys(roachpb.Key, roachpb.Key) error {
+func (fw *SSTWriter) ExperimentalClearAllRangeKeys(roachpb.Key, roachpb.Key) error {
 	return nil
+}
+
+// ExperimentalPutEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) ExperimentalPutEngineRangeKey(
+	start, end roachpb.Key, suffix, value []byte,
+) error {
+	panic("not implemented")
 }
 
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {

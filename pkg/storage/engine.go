@@ -298,6 +298,20 @@ type EngineIterator interface {
 	// the iteration. After this call, valid will be true if the iterator was
 	// not originally positioned at the first key.
 	PrevEngineKey() (valid bool, err error)
+	// HasEnginePointAndRange returns whether the iterator is positioned on a
+	// point or range key.
+	//
+	// TODO(erikgrinaker): Consider renaming this HasPointAndRange and merge with
+	// the SimpleMVCCIterator implementation. However, HasPointAndRange() needs to
+	// imply Valid() for MVCC iterators, which in turns prevents it from being
+	// used e.g. across the lock table. Once we revamp the MVCCIterator interface
+	// we can probably merge these:
+	// https://github.com/cockroachdb/cockroach/issues/82589
+	HasEnginePointAndRange() (bool, bool)
+	// EngineRangeBounds returns the current range key bounds.
+	EngineRangeBounds() (roachpb.Span, error)
+	// EngineRangeKeys returns the engine range keys at the current position.
+	EngineRangeKeys() []EngineRangeKeyValue
 	// UnsafeEngineKey returns the same value as EngineKey, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
@@ -388,12 +402,6 @@ type IterOptions struct {
 	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
 	// Defaults to IterKeyTypePointsOnly. For more details on range keys, see
 	// comment on SimpleMVCCIterator.
-	//
-	// Range keys are only supported for use with MVCCIterators. Enabling them
-	// for EngineIterators will error.
-	//
-	// TODO(erikgrinaker): Consider separating the options structs for
-	// EngineIterator and MVCCIterator.
 	KeyTypes IterKeyType
 	// RangeKeyMaskingBelow enables masking (hiding) of point keys by range keys.
 	// Any range key with a timestamp at or below RangeKeyMaskingBelow
@@ -537,7 +545,7 @@ type Reader interface {
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
-	// after this function returns. EngineIterators do not support range keys.
+	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
@@ -651,6 +659,23 @@ type Writer interface {
 	// after it returns.
 	ClearMVCCIteratorRange(start, end roachpb.Key) error
 
+	// ExperimentalClearAllRangeKeys deletes all range keys (and all versions)
+	// from start (inclusive) to end (exclusive). This can be used both for MVCC
+	// range keys or the more general engine range keys. For any range key that
+	// straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Clears are idempotent.
+	//
+	// This method is primarily intended for MVCC garbage collection and similar
+	// internal use. It will do an internal scan across the span first to check
+	// whether it contains any range keys at all, and clear the smallest single
+	// span that covers all range keys (if any), to avoid dropping Pebble range
+	// tombstones across unnecessary spans.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalClearAllRangeKeys(start, end roachpb.Key) error
+
 	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
 	// (inclusive) to end (exclusive) at the given timestamp. For any range key
 	// that straddles the start and end boundaries, only the segments within the
@@ -664,22 +689,6 @@ type Writer interface {
 	// have severe limitations including being ignored by all KV and MVCC APIs and
 	// only being stored in memory.
 	ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
-
-	// ExperimentalClearAllMVCCRangeKeys deletes all MVCC range keys (i.e. all
-	// versions) from start (inclusive) to end (exclusive). For any range key
-	// that straddles the start and end boundaries, only the segments within the
-	// boundaries will be cleared. Clears are idempotent.
-	//
-	// This method is primarily intended for MVCC garbage collection and similar
-	// internal use. It will do an internal scan across the span first to check
-	// whether it contains any range keys at all, and clear the smallest single
-	// span that covers all range keys (if any), to avoid dropping Pebble range
-	// tombstones across unnecessary spans.
-	//
-	// This method is EXPERIMENTAL: range keys are under active development, and
-	// have severe limitations including being ignored by all KV and MVCC APIs and
-	// only being stored in memory.
-	ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error
 
 	// ExperimentalPutMVCCRangeKey writes an MVCC range key. It will replace any
 	// overlapping range keys at the given timestamp (even partial overlap). Only
@@ -696,6 +705,13 @@ type Writer interface {
 	// have severe limitations including being ignored by all KV and MVCC APIs and
 	// only being stored in memory.
 	ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
+
+	// ExperimentalPutEngineRangeKey sets the given range key to the values
+	// provided. This is a general-purpose and low-level method that should be
+	// used sparingly, only when the other Put* methods are not applicable.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ExperimentalPutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
@@ -1211,7 +1227,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	if err != nil {
 		return err
 	}
-	return writer.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return writer.ExperimentalClearAllRangeKeys(start, end)
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(

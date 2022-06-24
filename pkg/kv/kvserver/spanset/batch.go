@@ -358,6 +358,21 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	return true, nil
 }
 
+// HasEnginePointAndRange is part of the storage.EngineIterator interface.
+func (i *EngineIterator) HasEnginePointAndRange() (bool, bool) {
+	return i.i.HasEnginePointAndRange()
+}
+
+// EngineRangeBounds is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineRangeBounds() (roachpb.Span, error) {
+	return i.i.EngineRangeBounds()
+}
+
+// EngineRangeKeys is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineRangeKeys() []storage.EngineRangeKeyValue {
+	return i.i.EngineRangeKeys()
+}
+
 // UnsafeEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeEngineKey() (storage.EngineKey, error) {
 	return i.i.UnsafeEngineKey()
@@ -610,6 +625,18 @@ func (s spanSetWriter) ExperimentalPutMVCCRangeKey(
 	return s.w.ExperimentalPutMVCCRangeKey(rangeKey, value)
 }
 
+func (s spanSetWriter) ExperimentalPutEngineRangeKey(
+	start, end roachpb.Key, suffix, value []byte,
+) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ExperimentalPutEngineRangeKey")
+	}
+	if err := s.checkAllowedRange(start, end); err != nil {
+		return err
+	}
+	return s.w.ExperimentalPutEngineRangeKey(start, end, suffix, value)
+}
+
 func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
 		return err
@@ -617,11 +644,14 @@ func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeK
 	return s.w.ExperimentalClearMVCCRangeKey(rangeKey)
 }
 
-func (s spanSetWriter) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+func (s spanSetWriter) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
+	if !s.spansOnly {
+		panic("cannot do timestamp checking for ExperimentalClearAllRangeKeys")
+	}
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return s.w.ExperimentalClearAllRangeKeys(start, end)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
