@@ -2162,15 +2162,20 @@ func forEachDatabaseDesc(
 		dbDescs = append(dbDescs, dbContext)
 	}
 
-	// Ignore databases that the user cannot see.
+	// Ignore databases that the user cannot see. We add a special case for the
+	// current database. This is because we currently allow a user to connect
+	// to a database even without the CONNECT privilege, but it would be poor
+	// UX to not show the current database in pg_catalog/information_schema
+	// tables.
+	// See https://github.com/cockroachdb/cockroach/issues/59875.
 	for _, dbDesc := range dbDescs {
 		canSeeDescriptor := !requiresPrivileges
 		if requiresPrivileges {
-			var err error
-			canSeeDescriptor, err = userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			hasPriv, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
 			if err != nil {
 				return err
 			}
+			canSeeDescriptor = hasPriv || p.CurrentDatabase() == dbDesc.GetName()
 		}
 		if canSeeDescriptor {
 			if err := fn(dbDesc); err != nil {
