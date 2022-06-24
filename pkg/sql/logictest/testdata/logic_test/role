@@ -1146,6 +1146,7 @@ query TTTTT
 SHOW DATABASES
 ----
 publicdb  root  NULL  {}  NULL
+test      root  NULL  {}  NULL
 
 query TTTTIT
 SHOW TABLES FROM publicdb
