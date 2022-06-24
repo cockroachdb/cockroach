@@ -30,7 +30,7 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 		" Note that intervals that are too short can negatively impact performance.",
 	24*time.Hour,
 	settings.NonNegativeDuration,
-)
+).WithPublic()
 
 var consistencyCheckRate = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
