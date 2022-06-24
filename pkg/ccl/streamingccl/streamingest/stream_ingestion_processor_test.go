@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -156,6 +157,8 @@ func (m *errorStreamClient) Complete(ctx context.Context, streamID streaming.Str
 func TestStreamIngestionProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
 
 	ctx := context.Background()
 
@@ -408,6 +411,8 @@ func (n noCutover) cutoverReached(context.Context) (bool, error) { return false,
 func TestRandomClientGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRaceWithIssue(t, 83867)
 
 	ctx := context.Background()
 

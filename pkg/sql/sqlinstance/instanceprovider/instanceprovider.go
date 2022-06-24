@@ -36,7 +36,8 @@ type writer interface {
 	ReleaseInstanceID(ctx context.Context, instanceID base.SQLInstanceID) error
 }
 
-// provider implements the sqlinstance.Provider interface for access to the sqlinstance subsystem.
+// provider implements the sqlinstance.Provider interface for access to the
+// sqlinstance subsystem.
 type provider struct {
 	*instancestorage.Reader
 	storage      writer
@@ -85,6 +86,12 @@ func (p *provider) Start(ctx context.Context) error {
 	if p.started() {
 		return p.initError
 	}
+	// Initialize the instance. We need to do this before starting the reader, so
+	// that the reader sees the instance.
+	if err := p.initAndWait(ctx); err != nil {
+		return err
+	}
+
 	if err := p.Reader.Start(ctx); err != nil {
 		p.initOnce.Do(func() {
 			p.initError = err
@@ -110,21 +117,31 @@ func (p *provider) Instance(
 	if !p.started() {
 		return base.SQLInstanceID(0), "", sqlinstance.NotStartedError
 	}
-
-	p.maybeInitialize()
 	select {
 	case <-ctx.Done():
 		return base.SQLInstanceID(0), "", ctx.Err()
 	case <-p.stopper.ShouldQuiesce():
 		return base.SQLInstanceID(0), "", stop.ErrUnavailable
 	case <-p.initialized:
+		return p.instanceID, p.sessionID, p.initError
+	}
+}
+
+func (p *provider) initAndWait(ctx context.Context) error {
+	p.maybeInitialize()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-p.initialized:
 		if p.initError == nil {
 			log.Ops.Infof(ctx, "created SQL instance %d", p.instanceID)
 		} else {
 			log.Ops.Warningf(ctx, "error creating SQL instance: %s", p.initError)
 		}
-		return p.instanceID, p.sessionID, p.initError
 	}
+	return p.initError
 }
 
 func (p *provider) maybeInitialize() {
