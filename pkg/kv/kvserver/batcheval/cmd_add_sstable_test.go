@@ -662,145 +662,158 @@ func TestEvalAddSSTable(t *testing.T) {
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
 		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {
-			for name, tc := range testcases {
-				t.Run(name, func(t *testing.T) {
-					ctx := context.Background()
-					st := cluster.MakeTestingClusterSettings()
-					batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
-					batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
+			testutils.RunValues(t, "ApproximateDiskBytes", []interface{}{0, 1000000}, func(t *testing.T, approxBytes interface{}) {
+				approxDiskBytes := uint64(approxBytes.(int))
+				for name, tc := range testcases {
+					t.Run(name, func(t *testing.T) {
+						ctx := context.Background()
+						st := cluster.MakeTestingClusterSettings()
+						batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
+						batcheval.AddSSTableRequireAtRequestTimestamp.Override(ctx, &st.SV, tc.requireReqTS)
 
-					dir := t.TempDir()
-					engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
-					require.NoError(t, err)
-					defer engine.Close()
-
-					// Write initial data.
-					intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0, 1)
-					b := engine.NewBatch()
-					for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
-						kv := tc.data[i]
-						var txn *roachpb.Transaction
-						if kv.WallTimestamp == intentTS {
-							txn = &intentTxn
-						}
-						require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
-					}
-					require.NoError(t, b.Commit(false))
-					stats := engineStats(t, engine, 0)
-
-					// Build and add SST.
-					if tc.toReqTS != 0 && tc.reqTS == 0 && tc.expectErr == nil {
-						t.Fatal("can't set toReqTS without reqTS")
-					}
-					sst, start, end := sstutil.MakeSST(t, st, tc.sst)
-					resp := &roachpb.AddSSTableResponse{}
-					result, err := batcheval.EvalAddSSTable(ctx, engine, batcheval.CommandArgs{
-						EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st, Desc: &roachpb.RangeDescriptor{}}).EvalContext(),
-						Stats:   stats,
-						Header: roachpb.Header{
-							Timestamp: hlc.Timestamp{WallTime: tc.reqTS},
-						},
-						Args: &roachpb.AddSSTableRequest{
-							RequestHeader:                  roachpb.RequestHeader{Key: start, EndKey: end},
-							Data:                           sst,
-							MVCCStats:                      sstutil.ComputeStats(t, sst),
-							DisallowConflicts:              tc.noConflict,
-							DisallowShadowing:              tc.noShadow,
-							DisallowShadowingBelow:         hlc.Timestamp{WallTime: tc.noShadowBelow},
-							SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: tc.toReqTS},
-							IngestAsWrites:                 ingestAsWrites,
-						},
-					}, resp)
-
-					expectErr := tc.expectErr
-					if tc.expectErrRace != nil && util.RaceEnabled {
-						expectErr = tc.expectErrRace
-					}
-					if expectErr != nil {
-						require.Error(t, err)
-						if b, ok := expectErr.(bool); ok && b {
-							// any error is fine
-						} else if expectMsg, ok := expectErr.(string); ok {
-							require.Contains(t, err.Error(), expectMsg)
-						} else if expectMsgs, ok := expectErr.([]string); ok {
-							var found bool
-							for _, msg := range expectMsgs {
-								if strings.Contains(err.Error(), msg) {
-									found = true
-									break
-								}
-							}
-							if !found {
-								t.Fatalf("%q does not contain any of %q", err, expectMsgs)
-							}
-						} else if e, ok := expectErr.(error); ok {
-							require.True(t, errors.HasType(err, e), "expected %T, got %v", e, err)
-						} else {
-							require.Fail(t, "invalid expectErr", "expectErr=%v", expectErr)
-						}
-						return
-					}
-					require.NoError(t, err)
-
-					if ingestAsWrites {
-						require.Nil(t, result.Replicated.AddSSTable)
-					} else {
-						require.NotNil(t, result.Replicated.AddSSTable)
-						sstPath := filepath.Join(dir, "sst")
-						require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
-						require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
-					}
-
-					// Scan resulting data from engine.
-					iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{
-						EndKey:       keys.MaxKey,
-						StartTime:    hlc.MinTimestamp,
-						EndTime:      hlc.MaxTimestamp,
-						IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-						InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
-					})
-					defer iter.Close()
-					iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
-					scan := []sstutil.KV{}
-					for {
-						ok, err := iter.Valid()
+						dir := t.TempDir()
+						engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
 						require.NoError(t, err)
-						if !ok {
-							break
+						defer engine.Close()
+
+						// Write initial data.
+						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0, 1)
+						b := engine.NewBatch()
+						for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
+							kv := tc.data[i]
+							var txn *roachpb.Transaction
+							if kv.WallTimestamp == intentTS {
+								txn = &intentTxn
+							}
+							require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
 						}
-						key := string(iter.Key().Key)
-						ts := iter.Key().Timestamp.WallTime
-						var value []byte
-						if iter.Key().IsValue() {
-							if len(iter.Value()) > 0 {
-								value, err = roachpb.Value{RawBytes: iter.Value()}.GetBytes()
+						require.NoError(t, b.Commit(false))
+						stats := engineStats(t, engine, 0)
+
+						// Build and add SST.
+						if tc.toReqTS != 0 && tc.reqTS == 0 && tc.expectErr == nil {
+							t.Fatal("can't set toReqTS without reqTS")
+						}
+						sst, start, end := sstutil.MakeSST(t, st, tc.sst)
+						resp := &roachpb.AddSSTableResponse{}
+						var mvccStats *enginepb.MVCCStats
+						// In the no-overlap case i.e. approxDiskBytes == 0, force a regular
+						// non-prefix Seek in the conflict check. Sending in nil stats
+						// makes this easier as that forces the function to rely exclusively
+						// on ApproxDiskBytes, otherwise EvalAddSSTable will always use
+						// prefix seeks since the test cases have too few keys in the
+						// sstable.
+						if approxDiskBytes != 0 {
+							mvccStats = sstutil.ComputeStats(t, sst)
+						}
+						result, err := batcheval.EvalAddSSTable(ctx, engine, batcheval.CommandArgs{
+							EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st, Desc: &roachpb.RangeDescriptor{}, ApproxDiskBytes: approxDiskBytes}).EvalContext(),
+							Stats:   stats,
+							Header: roachpb.Header{
+								Timestamp: hlc.Timestamp{WallTime: tc.reqTS},
+							},
+							Args: &roachpb.AddSSTableRequest{
+								RequestHeader:                  roachpb.RequestHeader{Key: start, EndKey: end},
+								Data:                           sst,
+								MVCCStats:                      mvccStats,
+								DisallowConflicts:              tc.noConflict,
+								DisallowShadowing:              tc.noShadow,
+								DisallowShadowingBelow:         hlc.Timestamp{WallTime: tc.noShadowBelow},
+								SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: tc.toReqTS},
+								IngestAsWrites:                 ingestAsWrites,
+							},
+						}, resp)
+
+						expectErr := tc.expectErr
+						if tc.expectErrRace != nil && util.RaceEnabled {
+							expectErr = tc.expectErrRace
+						}
+						if expectErr != nil {
+							require.Error(t, err)
+							if b, ok := expectErr.(bool); ok && b {
+								// any error is fine
+							} else if expectMsg, ok := expectErr.(string); ok {
+								require.Contains(t, err.Error(), expectMsg)
+							} else if expectMsgs, ok := expectErr.([]string); ok {
+								var found bool
+								for _, msg := range expectMsgs {
+									if strings.Contains(err.Error(), msg) {
+										found = true
+										break
+									}
+								}
+								if !found {
+									t.Fatalf("%q does not contain any of %q", err, expectMsgs)
+								}
+							} else if e, ok := expectErr.(error); ok {
+								require.True(t, errors.HasType(err, e), "expected %T, got %v", e, err)
+							} else {
+								require.Fail(t, "invalid expectErr", "expectErr=%v", expectErr)
+							}
+							return
+						}
+						require.NoError(t, err)
+
+						if ingestAsWrites {
+							require.Nil(t, result.Replicated.AddSSTable)
+						} else {
+							require.NotNil(t, result.Replicated.AddSSTable)
+							sstPath := filepath.Join(dir, "sst")
+							require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
+							require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
+						}
+
+						// Scan resulting data from engine.
+						iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{
+							EndKey:       keys.MaxKey,
+							StartTime:    hlc.MinTimestamp,
+							EndTime:      hlc.MaxTimestamp,
+							IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+							InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
+						})
+						defer iter.Close()
+						iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
+						scan := []sstutil.KV{}
+						for {
+							ok, err := iter.Valid()
+							require.NoError(t, err)
+							if !ok {
+								break
+							}
+							key := string(iter.Key().Key)
+							ts := iter.Key().Timestamp.WallTime
+							var value []byte
+							if iter.Key().IsValue() {
+								if len(iter.Value()) > 0 {
+									value, err = roachpb.Value{RawBytes: iter.Value()}.GetBytes()
+									require.NoError(t, err)
+								}
+							} else {
+								var meta enginepb.MVCCMetadata
+								require.NoError(t, protoutil.Unmarshal(iter.UnsafeValue(), &meta))
+								if meta.RawBytes == nil {
+									// Skip intent metadata records (value emitted separately).
+									iter.Next()
+									continue
+								}
+								value, err = roachpb.Value{RawBytes: meta.RawBytes}.GetBytes()
 								require.NoError(t, err)
 							}
-						} else {
-							var meta enginepb.MVCCMetadata
-							require.NoError(t, protoutil.Unmarshal(iter.UnsafeValue(), &meta))
-							if meta.RawBytes == nil {
-								// Skip intent metadata records (value emitted separately).
-								iter.Next()
-								continue
-							}
-							value, err = roachpb.Value{RawBytes: meta.RawBytes}.GetBytes()
-							require.NoError(t, err)
+							scan = append(scan, sstutil.KV{key, ts, string(value)})
+							iter.Next()
 						}
-						scan = append(scan, sstutil.KV{key, ts, string(value)})
-						iter.Next()
-					}
-					require.Equal(t, tc.expect, scan)
+						require.Equal(t, tc.expect, scan)
 
-					// Check that stats were updated correctly.
-					if tc.expectStatsEst {
-						require.True(t, stats.ContainsEstimates > 0, "expected stats to be estimated")
-					} else {
-						require.False(t, stats.ContainsEstimates > 0, "found estimated stats")
-						require.Equal(t, stats, engineStats(t, engine, stats.LastUpdateNanos))
-					}
-				})
-			}
+						// Check that stats were updated correctly.
+						if tc.expectStatsEst {
+							require.True(t, stats.ContainsEstimates > 0, "expected stats to be estimated")
+						} else {
+							require.False(t, stats.ContainsEstimates > 0, "found estimated stats")
+							require.Equal(t, stats, engineStats(t, engine, stats.LastUpdateNanos))
+						}
+					})
+				}
+			})
 		})
 	})
 }

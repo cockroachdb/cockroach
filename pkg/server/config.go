@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
@@ -627,7 +628,17 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
-				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})
+				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{
+					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
+						switch name {
+						case "none":
+							return nil, nil
+						case "rocksdb.BuiltinBloomFilter":
+							return bloom.FilterPolicy(10), nil
+						}
+						return nil, nil
+					},
+				})
 				if err != nil {
 					return nil, err
 				}

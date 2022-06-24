@@ -1559,7 +1559,9 @@ type noopWriter struct{}
 func (noopWriter) Close() error                { return nil }
 func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
-func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap bool) {
+func runCheckSSTConflicts(
+	b *testing.B, numEngineKeys, numVersions, numSstKeys int, overlap, usePrefixSeek bool,
+) {
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	value := make([]byte, 128)
 	for i := range value {
@@ -1588,12 +1590,18 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 	sstFile := &MemFile{}
 	sstWriter := MakeIngestionSSTWriter(ctx, st, sstFile)
 	var sstStart, sstEnd MVCCKey
+	lastKeyNum := -1
+	lastKeyCounter := 0
 	for i := 0; i < numSstKeys; i++ {
 		keyNum := int((float64(i) / float64(numSstKeys)) * float64(numEngineKeys))
 		if !overlap {
 			keyNum = i + numEngineKeys
+		} else if lastKeyNum == keyNum {
+			lastKeyCounter++
+		} else {
+			lastKeyCounter = 0
 		}
-		key := roachpb.Key(encoding.EncodeUvarintAscending(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyNum)), 1))
+		key := roachpb.Key(encoding.EncodeUvarintAscending(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyNum)), uint64(1+lastKeyCounter)))
 		mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(numVersions + 3)}}
 		if i == 0 {
 			sstStart.Key = append([]byte(nil), mvccKey.Key...)
@@ -1603,12 +1611,13 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 			sstEnd.Timestamp = mvccKey.Timestamp
 		}
 		require.NoError(b, sstWriter.Put(mvccKey, value))
+		lastKeyNum = keyNum
 	}
 	sstWriter.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, false, hlc.Timestamp{}, math.MaxInt64)
+		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, false, hlc.Timestamp{}, math.MaxInt64, usePrefixSeek)
 		require.NoError(b, err)
 	}
 }

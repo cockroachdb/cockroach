@@ -323,6 +323,12 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		// so don't expect to ever see the intent. NB: intentSeekKey is nil.
 		i.intentKey = nil
 	}
+	if !i.iterValid && i.prefix {
+		// The prefix seek below will also certainly fail, as we didn't find an
+		// MVCC value here.
+		intentSeekKey = nil
+		i.intentKey = nil
+	}
 	if intentSeekKey != nil {
 		var limitKey roachpb.Key
 		if i.iterValid && !i.prefix {

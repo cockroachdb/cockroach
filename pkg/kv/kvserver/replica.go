@@ -2034,6 +2034,12 @@ func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 	return r.store.Engine().Capacity()
 }
 
+// GetApproximateDiskBytes returns an approximate measure of bytes in the store
+// in the specified key range.
+func (r *Replica) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
+	return r.store.Engine().ApproximateDiskBytes(from, to)
+}
+
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }
