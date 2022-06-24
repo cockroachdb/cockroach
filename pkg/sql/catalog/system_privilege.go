@@ -33,9 +33,7 @@ type SystemPrivilegeObject interface {
 }
 
 // SystemClusterPrivilege represents a SystemClusterPrivilege.
-type SystemClusterPrivilege struct {
-	SystemPrivilegeObject
-}
+type SystemClusterPrivilege struct{}
 
 // SystemClusterPrivilegeObjectType represents the object type for
 // SystemClusterPrivilege.

@@ -149,7 +149,6 @@ type TableReader interface {
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
-
 	// CheckPrivilege verifies that the current user has `privilege` on
 	// `descriptor`.
 	CheckPrivilege(
@@ -161,7 +160,7 @@ type AuthorizationAccessor interface {
 
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
-	HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error)
+	HasOwnership(ctx context.Context, privilegeObject catalog.PrivilegeObject) (bool, error)
 
 	// CheckPrivilegeForUser verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(

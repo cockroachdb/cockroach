@@ -249,11 +249,13 @@ func IsOwner(privilegeObject catalog.PrivilegeObject, role username.SQLUsername)
 // has ownership privilege of the desc.
 // TODO(richardjcai): SUPERUSER has implicit ownership.
 // We do not have SUPERUSER privilege yet but should we consider root a superuser?
-func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
+func (p *planner) HasOwnership(
+	ctx context.Context, privilegeObject catalog.PrivilegeObject,
+) (bool, error) {
 	user := p.SessionData().User()
 
 	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) bool {
-		return IsOwner(descriptor, role)
+		return IsOwner(privilegeObject, role)
 	})
 }
 
