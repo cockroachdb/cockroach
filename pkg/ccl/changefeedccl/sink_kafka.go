@@ -23,7 +23,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -645,7 +644,7 @@ func buildKafkaConfig(
 func makeKafkaSink(
 	ctx context.Context,
 	u sinkURL,
-	targets []jobspb.ChangefeedTargetSpecification,
+	targets changefeedbase.Targets,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {

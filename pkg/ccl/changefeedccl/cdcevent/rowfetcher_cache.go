@@ -12,7 +12,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -79,7 +78,7 @@ func newRowFetcherCache(
 	leaseMgr *lease.Manager,
 	cf *descs.CollectionFactory,
 	db *kv.DB,
-	specs []jobspb.ChangefeedTargetSpecification,
+	specs changefeedbase.Targets,
 ) (*rowFetcherCache, error) {
 	if len(specs) == 0 {
 		return nil, errors.AssertionFailedf("Expected at least one spec, found 0")

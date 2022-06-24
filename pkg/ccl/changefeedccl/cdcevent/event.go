@@ -12,7 +12,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -347,7 +347,7 @@ func getEventDescriptorCached(
 func NewEventDecoder(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
-	targets []jobspb.ChangefeedTargetSpecification,
+	targets changefeedbase.Targets,
 	includeVirtual bool,
 ) (Decoder, error) {
 	rfCache, err := newRowFetcherCache(

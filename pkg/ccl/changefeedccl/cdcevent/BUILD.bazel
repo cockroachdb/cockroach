@@ -12,7 +12,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
-        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
@@ -46,6 +45,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/utilccl",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",

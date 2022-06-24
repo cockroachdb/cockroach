@@ -821,6 +821,11 @@ func (s StatementOptions) GetMetricScope() (string, bool) {
 	return v, ok
 }
 
+// IncludeVirtual returns true if we need to set placeholder nulls for virtual columns.
+func (s StatementOptions) IncludeVirtual() bool {
+	return s.m[OptVirtualColumns] == string(OptVirtualColumnsNull)
+}
+
 // GetMinCheckpointFrequency returns the minimum frequency with which checkpoints should be
 // recorded. Returns nil if not set, and an error if invalid.
 func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {

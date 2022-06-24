@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/changefeedvalidators",
-        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",

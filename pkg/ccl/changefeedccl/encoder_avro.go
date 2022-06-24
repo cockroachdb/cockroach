@@ -35,7 +35,7 @@ type confluentAvroEncoder struct {
 	schemaPrefix                       string
 	updatedField, beforeField, keyOnly bool
 	virtualColumnVisibility            changefeedbase.VirtualColumnVisibility
-	targets                            []jobspb.ChangefeedTargetSpecification
+	targets                            changefeedbase.Targets
 
 	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -73,7 +73,7 @@ var encoderCacheConfig = cache.Config{
 }
 
 func newConfluentAvroEncoder(
-	opts changefeedbase.EncodingOptions, targets []jobspb.ChangefeedTargetSpecification,
+	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts.AvroSchemaPrefix,
@@ -132,7 +132,7 @@ func (e *confluentAvroEncoder) rawTableName(eventMeta cdcevent.Metadata) (string
 		if target.TableID == eventMeta.TableID {
 			switch target.Type {
 			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-				return e.schemaPrefix + target.StatementTimeName, nil
+				return e.schemaPrefix + string(target.StatementTimeName), nil
 			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
 				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, eventMeta.FamilyName), nil
 			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
