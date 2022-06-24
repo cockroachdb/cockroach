@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -123,6 +124,7 @@ type Instance struct {
 	ttl       func() time.Duration
 	hb        func() time.Duration
 	testKnobs sqlliveness.TestingKnobs
+	startErr  error
 	mu        struct {
 		started bool
 		syncutil.Mutex
@@ -188,6 +190,11 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 			if everySecond.ShouldLog() {
 				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
 			}
+			// Unauthenticated errors are unrecoverable, we should break instead
+			// of retrying.
+			if grpcutil.IsAuthError(err) {
+				break
+			}
 			continue
 		}
 		break
@@ -248,6 +255,15 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			if s == nil {
 				newSession, err := l.createSession(ctx)
 				if err != nil {
+					func() {
+						l.mu.Lock()
+						defer l.mu.Unlock()
+						l.startErr = err
+						// There was an unrecoverable error when trying to
+						// create the session. Notify all calls to Session that
+						// the session failed.
+						close(l.mu.blockCh)
+					}()
 					return
 				}
 				l.setSession(newSession)
@@ -341,6 +357,15 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ch:
+			var err error
+			func() {
+				l.mu.Lock()
+				defer l.mu.Unlock()
+				err = l.startErr
+			}()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 }
