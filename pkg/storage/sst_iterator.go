@@ -32,7 +32,8 @@ type sstIterator struct {
 	keyBuf []byte
 
 	// roachpb.Verify k/v pairs on each call to Next.
-	verify bool
+	verify   bool
+	filename string
 }
 
 // NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
@@ -46,6 +47,16 @@ func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 		return nil, err
 	}
 	return &sstIterator{sst: sst}, nil
+}
+
+func NewSSTIteratorWithName(file sstable.ReadableFile, filename string) (SimpleMVCCIterator, error) {
+	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
+		Comparer: EngineComparer,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &sstIterator{sst: sst, filename: filename}, nil
 }
 
 // NewMemSSTIterator returns a `SimpleMVCCIterator` for an in-memory sstable.
@@ -104,9 +115,16 @@ func (r *sstIterator) Valid() (bool, error) {
 	return r.iterValid && r.err == nil, r.err
 }
 
+func (r *sstIterator) maybeWrapErr() {
+	if r.err != nil && r.filename != "" {
+		r.err = errors.Wrapf(r.err, "file: %s", r.filename)
+	}
+}
+
 // Next implements the SimpleMVCCIterator interface.
 func (r *sstIterator) Next() {
 	if !r.iterValid || r.err != nil {
+		r.maybeWrapErr()
 		return
 	}
 	var iKey *sstable.InternalKey
@@ -120,6 +138,7 @@ func (r *sstIterator) Next() {
 	if r.iterValid && r.err == nil && r.verify {
 		r.err = roachpb.Value{RawBytes: r.value}.Verify(r.mvccKey.Key)
 	}
+	r.maybeWrapErr()
 }
 
 // NextKey implements the SimpleMVCCIterator interface.

@@ -269,7 +269,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
-			return summary, err
+			log.Errorf(ctx, "error processing dir %s: %v", file.Dir, err)
+			return summary, errors.Wrapf(err, "processing dir %s", file.Dir)
 		}
 		defer func() {
 			if err := dir.Close(); err != nil {
@@ -278,7 +279,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		}()
 		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
 		if err != nil {
-			return summary, err
+			log.Errorf(ctx, "error processing file %s: %v", file.Path, err)
+			return summary, errors.Wrapf(err, "processing file %s", file.Path)
 		}
 		defer iter.Close()
 		iters = append(iters, iter)

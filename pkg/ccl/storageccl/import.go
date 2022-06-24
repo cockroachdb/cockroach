@@ -353,7 +353,7 @@ func ExternalSSTReader(
 		}
 	}
 
-	iter, err := storage.NewSSTIterator(reader)
+	iter, err := storage.NewSSTIteratorWithName(reader, basename)
 	if err != nil {
 		reader.Close()
 		return nil, err
