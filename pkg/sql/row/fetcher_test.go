@@ -62,6 +62,7 @@ func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) descpb.IndexFetchSp
 
 func initFetcher(
 	t *testing.T,
+	txn *kv.Txn,
 	entry initFetcherArgs,
 	reverseScan bool,
 	alloc *tree.DatumAlloc,
@@ -74,6 +75,7 @@ func initFetcher(
 	if err := fetcher.Init(
 		context.Background(),
 		FetcherInitArgs{
+			Txn:        txn,
 			Reverse:    reverseScan,
 			Alloc:      alloc,
 			MemMonitor: memMon,
@@ -147,17 +149,15 @@ func TestNextRowSingle(t *testing.T) {
 				indexIdx:  0,
 			}
 
-			rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /* memMon */)
+			txn := kv.NewTxn(ctx, kvDB, 0)
+			rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /* memMon */)
 
 			if err := rf.StartScan(
 				context.Background(),
-				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
-				false, /*traceKV*/
-				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -252,17 +252,15 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				indexIdx:  0,
 			}
 
-			rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+			txn := kv.NewTxn(ctx, kvDB, 0)
+			rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 			if err := rf.StartScan(
 				context.Background(),
-				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
 				rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-				10,    /*limitHint*/
-				false, /*traceKV*/
-				false, /*forceProductionKVBatchSize*/
+				10, /*limitHint*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -346,18 +344,16 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	memMon := mon.NewMonitor("test", mon.MemoryResource, nil, nil, -1, 1000, settings)
 	memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)
-	rf := initFetcher(t, args, false /*reverseScan*/, alloc, memMon)
+	txn := kv.NewTxn(ctx, kvDB, 0)
+	rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, memMon)
 	defer rf.Close(ctx)
 
 	err := rf.StartScan(
 		context.Background(),
-		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
 		nil, /* spanIDs */
 		rowinfra.NoBytesLimit,
 		rowinfra.NoRowLimit,
-		false, /*traceKV*/
-		false, /*forceProductionKVBatchSize*/
 	)
 	assert.Error(t, err)
 	assert.Equal(t, pgerror.GetPGCode(err), pgcode.OutOfMemory)
@@ -407,7 +403,8 @@ INDEX(c)
 		indexIdx:  0,
 	}
 
-	rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+	txn := kv.NewTxn(ctx, kvDB, 0)
+	rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 	// Start a scan that has multiple input spans, to tickle the codepath that
 	// sees an "empty batch". When we have multiple input spans, the kv server
@@ -427,7 +424,6 @@ INDEX(c)
 
 	if err := rf.StartScan(
 		context.Background(),
-		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
@@ -435,9 +431,7 @@ INDEX(c)
 		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 		// Set a limitHint of 1 to more quickly end the first batch, causing a
 		// batch that ends between rows.
-		1,     /*limitHint*/
-		false, /*traceKV*/
-		false, /*forceProductionKVBatchSize*/
+		1, /*limitHint*/
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -584,17 +578,15 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				args.columns = []int{0, 1, 2, 3}
 			}
 
-			rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+			txn := kv.NewTxn(ctx, kvDB, 0)
+			rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 			if err := rf.StartScan(
 				context.Background(),
-				kv.NewTxn(ctx, kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
 				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
-				false, /*traceKV*/
-				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -693,14 +685,15 @@ func TestRowFetcherReset(t *testing.T) {
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "foo")
 
+	var txn *kv.Txn
 	args := initFetcherArgs{
 		tableDesc: tableDesc,
 		indexIdx:  0,
 	}
 	da := tree.DatumAlloc{}
-	fetcher := initFetcher(t, args, false, &da, nil /*memMon*/)
+	fetcher := initFetcher(t, txn, args, false, &da, nil /*memMon*/)
 
-	resetFetcher := initFetcher(t, args, false /*reverseScan*/, &da, nil /*memMon*/)
+	resetFetcher := initFetcher(t, txn, args, false /*reverseScan*/, &da, nil /*memMon*/)
 
 	resetFetcher.Reset()
 
@@ -711,6 +704,7 @@ func TestRowFetcherReset(t *testing.T) {
 	if err := resetFetcher.Init(
 		ctx,
 		FetcherInitArgs{
+			Txn:   txn,
 			Alloc: &da,
 			Spec:  &spec,
 		},

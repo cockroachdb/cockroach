@@ -432,8 +432,9 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
-		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.desc, sp,
-			ib.spec.ChunkSize, false /*traceKV*/)
+		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
+			ctx, txn, ib.desc, sp, ib.spec.ChunkSize, false, /* traceKV */
+		)
 		return err
 	}); err != nil {
 		return nil, nil, 0, err

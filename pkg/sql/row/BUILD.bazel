@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "row",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/kvstreamer",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
@@ -69,6 +71,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/unique",
         "//pkg/util/uuid",
@@ -124,4 +127,9 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+disallowed_imports_test(
+    "row",
+    ["//pkg/sql/execinfra"],
 )

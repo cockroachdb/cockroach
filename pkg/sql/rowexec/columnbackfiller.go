@@ -78,8 +78,9 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc,
-		columnBackfillerMon); err != nil {
+	if err := cb.ColumnBackfiller.InitForDistributedUse(
+		ctx, flowCtx, cb.desc, columnBackfillerMon,
+	); err != nil {
 		return nil, err
 	}
 
