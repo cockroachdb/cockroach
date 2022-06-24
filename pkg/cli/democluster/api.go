@@ -51,6 +51,10 @@ type DemoCluster interface {
 
 	// SetupWorkload initializes the workload generator if defined.
 	SetupWorkload(ctx context.Context) error
+
+	// SetClusterSetting overrides a default cluster setting at system level
+	// and for all tenants.
+	SetClusterSetting(ctx context.Context, setting string, value interface{}) error
 }
 
 // EnableEnterprise is not implemented here in order to keep OSS/BSL builds successful.
