@@ -47,6 +47,7 @@ type provider struct {
 	instanceID   base.SQLInstanceID
 	sessionID    sqlliveness.SessionID
 	initError    error
+	isSkeleton   bool
 	mu           struct {
 		syncutil.Mutex
 		started bool
@@ -62,6 +63,7 @@ func New(
 	addr string,
 	f *rangefeed.Factory,
 	clock *hlc.Clock,
+	isSkeleton bool,
 ) sqlinstance.Provider {
 	storage := instancestorage.NewStorage(db, codec, slProvider)
 	reader := instancestorage.NewReader(storage, slProvider.CachedReader(), f, codec, clock, stopper)
@@ -72,6 +74,7 @@ func New(
 		session:      slProvider,
 		instanceAddr: addr,
 		initialized:  make(chan struct{}),
+		isSkeleton:   isSkeleton,
 	}
 	return p
 }
@@ -81,6 +84,12 @@ func (p *provider) Start(ctx context.Context) error {
 	if p.started() {
 		return p.initError
 	}
+	// Initialize the instance. We need to do this before starting the reader, so
+	// that the reader sees the instance.
+	if err := p.initAndWait(ctx); err != nil {
+		return err
+	}
+
 	if err := p.Reader.Start(ctx); err != nil {
 		p.initOnce.Do(func() {
 			p.initError = err
@@ -106,21 +115,35 @@ func (p *provider) Instance(
 	if !p.started() {
 		return base.SQLInstanceID(0), "", sqlinstance.NotStartedError
 	}
-
-	p.maybeInitialize()
 	select {
 	case <-ctx.Done():
 		return base.SQLInstanceID(0), "", ctx.Err()
 	case <-p.stopper.ShouldQuiesce():
 		return base.SQLInstanceID(0), "", stop.ErrUnavailable
 	case <-p.initialized:
+		return p.instanceID, p.sessionID, p.initError
+	}
+}
+
+func (p *provider) initAndWait(ctx context.Context) error {
+	if p.isSkeleton {
+		// Don't initialize the instance if the provider is a placeholder.
+		return nil
+	}
+	p.maybeInitialize()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	case <-p.initialized:
 		if p.initError == nil {
 			log.Ops.Infof(ctx, "created SQL instance %d", p.instanceID)
 		} else {
 			log.Ops.Warningf(ctx, "error creating SQL instance: %s", p.initError)
 		}
-		return p.instanceID, p.sessionID, p.initError
 	}
+	return p.initError
 }
 
 func (p *provider) maybeInitialize() {

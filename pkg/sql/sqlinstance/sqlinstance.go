@@ -47,8 +47,8 @@ type Provider interface {
 	// Instance returns the instance ID and sqlliveness.SessionID for the
 	// current SQL instance.
 	Instance(context.Context) (base.SQLInstanceID, sqlliveness.SessionID, error)
-	// Start starts the instanceprovider. This will block until
-	// the underlying instance data reader has been started.
+	// Start starts the instanceprovider and initializes the current SQL instance.
+	// This will block until the underlying instance data reader has been started.
 	Start(context.Context) error
 }
 
