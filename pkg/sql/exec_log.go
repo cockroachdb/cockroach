@@ -444,7 +444,7 @@ func (p *planner) maybeAudit(privilegeObject catalog.PrivilegeObject, priv privi
 		default:
 			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: false})
 		}
-	case catalog.SystemPrivilegeObject:
+	case catalog.SyntheticPrivilegeObject:
 		// TODO(richardjcai): Add auditing here.
 	}
 }

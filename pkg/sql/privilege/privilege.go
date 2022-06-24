@@ -75,8 +75,8 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
-	// System represents system privileges.
-	System ObjectType = "system"
+	// Global represents global privileges.
+	Global ObjectType = "global"
 )
 
 var isDescriptorBacked = map[ObjectType]bool{
@@ -85,7 +85,7 @@ var isDescriptorBacked = map[ObjectType]bool{
 	Table:    true,
 	Type:     true,
 	Sequence: true,
-	System:   false,
+	Global:   false,
 }
 
 // Predefined sets of privileges.
@@ -294,7 +294,7 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return SequencePrivileges
 	case Any:
 		return AllPrivileges
-	case System:
+	case Global:
 		return SystemPrivileges
 	default:
 		panic(errors.AssertionFailedf("unknown object type %s", objectType))

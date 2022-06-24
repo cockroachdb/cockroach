@@ -24,60 +24,60 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
-// SystemPrivilegeObject represents an object that has its privileges stored
+// SyntheticPrivilegeObject represents an object that has its privileges stored
 // in system.privileges.
-type SystemPrivilegeObject interface {
+type SyntheticPrivilegeObject interface {
 	PrivilegeObject
 	ToString() string
 	PrivilegeObjectType() privilege.ObjectType
 }
 
-// SystemClusterPrivilege represents privileges granted via
+// GlobalPrivilege represents privileges granted via
 // GRANT SYSTEM [privilege...] TO [roles...].
 // These privileges are "global", for example, MODIFYCLUSTERSETTING which lets
 // the role modify cluster settings within the cluster.
-type SystemClusterPrivilege struct{}
+type GlobalPrivilege struct{}
 
-// SystemClusterPrivilegeObjectType represents the object type for
-// SystemClusterPrivilege.
-const SystemClusterPrivilegeObjectType = "SystemCluster"
+// GlobalPrivilegeObjectType represents the object type for
+// GlobalPrivilege.
+const GlobalPrivilegeObjectType = "Global"
 
-// ToString implements the SystemPrivilegeObject interface.
-func (p *SystemClusterPrivilege) ToString() string {
-	return "/system/"
+// ToString implements the SyntheticPrivilegeObject interface.
+func (p *GlobalPrivilege) ToString() string {
+	return "/global/"
 }
 
-// PrivilegeObjectType implements the SystemPrivilegeObject interface.
-func (p *SystemClusterPrivilege) PrivilegeObjectType() privilege.ObjectType {
-	return privilege.System
+// PrivilegeObjectType implements the SyntheticPrivilegeObject interface.
+func (p *GlobalPrivilege) PrivilegeObjectType() privilege.ObjectType {
+	return privilege.Global
 }
 
 // SystemClusterPrivilegeObject is one of one since it is global.
 // We can use a const to identify it.
-var SystemClusterPrivilegeObject = &SystemClusterPrivilege{}
+var SystemClusterPrivilegeObject = &GlobalPrivilege{}
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (p *SystemClusterPrivilege) GetPrivilegeDescriptor(
+func (p *GlobalPrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, planner, p)
 }
 
 // GetObjectType implements the PrivilegeObject interface.
-func (p *SystemClusterPrivilege) GetObjectType() string {
+func (p *GlobalPrivilege) GetObjectType() string {
 	// TODO(richardjcai): Turn this into a const map somewhere.
-	return SystemClusterPrivilegeObjectType
+	return GlobalPrivilegeObjectType
 }
 
 // GetName implements the PrivilegeObject interface.
-func (p *SystemClusterPrivilege) GetName() string {
+func (p *GlobalPrivilege) GetName() string {
 	// TODO(richardjcai): Turn this into a const map somewhere.
 	// GetName can return none since SystemCluster is not named and is 1 of 1.
 	return ""
 }
 
 func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
-	ctx context.Context, planner eval.Planner, systemTablePrivilegeObject SystemPrivilegeObject,
+	ctx context.Context, planner eval.Planner, systemTablePrivilegeObject SyntheticPrivilegeObject,
 ) (*catpb.PrivilegeDescriptor, error) {
 	query := fmt.Sprintf(
 		`SELECT username, privileges FROM system.%s WHERE path='%s'`,

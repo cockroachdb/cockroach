@@ -28,9 +28,9 @@ type Metadata struct {
 
 var registry = []*Metadata{
 	{
-		prefix: "/system",
-		regex:  regexp.MustCompile("(/system/)$"),
-		val:    reflect.TypeOf((*catalog.SystemClusterPrivilege)(nil)),
+		prefix: "/global",
+		regex:  regexp.MustCompile("(/global/)$"),
+		val:    reflect.TypeOf((*catalog.GlobalPrivilege)(nil)),
 	},
 }
 
@@ -43,8 +43,8 @@ func findMetadata(val string) *Metadata {
 	return nil
 }
 
-// Parse turns a privilege path string to a SystemPrivilegeObject.
-func Parse(privPath string) (catalog.SystemPrivilegeObject, error) {
+// Parse turns a privilege path string to a SyntheticPrivilegeObject.
+func Parse(privPath string) (catalog.SyntheticPrivilegeObject, error) {
 	md := findMetadata(privPath)
 	if md == nil {
 		return nil, errors.AssertionFailedf("no prefix match found for privilege path %s", privPath)
@@ -73,5 +73,5 @@ func Parse(privPath string) (catalog.SystemPrivilegeObject, error) {
 		}
 		v.Elem().Field(i).Set(reflect.ValueOf(matches[idx]))
 	}
-	return v.Interface().(catalog.SystemPrivilegeObject), nil
+	return v.Interface().(catalog.SyntheticPrivilegeObject), nil
 }

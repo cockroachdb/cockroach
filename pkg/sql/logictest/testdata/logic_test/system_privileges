@@ -1,6 +1,6 @@
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on SystemCluster
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
 SELECT * FROM crdb_internal.cluster_settings;
 
 user root
@@ -18,14 +18,14 @@ user root
 query TTTT
 SELECT * FROM system.privileges
 ----
-testuser  /system/  {MODIFYCLUSTERSETTING}  {}
+testuser  /global/  {MODIFYCLUSTERSETTING}  {}
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on SystemCluster
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
 SELECT * FROM crdb_internal.cluster_settings;
 
 user root

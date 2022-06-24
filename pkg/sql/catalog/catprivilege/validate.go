@@ -57,9 +57,10 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 	return catpb.DefaultSuperuserPrivileges
 }
 
-// ValidateSystemPrivilegeObject validates a SystemPrivilegeObject.
-// TODO(richardjcai): Make sure the actual privilege descriptor is validated.
-func ValidateSystemPrivilegeObject(systemPrivilegeObject catalog.SystemPrivilegeObject) error {
+// ValidateSyntheticPrivilegeObject validates a SyntheticPrivilegeObject.
+func ValidateSyntheticPrivilegeObject(
+	systemPrivilegeObject catalog.SyntheticPrivilegeObject,
+) error {
 	out, err := systemprivilege.Parse(systemPrivilegeObject.ToString())
 	if err != nil {
 		return err

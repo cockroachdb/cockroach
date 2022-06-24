@@ -21,7 +21,7 @@ import (
 func TestParsePrivilegePath(t *testing.T) {
 	for _, tc := range []struct {
 		regex        string
-		expectedType catalog.SystemPrivilegeObject
+		expectedType catalog.SyntheticPrivilegeObject
 		error        string
 	}{
 		{
@@ -29,12 +29,12 @@ func TestParsePrivilegePath(t *testing.T) {
 			error: "no prefix match found for privilege path /garbageasdf/",
 		},
 		{
-			regex:        "/system/",
+			regex:        "/global/",
 			expectedType: catalog.SystemClusterPrivilegeObject,
 		},
 		{
-			regex: "/system/unexpected",
-			error: "/system/unexpected does not match regex pattern (/system/)$",
+			regex: "/global/unexpected",
+			error: "/global/unexpected does not match regex pattern (/global/)$",
 		},
 	} {
 		actualType, err := Parse(tc.regex)
