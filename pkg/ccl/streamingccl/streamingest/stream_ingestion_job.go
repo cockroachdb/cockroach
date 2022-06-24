@@ -299,7 +299,59 @@ func revertToCutoverTimestamp(
 // TODO(adityamaru): Add ClearRange logic once we have introduced
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
+func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	db := jobExecCtx.ExecCfg().DB
+	p := s.job.Payload()
+	spans := []roachpb.Span{p.GetStreamIngestion().Span}
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	client, err := streamclient.NewStreamClient(streamingccl.StreamAddress(details.StreamAddress))
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		// Cancel the producer job even when the revert has error. The source job's
+		// protected timestamp is no longer needed as this ingestion job won't resume
+		// ingestion anymore.
+		err := client.Complete(ctx, streaming.StreamID(details.StreamID), false /* ingestionCutover*/)
+		if err != nil {
+			log.Warningf(ctx, "encountered error when canceling the producer job: %v", err)
+		}
+		err = client.Close()
+		if err != nil {
+			log.Warningf(ctx, "encountered error when closing the stream client: %v", err)
+		}
+	}()
+	for len(spans) != 0 {
+		var b kv.Batch
+		for _, span := range spans {
+			b.AddRawRequest(&roachpb.ClearRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    span.Key,
+					EndKey: span.EndKey,
+				},
+			})
+		}
+		if err := db.Run(ctx, &b); err != nil {
+			return err
+		}
+
+		// TODO(casper): handle timeout when we have very large tenant with
+		// saving checkpoints and retrying.
+		spans = spans[:0]
+		for _, raw := range b.RawResponse().Responses {
+			r := raw.GetClearRange()
+			if r.ResumeSpan != nil {
+				if !r.ResumeSpan.Valid() {
+					return errors.Errorf("invalid resume span: %s", r.ResumeSpan)
+				}
+				log.Warningf(ctx, "continue to clear tenant data with resume "+
+					"span %s and for reason %s", r.ResumeSpan, r.ResumeReason)
+				spans = append(spans, *r.ResumeSpan)
+			}
+		}
+	}
 	return nil
 }
 

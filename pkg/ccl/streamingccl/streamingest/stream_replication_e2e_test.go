@@ -22,6 +22,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -78,10 +80,12 @@ type tenantStreamingClusters struct {
 	args         tenantStreamingClustersArgs
 	srcSysSQL    *sqlutils.SQLRunner
 	srcTenantSQL *sqlutils.SQLRunner
+	srcKvDB      *kv.DB
 	srcURL       url.URL
 
 	destSysSQL    *sqlutils.SQLRunner
 	destTenantSQL *sqlutils.SQLRunner
+	destKvDB      *kv.DB
 }
 
 func (c *tenantStreamingClusters) compareResult(query string) {
@@ -149,23 +153,26 @@ func createTenantStreamingClusters(
 		serverArgs base.TestServerArgs,
 		tenantID roachpb.TenantID,
 		numNodes int,
-	) (*sqlutils.SQLRunner, *sqlutils.SQLRunner, url.URL, func()) {
+	) (*kv.DB, *sqlutils.SQLRunner, *sqlutils.SQLRunner, url.URL, func()) {
 		params := base.TestClusterArgs{ServerArgs: serverArgs}
 		c := testcluster.StartTestCluster(t, numNodes, params)
 		// TODO(casper): support adding splits when we have multiple nodes.
 		_, tenantConn := serverutils.StartTenant(t, c.Server(0), base.TestTenantArgs{TenantID: tenantID})
 		pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-		return sqlutils.MakeSQLRunner(c.ServerConn(0)), sqlutils.MakeSQLRunner(tenantConn), pgURL, func() {
-			require.NoError(t, tenantConn.Close())
-			c.Stopper().Stop(ctx)
-			cleanupSinkCert()
-		}
+		return c.Servers[0].DB(), sqlutils.MakeSQLRunner(c.ServerConn(0)),
+			sqlutils.MakeSQLRunner(tenantConn), pgURL, func() {
+				require.NoError(t, tenantConn.Close())
+				c.Stopper().Stop(ctx)
+				cleanupSinkCert()
+			}
 	}
 
 	// Start the source cluster.
-	sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
+	srcKvDB, sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup :=
+		startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
 	// Start the destination cluster.
-	destSysSQL, destTenantSQL, _, destCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.destTenantID, args.destNumNodes)
+	destKvDB, destSysSQL, destTenantSQL, _, destCleanup :=
+		startTestClusterWithTenant(ctx, t, serverArgs, args.destTenantID, args.destNumNodes)
 
 	args.srcInitFunc(t, sourceSysSQL, sourceTenantSQL)
 	args.destInitFunc(t, destSysSQL, destTenantSQL)
@@ -174,9 +181,11 @@ func createTenantStreamingClusters(
 	return &tenantStreamingClusters{
 			t:             t,
 			args:          args,
+			srcKvDB:       srcKvDB,
 			srcSysSQL:     sourceSysSQL,
 			srcTenantSQL:  sourceTenantSQL,
 			srcURL:        srcURL,
+			destKvDB:      destKvDB,
 			destSysSQL:    destSysSQL,
 			destTenantSQL: destTenantSQL,
 		}, func() {
@@ -358,6 +367,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 
 	// Pause ingestion.
 	c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
+	fmt.Println("after pausing job")
 	jobutils.WaitForJobToPause(t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 	pausedCheckpoint := streamIngestionStats(t, c.destSysSQL, ingestionJobID).ReplicationLagInfo.HighWatermark
 	// Check we paused at a timestamp greater than the previously reached high watermark
@@ -427,4 +437,56 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 
 	// Confirm this new run resumed from the empty checkpoint.
 	require.True(t, streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime.IsEmpty())
+}
+
+func TestTenantStreamingCancelIngestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
+		producerJobID, ingestionJobID := c.startStreamReplication()
+
+		jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+		var srcTime time.Time
+		c.srcSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&srcTime)
+		c.waitUntilHighWatermark(srcTime, jobspb.JobID(ingestionJobID))
+
+		c.compareResult("SELECT * FROM d.t1")
+		c.compareResult("SELECT * FROM d.t2")
+
+		if cancelAfterPaused {
+			c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
+			jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+		}
+
+		c.destSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", ingestionJobID))
+		jobutils.WaitForJobToCancel(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToCancel(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+
+		// Check if the producer job has released protected timestamp.
+		stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		require.NotNil(t, stats.ProducerStatus)
+		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+
+		// Check if dest tenant key ranges get cleaned up.
+		destTenantPrefix := keys.MakeTenantPrefix(c.args.destTenantID)
+		rows, err := c.destKvDB.Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+	}
+
+	t.Run("cancel-ingestion-after-paused", func(t *testing.T) {
+		testCancelIngestion(t, true)
+	})
+
+	t.Run("cancel-ingestion-while-running", func(t *testing.T) {
+		testCancelIngestion(t, false)
+	})
 }
