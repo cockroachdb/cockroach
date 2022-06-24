@@ -18,7 +18,6 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -415,14 +414,6 @@ func (s *Streamer) Init(
 	s.hints = hints
 	s.maxKeysPerRow = int32(maxKeysPerRow)
 }
-
-const (
-	requestUnionSliceOverhead = int64(unsafe.Sizeof([]roachpb.RequestUnion{}))
-	intSliceOverhead          = int64(unsafe.Sizeof([]int{}))
-	intSize                   = int64(unsafe.Sizeof(int(0)))
-	int32SliceOverhead        = int64(unsafe.Sizeof([]int32{}))
-	int32Size                 = int64(unsafe.Sizeof(int32(0)))
-)
 
 // Enqueue dispatches multiple requests for execution. Results are delivered
 // through the GetResults call.
@@ -1303,15 +1294,6 @@ func (fp singleRangeBatchResponseFootprint) hasIncomplete() bool {
 func calculateFootprint(
 	req singleRangeBatch, br *roachpb.BatchResponse,
 ) (fp singleRangeBatchResponseFootprint, _ error) {
-	// Note that we cannot use Size() methods that are automatically generated
-	// by the protobuf library because they account for things differently from
-	// how the memory usage is accounted for by the KV layer for the purposes of
-	// tracking TargetBytes limit.
-
-	// getRequestScratch and scanRequestScratch are used to calculate
-	// the size of requests when we set the ResumeSpans on them.
-	var getRequestScratch roachpb.GetRequest
-	var scanRequestScratch roachpb.ScanRequest
 	for i, resp := range br.Responses {
 		reply := resp.GetInner()
 		switch req.reqs[i].GetInner().(type) {
@@ -1324,8 +1306,7 @@ func calculateFootprint(
 			}
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				getRequestScratch.SetSpan(*get.ResumeSpan)
-				fp.resumeReqsMemUsage += int64(getRequestScratch.Size())
+				fp.resumeReqsMemUsage += requestSize(get.ResumeSpan.Key, get.ResumeSpan.EndKey)
 				fp.numIncompleteGets++
 			} else {
 				// This Get was completed.
@@ -1352,8 +1333,7 @@ func calculateFootprint(
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
-				scanRequestScratch.SetSpan(*scan.ResumeSpan)
-				fp.resumeReqsMemUsage += int64(scanRequestScratch.Size())
+				fp.resumeReqsMemUsage += requestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
 		}
@@ -1664,34 +1644,4 @@ func buildResumeSingeRangeBatch(
 	atomic.AddInt64(&s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))
 
 	return resumeReq
-}
-
-var zeroInt32Slice []int32
-
-func init() {
-	zeroInt32Slice = make([]int32, 1<<10)
-}
-
-const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
-
-func requestsMemUsage(reqs []roachpb.RequestUnion) (memUsage int64) {
-	for _, r := range reqs {
-		memUsage += int64(r.Size())
-	}
-	return memUsage
-}
-
-// getResponseSize calculates the size of the GetResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
-func getResponseSize(get *roachpb.GetResponse) int64 {
-	if get.Value == nil {
-		return 0
-	}
-	return int64(len(get.Value.RawBytes))
-}
-
-// scanResponseSize calculates the size of the ScanResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
-func scanResponseSize(scan *roachpb.ScanResponse) int64 {
-	return scan.NumBytes
 }
