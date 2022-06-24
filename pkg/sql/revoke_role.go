@@ -29,12 +29,6 @@ type RevokeRoleNode struct {
 	roles       []username.SQLUsername
 	members     []username.SQLUsername
 	adminOption bool
-
-	run revokeRoleRun
-}
-
-type revokeRoleRun struct {
-	rowsAffected int
 }
 
 // RevokeRole represents a GRANT ROLE statement.
@@ -156,8 +150,6 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 			return err
 		}
 	}
-
-	n.run.rowsAffected += rowsAffected
 
 	return nil
 }
