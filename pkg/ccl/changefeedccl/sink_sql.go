@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -70,10 +70,7 @@ type sqlSink struct {
 const sqlSinkTableName = `sqlsink`
 
 func makeSQLSink(
-	u sinkURL,
-	tableName string,
-	targets []jobspb.ChangefeedTargetSpecification,
-	mb metricsRecorderBuilder,
+	u sinkURL, tableName string, targets changefeedbase.Targets, mb metricsRecorderBuilder,
 ) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.

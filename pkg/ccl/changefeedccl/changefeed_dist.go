@@ -154,7 +154,7 @@ func distChangefeedFlow(
 func fetchTableDescriptors(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	targets []jobspb.ChangefeedTargetSpecification,
+	targets changefeedbase.Targets,
 	ts hlc.Timestamp,
 ) ([]catalog.TableDescriptor, error) {
 	var targetDescs []catalog.TableDescriptor

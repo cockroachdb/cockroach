@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -81,7 +80,7 @@ func New(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
 	events changefeedbase.SchemaChangeEventClass,
-	targets []jobspb.ChangefeedTargetSpecification,
+	targets changefeedbase.Targets,
 	initialHighwater hlc.Timestamp,
 	metrics *Metrics,
 	tolerances changefeedbase.CanHandle,
@@ -119,7 +118,7 @@ type schemaFeed struct {
 	db         *kv.DB
 	clock      *hlc.Clock
 	settings   *cluster.Settings
-	targets    []jobspb.ChangefeedTargetSpecification
+	targets    changefeedbase.Targets
 	ie         sqlutil.InternalExecutor
 	metrics    *Metrics
 	tolerances changefeedbase.CanHandle
@@ -696,7 +695,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				if err != nil {
 					return err
 				}
-				var origName string
+				var origName changefeedbase.StatementTimeName
 				var isTable bool
 				for _, cts := range tf.targets {
 					if cts.TableID == descpb.ID(id) {
@@ -716,7 +715,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				if unsafeValue == nil {
 					name := origName
 					if name == "" {
-						name = fmt.Sprintf("desc(%d)", id)
+						name = changefeedbase.StatementTimeName(fmt.Sprintf("desc(%d)", id))
 					}
 					return errors.Errorf(`"%v" was dropped or truncated`, name)
 				}
