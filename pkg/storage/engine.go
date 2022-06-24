@@ -1227,7 +1227,29 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	if err != nil {
 		return err
 	}
-	return writer.ExperimentalClearAllRangeKeys(start, end)
+
+	// Use a separate iterator to look for any range keys, to avoid dropping
+	// unnecessary range keys. Pebble.ExperimentalClearAllRangeKeys also checks
+	// this, but we may be writing to an SSTWriter here which can't know.
+	//
+	// TODO(erikgrinaker): Review the engine clear methods and heuristics to come
+	// up with a better scheme for avoiding dropping unnecessary range tombstones
+	// across range key spans.
+	iter = reader.NewEngineIterator(IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	defer iter.Close()
+
+	valid, err = iter.SeekEngineKeyGE(EngineKey{Key: start})
+	if err != nil {
+		return err
+	}
+	if valid {
+		return writer.ExperimentalClearAllRangeKeys(start, end)
+	}
+	return nil
 }
 
 var ingestDelayL0Threshold = settings.RegisterIntSetting(
