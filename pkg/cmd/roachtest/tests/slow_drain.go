@@ -30,7 +30,7 @@ func registerSlowDrain(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("slow-drain/duration=%s", duration),
-		Owner:   registry.OwnerServer,
+		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSlowDrain(ctx, t, c, duration)

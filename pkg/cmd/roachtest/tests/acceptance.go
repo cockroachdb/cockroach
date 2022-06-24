@@ -59,6 +59,9 @@ func registerAcceptance(r registry.Registry) {
 				minVersion: "v19.2.0",
 				timeout:    30 * time.Minute,
 			},
+			{name: "cli/node-status", fn: runCLINodeStatus},
+			{name: "cluster-init", fn: runClusterInit},
+			{name: "rapid-restart", fn: runRapidRestart},
 		},
 		registry.OwnerMultiTenant: {
 			{
@@ -67,13 +70,12 @@ func registerAcceptance(r registry.Registry) {
 				fn:   runAcceptanceMultitenant,
 			},
 		},
-		registry.OwnerServer: {
+		registry.OwnerObsInf: {
+			{name: "status-server", fn: runStatusServer},
+		},
+		registry.OwnerDevInf: {
 			{name: "build-info", fn: RunBuildInfo},
 			{name: "build-analyze", fn: RunBuildAnalyze},
-			{name: "cli/node-status", fn: runCLINodeStatus},
-			{name: "cluster-init", fn: runClusterInit},
-			{name: "rapid-restart", fn: runRapidRestart},
-			{name: "status-server", fn: runStatusServer},
 		},
 	}
 	tags := []string{"default", "quick"}

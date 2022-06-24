@@ -71,7 +71,7 @@ func registerDecommission(r registry.Registry) {
 		numNodes := 4
 		r.Add(registry.TestSpec{
 			Name:    "decommission/drains",
-			Owner:   registry.OwnerServer,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionDrains(ctx, t, c)
@@ -105,7 +105,7 @@ func registerDecommission(r registry.Registry) {
 		numNodes := 6
 		r.Add(registry.TestSpec{
 			Name:    "decommission/slow",
-			Owner:   registry.OwnerServer,
+			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionSlow(ctx, t, c)

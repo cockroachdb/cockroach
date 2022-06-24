@@ -428,6 +428,9 @@ func getStatementDetailsQueryClausesAndArgs(
 		if !(len(req.AppNames) == 1 && req.AppNames[0] == "") {
 			buffer.WriteString(" AND (")
 			for i, app := range req.AppNames {
+				if app == "(unset)" {
+					app = ""
+				}
 				if i != 0 {
 					args = append(args, app)
 					buffer.WriteString(fmt.Sprintf(" OR app_name = $%d", len(args)))
