@@ -49,8 +49,8 @@ type Provider interface {
 	// Instance returns the instance ID and sqlliveness.SessionID for the
 	// current SQL instance.
 	Instance(context.Context) (base.SQLInstanceID, sqlliveness.SessionID, error)
-	// Start starts the instanceprovider. This will block until
-	// the underlying instance data reader has been started.
+	// Start starts the instanceprovider and initializes the current SQL instance.
+	// This will block until the underlying instance data reader has been started.
 	Start(context.Context) error
 }
 
@@ -59,3 +59,7 @@ var NonExistentInstanceError = errors.Errorf("non existent SQL instance")
 
 // NotStartedError can be returned if the sqlinstance subsystem has not been started yet.
 var NotStartedError = errors.Errorf("sqlinstance subsystem not started")
+
+// NotASQLInstanceError can be returned if a function is is not supported for
+// non-SQL instances.
+var NotASQLInstanceError = errors.Errorf("not supported for non-SQL instance")
