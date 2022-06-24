@@ -432,6 +432,30 @@ oid         nspname             nspowner    nspacl
 1098122499  pg_extension        NULL        NULL
 4101115737  public              2310524507  NULL
 
+# Verify that we can still see the schemas even if we don't have any privilege
+# on the current database.
+
+statement ok
+REVOKE ALL ON DATABASE test FROM public;
+REVOKE ALL ON DATABASE test FROM testuser
+
+user testuser
+
+query OTOT colnames
+SELECT * FROM pg_catalog.pg_namespace
+----
+oid         nspname             nspowner    nspacl
+1445254017  crdb_internal       NULL        NULL
+155990598   information_schema  NULL        NULL
+2154378761  pg_catalog          NULL        NULL
+1098122499  pg_extension        NULL        NULL
+4101115737  public              2310524507  NULL
+
+user root
+
+statement ok
+GRANT CONNECT ON DATABASE test TO public
+
 ## pg_catalog.pg_database
 
 query OTOITTBB colnames

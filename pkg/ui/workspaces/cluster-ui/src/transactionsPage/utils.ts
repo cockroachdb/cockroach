@@ -57,8 +57,9 @@ export const getStatementsByFingerprintId = (
   statementFingerprintIds: Long[],
   statements: Statement[],
 ): Statement[] => {
-  return statements?.filter(s =>
-    statementFingerprintIds.some(id => id.eq(s.id)),
+  return (
+    statements?.filter(s => statementFingerprintIds.some(id => id.eq(s.id))) ||
+    []
   );
 };
 

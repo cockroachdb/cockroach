@@ -53,10 +53,11 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
 		require.EqualError(t, err, fmt.Sprintf(
-			`%s is set to '%s', but %s is not set`,
+			"%s or %s must be set if %q is %q",
+			CredentialsParam,
+			BearerTokenParam,
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
-			CredentialsParam,
 		))
 	})
 
