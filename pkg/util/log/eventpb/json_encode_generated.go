@@ -572,9 +572,7 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		}
 		printComma = true
 		b = append(b, "\"LastRead\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.LastRead)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.LastRead)))
 		b = append(b, '"')
 	}
 
@@ -602,9 +600,7 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		}
 		printComma = true
 		b = append(b, "\"DatabaseName\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.DatabaseName)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.DatabaseName)))
 		b = append(b, '"')
 	}
 
@@ -614,9 +610,7 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		}
 		printComma = true
 		b = append(b, "\"TableName\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.TableName)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableName)))
 		b = append(b, '"')
 	}
 
@@ -626,9 +620,7 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		}
 		printComma = true
 		b = append(b, "\"IndexName\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.IndexName)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.IndexName)))
 		b = append(b, '"')
 	}
 
@@ -638,9 +630,7 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		}
 		printComma = true
 		b = append(b, "\"IndexType\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.IndexType)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.IndexType)))
 		b = append(b, '"')
 	}
 
