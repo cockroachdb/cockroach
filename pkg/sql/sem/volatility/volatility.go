@@ -77,6 +77,23 @@ func (v V) String() string {
 	}
 }
 
+// TitleString returns the byte representation of Volatility as a title-cased
+// string.
+func (v V) TitleString() string {
+	switch v {
+	case Leakproof:
+		return "Leakproof"
+	case Immutable:
+		return "Immutable"
+	case Stable:
+		return "Stable"
+	case Volatile:
+		return "Volatile"
+	default:
+		return "Invalid"
+	}
+}
+
 // ToPostgres returns the postgres "provolatile" string ("i" or "s" or "v") and
 // the "proleakproof" flag.
 func (v V) ToPostgres() (provolatile string, proleakproof bool) {
