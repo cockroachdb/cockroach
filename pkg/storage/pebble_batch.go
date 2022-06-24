@@ -249,9 +249,6 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if p.writeOnly {
 		panic("write-only batch")
 	}
-	if opts.KeyTypes != IterKeyTypePointsOnly {
-		panic("EngineIterator does not support range keys")
-	}
 
 	iter := &p.normalEngineIter
 	if opts.Prefix {
@@ -371,7 +368,7 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 	if err := p.batch.DeleteRange(p.buf, EncodeMVCCKey(MVCCKey{Key: end}), nil); err != nil {
 		return err
 	}
-	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return p.ExperimentalClearAllRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Batch interface.
@@ -408,7 +405,7 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 			return err
 		}
 	}
-	return p.ExperimentalClearAllMVCCRangeKeys(start, end)
+	return p.ExperimentalClearAllRangeKeys(start, end)
 }
 
 // ExperimentalClearMVCCRangeKey implements the Engine interface.
@@ -426,8 +423,8 @@ func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
 		nil)
 }
 
-// ExperimentalClearAllMVCCRangeKeys implements the Engine interface.
-func (p *pebbleBatch) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+// ExperimentalClearAllRangeKeys implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
 	if !p.SupportsRangeKeys() {
 		return nil // noop
 	}
@@ -487,7 +484,34 @@ func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value M
 		return err
 	}
 	// Mark the batch as containing range keys. See
-	// ExperimentalClearAllMVCCRangeKeys for why.
+	// ExperimentalClearAllRangeKeys for why.
+	p.containsRangeKeys = true
+	return nil
+}
+
+// ExperimentalPutEngineRangeKey implements the Engine interface.
+func (p *pebbleBatch) ExperimentalPutEngineRangeKey(
+	start, end roachpb.Key, suffix, value []byte,
+) error {
+	if !p.SupportsRangeKeys() {
+		return errors.Errorf("range keys not supported by Pebble database version %s",
+			p.db.FormatMajorVersion())
+	}
+	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	if err := p.batch.Experimental().RangeKeySet(
+		EngineKey{Key: start}.Encode(),
+		EngineKey{Key: end}.Encode(),
+		suffix,
+		value,
+		nil,
+	); err != nil {
+		return err
+	}
+	// Mark the batch as containing range keys. See ExperimentalClearAllRangeKeys
+	// for why.
 	p.containsRangeKeys = true
 	return nil
 }
