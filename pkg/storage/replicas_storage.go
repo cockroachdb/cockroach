@@ -728,6 +728,10 @@ type ReplicasStorage interface {
 	// to the caller to decide when to throw away a handle it may be holding
 	// (the handle is not really usable for doing anything once the range is
 	// deleted).
+	//
+	// TODO(tbg): how's the locking here? A deletion check isn't worth much
+	// since without proper locking the deletion might happen an instant
+	// later.
 	GetHandle(rr FullReplicaID) (RangeStorage, error)
 
 	// CreateUninitializedRange is used when rebalancing is used to add a range
