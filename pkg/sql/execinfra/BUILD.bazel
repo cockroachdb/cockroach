@@ -7,8 +7,6 @@ go_library(
     srcs = [
         "base.go",
         "flow_context.go",
-        "metadata_test_receiver.go",
-        "metadata_test_sender.go",
         "metrics.go",
         "outboxbase.go",
         "processorsbase.go",

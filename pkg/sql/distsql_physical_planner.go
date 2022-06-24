@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -92,10 +91,6 @@ type DistSQLPlanner struct {
 	stopper              *stop.Stopper
 	distSQLSrv           *distsql.ServerImpl
 	spanResolver         physicalplan.SpanResolver
-
-	// metadataTestTolerance is the minimum level required to plan metadata test
-	// processors.
-	metadataTestTolerance execinfra.MetadataTestLevel
 
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
@@ -203,13 +198,12 @@ func NewDistSQLPlanner(
 			connHealth:  nodeDialer.ConnHealthTryDial,
 			isAvailable: isAvailable,
 		},
-		distSender:            distSender,
-		nodeDescs:             nodeDescs,
-		rpcCtx:                rpcCtx,
-		metadataTestTolerance: execinfra.NoExplain,
-		sqlInstanceProvider:   sqlInstanceProvider,
-		codec:                 codec,
-		clock:                 clock,
+		distSender:          distSender,
+		nodeDescs:           nodeDescs,
+		rpcCtx:              rpcCtx,
+		sqlInstanceProvider: sqlInstanceProvider,
+		codec:               codec,
+		clock:               clock,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -225,10 +219,6 @@ func NewDistSQLPlanner(
 	dsp.initRunners(ctx)
 	dsp.initCancelingWorkers(ctx)
 	return dsp
-}
-
-func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
-	return dsp.distSQLSrv.TestingKnobs.MetadataTestLevel >= dsp.metadataTestTolerance
 }
 
 // GetSQLInstanceInfo gets a node descriptor by node ID.
@@ -3082,24 +3072,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
 	}
 
-	if dsp.shouldPlanTestMetadata() {
-		if err := plan.CheckLastStagePost(); err != nil {
-			log.Fatalf(ctx, "%v", err)
-		}
-		plan.AddNoGroupingStageWithCoreFunc(
-			func(_ int, _ *physicalplan.Processor) execinfrapb.ProcessorCoreUnion {
-				return execinfrapb.ProcessorCoreUnion{
-					MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
-						ID: uuid.MakeV4().String(),
-					},
-				}
-			},
-			execinfrapb.PostProcessSpec{},
-			plan.GetResultTypes(),
-			plan.MergeOrdering,
-		)
-	}
-
 	return plan, err
 }
 
@@ -4147,15 +4119,6 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
 	planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
 ) {
-	// Find all MetadataTestSenders in the plan, so that the MetadataTestReceiver
-	// knows how many sender IDs it should expect.
-	var metadataSenders []string
-	for _, proc := range plan.Processors {
-		if proc.Spec.Core.MetadataTestSender != nil {
-			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
-		}
-	}
-
 	maybeMoveSingleFlowToGateway(planCtx, plan, rowCount)
 
 	// Add a final "result" stage if necessary.
@@ -4172,19 +4135,6 @@ func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
 	plan.AddProjection(projection, execinfrapb.Ordering{})
 	// PlanToStreamColMap is no longer necessary.
 	plan.PlanToStreamColMap = nil
-
-	if len(metadataSenders) > 0 {
-		plan.AddSingleGroupStage(
-			dsp.gatewaySQLInstanceID,
-			execinfrapb.ProcessorCoreUnion{
-				MetadataTestReceiver: &execinfrapb.MetadataTestReceiverSpec{
-					SenderIDs: metadataSenders,
-				},
-			},
-			execinfrapb.PostProcessSpec{},
-			plan.GetResultTypes(),
-		)
-	}
 
 	// Set up the endpoints for plan.Streams.
 	plan.PopulateEndpoints()

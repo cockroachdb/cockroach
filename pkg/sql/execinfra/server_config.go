@@ -258,11 +258,6 @@ type TestingKnobs struct {
 	// to incoming flows to register.
 	DrainFast bool
 
-	// MetadataTestLevel controls whether or not additional metadata test
-	// processors are planned, which send additional "RowNum" metadata that is
-	// checked by a test receiver on the gateway.
-	MetadataTestLevel MetadataTestLevel
-
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
 
@@ -285,20 +280,6 @@ type TestingKnobs struct {
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
 }
-
-// MetadataTestLevel represents the types of queries where metadata test
-// processors are planned.
-type MetadataTestLevel int
-
-const (
-	// Off represents that no metadata test processors are planned.
-	Off MetadataTestLevel = iota
-	// NoExplain represents that metadata test processors are planned for all
-	// queries except EXPLAIN (DISTSQL) statements.
-	NoExplain
-	// On represents that metadata test processors are planned for all queries.
-	On
-)
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
