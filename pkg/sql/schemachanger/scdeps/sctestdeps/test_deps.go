@@ -131,7 +131,7 @@ var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
 
 // CheckPrivilege implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) CheckPrivilege(
-	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind,
 ) error {
 	return nil
 }
@@ -142,14 +142,16 @@ func (s *TestState) HasAdminRole(ctx context.Context) (bool, error) {
 }
 
 // HasOwnership implements the scbuild.AuthorizationAccessor interface.
-func (s *TestState) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
+func (s *TestState) HasOwnership(
+	ctx context.Context, privilegeObject catalog.PrivilegeObject,
+) (bool, error) {
 	return true, nil
 }
 
 // CheckPrivilegeForUser implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) CheckPrivilegeForUser(
 	ctx context.Context,
-	descriptor catalog.Descriptor,
+	privilegeObject catalog.PrivilegeObject,
 	privilege privilege.Kind,
 	user username.SQLUsername,
 ) error {

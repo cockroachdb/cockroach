@@ -158,7 +158,6 @@ type changePrivilegesNode struct {
 	withGrantOption bool
 	grantees        []username.SQLUsername
 	desiredprivs    privilege.List
-	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool)
 	targets         tree.TargetList
 	grantOn         privilege.ObjectType
 }

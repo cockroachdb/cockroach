@@ -32,10 +32,11 @@ type SystemPrivilegeObject interface {
 	PrivilegeObjectType() privilege.ObjectType
 }
 
-// SystemClusterPrivilege represents a SystemClusterPrivilege.
-type SystemClusterPrivilege struct {
-	SystemPrivilegeObject
-}
+// SystemClusterPrivilege represents privileges granted via
+// GRANT SYSTEM [privilege...] TO [roles...].
+// These privileges are "global", for example, MODIFYCLUSTERSETTING which lets
+// the role modify cluster settings within the cluster.
+type SystemClusterPrivilege struct{}
 
 // SystemClusterPrivilegeObjectType represents the object type for
 // SystemClusterPrivilege.
