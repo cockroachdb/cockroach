@@ -281,10 +281,19 @@ func extractResultKey(repr []byte) roachpb.Key {
 	return key.Key
 }
 
-// Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
-// one MVCCGet / MVCCScan call.
+// pebbleMVCCScanner handles MVCCScan / MVCCGet using a Pebble iterator. If any
+// MVCC range tombstones are encountered, it synthesizes MVCC point tombstones
+// by switching to a pointSynthesizingIter.
 type pebbleMVCCScanner struct {
 	parent MVCCIterator
+	// pointIter is a point synthesizing iterator that wraps and replaces parent
+	// when an MVCC range tombstone is encountered. A separate reference to it is
+	// kept in order to release it back to its pool when the scanner is done.
+	//
+	// TODO(erikgrinaker): pooling and reusing this together with the
+	// pebbleMVCCScanner would be more efficient, but only if MVCC range
+	// tombstones are frequent. We expect them to be rare, so we don't for now.
+	pointIter *pointSynthesizingIter
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
 	reverse    bool
@@ -373,6 +382,9 @@ var pebbleMVCCScannerPool = sync.Pool{
 }
 
 func (p *pebbleMVCCScanner) release() {
+	if p.pointIter != nil {
+		p.pointIter.release()
+	}
 	// Discard most memory references before placing in pool.
 	*p = pebbleMVCCScanner{
 		keyBuf: p.keyBuf,
@@ -1070,6 +1082,9 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	if !p.iterValid() {
 		return false
 	}
+	if !p.maybeEnablePointSynthesis() {
+		return false
+	}
 
 	p.curRawKey = p.parent.UnsafeRawMVCCKey()
 
@@ -1085,6 +1100,30 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	if util.RaceEnabled {
 		p.meta = enginepb.MVCCMetadata{}
 		p.curUnsafeValue = MVCCValue{}
+	}
+	return true
+}
+
+// maybeEnablePointSynthesis checks if p.parent is on an MVCC range tombstone.
+// If it is, it wraps and replaces p.parent with a pointSynthesizingIter, which
+// synthesizes MVCC point tombstones for MVCC range tombstones and never emits
+// range keys itself.
+//
+// Returns the iterator validity after a switch, and otherwise assumes the
+// iterator was valid when called and returns true if there is no change.
+func (p *pebbleMVCCScanner) maybeEnablePointSynthesis() bool {
+	if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+		// TODO(erikgrinaker): We have to seek to the current iterator position to
+		// correctly initialize pointSynthesizingIter, but we could just load the
+		// underlying iterator state instead. We'll optimize this later.
+		//
+		// NB: The seek must use a cloned key, because it repositions the underlying
+		// iterator and then uses the given seek key for comparisons, which is not
+		// safe with UnsafeKey().
+		p.pointIter = newPointSynthesizingIter(p.parent, p.isGet)
+		p.pointIter.SeekGE(p.parent.Key())
+		p.parent = p.pointIter
+		return p.iterValid()
 	}
 	return true
 }
@@ -1211,6 +1250,9 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 			// The iterator is now invalid, but note that this case is handled in
 			// both iterNext and iterPrev. In the former case, we'll position the
 			// iterator at the first entry, and in the latter iteration will be done.
+			return nil, false
+		}
+		if !p.maybeEnablePointSynthesis() {
 			return nil, false
 		}
 	} else if !p.iterValid() {
