@@ -705,12 +705,13 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	idx := &Index{
-		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ),
-		Unique:   typ != nonUniqueIndex,
-		Inverted: def.Inverted,
-		IdxZone:  cat.EmptyZone(),
-		table:    tt,
-		version:  version,
+		IdxName:   tt.makeIndexName(def.Name, def.Columns, typ),
+		Unique:    typ != nonUniqueIndex,
+		Inverted:  def.Inverted,
+		IdxZone:   cat.EmptyZone(),
+		table:     tt,
+		version:   version,
+		Invisible: false,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.

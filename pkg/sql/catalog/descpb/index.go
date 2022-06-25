@@ -28,6 +28,11 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
+// IsInvisible returns whether the index is invisible or not.
+func (desc *IndexDescriptor) IsInvisible() bool {
+	return desc.Invisible
+}
+
 // ExplicitColumnStartIdx returns the start index of any explicit columns.
 func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 	start := int(desc.Partitioning.NumImplicitColumns)
