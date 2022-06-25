@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -706,20 +707,18 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 		var keys []roachpb.Key
 		var timestamps []hlc.Timestamp
 
-		var curWallTime = 0
-		var curLogical = 0
-
+		numDigits := len(strconv.Itoa(numKeys))
 		batch := e.NewBatch()
 		for i := 0; i < numKeys; i++ {
 			// Ensure walltime and logical are monotonically increasing.
-			curWallTime = randutil.RandIntInRange(rnd, 0, math.MaxInt64-1)
-			curLogical = randutil.RandIntInRange(rnd, 0, math.MaxInt32-1)
+			curWallTime := randutil.RandIntInRange(rnd, 0, math.MaxInt64-1)
+			curLogical := randutil.RandIntInRange(rnd, 0, math.MaxInt32-1)
 			ts := hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 			timestamps = append(timestamps, ts)
 
 			// Make keys unique and ensure they are monotonically increasing.
 			key := roachpb.Key(randutil.RandBytes(rnd, keySize))
-			key = append([]byte(fmt.Sprintf("#%d", i)), key...)
+			key = append([]byte(fmt.Sprintf("#%0"+strconv.Itoa(numDigits)+"d", i)), key...)
 			keys = append(keys, key)
 
 			averageValueSize := bytesPerValue - keySize
