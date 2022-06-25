@@ -302,6 +302,7 @@ message InterleaveDescriptor {
 //   key_column_names:       k1, k2
 //   key_column_directions:  ASC, ASC
 //   key_column_ids:         1, 2   // k1, k2
+//   hidden: false
 //
 // [old STORING encoding] Index k1v (k1, v) STORING (w):
 //   name:                   k1v
@@ -312,6 +313,7 @@ message InterleaveDescriptor {
 //   store_column_names:     w
 //   key_column_ids:         1, 4   // k1, v
 //   key_suffix_column_ids:  2, 5   // k2, w
+//   hidden: false
 //
 // [new STORING encoding] Index k1v (k1, v) STORING (w):
 //   name:                   k1v
@@ -323,6 +325,7 @@ message InterleaveDescriptor {
 //   key_column_ids:         1, 4   // k1, v
 //   key_suffix_column_ids:  2      // k2
 //   store_column_ids:       5      // w
+//   hidden: false
 message IndexDescriptor {
   option (gogoproto.equal) = true;
 
@@ -491,7 +494,12 @@ message IndexDescriptor {
   optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
     (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
 
-  // Next ID: 28
+  // Hidden specifies whether the index is hidden to the optimizer. An invisible
+  // index is ignored by the optimizer unless it is explicitly selected with
+  // index hinting (force index). The default value for hidden is false.
+  optional bool hidden = 28 [(gogoproto.nullable) = false];
+
+  // Next ID: 29
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

@@ -674,6 +674,7 @@ func pk(name string) descpb.IndexDescriptor {
 		KeyColumnNames:      []string{name},
 		KeyColumnDirections: singleASC,
 		KeyColumnIDs:        singleID1,
+		Hidden:              false,
 	}
 }
 
