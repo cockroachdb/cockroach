@@ -99,29 +99,31 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 // TODO(asubiotto): Flatten this struct, we're currently allocating a map per
 //  stat.
 type NodeLevelStats struct {
-	NetworkBytesSentGroupedByNode map[base.SQLInstanceID]int64
-	MaxMemoryUsageGroupedByNode   map[base.SQLInstanceID]int64
-	MaxDiskUsageGroupedByNode     map[base.SQLInstanceID]int64
-	KVBytesReadGroupedByNode      map[base.SQLInstanceID]int64
-	KVRowsReadGroupedByNode       map[base.SQLInstanceID]int64
-	KVTimeGroupedByNode           map[base.SQLInstanceID]time.Duration
-	NetworkMessagesGroupedByNode  map[base.SQLInstanceID]int64
-	ContentionTimeGroupedByNode   map[base.SQLInstanceID]time.Duration
+	NetworkBytesSentGroupedByNode      map[base.SQLInstanceID]int64
+	MaxMemoryUsageGroupedByNode        map[base.SQLInstanceID]int64
+	MaxDiskUsageGroupedByNode          map[base.SQLInstanceID]int64
+	KVBytesReadGroupedByNode           map[base.SQLInstanceID]int64
+	KVRowsReadGroupedByNode            map[base.SQLInstanceID]int64
+	KVBatchRequestsIssuedGroupedByNode map[base.SQLInstanceID]int64
+	KVTimeGroupedByNode                map[base.SQLInstanceID]time.Duration
+	NetworkMessagesGroupedByNode       map[base.SQLInstanceID]int64
+	ContentionTimeGroupedByNode        map[base.SQLInstanceID]time.Duration
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
 type QueryLevelStats struct {
-	NetworkBytesSent int64
-	MaxMemUsage      int64
-	MaxDiskUsage     int64
-	KVBytesRead      int64
-	KVRowsRead       int64
-	KVTime           time.Duration
-	NetworkMessages  int64
-	ContentionTime   time.Duration
-	Regions          []string
+	NetworkBytesSent      int64
+	MaxMemUsage           int64
+	MaxDiskUsage          int64
+	KVBytesRead           int64
+	KVRowsRead            int64
+	KVBatchRequestsIssued int64
+	KVTime                time.Duration
+	NetworkMessages       int64
+	ContentionTime        time.Duration
+	Regions               []string
 }
 
 // Accumulate accumulates other's stats into the receiver.
@@ -135,6 +137,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	}
 	s.KVBytesRead += other.KVBytesRead
 	s.KVRowsRead += other.KVRowsRead
+	s.KVBatchRequestsIssued += other.KVBatchRequestsIssued
 	s.KVTime += other.KVTime
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
@@ -205,14 +208,15 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 func (a *TraceAnalyzer) ProcessStats() error {
 	// Process node level stats.
 	a.nodeLevelStats = NodeLevelStats{
-		NetworkBytesSentGroupedByNode: make(map[base.SQLInstanceID]int64),
-		MaxMemoryUsageGroupedByNode:   make(map[base.SQLInstanceID]int64),
-		MaxDiskUsageGroupedByNode:     make(map[base.SQLInstanceID]int64),
-		KVBytesReadGroupedByNode:      make(map[base.SQLInstanceID]int64),
-		KVRowsReadGroupedByNode:       make(map[base.SQLInstanceID]int64),
-		KVTimeGroupedByNode:           make(map[base.SQLInstanceID]time.Duration),
-		NetworkMessagesGroupedByNode:  make(map[base.SQLInstanceID]int64),
-		ContentionTimeGroupedByNode:   make(map[base.SQLInstanceID]time.Duration),
+		NetworkBytesSentGroupedByNode:      make(map[base.SQLInstanceID]int64),
+		MaxMemoryUsageGroupedByNode:        make(map[base.SQLInstanceID]int64),
+		MaxDiskUsageGroupedByNode:          make(map[base.SQLInstanceID]int64),
+		KVBytesReadGroupedByNode:           make(map[base.SQLInstanceID]int64),
+		KVRowsReadGroupedByNode:            make(map[base.SQLInstanceID]int64),
+		KVBatchRequestsIssuedGroupedByNode: make(map[base.SQLInstanceID]int64),
+		KVTimeGroupedByNode:                make(map[base.SQLInstanceID]time.Duration),
+		NetworkMessagesGroupedByNode:       make(map[base.SQLInstanceID]int64),
+		ContentionTimeGroupedByNode:        make(map[base.SQLInstanceID]time.Duration),
 	}
 	var errs error
 
@@ -224,6 +228,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		instanceID := stats.Component.SQLInstanceID
 		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.KV.BytesRead.Value())
 		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.KV.TuplesRead.Value())
+		a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode[instanceID] += int64(stats.KV.BatchRequestsIssued.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
 	}
@@ -318,6 +323,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {
 		a.queryLevelStats.KVRowsRead += kvRowsRead
+	}
+
+	for _, kvBatchRequestsIssued := range a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode {
+		a.queryLevelStats.KVBatchRequestsIssued += kvBatchRequestsIssued
 	}
 
 	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {

@@ -78,7 +78,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B)
+rows read from KV: 2 (16 B, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -102,6 +102,7 @@ regions: <hidden>
     │   │ KV contention time: 0µs
     │   │ KV rows read: 1
     │   │ KV bytes read: 8 B
+    │   │ KV gRPC calls: 1
     │   │ estimated max memory allocated: 0 B
     │   │ estimated max sql temp disk usage: 0 B
     │   │ table: a@a_pkey
@@ -114,6 +115,7 @@ regions: <hidden>
     │         KV contention time: 0µs
     │         KV rows read: 1
     │         KV bytes read: 8 B
+    │         KV gRPC calls: 1
     │         estimated max memory allocated: 0 B
     │         missing stats
     │         table: a@a_y_idx
@@ -127,6 +129,7 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 0
         │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
         │ estimated max sql temp disk usage: 0 B
         │ table: a@a_pkey
@@ -139,6 +142,7 @@ regions: <hidden>
               KV contention time: 0µs
               KV rows read: 0
               KV bytes read: 0 B
+              KV gRPC calls: 0
               estimated max memory allocated: 0 B
               missing stats
               table: a@a_y_idx
@@ -156,7 +160,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B)
+rows read from KV: 2 (16 B, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -180,6 +184,7 @@ regions: <hidden>
     │   │ KV contention time: 0µs
     │   │ KV rows read: 1
     │   │ KV bytes read: 8 B
+    │   │ KV gRPC calls: 1
     │   │ estimated max memory allocated: 0 B
     │   │ table: a@a_pkey
     │   │
@@ -191,6 +196,7 @@ regions: <hidden>
     │         KV contention time: 0µs
     │         KV rows read: 1
     │         KV bytes read: 8 B
+    │         KV gRPC calls: 1
     │         missing stats
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
@@ -203,6 +209,7 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 0
         │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
         │ table: a@a_pkey
         │
@@ -214,6 +221,7 @@ regions: <hidden>
               KV contention time: 0µs
               KV rows read: 0
               KV bytes read: 0 B
+              KV gRPC calls: 0
               missing stats
               table: a@a_y_idx
               spans: [/2 - /2]
@@ -307,7 +315,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B)
+rows read from KV: 2 (16 B, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -320,6 +328,7 @@ regions: <hidden>
 │ KV contention time: 0µs
 │ KV rows read: 1
 │ KV bytes read: 8 B
+│ KV gRPC calls: 1
 │ estimated max memory allocated: 0 B
 │ count: 1
 │
@@ -331,6 +340,7 @@ regions: <hidden>
     │ KV contention time: 0µs
     │ KV rows read: 1
     │ KV bytes read: 8 B
+    │ KV gRPC calls: 1
     │ estimated max memory allocated: 0 B
     │ table: b@b_pkey
     │ equality: (x) = (x)
@@ -344,6 +354,7 @@ regions: <hidden>
           KV contention time: 0µs
           KV rows read: 1
           KV bytes read: 8 B
+          KV gRPC calls: 1
           estimated max memory allocated: 0 B
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
