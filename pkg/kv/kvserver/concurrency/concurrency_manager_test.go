@@ -52,7 +52,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [priority] [uncertainty-limit=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>] [lock-timeout] [max-lock-wait-queue-length=<int>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name> [eval-kind=<pess|opt|pess-after-opt]
@@ -97,8 +97,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				d.ScanArgs(t, "name", &txnName)
 				ts := scanTimestamp(t, d)
 
-				var epoch int
-				d.ScanArgs(t, "epoch", &epoch)
+				epoch := 0
+				if d.HasArg("epoch") {
+					d.ScanArgs(t, "epoch", &epoch)
+				}
+
+				priority := scanTxnPriority(t, d)
 
 				uncertaintyLimit := ts
 				if d.HasArg("uncertainty-limit") {
@@ -118,7 +122,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						Epoch:          enginepb.TxnEpoch(epoch),
 						WriteTimestamp: ts,
 						MinTimestamp:   ts,
-						Priority:       1, // not min or max
+						Priority:       priority,
 					},
 					ReadTimestamp:          ts,
 					GlobalUncertaintyLimit: uncertaintyLimit,
@@ -152,6 +156,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					readConsistency = roachpb.INCONSISTENT
 				}
 
+				priority := scanUserPriority(t, d)
 				waitPolicy := scanWaitPolicy(t, d, false /* required */)
 
 				var lockTimeout time.Duration
@@ -173,9 +178,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
 
 				c.requestsByName[reqName] = concurrency.Request{
-					Txn:       txn,
-					Timestamp: ts,
-					// TODO(nvanbenschoten): test Priority
+					Txn:                    txn,
+					Timestamp:              ts,
+					NonTxnPriority:         priority,
 					ReadConsistency:        readConsistency,
 					WaitPolicy:             waitPolicy,
 					LockTimeout:            lockTimeout,
@@ -645,19 +650,47 @@ func (c *cluster) PushTransaction(
 		}
 		defer c.unregisterPush(push)
 	}
+	var pusherPriority enginepb.TxnPriority
+	if h.Txn != nil {
+		pusherPriority = h.Txn.Priority
+	} else {
+		pusherPriority = roachpb.MakePriority(h.UserPriority)
+	}
+	pushTo := h.Timestamp.Next()
 	for {
 		// Is the pushee pushed?
 		pusheeTxn, pusheeRecordSig := pusheeRecord.asTxn()
-		var pushed bool
-		switch pushType {
-		case roachpb.PUSH_TIMESTAMP:
-			pushed = h.Timestamp.Less(pusheeTxn.WriteTimestamp) || pusheeTxn.Status.IsFinalized()
-		case roachpb.PUSH_ABORT, roachpb.PUSH_TOUCH:
-			pushed = pusheeTxn.Status.IsFinalized()
+		// NOTE: this logic is adapted from cmd_push_txn.go.
+		var pusherWins bool
+		switch {
+		case pusheeTxn.Status.IsFinalized():
+			// Already finalized.
+			return pusheeTxn, nil
+		case pushType == roachpb.PUSH_TIMESTAMP && pushTo.LessEq(pusheeTxn.WriteTimestamp):
+			// Already pushed.
+			return pusheeTxn, nil
+		case pushType == roachpb.PUSH_TOUCH:
+			pusherWins = false
+		case txnwait.CanPushWithPriority(pusherPriority, pusheeTxn.Priority):
+			pusherWins = true
 		default:
-			return nil, roachpb.NewErrorf("unexpected push type: %s", pushType)
+			pusherWins = false
 		}
-		if pushed {
+		if pusherWins {
+			switch pushType {
+			case roachpb.PUSH_ABORT:
+				log.Eventf(ctx, "pusher aborted pushee")
+				err = c.updateTxnRecord(pusheeTxn.ID, roachpb.ABORTED, pusheeTxn.WriteTimestamp)
+			case roachpb.PUSH_TIMESTAMP:
+				log.Eventf(ctx, "pusher pushed pushee to %s", pushTo)
+				err = c.updateTxnRecord(pusheeTxn.ID, pusheeTxn.Status, pushTo)
+			default:
+				err = errors.Errorf("unexpected push type: %s", pushType)
+			}
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			pusheeTxn, _ = pusheeRecord.asTxn()
 			return pusheeTxn, nil
 		}
 		// If PUSH_TOUCH, return error instead of waiting.

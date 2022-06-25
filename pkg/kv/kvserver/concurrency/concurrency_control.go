@@ -362,7 +362,7 @@ type Request struct {
 	Timestamp hlc.Timestamp
 
 	// The priority of the request. Only set if Txn is nil.
-	Priority roachpb.UserPriority
+	NonTxnPriority roachpb.UserPriority
 
 	// The consistency level of the request. Only set if Txn is nil.
 	ReadConsistency roachpb.ReadConsistencyType
