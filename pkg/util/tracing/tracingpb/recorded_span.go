@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/redact"
 	types "github.com/gogo/protobuf/types"
 )
@@ -116,4 +117,22 @@ func (m OperationMetadata) Combine(other OperationMetadata) OperationMetadata {
 	m.ContainsUnfinished = m.ContainsUnfinished || other.ContainsUnfinished
 	m.Duration += other.Duration
 	return m
+}
+
+var _ redact.SafeFormatter = OperationMetadata{}
+
+func (m OperationMetadata) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.SafeRune('{')
+	metadata := fmt.Sprintf("count: %d, duration %s", m.Count,
+		humanizeutil.Duration(m.Duration))
+	if m.ContainsUnfinished {
+		metadata += ", unfinished"
+	}
+	s.SafeString(redact.SafeString(metadata))
+	s.SafeRune('}')
 }

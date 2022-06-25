@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -225,6 +226,11 @@ func (r Recording) FindSpan(operation string) (RecordedSpan, bool) {
 	return RecordedSpan{}, false
 }
 
+type operationAndMetadata struct {
+	operation string
+	metadata  OperationMetadata
+}
+
 // visitSpan returns the log messages for sp, and all of sp's children.
 //
 // All messages from a Span are kept together. Sibling spans are ordered within
@@ -263,6 +269,29 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 			sb.SafeRune(':')
 			_, _ = sb.WriteString(tag.Value)
 		}
+	}
+
+	// Sort the OperationMetadata of s' children in descending order of duration.
+	childrenMetadata := make([]operationAndMetadata, 0, len(sp.ChildrenMetadata))
+	for operation, metadata := range sp.ChildrenMetadata {
+		childrenMetadata = append(childrenMetadata,
+			operationAndMetadata{operation, metadata})
+	}
+	sort.Slice(childrenMetadata, func(i, j int) bool {
+		return childrenMetadata[i].metadata.Duration > childrenMetadata[j].metadata.Duration
+	})
+	childrenMetadataSb := redact.StringBuilder{}
+	for i, c := range childrenMetadata {
+		if i != 0 {
+			childrenMetadataSb.SafeString(", ")
+		}
+		childrenMetadataSb.SafeString(redact.SafeString(c.operation))
+		childrenMetadataSb.SafeRune(':')
+		_, _ = childrenMetadataSb.WriteString(c.metadata.String())
+	}
+	if childrenMetadataSb.Len() != 0 {
+		sb.SafeString(redact.SafeString(
+			fmt.Sprintf(" childrenMetadata:{%s}", childrenMetadataSb.String())))
 	}
 
 	ownLogs = append(ownLogs, conv(
