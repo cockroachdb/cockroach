@@ -144,6 +144,7 @@ ElementState:
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: true
       keyColumnDirections:
@@ -420,6 +421,7 @@ ElementState:
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: true
       keyColumnDirections:

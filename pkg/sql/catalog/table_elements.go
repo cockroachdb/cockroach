@@ -139,6 +139,7 @@ type Index interface {
 	IsUnique() bool
 	IsDisabled() bool
 	IsSharded() bool
+	IsHidden() bool
 	IsCreatedExplicitly() bool
 	GetPredicate() string
 	GetType() descpb.IndexDescriptor_Type

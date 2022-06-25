@@ -183,6 +183,7 @@ func (p *planner) AlterPrimaryKey(
 		Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
 		ConstraintID:   tableDesc.GetNextConstraintID(),
 		CreatedAtNanos: p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+		Hidden:         false,
 	}
 	tableDesc.NextConstraintID++
 

@@ -208,6 +208,7 @@ func MakeColumnDefDescs(
 				Unique:              true,
 				KeyColumnNames:      []string{string(d.Name)},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				Hidden:              false,
 			}
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
@@ -225,6 +226,7 @@ func MakeColumnDefDescs(
 					ShardBuckets: buckets,
 					ColumnNames:  []string{string(d.Name)},
 				},
+				Hidden: false,
 			}
 		}
 		if d.Unique.ConstraintName != "" {
