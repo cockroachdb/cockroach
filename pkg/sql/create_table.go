@@ -1797,6 +1797,7 @@ func NewTableDesc(
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
+				Hidden:           false,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1906,6 +1907,7 @@ func NewTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
+				Hidden:           false,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {

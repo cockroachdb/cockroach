@@ -29,6 +29,11 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
+// IsHidden returns whether the index is hidden from the optimizer or not.
+func (desc *IndexDescriptor) IsHidden() bool {
+	return desc.Hidden
+}
+
 // ExplicitColumnStartIdx returns the start index of any explicit columns.
 func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 	start := int(desc.Partitioning.NumImplicitColumns)
