@@ -54,13 +54,13 @@ cockroachdb/security:
 cockroachdb/prodsec:
   triage_column_id: 0 # TODO as well
 cockroachdb/bulk-io:
-  aliases:
-    cockroachdb/bulk-prs: other
   triage_column_id: 3097123
 cockroachdb/cdc:
   aliases:
     cockroachdb/cdc-prs: other
   triage_column_id: 3570120
+cockroachdb/tenant-streaming:
+  triage_column_id: 0 # TODO
 cockroachdb/server:
   aliases:
     cockroachdb/cli-prs: other
