@@ -16,19 +16,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// delegateShowDatabaseIndexes implements SHOW INDEX FROM DATABASE, SHOW INDEXES
+// FROM DATABASE, SHOW KEYS FROM DATABASE which returns all the indexes in the
+// given or current database.
 func (d *delegator) delegateShowDatabaseIndexes(
 	n *tree.ShowDatabaseIndexes,
 ) (tree.Statement, error) {
+	name, err := d.getSpecifiedOrCurrentDatabase(n.Database)
+	if err != nil {
+		return nil, err
+	}
+
 	getAllIndexesQuery := `
 SELECT
 	table_name,
-	index_name,
+	info.index_name,
 	non_unique::BOOL,
 	seq_in_index,
 	column_name,
 	direction,
 	storing::BOOL,
-	implicit::BOOL`
+	implicit::BOOL,
+  NOT idx.is_hidden::BOOL AS visible`
 
 	if n.WithComment {
 		getAllIndexesQuery += `,
@@ -36,8 +45,8 @@ SELECT
 	}
 
 	getAllIndexesQuery += `
-FROM
-	%s.information_schema.statistics`
+	FROM
+		%[1]s.information_schema.statistics AS info`
 
 	if n.WithComment {
 		getAllIndexesQuery += `
@@ -45,5 +54,14 @@ FROM
 		statistics.index_name = pg_class.relname`
 	}
 
-	return parse(fmt.Sprintf(getAllIndexesQuery, n.Database.String()))
+	getAllIndexesQuery += `
+      LEFT JOIN %[1]s.crdb_internal.table_indexes AS idx ON 
+      idx.index_name = info.index_name AND 
+			idx.descriptor_name = info.table_name`
+
+	getAllIndexesQuery += `
+ORDER BY
+    1, 2, 4`
+
+	return parse(fmt.Sprintf(getAllIndexesQuery, name.String()))
 }

@@ -43,6 +43,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IsUnique:       n.Unique,
 		IsInverted:     n.Inverted,
 		IsConcurrently: n.Concurrently,
+		IsHidden:       false, // TODO(wenyihu6): populate hidden property after CREATE
 	}
 	var relation scpb.Element
 	var source *scpb.PrimaryIndex

@@ -158,7 +158,6 @@ CREATE TABLE regional_by_row_table (
 
 query TTB
 SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM regional_by_row_table]
-ORDER BY index_name, seq_in_index
 ----
 regional_by_row_table_a_idx  crdb_region  true
 regional_by_row_table_a_idx  a            false

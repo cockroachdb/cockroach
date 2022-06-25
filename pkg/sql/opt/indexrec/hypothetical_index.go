@@ -47,6 +47,9 @@ type hypotheticalIndex struct {
 
 	// inverted indicates if an index is inverted.
 	inverted bool
+
+	// hidden indicates if an index is hidden.
+	hidden bool
 }
 
 var _ cat.Index = &hypotheticalIndex{}
@@ -109,6 +112,11 @@ func (hi *hypotheticalIndex) IsUnique() bool {
 // IsInverted is part of the cat.Index interface.
 func (hi *hypotheticalIndex) IsInverted() bool {
 	return hi.inverted
+}
+
+// IsHidden is part of the cat.Index interface.
+func (hi *hypotheticalIndex) IsHidden() bool {
+	return hi.hidden
 }
 
 // ColumnCount is part of the cat.Index interface.

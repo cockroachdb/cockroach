@@ -579,6 +579,10 @@ func (u *unknownIndex) IsUnique() bool {
 	return false
 }
 
+func (u *unknownIndex) IsHidden() bool {
+	return false
+}
+
 func (u *unknownIndex) IsInverted() bool {
 	return false
 }

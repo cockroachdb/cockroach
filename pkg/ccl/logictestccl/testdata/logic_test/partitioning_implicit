@@ -514,7 +514,6 @@ CREATE TABLE public.t (
 
 query TTB
 SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM t]
-ORDER BY index_name, seq_in_index
 ----
 created_idx           partition_by  true
 created_idx           c             false

@@ -208,6 +208,7 @@ func MakeColumnDefDescs(
 				Unique:              true,
 				KeyColumnNames:      []string{string(d.Name)},
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				Hidden:              false, // new primary or unique index should always be visible
 			}
 		} else {
 			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
@@ -225,6 +226,7 @@ func MakeColumnDefDescs(
 					ShardBuckets: buckets,
 					ColumnNames:  []string{string(d.Name)},
 				},
+				Hidden: false, // new primary or unique index should always be visible
 			}
 		}
 		if d.Unique.ConstraintName != "" {
