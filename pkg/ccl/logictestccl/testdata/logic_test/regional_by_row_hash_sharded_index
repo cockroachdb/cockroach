@@ -149,3 +149,38 @@ CREATE TABLE public.t_regional_pk_hashed_2 (
                             INDEX t_regional_pk_hashed_2_b_idx (b ASC) USING HASH WITH (bucket_count=16),
                             FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
 ) LOCALITY REGIONAL BY ROW
+
+# Permit foreign key constraint on full primary index of RBR table excluding
+# hash column (See #74244).
+statement ok
+CREATE TABLE users (
+    id         UUID   NOT NULL DEFAULT gen_random_uuid(),
+    username   STRING NOT NULL,
+    PRIMARY KEY (id) USING HASH
+) LOCALITY REGIONAL BY ROW
+
+statement error virtual column "crdb_internal_user_id_shard_16" cannot reference a foreign key
+CREATE TABLE user_settings (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX (user_id) USING HASH,
+    FOREIGN KEY (crdb_internal_user_id_shard_16, user_id, crdb_region) REFERENCES users (crdb_internal_id_shard_16, id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE user_settings (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX (user_id) USING HASH,
+    FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+) LOCALITY REGIONAL BY ROW
+
+statement error virtual column "crdb_internal_user_id_shard_16" cannot reference a foreign key
+ALTER TABLE user_settings ADD FOREIGN KEY (crdb_internal_user_id_shard_16, user_id, crdb_region)
+  REFERENCES users (crdb_internal_id_shard_16, id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+
+statement ok
+ALTER TABLE user_settings ADD FOREIGN KEY (user_id, crdb_region)
+  REFERENCES users (id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
