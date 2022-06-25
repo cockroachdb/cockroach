@@ -214,13 +214,15 @@ type cFetcher struct {
 
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
-	// bytesRead stores the total number of bytes read by this cFetcher
-	// throughout its lifetime in case when the underlying row.KVFetcher has
-	// already been closed and nil-ed out.
+	// bytesRead and batchRequestsIssued store the total number of bytes read
+	// and of BatchRequests issued, respectively, by this cFetcher throughout
+	// its lifetime in case when the underlying row.KVFetcher has already been
+	// closed and nil-ed out.
 	//
-	// The field should not be accessed directly by the users of the cFetcher -
-	// getBytesRead() should be used instead.
-	bytesRead int64
+	// The fields should not be accessed directly by the users of the cFetcher -
+	// getBytesRead() and getBatchRequestsIssued() should be used instead.
+	bytesRead           int64
+	batchRequestsIssued int64
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -1292,6 +1294,15 @@ func (cf *cFetcher) getBytesRead() int64 {
 	return cf.bytesRead
 }
 
+// getBatchRequestsIssued returns the number of BatchRequests issued by the
+// cFetcher throughout its lifetime so far.
+func (cf *cFetcher) getBatchRequestsIssued() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetBatchRequestsIssued()
+	}
+	return cf.batchRequestsIssued
+}
+
 var cFetcherPool = sync.Pool{
 	New: func() interface{} {
 		return &cFetcher{}
@@ -1315,6 +1326,7 @@ func (cf *cFetcher) Release() {
 func (cf *cFetcher) Close(ctx context.Context) {
 	if cf != nil && cf.fetcher != nil {
 		cf.bytesRead = cf.fetcher.GetBytesRead()
+		cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
 		cf.fetcher.Close(ctx)
 		cf.fetcher = nil
 	}

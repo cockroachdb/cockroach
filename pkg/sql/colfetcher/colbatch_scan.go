@@ -157,6 +157,13 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.mu.rowsRead
 }
 
+// GetBatchRequestsIssued is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getBatchRequestsIssued()
+}
+
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)

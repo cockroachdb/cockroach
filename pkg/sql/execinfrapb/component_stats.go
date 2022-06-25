@@ -151,6 +151,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.BytesRead.HasValue() {
 		fn("KV bytes read", humanize.IBytes(s.KV.BytesRead.Value()))
 	}
+	if s.KV.BatchRequestsIssued.HasValue() {
+		fn("KV gRPC calls", humanizeutil.Count(s.KV.BatchRequestsIssued.Value()))
+	}
 	if s.KV.NumInterfaceSteps.HasValue() {
 		fn("MVCC step count (ext/int)",
 			fmt.Sprintf("%s/%s",
@@ -249,6 +252,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	if !result.KV.BytesRead.HasValue() {
 		result.KV.BytesRead = other.KV.BytesRead
 	}
+	if !result.KV.BatchRequestsIssued.HasValue() {
+		result.KV.BatchRequestsIssued = other.KV.BatchRequestsIssued
+	}
 
 	// Exec stats.
 	if !result.Exec.ExecTime.HasValue() {
@@ -339,6 +345,10 @@ func (s *ComponentStats) MakeDeterministic() {
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())
+	}
+	if s.KV.BatchRequestsIssued.HasValue() {
+		// BatchRequestsIssued is overridden to a useful value for tests.
+		s.KV.BatchRequestsIssued.Set(s.KV.TuplesRead.Value())
 	}
 
 	// Exec.

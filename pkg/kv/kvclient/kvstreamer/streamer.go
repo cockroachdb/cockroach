@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -225,6 +226,10 @@ type Streamer struct {
 	maxKeysPerRow int32
 	budget        *budget
 
+	atomics struct {
+		batchRequestsIssued *int64
+	}
+
 	coordinator          workerCoordinator
 	coordinatorStarted   bool
 	coordinatorCtxCancel context.CancelFunc
@@ -304,6 +309,9 @@ func max(a, b int64) int64 {
 // The Streamer takes ownership of the memory account, and the caller is allowed
 // to interact with the account only after canceling the Streamer (because
 // memory accounts are not thread-safe).
+//
+// batchRequestsIssued should be incremented every time a new BatchRequest is
+// sent.
 func NewStreamer(
 	distSender *kvcoord.DistSender,
 	stopper *stop.Stopper,
@@ -312,6 +320,7 @@ func NewStreamer(
 	lockWaitPolicy lock.WaitPolicy,
 	limitBytes int64,
 	acc *mon.BoundAccount,
+	batchRequestsIssued *int64,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -321,6 +330,10 @@ func NewStreamer(
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
 	}
+	if batchRequestsIssued == nil {
+		batchRequestsIssued = new(int64)
+	}
+	s.atomics.batchRequestsIssued = batchRequestsIssued
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		txn:                    txn,
@@ -1078,6 +1091,7 @@ func (w *workerCoordinator) performRequestAsync(
 				w.s.results.setError(err.GoError())
 				return
 			}
+			atomic.AddInt64(w.s.atomics.batchRequestsIssued, 1)
 
 			// First, we have to reconcile the memory budget. We do it
 			// separately from processing the results because we want to know

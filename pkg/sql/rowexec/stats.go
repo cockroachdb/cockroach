@@ -165,6 +165,11 @@ func (c *rowFetcherStatCollector) GetBytesRead() int64 {
 	return c.fetcher.GetBytesRead()
 }
 
+// GetBatchRequestsIssued is part of the rowFetcher interface.
+func (c *rowFetcherStatCollector) GetBatchRequestsIssued() int64 {
+	return c.fetcher.GetBatchRequestsIssued()
+}
+
 // Close is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) Close(ctx context.Context) {
 	c.fetcher.Close(ctx)

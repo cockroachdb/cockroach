@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
@@ -126,9 +125,7 @@ type ColIndexJoin struct {
 	usesStreamer bool
 }
 
-var _ colexecop.KVReader = &ColIndexJoin{}
-var _ execreleasable.Releasable = &ColIndexJoin{}
-var _ colexecop.ClosableOperator = &ColIndexJoin{}
+var _ ScanOperator = &ColIndexJoin{}
 
 // Init initializes a ColIndexJoin.
 func (s *ColIndexJoin) Init(ctx context.Context) {
@@ -390,6 +387,13 @@ func (s *ColIndexJoin) GetRowsRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.rowsRead
+}
+
+// GetBatchRequestsIssued is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetBatchRequestsIssued() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getBatchRequestsIssued()
 }
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.

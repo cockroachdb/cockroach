@@ -225,7 +225,7 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 	}
 }
 
-func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
+func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) sendFunc {
 	return func(
 		ctx context.Context,
 		ba roachpb.BatchRequest,
@@ -234,6 +234,7 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn) sendFunc {
 		if err != nil {
 			return nil, err.GoError()
 		}
+		*batchRequestsIssued++
 		return res, nil
 	}
 }
