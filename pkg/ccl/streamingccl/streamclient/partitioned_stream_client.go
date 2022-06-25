@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,6 +57,9 @@ var _ Client = &partitionedStreamClient{}
 func (p *partitionedStreamClient) Create(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) (streaming.StreamID, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
+	defer sp.Finish()
+
 	streamID := streaming.InvalidStreamID
 
 	conn, err := p.srcDB.Conn(ctx)
@@ -76,6 +80,9 @@ func (p *partitionedStreamClient) Create(
 func (p *partitionedStreamClient) Heartbeat(
 	ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Heartbeat")
+	defer sp.Finish()
+
 	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return streampb.StreamReplicationStatus{}, err
@@ -175,6 +182,9 @@ func (p *partitionedStreamClient) Close() error {
 func (p *partitionedStreamClient) Subscribe(
 	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (Subscription, error) {
+	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
+	defer sp.Finish()
+
 	sps := streampb.StreamPartitionSpec{}
 	if err := protoutil.Unmarshal(spec, &sps); err != nil {
 		return nil, err
@@ -201,6 +211,9 @@ func (p *partitionedStreamClient) Subscribe(
 
 // Complete implements the streamclient.Client interface.
 func (p *partitionedStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Complete")
+	defer sp.Finish()
+
 	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return err
@@ -255,6 +268,9 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 
 // Subscribe implements the Subscription interface.
 func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "Subscription.Subscribe")
+	defer sp.Finish()
+
 	defer close(p.eventsChan)
 	conn, err := p.db.Conn(ctx)
 	if err != nil {

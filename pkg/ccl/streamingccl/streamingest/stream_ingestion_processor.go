@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -535,6 +536,9 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) error {
+	_, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-buffer-sst")
+	defer sp.Finish()
+
 	iter, err := storage.NewMemSSTIterator(sst.Data, true)
 	if err != nil {
 		return err
@@ -606,6 +610,9 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 }
 
 func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
+	ctx, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-flush")
+	defer sp.Finish()
+
 	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
 	// Ensure that the current batch is sorted.
 	sort.Sort(sip.curBatch)
@@ -613,7 +620,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	totalSize := 0
 	minBatchMVCCTimestamp := hlc.MaxTimestamp
 	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
+		if err := sip.batcher.AddMVCCKey(ctx, kv.Key, kv.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
 		}
 		if kv.Key.Timestamp.Less(minBatchMVCCTimestamp) {
@@ -631,7 +638,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 			sip.metrics.IngestedBytes.Inc(int64(totalSize))
 			sip.metrics.IngestedEvents.Inc(int64(len(sip.curBatch)))
 		}()
-		if err := sip.batcher.Flush(sip.Ctx); err != nil {
+		if err := sip.batcher.Flush(ctx); err != nil {
 			return nil, errors.Wrap(err, "flushing")
 		}
 	}
@@ -654,7 +661,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	sip.lastFlushTime = timeutil.Now()
 	sip.bufferedCheckpoints = make(map[string]hlc.Timestamp)
 
-	return &flushedCheckpoints, sip.batcher.Reset(sip.Ctx)
+	return &flushedCheckpoints, sip.batcher.Reset(ctx)
 }
 
 func init() {
