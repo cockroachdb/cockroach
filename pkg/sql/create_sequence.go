@@ -297,6 +297,7 @@ func NewSequenceTableDesc(
 		EncodingType:        descpb.PrimaryIndexEncoding,
 		Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 		CreatedAtNanos:      creationTime.WallTime,
+		Invisible:           false,
 	})
 	desc.Families = []descpb.ColumnFamilyDescriptor{
 		{

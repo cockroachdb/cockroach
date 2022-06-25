@@ -214,6 +214,10 @@ message Index {
   bool is_concurrently = 20;
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+
+  // is_invisible specifies whether this index is invisible. Note that primary
+  // index cannot be invisible.
+  bool is_invisible = 23;
 }
 
 message PrimaryIndex {
