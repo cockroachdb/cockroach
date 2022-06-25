@@ -261,7 +261,7 @@ func (p *planner) HasAnyPrivilege(
 		}
 
 		if priv.GrantOption {
-			if err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
+			if err := p.CheckGrantOptionsForUser(ctx, desc.GetPrivileges(), desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */); err != nil {
 				if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
 					continue
 				}

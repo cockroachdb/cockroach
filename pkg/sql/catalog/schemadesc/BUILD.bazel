@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/util/hlc",
         "//pkg/util/log",

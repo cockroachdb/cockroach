@@ -325,6 +325,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptorForSystemTenant(systemschema.TenantSettingsTable)
 	target.AddDescriptorForNonSystemTenant(systemschema.SpanCountTable)
 
+	// Tables introduced in 22.2.
+	target.AddDescriptor(systemschema.SystemPrivilegeTable)
+
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 }
