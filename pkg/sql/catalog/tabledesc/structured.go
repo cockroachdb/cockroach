@@ -669,6 +669,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 			Unique:              true,
 			KeyColumnNames:      []string{col.Name},
 			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+			Hidden:              false, // new primary index should always be visible
 		}
 		if err := desc.AddPrimaryIndex(idx); err != nil {
 			return err

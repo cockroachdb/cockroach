@@ -917,6 +917,9 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
+	// Hidden is true iff this index is hidden.
+	Hidden bool
+
 	Columns []cat.IndexColumn
 
 	// IdxZone is the zone associated with the index. This may be inherited from
@@ -976,6 +979,11 @@ func (ti *Index) IsUnique() bool {
 // IsInverted is part of the cat.Index interface.
 func (ti *Index) IsInverted() bool {
 	return ti.Inverted
+}
+
+// IsHidden is part of the cat.Index interface.
+func (ti *Index) IsHidden() bool {
+	return ti.Hidden
 }
 
 // ColumnCount is part of the cat.Index interface.

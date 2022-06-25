@@ -64,6 +64,7 @@ ElementState:
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: true
       sharding: null
@@ -275,6 +276,7 @@ ElementState:
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: true
       sharding: null
@@ -288,6 +290,7 @@ ElementState:
       indexId: 2
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: false
       sharding: null
@@ -651,6 +654,7 @@ ElementState:
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: true
       sharding: null
@@ -897,6 +901,7 @@ ElementState:
       indexId: 1
       isConcurrently: false
       isCreatedExplicitly: false
+      isHidden: false
       isInverted: false
       isUnique: true
       sharding: null

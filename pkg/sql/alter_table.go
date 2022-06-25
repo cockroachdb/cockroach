@@ -280,6 +280,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
+					Hidden:           false, // TODO(wenyihu6): populate hidden property after CREATE
 					StoreColumnNames: d.Storing.ToStrings(),
 					CreatedAtNanos:   params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 				}

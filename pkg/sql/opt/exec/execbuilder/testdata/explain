@@ -613,15 +613,24 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: +index_name,+non_unique,+seq_in_index,+column_name,+direction,+storing,+implicit
+│ order: +index_name,+non_unique,+seq_in_index,+column_name,+direction,+storing,+implicit,+visible
 │
 └── • render
     │
-    └── • filter
-        │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+    └── • hash join (right outer)
+        │ equality: (index_name, descriptor_name) = (index_name, table_name)
         │
-        └── • virtual table
-              table: statistics@primary
+        ├── • filter
+        │   │ filter: descriptor_name = 'foo'
+        │   │
+        │   └── • virtual table
+        │         table: table_indexes@primary
+        │
+        └── • filter
+            │ filter: ((table_name = 'foo') AND (table_catalog = 'test')) AND (table_schema = 'public')
+            │
+            └── • virtual table
+                  table: statistics@primary
 
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
