@@ -44,6 +44,41 @@ func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hl
 	return ts
 }
 
+func scanTxnPriority(t *testing.T, d *datadriven.TestData) enginepb.TxnPriority {
+	priority := scanUserPriority(t, d)
+	// NB: don't use roachpb.MakePriority to avoid randomness.
+	switch priority {
+	case roachpb.MinUserPriority:
+		return enginepb.MinTxnPriority
+	case roachpb.NormalUserPriority:
+		return 1 // not min nor max
+	case roachpb.MaxUserPriority:
+		return enginepb.MaxTxnPriority
+	default:
+		d.Fatalf(t, "unknown priority: %s", priority)
+		return 0
+	}
+}
+
+func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority {
+	const key = "priority"
+	priS := "normal"
+	if d.HasArg(key) {
+		d.ScanArgs(t, key, &priS)
+	}
+	switch priS {
+	case "low":
+		return roachpb.MinUserPriority
+	case "normal":
+		return roachpb.NormalUserPriority
+	case "high":
+		return roachpb.MaxUserPriority
+	default:
+		d.Fatalf(t, "unknown priority: %s", priS)
+		return 0
+	}
+}
+
 func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
 	var durS string
 	d.ScanArgs(t, "dur", &durS)
