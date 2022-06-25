@@ -430,17 +430,22 @@ func (p *planner) logOperationalEventsOnlyExternally(
 // call to this method elsewhere must find a way to ensure that
 // contributors who later add features do not have to remember to call
 // this to get it right.
-func (p *planner) maybeAudit(desc catalog.Descriptor, priv privilege.Kind) {
-	wantedMode := desc.GetAuditMode()
-	if wantedMode == descpb.TableDescriptor_DISABLED {
-		return
-	}
+func (p *planner) maybeAudit(privilegeObject catalog.PrivilegeObject, priv privilege.Kind) {
+	switch object := privilegeObject.(type) {
+	case catalog.Descriptor:
+		wantedMode := object.GetAuditMode()
+		if wantedMode == descpb.TableDescriptor_DISABLED {
+			return
+		}
 
-	switch priv {
-	case privilege.INSERT, privilege.DELETE, privilege.UPDATE:
-		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: true})
-	default:
-		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: false})
+		switch priv {
+		case privilege.INSERT, privilege.DELETE, privilege.UPDATE:
+			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: true})
+		default:
+			p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: object, writing: false})
+		}
+	case catalog.SyntheticPrivilegeObject:
+		// TODO(richardjcai): Add auditing here.
 	}
 }
 

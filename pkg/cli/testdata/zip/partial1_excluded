@@ -10,7 +10,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] requesting data for debug/settings... received response... converting to JSON... writing binary output: debug/settings.json... done
 [cluster] requesting data for debug/reports/problemranges... received response... converting to JSON... writing binary output: debug/reports/problemranges.json... done
 [cluster] retrieving list of system tables... done
-[cluster] 37 system tables found
+[cluster] 38 system tables found
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
@@ -44,6 +44,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] retrieving SQL data for system.locations... writing output: debug/system.locations.txt... done
 [cluster] retrieving SQL data for system.migrations... writing output: debug/system.migrations.txt... done
 [cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
+[cluster] retrieving SQL data for system.privileges... writing output: debug/system.privileges.txt... done
 [cluster] retrieving SQL data for system.protected_ts_meta... writing output: debug/system.protected_ts_meta.txt... done
 [cluster] retrieving SQL data for system.protected_ts_records... writing output: debug/system.protected_ts_records.txt... done
 [cluster] retrieving SQL data for system.rangelog... writing output: debug/system.rangelog.txt... done
@@ -107,7 +108,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] 1 log file ...
 [node 1] [log file ...
 [node 1] requesting ranges... received response... done
-[node 1] 49 ranges found
+[node 1] 50 ranges found
 [node 1] writing range 1... converting to JSON... writing binary output: debug/nodes/1/ranges/1.json... done
 [node 1] writing range 2... converting to JSON... writing binary output: debug/nodes/1/ranges/2.json... done
 [node 1] writing range 3... converting to JSON... writing binary output: debug/nodes/1/ranges/3.json... done
@@ -157,6 +158,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] writing range 47... converting to JSON... writing binary output: debug/nodes/1/ranges/47.json... done
 [node 1] writing range 48... converting to JSON... writing binary output: debug/nodes/1/ranges/48.json... done
 [node 1] writing range 49... converting to JSON... writing binary output: debug/nodes/1/ranges/49.json... done
+[node 1] writing range 50... converting to JSON... writing binary output: debug/nodes/1/ranges/50.json... done
 [node 2] skipping node... writing binary output: debug/nodes/2.skipped... done
 [node 3] node status... converting to JSON... writing binary output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
@@ -196,7 +198,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 3] 1 log file ...
 [node 3] [log file ...
 [node 3] requesting ranges... received response... done
-[node 3] 49 ranges found
+[node 3] 50 ranges found
 [node 3] writing range 1... converting to JSON... writing binary output: debug/nodes/3/ranges/1.json... done
 [node 3] writing range 2... converting to JSON... writing binary output: debug/nodes/3/ranges/2.json... done
 [node 3] writing range 3... converting to JSON... writing binary output: debug/nodes/3/ranges/3.json... done
@@ -246,6 +248,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 3] writing range 47... converting to JSON... writing binary output: debug/nodes/3/ranges/47.json... done
 [node 3] writing range 48... converting to JSON... writing binary output: debug/nodes/3/ranges/48.json... done
 [node 3] writing range 49... converting to JSON... writing binary output: debug/nodes/3/ranges/49.json... done
+[node 3] writing range 50... converting to JSON... writing binary output: debug/nodes/3/ranges/50.json... done
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done

@@ -13,6 +13,7 @@
 package dbdesc
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -533,6 +535,18 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 // interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {
 	desc.DeclarativeSchemaChangerState = state
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (desc *immutable) GetObjectType() string {
+	return string(desc.DescriptorType())
+}
+
+// GetPrivilegeDescriptor implements the PrivilegeObject interface.
+func (desc *immutable) GetPrivilegeDescriptor(
+	ctx context.Context, planner eval.Planner,
+) (*catpb.PrivilegeDescriptor, error) {
+	return desc.GetPrivileges(), nil
 }
 
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the

@@ -159,6 +159,7 @@ type LeasableDescriptor interface {
 type Descriptor interface {
 	NameEntry
 	LeasableDescriptor
+	PrivilegeObject
 
 	// GetPrivileges returns this descriptor's PrivilegeDescriptor, which
 	// describes the set of privileges that users have to use, modify, or delete
