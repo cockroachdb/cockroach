@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -165,6 +166,7 @@ func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 //
 //       if err := CheckRecording(sp.GetRecording(), `
 //           === operation:root
+//           [childrenMetadata]
 //           event:root 1
 //               === operation:remote child
 //               event:remote child 1
@@ -186,17 +188,48 @@ func CheckRecording(rec tracingpb.Recording, expected string) error {
 		// 	 After  |  "event:root 1"
 		re := regexp.MustCompile(`.*s.*s\s{4}`)
 		rec = string(re.ReplaceAll([]byte(rec), nil))
-		// 4. Change all tabs to four spaces.
+		// 4. Strip out all the metadata from each ChildrenMetadata entry.
+		//
+		// 	 Before |  [operation: {Count:<count>, Duration:<duration>}]
+		// 	 After  |  [operation]
+		re = regexp.MustCompile(`:.*]`)
+		rec = string(re.ReplaceAll([]byte(rec), []byte("]")))
+		// 5. Change all tabs to four spaces.
 		rec = strings.ReplaceAll(rec, "\t", "    ")
-		// 5. Compute the outermost indentation.
+		// 6. Compute the outermost indentation.
 		indent := strings.Repeat(" ", len(rec)-len(strings.TrimLeft(rec, " ")))
-		// 6. Outdent each line by that amount.
+		// 7. Outdent each line by that amount.
 		var lines []string
 		for _, line := range strings.Split(rec, "\n") {
 			lines = append(lines, strings.TrimPrefix(line, indent))
 		}
-		// 6. Stitch everything together.
+		// 8. Stitch everything together.
 		return strings.Join(lines, "\n")
+	}
+
+	sortChildrenMetadataByName := func(m map[string]tracingpb.OperationMetadata) {
+		// Sort the OperationMetadata of s' children alphabetically.
+		childrenMetadata := make([]tracingpb.OperationAndMetadata, 0, len(m))
+		for operation, metadata := range m {
+			childrenMetadata = append(childrenMetadata,
+				tracingpb.OperationAndMetadata{Operation: operation, Metadata: metadata})
+		}
+		sort.Slice(childrenMetadata, func(i, j int) bool {
+			return childrenMetadata[i].Operation < childrenMetadata[j].Operation
+		})
+
+		for i, cm := range childrenMetadata {
+			metadata := m[cm.Operation]
+			metadata.Duration = time.Duration(float64(i) * time.Second.Seconds())
+			m[cm.Operation] = metadata
+		}
+	}
+
+	// ChildrenMetadata are sorted in descending order of duration when returned.
+	// To ensure a stable sort in tests, we set the durations to sort in an
+	// alphabetical descending order.
+	for i := range rec {
+		sortChildrenMetadataByName(rec[i].ChildrenMetadata)
 	}
 
 	exp := normalize(expected)
