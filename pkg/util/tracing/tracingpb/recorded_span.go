@@ -117,3 +117,11 @@ func (m OperationMetadata) Combine(other OperationMetadata) OperationMetadata {
 	m.Duration += other.Duration
 	return m
 }
+
+// String implements the Stringer interface.
+func (m OperationMetadata) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Count: %d, Duration: %s, Unfinished: %t", m.Count,
+		m.Duration.String(), m.ContainsUnfinished))
+	return sb.String()
+}
