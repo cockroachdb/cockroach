@@ -840,8 +840,9 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	z.scanStats = execstats.GetScanStats(z.Ctx, z.ExecStatsTrace)
 
 	kvStats := execinfrapb.KVStats{
-		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime: optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx, z.ExecStatsTrace)),
+		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
+		ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx, z.ExecStatsTrace)),
+		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
 	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
@@ -872,6 +873,14 @@ func (z *zigzagJoiner) getRowsRead() int64 {
 		rowsRead += z.infos[i].rowsRead
 	}
 	return rowsRead
+}
+
+func (z *zigzagJoiner) getBatchRequestsIssued() int64 {
+	var batchRequestsIssued int64
+	for i := range z.infos {
+		batchRequestsIssued += z.infos[i].fetcher.GetBatchRequestsIssued()
+	}
+	return batchRequestsIssued
 }
 
 func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {

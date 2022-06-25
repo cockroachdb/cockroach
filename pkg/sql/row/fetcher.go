@@ -376,12 +376,13 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			acc:                        rf.kvFetcherMemAcc,
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
 		}
+		var batchRequestsIssued int64
 		if args.Txn != nil {
-			fetcherArgs.sendFn = makeKVBatchFetcherDefaultSendFunc(args.Txn)
+			fetcherArgs.sendFn = makeKVBatchFetcherDefaultSendFunc(args.Txn, &batchRequestsIssued)
 			fetcherArgs.requestAdmissionHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.responseAdmissionQ = args.Txn.DB().SQLKVResponseAdmissionQ
 		}
-		rf.kvFetcher = newKVFetcher(newKVBatchFetcher(fetcherArgs))
+		rf.kvFetcher = newKVFetcher(newKVBatchFetcher(fetcherArgs), &batchRequestsIssued)
 	}
 
 	return nil
@@ -397,7 +398,8 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 //   the caller should be careful since reads performed under different txns
 //   do not provide consistent view of the data.
 func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
-	return rf.setTxnAndSendFn(txn, makeKVBatchFetcherDefaultSendFunc(txn))
+	sendFn := makeKVBatchFetcherDefaultSendFunc(txn, rf.kvFetcher.atomics.batchRequestsIssued)
+	return rf.setTxnAndSendFn(txn, sendFn)
 }
 
 // setTxnAndSendFn peeks inside of the KVFetcher to update the underlying
@@ -596,10 +598,15 @@ func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher) error {
 	if !rf.args.WillUseCustomKVBatchFetcher {
 		return errors.AssertionFailedf("StartScanFrom is called instead of StartScan")
 	}
+	var batchRequestsIssued *int64
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
+		// Keep the same counter across different fetchers.
+		batchRequestsIssued = rf.kvFetcher.atomics.batchRequestsIssued
+	} else {
+		batchRequestsIssued = new(int64)
 	}
-	rf.kvFetcher = newKVFetcher(f)
+	rf.kvFetcher = newKVFetcher(f, batchRequestsIssued)
 	return rf.startScan(ctx)
 }
 
@@ -1236,4 +1243,10 @@ func (rf *Fetcher) Key() roachpb.Key {
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.
 func (rf *Fetcher) GetBytesRead() int64 {
 	return rf.kvFetcher.GetBytesRead()
+}
+
+// GetBatchRequestsIssued returns total number of BatchRequests issued by the
+// underlying KVFetcher.
+func (rf *Fetcher) GetBatchRequestsIssued() int64 {
+	return rf.kvFetcher.GetBatchRequestsIssued()
 }
