@@ -214,10 +214,9 @@ type cFetcher struct {
 
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
-	// bytesRead stores the cumulative number of bytes read by this cFetcher
-	// throughout its whole existence (i.e. between its construction and
-	// Release()). It accumulates the bytes read statistic across StartScan and
-	// Close methods.
+	// bytesRead stores the total number of bytes read by this cFetcher
+	// throughout its lifetime in case when the underlying row.KVFetcher has
+	// already been closed and nil-ed out.
 	//
 	// The field should not be accessed directly by the users of the cFetcher -
 	// getBytesRead() should be used instead.
@@ -1285,11 +1284,10 @@ func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
 }
 
 // getBytesRead returns the number of bytes read by the cFetcher throughout its
-// existence so far. This number accumulates the bytes read statistic across
-// StartScan and Close methods.
+// lifetime so far.
 func (cf *cFetcher) getBytesRead() int64 {
 	if cf.fetcher != nil {
-		cf.bytesRead += cf.fetcher.ResetBytesRead()
+		return cf.fetcher.GetBytesRead()
 	}
 	return cf.bytesRead
 }
@@ -1316,7 +1314,7 @@ func (cf *cFetcher) Release() {
 
 func (cf *cFetcher) Close(ctx context.Context) {
 	if cf != nil && cf.fetcher != nil {
-		cf.bytesRead += cf.fetcher.GetBytesRead()
+		cf.bytesRead = cf.fetcher.GetBytesRead()
 		cf.fetcher.Close(ctx)
 		cf.fetcher = nil
 	}
