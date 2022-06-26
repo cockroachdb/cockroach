@@ -1,0 +1,47 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package storageutils
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/stretchr/testify/require"
+)
+
+// EngineStats computes MVCC stats for the given engine reader, limited to the
+// replicated user keyspace.
+func EngineStats(t *testing.T, engine storage.Reader, nowNanos int64) *enginepb.MVCCStats {
+	t.Helper()
+
+	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	})
+	defer iter.Close()
+	stats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, nowNanos)
+	require.NoError(t, err)
+	return &stats
+}
+
+// SSTStats computes MVCC stats for the given binary SST.
+func SSTStats(t *testing.T, sst []byte, nowNanos int64) *enginepb.MVCCStats {
+	t.Helper()
+
+	iter, err := storage.NewMemSSTIterator(sst, true)
+	require.NoError(t, err)
+	defer iter.Close()
+	stats, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, nowNanos)
+	require.NoError(t, err)
+	return &stats
+}

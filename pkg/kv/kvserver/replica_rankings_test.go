@@ -19,10 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -103,22 +104,18 @@ func TestAddSSTQPSStat(t *testing.T) {
 	nextKey := scratchKey.Next()
 
 	// Construct an sst with 200 keys that will be reused with different divisors.
-	sstKeys := make([]sstutil.KV, 200)
+	sstKeys := make(storageutils.KVs, 200)
 	for i := range sstKeys {
-		sstKeys[i] = sstutil.KV{
-			KeyString:     nextKey.String(),
-			WallTimestamp: 1,
-			ValueString:   "value",
-		}
+		sstKeys[i] = storageutils.PointKV(nextKey.String(), 1, "value")
 		nextKey = nextKey.Next()
 	}
-	sst, start, end := sstutil.MakeSST(t, ts.ClusterSettings(), sstKeys)
+	sst, start, end := storageutils.MakeSST(t, ts.ClusterSettings(), sstKeys)
 	requestSize := float64(len(sst))
 
 	sstReq := &roachpb.AddSSTableRequest{
 		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:          sst,
-		MVCCStats:     sstutil.ComputeStats(t, sst),
+		MVCCStats:     storageutils.SSTStats(t, sst, 0),
 	}
 
 	get := &roachpb.GetRequest{
@@ -340,21 +337,17 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	nextKey := scratchKey.Next()
 
 	scratchKeys := make([]roachpb.Key, 300)
-	sstKeys := make([]sstutil.KV, 300)
+	sstKeys := make(storageutils.KVs, 300)
 	for i := range sstKeys {
 		scratchKeys[i] = nextKey
-		sstKeys[i] = sstutil.KV{
-			KeyString:     nextKey.String(),
-			WallTimestamp: 1,
-			ValueString:   "value",
-		}
+		sstKeys[i] = storageutils.PointKV(nextKey.String(), 1, "value")
 		nextKey = nextKey.Next()
 	}
-	sst, start, end := sstutil.MakeSST(t, ts.ClusterSettings(), sstKeys)
+	sst, start, end := storageutils.MakeSST(t, ts.ClusterSettings(), sstKeys)
 	sstReq := &roachpb.AddSSTableRequest{
 		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:          sst,
-		MVCCStats:     sstutil.ComputeStats(t, sst),
+		MVCCStats:     storageutils.SSTStats(t, sst, 0),
 	}
 
 	addSSTBA := roachpb.BatchRequest{}
@@ -387,9 +380,9 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		expectedRBPS float64
 	}{
 		{getReadBA, 1, 0, 1, 0, 10},
-		{genVariableRead(ctx, start, sstKeys[1].Key()), 1, 0, 1, 0, 38},
-		{genVariableRead(ctx, start, sstKeys[4].Key()), 1, 0, 4, 0, 176},
-		{genVariableRead(ctx, start, sstKeys[64].Key()), 1, 0, 64, 0, 10496},
+		{genVariableRead(ctx, start, sstKeys[1].(storage.MVCCKeyValue).Key.Key), 1, 0, 1, 0, 38},
+		{genVariableRead(ctx, start, sstKeys[4].(storage.MVCCKeyValue).Key.Key), 1, 0, 4, 0, 176},
+		{genVariableRead(ctx, start, sstKeys[64].(storage.MVCCKeyValue).Key.Key), 1, 0, 64, 0, 10496},
 	}
 
 	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
