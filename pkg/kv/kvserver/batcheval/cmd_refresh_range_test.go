@@ -290,3 +290,56 @@ func TestRefreshRangeTimestampBounds(t *testing.T) {
 		}
 	}
 }
+
+// TestRefreshRangeRangeTombstone verifies that we get an error for an MVCC
+// range tombstone.
+func TestRefreshRangeRangeTombstone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	ts3 := hlc.Timestamp{WallTime: 3}
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	start, end := roachpb.Key("a"), roachpb.Key("z")
+
+	// Write an MVCC range tombstone at ts2.
+	require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(
+		ctx, eng, nil, start, end, ts2, hlc.ClockTimestamp{}, 0))
+
+	// We are trying to refresh from time 1 to 3, but the tombstone was written at
+	// time 2, therefore the refresh should fail.
+	var resp roachpb.RefreshRangeResponse
+	_, err := RefreshRange(ctx, eng, CommandArgs{
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+		}).EvalContext(),
+		Args: &roachpb.RefreshRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    start,
+				EndKey: end,
+			},
+			RefreshFrom: ts1,
+		},
+		Header: roachpb.Header{
+			Txn: &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					WriteTimestamp: ts3,
+				},
+				ReadTimestamp: ts3,
+			},
+			Timestamp: ts3,
+		},
+	}, &resp)
+	var refreshErr *roachpb.RefreshFailedError
+	require.ErrorAs(t, err, &refreshErr)
+	require.Equal(t, roachpb.RefreshFailedError{
+		Reason:    roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+		Key:       start,
+		Timestamp: ts2,
+	}, *refreshErr)
+}

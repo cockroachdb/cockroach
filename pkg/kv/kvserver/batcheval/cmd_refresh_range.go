@@ -73,6 +73,8 @@ func refreshRange(
 	// iterators will emit MVCC tombstones by default and will emit intents when
 	// configured to do so (see IntentPolicy).
 	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+		KeyTypes:     storage.IterKeyTypePointsAndRanges,
+		StartKey:     span.Key,
 		EndKey:       span.EndKey,
 		StartTime:    refreshFrom, // exclusive
 		EndTime:      refreshTo,   // inclusive
@@ -81,8 +83,7 @@ func refreshRange(
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
-	iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
-	for {
+	for iter.SeekGE(storage.MVCCKey{Key: span.Key}); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return err
 		} else if !ok {
@@ -90,6 +91,16 @@ func refreshRange(
 		}
 
 		key := iter.UnsafeKey().Clone()
+
+		if _, hasRange := iter.HasPointAndRange(); hasRange {
+			rangeKVs := iter.RangeKeys()
+			if len(rangeKVs) == 0 { // defensive
+				return errors.Errorf("expected range key at %s not found", key)
+			}
+			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE,
+				key.Key, rangeKVs[0].RangeKey.Timestamp)
+		}
+
 		if !key.IsValue() {
 			// Found an intent. Check whether it is owned by this transaction.
 			// If so, proceed with iteration. Otherwise, return an error.
@@ -99,7 +110,6 @@ func refreshRange(
 			if meta.IsInline() {
 				// Ignore inline MVCC metadata. We don't expect to see this in practice
 				// when performing a refresh of an MVCC keyspace.
-				iter.Next()
 				continue
 			}
 			if meta.Txn.ID == txnID {
@@ -116,7 +126,6 @@ func refreshRange(
 					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
 						meta.Timestamp, iter.UnsafeKey().Timestamp)
 				}
-				iter.Next()
 				continue
 			}
 			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
