@@ -2406,3 +2406,74 @@ CREATE TABLE visible (visible INT4)
 CREATE TABLE visible (visible INT4) -- fully parenthesized
 CREATE TABLE visible (visible INT4) -- literals removed
 CREATE TABLE _ (_ INT4) -- identifiers removed
+
+# The following test cases check for invisible index feature.
+parse
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) INVISIBLE)
+----
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) INVISIBLE)
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) INVISIBLE) -- fully parenthesized
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c) INVISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INDEX (_ ASC, _ DESC) STORING (_) INVISIBLE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > 3 INVISIBLE)
+----
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > 3 INVISIBLE)
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE ((c) > (3)) INVISIBLE) -- fully parenthesized
+CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > _ INVISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INVERTED INDEX (_ ASC, _ DESC) WHERE _ > 3 INVISIBLE) -- identifiers removed
+
+error
+CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 INVISIBLE)
+----
+at or near "invisible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 INVISIBLE)
+                                                        ^
+HINT: try \h CREATE TABLE
+
+error
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)) INVISIBLE)
+----
+at or near "invisible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)) INVISIBLE)
+                                                                                   ^
+HINT: try \h CREATE TABLE
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INVISIBLE)
+----
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) INVISIBLE)
+----
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d INDEX (b) INVISIBLE)
+----
+at or near "index": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d INDEX (b) INVISIBLE)
+                                               ^
+HINT: try \h CREATE TABLE
+
+# The following test cases make sure that a primary index cannot be invisible.
+error
+CREATE TABLE a (b INT8 PRIMARY KEY INVISIBLE)
+----
+at or near "invisible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT8 PRIMARY KEY INVISIBLE)
+                                   ^
+HINT: try \h CREATE TABLE
+
+error
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0") INVISIBLE)
+----
+at or near "invisible": syntax error
+DETAIL: source SQL:
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0") INVISIBLE)
+                                                          ^
+HINT: try \h CREATE TABLE

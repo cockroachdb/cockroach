@@ -699,6 +699,12 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 func (tt *Table) addIndexWithVersion(
 	def *tree.IndexTableDef, typ indexType, version descpb.IndexDescriptorVersion,
 ) *Index {
+	// Primary index cannot be invisible. Theoretically, this case should never
+	// happen as adding a primary invisible index is not supported syntactically.
+	if typ == primaryIndex && def.Invisible {
+		panic("an invisible index cannot be invisible.")
+	}
+
 	// Add a unique constraint if this is a primary or unique index.
 	if typ != nonUniqueIndex {
 		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
@@ -711,7 +717,7 @@ func (tt *Table) addIndexWithVersion(
 		IdxZone:   cat.EmptyZone(),
 		table:     tt,
 		version:   version,
-		Invisible: false,
+		Invisible: def.Invisible,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.

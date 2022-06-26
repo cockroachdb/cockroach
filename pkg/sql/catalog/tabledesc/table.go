@@ -202,6 +202,7 @@ func MakeColumnDefDescs(
 		col.ComputeExpr = &s
 	}
 
+	// TODO (wenyihu6): check to make sure unique constraint index can be invisible but primary constraint index cannot
 	if d.PrimaryKey.IsPrimaryKey || (d.Unique.IsUnique && !d.Unique.WithoutIndex) {
 		if !d.PrimaryKey.Sharded {
 			ret.PrimaryKeyOrUniqueIndexDescriptor = &descpb.IndexDescriptor{

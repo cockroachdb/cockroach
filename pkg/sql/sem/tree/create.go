@@ -224,6 +224,7 @@ type CreateIndex struct {
 	IfNotExists bool
 	Columns     IndexElemList
 	Sharded     *ShardedIndexDef
+	Invisible   bool
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
 	Storing          NameList
@@ -281,6 +282,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
+	}
+	if node.Invisible {
+		ctx.WriteString(" INVISIBLE")
 	}
 }
 
@@ -966,6 +970,7 @@ type IndexTableDef struct {
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
+	Invisible        bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -1000,6 +1005,9 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
 		ctx.FormatNode(node.Predicate)
+	}
+	if node.Invisible {
+		ctx.WriteString(" INVISIBLE")
 	}
 }
 

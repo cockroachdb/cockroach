@@ -280,7 +280,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
-					Invisible:        false,
+					Invisible:        d.Invisible,
 					StoreColumnNames: d.Storing.ToStrings(),
 					CreatedAtNanos:   params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 				}
