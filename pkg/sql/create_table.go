@@ -1794,11 +1794,11 @@ func NewTableDesc(
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				Hidden:           false,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
+			idx.Hidden = d.Hidden
 			columns := d.Columns
 			if d.Sharded != nil {
 				var err error
@@ -2629,6 +2629,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				indexDef := tree.IndexTableDef{
 					Name:     tree.Name(idx.GetName()),
 					Inverted: idx.GetType() == descpb.IndexDescriptor_INVERTED,
+					Hidden:   idx.IsHidden(),
 					Storing:  make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:  make(tree.IndexElemList, 0, idx.NumKeyColumns()),
 				}
