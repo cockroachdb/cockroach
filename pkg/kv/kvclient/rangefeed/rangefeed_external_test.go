@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,6 +36,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var pointKV = storageutils.PointKV
+
+type kvs = storageutils.KVs
 
 // TestRangeFeedIntegration is a basic integration test demonstrating all of
 // the pieces working together.
@@ -512,9 +516,15 @@ func TestWithOnSSTable(t *testing.T) {
 	// Ingest an SST.
 	now := db.Clock().Now()
 	now.Logical = 0
-	ts := now.WallTime
-	sstKVs := []sstutil.KV{{"a", ts, "1"}, {"b", ts, "2"}, {"c", ts, "3"}, {"d", ts, "4"}, {"e", ts, "5"}}
-	sst, sstStart, sstEnd := sstutil.MakeSST(t, srv.ClusterSettings(), sstKVs)
+	ts := int(now.WallTime)
+	sstKVs := kvs{
+		pointKV("a", ts, "1"),
+		pointKV("b", ts, "2"),
+		pointKV("c", ts, "3"),
+		pointKV("d", ts, "4"),
+		pointKV("e", ts, "5"),
+	}
+	sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
 	_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		false /* ingestAsWrites */, now)
@@ -530,13 +540,15 @@ func TestWithOnSSTable(t *testing.T) {
 
 	require.Equal(t, roachpb.Span{Key: sstStart, EndKey: sstEnd}, sstEvent.Span)
 	require.Equal(t, now, sstEvent.WriteTS)
-	require.Equal(t, sstKVs, sstutil.ScanSST(t, sstEvent.Data))
+	require.Equal(t, sstKVs, storageutils.ScanSST(t, sstEvent.Data))
 }
 
 // TestWithOnSSTableCatchesUpIfNotSet tests that the rangefeed runs a catchup
 // scan if an OnSSTable event is emitted and no OnSSTable event handler is set.
 func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -587,10 +599,16 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	// Ingest an SST.
 	now := db.Clock().Now()
 	now.Logical = 0
-	ts := now.WallTime
-	sstKVs := []sstutil.KV{{"a", ts, "1"}, {"b", ts, "2"}, {"c", ts, "3"}, {"d", ts, "4"}, {"e", ts, "5"}}
-	expectKVs := []sstutil.KV{{"c", ts, "3"}, {"d", ts, "4"}}
-	sst, sstStart, sstEnd := sstutil.MakeSST(t, srv.ClusterSettings(), sstKVs)
+	ts := int(now.WallTime)
+	sstKVs := kvs{
+		pointKV("a", ts, "1"),
+		pointKV("b", ts, "2"),
+		pointKV("c", ts, "3"),
+		pointKV("d", ts, "4"),
+		pointKV("e", ts, "5"),
+	}
+	expectKVs := kvs{pointKV("c", ts, "3"), pointKV("d", ts, "4")}
+	sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
 	_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		false /* ingestAsWrites */, now)
@@ -598,16 +616,16 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 
 	// Assert that we receive the KV pairs within the rangefeed span.
 	timer := time.NewTimer(3 * time.Second)
-	var seenKVs []sstutil.KV
+	var seenKVs kvs
 	for len(seenKVs) < len(expectKVs) {
 		select {
 		case row := <-rowC:
-			value, err := row.Value.GetBytes()
-			require.NoError(t, err)
-			seenKVs = append(seenKVs, sstutil.KV{
-				KeyString:     string(row.Key),
-				WallTimestamp: row.Value.Timestamp.WallTime,
-				ValueString:   string(value),
+			seenKVs = append(seenKVs, storage.MVCCKeyValue{
+				Key: storage.MVCCKey{
+					Key:       row.Key,
+					Timestamp: row.Value.Timestamp,
+				},
+				Value: row.Value.RawBytes,
 			})
 		case <-timer.C:
 			require.Fail(t, "timed out waiting for catchup scan", "saw entries: %v", seenKVs)
