@@ -432,3 +432,11 @@ CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH (s2_max_cells
 CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH (s2_max_cells = (20), s2_max_level = (12), s2_level_mod = (3)) NOT VISIBLE -- fully parenthesized
 CREATE INVERTED INDEX geom_idx_2 ON some_spatial_table (geom) WITH (s2_max_cells = _, s2_max_level = _, s2_level_mod = _) NOT VISIBLE -- literals removed
 CREATE INVERTED INDEX _ ON _ (_) WITH (_ = 20, _ = 12, _ = 3) NOT VISIBLE -- identifiers removed
+
+parse
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 NOT VISIBLE
+----
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 NOT VISIBLE
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) NOT VISIBLE -- fully parenthesized
+CREATE UNIQUE INDEX IF NOT EXISTS a ON b (c) WHERE d > _ NOT VISIBLE -- literals removed
+CREATE UNIQUE INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 NOT VISIBLE -- identifiers removed

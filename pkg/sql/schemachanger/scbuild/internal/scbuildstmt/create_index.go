@@ -106,6 +106,12 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", n.Table.ObjectName))
 	}
+
+	if index.IsUnique && index.IsHidden {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"invisible unique index is currently not supported."))
+	}
+
 	// Resolve the index name and make sure it doesn't exist yet.
 	{
 		indexElements := b.ResolveIndex(index.TableID, n.Name, ResolveParams{

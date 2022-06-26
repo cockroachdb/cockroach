@@ -226,6 +226,9 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			} else if !def.PrimaryKey {
 				tab.addIndex(&def.IndexTableDef, uniqueIndex)
 			}
+			if def.Hidden {
+				panic("a unique index cannot be invisible.")
+			}
 
 		case *tree.IndexTableDef:
 			tab.addIndex(def, nonUniqueIndex)
@@ -702,7 +705,11 @@ func (tt *Table) addIndexWithVersion(
 	// Primary index cannot be invisible. Theoretically, this case should never
 	// happen as adding a primary invisible index is not supported syntactically.
 	if typ == primaryIndex && def.Hidden {
-		panic("an invisible index cannot be invisible.")
+		panic("a primary index cannot be invisible.")
+	}
+
+	if typ == uniqueIndex && def.Hidden {
+		panic("a unique index cannot be invisible.")
 	}
 
 	// Add a unique constraint if this is a primary or unique index.

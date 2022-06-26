@@ -708,6 +708,11 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
+	if d.Hidden {
+		return pgerror.New(pgcode.FeatureNotSupported,
+			"invisible unique constraint is currently not supported",
+		)
+	}
 
 	// If there is a predicate, validate it.
 	var predicate string

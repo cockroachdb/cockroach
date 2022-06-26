@@ -736,6 +736,11 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
+	// TODO(wenyihu6): check to see if this pgcode error is correct.
+	if n.n.Unique && n.n.Hidden {
+		return pgerror.Newf(pgcode.FeatureNotSupported, "invisible unique index is currently not supported.")
+	}
+
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
 	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly

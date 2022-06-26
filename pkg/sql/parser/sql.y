@@ -7761,7 +7761,7 @@ index_def:
       Hidden:           $11.bool(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_hidden
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
@@ -7772,6 +7772,7 @@ index_def:
         PartitionByIndex: $9.partitionByIndex(),
         StorageParams:    $10.storageParams(),
         Predicate:        $11.expr(),
+        Hidden:           $12.bool(),
       },
     }
   }

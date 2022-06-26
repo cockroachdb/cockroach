@@ -74,6 +74,10 @@ CREATE TABLE g (
 ----
 
 exec-ddl
+CREATE INDEX geom_idx ON g USING GIST(geog) WITH (s2_max_cells = 20, s2_max_level = 12, s2_level_mod = 3) NOT VISIBLE
+----
+
+exec-ddl
 SHOW CREATE g
 ----
 TABLE g
@@ -85,15 +89,19 @@ TABLE g
  ├── tableoid oid [hidden] [system]
  ├── geog_inverted_key encodedkey not null [inverted]
  ├── geog_inverted_key encodedkey not null [inverted]
+ ├── geog_inverted_key encodedkey not null [inverted]
  ├── PRIMARY INDEX g_pkey
  │    └── k int not null
  ├── INVERTED INDEX g_a_geog_idx
  │    ├── a int
  │    ├── geog_inverted_key encodedkey not null [inverted]
  │    └── k int not null
- └── INVERTED INDEX g_a_b_geog_idx
-      ├── a int
-      ├── b int
+ ├── INVERTED INDEX g_a_b_geog_idx
+ │    ├── a int
+ │    ├── b int
+ │    ├── geog_inverted_key encodedkey not null [inverted]
+ │    └── k int not null
+ └── INVERTED INDEX geom_idx NOT VISIBLE
       ├── geog_inverted_key encodedkey not null [inverted]
       └── k int not null
 

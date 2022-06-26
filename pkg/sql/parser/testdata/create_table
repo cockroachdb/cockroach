@@ -2424,22 +2424,23 @@ CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE ((c) > (3
 CREATE TABLE a (b INT8, c STRING, INVERTED INDEX (b ASC, c DESC) WHERE c > _ NOT VISIBLE) -- literals removed
 CREATE TABLE _ (_ INT8, _ STRING, INVERTED INDEX (_ ASC, _ DESC) WHERE _ > 3 NOT VISIBLE) -- identifiers removed
 
+# The following test cases make sure that a unique index or a unique constraint cannot be invisible.
+# TODO(wenyihu6): check how we want to change the parser for invisible unique index semantic error.
 error
 CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 NOT VISIBLE)
 ----
-at or near "not": syntax error
-DETAIL: source SQL:
-CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3 NOT VISIBLE)
-                                                        ^
-HINT: try \h CREATE TABLE
 
 error
 CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)) NOT VISIBLE)
 ----
-at or near "not": syntax error
+
+error
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITH INVISIBLE INDEX (b, c))
+----
+at or near "with": syntax error
 DETAIL: source SQL:
-CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)) NOT VISIBLE)
-                                                                                   ^
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITH INVISIBLE INDEX (b, c))
+                                                      ^
 HINT: try \h CREATE TABLE
 
 error
@@ -2452,12 +2453,12 @@ CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) NOT VISIBLE)
 HINT: try \h CREATE TABLE
 
 error
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) NOT VISIBLE)
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE INDEX (b) NOT VISIBLE)
 ----
-at or near "visible": syntax error
+at or near "index": syntax error
 DETAIL: source SQL:
-CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) NOT VISIBLE)
-                                                                               ^
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE INDEX (b) NOT VISIBLE)
+                                                      ^
 HINT: try \h CREATE TABLE
 
 error
@@ -2485,3 +2486,4 @@ HINT: try \h CREATE TABLE
 
 # TODO (wenyihu6): change the parser later on to give more user-friendly error
 # when primary key constriant is used with invisible index.
+--- empty ---

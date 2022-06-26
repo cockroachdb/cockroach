@@ -59,11 +59,11 @@ rowid_2
 
 query TT
 SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
-ORDER BY index_name, seq_in_index
+ORDER BY index_name, column_name
 ----
-t_pkey  rowid_2
-t_pkey  rowid_1
 t_pkey  rowid
+t_pkey  rowid_1
+t_pkey  rowid_2
 
 query TT
 SHOW CREATE t
@@ -987,3 +987,13 @@ tbl  CREATE TABLE public.tbl (
      CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
      FAMILY f1 (i, j)
 )
+
+statement ok
+CREATE TABLE t_invisible1 (b INT8, c STRING, d INT, INDEX (b ASC, c DESC) STORING (d) NOT VISIBLE)
+
+statement ok
+CREATE TABLE t_invisible2 (b INT, c GEOGRAPHY, INVERTED INDEX (b ASC, c DESC) WHERE b > 3 NOT VISIBLE)
+
+# TODO(wenyihu6): need to support this case after changing
+#statement error pgcode 0A000 invisible unique index is currently not supported.
+#CREATE TABLE t_invisible3 (b INT, c STRING, UNIQUE INDEX foo (b) WHERE c = 'HELLO' NOT VISIBLE)

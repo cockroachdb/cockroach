@@ -403,3 +403,22 @@ CREATE INDEX ON opclasses(b blah_ops)
 # inverted, even if the type is invertible.
 statement error operator class "blah_ops" does not exist
 CREATE INDEX ON opclasses(c blah_ops)
+
+# The following test cases check for invisible index feature.
+statement ok
+CREATE TABLE b (c INT PRIMARY KEY, d INT, geom1 GEOMETRY)
+
+statement ok
+CREATE INDEX a1 ON b (d) VISIBLE
+
+statement ok
+CREATE INDEX a3 ON b (c) WITH (fillfactor = 100) NOT VISIBLE
+
+statement ok
+CREATE INVERTED INDEX IF NOT EXISTS a4 ON b (geom1) WHERE d > 3 VISIBLE
+
+statement error pgcode 0A000 invisible unique index is currently not supported.
+CREATE UNIQUE INDEX idx ON b (((lower(c) || ' ') || lower(d))) NOT VISIBLE
+
+statement error pgcode 0A000 invisible unique index is currently not supported.
+CREATE UNIQUE INDEX IF NOT EXISTS idx ON b (c) WHERE d > 3 NOT VISIBLE
