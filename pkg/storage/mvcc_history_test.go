@@ -1193,7 +1193,7 @@ func cmdScan(e *evalCtx) error {
 	// ascertain no result is populated in the intents when an error
 	// occurs.
 	for _, intent := range res.Intents {
-		e.results.buf.Printf("scan: %v -> intent {%s}\n", key, intent.Txn)
+		e.results.buf.Printf("scan: intent %v {%s}\n", intent.Intent_SingleKeySpan.Key, intent.Txn)
 	}
 	for _, val := range res.KVs {
 		e.results.buf.Printf("scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
