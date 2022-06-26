@@ -473,6 +473,8 @@ func TestMVCCRangeKeyValidate(t *testing.T) {
 	}
 }
 
+// TODO(erikgrinaker): The below should use the testutils/storageutils variants
+// instead, but that requires test code to be in storage_test.
 func pointKey(key string, ts int) MVCCKey {
 	return MVCCKey{Key: roachpb.Key(key), Timestamp: wallTS(ts)}
 }
