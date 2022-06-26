@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
@@ -147,7 +146,7 @@ func newChangeAggregatorProcessor(
 	if err := ca.Init(
 		ca,
 		post,
-		changefeeddist.ChangefeedResultTypes,
+		changefeedResultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -306,8 +305,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 
 	ca.eventConsumer, err = newKVEventToRowConsumer(
-		ctx, ca.flowCtx.Cfg, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, ca.encoder, feed, ca.knobs, ca.topicNamer)
+		ctx, ca.flowCtx.Cfg, ca.flowCtx.EvalCtx, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ca.sink, ca.encoder, feed, ca.spec.Select, ca.knobs, ca.topicNamer)
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
@@ -375,9 +374,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	filters := opts.GetFilters()
 	cfg := ca.flowCtx.Cfg
 
-	var sf schemafeed.SchemaFeed
-
 	initialScanOnly := endTime.EqOrdering(initialHighWater)
+	var sf schemafeed.SchemaFeed
 
 	if schemaChange.Policy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
@@ -1080,7 +1078,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 }
 
 func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
-	if err := d.EnsureDecoded(changefeeddist.ChangefeedResultTypes[0], &cf.a); err != nil {
+	if err := d.EnsureDecoded(changefeedResultTypes[0], &cf.a); err != nil {
 		return err
 	}
 	raw, ok := d.Datum.(*tree.DBytes)
