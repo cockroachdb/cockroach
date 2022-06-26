@@ -650,6 +650,7 @@ func readPostgresStmt(
 			Columns:          stmt.Columns,
 			Storing:          stmt.Storing,
 			Inverted:         stmt.Inverted,
+			Hidden:           stmt.Hidden,
 			PartitionByIndex: stmt.PartitionByIndex,
 			StorageParams:    stmt.StorageParams,
 		}
