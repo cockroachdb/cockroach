@@ -1603,6 +1603,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	//    [PARTITION BY ...]
 	//    [WITH ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	title := make([]pretty.Doc, 0, 6)
 	title = append(title, pretty.Keyword("CREATE"))
@@ -1652,6 +1653,9 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
+	if node.Hidden {
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+	}
 	return p.nestUnder(
 		pretty.Fold(pretty.ConcatSpace, title...),
 		pretty.Group(pretty.Stack(clauses...)))
@@ -1689,6 +1693,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	title := pretty.Keyword("INDEX")
 	if node.Name != "" {
@@ -1721,6 +1726,9 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
 	}
+	if node.Hidden {
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
+	}
 
 	if len(clauses) == 0 {
 		return title
@@ -1736,6 +1744,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	// or (no constraint name):
 	//
@@ -1744,6 +1753,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
 	//    [WHERE ...]
+	//    [NOT VISIBLE]
 	//
 	clauses := make([]pretty.Doc, 0, 5)
 	var title pretty.Doc
@@ -1775,6 +1785,9 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))
+	}
+	if node.Hidden {
+		clauses = append(clauses, pretty.Keyword(" NOT VISIBLE"))
 	}
 
 	if len(clauses) == 0 {

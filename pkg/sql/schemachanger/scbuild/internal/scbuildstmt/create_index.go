@@ -43,7 +43,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IsUnique:       n.Unique,
 		IsInverted:     n.Inverted,
 		IsConcurrently: n.Concurrently,
-		IsHidden:       false,
+		IsHidden:       n.Hidden,
 	}
 	var relation scpb.Element
 	var source *scpb.PrimaryIndex
