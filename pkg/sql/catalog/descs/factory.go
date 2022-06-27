@@ -14,11 +14,14 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -33,7 +36,17 @@ type CollectionFactory struct {
 	spanConfigSplitter spanconfig.Splitter
 	spanConfigLimiter  spanconfig.Limiter
 	defaultMonitor     *mon.BytesMonitor
+	ieFactoryWithTxn   InternalExecutorFactoryWithTxn
 }
+
+// InternalExecutorFactoryWithTxn is used to create an internal executor
+// with associated extra txn state information.
+type InternalExecutorFactoryWithTxn func(
+	ctx context.Context,
+	sv *settings.Values,
+	txn *kv.Txn,
+	descCol *Collection,
+) sqlutil.InternalExecutor
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
 // the node-level dependencies needed to construct a Collection.
@@ -92,4 +105,12 @@ func (cf *CollectionFactory) NewCollection(
 ) *Collection {
 	c := cf.MakeCollection(ctx, temporarySchemaProvider, nil /* monitor */)
 	return c
+}
+
+// SetInternalExecutorWithTxn is to set the internal executor factory hanging
+// off the collection factory.
+func (cf *CollectionFactory) SetInternalExecutorWithTxn(
+	ieFactoryWithTxn InternalExecutorFactoryWithTxn,
+) {
+	cf.ieFactoryWithTxn = ieFactoryWithTxn
 }
