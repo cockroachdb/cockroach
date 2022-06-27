@@ -14,11 +14,15 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -33,6 +37,19 @@ type CollectionFactory struct {
 	spanConfigSplitter spanconfig.Splitter
 	spanConfigLimiter  spanconfig.Limiter
 	defaultMonitor     *mon.BytesMonitor
+	ieFactoryWithTxn   InternalExecutorFactoryWithTxn
+}
+
+// InternalExecutorFactoryWithTxn is used to create an internal executor
+// with associated extra txn state information.
+// It should only be used as a field hanging off CollectionFactory.
+type InternalExecutorFactoryWithTxn interface {
+	NewInternalExecutorWithTxn(
+		sd *sessiondata.SessionData,
+		sv *settings.Values,
+		txn *kv.Txn,
+		descCol *Collection,
+	) (sqlutil.InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc)
 }
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
@@ -83,4 +100,12 @@ func (cf *CollectionFactory) NewCollection(
 	}
 	return newCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydrated, cf.systemDatabase,
 		cf.virtualSchemas, temporarySchemaProvider, monitor)
+}
+
+// SetInternalExecutorWithTxn is to set the internal executor factory hanging
+// off the collection factory.
+func (cf *CollectionFactory) SetInternalExecutorWithTxn(
+	ieFactoryWithTxn InternalExecutorFactoryWithTxn,
+) {
+	cf.ieFactoryWithTxn = ieFactoryWithTxn
 }
