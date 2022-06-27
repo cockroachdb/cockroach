@@ -98,11 +98,16 @@ message StreamIngestionDetails {
 
 message StreamIngestionProgress {
   // PartitionProgress stores fields that are related to the status of a
-  // partition.
+  // source cluster partition.
   message PartitionProgress {
     util.hlc.Timestamp ingested_timestamp = 1 [(gogoproto.nullable) = false];
     // TODO(pbardea): Add an error message so that per-partition errors can be
     // surfaced to the user.
+
+    // Destination SQL instance that subscribes to this partition.
+    int32 dest_sql_instance_id = 2 [(gogoproto.customname) = "DestSQLInstanceID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID",
+      (gogoproto.nullable) = false];
   }
   // CutoverTime is set to signal to the stream ingestion job to complete its
   // ingestion. This involves stopping any subsequent ingestion, and rolling

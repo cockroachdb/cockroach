@@ -208,6 +208,12 @@ message StreamIngestionFrontierSpec {
   // at a certain timestamp, then it's safe to resolve the ingestion at that
   // timestamp.
   repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
+
+  // Mapping between a source cluster partition ID and its subscribing sql instance ID
+  // in the destination cluster. This describes the flow topology of the replication stream.
+  map<string, uint32> subscribing_sql_instances = 6 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "SubscribingSQLInstances"];
+
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 
