@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -267,4 +269,42 @@ func registerPreserveDowngradeVersionSetting() *settings.StringSetting {
 	s.SetReportable(true)
 	s.SetVisibility(settings.Public)
 	return s
+}
+
+var metaPreserveDowngradeLastUpdated = metric.Metadata{
+	Name:        "cluster.preserve-downgrade-option.last-updated",
+	Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
+	Measurement: "Timestamp",
+	Unit:        metric.Unit_TIMESTAMP_SEC,
+}
+
+// preserveDowngradeLastUpdatedMetric is a metric gauge that measures the
+// time the cluster.preserve_downgrade_option was last updated.
+var preserveDowngradeLastUpdatedMetric = metric.NewGauge(metaPreserveDowngradeLastUpdated)
+
+// RegisterOnVersionChangeCallback is a callback function that updates the
+// cluster.preserve-downgrade-option.last-updated when the
+// cluster.preserve_downgrade_option settings is changed.
+func RegisterOnVersionChangeCallback(sv *settings.Values) {
+	preserveDowngradeVersion.SetOnChange(sv, func(ctx context.Context) {
+		var value int64
+		downgrade := preserveDowngradeVersion.Get(sv)
+		if downgrade != "" {
+			value = timeutil.Now().Unix()
+		}
+		preserveDowngradeLastUpdatedMetric.Update(value)
+	})
+}
+
+// Metrics defines the settings tracked in prometheus.
+type Metrics struct {
+	PreserveDowngradeLastUpdated *metric.Gauge
+}
+
+// MakeMetrics is a function that creates the metrics defined in the Metrics
+// struct.
+func MakeMetrics() Metrics {
+	return Metrics{
+		PreserveDowngradeLastUpdated: preserveDowngradeLastUpdatedMetric,
+	}
 }

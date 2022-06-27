@@ -2379,6 +2379,13 @@ var charts = []sectionDescription{
 				AxisLabel: "SQL Statements",
 			},
 			{
+				Title: "Cluster.preserve_downgrade_option Last Updated",
+				Metrics: []string{
+					"cluster.preserve-downgrade-option.last-updated",
+				},
+				AxisLabel: "Last Updated Timestamp",
+			},
+			{
 				Title: "Byte I/O",
 				Metrics: []string{
 					"sql.bytesin",

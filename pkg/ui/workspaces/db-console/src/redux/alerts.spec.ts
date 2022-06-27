@@ -31,6 +31,8 @@ import {
   disconnectedDismissedLocalSetting,
   emailSubscriptionAlertLocalSetting,
   emailSubscriptionAlertSelector,
+  clusterPreserveDowngradeOptionDismissedSetting,
+  clusterPreserveDowngradeOptionOvertimeSelector,
 } from "./alerts";
 import { versionsSelector } from "src/redux/nodes";
 import {
@@ -45,7 +47,9 @@ import {
   nodesReducerObj,
   clusterReducerObj,
   healthReducerObj,
+  settingsReducerObj,
 } from "./apiReducers";
+import Long from "long";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 
 const sandbox = sinon.createSandbox();
@@ -478,6 +482,57 @@ describe("alerts", function () {
         assert.isFalse(openState);
       });
     });
+
+    describe("cluster.preserve_downgrade_option overtime alert", () => {
+      it("initialized with default false state", () => {
+        const settingState =
+          clusterPreserveDowngradeOptionDismissedSetting.selector(state());
+        assert.isFalse(settingState);
+      });
+      it("returns an alert if cluster.preserve_downgrad_option is lastUpdated >48 hours ago", () => {
+        dispatch(
+          settingsReducerObj.receiveData(
+            new protos.cockroach.server.serverpb.SettingsResponse({
+              key_values: {
+                "cluster.preserve_downgrade_option": {
+                  last_updated: {
+                    seconds: Long.fromInt(165000000),
+                    nanos: 165000000,
+                  },
+                  value: "22.1",
+                },
+              },
+            }),
+          ),
+        );
+        const alert = clusterPreserveDowngradeOptionOvertimeSelector(state());
+        assert.isNotEmpty(alert);
+      });
+      it("does not display alert once dismissed", async () => {
+        dispatch(
+          settingsReducerObj.receiveData(
+            new protos.cockroach.server.serverpb.SettingsResponse({
+              key_values: {
+                "cluster.preserve_downgrade_option": {
+                  last_updated: {
+                    seconds: Long.fromInt(165000000),
+                    nanos: 165000000,
+                  },
+                  value: "22.1",
+                },
+              },
+            }),
+          ),
+        );
+
+        // dismiss alert
+        const alert = clusterPreserveDowngradeOptionOvertimeSelector(state());
+        await alert.dismiss(dispatch, state);
+        const openState =
+          clusterPreserveDowngradeOptionDismissedSetting.selector(state());
+        assert.isTrue(openState);
+      });
+    });
   });
 
   describe("data sync listener", function () {
@@ -592,7 +647,11 @@ describe("alerts", function () {
           new protos.cockroach.server.serverpb.ClusterResponse({}),
         ),
       );
-
+      dispatch(
+        settingsReducerObj.receiveData(
+          new protos.cockroach.server.serverpb.SettingsResponse({}),
+        ),
+      );
       const expectedState = state();
       sync();
       assert.deepEqual(state(), expectedState);
