@@ -9,6 +9,7 @@ go_library(
         "//pkg/kv",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descsinterface",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
     ],
