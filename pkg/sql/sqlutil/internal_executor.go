@@ -169,6 +169,16 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetExtraTxnState sets the descriptor collections, schema change job records
+	// and job collection for the internal executor before running the SQL
+	// statement.
+	SetExtraTxnState(
+		ctx context.Context,
+		txn *kv.Txn,
+		sessionData *sessiondata.SessionData,
+		run func() error,
+	) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -211,6 +221,36 @@ type InternalRows interface {
 type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
+
+// WithTxn is to run SQL statements under the same txn.
+// All executions within this scope should share the same descriptor
+// collection.
+// Note that this function will take care of the creation and release of the
+// descriptor collections.
+func (f InternalExecutorFactory) WithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, sessionData)
+	return ie.SetExtraTxnState(
+		ctx,
+		txn,
+		sessionData,
+		func() error { return run(ctx, txn, ie) })
+}
+
+// WithoutTxn is to run SQL statements without a txn context.
+// Note that in this mode, each execution with the internal executor runs its
+// own descriptor collection, schema change job collection and transaction state
+// machine.
+func (f InternalExecutorFactory) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, nil)
+	return run(ctx, ie)
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error

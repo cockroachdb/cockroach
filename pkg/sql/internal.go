@@ -17,12 +17,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -733,6 +736,31 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
+}
+
+// SetExtraTxnState sets the descriptor collections, schema change job records
+// and job collection for the internal executor before running the SQL
+// statement.
+func (ie *InternalExecutor) SetExtraTxnState(
+	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData, run func() error,
+) error {
+	sds := sessiondata.NewStack(sessionData)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	descsCollection := ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
+	schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
+	ie.extraTxnState = &extraTxnState{
+		txn:                    txn,
+		descCollection:         descsCollection,
+		schemaChangeJobRecords: schemaChangeJobRecords,
+	}
+
+	defer func() {
+		descsCollection.ReleaseAll(ctx)
+		for k := range schemaChangeJobRecords {
+			delete(schemaChangeJobRecords, k)
+		}
+	}()
+	return run()
 }
 
 var rowsAffectedResultColumns = colinfo.ResultColumns{
