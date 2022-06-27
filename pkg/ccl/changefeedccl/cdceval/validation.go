@@ -180,13 +180,13 @@ func normalizeSelectClause(
 	semaCtx.SearchPath = &cdcCustomFunctionResolver{SearchPath: semaCtx.SearchPath}
 	semaCtx.Properties.Require("cdc", rejectInvalidCDCExprs)
 
-	resolveType := func(ref tree.ResolvableTypeReference) (tree.ResolvableTypeReference, error) {
+	resolveType := func(ref tree.ResolvableTypeReference) (tree.ResolvableTypeReference, bool, error) {
 		typ, err := tree.ResolveType(ctx, ref, semaCtx.GetTypeResolver())
 		if err != nil {
-			return nil, pgerror.Wrapf(err, pgcode.IndeterminateDatatype,
+			return nil, false, pgerror.Wrapf(err, pgcode.IndeterminateDatatype,
 				"could not resolve type %s", ref.SQLString())
 		}
-		return &tree.OIDTypeReference{OID: typ.Oid()}, nil
+		return &tree.OIDTypeReference{OID: typ.Oid()}, typ.UserDefined(), nil
 	}
 
 	// Verify that any UDTs used in the statement reference only the UDTs that are
@@ -199,16 +199,25 @@ func normalizeSelectClause(
 		// Replace type references with resolved type.
 		switch e := expr.(type) {
 		case *tree.AnnotateTypeExpr:
-			typ, err := resolveType(e.Type)
+			typ, udt, err := resolveType(e.Type)
 			if err != nil {
 				return false, expr, err
+			}
+			if !udt {
+				// Only care about user defined types.
+				return true, expr, nil
 			}
 			e.Type = typ
 		case *tree.CastExpr:
-			typ, err := resolveType(e.Type)
+			typ, udt, err := resolveType(e.Type)
 			if err != nil {
 				return false, expr, err
 			}
+			if !udt {
+				// Only care about user defined types.
+				return true, expr, nil
+			}
+
 			e.Type = typ
 		}
 

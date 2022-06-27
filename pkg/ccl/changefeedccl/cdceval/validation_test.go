@@ -115,6 +115,14 @@ func TestNormalizeAndValidate(t *testing.T) {
 					"FROM [%d AS bar] WHERE status = 'open':::defaultdb.public.status",
 				fooDesc.GetID()),
 		},
+		{
+			name: "can cast to standard type",
+			desc: fooDesc,
+			stmt: "SELECT 'cast'::string, 'type_annotation':::string FROM foo AS bar",
+			expectStmt: fmt.Sprintf(
+				"SELECT 'cast'::STRING, 'type_annotation':::STRING FROM [%d AS bar]",
+				fooDesc.GetID()),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sc, err := ParseChangefeedExpression(tc.stmt)
