@@ -37,10 +37,10 @@ import {
 import {
   cancelStatementDiagnosticsReportAction,
   createStatementDiagnosticsReportAction,
-  setCombinedStatementsTimeScaleAction,
+  setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
+import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import {
   trackCancelDiagnosticsBundleAction,
@@ -67,7 +67,7 @@ export const selectStatementDetails = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     queryByName(props.location, appNamesAttr),
   (state: AdminUIState): TimeScale =>
-    statementsTimeScaleLocalSetting.selector(state),
+    globalTimeScaleLocalSetting.selector(state),
   (state: AdminUIState) => state.cachedData.statementDetails,
   (
     fingerprintID,
@@ -113,7 +113,7 @@ const mapStateToProps = (
     latestFormattedQuery:
       state.sqlActivity.statementDetailsLatestFormattedQuery,
     statementsError: state.cachedData.statements.lastError,
-    timeScale: statementsTimeScaleLocalSetting.selector(state),
+    timeScale: globalTimeScaleLocalSetting.selector(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
@@ -131,7 +131,7 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
     createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
   createStatementDiagnosticsReport: createStatementDiagnosticsReportAction,
   onTabChanged: trackStatementDetailsSubnavSelectionAction,
-  onTimeScaleChange: setCombinedStatementsTimeScaleAction,
+  onTimeScaleChange: setGlobalTimeScaleAction,
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
   onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
     return (dispatch: AppDispatch) => {

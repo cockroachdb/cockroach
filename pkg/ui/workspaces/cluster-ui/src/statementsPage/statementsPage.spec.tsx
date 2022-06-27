@@ -102,8 +102,13 @@ describe("StatementsPage", () => {
     };
 
     assert.equal(filterBySearchQuery(statement, "select"), true);
-    assert.equal(filterBySearchQuery(statement, "virtual table"), true);
-    assert.equal(filterBySearchQuery(statement, "group (scalar)"), true);
+    assert.equal(filterBySearchQuery(statement, "count"), true);
+    assert.equal(filterBySearchQuery(statement, "select count"), true);
+    assert.equal(filterBySearchQuery(statement, "cluster settings"), true);
+
+    // Searching by plan should be false.
+    assert.equal(filterBySearchQuery(statement, "virtual table"), false);
+    assert.equal(filterBySearchQuery(statement, "group (scalar)"), false);
     assert.equal(filterBySearchQuery(statement, "node_build_info"), false);
     assert.equal(filterBySearchQuery(statement, "crdb_internal"), false);
   });

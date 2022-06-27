@@ -108,14 +108,14 @@ export function createOpenDiagnosticsModalAction(
         Combined Stats Actions
 ****************************************/
 
-export const SET_COMBINED_STATEMENTS_TIME_SCALE =
-  "cockroachui/statements/SET_COMBINED_STATEMENTS_TIME_SCALE";
+export const SET_GLOBAL_TIME_SCALE =
+  "cockroachui/statements/SET_GLOBAL_TIME_SCALE";
 
-export function setCombinedStatementsTimeScaleAction(
+export function setGlobalTimeScaleAction(
   ts: TimeScale,
 ): PayloadAction<TimeScale> {
   return {
-    type: SET_COMBINED_STATEMENTS_TIME_SCALE,
+    type: SET_GLOBAL_TIME_SCALE,
     payload: ts,
   };
 }
