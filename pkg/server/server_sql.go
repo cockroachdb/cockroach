@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -953,6 +954,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalMemMetrics,
 		ieFactoryMonitor,
 	)
+
+	collectionFactory.SetInternalExecutorWithTxn(ieFactory)
 
 	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
 	jobRegistry.SetInternalExecutorFactory(ieFactory)
