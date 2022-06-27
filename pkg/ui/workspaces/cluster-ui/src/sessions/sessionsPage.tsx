@@ -59,7 +59,7 @@ import sessionPageStyles from "./sessionPage.module.scss";
 import ColumnsSelector, {
   SelectOption,
 } from "../columnsSelector/columnsSelector";
-import { TimestampToMoment } from "src/util";
+import { TimestampToMoment, unset } from "src/util";
 import moment from "moment";
 import {
   getLabel,
@@ -104,12 +104,15 @@ export type SessionsPageProps = OwnProps & RouteComponentProps;
 
 function getSessionAppFilterOptions(sessions: SessionInfo[]): string[] {
   const uniqueAppNames = new Set(
-    sessions.map(s =>
-      s.session.application_name ? s.session.application_name : "(unset)",
-    ),
+    sessions.map(s => {
+      if (s.session.application_name.startsWith("$ internal")) {
+        return "$ internal";
+      }
+      return s.session.application_name ? s.session.application_name : unset;
+    }),
   );
 
-  return Array.from(uniqueAppNames);
+  return Array.from(uniqueAppNames).sort();
 }
 
 export class SessionsPage extends React.Component<
@@ -280,7 +283,7 @@ export class SessionsPage extends React.Component<
           if (apps.includes(internalAppNamePrefix)) {
             showInternal = true;
           }
-          if (apps.includes("(unset)")) {
+          if (apps.includes(unset)) {
             apps.push("");
           }
 

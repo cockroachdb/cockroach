@@ -39,6 +39,7 @@ import {
   unique,
   containAny,
   syncHistory,
+  unset,
 } from "src/util";
 import {
   AggregateStatistics,
@@ -432,7 +433,7 @@ export class StatementsPage extends React.Component<
         : [];
     const databases =
       filters.database.length > 0 ? filters.database.split(",") : [];
-    if (databases.includes("(unset)")) {
+    if (databases.includes(unset)) {
       databases.push("");
     }
     const regions =
