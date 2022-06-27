@@ -921,3 +921,14 @@ func (p *planner) QueryIteratorEx(
 func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 	return p.execCfg.Settings.Version.IsActive(ctx, key)
 }
+
+// extraTxnState is to store extra transaction state info that
+// will be passed to an internal executor when it's used under a txn context.
+// It should not be exported from the sql package.
+type extraTxnState struct {
+	txn                    *kv.Txn
+	descCollection         *descs.Collection
+	jobs                   *jobsCollection
+	schemaChangeJobRecords map[descpb.ID]*jobs.Record
+	schemaChangerState     *SchemaChangerState
+}
