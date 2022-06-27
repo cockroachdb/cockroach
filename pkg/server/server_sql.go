@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -943,6 +944,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
+
+	ieFactoryWithTxn := func(
+		ctx context.Context, sessionData *sessiondata.SessionData, descCol sqlutil.DescsCollection, schemaChangeJobRecords sqlutil.SchemaChangeJobRecords,
+	) sqlutil.InternalExecutor {
+		// TODO (janexing): is the type conversion safe?
+		ie := sql.MakeInternalExecutorWithTxn(
+			pgServer.SQLServer,
+			internalMemMetrics,
+			ieFactoryMonitor,
+			descCol.(*descs.Collection),
+			schemaChangeJobRecords.(map[descpb.ID]*jobs.Record),
+		)
+		ie.SetSessionData(sessionData)
+		return &ie
+	}
+	collectionFactory.SetInternalExecutorWithTxn(ieFactoryWithTxn)
 
 	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
 	jobRegistry.SetInternalExecutorFactory(ieFactory)

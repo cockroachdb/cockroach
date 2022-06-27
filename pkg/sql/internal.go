@@ -17,12 +17,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -111,6 +114,26 @@ func MakeInternalExecutor(
 		s:          s,
 		mon:        monitor,
 		memMetrics: memMetrics,
+	}
+}
+
+// MakeInternalExecutorWithTxn creates an Internal Executor with txn related
+// information.
+func MakeInternalExecutorWithTxn(
+	s *Server,
+	memMetrics MemoryMetrics,
+	monitor *mon.BytesMonitor,
+	descCol *descs.Collection,
+	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
+) InternalExecutor {
+	return InternalExecutor{
+		s:          s,
+		mon:        monitor,
+		memMetrics: memMetrics,
+		extraTxnState: &extraTxnState{
+			descCollection:         descCol,
+			schemaChangeJobRecords: schemaChangeJobRecords,
+		},
 	}
 }
 
@@ -733,6 +756,36 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
+}
+
+// SetExtraTxnState sets the descriptor collections, schema change job records
+// and job collection for the internal executor before running the SQL
+// statement.
+// It only set the extra txn state for the internal executor if the given
+// txn is not nil.
+func (ie *InternalExecutor) SetExtraTxnState(exTxnState *sqlutil.ExtraTxnStateArgs) {
+	if exTxnState == nil {
+		return
+	}
+
+	if exTxnState.Txn == nil {
+		panic("cannot set extra txn state if txn is nil")
+	}
+
+	ie.extraTxnState = &extraTxnState{
+		txn: exTxnState.Txn,
+	}
+
+	if exTxnState.DescCollection != nil {
+		ie.extraTxnState.descCollection = exTxnState.DescCollection.(*descs.Collection)
+	}
+	if exTxnState.SchemaChangeJobRecords != nil {
+		// TODO(janexing): this looks ugly, any better solution?
+		ie.extraTxnState.schemaChangeJobRecords = interface{}(exTxnState.SchemaChangeJobRecords).(map[descpb.ID]*jobs.Record)
+	}
+	if exTxnState.Jobs != nil {
+		ie.extraTxnState.jobs = exTxnState.Jobs.(*jobsCollection)
+	}
 }
 
 var rowsAffectedResultColumns = colinfo.ResultColumns{
