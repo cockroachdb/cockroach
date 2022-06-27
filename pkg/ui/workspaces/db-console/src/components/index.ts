@@ -21,5 +21,4 @@ export * from "./input";
 export * from "./tooltip";
 export * from "./select";
 export * from "./modal";
-export * from "./rangeCalendar";
 export * from "./link";
