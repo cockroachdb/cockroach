@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -292,7 +294,7 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
-// TODO(yuzefovich): make this redact.RedactableString.
+	// TODO(yuzefovich): make this redact.RedactableString.
 	opName string,
 	txn *kv.Txn,
 	user username.SQLUsername,
@@ -842,6 +844,20 @@ func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Desc
 	)
 }
 
+// initInternalExecutor is to initialize an internal executor with a planner.
+// Note that this function should only be used when using internal executor
+// to run sql statement under the planner context.
+func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecutor {
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
+	ie.(*InternalExecutor).extraTxnState = &extraTxnState{
+		txn:                    p.Txn(),
+		descCollection:         p.Descriptors(),
+		jobs:                   p.extendedEvalCtx.Jobs,
+		schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
+	}
+	return ie
+}
+
 // QueryRowEx executes the supplied SQL statement and returns a single row, or
 // nil if no row is found, or an error if more that one row is returned.
 //
@@ -854,8 +870,21 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryRowExUpdated(ctx, opName, override, stmt, qargs...)
+}
+
+// ExecEx is like Exec, but allows the caller to override some session data
+// fields (e.g. the user).
+func (p *planner) ExecEx(
+	ctx context.Context,
+	opName string,
+	override sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (int, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.ExecExUpdated(ctx, opName, override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -871,9 +900,61 @@ func (p *planner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData())
-	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+	ie := initInternalExecutor(ctx, p)
+	rows, err := ie.QueryIteratorExUpdated(ctx, opName, override, stmt, qargs...)
 	return rows.(eval.InternalRows), err
+}
+
+// QueryBufferedEx executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once).
+// The fields set in session that are set override the respective fields if they
+// have previously been set through SetSessionData().
+func (p *planner) QueryBufferedEx(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryBufferedExUpdated(ctx, opName, session, stmt, qargs...)
+}
+
+// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// ResultColumns of the input query.
+func (p *planner) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryRowExWithColsUpdated(ctx, opName, session, stmt, qargs...)
+}
+
+// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the
+// computed ResultColumns of the input query.
+func (p *planner) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	ie := initInternalExecutor(ctx, p)
+	return ie.QueryBufferedExWithColsUpdated(ctx, opName, session, stmt, qargs...)
+}
+
+// WithInternalExecutor let user run multiple sql statements within the same
+// internal executor initialized under a planner context. To run single sql
+// statements, please use the query functions above.
+func (p *planner) WithInternalExecutor(
+	ctx context.Context,
+	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+) error {
+	ie := initInternalExecutor(ctx, p)
+	return run(ctx, p.Txn(), ie)
 }
 
 // extraTxnState is to store extra transaction state info that
