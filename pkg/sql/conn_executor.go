@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -689,6 +688,7 @@ func (s *Server) SetupConn(
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		nil, /* optionalModification */
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -848,6 +848,10 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	// postSetupFns is to override certain field of a conn executor.
+	// It is set when conn executor is init under an internal executor
+	// with a not-nil txn.
+	postSetupFns []func(ex *connExecutor),
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -951,10 +955,12 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	descsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
-	ex.extraTxnState.descCollection = &descsCollection
-	ex.extraTxnState.txnRewindPos = -1
+
+	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
+
+	ex.extraTxnState.txnRewindPos = -1
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
 	ex.mu.ActiveQueries = make(map[clusterunique.ID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
@@ -965,76 +971,12 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
-	ex.initPlanner(ctx, &ex.planner)
-
-	return ex
-}
-
-// newConnExecutorWithTxn creates a connExecutor that will execute statements
-// under a higher-level txn. This connExecutor runs with a different state
-// machine, much reduced from the regular one. It cannot initiate or end
-// transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
-// retries).
-//
-// If there is no error, this function also activate()s the returned
-// executor, so the caller does not need to run the
-// activation. However this means that run() or close() must be called
-// to release resources.
-func (s *Server) newConnExecutorWithTxn(
-	ctx context.Context,
-	sdMutIterator *sessionDataMutatorIterator,
-	stmtBuf *StmtBuf,
-	clientComm ClientComm,
-	parentMon *mon.BytesMonitor,
-	memMetrics MemoryMetrics,
-	srvMetrics *Metrics,
-	txn *kv.Txn,
-	syntheticDescs []catalog.Descriptor,
-	applicationStats sqlstats.ApplicationStats,
-) *connExecutor {
-	ex := s.newConnExecutor(
-		ctx,
-		sdMutIterator,
-		stmtBuf,
-		clientComm,
-		memMetrics,
-		srvMetrics,
-		applicationStats,
-	)
-	if txn.Type() == kv.LeafTxn {
-		// If the txn is a leaf txn it is not allowed to perform mutations. For
-		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.SetReadOnly(true)
-		})
+	for _, run := range postSetupFns {
+		run(ex)
 	}
 
-	// The new transaction stuff below requires active monitors and traces, so
-	// we need to activate the executor now.
-	ex.activate(ctx, parentMon, &mon.BoundAccount{})
+	ex.initPlanner(ctx, &ex.planner)
 
-	// Perform some surgery on the executor - replace its state machine and
-	// initialize the state.
-	ex.machine = fsm.MakeMachine(
-		BoundTxnStateTransitions,
-		stateOpen{ImplicitTxn: fsm.False},
-		&ex.state,
-	)
-	ex.state.resetForNewSQLTxn(
-		ctx,
-		explicitTxn,
-		txn.ReadTimestamp().GoTime(),
-		nil, /* historicalTimestamp */
-		roachpb.UnspecifiedUserPriority,
-		tree.ReadWrite,
-		txn,
-		ex.transitionCtx,
-		ex.QualityOfService())
-
-	// Modify the Collection to match the parent executor's Collection.
-	// This allows the InternalExecutor to see schema changes made by the
-	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
 }
 
