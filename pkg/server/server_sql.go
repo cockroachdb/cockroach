@@ -124,18 +124,19 @@ import (
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
 type SQLServer struct {
-	ambientCtx       log.AmbientContext
-	stopper          *stop.Stopper
-	sqlIDContainer   *base.SQLIDContainer
-	pgServer         *pgwire.Server
-	distSQLServer    *distsql.ServerImpl
-	execCfg          *sql.ExecutorConfig
-	cfg              *BaseConfig
-	internalExecutor *sql.InternalExecutor
-	leaseMgr         *lease.Manager
-	blobService      *blobs.Service
-	tracingService   *service.Service
-	tenantConnect    kvtenant.Connector
+	ambientCtx              log.AmbientContext
+	stopper                 *stop.Stopper
+	sqlIDContainer          *base.SQLIDContainer
+	pgServer                *pgwire.Server
+	distSQLServer           *distsql.ServerImpl
+	execCfg                 *sql.ExecutorConfig
+	cfg                     *BaseConfig
+	internalExecutor        *sql.InternalExecutor
+	internalExecutorFactory sqlutil.InternalExecutorFactory
+	leaseMgr                *lease.Manager
+	blobService             *blobs.Service
+	tracingService          *service.Service
+	tenantConnect           kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
@@ -290,6 +291,9 @@ type sqlServerArgs struct {
 	//
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
+
+	// internalExecutorFactory is to initialize an internal executor.
+	internalExecutorFactory sqlutil.InternalExecutorFactory
 
 	// Stores and deletes expired liveness sessions.
 	sqlLivenessProvider sqlliveness.Provider
@@ -941,6 +945,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(
 		ctx, pgServer.SQLServer, internalMemMetrics, cfg.Settings,
 	)
+	cfg.internalExecutorFactory = ieFactory
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
 		cfg.circularInternalExecutor,
@@ -1082,6 +1087,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		distSQLServer:                  distSQLServer,
 		execCfg:                        execCfg,
 		internalExecutor:               cfg.circularInternalExecutor,
+		internalExecutorFactory:        cfg.internalExecutorFactory,
 		leaseMgr:                       leaseMgr,
 		blobService:                    blobService,
 		tracingService:                 tracingService,
