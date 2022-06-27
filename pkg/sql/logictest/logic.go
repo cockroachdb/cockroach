@@ -1748,15 +1748,34 @@ func (t *logicTest) newTestServerCluster(binaryPath string) {
 		if !found {
 			t.Fatal(errors.New("BuiltWithBazel: cockroach binary not found"))
 		}
+	} else if gobuild.Default.GOPATH != "" {
+		localBinary = gobuild.Default.GOPATH + "/src/github.com/cockroachdb/cockroach/cockroach"
+		t.t().Logf("gopath: %s", gobuild.Default.GOPATH)
+		t.t().Logf("local binary: %s", localBinary)
 	} else {
-		// We're unable to find the name in PATH and "name" is a relative path:
-		// look in the cockroach repo.
-		gopath := os.Getenv("GOPATH")
-		if gopath == "" {
-			gopath = filepath.Join(os.Getenv("HOME"), "go")
+		localBinary = ""
+		if fi, err := os.Stat("./cockroach"); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
+			localBinary, err = filepath.Abs("./cockroach")
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
+		if localBinary == "" {
+			// We're unable to find the name in PATH and "name" is a relative path:
+			// look in the cockroach repo.
+			gopath := os.Getenv("GOPATH")
+			wd, _ := os.Getwd()
+			fmt.Println("working dir:", wd)
+			if gopath == "" {
+				homePath := os.Getenv("HOME")
+				if homePath == "" {
+					t.Fatal("GOPATH and HOME both unset")
+				}
+				gopath = filepath.Join(homePath, "go")
+			}
 
-		localBinary = gopath + "/src/github.com/cockroachdb/cockroach/cockroach"
+			localBinary = gopath + "/src/github.com/cockroachdb/cockroach/cockroach"
+		}
 	}
 
 	if binaryPath == "" {

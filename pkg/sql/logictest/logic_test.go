@@ -29,7 +29,7 @@ import (
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t, "times out and/or hangs")
-	RunLogicTest(t, TestServerArgs{}, testutils.TestDataPath(t, "logic_test", "[^.]*"))
+	RunLogicTest(t, TestServerArgs{}, testutils.TestDataPath(t, "logic_test", "testserver_upgrade_node"))
 }
 
 // TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments
