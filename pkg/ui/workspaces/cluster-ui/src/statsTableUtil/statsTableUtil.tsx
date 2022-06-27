@@ -17,7 +17,6 @@ import {
   statementDiagnostics,
   statementsRetries,
   statementsSql,
-  statementsTimeInterval,
   readFromDisk,
   writtenToDisk,
   planningExecutionTime,
@@ -344,11 +343,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {`Cumulative number of executions of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {`Cumulative number of executions of ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
             <p>
               {"The bar indicates the ratio of runtime success (gray) to "}
@@ -409,15 +404,11 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {"Aggregation of all rows "}
+              {"Average (mean) number of rows "}
               <Anchor href={readFromDisk} target="_blank">
                 read from disk
               </Anchor>
-              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {` per execution for ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
             <p>
               The gray bar indicates the mean number of rows read from disk. The
@@ -458,11 +449,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={readFromDisk} target="_blank">
                 read from disk
               </Anchor>
-              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
             <p>
               The gray bar indicates the mean number of bytes read from disk.
@@ -503,11 +490,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={writtenToDisk} target="_blank">
                 written to disk
               </Anchor>
-              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
             <p>
               The gray bar indicates the mean number of rows written to disk.
@@ -552,11 +535,12 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={planningExecutionTime} target="_blank">
                 planning and execution time
               </Anchor>
-              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified time interval. `}
+              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
             <p>
               The gray bar indicates the mean latency. The blue bar indicates
-              one standard deviation from the mean.
+              one standard deviation from the mean. This time does not include
+              the time it takes to stream results back to the client.
             </p>
           </>
         }
@@ -593,11 +577,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={contentionTime} target="_blank">
                 in contention
               </Anchor>
-              {` with other ${contentModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {` with other ${contentModifier} within the specified time interval.`}
             </p>
             <p>
               The gray bar indicates mean contention time. The blue bar
@@ -634,11 +614,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {`Maximum memory used by a ${contentModifier} with this fingerprint${fingerprintModifier} at any time during its execution within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {`Maximum memory used by a ${contentModifier} with this fingerprint${fingerprintModifier} at any time during its execution within the specified time interval.`}
             </p>
             <p>
               The gray bar indicates the average max memory usage. The blue bar
@@ -679,11 +655,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={readsAndWrites} target="_blank">
                 data transferred over the network
               </Anchor>
-              {` (e.g., between regions and nodes) for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
+              {` (e.g., between regions and nodes) for ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
             <p>
               If this value is 0, the statement was executed on a single node.
@@ -727,7 +699,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               <Anchor href={statementsRetries} target="_blank">
                 retries
               </Anchor>
-              {` of ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified time interval.`}
+              {` (including internal and automatic retries) of ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
           </>
         }
@@ -760,7 +732,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
           <p>
             % of runtime all {contentModifier} with this fingerprint
             {fingerprintModifier} represent, compared to the cumulative runtime
-            of all queries within the last hour or specified time interval.
+            of all queries within the specified time interval.
           </p>
         }
       >
