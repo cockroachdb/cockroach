@@ -334,6 +334,7 @@ func NewStreamer(
 		"single Streamer async concurrency",
 		uint64(streamerConcurrencyLimit.Get(&st.SV)),
 	)
+	s.mu.avgResponseEstimator.init(&st.SV)
 	return s
 }
 
