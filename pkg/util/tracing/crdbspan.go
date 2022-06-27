@@ -678,10 +678,6 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 	logRecord := &tracingpb.LogRecord{
 		Time:    now,
 		Message: msg,
-		// Compatibility with 21.2.
-		DeprecatedFields: []tracingpb.LogRecord_Field{
-			{Key: tracingpb.LogMessageField, Value: msg},
-		},
 	}
 
 	s.recordInternal(logRecord, &s.mu.recording.logs)

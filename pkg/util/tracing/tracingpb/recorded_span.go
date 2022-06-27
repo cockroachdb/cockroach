@@ -82,17 +82,6 @@ func (l LogRecord) Msg() redact.RedactableString {
 	if l.Message != "" {
 		return l.Message
 	}
-
-	// Compatibility with 21.2: look at l.DeprecatedFields.
-	for _, f := range l.DeprecatedFields {
-		key := f.Key
-		if key == LogMessageField {
-			return f.Value
-		}
-		if key == "error" {
-			return redact.Sprintf("error: %s", f.Value)
-		}
-	}
 	return ""
 }
 

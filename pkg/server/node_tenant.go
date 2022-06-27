@@ -43,27 +43,6 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) e
 					"recording has non-redactable span with the Message field set: %s", sp)
 			}
 			record.Message = record.Message.Redact()
-
-			// For compatibility with old versions, also redact DeprecatedFields.
-			for k := range record.DeprecatedFields {
-				field := &record.DeprecatedFields[k]
-				if field.Key != tracingpb.LogMessageField {
-					// We don't have any of these fields, but let's not take any
-					// chances (our dependencies might slip them in).
-					field.Value = TraceRedactedMarker
-					continue
-				}
-				if !sp.RedactableLogs {
-					// If we're handling a span that originated from an (early patch
-					// release) 22.1 node, all the containing information will be
-					// stripped. Note that this is not the common path here, as most
-					// information in the trace will be from the local node, which
-					// always creates redactable logs.
-					field.Value = TraceRedactedMarker
-					continue
-				}
-				field.Value = field.Value.Redact()
-			}
 		}
 	}
 	return nil
