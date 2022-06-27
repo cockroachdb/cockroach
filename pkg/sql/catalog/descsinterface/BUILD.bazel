@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "descsinterface",
+    srcs = ["collection_interface.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descsinterface",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/hlc",
+    ],
+)
