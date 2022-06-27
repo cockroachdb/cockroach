@@ -212,6 +212,17 @@ type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
 
+// WithoutTxn is to run SQL statements without a txn context.
+// Note that in this mode, each execution with the internal executor runs its
+// own descriptor collection, schema change job collection and transaction state
+// machine.
+func (f InternalExecutorFactory) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, nil /* SessionData */)
+	return run(ctx, ie)
+}
+
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
 
@@ -219,3 +230,9 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// InternalExecutorCommitTxnFunc is to commit the txn associated with an
+// internal executor.
+type InternalExecutorCommitTxnFunc func(
+	ctx context.Context, txn *kv.Txn,
+) error
