@@ -2477,3 +2477,6 @@ DETAIL: source SQL:
 CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0") INVISIBLE)
                                                           ^
 HINT: try \h CREATE TABLE
+
+# TODO (wenyihu6): change the parser later on to give more user-friendly error
+# when primary key constriant is used with invisible index.

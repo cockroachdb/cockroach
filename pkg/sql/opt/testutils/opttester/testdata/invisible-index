@@ -1,0 +1,406 @@
+# This file tests for invisible index feature. Invisible index should be ignored
+# by the optimizer unless explicitly selected with index hinting.
+
+exec-ddl
+CREATE TABLE t1 (k INT PRIMARY KEY, v INT, i INT, p INT, INDEX idx_v_invisible (v) INVISIBLE)
+----
+
+# Index idx_v_invisible should be invisible.
+exec-ddl
+SHOW CREATE t1
+----
+TABLE t1
+ ├── k int not null
+ ├── v int
+ ├── i int
+ ├── p int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t1_pkey
+ │    └── k int not null
+ └── INDEX idx_v_invisible INVISIBLE
+      ├── v int
+      └── k int not null
+
+# Optimal plan did not choose a scan of the index
+# idx_v_invisible because idx_v_invisible was invisible.
+opt
+SELECT * FROM t1 WHERE v = 2
+----
+select
+ ├── columns: k:1(int!null) v:2(int!null) i:3(int) p:4(int)
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3,4)
+ ├── scan t1
+ │    ├── columns: k:1(int!null) v:2(int) i:3(int) p:4(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+           ├── variable: v:2 [type=int]
+           └── const: 2 [type=int]
+
+# Optimal plan for the following query chose a scan of the index idx_v_invisible
+# because idx_v_invisible was explicitly selected with index hinting.
+opt
+SELECT * FROM t1@idx_v_invisible WHERE v = 2
+----
+index-join t1
+ ├── columns: k:1(int!null) v:2(int!null) i:3(int) p:4(int)
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3,4)
+ └── scan t1@idx_v_invisible
+      ├── columns: k:1(int!null) v:2(int!null)
+      ├── constraint: /2/1: [/2 - /2]
+      ├── flags: force-index=idx_v_invisible
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+# Index idx_i_visible should be visible.
+exec-ddl
+CREATE INDEX idx_i_visible ON t1(i) VISIBLE
+----
+
+# Optimal plan for the following query choose a scan of the index idx_i_visible
+# because idx_i_visible is visible.
+opt
+SELECT * FROM t1 WHERE i = 2
+----
+index-join t1
+ ├── columns: k:1(int!null) v:2(int) i:3(int!null) p:4(int)
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan t1@idx_i_visible
+      ├── columns: k:1(int!null) i:3(int!null)
+      ├── constraint: /3/1: [/2 - /2]
+      ├── key: (1)
+      └── fd: ()-->(3)
+
+exec-ddl
+DROP INDEX t1@idx_i_visible
+----
+
+# Index idx_i_invisible should be invisible.
+exec-ddl
+CREATE INDEX idx_i_invisible ON t1(i) INVISIBLE
+----
+
+# Optimal plan for the following query did not choose a scan of the index
+# idx_i_invisible because idx_i_invisible was invisible.
+opt
+SELECT * FROM t1 WHERE i = 2
+----
+select
+ ├── columns: k:1(int!null) v:2(int) i:3(int!null) p:4(int)
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ ├── scan t1
+ │    ├── columns: k:1(int!null) v:2(int) i:3(int) p:4(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── eq [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
+           ├── variable: i:3 [type=int]
+           └── const: 2 [type=int]
+
+# Optimal plan for the following query chose a scan of the index idx_i_invisible
+# because idx_i_invisible was explicitly selected with index hinting.
+opt
+SELECT * FROM t1@{FORCE_INDEX=idx_i_invisible, ASC};
+----
+index-join t1
+ ├── columns: k:1(int!null) v:2(int) i:3(int) p:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t1@idx_i_invisible
+      ├── columns: k:1(int!null) i:3(int)
+      ├── flags: force-index=idx_i_invisible,fwd
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+# Optimal plan for the following query chose a scan of the index idx_i_invisible
+# because idx_i_invisible was explicitly selected with index hinting.
+opt
+SELECT * FROM t1@{FORCE_INDEX=idx_i_invisible, DESC} WHERE i > 0;
+----
+index-join t1
+ ├── columns: k:1(int!null) v:2(int) i:3(int!null) p:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t1@idx_i_invisible,rev
+      ├── columns: k:1(int!null) i:3(int!null)
+      ├── constraint: /3/1: [/1 - ]
+      ├── flags: force-index=idx_i_invisible,rev
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+# The following test cases checks for primary index. Primary indexes cannot be
+# invisible.
+
+# TODO (wenyihu3): After introducing ALTER INDEX ... INVISIBLE, UNIQUE INDEX,
+# ADD CONSTRAINT for UNIQUE new test cases should be added. New test cases
+# should also cover ALTER PRIMARY KEY.
+
+# Note that primary indexes cannot be created with CREATE TABLE or CREATE INDEX.
+# Check pkg/sql/parser/testdata/create_table to see how adding invisible with
+# primary key constraint caused an error. New indexes created on primary key
+# column are secondary and can be made invisible.
+
+exec-ddl
+CREATE INDEX idx_k_invisible ON t1(k) INVISIBLE
+----
+
+opt
+SELECT k FROM t1;
+----
+scan t1
+ ├── columns: k:1(int!null)
+ └── key: (1)
+
+# TODO (wenyihu6): More test cases should be added for UNIQUE index and primary key index.
+# The following tests check for unique index.
+exec-ddl
+CREATE TABLE t4 (id INT, INDEX idx_data_invisible(id) WHERE id > 10 INVISIBLE);
+----
+
+exec-ddl
+SHOW CREATE t4
+----
+TABLE t4
+ ├── id int
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t4_pkey
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── INDEX idx_data_invisible INVISIBLE
+      ├── id int
+      ├── rowid int not null default (unique_rowid()) [hidden]
+      └── WHERE id > 10
+
+# The following tests check for invisible partial index.
+exec-ddl
+CREATE TABLE t2 (a INT, b INT, c INT, INDEX idx_a_partial_visible (a) WHERE a > 0);
+----
+
+opt
+SELECT a FROM t2 WHERE a > 0;
+----
+scan t2@idx_a_partial_visible,partial
+ └── columns: a:1(int!null)
+
+exec-ddl
+DROP INDEX t2@idx_a_partial_visible
+----
+
+exec-ddl
+CREATE INDEX idx_a_partial_invisible ON t2(a) WHERE a > 0 INVISIBLE
+----
+
+opt
+SELECT a FROM t2 WHERE a > 0;
+----
+select
+ ├── columns: a:1(int!null)
+ ├── scan t2
+ │    ├── columns: a:1(int)
+ │    └── partial index predicates
+ │         └── idx_a_partial_invisible: filters
+ │              └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │                   ├── variable: a:1 [type=int]
+ │                   └── const: 0 [type=int]
+ └── filters
+      └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+           ├── variable: a:1 [type=int]
+           └── const: 0 [type=int]
+
+opt
+SELECT * FROM t2@{FORCE_INDEX=idx_a_partial_invisible, DESC} WHERE a > 2;
+----
+index-join t2
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ └── select
+      ├── columns: a:1(int!null) rowid:4(int!null)
+      ├── key: (4)
+      ├── fd: (4)-->(1)
+      ├── scan t2@idx_a_partial_invisible,rev,partial
+      │    ├── columns: a:1(int!null) rowid:4(int!null)
+      │    ├── flags: force-index=idx_a_partial_invisible,rev
+      │    ├── key: (4)
+      │    └── fd: (4)-->(1)
+      └── filters
+           └── gt [type=bool, outer=(1), constraints=(/1: [/3 - ]; tight)]
+                ├── variable: a:1 [type=int]
+                └── const: 2 [type=int]
+
+opt
+SELECT a FROM t2@{FORCE_INDEX=idx_a_partial_invisible} WHERE a < 0;
+----
+select
+ ├── columns: a:1(int!null)
+ ├── scan t2
+ │    ├── columns: a:1(int)
+ │    ├── partial index predicates
+ │    │    └── idx_a_partial_invisible: filters
+ │    │         └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │    │              ├── variable: a:1 [type=int]
+ │    │              └── const: 0 [type=int]
+ │    └── flags: force-index=idx_a_partial_invisible
+ └── filters
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+           ├── variable: a:1 [type=int]
+           └── const: 0 [type=int]
+
+exec-ddl
+CREATE INDEX idx_c_partial_invisible ON t2(c) WHERE a >= b AND c = 3 INVISIBLE
+----
+
+opt
+SELECT * FROM t2 WHERE a > b AND c = 3;
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── fd: ()-->(3)
+ ├── scan t2
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── partial index predicates
+ │         ├── idx_a_partial_invisible: filters
+ │         │    └── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+ │         │         ├── variable: a:1 [type=int]
+ │         │         └── const: 0 [type=int]
+ │         └── idx_c_partial_invisible: filters
+ │              ├── ge [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ │              │    ├── variable: a:1 [type=int]
+ │              │    └── variable: b:2 [type=int]
+ │              └── eq [type=bool, outer=(3), constraints=(/3: [/3 - /3]; tight), fd=()-->(3)]
+ │                   ├── variable: c:3 [type=int]
+ │                   └── const: 3 [type=int]
+ └── filters
+      ├── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    ├── variable: a:1 [type=int]
+      │    └── variable: b:2 [type=int]
+      └── eq [type=bool, outer=(3), constraints=(/3: [/3 - /3]; tight), fd=()-->(3)]
+           ├── variable: c:3 [type=int]
+           └── const: 3 [type=int]
+
+opt
+SELECT * FROM t2@{FORCE_INDEX=idx_c_partial_invisible} WHERE a > b AND c = 3;
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── fd: ()-->(3)
+ ├── index-join t2
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    ├── fd: ()-->(3)
+ │    └── scan t2@idx_c_partial_invisible,partial
+ │         ├── columns: c:3(int!null) rowid:4(int!null)
+ │         ├── flags: force-index=idx_c_partial_invisible
+ │         ├── key: (4)
+ │         └── fd: ()-->(3)
+ └── filters
+      └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── variable: a:1 [type=int]
+           └── variable: b:2 [type=int]
+
+# The following tests check for inverted index and partial inverted index.
+exec-ddl
+CREATE TABLE t3 (id INT, data JSONB, geom GEOMETRY, INVERTED INDEX idx_data_invisible(data) WHERE id > 10 INVISIBLE);
+----
+
+opt
+SELECT * FROM t3 WHERE data @> '{"foo": "1"}' AND id > 10
+----
+select
+ ├── columns: id:1(int!null) data:2(jsonb!null) geom:3(geometry)
+ ├── immutable
+ ├── scan t3
+ │    ├── columns: id:1(int) data:2(jsonb) geom:3(geometry)
+ │    └── partial index predicates
+ │         └── idx_data_invisible: filters
+ │              └── gt [type=bool, outer=(1), constraints=(/1: [/11 - ]; tight)]
+ │                   ├── variable: id:1 [type=int]
+ │                   └── const: 10 [type=int]
+ └── filters
+      ├── contains [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      │    ├── variable: data:2 [type=jsonb]
+      │    └── const: '{"foo": "1"}' [type=jsonb]
+      └── gt [type=bool, outer=(1), constraints=(/1: [/11 - ]; tight)]
+           ├── variable: id:1 [type=int]
+           └── const: 10 [type=int]
+
+opt
+SELECT * FROM t3@idx_data_invisible WHERE data @> '{"foo": "1"}' AND id > 12
+----
+select
+ ├── columns: id:1(int!null) data:2(jsonb!null) geom:3(geometry)
+ ├── immutable
+ ├── index-join t3
+ │    ├── columns: id:1(int) data:2(jsonb) geom:3(geometry)
+ │    └── scan t3@idx_data_invisible,partial
+ │         ├── columns: rowid:4(int!null)
+ │         ├── inverted constraint: /7/4
+ │         │    └── spans: ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
+ │         ├── flags: force-index=idx_data_invisible
+ │         └── key: (4)
+ └── filters
+      └── gt [type=bool, outer=(1), constraints=(/1: [/13 - ]; tight)]
+           ├── variable: id:1 [type=int]
+           └── const: 12 [type=int]
+
+exec-ddl
+CREATE INDEX idx_geom_invisible ON t3 USING GIN (geom) INVISIBLE
+----
+
+opt
+SELECT * FROM t3 WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
+----
+select
+ ├── columns: id:1(int) data:2(jsonb) geom:3(geometry!null)
+ ├── immutable
+ ├── scan t3
+ │    ├── columns: id:1(int) data:2(jsonb) geom:3(geometry)
+ │    └── partial index predicates
+ │         └── idx_data_invisible: filters
+ │              └── gt [type=bool, outer=(1), constraints=(/1: [/11 - ]; tight)]
+ │                   ├── variable: id:1 [type=int]
+ │                   └── const: 10 [type=int]
+ └── filters
+      └── function: st_covers [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+           ├── variable: geom:3 [type=geometry]
+           └── const: '0102000000020000000000000000000000000000000000000000000000000000000000000000000040' [type=geometry]
+
+opt
+SELECT * FROM t3@idx_geom_invisible WHERE st_covers(geom, 'LINESTRING ( 0 0, 0 2 )'::geometry)
+----
+select
+ ├── columns: id:1(int) data:2(jsonb) geom:3(geometry!null)
+ ├── immutable
+ ├── index-join t3
+ │    ├── columns: id:1(int) data:2(jsonb) geom:3(geometry)
+ │    └── inverted-filter
+ │         ├── columns: rowid:4(int!null)
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── function: st_coveredby [type=bool]
+ │         │         ├── const: '0102000000020000000000000000000000000000000000000000000000000000000000000000000040' [type=geometry]
+ │         │         └── variable: geom:3 [type=geometry]
+ │         ├── key: (4)
+ │         └── scan t3@idx_geom_invisible
+ │              ├── columns: rowid:4(int!null) geom_inverted_key:8(encodedkey!null)
+ │              ├── inverted constraint: /8/4
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── flags: force-index=idx_geom_invisible
+ │              ├── key: (4)
+ │              └── fd: (4)-->(8)
+ └── filters
+      └── function: st_covers [type=bool, outer=(3), immutable, constraints=(/3: (/NULL - ])]
+           ├── variable: geom:3 [type=geometry]
+           └── const: '0102000000020000000000000000000000000000000000000000000000000000000000000000000040' [type=geometry]
