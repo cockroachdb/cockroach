@@ -239,10 +239,10 @@ func alterTableAddColumn(
 	}
 	{
 		tableElts := b.QueryByID(tbl.TableID)
-		_, _, currentZoneConfigElem := scpb.FindTableZoneConfig(tableElts)
 		_, _, tblNS := scpb.FindNamespace(tableElts)
-		rc := synthesizeMultiRegionConfig(b, tblNS.DatabaseID)
 		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+			_, _, currentZoneConfigElem := scpb.FindTableZoneConfig(tableElts)
+			rc := synthesizeMultiRegionConfig(b, tblNS.DatabaseID)
 			for _, indexID := range indexIDsForZoneConfig {
 				for _, region := range rc.Regions() {
 					fmt.Printf("Subzone: %d %s\n", indexID, region)

@@ -21,10 +21,7 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.TableZoneConfig) scop.Op {
-					return &scop.UpsertZoneConfig{
-						DescriptorID: this.TableID,
-						ZoneConfig:   this.ZoneConfig,
-					}
+					return notImplemented(this)
 				}),
 			),
 		),

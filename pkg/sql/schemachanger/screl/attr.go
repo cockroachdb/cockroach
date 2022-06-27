@@ -65,7 +65,10 @@ const (
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
 	TemporaryIndexID
+	// ZoneConfigID uniquely identifies zone configs during the build phase.
+	// Note: These are provisional and never stored.
 	ZoneConfigID
+	// PartitionName region name of a sub zone config.
 	PartitionName
 
 	// TargetStatus is the target status of an element.

@@ -350,18 +350,18 @@ func (mr *MockDependenciesMockRecorder) User() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "User", reflect.TypeOf((*MockDependencies)(nil).User))
 }
 
-// ZoneConfigReader mocks base method.
-func (m *MockDependencies) ZoneConfigReader() scmutationexec.ZoneConfigReader {
+// ZoneConfigReaderForExec mocks base method.
+func (m *MockDependencies) ZoneConfigReaderForExec() scmutationexec.ZoneConfigReader {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ZoneConfigReader")
+	ret := m.ctrl.Call(m, "ZoneConfigReaderForExec")
 	ret0, _ := ret[0].(scmutationexec.ZoneConfigReader)
 	return ret0
 }
 
-// ZoneConfigReader indicates an expected call of ZoneConfigReader.
-func (mr *MockDependenciesMockRecorder) ZoneConfigReader() *gomock.Call {
+// ZoneConfigReaderForExec indicates an expected call of ZoneConfigReaderForExec.
+func (mr *MockDependenciesMockRecorder) ZoneConfigReaderForExec() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ZoneConfigReader", reflect.TypeOf((*MockDependencies)(nil).ZoneConfigReader))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ZoneConfigReaderForExec", reflect.TypeOf((*MockDependencies)(nil).ZoneConfigReaderForExec))
 }
 
 // MockBackfiller is a mock of Backfiller interface.

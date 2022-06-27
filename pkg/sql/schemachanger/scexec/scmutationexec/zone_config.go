@@ -17,14 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
-func (m *visitor) UpsertZoneConfig(ctx context.Context, op scop.UpsertZoneConfig) error {
-	tbl, err := m.checkOutTable(ctx, op.DescriptorID)
-	if err != nil {
-		return err
-	}
-	return m.s.SetZoneConfig(tbl, op.ZoneConfig)
-}
-
 func (m *visitor) AddSubZoneConfig(ctx context.Context, op scop.AddSubZoneConfig) error {
 	tbl, err := m.checkOutTable(ctx, op.DescriptorID)
 	if err != nil {

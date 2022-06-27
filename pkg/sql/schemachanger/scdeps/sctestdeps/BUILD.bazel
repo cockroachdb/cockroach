@@ -31,6 +31,7 @@ go_library(
         "//pkg/sql/descmetadata",
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scexec",

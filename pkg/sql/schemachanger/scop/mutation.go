@@ -543,13 +543,6 @@ type RefreshStats struct {
 	TableID descpb.ID
 }
 
-// UpsertZoneConfig the zone config.
-type UpsertZoneConfig struct {
-	mutationOp
-	DescriptorID descpb.ID
-	ZoneConfig   *zonepb.ZoneConfig
-}
-
 // AddSubZoneConfig adds a sub zone into the zone config.
 type AddSubZoneConfig struct {
 	mutationOp
@@ -559,6 +552,7 @@ type AddSubZoneConfig struct {
 	ZoneConfig    *zonepb.ZoneConfig
 }
 
+// RemoveSubZoneConfig removes a sub zone from the zone config.
 type RemoveSubZoneConfig struct {
 	mutationOp
 	DescriptorID  descpb.ID

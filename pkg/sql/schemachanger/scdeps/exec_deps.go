@@ -421,7 +421,7 @@ func (d *execDeps) User() username.SQLUsername {
 	return d.user
 }
 
-// CommentUpdater implements the scexec.Dependencies interface.
+// DescriptorMetadataUpdater implements the scexec.Dependencies interface.
 func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.DescriptorMetadataUpdater {
 	return d.commentUpdaterFactory.NewMetadataUpdater(ctx, d.txn, d.sessionData)
 }
@@ -465,7 +465,7 @@ func (d *execDeps) IncrementSchemaChangeErrorType(typ string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeErrorCounter(typ))
 }
 
-func (d *execDeps) ZoneConfigReader() scmutationexec.ZoneConfigReader {
+func (d *execDeps) ZoneConfigReaderForExec() scmutationexec.ZoneConfigReader {
 	return d.zoneConfigReader
 }
 
@@ -560,6 +560,7 @@ type zoneConfigReader struct {
 	codec keys.SQLCodec
 }
 
+// NewZoneConfigReader constructs a new zone config reader for execution.
 func NewZoneConfigReader(txn *kv.Txn, codec keys.SQLCodec) scmutationexec.ZoneConfigReader {
 	return &zoneConfigReader{
 		txn:   txn,
@@ -567,7 +568,8 @@ func NewZoneConfigReader(txn *kv.Txn, codec keys.SQLCodec) scmutationexec.ZoneCo
 	}
 }
 
-func (zc *zoneConfigReader) GetZoneConfigRaw(
+// GetZoneConfigRaw reads the zone config the system table.
+func (zc *zoneConfigReader) GetZoneConfig(
 	ctx context.Context, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
 	kv, err := zc.txn.Get(ctx, config.MakeZoneKey(zc.codec, id))

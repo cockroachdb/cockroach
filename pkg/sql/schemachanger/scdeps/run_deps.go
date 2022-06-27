@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -31,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// NewJobRunDependencies returns an scrun.JobRunDependencies implementation built from the
+// NewJobRunDependencies returns a scrun.JobRunDependencies implementation built from the
 // given arguments.
 func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
@@ -83,7 +82,6 @@ type jobExecutionDeps struct {
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
 	merger                scexec.Merger
-	zoneConfigReader      scmutationexec.ZoneConfigReader
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          backfiller.RangeCounter
 	jobRegistry           *jobs.Registry

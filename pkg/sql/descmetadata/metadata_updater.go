@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -192,10 +191,7 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 
 // SetZoneConfig implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) SetZoneConfig(
-	ctx context.Context,
-	id descpb.ID,
-	zone *zonepb.ZoneConfig,
-	subZonesIndexesToRecompute util.FastIntSet,
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
 ) error {
 	if zone == nil {
 		_, err := mu.ie.Exec(ctx, "delete-zone", mu.txn,
@@ -206,6 +202,7 @@ func (mu metadataUpdater) SetZoneConfig(
 	return mu.collectionFactory.Txn(ctx, mu.ie, mu.txn.DB(),
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 
+			// Recompute any spans for the subzones.
 			if len(zone.Subzones) != 0 {
 				tbl, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
 				if err != nil {
