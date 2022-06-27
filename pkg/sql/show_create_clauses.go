@@ -213,30 +213,41 @@ func formatViewQueryTypesForDisplay(
 	desc catalog.TableDescriptor,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		var innerExpr tree.Expr
+		var typRef tree.ResolvableTypeReference
 		switch n := expr.(type) {
-		case *tree.AnnotateTypeExpr, *tree.CastExpr:
-			texpr, err := tree.TypeCheck(ctx, n, semaCtx, types.Any)
-			if err != nil {
-				return false, expr, err
-			}
-			if !texpr.ResolvedType().UserDefined() {
-				return true, expr, nil
-			}
-
-			formattedExpr, err := schemaexpr.FormatExprForDisplay(
-				ctx, desc, expr.String(), semaCtx, sessionData, tree.FmtParsable,
-			)
-			if err != nil {
-				return false, expr, err
-			}
-			newExpr, err = parser.ParseExpr(formattedExpr)
-			if err != nil {
-				return false, expr, err
-			}
-			return false, newExpr, nil
+		case *tree.CastExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
 		default:
 			return true, expr, nil
 		}
+		var typ *types.T
+		typ, err = tree.ResolveType(ctx, typRef, semaCtx.TypeResolver)
+		if err != nil {
+			return false, expr, err
+		}
+		if !typ.UserDefined() {
+			return true, expr, nil
+		}
+		texpr, err := innerExpr.TypeCheck(ctx, semaCtx, typ)
+		if err != nil {
+			return false, expr, err
+		}
+		formattedExpr, err := schemaexpr.FormatExprForDisplay(
+			ctx, desc, texpr.String(), semaCtx, sessionData, tree.FmtParsable,
+		)
+		if err != nil {
+			return false, expr, err
+		}
+		newExpr, err = parser.ParseExpr(formattedExpr)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
 	}
 
 	viewQuery := desc.GetViewQuery()
