@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -226,9 +228,7 @@ type Streamer struct {
 	maxKeysPerRow int32
 	budget        *budget
 
-	atomics struct {
-		batchRequestsIssued *int64
-	}
+	streamerStatistics
 
 	coordinator          workerCoordinator
 	coordinatorStarted   bool
@@ -274,6 +274,37 @@ type Streamer struct {
 		// coordinator must exit.
 		done bool
 	}
+}
+
+type streamerStatistics struct {
+	atomics struct {
+		batchRequestsIssued *int64
+		// resumeBatchRequests tracks the number of BatchRequests created for
+		// the ResumeSpans throughout the lifetime of the Streamer.
+		resumeBatchRequests int64
+		// resumeSingleRangeRequests tracks the number of single-range requests
+		// that were created for the ResumeSpans throughout the lifetime of the
+		// Streamer.
+		resumeSingleRangeRequests int64
+		// emptyBatchResponses tracks the number of BatchRequests that resulted
+		// in empty BatchResponses because they were issued with too low value
+		// of TargetBytes parameter.
+		emptyBatchResponses int64
+		// droppedBatchResponses tracks the number of the received
+		// BatchResponses that were dropped because the memory reservation
+		// during the budget reconciliation was denied (i.e. the original
+		// estimate was too low, and the budget has been used up by the time
+		// response came).
+		droppedBatchResponses int64
+	}
+	// numEnqueueCalls tracks the number of times Enqueue() has been called.
+	numEnqueueCalls int
+	// numEnqueuedRequests tracks the number of possibly-multi-range requests
+	// that have been Enqueue()'d into the Streamer.
+	numEnqueuedRequests int
+	// numEnqueuedSingleRangeRequests tracks the number of single-range
+	// sub-requests that were created during the truncation process in Enqueue()
+	numEnqueuedSingleRangeRequests int
 }
 
 // streamerConcurrencyLimit is an upper bound on the number of asynchronous
@@ -434,6 +465,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		return err
 	}
 
+	s.numEnqueueCalls++
+	s.numEnqueuedRequests += len(reqs)
+
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
 	rs, err := keys.Range(reqs)
@@ -542,6 +576,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		}
 
 		requestsToServe = append(requestsToServe, r)
+		s.numEnqueuedSingleRangeRequests += len(singleRangeReqs)
 
 		// Determine next seek key, taking potentially sparse requests into
 		// consideration.
@@ -625,6 +660,7 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 // other calls on s are allowed after this.
 func (s *Streamer) Close(ctx context.Context) {
 	if s.coordinatorStarted {
+		s.coordinator.logStatistics(ctx)
 		s.coordinatorCtxCancel()
 		s.mu.Lock()
 		s.mu.done = true
@@ -740,6 +776,33 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// logStatistics logs some of the statistics about the Streamer. It should be
+// called at the end of the Streamer's lifecycle.
+// TODO(yuzefovich): at the moment, these statistics will be attached to the
+// tracing span of the Streamer's user. Some time has been spent to figure it
+// out but led to no success. This should be cleaned up.
+func (w *workerCoordinator) logStatistics(ctx context.Context) {
+	avgResponseSize, _ := w.getAvgResponseSize()
+	log.VEventf(
+		ctx, 1,
+		"number of Enqueue calls = %d, number of enqueued requests = %d, "+
+			"number of single-range enqueued requests = %d, number of issued BatchRequests = %d, "+
+			"number of resume BatchRequests = %d, number of resume single-range requests = %d, "+
+			"number of spilled Results = %d, number of empty BatchResponses = %d, "+
+			"number of dropped BatchResponses = %d, final average response size = %s",
+		w.s.numEnqueueCalls,
+		w.s.numEnqueuedRequests,
+		w.s.numEnqueuedSingleRangeRequests,
+		atomic.LoadInt64(w.s.atomics.batchRequestsIssued),
+		atomic.LoadInt64(&w.s.atomics.resumeBatchRequests),
+		atomic.LoadInt64(&w.s.atomics.resumeSingleRangeRequests),
+		w.s.results.numSpilledResults(),
+		atomic.LoadInt64(&w.s.atomics.emptyBatchResponses),
+		atomic.LoadInt64(&w.s.atomics.droppedBatchResponses),
+		humanizeutil.IBytes(avgResponseSize),
+	)
 }
 
 // waitForRequests blocks until there is at least one request to be served.
@@ -1129,6 +1192,7 @@ func (w *workerCoordinator) performRequestAsync(
 				// but not enough for that large row).
 				toConsume := -overaccountedTotal
 				if err := w.s.budget.consume(ctx, toConsume, headOfLine /* allowDebt */); err != nil {
+					atomic.AddInt64(&w.s.atomics.droppedBatchResponses, 1)
 					w.s.budget.release(ctx, targetBytes)
 					if !headOfLine {
 						// Since this is not the head of the line, we'll just
@@ -1413,6 +1477,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 		)
 	} else {
 		// We received an empty response.
+		atomic.AddInt64(&w.s.atomics.emptyBatchResponses, 1)
 		if req.minTargetBytes != 0 {
 			// We previously have already received an empty response for this
 			// request, and minTargetBytes wasn't sufficient. Make sure that
@@ -1444,6 +1509,8 @@ func (w *workerCoordinator) processSingleRangeResults(
 			req.reqs[i] = roachpb.RequestUnion{}
 		}
 		w.s.requestsToServe.add(resumeReq)
+		atomic.AddInt64(&w.s.atomics.resumeBatchRequests, 1)
+		atomic.AddInt64(&w.s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))
 	}
 
 	return nil
