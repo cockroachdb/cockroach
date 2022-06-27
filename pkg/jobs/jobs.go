@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
@@ -798,6 +799,9 @@ func HasJobNotFoundError(err error) bool {
 }
 
 func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
+	ctx, sp := tracing.ChildSpan(ctx, "load-job")
+	defer sp.Finish()
+
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	var createdBy *CreatedByInfo

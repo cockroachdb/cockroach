@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -140,6 +141,9 @@ func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error 
 }
 
 func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateFn UpdateFn) error {
+	ctx, sp := tracing.ChildSpan(ctx, "update-job")
+	defer sp.Finish()
+
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	var status Status
@@ -150,7 +154,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		var err error
 		var row tree.Datums
 		row, err = j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn,
+			ctx, "select-job", txn,
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			getSelectStmtForJobUpdate(j.session != nil, useReadLock), j.ID(),
 		)
