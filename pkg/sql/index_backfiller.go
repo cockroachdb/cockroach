@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -166,7 +167,8 @@ func (ib *IndexBackfillPlanner) plan(
 	if err := DescsTxn(ctx, ib.execCfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, descriptors)
+		sd := sessiondatautil.NewFakeSessionData(ib.execCfg.SV())
+		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx,
 			nil /* planner */, txn, DistributionTypeSystemTenantOnly)
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
