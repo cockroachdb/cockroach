@@ -2673,6 +2673,87 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 	})
 }
 
+// TODO:
+// For each FK constraint in each left/right table pair:
+//   If there are equalities between a subset of the FK columns,
+//   And the FK columsn for a key (lax I think?) on the referenced (parent) side of the
+//   FK constraint,
+//   Then all the columns in the FK constraint are equal to columns in the child.
+
+// // addFKJoinImpliedFDs adds any extra equality FDs that are implied by a self
+// // join equality between key columns on a table.
+// // TODO
+// func (h *joinPropsHelper) addFKJoinImpliedFDs(rel *props.Relational) {
+// 	md := h.join.Memo().Metadata()
+// 	leftCols, rightCols := h.leftProps.OutputCols, h.rightProps.OutputCols
+// 	if !rel.FuncDeps.ComputeEquivClosure(leftCols).Intersects(rightCols) {
+// 		// There are no equalities between left and right columns.
+// 		return
+// 	}
+// 	// Retrieve the tables that originate the given columns.
+// 	getTables := func(cols opt.ColSet) intsets.Fast {
+// 		var tables intsets.Fast
+// 		cols.ForEach(func(col opt.ColumnID) {
+// 			if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
+// 				tables.Add(int(tab))
+// 			}
+// 		})
+// 		return tables
+// 	}
+// 	leftTables, rightTables := getTables(leftCols), getTables(rightCols)
+// 	if leftTables.Empty() || rightTables.Empty() {
+// 		return
+// 	}
+// 	leftTables.ForEach(func(left int) {
+// 		leftTable := opt.TableID(left)
+// 		baseTabFDs := MakeTableFuncDep(md, leftTable)
+// 		rightTables.ForEach(func(right int) {
+// 			rightTable := opt.TableID(right)
+// 			for i, n := 0, md.Table(leftTable).InboundForeignKeyCount(); i < n; i++ {
+// 				fk := md.Table(leftTable).InboundForeignKey(i)
+// 				if fk.ReferencedTableID() != md.TableMeta(rightTable).Table.ID() {
+// 					continue
+// 				}
+// 				// Collect the equality columns.
+// 				var eqCols opt.ColSet
+// 				for colOrd, n := 0; fk.ColumnCount(); colOrd++ {
+// 					fk.Coj
+//
+// 				}
+// 			}
+//
+//
+// 			// TODO: FK join.
+// 			var eqCols opt.ColSet
+// 			var outColOrds intsets.Fast
+// 			numCols := rightTab.OutboundForeignKey(i).ColumnCount()
+// 			for colOrd := 0; colOrd < numCols; colOrd++ {
+// 				for colOrd := 0; colOrd < numCols; colOrd++ {
+// 					leftCol, rightCol := leftTable.ColumnID(colOrd), rightTable.ColumnID(colOrd)
+// 					if rel.OutputCols.Contains(leftCol) && rel.OutputCols.Contains(rightCol) {
+// 						outColOrds.Add(colOrd)
+// 						if rel.FuncDeps.AreColsEquiv(leftCol, rightCol) {
+// 							eqCols.Add(leftCol)
+// 							eqCols.Add(rightCol)
+// 						}
+// 					}
+// 				}
+// 			}
+//
+// 			if md.TableMeta(leftTable).Table.ID() != md.TableMeta(rightTable).Table.ID() {
+// 				return
+// 			}
+// 			if !eqCols.Empty() && baseTabFDs.ColsAreStrictKey(eqCols) {
+// 				// Add equalities between each pair of columns at the same ordinal
+// 				// position, ignoring those that aren't part of the output.
+// 				outColOrds.ForEach(func(colOrd int) {
+// 					rel.FuncDeps.AddEquivalency(leftTable.ColumnID(colOrd), rightTable.ColumnID(colOrd))
+// 				})
+// 			}
+// 		})
+// 	})
+// }
+
 func (h *joinPropsHelper) cardinality() props.Cardinality {
 	left := h.leftProps.Cardinality
 	right := h.rightProps.Cardinality
