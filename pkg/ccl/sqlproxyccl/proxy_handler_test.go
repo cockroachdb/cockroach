@@ -1280,10 +1280,8 @@ func TestConnectionMigration(t *testing.T) {
 		conn, err := db.Conn(tCtx)
 		require.NoError(t, err)
 
-		// Spin up a goroutine to trigger the initial connection.
-		go func() {
-			_ = conn.PingContext(tCtx)
-		}()
+		// Trigger the initial connection.
+		require.NoError(t, conn.PingContext(tCtx))
 
 		var f *forwarder
 		require.Eventually(t, func() bool {
@@ -1333,15 +1331,9 @@ func TestConnectionMigration(t *testing.T) {
 		// one test.
 		<-goCh
 		time.Sleep(2 * time.Second)
-		// This should be an error because the transfer timed out.
+		// This should be an error because the transfer timed out. Connection
+		// should automatically be closed.
 		require.Error(t, f.TransferConnection())
-
-		// Connection should be closed because this is a non-recoverable error,
-		// i.e. timeout after sending the request, but before fully receiving
-		// its response.
-		err = conn.PingContext(tCtx)
-		require.Error(t, err)
-		require.Regexp(t, "(closed|bad connection)", err.Error())
 
 		select {
 		case <-time.After(10 * time.Second):
