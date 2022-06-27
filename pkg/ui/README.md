@@ -15,6 +15,19 @@ you'll be able to access the UI at <http://localhost:8080>. If you've started
 a node using `demo`, the default port is 8081 and you'll be able to access the UI
 at <http://localhost:8081>.
 
+Immdiately upon cloning this repo, your editor may report errors from
+[eslint](https://eslint.org/) claiming that `@cockroachlabs/eslint-plugin-crbd`
+failed to load. Solve this issue by running the linter once to build the
+CRDB-specific plugin, which lives in this repo:
+```shell
+$ make ui-lint
+```
+
+or by building the plugin manually:
+```shell
+$ pushd pkg/ui/workspaces/eslint-plugin-crbd; yarn && yarn build; popd
+```
+
 Behind the scenes, our UI is compiled using a collection of tools that depends on
 [Node.js](https://nodejs.org/) and are managed with
 [Yarn](https://yarnpkg.com), a package manager that offers more deterministic
