@@ -19,9 +19,7 @@ import {
 } from "src/util";
 import {
   countBarChart,
-  rowsReadBarChart,
   bytesReadBarChart,
-  rowsWrittenBarChart,
   latencyBarChart,
   contentionBarChart,
   maxMemUsageBarChart,
@@ -71,12 +69,7 @@ function makeCommonColumns(
   };
 
   const countBar = countBarChart(statements, defaultBarChartOptions);
-  const rowsReadBar = rowsReadBarChart(statements, defaultBarChartOptions);
   const bytesReadBar = bytesReadBarChart(statements, defaultBarChartOptions);
-  const rowsWrittenBar = rowsWrittenBarChart(
-    statements,
-    defaultBarChartOptions,
-  );
   const latencyBar = latencyBarChart(statements, defaultBarChartOptions);
   const contentionBar = contentionBarChart(
     statements,
@@ -109,12 +102,18 @@ function makeCommonColumns(
       showByDefault: false,
     },
     {
-      name: "rowsRead",
-      title: statisticsTableTitles.rowsRead(statType),
+      name: "rowsProcessed",
+      title: statisticsTableTitles.rowsProcessed(statType),
       className: cx("statements-table__col-rows-read"),
-      cell: rowsReadBar,
+      cell: (stmt: AggregateStatistics) =>
+        `${FixLong(Number(stmt.stats.rows_read.mean))} Reads / ${FixLong(
+          Number(stmt.stats.rows_written?.mean),
+        )} Writes`,
       sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.rows_read.mean)),
+        FixLong(
+          Number(stmt.stats.rows_read.mean) +
+            Number(stmt.stats.rows_written?.mean),
+        ),
     },
     {
       name: "bytesRead",
@@ -122,14 +121,6 @@ function makeCommonColumns(
       cell: bytesReadBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.bytes_read.mean)),
-    },
-    {
-      name: "rowsWritten",
-      title: statisticsTableTitles.rowsWritten(statType),
-      cell: rowsWrittenBar,
-      sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.rows_written?.mean)),
-      showByDefault: false,
     },
     {
       name: "time",
