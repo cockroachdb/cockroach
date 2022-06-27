@@ -114,7 +114,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
-	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory            sqlutil.InternalExecutorFactory
 
 	// mvccCompliantAddIndex is set to true early in exec if we
 	// find that the schema change was created under the
