@@ -237,6 +237,8 @@ func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}
 	return nil
 }
 
+func (s *streamIngestionResumer) ForceRealSpan() bool { return true }
+
 var _ jobs.Resumer = &streamIngestionResumer{}
 
 func init() {
