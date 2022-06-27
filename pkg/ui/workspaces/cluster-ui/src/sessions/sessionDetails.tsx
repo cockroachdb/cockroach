@@ -161,7 +161,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 "page--header__title",
               )}`}
             >
-              Session details
+              Session Details
             </h3>
             {showActionButtons && (
               <div className={cx("heading-controls-group")}>
@@ -179,7 +179,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   type="secondary"
                   size="small"
                 >
-                  Cancel statement
+                  Cancel Statement
                 </Button>
                 <Button
                   onClick={() => {
@@ -192,7 +192,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   type="secondary"
                   size="small"
                 >
-                  Cancel session
+                  Cancel Session
                 </Button>
               </div>
             )}
@@ -386,7 +386,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 />
               )}
               <SummaryCardItem
-                label={"Application name"}
+                label={"Application Name"}
                 value={session.application_name}
                 className={cx("details-item")}
               />
@@ -421,7 +421,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 max_alloc_bytes={session.max_alloc_bytes}
               />
               <SummaryCardItem
-                label={"User name"}
+                label={"User Name"}
                 value={session.username}
                 className={cx("details-item")}
               />
