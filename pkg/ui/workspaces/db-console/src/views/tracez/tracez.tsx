@@ -18,6 +18,7 @@ import {
   SortSetting,
   util,
 } from "@cockroachlabs/cluster-ui";
+import "./tracez.styl";
 import { Button, Icon } from "@cockroachlabs/ui-components";
 import Dropdown from "src/views/shared/components/dropdown";
 import {
@@ -35,7 +36,6 @@ import {
 } from "src/util/api";
 import { CaretRight } from "@cockroachlabs/icons";
 import { Switch } from "antd";
-import "antd/lib/switch/style";
 import ISnapshotInfo = cockroach.server.serverpb.ISnapshotInfo;
 import ITracingSpan = cockroach.server.serverpb.ITracingSpan;
 import GetTracingSnapshotRequest = cockroach.server.serverpb.GetTracingSnapshotRequest;
@@ -105,6 +105,7 @@ const GoroutineToggler = ({ id, stack }: { id: Long; stack: string }) => {
 interface TagProps {
   t: ISpanTag;
   setSearch: (s: string) => void;
+  toggleExpanded?: () => void;
 }
 
 const TagValue = ({ t, setSearch }: TagProps) => {
@@ -119,7 +120,7 @@ const TagValue = ({ t, setSearch }: TagProps) => {
   return <span title={t.caption}>{v}</span>;
 };
 
-const TagBadge = ({ t, setSearch }: TagProps) => {
+const TagBadge = ({ t, setSearch, toggleExpanded, isExpanded, status }: TagProps) => {
   let highlight = null;
   if (t.highlight) {
     highlight = <Icon iconName="Caution" />;
@@ -130,20 +131,38 @@ const TagBadge = ({ t, setSearch }: TagProps) => {
   } else if (t.copied_from_child) {
     arrow = <span title="from child">(↑)</span>;
   }
+  const isExpandable = Boolean(t.children.length)
+
+  const icon = !isExpandable ? null :
+    isExpanded ? (<Icon iconName={"CaretDown"} />) :
+      (<Icon iconName={"CaretRight"} />);
+
   return (
-    <Badge
-      text={
-        <>
-          {highlight}
-          {t.key}
-          {arrow}
-          {t.val ? ":" : ""}
-          <TagValue t={t} setSearch={setSearch} />
-        </>
-      }
-      size="small"
-      status={t.hidden ? "default" : "info"}
-    />
+    <Button
+      className="tag-button"
+      intent="tertiary"
+      onClick={() => {
+        if (!isExpandable) {
+          return;
+        }
+        toggleExpanded();
+      }}
+    >
+      <Badge
+        text={
+          <>
+            {highlight}
+            {t.key}
+            {arrow}
+            {t.val ? ":" : ""}
+            <TagValue t={t} setSearch={setSearch} />
+          </>
+        }
+        size="small"
+        status={status ? status : isExpandable ? "warning" : !t.hidden ? "info" : "default"}
+        icon={icon}
+      />
+    </Button>
   );
 };
 
@@ -168,18 +187,44 @@ const TagCell = (props: {
   sr: SnapshotRow;
   setSearch: (s: string) => void;
 }) => {
+  const [expandedTagIndex, setExpandedTagIndex] = useState<Number>(-1);
+  const processedTags = props.sr.span.processed_tags
+  const orderedTags = [...processedTags.filter(t => !t.hidden), ...processedTags.filter(t => t.hidden)]
+
+  // Pad 8px on top and bottom.
+  //
+  // Table rows have a minimum height of 70px, and this is not configurable.
+  //
+  // With this particular badge styling, that gives the illusion of 15 pixels of padding, with the TagBadge centered
+  // vertically. But this implicit padding will disappear when a cell is expanded, causing the top series of TagBadges
+  // to move up 8 pixels. This is disorienting, so avoid it by making the padding official.
   return (
-    <div style={{ display: "flex", gap: "10px", maxWidth: "20%" }}>
-      {props.sr.span.processed_tags
-        .filter(t => !t.hidden)
-        .map((t, i) => (
-          <TagBadge t={t} setSearch={props.setSearch} key={i} />
-        ))}
-      {props.sr.span.processed_tags
-        .filter(t => t.hidden)
-        .map((t, i) => (
-          <TagBadge t={t} setSearch={props.setSearch} key={i} />
-        ))}
+    <div style={{paddingTop: "8px", paddingBottom: "8px", display: "flex", flexDirection: "column", gap: "10px"}}>
+      <div style={{ display: "flex", gap: "10px", maxWidth: "20%" }}>
+        {orderedTags
+          .map((t, i) => (
+            <TagBadge t={t}
+                      setSearch={props.setSearch}
+                      isExpanded={expandedTagIndex == i}
+                      toggleExpanded={()=>{
+                        if (expandedTagIndex == i) {
+                          setExpandedTagIndex(-1);
+                        } else {
+                          setExpandedTagIndex(i);
+                        }
+                      }}
+                      key={i} />
+          ))}
+      </div>
+      {expandedTagIndex != -1 && (
+        <div style={{ display: "flex", gap: "10px", maxWidth: "20%" }}>
+          {orderedTags[expandedTagIndex].children.map(
+            (t, i) => (
+              <TagBadge t={t} key={i} status="warning"/>
+            )
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -252,7 +297,9 @@ const CurrentSnapshot = ({
   return (
     <SnapshotSortedTable
       data={snapshot.rows.filter(r => {
-        return JSON.stringify(r).toLowerCase().includes(search.toLowerCase());
+        return JSON.stringify(r)
+          .toLowerCase()
+          .includes(search.toLowerCase());
       })}
       columns={snapshotColumns(
         setRecording,
@@ -282,8 +329,9 @@ export const Tracez = () => {
   // In the UI when you click on an operation we set the requestedSpan. Then
   // the effect is triggered to retrieve the trace for that span, once that's
   // updated the UI is changed.
-  const [requestedSpan, setRequestedSpan] =
-    useState<cockroach.server.serverpb.ITracingSpan>(null);
+  const [requestedSpan, setRequestedSpan] = useState<
+    cockroach.server.serverpb.ITracingSpan
+  >(null);
   const [currentTrace, setCurrentTrace] = useState<IGetTraceResponse>(null);
   const [showTrace, setShowTrace] = useState<boolean>(false);
   const [showLiveTrace, setShowLiveTrace] = useState<boolean>(false);
