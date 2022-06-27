@@ -25,7 +25,7 @@ func (s stmtList) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s stmtList) Less(i, j int) bool {
-	cmp := strings.Compare(s[i].anonymizedStmt, s[j].anonymizedStmt)
+	cmp := strings.Compare(s[i].stmtNoConstants, s[j].stmtNoConstants)
 	if cmp == -1 {
 		return true
 	}

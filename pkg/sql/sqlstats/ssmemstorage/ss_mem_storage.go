@@ -48,21 +48,21 @@ type stmtKey struct {
 
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
-	anonymizedStmt string
-	failed         bool
-	implicitTxn    bool
-	database       string
+	stmtNoConstants string
+	failed          bool
+	implicitTxn     bool
+	database        string
 }
 
 func (p sampledPlanKey) size() int64 {
-	return int64(unsafe.Sizeof(p)) + int64(len(p.anonymizedStmt)) + int64(len(p.database))
+	return int64(unsafe.Sizeof(p)) + int64(len(p.stmtNoConstants)) + int64(len(p.database))
 }
 
 func (s stmtKey) String() string {
 	if s.failed {
-		return "!" + s.anonymizedStmt
+		return "!" + s.stmtNoConstants
 	}
-	return s.anonymizedStmt
+	return s.stmtNoConstants
 }
 
 func (s stmtKey) size() int64 {
@@ -259,10 +259,10 @@ func NewTempContainerFromExistingStmtStats(
 		}
 		key := stmtKey{
 			sampledPlanKey: sampledPlanKey{
-				anonymizedStmt: statistics[i].Key.KeyData.Query,
-				failed:         statistics[i].Key.KeyData.Failed,
-				implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
-				database:       statistics[i].Key.KeyData.Database,
+				stmtNoConstants: statistics[i].Key.KeyData.Query,
+				failed:          statistics[i].Key.KeyData.Failed,
+				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
+				database:        statistics[i].Key.KeyData.Database,
 			},
 			planHash:                 statistics[i].Key.KeyData.PlanHash,
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
@@ -479,7 +479,7 @@ func (s *stmtStats) mergeStatsLocked(statistics *roachpb.CollectedStatementStati
 // stat object is returned or not, we always return the correct stmtFingerprintID
 // for the given stmt.
 func (s *Container) getStatsForStmt(
-	anonymizedStmt string,
+	stmtNoConstants string,
 	implicitTxn bool,
 	database string,
 	failed bool,
@@ -497,10 +497,10 @@ func (s *Container) getStatsForStmt(
 	// that we use separate buckets for the different situations.
 	key = stmtKey{
 		sampledPlanKey: sampledPlanKey{
-			anonymizedStmt: anonymizedStmt,
-			failed:         failed,
-			implicitTxn:    implicitTxn,
-			database:       database,
+			stmtNoConstants: stmtNoConstants,
+			failed:          failed,
+			implicitTxn:     implicitTxn,
+			database:        database,
 		},
 		planHash:                 planHash,
 		transactionFingerprintID: transactionFingerprintID,
@@ -671,10 +671,10 @@ func (s *Container) MergeApplicationStatementStats(
 			}
 			key := stmtKey{
 				sampledPlanKey: sampledPlanKey{
-					anonymizedStmt: statistics.Key.Query,
-					failed:         statistics.Key.Failed,
-					implicitTxn:    statistics.Key.ImplicitTxn,
-					database:       statistics.Key.Database,
+					stmtNoConstants: statistics.Key.Query,
+					failed:          statistics.Key.Failed,
+					implicitTxn:     statistics.Key.ImplicitTxn,
+					database:        statistics.Key.Database,
 				},
 				planHash:                 statistics.Key.PlanHash,
 				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
@@ -961,6 +961,6 @@ type transactionCounts struct {
 
 func constructStatementFingerprintIDFromStmtKey(key stmtKey) roachpb.StmtFingerprintID {
 	return roachpb.ConstructStatementFingerprintID(
-		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
+		key.stmtNoConstants, key.failed, key.implicitTxn, key.database,
 	)
 }
