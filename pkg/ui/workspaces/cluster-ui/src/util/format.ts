@@ -174,7 +174,8 @@ export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
 /**
  * Alternate 24 hour UTC format
  */
-export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] HH:mm UTC";
+export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
+export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
 
 export function RenderCount(yesCount: Long, totalCount: Long): string {
   if (longToInt(yesCount) == 0) {
