@@ -3052,7 +3052,7 @@ left-join (lookup lookup_expr [as=t])
  │    └── filters (true)
  └── filters (true)
 
-# The filters in the lookup expression should constrain only the first 3 columns
+# The filters in the lookup expression should constrain only the first 2 columns
 # of idx_u_etc.
 opt expect=GenerateLookupJoins
 SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(w, u) LEFT JOIN lookup_expr t
@@ -3069,7 +3069,6 @@ left-join (lookup lookup_expr [as=t])
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── r:3 IN ('east', 'west') [outer=(3), constraints=(/3: [/'east' - /'east'] [/'west' - /'west']; tight)]
- │    │         ├── y:9 IN (10, 20) [outer=(9), constraints=(/9: [/10 - /10] [/20 - /20]; tight)]
  │    │         └── column2:2 = u:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
  │    ├── cardinality: [3 - ]
  │    ├── fd: (3,4)-->(5-7,9,10)
@@ -3781,10 +3780,7 @@ inner-join (lookup abcd_check)
  ├── fd: (1)==(6), (6)==(1)
  ├── inner-join (lookup abcd_check@abcd_check_a_b_c_idx)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcd_check.rowid:10!null
- │    ├── lookup expression
- │    │    └── filters
- │    │         ├── b:7 IN (10, 20) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20]; tight)]
- │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    ├── key columns: [1] = [6]
  │    ├── fd: (10)-->(6-8), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
