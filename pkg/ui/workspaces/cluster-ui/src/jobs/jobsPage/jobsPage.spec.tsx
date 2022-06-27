@@ -117,5 +117,5 @@ describe("Jobs", () => {
     await waitFor(() =>
       screen.getByText("Next Execution Time:", { exact: false }),
     );
-  });
+  }, 5_000 * 10 /* 5_000ms is the default */);
 });
