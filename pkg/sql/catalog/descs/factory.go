@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -33,6 +34,7 @@ type CollectionFactory struct {
 	spanConfigSplitter spanconfig.Splitter
 	spanConfigLimiter  spanconfig.Limiter
 	defaultMonitor     *mon.BytesMonitor
+	ieFactoryWithTxn   sqlutil.InternalExecutorFactoryWithTxn
 }
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
@@ -92,4 +94,12 @@ func (cf *CollectionFactory) NewCollection(
 ) *Collection {
 	c := cf.MakeCollection(ctx, temporarySchemaProvider, nil /* monitor */)
 	return c
+}
+
+// SetInternalExecutorWithTxn is to set the internal executor factory hanging
+// off the collection factory.
+func (cf *CollectionFactory) SetInternalExecutorWithTxn(
+	ieFactoryWithTxn sqlutil.InternalExecutorFactoryWithTxn,
+) {
+	cf.ieFactoryWithTxn = ieFactoryWithTxn
 }

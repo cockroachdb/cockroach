@@ -944,6 +944,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return &ie
 	}
 
+	ieFactoryWithTxn := func(
+		ctx context.Context, sessionData *sessiondata.SessionData, descCol sqlutil.DescsCollection, schemaChangeJobRecords map[sqlutil.DescpbID]sqlutil.JobRecords,
+	) sqlutil.InternalExecutor {
+		ie := sql.MakeInternalExecutorWithTxn(
+			pgServer.SQLServer,
+			internalMemMetrics,
+			ieFactoryMonitor,
+			descCol.(*descs.Collection),
+			schemaChangeJobRecords,
+		)
+		ie.SetSessionData(sessionData)
+		return &ie
+	}
+	collectionFactory.SetInternalExecutorWithTxn(ieFactoryWithTxn)
+
 	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
 	jobRegistry.SetInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)

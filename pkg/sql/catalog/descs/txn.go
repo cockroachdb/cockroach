@@ -113,6 +113,100 @@ func (cf *CollectionFactory) Txn(
 	}
 }
 
+// TxnWithExecutor enables callers to run transactions with a *Collection such that all
+// retrieved immutable descriptors are properly leased and all mutable
+// descriptors are handled. The function deals with verifying the two version
+// invariant and retrying when it is violated. Callers need not worry that they
+// write mutable descriptors multiple times. The call will explicitly wait for
+// the leases to drain on old versions of descriptors modified or deleted in the
+// transaction; callers do not need to call lease.WaitForOneVersion.
+//
+// The passed transaction is pre-emptively anchored to the system config key on
+// the system tenant.
+// CollectionFactory.TxnWithOwnIE should replace CollectionFactory.Txn.
+func (cf *CollectionFactory) TxnWithExecutor(
+	ctx context.Context,
+	db *kv.DB,
+	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection, ie sqlutil.InternalExecutor) error,
+) error {
+	// Waits for descriptors that were modified, skipping
+	// over ones that had their descriptor wiped.
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
+		// Wait for a single version on leased descriptors.
+		for _, ld := range modifiedDescriptors {
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
+			retryOpts := retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     1.5,
+				MaxBackoff:     time.Second,
+			}
+			// Detect unpublished ones.
+			if waitForNoVersion {
+				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	for {
+		var modifiedDescriptors []lease.IDVersion
+		var deletedDescs catalog.DescriptorIDSet
+		var descsCol *Collection
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			modifiedDescriptors = nil
+			deletedDescs = catalog.DescriptorIDSet{}
+			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
+
+			schemaChangeJobRecords := make(map[sqlutil.DescpbID]sqlutil.JobRecords)
+			defer func() {
+				descsCol.ReleaseAll(ctx)
+				for k := range schemaChangeJobRecords {
+					delete(schemaChangeJobRecords, k)
+				}
+			}()
+
+			//TODO(janexing): how should we do with the session data for internal
+			//executor here?
+			ie := cf.ieFactoryWithTxn(ctx, nil, descsCol, schemaChangeJobRecords)
+			if err := f(ctx, txn, descsCol, ie); err != nil {
+				return err
+			}
+
+			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
+				return err
+			}
+			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+
+			if err := CheckSpanCountLimit(
+				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
+			); err != nil {
+				return err
+			}
+			retryErr, err := CheckTwoVersionInvariant(
+				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
+			if retryErr {
+				return errTwoVersionInvariantViolated
+			}
+			deletedDescs = descsCol.deletedDescs
+			return err
+		}); errors.Is(err, errTwoVersionInvariantViolated) {
+			continue
+		} else {
+			if err == nil {
+				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
+			}
+			return err
+		}
+	}
+}
+
 // CheckTwoVersionInvariant checks whether any new schema being modified written
 // at a version V has only valid leases at version = V - 1. A transaction retry
 // error as well as a boolean is returned whenever the invariant is violated.
