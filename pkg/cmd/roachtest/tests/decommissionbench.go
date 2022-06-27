@@ -43,6 +43,8 @@ type decommissionBenchSpec struct {
 
 	// When true, the test will attempt to stop the node prior to decommission.
 	whileDown bool
+
+	skip string
 }
 
 // registerDecommissionBench defines all decommission benchmark configurations
@@ -84,6 +86,7 @@ func registerDecommissionBench(r registry.Registry) {
 			warehouses:       3000,
 			load:             true,
 			admissionControl: true,
+			skip:             "https://github.com/cockroachdb/cockroach/issues/82870",
 		},
 	} {
 		registerDecommissionBenchSpec(r, benchSpec)
@@ -125,6 +128,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		Cluster:           r.MakeClusterSpec(benchSpec.nodes+1, spec.CPU(benchSpec.cpus)),
 		Timeout:           timeout,
 		NonReleaseBlocker: true,
+		Skip:              benchSpec.skip,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDecommissionBench(ctx, t, c, benchSpec, timeout)
 		},
