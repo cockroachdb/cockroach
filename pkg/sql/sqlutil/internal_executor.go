@@ -169,6 +169,23 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetExtraTxnState sets the descriptor collections, schema change job records
+	// and job collection for the internal executor before running the SQL
+	// statement.
+	// It only set the extra txn state for the internal executor if the given
+	// txn is not nil.
+	// To make sure the txn is always coupled with sufficient information, if any
+	// of the descriptor collection, schema change job record and job collection
+	// is not provided, this function will panic.
+	SetExtraTxnState(exTxnState *ExtraTxnStateArgs)
+
+	// SetSessionData binds the session variables that will be used by queries
+	// performed through this executor from now on. This creates a new session stack.
+	// It is recommended to use SetSessionDataStack.
+	//
+	// SetSessionData cannot be called concurrently with query execution.
+	SetSessionData(sessionData *sessiondata.SessionData)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -212,6 +229,26 @@ type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
 
+// InternalExecutorFactoryWithTxn is a function to construct an internal executor
+// that can run queries within a txn.
+type InternalExecutorFactoryWithTxn func(
+	ctx context.Context,
+	data *sessiondata.SessionData,
+	collection DescsCollection,
+	records map[DescpbID]JobRecords,
+) InternalExecutor
+
+// WithoutTxn is to run SQL statements without a txn context.
+// Note that in this mode, each execution with the internal executor runs its
+// own descriptor collection, schema change job collection and transaction state
+// machine.
+func (f InternalExecutorFactory) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, nil)
+	return run(ctx, ie)
+}
+
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
 
@@ -219,3 +256,51 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// TODO(janexing):We declared the following interfaces for descs.Collection,
+// jobs.Collection and map[descpb.ID]*jobs.Record only to avoid cyclic
+// dependency. We're never going to use the methods declared here.
+// It may be confusing to the user of internal executor though.
+// Any better solutions?
+
+// DescsCollection is an interface for descs.Collection. It is created to
+// avoid cyclic dependency.
+type DescsCollection interface {
+	MaybeUpdateDeadline(ctx context.Context, txn *kv.Txn) (err error)
+	ResetMaxTimestampBound()
+	SkipValidationOnWrite()
+	ReleaseLeases(ctx context.Context)
+	ReleaseAll(ctx context.Context)
+	ResetSyntheticDescriptors()
+	HasUncommittedTables() bool
+	HasUncommittedTypes() bool
+}
+
+// JobsCollection is an interface for jobs.Collection. It is created to
+// avoid cyclic dependency.
+type JobsCollection interface {
+}
+
+// DescpbID is an interface for descpb.ID.
+// It is created to avoid cyclic dependency.
+type DescpbID interface {
+}
+
+// JobRecords is an interface for jobs.Record.
+// It is created to avoid cyclic dependency.
+type JobRecords interface {
+}
+
+// SchemaChangeJobRecords is an interface for map[descpb.ID]*jobs.Record.
+// It is created to avoid cyclic dependency.
+type SchemaChangeJobRecords interface {
+}
+
+// ExtraTxnStateArgs is to pass txn related information from the caller of
+// internal executor to the children conn executors.
+type ExtraTxnStateArgs struct {
+	Txn                    *kv.Txn
+	DescCollection         DescsCollection
+	Jobs                   JobsCollection
+	SchemaChangeJobRecords map[DescpbID]JobRecords
+}
