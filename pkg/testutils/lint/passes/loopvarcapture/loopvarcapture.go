@@ -87,7 +87,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 
-		v := NewVisitor(pass, loop)
+		v := NewVisitor(pass, loop, false)
 		for _, issue := range v.FindCaptures() {
 			pass.Report(issue)
 		}
@@ -109,14 +109,31 @@ type Visitor struct {
 	closures map[*ast.Object]*ast.Ident
 	// issues accumulates issues found in a loop
 	issues []analysis.Diagnostic
+
+	// withinClosure indicates whether the visitor is within a closure
+	// that is defined in the loop. In this case, we want the linter's
+	// behavior to be slightly different. For example, references to
+	// loop variables in `defer` calls are safe because they are called
+	// in a closure that is called within an interation of the loop. One
+	// simple example of this is the following idiom:
+	//
+	// for _, loopVar := range ... {
+	//     func() {
+	//         // ...
+	//         defer loopVar.Close() // guaranteed to be called in the current iteration
+	//        // ...
+	//     }()
+	// }
+	withinClosure bool
 }
 
 // NewVisitor creates a new Visitor instance for the given loop.
-func NewVisitor(pass *analysis.Pass, loop *Loop) *Visitor {
+func NewVisitor(pass *analysis.Pass, loop *Loop, withinClosure bool) *Visitor {
 	return &Visitor{
-		loop:     loop,
-		pass:     pass,
-		closures: map[*ast.Object]*ast.Ident{},
+		loop:          loop,
+		pass:          pass,
+		withinClosure: withinClosure,
+		closures:      map[*ast.Object]*ast.Ident{},
 	}
 }
 
@@ -162,25 +179,35 @@ func (v *Visitor) FindCaptures() []analysis.Diagnostic {
 func (v *Visitor) visitLoopBody(n ast.Node) bool {
 	switch node := n.(type) {
 	case *ast.GoStmt:
-		v.visitCallExpr(goCall, node.Call)
+		v.findLoopVarRefsInCall(goCall, node.Call)
 		// no need to keep traversing the AST, the function above is
 		// already doing that.
 		return false
 
 	case *ast.CallExpr:
 		if v.isGoRoutineFunction(node) {
-			v.visitCallExpr(goCall, node)
+			v.findLoopVarRefsInCall(goCall, node)
+			// no need to keep traversing the AST, the function above is
+			// already doing that.
+			return false
 		}
 
-		// keep traversing the AST, as there could be problematic
-		// references in the parameters passed to the function
-		return true
+	case *ast.FuncLit:
+		// when a function literal is found in the body of the loop (i.e.,
+		// not a part of a `defer` or `go` statements), visit the closure
+		// recursively
+		v.visitLoopClosure(node)
+		// no need to keep traversing the AST using this visitor, as the
+		// previous function is doing that.
+		return false
 
 	case *ast.DeferStmt:
-		v.visitCallExpr(deferCall, node.Call)
-		// no need to keep traversing the AST, the function above is
-		// already doing that.
-		return false
+		if !v.withinClosure {
+			v.findLoopVarRefsInCall(deferCall, node.Call)
+			// no need to keep traversing the AST, the function above is
+			// already doing that.
+			return false
+		}
 
 	case *ast.AssignStmt:
 		for i, rhs := range node.Rhs {
@@ -194,22 +221,20 @@ func (v *Visitor) visitLoopBody(n ast.Node) bool {
 			ast.Inspect(rhs, v.funcLitInspector(func(id *ast.Ident) {
 				v.closures[lhs.Obj] = id
 			}))
-
-			// keep traversing the AST, as there could be invalid function
-			// calls that should be detected (one of GoRoutineFunctions)
-			return true
 		}
 	}
 
-	// if the node is none of the above, keep traversing the AST
+	// if the node is none of the above or if there the subtree needs to
+	// be traverse, keep going
 	return true
 }
 
-// visitCallExpr inspects function calls passed to `go` or `defer`
-// staments, looking for closures that capture loop variables by
-// reference in the body of the closure or in any of the arguments
-// passed to it.
-func (v *Visitor) visitCallExpr(stmtType statementType, call *ast.CallExpr) {
+// findLoopVarRefsInCall inspects function calls passed to `go` (or
+// GoRoutineFunctions) or `defer` staments, looking for closures that
+// capture loop variables by reference in the body of the closure or
+// in any of the arguments passed to it. Any references are saved the
+// visitor's `issues` field.
+func (v *Visitor) findLoopVarRefsInCall(stmtType statementType, call *ast.CallExpr) {
 	ast.Inspect(call, v.funcLitInspector(func(ident *ast.Ident) {
 		v.addIssue(stmtType, ident)
 	}))
@@ -298,7 +323,8 @@ func (v *Visitor) findLoopVariableReferences(
 // capture is included in the diagnostic. If a `//nolint` comment is
 // associated with the use of this identifier, no issue is reported.
 func (v *Visitor) addIssue(stmtType statementType, id *ast.Ident) {
-	if passesutil.HasNolintComment(v.pass, id, name) {
+	if passesutil.HasNolintComment(v.pass, id, name) ||
+		(stmtType == deferCall && v.withinClosure) {
 		return
 	}
 
@@ -355,6 +381,22 @@ func reportMessage(stmtType statementType, chain []*ast.Ident) string {
 		pathMsg,
 		suffixMsg,
 	)
+}
+
+// visitLoopClosure traverses the subtree of a function literal
+// (closure) present in the body of the loop (outside `go` or `defer`
+// statements). A new Visitor instance is created to do the traversal,
+// with the `withinClosure` field set to `true`.
+func (v *Visitor) visitLoopClosure(closure *ast.FuncLit) {
+	closureVisitor := NewVisitor(v.pass, v.loop, true)
+	ast.Inspect(closure.Body, closureVisitor.visitLoopBody)
+
+	// merge the `issues` and `closures` field back to the
+	// calling Visitor
+	v.issues = append(v.issues, closureVisitor.issues...)
+	for obj, loopVarObj := range closureVisitor.closures {
+		v.closures[obj] = loopVarObj
+	}
 }
 
 // isGoRoutineFunction takes a call expression node and returns

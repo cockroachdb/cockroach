@@ -22,9 +22,10 @@ import (
 )
 
 var (
-	intID   = func(n int) int { return n }
-	doWork  = func() {}
-	runFunc = func(f func()) { f() }
+	intID         = func(n int) int { return n }
+	doWork        = func() {}
+	runFunc       = func(f func()) { f() }
+	someCondition = func() bool { return true }
 
 	collection = []int{1, 2, 3}
 )
@@ -279,6 +280,87 @@ func CapturingDefers() {
 				intID(idx)            // this is OK
 			}(i)
 		}
+	}
+}
+
+// SafeDefers makes sure that `defer` statements contained in a
+// closure defined withing a loop do not lead to an issue being
+// reported, as they are always safe.
+func SafeDefers() {
+	for i, n := range collection {
+		// function called immediately; defer is always safe
+		func() {
+			fmt.Printf("doing work: %d", n)
+			defer func() {
+				intID(n) // this is OK
+			}()
+
+			// this continues to be problematic
+			go func() {
+				intID(n) // want `loop variable 'n' captured by reference`
+			}()
+		}()
+
+		// defer within locally-scoped closure. Only unsafe if called in a
+		// Go routine
+		customErr := func() (retErr error) {
+			doWork()
+			defer func() {
+				if r := recover(); r != nil {
+					retErr = fmt.Errorf("panicked at %d: %v", i, r) // this is OK
+				}
+			}()
+			return nil
+		}
+
+		if someCondition() {
+			customErr() // this is OK -- not a Go routine
+		}
+
+		// this is not safe as it is called in a Go routine
+		go customErr() // want `'customErr' function captures loop variable 'i' by reference`
+
+		go func() {
+			fmt.Printf("async\n")
+			customErr() // want `'customErr' function captures loop variable 'i' by reference`
+		}()
+
+		// make sure we still keep the `closures` map updated even when a
+		// closure is assigned in a safe `defer`
+		var badClosure func()
+		func() {
+			doWork()
+			defer func() {
+				badClosure = func() { intID(n) }
+			}()
+		}()
+
+		go badClosure() // want `'badClosure' function captures loop variable 'n' by reference`
+		go func() {
+			badClosure() // want `'badClosure' function captures loop variable 'n' by reference`
+			doWork()
+		}()
+
+		var anotherBadClosure func() error
+		func() {
+			doWork()
+			func() {
+				anotherBadClosure = func() error {
+					intID(n)
+					doWork()
+					return nil
+				}
+
+				defer func() { intID(n) }() // this is OK
+			}()
+			doWork()
+		}()
+
+		go anotherBadClosure() // want `'anotherBadClosure' function captures loop variable 'n' by reference`
+		go func() {
+			doWork()
+			anotherBadClosure() // want `'anotherBadClosure' function captures loop variable 'n' by reference`
+		}()
 	}
 }
 
