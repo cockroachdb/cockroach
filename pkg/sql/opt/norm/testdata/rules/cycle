@@ -3,4 +3,6 @@
 exprnorm
 (NormCycleTestRel (True))
 ----
-error: optimizer factory constructor call stack exceeded max depth of 10000
+values
+ ├── cardinality: [0 - 0]
+ └── key: ()
