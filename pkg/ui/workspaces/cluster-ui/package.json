@@ -14,7 +14,7 @@
     "build:typescript": "tsc",
     "build:watch": "webpack --watch --mode=development --env.WEBPACK_WATCH",
     "tsc:watch": "tsc --watch",
-    "ci": "jest --ci -i",
+    "ci": "jest --ci -i --testPathPattern jobsPage",
     "clean": "rm -rf  ./dist/*",
     "lint": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe",
     "lint:fix": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe --fix",
