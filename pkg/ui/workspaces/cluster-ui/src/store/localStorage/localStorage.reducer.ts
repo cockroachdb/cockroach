@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment from "moment";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "../../queryFilter";
@@ -32,6 +31,7 @@ export type LocalStorageState = {
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
+  "sortSetting/JobsPage": SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
@@ -39,6 +39,9 @@ export type LocalStorageState = {
   "filters/SessionsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
+  "typeSetting/JobsPage": number;
+  "statusSetting/JobsPage": string;
+  "showSetting/JobsPage": string;
 };
 
 type Payload = {
@@ -65,6 +68,17 @@ const defaultSessionsSortSetting: SortSetting = {
   columnTitle: "statementAge",
 };
 
+const defaultJobsSortSetting: SortSetting = {
+  ascending: false,
+  columnTitle: "lastExecutionTime",
+};
+
+const defaultJobStatusSetting = "";
+
+const defaultJobShowSetting = "0";
+
+const defaultJobTypeSetting = 0;
+
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
@@ -82,6 +96,9 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
   "showColumns/SessionsPage":
     JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
+  "showSetting/JobsPage":
+    JSON.parse(localStorage.getItem("showSetting/JobsPage")) ||
+    defaultJobShowSetting,
   "timeScale/SQLActivity":
     JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
     defaultTimeScaleSelected,
@@ -91,6 +108,9 @@ const initialState: LocalStorageState = {
   "sortSetting/ActiveTransactionsPage":
     JSON.parse(localStorage.getItem("sortSetting/ActiveTransactionsPage")) ||
     defaultSortSettingActiveExecutions,
+  "sortSetting/JobsPage":
+    JSON.parse(localStorage.getItem("sortSetting/JobsPage")) ||
+    defaultJobsSortSetting,
   "sortSetting/StatementsPage":
     JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
     defaultSortSetting,
@@ -118,6 +138,12 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":
     JSON.parse(localStorage.getItem("search/TransactionsPage")) || null,
+  "typeSetting/JobsPage":
+    JSON.parse(localStorage.getItem("typeSetting/JobsPage")) ||
+    defaultJobTypeSetting,
+  "statusSetting/JobsPage":
+    JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
+    defaultJobStatusSetting,
 };
 
 const localStorageSlice = createSlice({

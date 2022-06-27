@@ -9,3 +9,4 @@
 // licenses/APL.txt.
 
 export * from "./jobDetails";
+export * from "./jobDetailsConnected";

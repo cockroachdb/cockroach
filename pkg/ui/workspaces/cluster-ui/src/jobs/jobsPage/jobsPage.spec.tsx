@@ -8,18 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { assert, expect } from "chai";
+import { assert } from "chai";
 import moment from "moment";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { JobsPage, JobsPageProps } from "./jobsPage";
 import { formatDuration } from "../util/duration";
-import {
-  allJobsFixture,
-  retryRunningJobFixture,
-  earliestRetainedTime,
-} from "./jobsPage.fixture";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
+import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import * as H from "history";
@@ -78,7 +73,7 @@ describe("Jobs", () => {
       "Description",
       "Status",
       "Job ID",
-      "User",
+      "User Name",
       "Creation Time (UTC)",
       "Last Execution Time (UTC)",
       "Execution Count",
