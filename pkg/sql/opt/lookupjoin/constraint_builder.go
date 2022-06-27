@@ -181,13 +181,17 @@ func (b *ConstraintBuilder) Build(
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
 	var filterOrdsToExclude util.FastIntSet
-	foundEqualityCols := false
+	foundNonConstEqualityCols := false
 
 	// addEqualityColumns adds the given columns as an equality in keyCols and
-	// rightSideCols.
-	addEqualityColumns := func(leftCol, rightCol opt.ColumnID) {
+	// rightSideCols. It also sets foundNonConstEqualityCols to true if
+	// constant=false.
+	addEqualityColumns := func(leftCol, rightCol opt.ColumnID, constant bool) {
 		keyCols = append(keyCols, leftCol)
 		rightSideCols = append(rightSideCols, rightCol)
+		if !constant {
+			foundNonConstEqualityCols = true
+		}
 	}
 
 	// All the lookup conditions must apply to the prefix of the index and so
@@ -195,9 +199,8 @@ func (b *ConstraintBuilder) Build(
 	for j := 0; j < numIndexKeyCols; j++ {
 		idxCol := b.table.IndexColumnID(index, j)
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			addEqualityColumns(leftEq[eqIdx], idxCol)
+			addEqualityColumns(leftEq[eqIdx], idxCol, false /* constant */)
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
-			foundEqualityCols = true
 			continue
 		}
 
@@ -222,8 +225,7 @@ func (b *ConstraintBuilder) Build(
 			// in rightEq to corresponding columns in leftEq.
 			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
 			inputProjections = append(inputProjections, projection)
-			addEqualityColumns(compEqCol, idxCol)
-			foundEqualityCols = true
+			addEqualityColumns(compEqCol, idxCol, false /* constant */)
 			continue
 		}
 
@@ -246,7 +248,7 @@ func (b *ConstraintBuilder) Build(
 				constColID,
 			))
 			constFilters = append(constFilters, allFilters[allIdx])
-			addEqualityColumns(constColID, idxCol)
+			addEqualityColumns(constColID, idxCol, true /* constant */)
 			filterOrdsToExclude.Add(allIdx)
 			continue
 		}
@@ -283,9 +285,9 @@ func (b *ConstraintBuilder) Build(
 		break
 	}
 
-	// Lookup join constraints that contain no equality columns (e.g., a lookup
-	// expression x=1) are not useful.
-	if !foundEqualityCols {
+	// Lookup join constraints that do not contain non-constant equality columns
+	// (e.g., a lookup expression x=1) are not useful.
+	if !foundNonConstEqualityCols {
 		return Constraint{}
 	}
 
