@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -1561,7 +1562,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 					// role option OR the MODIFYCLUSTERSETTING system cluster privilege.
 					// We return the error for "system cluster privilege" due to
 					// the long term goal of moving away from coarse-grained role options.
-					if err := p.CheckPrivilege(ctx, catalog.SystemClusterPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err != nil {
+					if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err != nil {
 						return err
 					}
 				} else {

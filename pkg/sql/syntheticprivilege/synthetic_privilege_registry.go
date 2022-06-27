@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package systemprivilege
+package syntheticprivilege
 
 import (
 	"reflect"
@@ -30,7 +30,7 @@ var registry = []*Metadata{
 	{
 		prefix: "/global",
 		regex:  regexp.MustCompile("(/global/)$"),
-		val:    reflect.TypeOf((*catalog.GlobalPrivilege)(nil)),
+		val:    reflect.TypeOf((*GlobalPrivilege)(nil)),
 	},
 }
 
