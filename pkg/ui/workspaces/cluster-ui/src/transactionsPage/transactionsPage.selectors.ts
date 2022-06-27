@@ -10,7 +10,7 @@
 
 import { createSelector } from "reselect";
 
-import { localStorageSelector } from "../statementsPage/statementsPage.selectors";
+import { localStorageSelector } from "../store/utils/selectors";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 
 export const selectTransactionsData = createSelector(
