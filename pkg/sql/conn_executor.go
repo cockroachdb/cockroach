@@ -928,7 +928,8 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	descsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	ex.extraTxnState.descCollectionWithMark.descsCollection = &descsCollection
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -1010,7 +1011,7 @@ func (s *Server) newConnExecutorWithTxn(
 	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
+	ex.extraTxnState.descCollectionWithMark.descsCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
 }
 
@@ -1175,6 +1176,16 @@ type HasAdminRoleCache struct {
 	IsSet bool
 }
 
+// DescriptorCollectionWithReleaseMark is to wrap a descriptor collection with
+// a boolean that notes if the descsCollection should be released when the
+// connExecutor is closed.
+// If the descriptor collection is passed from the internal executor, we leave
+// the caller from the internal executor side to release the lease.
+type DescriptorCollectionWithReleaseMark struct {
+	descsCollection  *descs.Collection
+	skipLocalRelease bool
+}
+
 type connExecutor struct {
 	_ util.NoCopy
 
@@ -1232,6 +1243,8 @@ type connExecutor struct {
 	// the field is accessed in connExecutor's serialize function, it should be
 	// added to txnState behind the mutex.
 	extraTxnState struct {
+		descCollectionWithMark DescriptorCollectionWithReleaseMark
+
 		// descCollection collects descriptors used by the current transaction.
 		descCollection descs.Collection
 
@@ -1647,7 +1660,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		delete(ex.extraTxnState.schemaChangeJobRecords, k)
 	}
 
-	ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	if ex.extraTxnState.descCollectionWithMark.skipLocalRelease {
+		ex.extraTxnState.descCollectionWithMark.descsCollection.ResetSyntheticDescriptors()
+	} else {
+		ex.extraTxnState.descCollectionWithMark.descsCollection.ReleaseAll(ctx)
+	}
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -2685,7 +2702,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
-		Descs:                  &ex.extraTxnState.descCollection,
+		Descs:                  ex.extraTxnState.descCollectionWithMark.descsCollection,
 		TxnModesSetter:         ex,
 		Jobs:                   &ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
@@ -2735,13 +2752,13 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	var minTSErr *roachpb.MinTimestampBoundUnsatisfiableError
 	if err := ex.state.mu.autoRetryReason; err != nil && errors.As(err, &minTSErr) {
 		nextMax := minTSErr.MinTimestampBound
-		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
+		ex.extraTxnState.descCollectionWithMark.descsCollection.SetMaxTimestampBound(nextMax)
 		evalCtx.AsOfSystemTime.MaxTimestampBound = nextMax
 	} else if newTxn {
 		// Otherwise, only change the historical timestamps if this is a new txn.
 		// This is because resetPlanner can be called multiple times for the same
 		// txn during the extended protocol.
-		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
+		ex.extraTxnState.descCollectionWithMark.descsCollection.ResetMaxTimestampBound()
 		evalCtx.AsOfSystemTime = nil
 	}
 }
@@ -2863,7 +2880,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// then the collection will get reset once we retry or rollback the
 		// transaction, and no deadline needs to be picked up here.
 		if txnIsOpen && !nextStateIsAborted {
-			err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ex.Ctx(), ex.state.mu.txn)
+			err := ex.extraTxnState.descCollectionWithMark.descsCollection.MaybeUpdateDeadline(ex.Ctx(), ex.state.mu.txn)
 			if err != nil {
 				return advanceInfo{}, err
 			}
@@ -2885,7 +2902,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
-			ex.extraTxnState.descCollection.SetSession(session)
+			ex.extraTxnState.descCollectionWithMark.descsCollection.SetSession(session)
 		}
 	case txnCommit:
 		if res.Err() != nil {
@@ -3177,7 +3194,7 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 // the stats refresher that new tables exist and should have their stats
 // collected now.
 func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
-	for _, desc := range ex.extraTxnState.descCollection.GetUncommittedTables() {
+	for _, desc := range ex.extraTxnState.descCollectionWithMark.descsCollection.GetUncommittedTables() {
 		// The CREATE STATISTICS run for an async CTAS query is initiated by the
 		// SchemaChanger, so we don't do it here.
 		if desc.IsTable() && !desc.IsAs() && desc.GetVersion() == 1 {
@@ -3198,7 +3215,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollectionWithMark.descsCollection,
 		ex.planner.EvalContext(),
 		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,

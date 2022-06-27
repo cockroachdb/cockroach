@@ -286,7 +286,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var stmt Statement
 	queryID := ex.generateID()
 	// Update the deadline on the transaction based on the collections.
-	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
+	err := ex.extraTxnState.descCollectionWithMark.descsCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
 		return makeErrEvent(err)
 	}
@@ -843,7 +843,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 
 	if err := descs.CheckSpanCountLimit(
 		ctx,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollectionWithMark.descsCollection,
 		ex.server.cfg.SpanConfigSplitter,
 		ex.server.cfg.SpanConfigLimiter,
 		ex.state.mu.txn,
@@ -855,7 +855,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalExecutor,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollectionWithMark.descsCollection,
 		ex.state.mu.txn,
 		inRetryBackoff,
 	)
@@ -953,7 +953,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		}
 	}
 
-	if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
+	if err := ex.extraTxnState.descCollectionWithMark.descsCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn); err != nil {
 		return err
 	}
 
@@ -968,8 +968,8 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// Now that we've committed, if we modified any descriptor we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
-		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+	if descs := ex.extraTxnState.descCollectionWithMark.descsCollection.GetDescriptorsWithNewVersion(); descs != nil {
+		ex.extraTxnState.descCollectionWithMark.descsCollection.ReleaseLeases(ctx)
 	}
 	return nil
 }
@@ -2079,7 +2079,7 @@ func (ex *connExecutor) handleAutoCommit(
 	}
 
 	// Attempt to refresh the deadline before the autocommit.
-	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
+	err := ex.extraTxnState.descCollectionWithMark.descsCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
