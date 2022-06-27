@@ -214,6 +214,9 @@ type InternalExecutorFactory interface {
 	// NewInternalExecutor constructs a new internal executor.
 	// TODO (janexing): this should be deprecated soon.
 	NewInternalExecutor(sd *sessiondata.SessionData) InternalExecutor
+	// RunWithoutTxn is to create an internal executor without binding to a txn,
+	// and run the passed function with this internal executor.
+	RunWithoutTxn(ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error) error
 }
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
@@ -223,3 +226,7 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// InternalExecutorCommitTxnFunc is to commit the txn associated with an
+// internal executor.
+type InternalExecutorCommitTxnFunc func(ctx context.Context) error
