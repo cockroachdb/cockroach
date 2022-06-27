@@ -104,18 +104,4 @@ describe("Jobs", () => {
       getByText(text);
     }
   });
-
-  it("shows next execution time on hovering a retry status", async () => {
-    const { getByText } = render(
-      <MemoryRouter>
-        <JobsPage {...getMockJobsPageProps([retryRunningJobFixture])} />
-      </MemoryRouter>,
-    );
-
-    userEvent.hover(getByText("Retrying"));
-
-    await waitFor(() =>
-      screen.getByText("Next Execution Time:", { exact: false }),
-    );
-  });
 });
