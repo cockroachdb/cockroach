@@ -487,7 +487,15 @@ func setupDMSEndpointsAndTask(
 		}
 		*ep.arn = *epOut.Endpoint.EndpointArn
 
+		// Test the connections to see if they are "successful".
+		// If not, any subsequence DMS task will fail to startup.
 		t.L().Printf("testing replication endpoint %s", *ep.in.EndpointIdentifier)
+		if _, err := dmsCli.TestConnection(ctx, &dms.TestConnectionInput{
+			EndpointArn:            epOut.Endpoint.EndpointArn,
+			ReplicationInstanceArn: proto.String(replicationARN),
+		}); err != nil {
+			return errors.Wrapf(err, "error initiating a test connection")
+		}
 		r := retry.StartWithCtx(ctx, retry.Options{
 			InitialBackoff: 30 * time.Second,
 			MaxBackoff:     time.Minute,
@@ -495,14 +503,39 @@ func setupDMSEndpointsAndTask(
 		})
 		var lastErr error
 		for r.Next() {
-			_, lastErr = dmsCli.TestConnection(ctx, &dms.TestConnectionInput{
-				EndpointArn:            epOut.Endpoint.EndpointArn,
-				ReplicationInstanceArn: proto.String(replicationARN),
-			})
-			if lastErr == nil {
+			if lastErr = func() error {
+				result, err := dmsCli.DescribeConnections(
+					ctx,
+					&dms.DescribeConnectionsInput{
+						Filters: []dmstypes.Filter{
+							{
+								Name:   proto.String("endpoint-arn"),
+								Values: []string{*epOut.Endpoint.EndpointArn},
+							},
+						},
+					},
+				)
+				if err != nil {
+					return err
+				}
+				if len(result.Connections) != 1 {
+					return errors.AssertionFailedf("expected exactly one connection during DescribeConnections, found %d", len(result.Connections))
+				}
+				conn := result.Connections[0]
+				if *conn.Status == "successful" {
+					return nil
+				}
+				retErr := errors.Newf(
+					"replication test on %s not successful (%s)",
+					*ep.in.EndpointIdentifier,
+					*conn.Status,
+				)
+				return retErr
+			}(); lastErr == nil {
 				break
+			} else {
+				t.L().Printf("replication endpoint test failed, retrying: %s", lastErr)
 			}
-			t.L().Printf("replication endpoint test failed, retrying: %s", lastErr)
 		}
 		if lastErr != nil {
 			return lastErr
