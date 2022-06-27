@@ -17,12 +17,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -197,6 +200,34 @@ func MakeInternalExecutor(
 		mon:        monitor,
 		memMetrics: memMetrics,
 	}
+}
+
+// MakeInternalExecutorWithTxn creates an Internal Executor with txn related
+// information.
+func MakeInternalExecutorWithTxn(
+	s *Server,
+	sd *sessiondata.SessionData,
+	memMetrics MemoryMetrics,
+	monitor *mon.BytesMonitor,
+	descCol *descs.Collection,
+	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
+	schemaChangeState SchemaChangerState,
+) InternalExecutor {
+	ex := &connExecutor{}
+	ex.extraTxnState.descCollection = descCol
+	ex.extraTxnState.skipReleaseDescCollection = true
+	ex.extraTxnState.skipReleaseSchemaChangeRecord = true
+	ex.extraTxnState.schemaChangeJobRecords = schemaChangeJobRecords
+	ex.extraTxnState.schemaChangerState = schemaChangeState
+	ie := InternalExecutor{
+		s:          s,
+		mon:        monitor,
+		memMetrics: memMetrics,
+		ex:         ex,
+	}
+	ie.s.populateMinimalSessionData(sd)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+	return ie
 }
 
 // MakeInternalExecutorMemMonitor creates and starts memory monitor for an
@@ -955,6 +986,17 @@ func (ie *InternalExecutor) execInternal(
 	// the iterator and nil retErr so that the iterator is properly closed by
 	// the caller which will cleanup the connExecutor goroutine.
 	return r, nil
+}
+
+// CommitTxn is to commit the txn bound to the internal executor.
+func (ie *InternalExecutor) CommitTxn(ctx context.Context) error {
+	if ie.txn == nil {
+		return errors.New("no txn to commit")
+	}
+	if err := ie.ex.commitSQLTransactionInternal(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the

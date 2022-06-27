@@ -879,6 +879,10 @@ type wrappedInternalExecutor struct {
 	}
 }
 
+func (ie *wrappedInternalExecutor) CommitTxn(ctx context.Context) error {
+	panic("not implemented")
+}
+
 func (ie *wrappedInternalExecutor) CloseExUnderTxn(ctx context.Context) {
 	panic("not implemented")
 }

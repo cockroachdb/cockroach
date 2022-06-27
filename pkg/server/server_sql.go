@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -943,6 +945,35 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
+
+	ieFactoryWithTxn := func(
+		ctx context.Context,
+		sv *settings.Values,
+		descCol *descs.Collection,
+	) sqlutil.InternalExecutor {
+		schemaChangeJobRecords := make(map[descpb.ID]*jobs.Record)
+		schemaChangeState := sql.SchemaChangerState{}
+		// By default, initialize a sessionData that would be the same as what
+		// would be created if root logged in.
+		// The sessionData's user can be overriden when calling the query
+		// functions of internal executor.
+		// TODO(janexing): since we can be running queries with a higher privilege
+		// than the actual user, a security boundary should be added to the error
+		// handling of internal executor.
+		sd := sql.NewFakeSessionData(sv)
+		sd.UserProto = username.RootUserName().EncodeProto()
+		ie := sql.MakeInternalExecutorWithTxn(
+			pgServer.SQLServer,
+			sd,
+			internalMemMetrics,
+			ieFactoryMonitor,
+			descCol,
+			schemaChangeJobRecords,
+			schemaChangeState,
+		)
+		return &ie
+	}
+	collectionFactory.SetInternalExecutorWithTxn(ieFactoryWithTxn)
 
 	distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory = ieFactory
 	jobRegistry.SetSessionBoundInternalExecutorFactory(ieFactory)
