@@ -88,7 +88,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (b = f) AND (e > 1)
+│ lookup condition: (e > 1) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -2186,7 +2186,7 @@ vectorized: true
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
     │
@@ -2205,7 +2205,7 @@ vectorized: true
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
     │
