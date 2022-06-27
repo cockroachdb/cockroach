@@ -78,7 +78,7 @@ const (
 // If both the environment variable and the test flag are set, the environment
 // variable wins out.
 func ShouldStartDefaultTestTenant(t testing.TB) bool {
-	const defaultProbabilityOfStartingTestTenant = 1.0
+	const defaultProbabilityOfStartingTestTenant = 0.5
 	var probabilityOfStartingDefaultTestTenant float64
 
 	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
