@@ -404,7 +404,7 @@ type TemporaryObjectCleaner struct {
 	settings                         *cluster.Settings
 	db                               *kv.DB
 	codec                            keys.SQLCodec
-	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory
+	makeSessionBoundInternalExecutor sqlutil.InternalExecutorFactory
 	// statusServer gives access to the SQLStatus service.
 	statusServer           serverpb.SQLStatusServer
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
@@ -433,7 +433,7 @@ func NewTemporaryObjectCleaner(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	registry *metric.Registry,
-	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory,
+	makeSessionBoundInternalExecutor sqlutil.InternalExecutorFactory,
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
