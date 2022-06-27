@@ -16,12 +16,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobrecords"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatautil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -40,6 +44,7 @@ var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violat
 //
 // The passed transaction is pre-emptively anchored to the system config key on
 // the system tenant.
+// Deprecated: Use cf.TxnWithExecutor().
 func (cf *CollectionFactory) Txn(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
@@ -82,6 +87,106 @@ func (cf *CollectionFactory) Txn(
 			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
 			defer descsCol.ReleaseAll(ctx)
 			if err := f(ctx, txn, descsCol); err != nil {
+				return err
+			}
+
+			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
+				return err
+			}
+			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+
+			if err := CheckSpanCountLimit(
+				ctx, descsCol, cf.spanConfigSplitter, cf.spanConfigLimiter, txn,
+			); err != nil {
+				return err
+			}
+			retryErr, err := CheckTwoVersionInvariant(
+				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
+			if retryErr {
+				return errTwoVersionInvariantViolated
+			}
+			deletedDescs = descsCol.deletedDescs
+			return err
+		}); errors.Is(err, errTwoVersionInvariantViolated) {
+			continue
+		} else {
+			if err == nil {
+				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
+			}
+			return err
+		}
+	}
+}
+
+// TxnWithExecutor enables callers to run transactions with a *Collection such that all
+// retrieved immutable descriptors are properly leased and all mutable
+// descriptors are handled. The function deals with verifying the two version
+// invariant and retrying when it is violated. Callers need not worry that they
+// write mutable descriptors multiple times. The call will explicitly wait for
+// the leases to drain on old versions of descriptors modified or deleted in the
+// transaction; callers do not need to call lease.WaitForOneVersion.
+// It also enables using internal executor to run sql queries in a txn manner.
+//
+// The passed transaction is pre-emptively anchored to the system config key on
+// the system tenant.
+func (cf *CollectionFactory) TxnWithExecutor(
+	ctx context.Context,
+	db *kv.DB,
+	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection, ie sqlutil.InternalExecutor) error,
+) error {
+	// Waits for descriptors that were modified, skipping
+	// over ones that had their descriptor wiped.
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
+		// Wait for a single version on leased descriptors.
+		for _, ld := range modifiedDescriptors {
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
+			retryOpts := retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     1.5,
+				MaxBackoff:     time.Second,
+			}
+			// Detect unpublished ones.
+			if waitForNoVersion {
+				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	for {
+		var modifiedDescriptors []lease.IDVersion
+		var deletedDescs catalog.DescriptorIDSet
+		var descsCol *Collection
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			modifiedDescriptors = nil
+			deletedDescs = catalog.DescriptorIDSet{}
+			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */, nil /* monitor */)
+			schemaChangeJobRecords := make(map[descpb.ID]jobrecords.JobRecords)
+			defer func() {
+				descsCol.ReleaseAll(ctx)
+				for k := range schemaChangeJobRecords {
+					delete(schemaChangeJobRecords, k)
+				}
+			}()
+
+			// By default, initialize a sessionData that would be the same as what
+			// would be created if root logged in.
+			// The sessionData's user can be overriden when calling the query
+			// functions of internal executor.
+			// TODO(janexing): since we can be running queries with a higher privilege
+			// than the actual user, a security boundary should be added to the error
+			// handling of internal executor.
+			sd := sessiondatautil.NewFakeSessionData(&cf.settings.SV)
+			sd.UserProto = username.RootUserName().EncodeProto()
+			ie := cf.ieFactoryWithTxn(ctx, sd, descsCol, schemaChangeJobRecords)
+			if err := f(ctx, txn, descsCol, ie); err != nil {
 				return err
 			}
 

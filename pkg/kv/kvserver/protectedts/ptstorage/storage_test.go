@@ -879,6 +879,21 @@ type wrappedInternalExecutor struct {
 	}
 }
 
+func (ie *wrappedInternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	panic("unimplemented")
+}
+
 var _ sqlutil.InternalExecutor = &wrappedInternalExecutor{}
 
 func (ie *wrappedInternalExecutor) Exec(
