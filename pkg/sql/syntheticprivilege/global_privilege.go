@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catalog
+package syntheticprivilege
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -23,14 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
-
-// SyntheticPrivilegeObject represents an object that has its privileges stored
-// in system.privileges.
-type SyntheticPrivilegeObject interface {
-	PrivilegeObject
-	ToString() string
-	PrivilegeObjectType() privilege.ObjectType
-}
 
 // GlobalPrivilege represents privileges granted via
 // GRANT SYSTEM [privilege...] TO [roles...].
@@ -52,9 +45,9 @@ func (p *GlobalPrivilege) PrivilegeObjectType() privilege.ObjectType {
 	return privilege.Global
 }
 
-// SystemClusterPrivilegeObject is one of one since it is global.
+// GlobalPrivilegeObject is one of one since it is global.
 // We can use a const to identify it.
-var SystemClusterPrivilegeObject = &GlobalPrivilege{}
+var GlobalPrivilegeObject = &GlobalPrivilege{}
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (p *GlobalPrivilege) GetPrivilegeDescriptor(
@@ -77,7 +70,9 @@ func (p *GlobalPrivilege) GetName() string {
 }
 
 func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
-	ctx context.Context, planner eval.Planner, systemTablePrivilegeObject SyntheticPrivilegeObject,
+	ctx context.Context,
+	planner eval.Planner,
+	systemTablePrivilegeObject catalog.SyntheticPrivilegeObject,
 ) (*catpb.PrivilegeDescriptor, error) {
 	query := fmt.Sprintf(
 		`SELECT username, privileges FROM system.%s WHERE path='%s'`,
