@@ -73,8 +73,27 @@ func startReplicationStreamJob(
 	return streaming.StreamID(jr.JobID), nil
 }
 
+// Convert the producer job's status into corresponding replication
+// stream status.
+func convertProducerJobStatusToStreamStatus(
+	jobStatus jobs.Status,
+) streampb.StreamReplicationStatus_StreamStatus {
+	switch {
+	case jobStatus == jobs.StatusRunning:
+		return streampb.StreamReplicationStatus_STREAM_ACTIVE
+	case jobStatus == jobs.StatusPaused:
+		return streampb.StreamReplicationStatus_STREAM_PAUSED
+	case jobStatus.Terminal():
+		return streampb.StreamReplicationStatus_STREAM_INACTIVE
+	default:
+		// This means the producer job is in transient state, the call site
+		// has to retry until other states are reached.
+		return streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY
+	}
+}
+
 // updateReplicationStreamProgress updates the job progress for an active replication
-// stream specified by 'streamID' and returns error if the stream is no longer active.
+// stream specified by 'streamID'.
 func updateReplicationStreamProgress(
 	ctx context.Context,
 	expiration time.Time,
@@ -87,22 +106,14 @@ func updateReplicationStreamProgress(
 	const useReadLock = false
 	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if md.Status == jobs.StatusRunning {
-				status.StreamStatus = streampb.StreamReplicationStatus_STREAM_ACTIVE
-			} else if md.Status == jobs.StatusPaused {
-				status.StreamStatus = streampb.StreamReplicationStatus_STREAM_PAUSED
-			} else if md.Status.Terminal() {
-				status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
-			} else {
-				status.StreamStatus = streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY
-			}
+			status.StreamStatus = convertProducerJobStatusToStreamStatus(md.Status)
 			// Skip checking PTS record in cases that it might already be released
 			if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE &&
 				status.StreamStatus != streampb.StreamReplicationStatus_STREAM_PAUSED {
 				return nil
 			}
 
-			ptsID := *md.Payload.GetStreamReplication().ProtectedTimestampRecord
+			ptsID := md.Payload.GetStreamReplication().ProtectedTimestampRecordID
 			ptsRecord, err := ptsProvider.GetRecord(ctx, txn, ptsID)
 			if err != nil {
 				return err
@@ -133,13 +144,40 @@ func updateReplicationStreamProgress(
 }
 
 // heartbeatReplicationStream updates replication stream progress and advances protected timestamp
-// record to the specified frontier.
+// record to the specified frontier. If 'frontier' is hlc.MaxTimestamp, returns the producer job
+// progress without updating it.
 func heartbeatReplicationStream(
 	evalCtx *eval.Context, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	expirationTime := timeutil.Now().Add(timeout)
+	// MaxTimestamp indicates not a real heartbeat, skip updating the producer
+	// job progress.
+	if frontier == hlc.MaxTimestamp {
+		var status streampb.StreamReplicationStatus
+		pj, err := execConfig.JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
+		if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
+			status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
+			return status, nil
+		}
+		if err != nil {
+			return streampb.StreamReplicationStatus{}, err
+		}
+		status.StreamStatus = convertProducerJobStatusToStreamStatus(pj.Status())
+		payload := pj.Payload()
+		ptsRecord, err := execConfig.ProtectedTimestampProvider.GetRecord(evalCtx.Ctx(), txn,
+			payload.GetStreamReplication().ProtectedTimestampRecordID)
+		// Nil protected timestamp indicates it was not created or has been released.
+		if errors.Is(err, protectedts.ErrNotExists) {
+			return status, nil
+		}
+		if err != nil {
+			return streampb.StreamReplicationStatus{}, err
+		}
+		status.ProtectedTimestamp = &ptsRecord.Timestamp
+		return status, nil
+	}
 
 	return updateReplicationStreamProgress(evalCtx.Ctx(),
 		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, streamID, frontier, txn)
