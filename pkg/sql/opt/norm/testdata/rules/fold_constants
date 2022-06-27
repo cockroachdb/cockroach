@@ -1197,6 +1197,28 @@ project
  └── projections
       └── a.arr:6[0] [as=arr:9, outer=(6)]
 
+# Fold JSONB constants.
+norm expect=FoldIndirection
+SELECT ('{"a": 1}'::jsonb)['a'] AS other_col FROM a
+----
+project
+ ├── columns: other_col:9!null
+ ├── fd: ()-->(9)
+ ├── scan a
+ └── projections
+      └── '1' [as=other_col:9]
+
+# JSONB is dynamically constructured.
+norm expect-not=FoldIndirection
+SELECT j['field'] FROM a
+----
+project
+ ├── columns: j:9
+ ├── scan a
+ │    └── columns: a.j:5
+ └── projections
+      └── a.j:5['field'] [as=j:9, outer=(5)]
+
 # Regression test for #40404.
 norm expect=FoldIndirection
 SELECT (SELECT x[1]) FROM (VALUES(null::oid[])) v(x)
