@@ -20,8 +20,8 @@ import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { SqlBox } from "src/sql";
 import { Col, Row, Tooltip } from "antd";
 import { SummaryCard } from "../summaryCard";
-import { formatDate } from "antd/es/date-picker/utils";
 import moment, { Moment } from "moment";
+import { DATE_FORMAT_24_UTC } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -115,7 +115,7 @@ export class IndexDetailsPage extends React.Component<
     if (timestamp.isSame(minDate)) {
       return "Never";
     } else {
-      return formatDate(timestamp, "MMM DD, YYYY [at] H:mm [(UTC)]");
+      return timestamp.format(DATE_FORMAT_24_UTC);
     }
   }
 
