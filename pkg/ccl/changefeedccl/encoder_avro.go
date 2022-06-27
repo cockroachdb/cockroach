@@ -128,26 +128,20 @@ func newConfluentAvroEncoder(
 // Get the raw SQL-formatted string for a table name
 // and apply full_table_name and avro_schema_prefix options
 func (e *confluentAvroEncoder) rawTableName(eventMeta cdcevent.Metadata) (string, error) {
-	for _, target := range e.targets {
-		if target.TableID == eventMeta.TableID {
-			switch target.Type {
-			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-				return e.schemaPrefix + string(target.StatementTimeName), nil
-			case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
-				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, eventMeta.FamilyName), nil
-			case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
-				if eventMeta.FamilyName != target.FamilyName {
-					// Not the right target specification for this family
-					continue
-				}
-				return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, target.FamilyName), nil
-			default:
-				// fall through to error
-			}
-			return "", errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
-		}
+	target, found := e.targets.FindByTableIDAndFamilyName(eventMeta.TableID, eventMeta.FamilyName)
+	if !found {
+		return eventMeta.TableName, errors.Newf("Could not find Target for %s", eventMeta)
 	}
-	return eventMeta.TableName, errors.Newf("Could not find TargetSpecification for %s", eventMeta)
+	switch target.Type {
+	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
+		return e.schemaPrefix + string(target.StatementTimeName), nil
+	case jobspb.ChangefeedTargetSpecification_EACH_FAMILY:
+		return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, eventMeta.FamilyName), nil
+	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+		return fmt.Sprintf("%s%s.%s", e.schemaPrefix, target.StatementTimeName, target.FamilyName), nil
+	default:
+		return "", errors.AssertionFailedf("Found a matching target with unimplemented type %s", target.Type)
+	}
 }
 
 // EncodeKey implements the Encoder interface.

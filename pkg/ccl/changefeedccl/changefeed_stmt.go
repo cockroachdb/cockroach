@@ -1195,7 +1195,8 @@ func getCommonChangefeedEventDetails(
 	changefeedEventDetails := eventpb.CommonChangefeedEventDetails{
 		Description: description,
 		SinkType:    sinkType,
-		NumTables:   int32(len(AllTargets(details))),
+		// TODO: Rename this field to NumTargets.
+		NumTables:   int32(AllTargets(details).Size),
 		Resolved:    resolved,
 		Format:      opts[changefeedbase.OptFormat],
 		InitialScan: initialScan,
