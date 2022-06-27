@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -674,6 +673,7 @@ func (s *Server) SetupConn(
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		nil, /* descsCollection */
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -827,6 +827,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	descsCollection *descs.Collection,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -928,8 +929,20 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	descsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
-	ex.extraTxnState.descCollectionWithMark.descsCollection = &descsCollection
+
+	if descsCollection != nil {
+		ex.extraTxnState.descCollectionWithMark = DescriptorCollectionWithReleaseMark{
+			descsCollection:  descsCollection,
+			skipLocalRelease: true,
+		}
+	} else {
+		newDescsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+		ex.extraTxnState.descCollectionWithMark = DescriptorCollectionWithReleaseMark{
+			descsCollection:  &newDescsCollection,
+			skipLocalRelease: false,
+		}
+	}
+
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -944,74 +957,6 @@ func (s *Server) newConnExecutor(
 
 	ex.initPlanner(ctx, &ex.planner)
 
-	return ex
-}
-
-// newConnExecutorWithTxn creates a connExecutor that will execute statements
-// under a higher-level txn. This connExecutor runs with a different state
-// machine, much reduced from the regular one. It cannot initiate or end
-// transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
-// retries).
-//
-// If there is no error, this function also activate()s the returned
-// executor, so the caller does not need to run the
-// activation. However this means that run() or close() must be called
-// to release resources.
-func (s *Server) newConnExecutorWithTxn(
-	ctx context.Context,
-	sdMutIterator *sessionDataMutatorIterator,
-	stmtBuf *StmtBuf,
-	clientComm ClientComm,
-	parentMon *mon.BytesMonitor,
-	memMetrics MemoryMetrics,
-	srvMetrics *Metrics,
-	txn *kv.Txn,
-	syntheticDescs []catalog.Descriptor,
-	applicationStats sqlstats.ApplicationStats,
-) *connExecutor {
-	ex := s.newConnExecutor(
-		ctx,
-		sdMutIterator,
-		stmtBuf,
-		clientComm,
-		memMetrics,
-		srvMetrics,
-		applicationStats,
-	)
-	if txn.Type() == kv.LeafTxn {
-		// If the txn is a leaf txn it is not allowed to perform mutations. For
-		// sanity, set read only on the session.
-		ex.dataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.SetReadOnly(true)
-		})
-	}
-
-	// The new transaction stuff below requires active monitors and traces, so
-	// we need to activate the executor now.
-	ex.activate(ctx, parentMon, mon.BoundAccount{})
-
-	// Perform some surgery on the executor - replace its state machine and
-	// initialize the state.
-	ex.machine = fsm.MakeMachine(
-		BoundTxnStateTransitions,
-		stateOpen{ImplicitTxn: fsm.False},
-		&ex.state,
-	)
-	ex.state.resetForNewSQLTxn(
-		ctx,
-		explicitTxn,
-		txn.ReadTimestamp().GoTime(),
-		nil, /* historicalTimestamp */
-		roachpb.UnspecifiedUserPriority,
-		tree.ReadWrite,
-		txn,
-		ex.transitionCtx,
-		ex.QualityOfService())
-
-	// Modify the Collection to match the parent executor's Collection.
-	// This allows the InternalExecutor to see schema changes made by the
-	// parent executor.
-	ex.extraTxnState.descCollectionWithMark.descsCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
 }
 

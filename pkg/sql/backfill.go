@@ -2474,7 +2474,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ief sqlutil.InternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
@@ -2504,7 +2504,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ief sqlutil.InternalExecutorFactory,
 	sd *sessiondata.SessionData,
 	srcTable *tabledesc.Mutable,
 	txn *kv.Txn,
