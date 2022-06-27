@@ -2449,8 +2449,20 @@ func (sc *SchemaChanger) txn(
 			return err
 		}
 	}
-
 	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+}
+
+// txnWithExecutor is to run internal executor within a txn.
+func (sc *SchemaChanger) txnWithExecutor(
+	ctx context.Context,
+	f func(context.Context, *kv.Txn, *descs.Collection, sqlutil.InternalExecutor) error,
+) error {
+	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
+		if err := fn(sc.job.ID()); err != nil {
+			return err
+		}
+	}
+	return sc.execCfg.CollectionFactory.TxnWithExecutor(ctx, sc.db, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -2461,11 +2473,12 @@ func (sc *SchemaChanger) txn(
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context, execCfg *ExecutorConfig, ts hlc.Timestamp, descriptors *descs.Collection,
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	sd *sessiondata.SessionData,
+	ts hlc.Timestamp,
+	descriptors *descs.Collection,
 ) extendedEvalContext {
-
-	sd := sessiondatautil.NewFakeSessionData(execCfg.SV())
-
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the

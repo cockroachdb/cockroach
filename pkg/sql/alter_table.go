@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -553,10 +555,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				if err := validateCheckInTxn(
-					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutorFactory,
-					params.SessionData(), n.tableDesc, params.p.Txn(), ck.Expr,
-				); err != nil {
+				if err := params.p.validateCheckInTxn(params.ctx, n.tableDesc, ck.Expr); err != nil {
 					return err
 				}
 				ck.Validity = descpb.ConstraintValidity_Validated
@@ -576,15 +575,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
-				if err := validateFkInTxn(
-					params.ctx,
-					params.ExecCfg().InternalExecutorFactory,
-					params.p.SessionData(),
-					n.tableDesc,
-					params.p.Txn(),
-					params.p.Descriptors(),
-					name,
-				); err != nil {
+				if err := params.p.validateFkInTxn(params.ctx, n.tableDesc, name); err != nil {
 					return err
 				}
 				foundFk.Validity = descpb.ConstraintValidity_Validated
@@ -605,10 +596,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"constraint %q in the middle of being added, try again later", t.Constraint)
 					}
-					if err := validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx, params.ExecCfg().InternalExecutorFactory(
-							params.ctx, params.SessionData(),
-						), n.tableDesc, params.p.Txn(), params.p.User(), name,
+					if err := params.p.validateUniqueWithoutIndexConstraintInTxn(
+						params.ctx,
+						n.tableDesc,
+						name,
 					); err != nil {
 						return err
 					}
@@ -2020,4 +2011,92 @@ func (p *planner) tryRemoveFKBackReferences(
 	}
 	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
 	return nil
+}
+
+// validateFkInTxn validates foreign key constraints within the provided
+// transaction. The logic is the same as in
+// SchemaChanger.validateFkInTxn, but this one is wrapped in a planner context.
+func (p *planner) validateFkInTxn(
+	ctx context.Context, srcTable *tabledesc.Mutable, fkName string,
+) error {
+	syntheticDescs, fk, targetTable, err := getTargetTablesAndFk(
+		ctx,
+		srcTable,
+		p.Txn(),
+		p.Descriptors(),
+		fkName,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := p.WithInternalExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) error {
+		return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+			return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
+		})
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateCheckInTxn validates check constraints within the provided
+// transaction. The logic is the same as in SchemaChanger.validateCheckInTxn,
+// but this one is wrapped in a planner context.
+func (p *planner) validateCheckInTxn(
+	ctx context.Context, tableDesc *tabledesc.Mutable, checkExpr string,
+) error {
+
+	var syntheticDescs []catalog.Descriptor
+	if tableDesc.Version > tableDesc.ClusterVersion().Version {
+		syntheticDescs = append(syntheticDescs, tableDesc)
+	}
+
+	if err := p.WithInternalExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) error {
+		return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+			return validateCheckExpr(ctx, &p.semaCtx, txn, p.SessionData(), checkExpr, tableDesc, ie)
+		})
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateUniqueWithoutIndexConstraintInTxn validates a unique constraint
+// within the provided transaction. The logic is the same as in
+// SchemaChanger.validateUniqueWithoutIndexConstraintInTxn, but this one is
+// wrapped in a planner context.
+func (p *planner) validateUniqueWithoutIndexConstraintInTxn(
+	ctx context.Context, tableDesc *tabledesc.Mutable, constraintName string,
+) error {
+	var syntheticDescs []catalog.Descriptor
+	if tableDesc.Version > tableDesc.ClusterVersion().Version {
+		syntheticDescs = append(syntheticDescs, tableDesc)
+	}
+	var uc *descpb.UniqueWithoutIndexConstraint
+	for i := range tableDesc.UniqueWithoutIndexConstraints {
+		def := &tableDesc.UniqueWithoutIndexConstraints[i]
+		if def.Name == constraintName {
+			uc = def
+			break
+		}
+	}
+	if uc == nil {
+		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
+	}
+
+	return p.WithInternalExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) error {
+		return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
+			return validateUniqueConstraint(
+				ctx, tableDesc, uc.Name, uc.ColumnIDs, uc.Predicate, ie, txn, p.User(), false, /* preExisting */
+			)
+		})
+
+	})
 }
