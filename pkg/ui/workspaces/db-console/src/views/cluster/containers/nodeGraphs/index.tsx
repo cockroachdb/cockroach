@@ -22,7 +22,6 @@ import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
@@ -66,19 +65,20 @@ import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
   setMetricsFixedWindow,
-  setTimeScale,
   TimeWindow,
   TimeScale,
   adjustTimeScale,
 } from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
-import { Anchor } from "@cockroachlabs/cluster-ui";
+import { Anchor, TimeScaleDropdown } from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
 import moment from "moment";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -113,6 +113,7 @@ type MapStateToProps = {
   hoverState: HoverState;
   resolution10sStorageTTL: moment.Duration;
   resolution30mStorageTTL: moment.Duration;
+  timeScale: TimeScale;
 };
 
 type MapDispatchToProps = {
@@ -350,6 +351,8 @@ export class NodeGraphs extends React.Component<
           </PageConfigItem>
           <PageConfigItem>
             <TimeScaleDropdown
+              currentScale={this.props.timeScale}
+              setTimeScale={this.props.setTimeScale}
               adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
             />
           </PageConfigItem>
@@ -420,6 +423,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   hoverState: hoverStateSelector(state),
   resolution10sStorageTTL: selectResolution10sStorageTTL(state),
   resolution30mStorageTTL: selectResolution30mStorageTTL(state),
+  timeScale: globalTimeScaleLocalSetting.selector(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
@@ -429,7 +433,7 @@ const mapDispatchToProps: MapDispatchToProps = {
   hoverOn,
   hoverOff,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale: setTimeScale,
+  setTimeScale: setGlobalTimeScaleAction,
 };
 
 export default compose(

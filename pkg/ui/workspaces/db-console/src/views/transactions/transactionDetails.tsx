@@ -20,14 +20,14 @@ import {
   selectData,
   selectLastError,
 } from "src/views/transactions/transactionsPage";
-import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
+import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 import {
   TransactionDetailsStateProps,
   TransactionDetailsDispatchProps,
   TransactionDetailsProps,
   TransactionDetails,
 } from "@cockroachlabs/cluster-ui";
-import { setCombinedStatementsTimeScaleAction } from "src/redux/statements";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
 
 export const selectTransaction = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
@@ -65,7 +65,7 @@ export default withRouter(
     ): TransactionDetailsStateProps => {
       const { isLoading, transaction } = selectTransaction(state, props);
       return {
-        timeScale: statementsTimeScaleLocalSetting.selector(state),
+        timeScale: globalTimeScaleLocalSetting.selector(state),
         error: selectLastError(state),
         isTenant: false,
         nodeRegions: nodeRegionsByIDSelector(state),
@@ -81,7 +81,7 @@ export default withRouter(
     {
       refreshData: refreshStatements,
       refreshUserSQLRoles,
-      onTimeScaleChange: setCombinedStatementsTimeScaleAction,
+      onTimeScaleChange: setGlobalTimeScaleAction,
     },
   )(TransactionDetails),
 );

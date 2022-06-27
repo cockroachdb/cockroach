@@ -28,7 +28,7 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
+import { globalTimeScaleLocalSetting } from "src/redux/globalTimeScale";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { queryByName } from "src/util/query";
 
@@ -48,7 +48,7 @@ import {
   cancelStatementDiagnosticsReportAction,
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
-  setCombinedStatementsTimeScaleAction,
+  setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import {
   trackCancelDiagnosticsBundleAction,
@@ -278,7 +278,7 @@ export const searchLocalSetting = new LocalSetting(
 
 const fingerprintsPageActions = {
   refreshStatements,
-  onTimeScaleChange: setCombinedStatementsTimeScaleAction,
+  onTimeScaleChange: setGlobalTimeScaleAction,
   refreshStatementDiagnosticsRequests,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
@@ -353,7 +353,7 @@ export default withRouter(
         apps: selectApps(state),
         columns: statementColumnsLocalSetting.selectorToArray(state),
         databases: selectDatabases(state),
-        timeScale: statementsTimeScaleLocalSetting.selector(state),
+        timeScale: globalTimeScaleLocalSetting.selector(state),
         filters: filtersLocalSetting.selector(state),
         lastReset: selectLastReset(state),
         nodeRegions: nodeRegionsByIDSelector(state),

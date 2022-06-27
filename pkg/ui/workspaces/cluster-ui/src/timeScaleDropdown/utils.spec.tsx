@@ -13,11 +13,26 @@ import moment from "moment";
 import {
   defaultTimeScaleOptions,
   findClosestTimeScale,
+  toDateRange,
   toRoundedDateRange,
 } from "./utils";
 import { assert } from "chai";
 
 describe("timescale utils", (): void => {
+  describe("toDateRange", () => {
+    it("get date range", () => {
+      const ts: TimeScale = {
+        windowSize: moment.duration(5, "day"),
+        sampleSize: moment.duration(5, "minutes"),
+        fixedWindowEnd: moment.utc("2022.01.10 13:42"),
+        key: "Custom",
+      };
+      const [start, end] = toDateRange(ts);
+      assert.equal(start.format("YYYY.MM.DD HH:mm:ss"), "2022.01.05 13:42:00");
+      assert.equal(end.format("YYYY.MM.DD HH:mm:ss"), "2022.01.10 13:42:00");
+    });
+  });
+
   describe("toRoundedDateRange", () => {
     it("round values", () => {
       const ts: TimeScale = {
