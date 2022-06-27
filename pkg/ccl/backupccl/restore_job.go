@@ -268,7 +268,7 @@ func restore(
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
 	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-		highWaterMark)
+		highWaterMark, true)
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.
