@@ -10,15 +10,21 @@
 
 package rel
 
-import "math/bits"
+import (
+	"math/bits"
+	"unsafe"
+)
 
 // ordinal is used to correlate attributes in a schema.
 // It enables use of the ordinalSet.
 type ordinal uint8
 
 // ordinalSet represents A bitmask over ordinals.
-// Note that it cannot contain attributes with ordinals greater than 15.
-type ordinalSet uint16
+// Note that it cannot contain attributes with ordinals greater than 30.
+type ordinalSet uint32
+
+const ordinalSetCapacity = (unsafe.Sizeof(ordinalSet(0)) * 8)
+const ordinalSetMaxOrdinal = ordinal(ordinalSetCapacity - 1)
 
 // ForEach iterates the set of attributes.
 func (m ordinalSet) forEach(f func(a ordinal) (wantMore bool)) {
@@ -64,12 +70,12 @@ func (m ordinalSet) union(other ordinalSet) ordinalSet {
 
 // len returns the number of ordinals in the set.
 func (m ordinalSet) len() int {
-	return bits.OnesCount16(uint16(m))
+	return bits.OnesCount32(uint32(m))
 }
 
 // rank returns the rank in the set of the passed ordinal.
 func (m ordinalSet) rank(a ordinal) int {
-	return bits.OnesCount16(uint16(m & ((1 << a) - 1)))
+	return bits.OnesCount32(uint32(m & ((1 << a) - 1)))
 }
 
 // isContainedIn returns true of m contains every element of other.
