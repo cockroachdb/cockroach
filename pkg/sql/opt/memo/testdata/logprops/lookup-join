@@ -87,12 +87,12 @@ inner-join (lookup abcd)
  │    ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) abcd.rowid:9(int!null)
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         │    ├── variable: m:1 [type=int]
- │    │         │    └── variable: a:6 [type=int]
- │    │         └── gt [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
- │    │              ├── variable: b:7 [type=int]
- │    │              └── const: 2 [type=int]
+ │    │         ├── gt [type=bool, outer=(7), constraints=(/7: [/3 - ]; tight)]
+ │    │         │    ├── variable: b:7 [type=int]
+ │    │         │    └── const: 2 [type=int]
+ │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │              ├── variable: m:1 [type=int]
+ │    │              └── variable: a:6 [type=int]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)

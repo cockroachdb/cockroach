@@ -88,7 +88,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 33
 │ table: def@def_pkey
-│ lookup condition: (b = f) AND (e > 1)
+│ lookup condition: (e > 1) AND (b = f)
 │
 └── • scan
       columns: (a, b, c)
@@ -2017,7 +2017,7 @@ vectorized: true
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
     │ estimated row count: 3
@@ -2025,7 +2025,7 @@ vectorized: true
     └── • values
           size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9rnEAQxt_3UwzzJlqG5PTydyGw18QUg9VUvVAoh8g5pDbGta72vBz33YvaXi-FlPbdPDPz7Ay_nQ3qbwUKdD7deTPXB-PajeLoo2dC5HjOVQxv4SYMPoBxP_PmTgSGRWBNTALDJrCHYErgzz3PNGEWQQvGiqAzwXNuYrgNXB8KpR7bKuGuqvuOBgIfjPZwBZfQHK5MmPnXve4G3ZlIWKqM_fSJNYrPaOGCsKrVkrVWdZ_aDA1u1qGYEOZl1TZ9ekG4VDWj2GCTNwWjwPu0aFkfTZAw4ybNi_FFC96BMYXll7Z81P3AkMuMawEnQgjXj88JpEUgbVxsCVXb_J6gm_SBUUy29O9b3Kq8DDnNuD6yXm4SrysWI6pgHjvhAAwJ95DJvTipky5ZJ8_JKsmzDgm9oQZfVV6CKgUYhmHIY-j_8YBT3RwIIaI4dP33BAcr3k-YP8HLKVyCPNvJ88FtTXYk7F-hueuxesvFTtq9PO05XqmifSq1gJrgO0F_CQRrgmckDNpGgLRJTkkekzwheUryjOQ5yYtXOVv_wzlkXalS8wvGr__ggpCzBx4vSqu2XvJdrZbDmFEGg29IZKybsWqNwi3HUr_gvtn6q9n-w7zYvvkRAAD__74CCoU=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkm9vm0AMxt_vU1h-U5isNpD-PanSZS2dqBh0QKpJU4RQsDpWyjEOFtIo330Ctiyd1Gl758f2g83vvEH9rUCBzqc7b-b6YFy7URx99EyIHM-5iuEt3ITBBzDuZ97cicCwCKyJSWDYBPYQTAn8ueeZJswiaMFYEXQmeM5NDLeB60Oh1GNbJdxVdd_RQOCD0R6u4BKaw5UJM_-6192gOxMJS5Wxnz6xRvEZLVwQVrVastaq7lObocHNOhQTwrys2qZPLwiXqmYUG2zypmAUeJ8WLeujCRJm3KR5MX7RgndgTGH5pS0fdT8w5DLjWsCJEML143MCaRFIGxdbQtU2vyfoJn1gFJMt_fsWtyovQ04zro-sl5vE64rFiCqYx044AEPCPWRyL07qpEvWyXOySvKsQ0JvqMFXlZegSgGGYRjyGPp3POBUNwdCiCgOXf89wcGK9xPmT_DyfGi3Jrtft3-F5q5nCpcgz3bS6uXFTtq9PO05XqmifSq1gJrgO0F_CQRrgmckDNpGgLRJTkkekzwheUryjOQ5yYtXOVv_wzlkXalS8wvGr7_ggpCzBx4vSqu2XvJdrZbDmFEGg29IZKybsWqNwi3HUr_gvtn6q9n-w7zYvvkRAAD__8m0CoU=
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) WHERE NOT EXISTS (
@@ -2037,7 +2037,7 @@ vectorized: true
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
-│ lookup condition: ((((r IN ('east', 'west')) AND (column2 = x)) AND (y IN (10, 20))) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
+│ lookup condition: ((((r IN ('east', 'west')) AND (y IN (10, 20))) AND (column2 = x)) AND ("lookup_join_const_col_@8" = z)) AND (column1 = w)
 │
 └── • render
     │ estimated row count: 3
@@ -2045,7 +2045,7 @@ vectorized: true
     └── • values
           size: 2 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFrnEAQx9_7KYZ5yVqG5PSaNiwEvCamNVgvVZMGyiFyDqmNca2rnMlx372spte7Qkr7Nv-Z_c0M_5016h8lSvRur4KZH4I49-Mk_hxYEHuBd5bAa7iI5p9A3MyCay8GYRPYE4tAOATOEEwJwusgsCyYxdCBWBH0Fnz56EUehPMEvFvTEsR-w1Kp-65Oua8bw7XPgOgOV3AK7eHKgll4bnQ_6N6ykLBSOYfZA2uUX9HGBWHdqCVrrRqTWg8P_LxHOSEsqrprTXpBuFQNo1xjW7Qlo8SbrOxYH02QMOc2K8qxow3vQUxh-a2r7rUZGHGVcyPhWErph8kJgWsTuA4uNoSqa39P0G12xygnG_r3LS5VUUWc5dwc2fubJI81Swi8iwRmYeLD5dwPkXDHNXcnTpu0Tx_Tp3SVFnmPhMFQg--qqEBVEoQQwn0D5oMPONPtgZQyTiI__EBwsOLdhPVsvDuFU3DfbuW7gbYnWyOcX6G1fWMb5GQrHSOPjY1nquweKi2hITD3QfBI8ISE866V4DrkTl901P4fRyPWtao077n58l8tCDm_4_F2tOqaJV81ajmMGeV84IZEzrodq_Yo_GosmQV3YfuvsPMHvNi8-hkAAP__j1EMSw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFvm0AM_b5fYflLj8lqA1m36qRKZC3dqBjpgHaVpgihYHWslGMcKLRR_vt00GXJpE7bN79nP9v3zmvUP0qU6N1eBTM_BHHux0n8ObAg9gLvLIHXcBHNP4G4mQXXXgzCJrAnFoFwCJwhmBKE10FgWTCLoQOxIugt-PLRizwI5wl4t6YliP2GpVL3XZ1yXzdG1z4LRHe4glNoD1cWzMJzg_sB95aFhJXKOcweWKP8ijYuCOtGLVlr1RhqPRT4eY9yQlhUddcaekG4VA2jXGNbtCWjxJus7FgfTZAw5zYryrGjDe9BTGH5ravutRkYcZVzI-FYSumHyQmBaxO4Di42hKprf0_QbXbHKCcb-vctLlVRRZzl3BzZ-5skjzVLCLyLBGZh4sPl3A-RcMc1dydOm7RPH9OndJUWeY-EwZCD76qoQFUShBDCfQPmgw840-2BlDJOIj_8QHCw4l3CejbefTeU25Pty51fobWtmcIpuG-30DbwZAsdA4-NjWeq7B4qLaEhMPdB8EjwhITzrpXgOuROX3TU_h9HI9a1qjTvufnyXy0IOb_j8Xa06polXzVqOYwZ4XzQDUTOuh2z9gj8akyZBXfF9l_Fzh_ixebVzwAAAP__mxgMSw==
 
 # The following tests check that if the joiners can separate a row request
 # into separate families that it does, and generates spans for each family

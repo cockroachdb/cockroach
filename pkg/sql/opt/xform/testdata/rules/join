@@ -3031,8 +3031,8 @@ left-join (lookup lookup_expr [as=t])
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── r:3 IN ('east', 'west') [outer=(3), constraints=(/3: [/'east' - /'east'] [/'west' - /'west']; tight)]
- │    │         ├── column2:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  │    │         ├── y:9 IN (10, 20) [outer=(9), constraints=(/9: [/10 - /10] [/20 - /20]; tight)]
+ │    │         ├── column2:2 = x:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
  │    │         ├── "lookup_join_const_col_@10":13 = z:10 [outer=(10,13), constraints=(/10: (/NULL - ]; /13: (/NULL - ]), fd=(10)==(13), (13)==(10)]
  │    │         └── column1:1 = w:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  │    ├── cardinality: [3 - ]
@@ -3069,8 +3069,8 @@ left-join (lookup lookup_expr [as=t])
  │    ├── lookup expression
  │    │    └── filters
  │    │         ├── r:3 IN ('east', 'west') [outer=(3), constraints=(/3: [/'east' - /'east'] [/'west' - /'west']; tight)]
- │    │         ├── column2:2 = u:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
- │    │         └── y:9 IN (10, 20) [outer=(9), constraints=(/9: [/10 - /10] [/20 - /20]; tight)]
+ │    │         ├── y:9 IN (10, 20) [outer=(9), constraints=(/9: [/10 - /10] [/20 - /20]; tight)]
+ │    │         └── column2:2 = u:5 [outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
  │    ├── cardinality: [3 - ]
  │    ├── fd: (3,4)-->(5-7,9,10)
  │    ├── values
@@ -3098,8 +3098,8 @@ left-join (lookup lookup_expr [as=t])
  │    ├── columns: column1:1!null column2:2 r:3 k:4 v:6 w:7
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── column1:1 = v:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         ├── r:3 IN ('east', 'west') [outer=(3), constraints=(/3: [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │    │         ├── column1:1 = v:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── column2:2 = w:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │    ├── cardinality: [3 - ]
  │    ├── fd: (3,4)-->(6,7)
@@ -3294,8 +3294,8 @@ inner-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6!null b:7!null n:2 m:1!null
  ├── lookup expression
  │    └── filters
- │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  ├── fd: (1)==(6), (6)==(1)
  ├── scan small
  │    └── columns: m:1 n:2
@@ -3309,8 +3309,8 @@ left-join (lookup abcd@abcd_a_b_idx)
  ├── columns: a:6 b:7 n:2 m:1
  ├── lookup expression
  │    └── filters
- │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  ├── scan small
  │    └── columns: m:1 n:2
  └── filters (true)
@@ -3328,8 +3328,8 @@ inner-join (lookup abcd)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3348,8 +3348,8 @@ left-join (lookup abcd)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (9)-->(6,7)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3369,8 +3369,8 @@ inner-join (lookup abcd)
  │    ├── columns: m:1!null n:2!null a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3390,8 +3390,8 @@ left-join (lookup abcd)
  │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (9)-->(6,7)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3412,8 +3412,8 @@ inner-join (lookup abcd)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         ├── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (9)-->(6,7), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3435,8 +3435,8 @@ left-join (lookup abcd)
  │    ├── columns: m:1 n:2 a:12 b:13 abcd.rowid:15 continuation:18
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
- │    │         └── b:13 > 1 [outer=(13), constraints=(/13: [/2 - ]; tight)]
+ │    │         ├── b:13 > 1 [outer=(13), constraints=(/13: [/2 - ]; tight)]
+ │    │         └── m:1 = a:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
  │    ├── first join in paired joiner; continuation column: continuation:18
  │    ├── fd: (15)-->(12,13,18)
  │    ├── scan small
@@ -3524,8 +3524,8 @@ inner-join (lookup abcde)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 IN (10, 20, 30) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │         ├── b:7 IN (10, 20, 30) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3546,8 +3546,8 @@ inner-join (lookup abcde)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         ├── b:7 IN (10, 20, 30) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── "lookup_join_const_col_@8":14 = c:8 [outer=(8,14), constraints=(/8: (/NULL - ]; /14: (/NULL - ]), fd=(8)==(14), (14)==(8)]
  │    ├── fd: ()-->(8), (11)-->(6,7), (1)==(6), (6)==(1)
  │    ├── project
@@ -3575,9 +3575,9 @@ inner-join (lookup abcde)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
+ │    │         ├── c:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
  │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         ├── "lookup_join_const_col_@7":14 = b:7 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
- │    │         └── c:8 IN (10, 20, 30) [outer=(8), constraints=(/8: [/10 - /10] [/20 - /20] [/30 - /30]; tight)]
+ │    │         └── "lookup_join_const_col_@7":14 = b:7 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
  │    ├── fd: ()-->(7), (11)-->(6,8), (1)==(6), (6)==(1)
  │    ├── project
  │    │    ├── columns: "lookup_join_const_col_@7":14!null m:1 n:2
@@ -3602,9 +3602,9 @@ inner-join (lookup abcde)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         ├── b:7 IN (10, 20) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20]; tight)]
- │    │         └── c:8 IN (30, 40) [outer=(8), constraints=(/8: [/30 - /30] [/40 - /40]; tight)]
+ │    │         ├── c:8 IN (30, 40) [outer=(8), constraints=(/8: [/30 - /30] [/40 - /40]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3649,8 +3649,8 @@ inner-join (lookup abcde)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcde.rowid:11!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 < 10 [outer=(7), constraints=(/7: (/NULL - /9]; tight)]
+ │    │         ├── b:7 < 10 [outer=(7), constraints=(/7: (/NULL - /9]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (11)-->(6-8), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3783,8 +3783,8 @@ inner-join (lookup abcd_check)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8 abcd_check.rowid:10!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │         └── b:7 IN (10, 20) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20]; tight)]
+ │    │         ├── b:7 IN (10, 20) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20]; tight)]
+ │    │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    ├── fd: (10)-->(6-8), (1)==(6), (6)==(1)
  │    ├── scan small
  │    │    └── columns: m:1 n:2
@@ -3803,8 +3803,8 @@ inner-join (lookup abcd_check)
  │    ├── columns: m:1!null n:2 a:6!null b:7!null c:8!null abcd_check.rowid:10!null
  │    ├── lookup expression
  │    │    └── filters
- │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         ├── b:7 IN (10, 20) [outer=(7), constraints=(/7: [/10 - /10] [/20 - /20]; tight)]
+ │    │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── "lookup_join_const_col_@8":13 = c:8 [outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
  │    ├── fd: ()-->(8), (10)-->(6,7), (1)==(6), (6)==(1)
  │    ├── project
@@ -4011,9 +4011,9 @@ project
       ├── columns: m:1!null a:6!null b:7!null c:8!null
       ├── lookup expression
       │    └── filters
-      │         ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       │         ├── b:7 IN (1, 2, 3) [outer=(7), constraints=(/7: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
-      │         └── c:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │         ├── c:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+      │         └── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       ├── fd: (1)==(6), (6)==(1)
       ├── scan small
       │    └── columns: m:1
@@ -4037,9 +4037,9 @@ inner-join (lookup t80525_bcd@t80525_bcd_b_c_d_idx)
  ├── flags: force lookup join (into right side)
  ├── lookup expression
  │    └── filters
+ │         ├── d:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
  │         ├── a:1 = b:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │         ├── "lookup_join_const_col_@6":11 = c:6 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
- │         └── d:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+ │         └── "lookup_join_const_col_@6":11 = c:6 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
  ├── fd: ()-->(6), (1)==(5), (5)==(1)
  ├── project
  │    ├── columns: "lookup_join_const_col_@6":11!null a:1
@@ -11796,8 +11796,8 @@ inner-join (lookup metric_values)
  ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
  ├── lookup expression
  │    └── filters
- │         ├── id:6 = metric_id:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ │         ├── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ │         └── id:6 = metric_id:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  ├── key: (2,6)
  ├── fd: ()-->(7), (1,2)-->(3), (1)==(6), (6)==(1)
  ├── scan metrics@name_index
@@ -11820,8 +11820,8 @@ inner-join (lookup metric_values)
  ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
  ├── lookup expression
  │    └── filters
- │         ├── id:6 = metric_id:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ │         ├── (time:2 >= '2020-01-01 00:00:00+00:00') AND (time:2 <= '2020-01-01 00:10:00+00:00') [outer=(2), constraints=(/2: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ │         └── id:6 = metric_id:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  ├── key: (2,6)
  ├── fd: (1,2)-->(3), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan metrics@name_index
@@ -11850,8 +11850,8 @@ inner-join (lookup metric_values)
  ├── columns: metric_id:1!null time:2!null value:3 id:6!null name:7!null
  ├── lookup expression
  │    └── filters
- │         ├── id:6 = metric_id:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── time:2 IN ('2022-04-08 00:00:00+00:00', '2022-04-09 00:00:00+00:00') [outer=(2), constraints=(/2: [/'2022-04-08 00:00:00+00:00' - /'2022-04-08 00:00:00+00:00'] [/'2022-04-09 00:00:00+00:00' - /'2022-04-09 00:00:00+00:00']; tight)]
+ │         ├── time:2 IN ('2022-04-08 00:00:00+00:00', '2022-04-09 00:00:00+00:00') [outer=(2), constraints=(/2: [/'2022-04-08 00:00:00+00:00' - /'2022-04-08 00:00:00+00:00'] [/'2022-04-09 00:00:00+00:00' - /'2022-04-09 00:00:00+00:00']; tight)]
+ │         └── id:6 = metric_id:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  ├── key: (2,6)
  ├── fd: ()-->(7), (1,2)-->(3), (1)==(6), (6)==(1)
  ├── scan metrics@name_index
@@ -11898,8 +11898,8 @@ left-join (lookup metric_values)
  ├── columns: id:1!null name:2 metric_id:5 time:6 value:7
  ├── lookup expression
  │    └── filters
- │         ├── id:1 = metric_id:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │         └── (time:6 >= '2020-01-01 00:00:00+00:00') AND (time:6 <= '2020-01-01 00:10:00+00:00') [outer=(6), constraints=(/6: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ │         ├── (time:6 >= '2020-01-01 00:00:00+00:00') AND (time:6 <= '2020-01-01 00:10:00+00:00') [outer=(6), constraints=(/6: [/'2020-01-01 00:00:00+00:00' - /'2020-01-01 00:10:00+00:00']; tight)]
+ │         └── id:1 = metric_id:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  ├── key: (1,5,6)
  ├── fd: (1)-->(2), (5,6)-->(7)
  ├── scan metrics

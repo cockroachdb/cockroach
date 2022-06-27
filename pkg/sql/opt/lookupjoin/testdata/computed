@@ -111,7 +111,7 @@ x = a AND y IN (1, 2)
 input projections:
   v_eq = a + 10
 lookup expression:
-  ((v_eq = v) AND (a = x)) AND (y IN (1, 2))
+  ((y IN (1, 2)) AND (v_eq = v)) AND (a = x)
 
 lookup-constraints left=(a int, b int) right=(x int, y int, v int not null as (x + 10) virtual) index=(v, x, y)
 x = a AND y > 0
@@ -119,4 +119,4 @@ x = a AND y > 0
 input projections:
   v_eq = a + 10
 lookup expression:
-  ((v_eq = v) AND (a = x)) AND (y > 0)
+  ((y > 0) AND (v_eq = v)) AND (a = x)
