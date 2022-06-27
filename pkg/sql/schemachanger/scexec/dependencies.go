@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -44,6 +45,7 @@ type Dependencies interface {
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
 	Telemetry() Telemetry
+	ZoneConfigReader() scmutationexec.ZoneConfigReader
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -354,8 +356,10 @@ type DescriptorMetadataUpdater interface {
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
 
+	// SetZoneConfig sets the zone config for a given descriptor. If necessary,
+	// the subzone spans will be recomputed as part of this call.
 	SetZoneConfig(
-		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig, subZonesIndexesToRecompute util.FastIntSet,
 	) error
 }
 

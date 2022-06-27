@@ -543,9 +543,26 @@ type RefreshStats struct {
 	TableID descpb.ID
 }
 
-// SetZoneConfig the zone config.
-type SetZoneConfig struct {
+// UpsertZoneConfig the zone config.
+type UpsertZoneConfig struct {
 	mutationOp
 	DescriptorID descpb.ID
 	ZoneConfig   *zonepb.ZoneConfig
+}
+
+// AddSubZoneConfig adds a sub zone into the zone config.
+type AddSubZoneConfig struct {
+	mutationOp
+	DescriptorID  descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+	ZoneConfig    *zonepb.ZoneConfig
+}
+
+type RemoveSubZoneConfig struct {
+	mutationOp
+	DescriptorID  descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+	ZoneConfig    *zonepb.ZoneConfig
 }

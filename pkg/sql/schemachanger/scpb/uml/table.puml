@@ -106,6 +106,14 @@ TableZoneConfig :  TableID
 TableZoneConfig :  ZoneConfigID
 TableZoneConfig :  ZoneConfig
 
+object TableSubZoneConfig
+
+TableSubZoneConfig :  TableID
+TableSubZoneConfig :  IndexID
+TableSubZoneConfig :  ZoneConfigID
+TableSubZoneConfig :  PartitionName
+TableSubZoneConfig :  ZoneConfig
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -280,6 +288,8 @@ Table <|-- RowLevelTTL
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Sequence <|-- TableZoneConfig
+Table <|-- TableSubZoneConfig
+Index <|-- TableSubZoneConfig
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion

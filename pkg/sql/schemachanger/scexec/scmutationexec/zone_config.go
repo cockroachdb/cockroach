@@ -13,13 +13,38 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
-func (m *visitor) SetZoneConfig(ctx context.Context, op scop.SetZoneConfig) error {
+func (m *visitor) UpsertZoneConfig(ctx context.Context, op scop.UpsertZoneConfig) error {
 	tbl, err := m.checkOutTable(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
 	return m.s.SetZoneConfig(tbl, op.ZoneConfig)
+}
+
+func (m *visitor) AddSubZoneConfig(ctx context.Context, op scop.AddSubZoneConfig) error {
+	tbl, err := m.checkOutTable(ctx, op.DescriptorID)
+	if err != nil {
+		return err
+	}
+	return m.s.AddSubZoneConfig(ctx, tbl, &zonepb.Subzone{
+		IndexID:       uint32(op.IndexID),
+		PartitionName: op.PartitionName,
+		Config:        *op.ZoneConfig,
+	})
+}
+
+func (m *visitor) RemoveSubZoneConfig(ctx context.Context, op scop.RemoveSubZoneConfig) error {
+	tbl, err := m.checkOutTable(ctx, op.DescriptorID)
+	if err != nil {
+		return err
+	}
+	return m.s.RemoveSubZoneConfig(ctx, tbl, &zonepb.Subzone{
+		IndexID:       uint32(op.IndexID),
+		PartitionName: op.PartitionName,
+		Config:        *op.ZoneConfig,
+	})
 }

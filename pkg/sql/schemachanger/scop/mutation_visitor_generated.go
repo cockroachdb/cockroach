@@ -88,7 +88,9 @@ type MutationVisitor interface {
 	RemoveDatabaseRoleSettings(context.Context, RemoveDatabaseRoleSettings) error
 	DeleteSchedule(context.Context, DeleteSchedule) error
 	RefreshStats(context.Context, RefreshStats) error
-	SetZoneConfig(context.Context, SetZoneConfig) error
+	UpsertZoneConfig(context.Context, UpsertZoneConfig) error
+	AddSubZoneConfig(context.Context, AddSubZoneConfig) error
+	RemoveSubZoneConfig(context.Context, RemoveSubZoneConfig) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -422,6 +424,16 @@ func (op RefreshStats) Visit(ctx context.Context, v MutationVisitor) error {
 }
 
 // Visit is part of the MutationOp interface.
-func (op SetZoneConfig) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.SetZoneConfig(ctx, op)
+func (op UpsertZoneConfig) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpsertZoneConfig(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddSubZoneConfig) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddSubZoneConfig(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveSubZoneConfig) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveSubZoneConfig(ctx, op)
 }

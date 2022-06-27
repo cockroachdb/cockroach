@@ -12,6 +12,7 @@ package scexec
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -37,7 +39,7 @@ import (
 // those side effects using the provided deps.
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 
-	mvs := newMutationVisitorState(deps.Catalog())
+	mvs := newMutationVisitorState(deps.Catalog(), deps.ZoneConfigReader())
 	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
@@ -294,7 +296,8 @@ func updateDescriptorMetadata(
 		}
 	}
 	for id, zoneCfg := range mvs.zoneConfigsToUpdate {
-		if err := m.SetZoneConfig(ctx, id, zoneCfg); err != nil {
+		// FIXME: Pass in the recompute spans..
+		if err := m.SetZoneConfig(ctx, id, zoneCfg.zoneConfig, zoneCfg.subZonesToRecompute); err != nil {
 			return err
 		}
 	}
@@ -349,6 +352,7 @@ func manageJobs(
 
 type mutationVisitorState struct {
 	c                            Catalog
+	zoneConfigReader             scmutationexec.ZoneConfigReader
 	modifiedDescriptors          nstree.Map
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
@@ -361,8 +365,13 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
-	zoneConfigsToUpdate          map[descpb.ID]*zonepb.ZoneConfig
+	zoneConfigsToUpdate          map[descpb.ID]*zoneConfigEntry
 	gcJobs
+}
+
+type zoneConfigEntry struct {
+	zoneConfig          *zonepb.ZoneConfig
+	subZonesToRecompute util.FastIntSet
 }
 
 type constraintCommentToUpdate struct {
@@ -410,13 +419,16 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 	return nil
 }
 
-func newMutationVisitorState(c Catalog) *mutationVisitorState {
+func newMutationVisitorState(
+	c Catalog, zoneConfigReader scmutationexec.ZoneConfigReader,
+) *mutationVisitorState {
 	return &mutationVisitorState{
 		c:                   c,
+		zoneConfigReader:    zoneConfigReader,
 		drainedNames:        make(map[descpb.ID][]descpb.NameInfo),
 		eventsByStatement:   make(map[uint32][]eventPayload),
 		statsToRefresh:      make(map[descpb.ID]struct{}),
-		zoneConfigsToUpdate: make(map[descpb.ID]*zonepb.ZoneConfig),
+		zoneConfigsToUpdate: make(map[descpb.ID]*zoneConfigEntry),
 	}
 }
 
@@ -600,9 +612,84 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 	return nil
 }
 
+func (mvs *mutationVisitorState) getOrAddZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (*zoneConfigEntry, error) {
+	if zc := mvs.zoneConfigsToUpdate[id]; zc != nil {
+		return zc, nil
+	}
+	zoneConfig, err := mvs.zoneConfigReader.GetZoneConfigRaw(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mvs.zoneConfigsToUpdate[id] = &zoneConfigEntry{
+		zoneConfig:          zoneConfig,
+		subZonesToRecompute: util.FastIntSet{},
+	}
+	return mvs.zoneConfigsToUpdate[id], nil
+}
+
+// SetZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+//// interface.
 func (mvs *mutationVisitorState) SetZoneConfig(
 	tbl catalog.TableDescriptor, config *zonepb.ZoneConfig,
 ) error {
-	mvs.zoneConfigsToUpdate[tbl.GetID()] = config
+	_, err := mvs.getOrAddZoneConfig(context.Background(), tbl.GetID())
+	if err != nil {
+		return err
+	}
+	mvs.zoneConfigsToUpdate[tbl.GetID()].zoneConfig = config
+	return nil
+}
+
+// AddSubZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+//// interface.
+func (mvs *mutationVisitorState) AddSubZoneConfig(
+	ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+) error {
+	zc, err := mvs.getOrAddZoneConfig(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	// Config is always recomputed here...
+	// FIXME: REcompute here..
+	//config.Config = *zc.zoneConfig
+	fmt.Printf("ADDING %d %s\n", config.IndexID, config.PartitionName)
+	zc.zoneConfig.Subzones = append(zc.zoneConfig.Subzones, *config)
+	zc.subZonesToRecompute.Add(int(config.IndexID))
+	return nil
+}
+
+// RemoveSubZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+//// interface.
+func (mvs *mutationVisitorState) RemoveSubZoneConfig(
+	ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+) error {
+
+	fmt.Printf("REMOVING %d %s\n", config.IndexID, config.PartitionName)
+
+	zc, err := mvs.getOrAddZoneConfig(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	for idx, subZone := range zc.zoneConfig.Subzones {
+		if config.IndexID == subZone.IndexID &&
+			config.PartitionName == subZone.PartitionName {
+			newSubZoneSpans := make([]zonepb.SubzoneSpan, 0, len(zc.zoneConfig.SubzoneSpans))
+			for _, subZoneSpan := range zc.zoneConfig.SubzoneSpans {
+				appendSpan := subZoneSpan.SubzoneIndex != int32(idx)
+				if subZoneSpan.SubzoneIndex > int32(idx) {
+					subZoneSpan.SubzoneIndex = subZoneSpan.SubzoneIndex - 1
+				}
+				if appendSpan {
+					newSubZoneSpans = append(newSubZoneSpans, subZoneSpan)
+				}
+			}
+			zc.subZonesToRecompute.Remove(int(config.IndexID))
+			zc.zoneConfig.SubzoneSpans = newSubZoneSpans
+			zc.zoneConfig.Subzones = append(zc.zoneConfig.Subzones[:idx], zc.zoneConfig.Subzones[idx+1:]...)
+			break
+		}
+	}
 	return nil
 }

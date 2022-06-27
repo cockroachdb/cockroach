@@ -66,6 +66,7 @@ const (
 	// during this index's backfill.
 	TemporaryIndexID
 	ZoneConfigID
+	PartitionName
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -283,6 +284,12 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ZoneConfigID, "ZoneConfigID"),
+	),
+	rel.EntityMapping(t((*scpb.TableSubZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(ZoneConfigID, "ZoneConfigID"),
+		rel.EntityAttr(PartitionName, "PartitionName"),
 	),
 }
 

@@ -113,5 +113,20 @@ type MutationVisitorStateUpdater interface {
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
 
+	// SetZoneConfig updates the zone config for a given descriptor. As a part
+	// of the update process subzone spans will get recomputed.
 	SetZoneConfig(tbl catalog.TableDescriptor, config *zonepb.ZoneConfig) error
+	AddSubZoneConfig(
+		ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+	) error
+	RemoveSubZoneConfig(
+		ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+	) error
+}
+
+// ZoneConfigReader supports reading raw zone config information
+// from storage.
+type ZoneConfigReader interface {
+	// GetZoneConfigRaw reads the raw zone config from storage.
+	GetZoneConfigRaw(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error)
 }

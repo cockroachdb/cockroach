@@ -16,14 +16,16 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.TableZoneConfig)(nil),
+	opRegistry.register((*scpb.TableSubZoneConfig)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableZoneConfig) scop.Op {
-					return &scop.UpsertZoneConfig{
-						DescriptorID: this.TableID,
-						ZoneConfig:   this.ZoneConfig,
+				emit(func(this *scpb.TableSubZoneConfig) scop.Op {
+					return &scop.AddSubZoneConfig{
+						DescriptorID:  this.TableID,
+						IndexID:       this.IndexID,
+						ZoneConfig:    this.ZoneConfig,
+						PartitionName: this.PartitionName,
 					}
 				}),
 			),
@@ -31,8 +33,13 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TableZoneConfig) scop.Op {
-					return notImplemented(this)
+				emit(func(this *scpb.TableSubZoneConfig) scop.Op {
+					return &scop.RemoveSubZoneConfig{
+						DescriptorID:  this.TableID,
+						IndexID:       this.IndexID,
+						ZoneConfig:    this.ZoneConfig,
+						PartitionName: this.PartitionName,
+					}
 				}),
 			),
 		),

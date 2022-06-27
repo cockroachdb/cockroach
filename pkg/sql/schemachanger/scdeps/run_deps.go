@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -82,6 +83,7 @@ type jobExecutionDeps struct {
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
 	merger                scexec.Merger
+	zoneConfigReader      scmutationexec.ZoneConfigReader
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          backfiller.RangeCounter
 	jobRegistry           *jobs.Registry
@@ -121,6 +123,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				indexValidator:     d.indexValidator,
 				eventLogger:        d.eventLoggerFactory(txn),
 				statsRefresher:     d.statsRefresher,
+				zoneConfigReader:   NewZoneConfigReader(txn, d.codec),
 				schemaChangerJobID: d.job.ID(),
 				kvTrace:            d.kvTrace,
 			},

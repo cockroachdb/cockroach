@@ -211,7 +211,7 @@ func alterTableAddColumn(
 
 	if newPrimary := addColumn(b, spec); newPrimary != nil {
 		primaryIdx = newPrimary
-		indexIDsForZoneConfig = append(indexIDsForZoneConfig, newPrimary.IndexID)
+		indexIDsForZoneConfig = append(indexIDsForZoneConfig, newPrimary.IndexID, newPrimary.TemporaryIndexID)
 	} else {
 		publicTargets := b.QueryByID(tbl.TableID).Filter(
 			func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
@@ -237,15 +237,28 @@ func alterTableAddColumn(
 		secondaryIndexIDs := addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
 		indexIDsForZoneConfig = append(indexIDsForZoneConfig, secondaryIndexIDs...)
 	}
-	if len(indexIDsForZoneConfig) > 0 {
+	{
 		tableElts := b.QueryByID(tbl.TableID)
+		_, _, currentZoneConfigElem := scpb.FindTableZoneConfig(tableElts)
+		_, _, tblNS := scpb.FindNamespace(tableElts)
+		rc := synthesizeMultiRegionConfig(b, tblNS.DatabaseID)
 		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			_, _, namespace := scpb.FindNamespace(tableElts)
-			dbRegionConfig := synthesizeMultiRegionConfig(b, namespace.DatabaseID)
-			prepareZoneConfigForMultiRegionTable(b,
-				dbRegionConfig,
-				tbl.TableID,
-				applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDsForZoneConfig...))
+			for _, indexID := range indexIDsForZoneConfig {
+				for _, region := range rc.Regions() {
+					fmt.Printf("Subzone: %d %s\n", indexID, region)
+					zc, err := zoneConfigForMultiRegionPartition(region, rc)
+					if err != nil {
+						panic(err)
+					}
+					b.Add(&scpb.TableSubZoneConfig{
+						TableID:       tbl.TableID,
+						IndexID:       indexID,
+						ZoneConfigID:  currentZoneConfigElem.ZoneConfigID,
+						PartitionName: string(region),
+						ZoneConfig:    &zc,
+					})
+				}
+			}
 		}
 	}
 
@@ -366,6 +379,15 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 	if existingName != nil {
 		b.Drop(existingName)
 	}
+	if _, _, elem := scpb.FindTableLocalityRegionalByRow(publicTargets); elem != nil {
+		// Clean up the index zone config.
+		scpb.ForEachTableSubZoneConfig(publicTargets, func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableSubZoneConfig) {
+			if current == scpb.Status_PUBLIC && e.IndexID == existing.IndexID {
+				b.Drop(e)
+			}
+		})
+	}
+
 	// Create the new primary index element and its dependents.
 	replacement := protoutil.Clone(existing).(*scpb.PrimaryIndex)
 	replacement.IndexID = b.NextTableIndexID(spec.tbl)

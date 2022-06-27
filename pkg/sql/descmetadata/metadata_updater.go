@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -189,8 +190,12 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 	return err
 }
 
+// SetZoneConfig implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) SetZoneConfig(
-	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+	ctx context.Context,
+	id descpb.ID,
+	zone *zonepb.ZoneConfig,
+	subZonesIndexesToRecompute util.FastIntSet,
 ) error {
 	if zone == nil {
 		_, err := mu.ie.Exec(ctx, "delete-zone", mu.txn,
