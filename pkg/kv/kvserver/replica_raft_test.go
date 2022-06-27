@@ -67,8 +67,9 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	now := timeutil.Now()
 	ts := func(s int) time.Time {
-		return timeutil.Now().Add(time.Duration(s) * time.Second)
+		return now.Add(time.Duration(s) * time.Second)
 	}
 
 	stats := handleRaftReadyStats{
