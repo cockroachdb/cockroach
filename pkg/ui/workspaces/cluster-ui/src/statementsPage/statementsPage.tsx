@@ -76,7 +76,6 @@ import {
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
-import { flattenTreeAttributes, planNodeToString } from "../statementDetails";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -157,14 +156,7 @@ export function filterBySearchQuery(
   statement: AggregateStatistics,
   search: string,
 ): boolean {
-  const label = statement.label;
-  const plan = planNodeToString(
-    flattenTreeAttributes(
-      statement.stats.sensitive_info &&
-        statement.stats.sensitive_info.most_recent_plan_description,
-    ),
-  );
-  const matchString = `${label} ${plan}`.toLowerCase();
+  const matchString = statement.label.toLowerCase();
   return search
     .toLowerCase()
     .split(" ")
