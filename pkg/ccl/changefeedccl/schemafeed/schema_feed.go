@@ -278,26 +278,21 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescsFn := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		seen := make(map[descpb.ID]struct{}, len(tf.targets))
 		initialDescs = initialDescs[:0]
 		if err := txn.SetFixedTimestamp(ctx, initialTableDescTs); err != nil {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		for _, table := range tf.targets {
-			if _, dup := seen[table.TableID]; dup {
-				continue
-			}
-			seen[table.TableID] = struct{}{}
+		return tf.targets.EachTableID(func(id descpb.ID) error {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
 			if err != nil {
 				return err
 			}
 			initialDescs = append(initialDescs, tableDesc)
-		}
-		return nil
+			return nil
+		})
 	}
 
 	if err := tf.collectionFactory.Txn(
@@ -673,6 +668,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	defer tf.mu.Unlock()
 
 	var descriptors []catalog.Descriptor
+	found := errors.New(``)
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
@@ -696,14 +692,10 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 					return err
 				}
 				var origName changefeedbase.StatementTimeName
-				var isTable bool
-				for _, cts := range tf.targets {
-					if cts.TableID == descpb.ID(id) {
-						origName = cts.StatementTimeName
-						isTable = true
-						break
-					}
-				}
+				isTable, _ := tf.targets.EachHavingTableID(descpb.ID(id), func(t changefeedbase.Target) error {
+					origName = t.StatementTimeName
+					return found // sentinel error to break the loop
+				})
 				isType := tf.mu.typeDeps.containsType(descpb.ID(id))
 				// Check if the descriptor is an interesting table or type.
 				if !(isTable || isType) {

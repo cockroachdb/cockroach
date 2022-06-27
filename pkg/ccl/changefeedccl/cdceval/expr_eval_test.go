@@ -408,13 +408,12 @@ CREATE TABLE foo (
 				targetType = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
 			}
 
-			targets := changefeedbase.Targets{
-				{
-					Type:       targetType,
-					TableID:    desc.GetID(),
-					FamilyName: tc.familyName,
-				},
-			}
+			targets := changefeedbase.Targets{}
+			targets.Add(changefeedbase.Target{
+				Type:       targetType,
+				TableID:    desc.GetID(),
+				FamilyName: tc.familyName,
+			})
 
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()

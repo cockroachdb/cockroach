@@ -18,13 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -132,28 +132,23 @@ func fetchTableDescriptors(
 	fetchSpans := func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		targetDescs = nil
+		targetDescs = make([]catalog.TableDescriptor, 0, targets.NumUniqueTables())
 		if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
 			return err
 		}
-		seen := make(map[descpb.ID]struct{}, len(targets))
 		// Note that all targets are currently guaranteed to have a Table ID
 		// and lie within the primary index span. Deduplication is important
 		// here as requesting the same span twice will deadlock.
-		for _, table := range targets {
-			if _, dup := seen[table.TableID]; dup {
-				continue
-			}
-			seen[table.TableID] = struct{}{}
+		return targets.EachTableID(func(id catid.DescID) error {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
 			if err != nil {
 				return err
 			}
 			targetDescs = append(targetDescs, tableDesc)
-		}
-		return nil
+			return nil
+		})
 	}
 	if err := sql.DescsTxn(ctx, execCfg, fetchSpans); err != nil {
 		return nil, err

@@ -290,13 +290,12 @@ CREATE TABLE foo (
 				sqlDB.Exec(t, action)
 			}
 
-			targets := changefeedbase.Targets{
-				{
-					Type:       targetType,
-					TableID:    tableDesc.GetID(),
-					FamilyName: tc.familyName,
-				},
-			}
+			targets := changefeedbase.Targets{}
+			targets.Add(changefeedbase.Target{
+				Type:       targetType,
+				TableID:    tableDesc.GetID(),
+				FamilyName: tc.familyName,
+			})
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
 			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual)

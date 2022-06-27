@@ -215,12 +215,12 @@ func makeTestKafkaSink(
 }
 
 func makeChangefeedTargets(targetNames ...string) changefeedbase.Targets {
-	targets := make(changefeedbase.Targets, len(targetNames))
+	targets := changefeedbase.Targets{}
 	for i, name := range targetNames {
-		targets[i] = changefeedbase.Target{
+		targets.Add(changefeedbase.Target{
 			TableID:           descpb.ID(i),
 			StatementTimeName: changefeedbase.StatementTimeName(name),
-		}
+		})
 	}
 	return targets
 }
@@ -427,10 +427,10 @@ func TestSQLSink(t *testing.T) {
 
 	fooTopic := overrideTopic(`foo`)
 	barTopic := overrideTopic(`bar`)
-	targets := changefeedbase.Targets{
-		fooTopic.GetTargetSpecification(),
-		barTopic.GetTargetSpecification(),
-	}
+	targets := changefeedbase.Targets{}
+	targets.Add(fooTopic.GetTargetSpecification())
+	targets.Add(barTopic.GetTargetSpecification())
+
 	const testTableName = `sink`
 	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
