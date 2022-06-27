@@ -1924,7 +1924,7 @@ CREATE TABLE crdb_internal.%s (
   last_active_query  STRING,         -- the query that finished last on this session as SQL
   num_txns_executed  INT,            -- the number of transactions that were executed so far on this session
   session_start      TIMESTAMP,      -- the time when the session was opened
-  oldest_query_start TIMESTAMP,      -- the time when the oldest query in the session was started
+  active_query_start TIMESTAMP,      -- the time when the current active query in the session was started
   kv_txn             STRING,         -- the ID of the current KV transaction
   alloc_bytes        INT,            -- the number of bytes allocated by the session
   max_alloc_bytes    INT,            -- the high water mark of bytes allocated by the session
@@ -1973,27 +1973,24 @@ func populateSessionsTable(
 	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
 ) error {
 	for _, session := range response.Sessions {
-		// Generate active_queries and oldest_query_start
+		// Generate active_queries and active_query_start
 		var activeQueries bytes.Buffer
-		var oldestStart time.Time
-		var oldestStartDatum tree.Datum
+		var activeQueryStart time.Time
+		var activeQueryStartDatum tree.Datum
 
-		for idx, query := range session.ActiveQueries {
-			if idx > 0 {
-				activeQueries.WriteString("; ")
-			}
+		for _, query := range session.ActiveQueries {
+			// Note that the max length of ActiveQueries is 1.
+			// The array is leftover from a time when we allowed multiple
+			// queries to be executed at once in a session.
+			activeQueryStart = query.Start
 			activeQueries.WriteString(query.Sql)
-
-			if oldestStart.IsZero() || query.Start.Before(oldestStart) {
-				oldestStart = query.Start
-			}
 		}
 
 		var err error
-		if oldestStart.IsZero() {
-			oldestStartDatum = tree.DNull
+		if activeQueryStart.IsZero() {
+			activeQueryStartDatum = tree.DNull
 		} else {
-			oldestStartDatum, err = tree.MakeDTimestamp(oldestStart, time.Microsecond)
+			activeQueryStartDatum, err = tree.MakeDTimestamp(activeQueryStart, time.Microsecond)
 			if err != nil {
 				return err
 			}
@@ -2026,7 +2023,7 @@ func populateSessionsTable(
 			tree.NewDString(session.LastActiveQuery),
 			tree.NewDInt(tree.DInt(session.NumTxnsExecuted)),
 			startTSDatum,
-			oldestStartDatum,
+			activeQueryStartDatum,
 			kvTxnIDDatum,
 			tree.NewDInt(tree.DInt(session.AllocBytes)),
 			tree.NewDInt(tree.DInt(session.MaxAllocBytes)),
@@ -2052,7 +2049,7 @@ func populateSessionsTable(
 				tree.DNull,                             // last active query
 				tree.DNull,                             // num txns executed
 				tree.DNull,                             // session start
-				tree.DNull,                             // oldest_query_start
+				tree.DNull,                             // active_query_start
 				tree.DNull,                             // kv_txn
 				tree.DNull,                             // alloc_bytes
 				tree.DNull,                             // max_alloc_bytes
