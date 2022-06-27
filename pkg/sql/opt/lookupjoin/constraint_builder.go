@@ -229,12 +229,20 @@ func (b *ConstraintBuilder) Build(
 	colsAlloc := make(opt.ColList, numIndexKeyCols*2)
 	keyCols := colsAlloc[0:0:numIndexKeyCols]
 	rightSideCols := colsAlloc[numIndexKeyCols : numIndexKeyCols : numIndexKeyCols*2]
-	var inputProjections memo.ProjectionsExpr
-	var lookupExpr memo.FiltersExpr
-	var allLookupFilters memo.FiltersExpr
-	var filterOrdsToExclude intsets.Fast
 	foundLookupCols := false
-	var remainingFilters memo.FiltersExpr
+	var (
+		inputProjections    memo.ProjectionsExpr
+		lookupExpr          memo.FiltersExpr
+		allLookupFilters    memo.FiltersExpr
+		remainingFilters    memo.FiltersExpr
+		filterOrdsToExclude intsets.Fast
+	)
+	// We do not want a suffix of the index columns to be constrained to
+	// multiple values by optional filters. This would only increase the number
+	// of lookup spans without making the constraint more selective. We keep
+	// track of the suffix length of indexed columns constrained in this way so
+	// that we can remove them after the loop.
+	optionalMultiValFilterSuffixLen := 0
 
 	// addEqualityColumns adds the given columns as an equality in keyCols and
 	// rightSideCols.
@@ -254,6 +262,7 @@ func (b *ConstraintBuilder) Build(
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
 			foundEqualityCols = true
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 			continue
 		}
 
@@ -283,6 +292,7 @@ func (b *ConstraintBuilder) Build(
 			derivedEquivCols.Add(idxCol)
 			foundEqualityCols = true
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 			continue
 		}
 
@@ -307,6 +317,7 @@ func (b *ConstraintBuilder) Build(
 			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
 			addEqualityColumns(constColID, idxCol)
 			filterOrdsToExclude.Add(allIdx)
+			optionalMultiValFilterSuffixLen = 0
 			continue
 		}
 
@@ -324,7 +335,15 @@ func (b *ConstraintBuilder) Build(
 			}
 			lookupExpr = append(lookupExpr, valsFilter)
 			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
-			filterOrdsToExclude.Add(allIdx)
+			if isOptional := allIdx >= len(onFilters); isOptional {
+				optionalMultiValFilterSuffixLen++
+			} else {
+				// There's no need to track optional filters for reducing the
+				// remaining filters because they are not present in the ON
+				// filters to begin with.
+				filterOrdsToExclude.Add(allIdx)
+			}
+
 			continue
 		}
 
@@ -338,12 +357,14 @@ func (b *ConstraintBuilder) Build(
 			allLookupFilters = append(allLookupFilters, b.allFilters[startIdx])
 			filterOrdsToExclude.Add(startIdx)
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 		}
 		if foundEnd {
 			lookupExpr = append(lookupExpr, b.allFilters[endIdx])
 			allLookupFilters = append(allLookupFilters, b.allFilters[endIdx])
 			filterOrdsToExclude.Add(endIdx)
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 		}
 		if foundStart && foundEnd {
 			// The column is constrained above and below by an inequality; no further
@@ -356,8 +377,11 @@ func (b *ConstraintBuilder) Build(
 		// case that only the start or end bound could be constrained with
 		// an input column; in this case, it still may be possible to use a constant
 		// to form the other bound.
+		//
+		// We exclude optional filters from this search because an optional
+		// range filter will not make the lookup more selective.
 		rangeFilter, remaining, filterIdx := b.findJoinConstantRangeFilter(
-			b.allFilters, idxCol, idxColIsDesc, !foundStart, !foundEnd,
+			onFilters, idxCol, idxColIsDesc, !foundStart, !foundEnd,
 		)
 		if rangeFilter != nil {
 			// A constant range filter could be found.
@@ -380,6 +404,13 @@ func (b *ConstraintBuilder) Build(
 	// expression x=1) are not useful.
 	if !foundLookupCols {
 		return Constraint{}, false
+	}
+
+	// Remove the suffix of index columns constrained to multiple values by
+	// optional filters.
+	if lookupExpr != nil && optionalMultiValFilterSuffixLen > 0 {
+		lookupExpr = lookupExpr[:len(lookupExpr)-optionalMultiValFilterSuffixLen]
+		allLookupFilters = allLookupFilters[:len(allLookupFilters)-optionalMultiValFilterSuffixLen]
 	}
 
 	// If a lookup expression is required, convert the equality columns to
