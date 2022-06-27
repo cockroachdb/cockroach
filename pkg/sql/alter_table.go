@@ -995,17 +995,9 @@ func applyColumnMutation(
 			}
 		}
 
-		info, err := tableDesc.GetConstraintInfo()
-		if err != nil {
+		if err := addNotNullConstraintMutationForCol(tableDesc, col); err != nil {
 			return err
 		}
-		inuseNames := make(map[string]struct{}, len(info))
-		for k := range info {
-			inuseNames[k] = struct{}{}
-		}
-		check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), tableDesc.GetNextConstraintID(), inuseNames, descpb.ConstraintValidity_Validating)
-		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
-		tableDesc.NextConstraintID++
 
 	case *tree.AlterTableDropNotNull:
 		if col.IsNullable() {
@@ -1043,7 +1035,10 @@ func applyColumnMutation(
 
 		// Add a check constraint equivalent to the non-null constraint and drop
 		// it in the schema changer.
-		check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), tableDesc.GetNextConstraintID(), inuseNames, descpb.ConstraintValidity_Dropping)
+		check := tabledesc.MakeNotNullCheckConstraint(
+			col.GetName(), col.GetID(), tableDesc.GetNextConstraintID(),
+			inuseNames, descpb.ConstraintValidity_Dropping,
+		)
 		tableDesc.Checks = append(tableDesc.Checks, check)
 		tableDesc.NextConstraintID++
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
@@ -1059,6 +1054,24 @@ func applyColumnMutation(
 		}
 		col.ColumnDesc().ComputeExpr = nil
 	}
+	return nil
+}
+
+func addNotNullConstraintMutationForCol(tableDesc *tabledesc.Mutable, col catalog.Column) error {
+	info, err := tableDesc.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	inuseNames := make(map[string]struct{}, len(info))
+	for k := range info {
+		inuseNames[k] = struct{}{}
+	}
+	check := tabledesc.MakeNotNullCheckConstraint(
+		col.GetName(), col.GetID(), tableDesc.GetNextConstraintID(),
+		inuseNames, descpb.ConstraintValidity_Validating,
+	)
+	tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
+	tableDesc.NextConstraintID++
 	return nil
 }
 
