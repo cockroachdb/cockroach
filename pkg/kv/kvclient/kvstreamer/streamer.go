@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -228,6 +230,19 @@ type Streamer struct {
 
 	atomics struct {
 		batchRequestsIssued *int64
+		// resumeRequests tracks the number of resume requests created
+		// throughout the lifetime of the Streamer.
+		resumeRequests int64
+		// emptyBatchResponses tracks the number of BatchRequests that resulted
+		// in empty BatchResponses because they were issued with too low value
+		// of TargetBytes parameter.
+		emptyBatchResponses int64
+		// droppedBatchResponses tracks the number of the received
+		// BatchResponses that were dropped because the memory reservation
+		// during the budget reconciliation was denied (i.e. the original
+		// estimate was too low, and the budget has been used up by the time
+		// response came).
+		droppedBatchResponses int64
 	}
 
 	coordinator          workerCoordinator
@@ -625,6 +640,7 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 // other calls on s are allowed after this.
 func (s *Streamer) Close(ctx context.Context) {
 	if s.coordinatorStarted {
+		s.coordinator.logStatistics(ctx)
 		s.coordinatorCtxCancel()
 		s.mu.Lock()
 		s.mu.done = true
@@ -740,6 +756,20 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// logStatistics logs some of the statistics about the Streamer. It should be
+// called at the end of the Streamer's lifecycle.
+// TODO(yuzefovich): at the moment, these statistics will be attached to the
+// tracing span of the Streamer's user. Some time has been spent to figure it
+// out but led to no success. This should be cleaned up.
+func (w *workerCoordinator) logStatistics(ctx context.Context) {
+	log.VEventf(ctx, 1, "number of resume requests = %d", atomic.LoadInt64(&w.s.atomics.resumeRequests))
+	log.VEventf(ctx, 1, "number of spilled Results = %d", w.s.results.numSpilledResults())
+	log.VEventf(ctx, 1, "number of empty BatchResponses = %d", atomic.LoadInt64(&w.s.atomics.emptyBatchResponses))
+	log.VEventf(ctx, 1, "number of dropped BatchResponses = %d", atomic.LoadInt64(&w.s.atomics.droppedBatchResponses))
+	avgResponseSize, _ := w.getAvgResponseSize()
+	log.VEventf(ctx, 1, "final average response size = %s", humanizeutil.IBytes(avgResponseSize))
 }
 
 // waitForRequests blocks until there is at least one request to be served.
@@ -1129,6 +1159,7 @@ func (w *workerCoordinator) performRequestAsync(
 				// but not enough for that large row).
 				toConsume := -overaccountedTotal
 				if err := w.s.budget.consume(ctx, toConsume, headOfLine /* allowDebt */); err != nil {
+					atomic.AddInt64(&w.s.atomics.droppedBatchResponses, 1)
 					w.s.budget.release(ctx, targetBytes)
 					if !headOfLine {
 						// Since this is not the head of the line, we'll just
@@ -1413,6 +1444,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 		)
 	} else {
 		// We received an empty response.
+		atomic.AddInt64(&w.s.atomics.emptyBatchResponses, 1)
 		if req.minTargetBytes != 0 {
 			// We previously have already received an empty response for this
 			// request, and minTargetBytes wasn't sufficient. Make sure that
@@ -1444,6 +1476,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 			req.reqs[i] = roachpb.RequestUnion{}
 		}
 		w.s.requestsToServe.add(resumeReq)
+		atomic.AddInt64(&w.s.atomics.resumeRequests, 1)
 	}
 
 	return nil
