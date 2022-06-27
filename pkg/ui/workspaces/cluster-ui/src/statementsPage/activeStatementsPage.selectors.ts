@@ -10,7 +10,7 @@
 
 import { createSelector } from "reselect";
 import { getActiveStatementsFromSessions } from "../activeExecutions/activeStatementUtils";
-import { localStorageSelector } from "./statementsPage.selectors";
+import { localStorageSelector } from "../store/utils/selectors";
 import {
   ActiveStatementFilters,
   ActiveStatementsViewDispatchProps,

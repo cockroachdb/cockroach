@@ -10,7 +10,7 @@
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { isEqual, map } from "lodash";
-import React, { MouseEvent } from "react";
+import React from "react";
 import { Anchor } from "src/anchor";
 import { JobsResponse } from "src/api/jobsApi";
 import emptyTableResultsIcon from "src/assets/emptyState/empty-table-results.svg";
@@ -28,9 +28,8 @@ import {
 } from "src/util/docs";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 
-import { HighwaterTimestamp } from "../util/highwaterTimestamp";
+import { HighwaterTimestamp, JobStatusCell } from "../util";
 import { JobDescriptionCell } from "./jobDescriptionCell";
-import { JobStatusCell } from "../util/jobStatusCell";
 
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
@@ -125,7 +124,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         style="tableTitle"
         content={<p>User that created the job.</p>}
       >
-        {"User"}
+        {"User Name"}
       </Tooltip>
     ),
     cell: job => job.username,
@@ -179,7 +178,13 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
       <Tooltip
         placement="bottom"
         style="tableTitle"
-        content={<p>Date and time the job was last executed.</p>}
+        content={
+          <p>
+            The high-water mark acts as a checkpoint for the changefeed’s job
+            progress, and guarantees that all changes before (or at) the
+            timestamp have been emitted.
+          </p>
+        }
       >
         {"High-water Timestamp"}
       </Tooltip>

@@ -30,6 +30,7 @@ import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnost
 import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
+import { localStorageSelector } from "../store/utils/selectors";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -44,16 +45,6 @@ export interface StatementsSummaryData {
   database: string;
   stats: StatementStatistics[];
 }
-
-export const adminUISelector = createSelector(
-  (state: AppState) => state.adminUI,
-  adminUiState => adminUiState,
-);
-
-export const localStorageSelector = createSelector(
-  adminUISelector,
-  adminUiState => adminUiState.localStorage,
-);
 
 // selectApps returns the array of all apps with statement statistics present
 // in the data.

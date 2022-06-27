@@ -22,7 +22,7 @@ import { SortSetting } from "src/sortedtable";
 import { syncHistory } from "src/util";
 
 import { JobTable } from "./jobTable";
-import { statusOptions, showOptions, typeOptions } from "../util/jobOptions";
+import { statusOptions, showOptions, typeOptions } from "../util";
 
 import { commonStyles } from "src/common";
 import styles from "../jobs.module.scss";
@@ -48,11 +48,12 @@ export interface JobsPageDispatchProps {
   setShow: (value: string) => void;
   setType: (value: JobType) => void;
   refreshJobs: (req: JobsRequest) => void;
+  onFilterChange?: (req: JobsRequest) => void;
 }
 
 export type JobsPageProps = JobsPageStateProps &
   JobsPageDispatchProps &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 export class JobsPage extends React.Component<JobsPageProps> {
   constructor(props: JobsPageProps) {
@@ -68,8 +69,8 @@ export class JobsPage extends React.Component<JobsPageProps> {
     if (
       this.props.setSort &&
       columnTitle &&
-      (sortSetting.columnTitle != columnTitle ||
-        sortSetting.ascending != ascending)
+      (sortSetting.columnTitle !== columnTitle ||
+        sortSetting.ascending !== ascending)
     ) {
       this.props.setSort({ columnTitle, ascending });
     }
@@ -82,25 +83,26 @@ export class JobsPage extends React.Component<JobsPageProps> {
 
     // Filter Show.
     const show = searchParams.get("show") || undefined;
-    if (this.props.setShow && show && show != this.props.show) {
+    if (this.props.setShow && show && show !== this.props.show) {
       this.props.setShow(show);
     }
 
     // Filter Type.
     const type = parseInt(searchParams.get("type"), 10) || undefined;
-    if (this.props.setType && type && type != this.props.type) {
+    if (this.props.setType && type && type !== this.props.type) {
       this.props.setType(type);
     }
   }
 
   private refresh(props = this.props): void {
-    props.refreshJobs(
-      new cockroach.server.serverpb.JobsRequest({
-        status: props.status,
-        type: props.type,
-        limit: parseInt(props.show, 10),
-      }),
-    );
+    const jobsRequest = new cockroach.server.serverpb.JobsRequest({
+      status: props.status,
+      type: props.type,
+      limit: parseInt(props.show, 10),
+    });
+    props.onFilterChange
+      ? props.onFilterChange(jobsRequest)
+      : props.refreshJobs(jobsRequest);
   }
 
   componentDidMount(): void {
@@ -113,7 +115,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
       prevProps.type !== this.props.type ||
       prevProps.show !== this.props.show
     ) {
-      this.refresh(this.props);
+      this.refresh();
     }
   }
 
