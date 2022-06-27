@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descsinterface"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -169,6 +170,17 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// WithDescsCollection sets the descriptor collections before running the SQL
+	// statement with internal executor.
+	WithDescsCollection(
+		txn *kv.Txn,
+		descCollection descsinterface.DescriptorCollection,
+		run func() error,
+	) error
+
+	// MakeDescsCollection creates the internal executor's own descriptor collection.
+	MakeDescsCollection(ctx context.Context, sd *sessiondata.SessionData) descsinterface.DescriptorCollection
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -206,6 +218,30 @@ type InternalRows interface {
 type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
+
+// WithTxn is to run SQL statements under the same txn.
+// All executions within this scope should share the same descriptor
+// collection.
+// TODO (janexing): verify if this is the desired behavior.
+func (f InternalExecutorFactory) WithTxn(
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	run func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, sessionData)
+	descsCollection := ie.MakeDescsCollection(ctx, sessionData)
+	defer descsCollection.ReleaseAll(ctx)
+	return ie.WithDescsCollection(txn, descsCollection, func() error { return run(ctx, txn, ie) })
+}
+
+// WithoutTxn is to run SQL statements without a txn context.
+func (f InternalExecutorFactory) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, nil)
+	return run(ctx, ie)
+}
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error

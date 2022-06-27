@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+
 	"math"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descsinterface"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -711,6 +713,28 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
+}
+
+// WithDescsCollection sets the descriptor collections before running the SQL
+// statement with internal executor.
+func (ie *InternalExecutor) WithDescsCollection(
+	txn *kv.Txn,
+	descCollection descsinterface.DescriptorCollection,
+	run func() error,
+) error {
+	ie.extraTxnState = &extraTxnState{
+		txn:            txn,
+		descCollection: descCollection.(*descs.Collection),
+	}
+	return run()
+}
+
+// MakeDescsCollection creates the internal executor's own descriptor collection.
+func (ie *InternalExecutor) MakeDescsCollection(ctx context.Context, sd *sessiondata.SessionData) descsinterface.DescriptorCollection {
+	sds := sessiondata.NewStack(sd)
+	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
+	descsCollection := ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
+	return &descsCollection
 }
 
 var rowsAffectedResultColumns = colinfo.ResultColumns{
