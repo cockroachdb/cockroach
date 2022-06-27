@@ -803,6 +803,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache:       closedSessionCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
+		internalExecutorFactory:  nil, // will be initialized in server.newSQLServer.
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
