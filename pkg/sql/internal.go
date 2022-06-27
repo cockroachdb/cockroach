@@ -17,12 +17,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -115,6 +118,52 @@ func MakeInternalExecutor(
 		mon:        monitor,
 		memMetrics: memMetrics,
 	}
+}
+
+// NewInternalExecutorWithTxn creates an Internal Executor with txn related
+// information, and also a function that can be called to commit the txn.
+// This function should only be used in the implementation of
+// descs.CollectionFactory's InternalExecutorFactoryWithTxn.
+// TODO (janexing): This function will be soon refactored after we change
+// the internal executor infrastructure with a single conn executor for all
+// sql statement executions within a txn.
+func NewInternalExecutorWithTxn(
+	s *Server,
+	sd *sessiondata.SessionData,
+	txn *kv.Txn,
+	memMetrics MemoryMetrics,
+	monitor *mon.BytesMonitor,
+	descCol *descs.Collection,
+	schemaChangeJobRecords map[descpb.ID]*jobs.Record,
+) (*InternalExecutor, sqlutil.InternalExecutorCommitTxnFunc) {
+	schemaChangerState := &SchemaChangerState{
+		mode: sd.NewSchemaChangerMode,
+	}
+	ie := InternalExecutor{
+		s:          s,
+		mon:        monitor,
+		memMetrics: memMetrics,
+		extraTxnState: &extraTxnState{
+			txn:                    txn,
+			descCollection:         descCol,
+			schemaChangeJobRecords: schemaChangeJobRecords,
+			schemaChangerState:     schemaChangerState,
+		},
+	}
+	ie.s.populateMinimalSessionData(sd)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+
+	commitTxnFunc := func(ctx context.Context) error {
+		defer func() {
+			ie.releaseSchemaChangeJobRecords()
+		}()
+		if err := ie.commitTxn(ctx); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	return &ie, commitTxnFunc
 }
 
 // MakeInternalExecutorMemMonitor creates and starts memory monitor for an
@@ -963,6 +1012,42 @@ func (ie *InternalExecutor) execInternal(
 	// the iterator and nil retErr so that the iterator is properly closed by
 	// the caller which will cleanup the connExecutor goroutine.
 	return r, nil
+}
+
+// ReleaseSchemaChangeJobRecords is to release the schema change job records.
+func (ie *InternalExecutor) releaseSchemaChangeJobRecords() {
+	for k := range ie.extraTxnState.schemaChangeJobRecords {
+		delete(ie.extraTxnState.schemaChangeJobRecords, k)
+	}
+}
+
+// commitTxn is to commit the txn bound to the internal executor.
+// It should only be used in CollectionFactory.TxnWithExecutor().
+func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
+	if ie.extraTxnState == nil || ie.extraTxnState.txn == nil {
+		return errors.New("no txn to commit")
+	}
+
+	var sd *sessiondata.SessionData
+	if ie.sessionDataStack != nil {
+		sd = ie.sessionDataStack.Top().Clone()
+	} else {
+		sd = ie.s.newSessionData(SessionArgs{})
+	}
+
+	rw := newAsyncIEResultChannel()
+	stmtBuf := NewStmtBuf()
+
+	ex, err := ie.initConnEx(ctx, ie.extraTxnState.txn, rw, sd, stmtBuf, nil /* syncCallback */)
+	if err != nil {
+		return errors.Wrap(err, "cannot create conn executor to commit txn")
+	}
+	defer ex.close(ctx, externalTxnClose)
+
+	if err := ex.commitSQLTransactionInternal(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the
