@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descsinterface"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -877,6 +878,29 @@ type wrappedInternalExecutor struct {
 		syncutil.RWMutex
 		errFunc func(statement string) error
 	}
+}
+
+func (ie *wrappedInternalExecutor) QueryBufferedExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, colinfo.ResultColumns, error) {
+	panic("unimplemented")
+}
+
+func (ie *wrappedInternalExecutor) WithDescsCollection(
+	txn *kv.Txn, descCollection descsinterface.DescriptorCollection, run func() error,
+) error {
+	panic("unimplemented")
+}
+
+func (ie *wrappedInternalExecutor) MakeDescsCollection(
+	ctx context.Context, sd *sessiondata.SessionData,
+) descsinterface.DescriptorCollection {
+	panic("unimplemented")
 }
 
 var _ sqlutil.InternalExecutor = &wrappedInternalExecutor{}
