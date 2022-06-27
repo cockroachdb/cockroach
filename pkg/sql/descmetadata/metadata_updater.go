@@ -35,7 +35,7 @@ import (
 type metadataUpdater struct {
 	ctx          context.Context
 	txn          *kv.Txn
-	ieFactory    sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory    sqlutil.InternalExecutorFactory
 	sessionData  *sessiondata.SessionData
 	descriptors  *descs.Collection
 	cacheEnabled bool
@@ -46,7 +46,7 @@ type metadataUpdater struct {
 // schema objects.
 func NewMetadataUpdater(
 	ctx context.Context,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory sqlutil.InternalExecutorFactory,
 	descriptors *descs.Collection,
 	settings *settings.Values,
 	txn *kv.Txn,
