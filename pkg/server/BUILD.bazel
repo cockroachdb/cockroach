@@ -163,6 +163,7 @@ go_library(
         "//pkg/sql/catalog/hydratedtables",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/txnbase",
         "//pkg/sql/clusterunique",
         "//pkg/sql/colexec",
         "//pkg/sql/consistencychecker",

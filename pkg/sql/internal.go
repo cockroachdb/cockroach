@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/txnbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -112,6 +114,30 @@ func MakeInternalExecutor(
 		mon:        monitor,
 		memMetrics: memMetrics,
 	}
+}
+
+// MakeInternalExecutorWithTxn creates an Internal Executor with txn related
+// information.
+func MakeInternalExecutorWithTxn(
+	s *Server,
+	sd *sessiondata.SessionData,
+	memMetrics MemoryMetrics,
+	monitor *mon.BytesMonitor,
+	descCol *descs.Collection,
+	schemaChangeJobRecords map[txnbase.DescpbID]txnbase.JobRecords,
+) InternalExecutor {
+	ie := InternalExecutor{
+		s:          s,
+		mon:        monitor,
+		memMetrics: memMetrics,
+		extraTxnState: &extraTxnState{
+			descCollection:         descCol,
+			schemaChangeJobRecords: schemaChangeJobRecords,
+		},
+	}
+	ie.s.populateMinimalSessionData(sd)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+	return ie
 }
 
 // MakeInternalExecutorMemMonitor creates and starts memory monitor for an

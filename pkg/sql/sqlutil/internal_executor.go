@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/txnbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -169,6 +170,13 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// SetSessionData binds the session variables that will be used by queries
+	// performed through this executor from now on. This creates a new session stack.
+	// It is recommended to use SetSessionDataStack.
+	//
+	// SetSessionData cannot be called concurrently with query execution.
+	SetSessionData(sessionData *sessiondata.SessionData)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -212,6 +220,26 @@ type InternalExecutorFactory func(
 	context.Context, *sessiondata.SessionData,
 ) InternalExecutor
 
+// InternalExecutorFactoryWithTxn is a function to construct an internal executor
+// that can run queries within a txn.
+type InternalExecutorFactoryWithTxn func(
+	ctx context.Context,
+	data *sessiondata.SessionData,
+	collection txnbase.DescsCollection,
+	records map[txnbase.DescpbID]txnbase.JobRecords,
+) InternalExecutor
+
+// WithoutTxn is to run SQL statements without a txn context.
+// Note that in this mode, each execution with the internal executor runs its
+// own descriptor collection, schema change job collection and transaction state
+// machine.
+func (f InternalExecutorFactory) WithoutTxn(
+	ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error,
+) error {
+	ie := f(ctx, nil)
+	return run(ctx, ie)
+}
+
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
 
@@ -219,3 +247,12 @@ type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) 
 // passes the fn the exported InternalExecutor instead of the whole unexported
 // extendedEvalContenxt, so it can be implemented outside pkg/sql.
 type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// ExtraTxnStateArgs is to pass txn related information from the caller of
+// internal executor to the children conn executors.
+type ExtraTxnStateArgs struct {
+	Txn                    *kv.Txn
+	DescCollection         txnbase.DescsCollection
+	Jobs                   txnbase.JobsCollection
+	SchemaChangeJobRecords map[txnbase.DescpbID]txnbase.JobRecords
+}

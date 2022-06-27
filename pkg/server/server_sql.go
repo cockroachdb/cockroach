@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/txnbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -944,6 +945,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ie.SetSessionData(sessionData)
 		return &ie
 	}
+
+	ieFactoryWithTxn := func(
+		ctx context.Context, sessionData *sessiondata.SessionData, descCol txnbase.DescsCollection, schemaChangeJobRecords map[txnbase.DescpbID]txnbase.JobRecords,
+	) sqlutil.InternalExecutor {
+		ie := sql.MakeInternalExecutorWithTxn(
+			pgServer.SQLServer,
+			sessionData,
+			internalMemMetrics,
+			ieFactoryMonitor,
+			descCol.(*descs.Collection),
+			schemaChangeJobRecords,
+		)
+		return &ie
+	}
+	collectionFactory.SetInternalExecutorWithTxn(ieFactoryWithTxn)
 
 	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
 	jobRegistry.SetInternalExecutorFactory(ieFactory)
