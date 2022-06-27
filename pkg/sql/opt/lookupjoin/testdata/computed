@@ -76,6 +76,55 @@ input projections:
   v_eq = a + 10
   lookup_join_const_col_@7 = 0
 
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT) index=(v, y, x)
+x = a
+optional: y IN (10, 20)
+----
+input projections:
+  v_eq = a + 10
+lookup expression:
+  ((y IN (10, 20)) AND (v_eq = v)) AND (a = x)
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, z INT) index=(v, y, x, z)
+x = a AND z > 0
+optional: y IN (10, 20)
+----
+input projections:
+  v_eq = a + 10
+lookup expression:
+  (((y IN (10, 20)) AND (z > 0)) AND (v_eq = v)) AND (a = x)
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, y INT, w INT) index=(v, y, x)
+x = a AND w > 0
+optional: y IN (10, 20)
+----
+input projections:
+  v_eq = a + 10
+lookup expression:
+  ((y IN (10, 20)) AND (v_eq = v)) AND (a = x)
+remaining filters:
+  w > 0
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, z INT) index=(v, x, z)
+x = a
+optional: z IN (10, 20)
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10
+
+lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) virtual, z INT) index=(v, x, z)
+x = a
+optional: z > 0
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a + 10
+
 # TODO(mgartner): We should be able to generate a lookup join by determining
 # that v is not null because the filter demands that x is not null, and v is
 # calculated from x.
