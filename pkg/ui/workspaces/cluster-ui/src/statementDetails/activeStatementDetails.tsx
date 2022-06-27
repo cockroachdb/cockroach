@@ -29,6 +29,7 @@ import { StatusIcon } from "src/activeExecutions/statusIcon";
 
 import styles from "./statementDetails.module.scss";
 import { SqlBox } from "src/sql/box";
+import { DATE_FORMAT_24_UTC } from "../util";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
@@ -96,9 +97,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                   <Col>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Start Time (UTC)</Text>
-                      <Text>
-                        {statement.start.format("MMM D, YYYY [at] H:mm (UTC)")}
-                      </Text>
+                      <Text>{statement.start.format(DATE_FORMAT_24_UTC)}</Text>
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
                       <Text>Elapsed Time</Text>

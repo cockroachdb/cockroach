@@ -31,6 +31,7 @@ import {
   util,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
 
 const decommissionedNodesSortSetting = new LocalSetting<
   AdminUIState,
@@ -88,7 +89,7 @@ export class DecommissionedNodeHistory extends React.Component<DecommissionedNod
       title: "Decommissioned On",
       sorter: sortByDecommissioningDate,
       render: (_text, record) => {
-        return record.decommissionedDate.format("LL[ at ]H:mm UTC");
+        return record.decommissionedDate.format(DATE_FORMAT_24_UTC);
       },
     },
   ];

@@ -37,6 +37,7 @@ import {
 } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
 import { Caution } from "@cockroachlabs/icons";
+import { DATE_FORMAT } from "src/util/format";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -379,7 +380,7 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table =>
           !table.details.statsLastUpdated
             ? "No table statistics found"
-            : table.details.statsLastUpdated.format("MMM DD, YYYY [at] H:mm"),
+            : table.details.statsLastUpdated.format(DATE_FORMAT),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",
