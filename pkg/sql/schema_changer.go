@@ -2449,8 +2449,20 @@ func (sc *SchemaChanger) txn(
 			return err
 		}
 	}
-
 	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+}
+
+// txnWithExecutor is to run internal executor within a txn.
+func (sc *SchemaChanger) txnWithExecutor(
+	ctx context.Context,
+	f func(context.Context, *kv.Txn, *descs.Collection, sqlutil.InternalExecutor) error,
+) error {
+	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
+		if err := fn(sc.job.ID()); err != nil {
+			return err
+		}
+	}
+	return sc.execCfg.CollectionFactory.TxnWithExecutor(ctx, sc.db, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
