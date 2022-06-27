@@ -59,13 +59,13 @@ lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=
 x IN (1, 2, 3) AND y = b AND z IN (4, 5, 6)
 ----
 lookup expression:
-  ((x IN (1, 2, 3)) AND (b = y)) AND (z IN (4, 5, 6))
+  ((x IN (1, 2, 3)) AND (z IN (4, 5, 6))) AND (b = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x IN (1, 2, 3) AND y = b AND z IN (4, 5, 6)
 ----
 lookup expression:
-  ((x IN (1, 2, 3)) AND (b = y)) AND (z IN (4, 5, 6))
+  ((x IN (1, 2, 3)) AND (z IN (4, 5, 6))) AND (b = y)
 
 lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
 y = b
@@ -79,14 +79,14 @@ x = a
 optional: y IN (1, 2, 3)
 ----
 lookup expression:
-  (a = x) AND (y IN (1, 2, 3))
+  (y IN (1, 2, 3)) AND (a = x)
 
 lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y)
 x = a AND z = 1
 optional: y IN (1, 2, 3)
 ----
 lookup expression:
-  (a = x) AND (y IN (1, 2, 3))
+  (y IN (1, 2, 3)) AND (a = x)
 remaining filters:
   z = 1
 
@@ -95,7 +95,7 @@ x = a
 optional: y IN (1, 2, 3) AND z = 1
 ----
 lookup expression:
-  (a = x) AND (y IN (1, 2, 3))
+  (y IN (1, 2, 3)) AND (a = x)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = 1 AND z = c
@@ -104,7 +104,7 @@ optional: y IN (3, 4)
 input projections:
   lookup_join_const_col_@7 = 1
 lookup expression:
-  ((lookup_join_const_col_@7 = x) AND (y IN (3, 4))) AND (c = z)
+  ((y IN (3, 4)) AND (lookup_join_const_col_@7 = x)) AND (c = z)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 z = c
@@ -118,7 +118,7 @@ y = b
 optional: x IN (1, 2) AND z IN (3, 4)
 ----
 lookup expression:
-  ((x IN (1, 2)) AND (b = y)) AND (z IN (3, 4))
+  ((x IN (1, 2)) AND (z IN (3, 4))) AND (b = y)
 
 # TODO(#75596): The lookup expression should not contain (z IN (3, 4)) because
 # it is an optional filter from a CHECK constraint. It will only increase the
@@ -131,7 +131,7 @@ optional: z IN (3, 4)
 input projections:
   lookup_join_const_col_@7 = 1
 lookup expression:
-  ((lookup_join_const_col_@7 = x) AND (b = y)) AND (z IN (3, 4))
+  ((z IN (3, 4)) AND (lookup_join_const_col_@7 = x)) AND (b = y)
 
 # The most restrictive IN filter should be chosen.
 lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
@@ -157,7 +157,7 @@ x = a AND y = false AND z > 0
 input projections:
   lookup_join_const_col_@6 = false
 lookup expression:
-  ((a = x) AND (lookup_join_const_col_@6 = y)) AND (z > 0)
+  ((z > 0) AND (a = x)) AND (lookup_join_const_col_@6 = y)
 
 
 # Test for range filters.
@@ -166,13 +166,13 @@ lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
 x = a AND y > 0
 ----
 lookup expression:
-  (a = x) AND (y > 0)
+  (y > 0) AND (a = x)
 
 lookup-constraints left=(a int, b int) right=(x int, y int) index=(x desc, y desc)
 x = a AND y > 0
 ----
 lookup expression:
-  (a = x) AND (y > 0)
+  (y > 0) AND (a = x)
 
 lookup-constraints left=(a int, b int) right=(x int, y int) index=(x, y)
 x > 0
@@ -189,13 +189,13 @@ x = a
 optional: y > 0
 ----
 lookup expression:
-  (a = x) AND (y > 0)
+  (y > 0) AND (a = x)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = a AND y = b AND z > 0
 ----
 lookup expression:
-  ((a = x) AND (b = y)) AND (z > 0)
+  ((z > 0) AND (a = x)) AND (b = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = 1 AND y = b AND z > 0
@@ -203,7 +203,7 @@ x = 1 AND y = b AND z > 0
 input projections:
   lookup_join_const_col_@7 = 1
 lookup expression:
-  ((lookup_join_const_col_@7 = x) AND (b = y)) AND (z > 0)
+  ((z > 0) AND (lookup_join_const_col_@7 = x)) AND (b = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = a AND y = 1 AND z > 0
@@ -211,7 +211,7 @@ x = a AND y = 1 AND z > 0
 input projections:
   lookup_join_const_col_@8 = 1
 lookup expression:
-  ((a = x) AND (lookup_join_const_col_@8 = y)) AND (z > 0)
+  ((z > 0) AND (a = x)) AND (lookup_join_const_col_@8 = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = 1 AND y = b
@@ -220,14 +220,14 @@ optional: z > 0
 input projections:
   lookup_join_const_col_@7 = 1
 lookup expression:
-  ((lookup_join_const_col_@7 = x) AND (b = y)) AND (z > 0)
+  ((z > 0) AND (lookup_join_const_col_@7 = x)) AND (b = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
 x = a AND z = 1
 optional: y > 0
 ----
 lookup expression:
-  (a = x) AND (y > 0)
+  (y > 0) AND (a = x)
 remaining filters:
   z = 1
 
@@ -236,7 +236,7 @@ x = a
 optional: y > 0 AND z = 1
 ----
 lookup expression:
-  (a = x) AND (y > 0)
+  (y > 0) AND (a = x)
 
 
 # Test for range filters and IN filters.
@@ -245,7 +245,7 @@ lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=
 x IN (1, 2) AND y = b AND z > 0
 ----
 lookup expression:
-  ((x IN (1, 2)) AND (b = y)) AND (z > 0)
+  ((x IN (1, 2)) AND (z > 0)) AND (b = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x IN (1, 2) AND y > 0 AND z = c
@@ -257,7 +257,7 @@ y = b AND z > 0
 optional: x IN (1, 2)
 ----
 lookup expression:
-  ((x IN (1, 2)) AND (b = y)) AND (z > 0)
+  ((x IN (1, 2)) AND (z > 0)) AND (b = y)
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y)
 y = b AND z > 0
