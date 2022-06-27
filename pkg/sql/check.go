@@ -43,11 +43,11 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
+	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
 	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
 	if err != nil {
@@ -57,8 +57,14 @@ func validateCheckExpr(
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
 	queryStr := fmt.Sprintf(`SELECT %s FROM [%d AS t] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), exprStr)
 	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
-
-	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)
+	rows, err := ie.QueryRowEx(
+		ctx,
+		"validate check constraint",
+		txn,
+		sessiondata.InternalExecutorOverride{
+			User: username.RootUserName(),
+		},
+		queryStr)
 	if err != nil {
 		return err
 	}
@@ -269,7 +275,8 @@ func validateForeignKey(
 		)
 
 		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint",
-			txn, sessiondata.NodeUserSessionDataOverride, query)
+			txn,
+			sessiondata.NodeUserSessionDataOverride, query)
 		if err != nil {
 			return err
 		}
