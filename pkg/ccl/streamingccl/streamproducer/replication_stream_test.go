@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -165,6 +166,37 @@ func startReplication(
 	return feedSource, streamingtest.MakeReplicationFeed(t, feedSource)
 }
 
+func testStreamReplicationStatus(
+	t *testing.T,
+	runner *sqlutils.SQLRunner,
+	streamID string,
+	streamStatus streampb.StreamReplicationStatus_StreamStatus,
+) {
+	checkStreamStatus := func(t *testing.T, frontier hlc.Timestamp,
+		expectedStreamStatus streampb.StreamReplicationStatus) {
+		status, rawStatus := &streampb.StreamReplicationStatus{}, make([]byte, 0)
+		row := runner.QueryRow(t, "SELECT crdb_internal.replication_stream_progress($1, $2)",
+			streamID, frontier.String())
+		row.Scan(&rawStatus)
+		require.NoError(t, protoutil.Unmarshal(rawStatus, status))
+		require.Equal(t, expectedStreamStatus, *status)
+	}
+
+	updatedFrontier := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	expectedStreamStatus := streampb.StreamReplicationStatus{
+		StreamStatus: streamStatus,
+	}
+	// Send a heartbeat first, the protected timestamp should get updated.
+	if streamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
+		expectedStreamStatus.ProtectedTimestamp = &updatedFrontier
+	}
+	checkStreamStatus(t, updatedFrontier, expectedStreamStatus)
+	// Send a query.
+	// The expected protected timestamp is still 'updatedFrontier' as the protected
+	// timestamp doesn't get updated when this is a query.
+	checkStreamStatus(t, hlc.MaxTimestamp, expectedStreamStatus)
+}
+
 func TestReplicationStreamInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -182,21 +214,6 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs, serverutils.TestTenantID())
 	defer cleanup()
 
-	checkStreamStatus := func(t *testing.T, streamID string, expectedStreamStatus streampb.StreamReplicationStatus_StreamStatus) {
-		hlcTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		status, rawStatus := &streampb.StreamReplicationStatus{}, make([]byte, 0)
-		row := h.SysDB.QueryRow(t, "SELECT crdb_internal.replication_stream_progress($1, $2)", streamID, hlcTime.String())
-
-		row.Scan(&rawStatus)
-		require.NoError(t, protoutil.Unmarshal(rawStatus, status))
-		expectedStatus := streampb.StreamReplicationStatus{StreamStatus: expectedStreamStatus}
-		// A running stream is expected to report the current protected timestamp for the replicating spans.
-		if expectedStatus.StreamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
-			require.Equal(t, hlcTime, *status.ProtectedTimestamp)
-		}
-		require.Equal(t, expectedStreamStatus, status.StreamStatus)
-	}
-
 	// Makes the stream time out really soon
 	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 	h.SysDB.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
@@ -206,7 +223,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 			[][]string{{"failed"}})
-		checkStreamStatus(t, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
+		testStreamReplicationStatus(t, h.SysDB, streamID, streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 
 	// Make sure the stream does not time out within the test timeout
@@ -223,7 +240,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 		for start, end := now, now.Add(testDuration); start.Before(end); start = start.Add(300 * time.Millisecond) {
 			h.SysDB.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
 				[][]string{{"running"}})
-			checkStreamStatus(t, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
+			testStreamReplicationStatus(t, h.SysDB, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
 
 		// Get a replication stream spec
@@ -241,7 +258,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
-		checkStreamStatus(t, "123", streampb.StreamReplicationStatus_STREAM_INACTIVE)
+		testStreamReplicationStatus(t, h.SysDB, "123", streampb.StreamReplicationStatus_STREAM_INACTIVE)
 	})
 }
 
