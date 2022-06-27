@@ -133,6 +133,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 func TestRemoveDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 80956)
 
 	// This test is pretty slow under race (200+ cpu-seconds) because it
 	// uses multiple real disk-backed stores and goes through multiple
