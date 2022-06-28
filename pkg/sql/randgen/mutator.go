@@ -971,8 +971,11 @@ func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				// Skip PK columns and columns already in the index.
 				continue
 			}
-			if tableInfo.columnsTableDefs[colOrdinal].Computed.Virtual {
-				// Virtual columns can't be stored.
+			// Virtual columns can't be stored.
+			if tableInfo.columnsTableDefs[colOrdinal].Computed.Virtual ||
+				// Neither can TableOID. Neither can MVCCTimestamp, but the logic to
+				// read the columns filters that one out.
+				tableInfo.columnsTableDefs[colOrdinal].Name == colinfo.TableOIDColumnName {
 				continue
 			}
 			if rng.Intn(2) == 0 {
