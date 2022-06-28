@@ -218,6 +218,8 @@ message TableDetailsResponse {
   // has_index_recommendations notifies if the there are index recommendations
   // on this table.
   bool has_index_recommendations = 11;
+  // garbage_percentage is the percentage of existing MVCC garbage on the table.
+  float garbage_percentage = 12;
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive

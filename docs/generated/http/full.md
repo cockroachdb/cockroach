@@ -5206,6 +5206,7 @@ a table.
 | configure_zone_statement | [string](#cockroach.server.serverpb.TableDetailsResponse-string) |  | configure_zone_statement is the output of "SHOW ZONE CONFIGURATION FOR TABLE" for this table. It is a SQL statement that would re-configure the table's current zone if executed. | [reserved](#support-status) |
 | stats_last_created_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableDetailsResponse-google.protobuf.Timestamp) |  | stats_last_created_at is the time at which statistics were last created. | [reserved](#support-status) |
 | has_index_recommendations | [bool](#cockroach.server.serverpb.TableDetailsResponse-bool) |  | has_index_recommendations notifies if the there are index recommendations on this table. | [reserved](#support-status) |
+| garbage_percentage | [float](#cockroach.server.serverpb.TableDetailsResponse-float) |  | garbage_percentage is the percentage of existing MVCC garbage on the table. | [reserved](#support-status) |
 
 
 
