@@ -24,8 +24,13 @@ type evalContext struct {
 	db *Database
 	ri ResultIterator
 
-	facts             []fact
-	depth, cur        int
+	facts []fact
+
+	// depth and cur relate to the join depth in the entities list.
+	depth, cur int
+
+	// numIterateCalls is the number of calls to iterate which have occurred.
+
 	slots             []slot
 	filterSliceCaches map[int][]reflect.Value
 }

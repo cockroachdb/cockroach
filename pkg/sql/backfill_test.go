@@ -57,7 +57,7 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID: 1, Name: "pri", KeyColumnIDs: []descpb.ColumnID{1},
 			KeyColumnNames:      []string{"c1"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 			EncodingType:        descpb.PrimaryIndexEncoding,
 			Version:             descpb.LatestIndexDescriptorVersion,
 		},
@@ -67,9 +67,9 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 					Index: &descpb.IndexDescriptor{
 						ID: 2, Name: "new_hash_index", KeyColumnIDs: []descpb.ColumnID{2, 3},
 						KeyColumnNames: []string{"c2", "c3"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-							descpb.IndexDescriptor_ASC,
-							descpb.IndexDescriptor_ASC,
+						KeyColumnDirections: []catpb.IndexColumn_Direction{
+							catpb.IndexColumn_ASC,
+							catpb.IndexColumn_ASC,
 						},
 						EncodingType: descpb.PrimaryIndexEncoding,
 						Version:      descpb.LatestIndexDescriptorVersion,

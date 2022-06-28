@@ -65,6 +65,9 @@ const (
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
 	TemporaryIndexID
+	// SourceIndexID is the index ID of the source index for a newly created
+	// index.
+	SourceIndexID
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -132,16 +135,19 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
+		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.SecondaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
+		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.TemporaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.UniqueWithoutIndexConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -275,6 +281,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(Comment, "Comment"),
+	),
+	rel.EntityMapping(t((*scpb.IndexColumn)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
 }
 

@@ -6311,14 +6311,25 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	}
 
 	for _, tc := range []testCase{
+		// The default policy is to skip schema changes which add new columns which
+		{
+			name:           "add column no default",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT * FROM foo",
+			initialPayload: initialPayload,
+			alterStmt:      "ALTER TABLE foo ADD COLUMN new STRING",
+			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
+			payload: []string{
+				`foo: [3, "tres"]->{"after": {"a": 3, "b": "tres", "c": null, "e": "inactive", "new": null}}`,
+			},
+		},
 		{
 			name:           "add column",
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT * FROM foo",
 			initialPayload: initialPayload,
-			alterStmt:      "ALTER TABLE foo ADD COLUMN new STRING",
+			alterStmt:      "ALTER TABLE foo ADD COLUMN new STRING DEFAULT 'new'",
 			payload: []string{
-				`foo: [1, "one"]->{"after": {"a": 1, "b": "one", "c": null, "e": "inactive", "new": null}}`,
-				`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": "c string", "e": "open", "new": null}}`,
+				`foo: [1, "one"]->{"after": {"a": 1, "b": "one", "c": null, "e": "inactive", "new": "new"}}`,
+				`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": "c string", "e": "open", "new": "new"}}`,
 			},
 		},
 		{
@@ -6328,11 +6339,11 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			name:           "add alt.status",
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT * FROM foo",
 			initialPayload: initialPayload,
-			alterStmt:      "ALTER TABLE foo ADD COLUMN alt alt.status",
+			alterStmt:      "ALTER TABLE foo ADD COLUMN alt alt.status DEFAULT 'alt_closed'",
 			afterAlterStmt: "INSERT INTO foo (a, b, alt) VALUES (3, 'tres', 'alt_open')",
 			payload: []string{
-				`foo: [1, "one"]->{"after": {"a": 1, "alt": null, "b": "one", "c": null, "e": "inactive"}}`,
-				`foo: [2, "two"]->{"after": {"a": 2, "alt": null, "b": "two", "c": "c string", "e": "open"}}`,
+				`foo: [1, "one"]->{"after": {"a": 1, "alt": "alt_closed", "b": "one", "c": null, "e": "inactive"}}`,
+				`foo: [2, "two"]->{"after": {"a": 2, "alt": "alt_closed", "b": "two", "c": "c string", "e": "open"}}`,
 				`foo: [3, "tres"]->{"after": {"a": 3, "alt": "alt_open", "b": "tres", "c": null, "e": "inactive"}}`,
 			},
 		},
@@ -6417,9 +6428,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Run(tc.name, func(t *testing.T) {
-				cdcTest(t, testFn(tc), feedTestEnterpriseSinks)
-			})
+			cdcTest(t, testFn(tc), feedTestEnterpriseSinks)
 		})
 	}
 }

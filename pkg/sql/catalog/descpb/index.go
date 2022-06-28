@@ -13,6 +13,7 @@ package descpb
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	types "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -43,7 +44,7 @@ func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 // FillColumns sets the column names and directions in desc.
 func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.KeyColumnNames = make([]string, 0, len(elems))
-	desc.KeyColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
+	desc.KeyColumnDirections = make([]catpb.IndexColumn_Direction, 0, len(elems))
 	for _, c := range elems {
 		if c.Expr != nil {
 			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
@@ -51,9 +52,9 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 		desc.KeyColumnNames = append(desc.KeyColumnNames, string(c.Column))
 		switch c.Direction {
 		case tree.Ascending, tree.DefaultDirection:
-			desc.KeyColumnDirections = append(desc.KeyColumnDirections, IndexDescriptor_ASC)
+			desc.KeyColumnDirections = append(desc.KeyColumnDirections, catpb.IndexColumn_ASC)
 		case tree.Descending:
-			desc.KeyColumnDirections = append(desc.KeyColumnDirections, IndexDescriptor_DESC)
+			desc.KeyColumnDirections = append(desc.KeyColumnDirections, catpb.IndexColumn_DESC)
 		default:
 			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
 		}

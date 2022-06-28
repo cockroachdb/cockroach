@@ -61,8 +61,8 @@ func TestCreateSystemTable(t *testing.T) {
 			ID:             1,
 			Unique:         true,
 			KeyColumnNames: []string{"id"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{
-				descpb.IndexDescriptor_ASC,
+			KeyColumnDirections: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
 			},
 			KeyColumnIDs: []descpb.ColumnID{1},
 		},

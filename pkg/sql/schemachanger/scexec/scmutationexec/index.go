@@ -12,11 +12,16 @@ package scmutationexec
 
 import (
 	"context"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -58,21 +63,7 @@ func addNewIndexMutation(
 	if opIndex.IndexID >= tbl.NextIndexID {
 		tbl.NextIndexID = opIndex.IndexID + 1
 	}
-	// Resolve column names
-	colNames, err := columnNamesFromIDs(tbl, opIndex.KeyColumnIDs)
-	if err != nil {
-		return err
-	}
-	storeColNames, err := columnNamesFromIDs(tbl, opIndex.StoringColumnIDs)
-	if err != nil {
-		return err
-	}
-	colDirs := make([]descpb.IndexDescriptor_Direction, len(opIndex.KeyColumnIDs))
-	for i, dir := range opIndex.KeyColumnDirections {
-		if dir == scpb.Index_DESC {
-			colDirs[i] = descpb.IndexDescriptor_DESC
-		}
-	}
+
 	// Set up the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
 	if opIndex.IsInverted {
@@ -90,18 +81,12 @@ func addNewIndexMutation(
 		Name:                        tabledesc.IndexNamePlaceholder(opIndex.IndexID),
 		Unique:                      opIndex.IsUnique,
 		Version:                     indexVersion,
-		KeyColumnNames:              colNames,
-		KeyColumnIDs:                opIndex.KeyColumnIDs,
-		StoreColumnIDs:              opIndex.StoringColumnIDs,
-		StoreColumnNames:            storeColNames,
-		KeyColumnDirections:         colDirs,
 		Type:                        indexType,
-		KeySuffixColumnIDs:          opIndex.KeySuffixColumnIDs,
-		CompositeColumnIDs:          opIndex.CompositeColumnIDs,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
 		ConstraintID:                tbl.GetNextConstraintID(),
 		UseDeletePreservingEncoding: isDeletePreserving,
+		StoreColumnNames:            []string{},
 	}
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
@@ -138,6 +123,7 @@ func (m *visitor) MakeBackfillingIndexDeleteOnly(
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_BACKFILLING,
 		descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_ADD,
 	)
 }
 
@@ -153,6 +139,7 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_ADD,
 	)
 }
 
@@ -217,6 +204,7 @@ func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 		return errors.AssertionFailedf("index being dropped (%d) does not match existing primary index (%d).", op.IndexID, tbl.PrimaryIndex.ID)
 	}
 	desc := tbl.GetPrimaryIndex().IndexDescDeepCopy()
+	tbl.TableDesc().PrimaryIndex = descpb.IndexDescriptor{} // zero-out the current primary index
 	return enqueueDropIndexMutation(tbl, &desc)
 }
 
@@ -249,6 +237,7 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_DROP,
 	)
 }
 
@@ -307,5 +296,146 @@ func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error 
 		return err
 	}
 	index.IndexDesc().Name = op.Name
+	return nil
+}
+
+func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	index, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	column, err := tbl.FindColumnWithID(op.ColumnID)
+	if err != nil {
+		return err
+	}
+	// Deal with the fact that we allow the columns to be unordered in how
+	// we add them. We could add a rule to make sure we add the columns in
+	// order, but we'd need a way to express successor or something in rel
+	// rules to add those dependencies efficiently. Instead, we just don't
+	// and sort here.
+	indexDesc := index.IndexDesc()
+	n := int(op.Ordinal + 1)
+	insertIntoNames := func(s *[]string) {
+		for delta := n - len(*s); delta > 0; delta-- {
+			*s = append(*s, "")
+		}
+		(*s)[n-1] = column.GetName()
+	}
+	insertIntoDirections := func(s *[]catpb.IndexColumn_Direction) {
+		for delta := n - len(*s); delta > 0; delta-- {
+			*s = append(*s, 0)
+		}
+		(*s)[n-1] = op.Direction
+	}
+	insertIntoIDs := func(s *[]descpb.ColumnID) {
+		for delta := n - len(*s); delta > 0; delta-- {
+			*s = append(*s, 0)
+		}
+		(*s)[n-1] = column.GetID()
+	}
+	switch op.Kind {
+	case scpb.IndexColumn_KEY:
+		insertIntoIDs(&indexDesc.KeyColumnIDs)
+		insertIntoNames(&indexDesc.KeyColumnNames)
+		insertIntoDirections(&indexDesc.KeyColumnDirections)
+	case scpb.IndexColumn_KEY_SUFFIX:
+		insertIntoIDs(&indexDesc.KeySuffixColumnIDs)
+	case scpb.IndexColumn_STORED:
+		insertIntoIDs(&indexDesc.StoreColumnIDs)
+		insertIntoNames(&indexDesc.StoreColumnNames)
+	}
+	// If this is a composite column, note that.
+	if colinfo.CanHaveCompositeKeyEncoding(column.GetType()) &&
+		// We don't need to track the composite column IDs for stored columns.
+		op.Kind != scpb.IndexColumn_STORED {
+
+		index.NumKeyColumns()
+		var colOrdMap catalog.TableColMap
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			colOrdMap.Set(index.GetKeyColumnID(i), i)
+		}
+		for i := 0; i < index.NumKeySuffixColumns(); i++ {
+			colOrdMap.Set(index.GetKeyColumnID(i), i+index.NumKeyColumns())
+		}
+		indexDesc.CompositeColumnIDs = append(indexDesc.CompositeColumnIDs, column.GetID())
+		cids := indexDesc.CompositeColumnIDs
+		sort.Slice(cids, func(i, j int) bool {
+			return colOrdMap.GetDefault(cids[i]) < colOrdMap.GetDefault(cids[j])
+		})
+	}
+	return nil
+}
+
+func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColumnFromIndex) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	index, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	// As a special case, avoid removing any columns from dropped indexes.
+	// The index is going to be removed, so it doesn't matter if it references
+	// dropped columns.
+	log.Infof(ctx, "yo sup, %d %d %v %v %v", op.IndexID, op.ColumnID, index.Dropped(), index.DeleteOnly(), index.Public())
+	if index.Dropped() {
+		return nil
+	}
+	column, err := tbl.FindColumnWithID(op.ColumnID)
+	if err != nil {
+		return err
+	}
+	// Deal with the fact that we allow the columns to be unordered in how
+	// we add them. We could add a rule to make sure we add the columns in
+	// order, but we'd need a way to express successor or something in rel
+	// rules to add those dependencies efficiently. Instead, we just don't
+	// and sort here.
+	idx := index.IndexDesc()
+	n := int(op.Ordinal + 1)
+	removeFromNames := func(s *[]string) {
+		(*s)[n-1] = ""
+	}
+	removeFromColumnIDs := func(s *[]descpb.ColumnID) {
+		(*s)[n-1] = 0
+	}
+	switch op.Kind {
+	case scpb.IndexColumn_KEY:
+		removeFromNames(&idx.KeyColumnNames)
+		removeFromColumnIDs(&idx.KeyColumnIDs)
+		for i := len(idx.KeyColumnIDs) - 1; i >= 0 && idx.KeyColumnIDs[i] == 0; i-- {
+			idx.KeyColumnNames = idx.KeyColumnNames[:i]
+			idx.KeyColumnIDs = idx.KeyColumnIDs[:i]
+			idx.KeyColumnDirections = idx.KeyColumnDirections[:i]
+		}
+	case scpb.IndexColumn_KEY_SUFFIX:
+		removeFromColumnIDs(&idx.KeySuffixColumnIDs)
+		for i := len(idx.KeySuffixColumnIDs) - 1; i >= 0 && idx.KeySuffixColumnIDs[i] == 0; i-- {
+			idx.KeySuffixColumnIDs = idx.KeySuffixColumnIDs[:i]
+		}
+	case scpb.IndexColumn_STORED:
+		removeFromNames(&idx.StoreColumnNames)
+		removeFromColumnIDs(&idx.StoreColumnIDs)
+		for i := len(idx.StoreColumnIDs) - 1; i >= 0 && idx.StoreColumnIDs[i] == 0; i-- {
+			idx.StoreColumnNames = idx.StoreColumnNames[:i]
+			idx.StoreColumnIDs = idx.StoreColumnIDs[:i]
+		}
+	}
+	// If this is a composite column, remove it from the list.
+	if colinfo.CanHaveCompositeKeyEncoding(column.GetType()) &&
+		// We don't need to track the composite column IDs for stored columns.
+		op.Kind != scpb.IndexColumn_STORED {
+		for i, colID := range idx.CompositeColumnIDs {
+			if colID == column.GetID() {
+				idx.CompositeColumnIDs = append(
+					idx.CompositeColumnIDs[:i], idx.CompositeColumnIDs[i+1:]...,
+				)
+			}
+		}
+	}
 	return nil
 }

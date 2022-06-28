@@ -37,6 +37,11 @@ type slot struct {
 	// equality filters and then variables used in attributes which require
 	// types.
 	any []typedValue
+
+	// not holds a value which this slot must not be equal to. Additionally,
+	// the value which fills this slot must have the same type as the value
+	// in the not container.
+	not typedValue
 }
 
 // typedValue is a value in its comparable form, which is to say, it is a
@@ -106,6 +111,19 @@ func maybeSet(
 	slots []slot, idx slotIdx, tv typedValue, set *util.FastIntSet,
 ) (foundContradiction bool) {
 	s := &slots[idx]
+
+	eqNotNil := func(a, b interface{}) bool {
+		_, eq := compareNotNil(a, b)
+		return eq
+	}
+	findMatchInAny := func(haystack []typedValue) bool {
+		for _, v := range s.any {
+			if tv.typ == v.typ && eqNotNil(v.value, tv.value) {
+				return true
+			}
+		}
+		return false
+	}
 	check := func() (shouldSet, foundContradiction bool) {
 		if !s.empty() {
 			if _, eq := compareNotNil(s.value, tv.value); !eq {
@@ -113,20 +131,13 @@ func maybeSet(
 			}
 			return false, false
 		}
-
-		if s.any != nil {
-			var foundMatch bool
-			for _, v := range s.any {
-				if tv.typ != v.typ {
-					continue
-				}
-				if _, foundMatch = compareNotNil(v.value, tv.value); foundMatch {
-					break
-				}
+		if s.not.typ != nil {
+			if tv.typ != s.not.typ || eqNotNil(s.not.value, tv.value) {
+				return false, true
 			}
-			if !foundMatch {
-				return false, true // contradiction
-			}
+		}
+		if s.any != nil && !findMatchInAny(s.any) {
+			return false, true // contradiction
 		}
 		return true, false
 	}
