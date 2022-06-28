@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
@@ -55,7 +57,7 @@ type virtual struct {
 }
 
 var _ catalog.SchemaDescriptor = virtual{}
-var _ catalog.PrivilegeObject = virtual{}
+var _ privilegeobject.PrivilegeObject = virtual{}
 
 func (p virtual) GetID() descpb.ID       { return p.id }
 func (p virtual) GetName() string        { return p.name }
@@ -72,8 +74,8 @@ func (p virtual) GetPrivilegeDescriptor(
 }
 
 // GetObjectType implements the PrivilegeObject interface.
-func (p virtual) GetObjectType() string {
-	return string(p.DescriptorType())
+func (p virtual) GetObjectType() privilege.ObjectType {
+	return privilege.Schema
 }
 
 type virtualBase struct{}

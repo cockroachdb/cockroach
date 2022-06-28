@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
+        "//pkg/sql/privilegeobject",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",

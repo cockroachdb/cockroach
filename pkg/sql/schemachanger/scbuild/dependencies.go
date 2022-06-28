@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -154,7 +155,7 @@ type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the current user has `privilege` on
 	// `descriptor`.
 	CheckPrivilege(
-		ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind,
+		ctx context.Context, privilegeObject privilegeobject.PrivilegeObject, privilege privilege.Kind,
 	) error
 
 	// HasAdminRole verifies if a user has an admin role.
@@ -162,11 +163,11 @@ type AuthorizationAccessor interface {
 
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
-	HasOwnership(ctx context.Context, privilegeObject catalog.PrivilegeObject) (bool, error)
+	HasOwnership(ctx context.Context, privilegeObject privilegeobject.PrivilegeObject) (bool, error)
 
 	// CheckPrivilegeForUser verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, privilegeObject catalog.PrivilegeObject, privilege privilege.Kind, user username.SQLUsername,
+		ctx context.Context, privilegeObject privilegeobject.PrivilegeObject, privilege privilege.Kind, user username.SQLUsername,
 	) error
 
 	// MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct

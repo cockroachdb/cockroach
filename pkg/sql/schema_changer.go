@@ -1546,7 +1546,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							ctx,
 							sc.execCfg,
 							txn,
-							getOwnerOfDesc(scTable),
+							scTable.GetPrivileges().Owner(),
 							scTable.GetID(),
 							modify.RowLevelTTL(),
 						)

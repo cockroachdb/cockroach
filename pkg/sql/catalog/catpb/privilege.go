@@ -126,15 +126,6 @@ func NewCustomSuperuserPrivilegeDescriptor(
 	}
 }
 
-// NewVirtualTablePrivilegeDescriptor is used to construct a privilege descriptor
-// owned by the node user which has SELECT privilege for the public role. It is
-// used for virtual tables.
-func NewVirtualTablePrivilegeDescriptor() *PrivilegeDescriptor {
-	return NewPrivilegeDescriptor(
-		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, username.NodeUserName(),
-	)
-}
-
 // NewVirtualSchemaPrivilegeDescriptor is used to construct a privilege descriptor
 // owned by the node user which has USAGE privilege for the public role. It is
 // used for virtual schemas.

@@ -1,6 +1,6 @@
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on global
 SELECT * FROM crdb_internal.cluster_settings;
 
 statement error pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
@@ -53,7 +53,7 @@ REVOKE SYSTEM EXTERNALCONNECTION FROM testuser
 
 user testuser
 
-statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on Global
+statement error pq: user testuser does not have MODIFYCLUSTERSETTING privilege on global
 SELECT * FROM crdb_internal.cluster_settings;
 
 statement error pq: only users with the EXTERNALCONNECTION system privilege are allowed to CREATE EXTERNAL CONNECTION
