@@ -615,8 +615,9 @@ func setupShardedIndex(
 	if err != nil {
 		return nil, nil, err
 	}
-	shardCol, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
-		colNames, isNewTable)
+	shardCol, err := maybeCreateAndAddShardCol(
+		int(buckets), tableDesc, colNames, isNewTable, evalCtx.Settings.Version.ActiveVersion(ctx),
+	)
 
 	if err != nil {
 		return nil, nil, err
@@ -639,7 +640,11 @@ func setupShardedIndex(
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable bool,
+	shardBuckets int,
+	desc *tabledesc.Mutable,
+	colNames []string,
+	isNewTable bool,
+	cv clusterversion.ClusterVersion,
 ) (col catalog.Column, err error) {
 	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {
@@ -661,6 +666,14 @@ func maybeCreateAndAddShardCol(
 	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
 	if err != nil && !columnIsUndefined {
 		return nil, err
+	}
+
+	if !cv.IsActive(clusterversion.Start22_1) {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot create hash sharded index on a node running binary newer than 21.2 in a mixed version cluster "+
+				"during a cluster upgrade from pre-22.1. Please run the schema change on a node still running pre-22.1 binary "+
+				"or wait until the cluster upgrade finalized which has better performance")
 	}
 	if columnIsUndefined || existingShardCol.Dropped() {
 		if isNewTable {

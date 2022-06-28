@@ -1572,8 +1572,8 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				shardCol, err := maybeCreateAndAddShardCol(int(buckets), &desc,
-					[]string{string(d.Name)}, true, /* isNewTable */
+				shardCol, err := maybeCreateAndAddShardCol(
+					int(buckets), &desc, []string{string(d.Name)}, true /* isNewTable */, st.Version.ActiveVersion(ctx),
 				)
 				if err != nil {
 					return nil, err
