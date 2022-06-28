@@ -13,6 +13,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
+import { Helmet } from "react-helmet";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -224,6 +225,7 @@ export class TransactionDetails extends React.Component<
 
     return (
       <div>
+        <Helmet title={"Details | Transactions"} />
         <section className={baseHeadingClasses.wrapper}>
           <Button
             onClick={this.backToTransactionsClick}
