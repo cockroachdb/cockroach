@@ -94,7 +94,7 @@ func constrainSpansBySelectClause(
 	}
 
 	tableName := tableNameOrAlias(ed.TableName, selectClause.From.Tables[0])
-	semaCtx := newSemaCtx(ed)
+	semaCtx := newSemaCtxWithTypeResolver(ed)
 	return sc.ConstrainPrimaryIndexSpanByExpr(
 		ctx, sql.BestEffortConstrain, tableName, ed.TableDescriptor(),
 		evalCtx, semaCtx, selectClause.Where.Expr)
