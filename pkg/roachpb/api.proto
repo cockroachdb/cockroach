@@ -356,6 +356,24 @@ message DeleteRangeRequest {
   // The caller must check the MVCCRangeTombstones version gate before using
   // this parameter, as it is new in 22.2.
   bool use_range_tombstone = 5;
+
+  DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = true];
+}
+
+// DeleteRangePredicates will conduct predicate based DeleteRange, if specified.
+message DeleteRangePredicates {
+  // StartTime specifies an exclusive lower bound to surface keys
+  // for deletion. If specified, DeleteRange will issue tombstones to keys
+  // within the span [startKey, endKey) that also have MVCC versions with
+  // timestamps between (startTime, endTime].
+  //
+  // The main application for this is a rollback of IMPORT INTO on a
+  // non-empty table. Here, the DeleteRange must only delete keys written by the
+  // import. In other words, older, pre-import, data cannot be touched. Because
+  // IMPORT INTO takes a table offline and does not allow masking an existing key,
+  // this operation will not issue tombstones to pre-import data that were
+  // written at or below predicateTime.
+  util.hlc.Timestamp start_time = 6 [(gogoproto.nullable) = false];
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
