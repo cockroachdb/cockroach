@@ -9,9 +9,8 @@ CREATE SEQUENCE db.public.sq1;
 +object {104 105 tbl} -> 106
 +object {104 105 sq1} -> 107
 
-
 test
-ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
+ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1')
 ----
 begin transaction #1
 checking for feature: ALTER TABLE
@@ -20,7 +19,7 @@ increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -28,7 +27,7 @@ upsert descriptor #106
   +    - 2
        columnNames:
        - i
-  +    - j
+  +    - l
   +    defaultColumnId: 2
        name: primary
      formatVersion: 3
@@ -38,14 +37,16 @@ upsert descriptor #106
   +  modificationTime: {}
   +  mutations:
   +  - column:
-  +      defaultExpr: 42:::INT8
+  +      defaultExpr: nextval(107:::REGCLASS)
   +      id: 2
-  +      name: j
+  +      name: l
   +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
   +        width: 64
+  +      usesSequenceIds:
+  +      - 107
   +    direction: ADD
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -70,7 +71,7 @@ upsert descriptor #106
   +      storeColumnIds:
   +      - 2
   +      storeColumnNames:
-  +      - j
+  +      - l
   +      unique: true
   +      version: 4
   +    mutationId: 1
@@ -96,7 +97,7 @@ upsert descriptor #106
   +      storeColumnIds:
   +      - 2
   +      storeColumnNames:
-  +      - j
+  +      - l
   +      unique: true
   +      useDeletePreservingEncoding: true
   +      version: 4
@@ -117,10 +118,34 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dependedOnBy:
+  +  - byId: true
+  +    columnIds:
+  +    - 2
+  +    id: 106
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›)
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+## PreCommitPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -146,9 +171,9 @@ upsert descriptor #106
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
-  +          NULL DEFAULT ‹42›
-  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
+  +          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
   +        statementTag: ALTER TABLE
   +    revertible: true
   +    targetRanks:
@@ -208,7 +233,7 @@ upsert descriptor #106
   +    - elementProto:
   +        columnName:
   +          columnId: 2
-  +          name: j
+  +          name: l
   +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -231,7 +256,9 @@ upsert descriptor #106
   +        columnDefaultExpression:
   +          columnId: 2
   +          embeddedExpr:
-  +            expr: 42:::INT8
+  +            expr: nextval(107:::REGCLASS)
+  +            usesSequenceIds:
+  +            - 107
   +          tableId: 106
   +      metadata:
   +        sourceElementId: 1
@@ -320,8 +347,28 @@ upsert descriptor #106
      mutations:
      - column:
   ...
-create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
-  descriptor IDs: [106]
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    revertible: true
+     dependedOnBy:
+     - byId: true
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sq1
+     parentId: 104
+  ...
+create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
+  descriptor IDs: [106 107]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -329,7 +376,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 7 with 4 MutationType ops
+## PostCommitPhase stage 1 of 7 with 5 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -372,6 +419,20 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+upsert descriptor #107
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "2"
+  +  version: "3"
 update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
@@ -379,7 +440,7 @@ begin transaction #4
 backfill indexes [2] from index #1 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+## PostCommitPhase stage 3 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -408,10 +469,24 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
+upsert descriptor #107
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000003"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "3"
+  +  version: "4"
 update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+## PostCommitPhase stage 4 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
        - PUBLIC
@@ -440,6 +515,20 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
+upsert descriptor #107
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000005"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "4"
+  +  version: "5"
 update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
@@ -451,19 +540,21 @@ begin transaction #8
 validate forward indexes [2] in table #106
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 7 with 8 MutationType ops
+## PostCommitPhase stage 7 of 7 with 9 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
          width: 64
-  +  - defaultExpr: 42:::INT8
+  +  - defaultExpr: nextval(107:::REGCLASS)
   +    id: 2
-  +    name: j
+  +    name: l
   +    pgAttributeNum: 2
   +    type:
   +      family: IntFamily
   +      oid: 20
   +      width: 64
+  +    usesSequenceIds:
+  +    - 107
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
@@ -485,7 +576,7 @@ upsert descriptor #106
        - WRITE_ONLY
        - PUBLIC
   ...
-           statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+           statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
            statementTag: ALTER TABLE
   -    revertible: true
        targetRanks:
@@ -498,14 +589,16 @@ upsert descriptor #106
   +  modificationTime: {}
      mutations:
   -  - column:
-  -      defaultExpr: 42:::INT8
+  -      defaultExpr: nextval(107:::REGCLASS)
   -      id: 2
-  -      name: j
+  -      name: l
   -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
   -        oid: 20
   -        width: 64
+  -      usesSequenceIds:
+  -      - 107
   -    direction: ADD
   -    mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
@@ -529,7 +622,7 @@ upsert descriptor #106
          partitioning: {}
          sharded: {}
   ...
-         - j
+         - l
          unique: true
   +      useDeletePreservingEncoding: true
          version: 4
@@ -559,7 +652,7 @@ upsert descriptor #106
   -      storeColumnIds:
   -      - 2
   -      storeColumnNames:
-  -      - j
+  -      - l
          unique: true
   -      useDeletePreservingEncoding: true
          version: 4
@@ -584,11 +677,31 @@ upsert descriptor #106
   +    storeColumnIds:
   +    - 2
   +    storeColumnNames:
-  +    - j
+  +    - l
        unique: true
        version: 4
   ...
        time: {}
+     unexposedParentSchemaId: 105
+  -  version: "5"
+  +  version: "6"
+upsert descriptor #107
+  ...
+         userName: root
+       jobId: "1"
+  -    revertible: true
+     dependedOnBy:
+     - byId: true
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000006"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
@@ -597,7 +710,7 @@ update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 o
 set schema change job #1 to non-cancellable
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #106
   ...
          userName: root
@@ -646,10 +759,24 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "6"
   +  version: "7"
+upsert descriptor #107
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000009"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "6"
+  +  version: "7"
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -675,9 +802,9 @@ upsert descriptor #106
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
-  -          NULL DEFAULT ‹42›
-  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
+  -          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
   -        statementTag: ALTER TABLE
   -    targetRanks:
   -    - 0
@@ -736,7 +863,7 @@ upsert descriptor #106
   -    - elementProto:
   -        columnName:
   -          columnId: 2
-  -          name: j
+  -          name: l
   -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -759,7 +886,9 @@ upsert descriptor #106
   -        columnDefaultExpression:
   -          columnId: 2
   -          embeddedExpr:
-  -            expr: 42:::INT8
+  -            expr: nextval(107:::REGCLASS)
+  -            usesSequenceIds:
+  -            - 107
   -          tableId: 106
   -      metadata:
   -        sourceElementId: 1
@@ -866,7 +995,7 @@ upsert descriptor #106
   -      storeColumnIds:
   -      - 2
   -      storeColumnNames:
-  -      - j
+  -      - l
   -      unique: true
   -      useDeletePreservingEncoding: true
   -      version: 4
@@ -903,8 +1032,31 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "7"
   +  version: "8"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     dependedOnBy:
+     - byId: true
+  ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime:
+  -    wallTime: "1640995200000000010"
+  +  modificationTime: {}
+     name: sq1
+     parentId: 104
+  ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "7"
+  +  version: "8"
 write *eventpb.FinishSchemaChange to event log for descriptor 106
-create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 commit transaction #11

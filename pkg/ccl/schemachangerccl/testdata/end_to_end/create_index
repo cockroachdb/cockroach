@@ -10,8 +10,8 @@ CREATE INDEX id1
   STORING (money)
   PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-checking for feature: CREATE INDEX
 begin transaction #1
+checking for feature: CREATE INDEX
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
