@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -606,19 +608,35 @@ func (desc *wrapper) GetIndexNameByID(indexID descpb.IndexID) (string, error) {
 	return index.GetName(), err
 }
 
-// GetObjectType implements the PrivilegeObject interface.
-func (desc *wrapper) GetObjectType() string {
-	return string(desc.DescriptorType())
-}
-
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (desc *wrapper) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
+	if desc.IsVirtualTable() {
+		vDesc := &syntheticprivilege.VirtualTablePrivilege{
+			ID: desc.ID,
+		}
+		return vDesc.GetPrivilegeDescriptor(ctx, planner)
+	}
 	return desc.GetPrivileges(), nil
 }
 
 // IsRefreshViewRequired implements the TableDescriptor interface.
 func (desc *wrapper) IsRefreshViewRequired() bool {
 	return desc.IsMaterializedView && desc.RefreshViewRequired
+}
+
+// GetObjectTypeName implements the PrivilegeObject interface.
+func (desc *wrapper) GetObjectTypeName() string {
+	return string(desc.DescriptorType())
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (desc *wrapper) GetObjectType() privilege.ObjectType {
+	if desc.IsVirtualTable() {
+		return privilege.VirtualTable
+	} else if desc.IsSequence() {
+		return privilege.Sequence
+	}
+	return privilege.Table
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -58,9 +59,14 @@ func (p public) GetPrivilegeDescriptor(
 	return p.GetPrivileges(), nil
 }
 
-// GetObjectType implements the PrivilegeObject interface.
-func (p public) GetObjectType() string {
+// GetObjectTypeName implements the PrivilegeObject interface.
+func (p public) GetObjectTypeName() string {
 	return string(p.DescriptorType())
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (p public) GetObjectType() privilege.ObjectType {
+	return privilege.Schema
 }
 
 type publicBase struct{}

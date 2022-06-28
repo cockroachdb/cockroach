@@ -13,9 +13,11 @@ package syntheticprivilege
 import (
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +33,11 @@ var registry = []*Metadata{
 		prefix: "/global",
 		regex:  regexp.MustCompile("(/global/)$"),
 		val:    reflect.TypeOf((*GlobalPrivilege)(nil)),
+	},
+	{
+		prefix: "/vtable",
+		regex:  regexp.MustCompile(`(/vtable/((?P<ID>\d+)))$`),
+		val:    reflect.TypeOf((*VirtualTablePrivilege)(nil)),
 	},
 }
 
@@ -71,7 +78,25 @@ func Parse(privPath string) (catalog.SyntheticPrivilegeObject, error) {
 		if idx == -1 {
 			return nil, errors.AssertionFailedf("no field found with name %s", f.Name)
 		}
-		v.Elem().Field(i).Set(reflect.ValueOf(matches[idx]))
+		val := reflect.ValueOf(matches[idx])
+		val, err := unmarshal(val, f)
+		if err != nil {
+			return nil, err
+		}
+		v.Elem().Field(i).Set(val)
 	}
 	return v.Interface().(catalog.SyntheticPrivilegeObject), nil
+}
+
+func unmarshal(val reflect.Value, f reflect.StructField) (reflect.Value, error) {
+	switch f.Type {
+	case reflect.TypeOf(descpb.ID(0)):
+		i, err := strconv.Atoi(val.String())
+		if err != nil {
+			return reflect.Value{}, errors.Wrap(err, "failed to cast value to uint32 (descpb.ID)")
+		}
+		return reflect.ValueOf(descpb.ID(i)), nil
+	default:
+		panic(errors.AssertionFailedf("unhandled type %v", f.Type))
+	}
 }

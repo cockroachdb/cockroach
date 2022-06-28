@@ -57,10 +57,14 @@ func (p *GlobalPrivilege) GetPrivilegeDescriptor(
 	return synthesizePrivilegeDescriptorFromSystemPrivilegesTable(ctx, planner, p)
 }
 
-// GetObjectType implements the PrivilegeObject interface.
-func (p *GlobalPrivilege) GetObjectType() string {
-	// TODO(richardjcai): Turn this into a const map somewhere.
+// GetObjectTypeName implements the PrivilegeObject interface.
+func (p *GlobalPrivilege) GetObjectTypeName() string {
 	return GlobalPrivilegeObjectType
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (p *GlobalPrivilege) GetObjectType() privilege.ObjectType {
+	return privilege.Global
 }
 
 // GetName implements the PrivilegeObject interface.
@@ -81,9 +85,7 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		systemTablePrivilegeObject.ToString())
 
 	it, err := planner.QueryIteratorEx(ctx, `get-system-privileges`,
-		sessiondata.InternalExecutorOverride{
-			User: username.RootUserName(),
-		}, query)
+		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +118,17 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 			privs,
 			false,
 		)
+	}
+
+	// To avoid having to insert a row for public for each virtual
+	// table into system.privileges, we assume that if there is
+	// NO entry for public in the PrivilegeDescriptor, Public has
+	// grant. If there is an empty row for Public, then public
+	// does not have grant.
+	if systemTablePrivilegeObject.PrivilegeObjectType() == privilege.VirtualTable {
+		if _, found := privileges.FindUser(username.PublicRoleName()); !found {
+			privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
+		}
 	}
 
 	privilegeObjectType := systemTablePrivilegeObject.PrivilegeObjectType()

@@ -77,15 +77,18 @@ const (
 	Sequence ObjectType = "sequence"
 	// Global represents global privileges.
 	Global ObjectType = "global"
+	// VirtualTable represents a virtual table object.
+	VirtualTable ObjectType = "virtual_table"
 )
 
 var isDescriptorBacked = map[ObjectType]bool{
-	Database: true,
-	Schema:   true,
-	Table:    true,
-	Type:     true,
-	Sequence: true,
-	Global:   false,
+	Database:     true,
+	Schema:       true,
+	Table:        true,
+	Type:         true,
+	Sequence:     true,
+	Global:       false,
+	VirtualTable: false,
 }
 
 // Predefined sets of privileges.
@@ -101,8 +104,9 @@ var (
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
-	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
-	SystemPrivileges   = List{ALL, MODIFYCLUSTERSETTING}
+	SequencePrivileges     = List{ALL, USAGE, SELECT, UPDATE, CREATE, DROP, INSERT, DELETE, ZONECONFIG}
+	SystemPrivileges       = List{ALL, MODIFYCLUSTERSETTING}
+	VirtualTablePrivileges = List{ALL, SELECT}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -296,6 +300,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return AllPrivileges
 	case Global:
 		return SystemPrivileges
+	case VirtualTable:
+		return VirtualTablePrivileges
 	default:
 		panic(errors.AssertionFailedf("unknown object type %s", objectType))
 	}

@@ -358,8 +358,14 @@ func (v TableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.Descri
 	return nil
 }
 
+// GetObjectTypeName implements the PrivilegeObject interface.
+func (v TableImplicitRecordType) GetObjectTypeName() string {
+	v.panicNotSupported("GetObjectTypeName")
+	return ""
+}
+
 // GetObjectType implements the PrivilegeObject interface.
-func (v TableImplicitRecordType) GetObjectType() string {
+func (v TableImplicitRecordType) GetObjectType() privilege.ObjectType {
 	v.panicNotSupported("GetObjectType")
 	return ""
 }

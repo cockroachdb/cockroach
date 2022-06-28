@@ -365,7 +365,11 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			for _, u := range table.GetPrivileges().Users {
+			privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
+			if err != nil {
+				return err
+			}
+			for _, u := range privDesc.Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
 						for _, cd := range table.PublicColumns() {
@@ -1345,7 +1349,11 @@ func populateTablePrivileges(
 			} else {
 				tableType = privilege.Table
 			}
-			for _, u := range table.GetPrivileges().Show(tableType) {
+			desc, err := table.GetPrivilegeDescriptor(ctx, p)
+			if err != nil {
+				return err
+			}
+			for _, u := range desc.Show(tableType) {
 				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
 					if err := addRow(
