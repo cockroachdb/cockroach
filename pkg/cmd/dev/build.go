@@ -120,6 +120,18 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
 
+	// Make sure `patchelf` is installed if crosslinux config is used.
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	if d.checkLinePresenceInBazelRcUser(workspace, "build --config=crosslinux") {
+		_, err := d.exec.CommandContextSilent(ctx, "/usr/bin/patchelf", "--version")
+		if err != nil {
+			return errors.New("patchelf is required when using crosslinux config")
+		}
+	}
+
 	// Set up dev cache unless it's disabled via the environment variable or the
 	// testing knob.
 	skipCacheCheck := d.knobs.skipCacheCheckDuringBuild || d.os.Getenv("DEV_NO_REMOTE_CACHE") != ""
