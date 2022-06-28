@@ -13,7 +13,6 @@ import { storiesOf, DecoratorFn } from "@storybook/react";
 
 import {
   countBarChart,
-  rowsReadBarChart,
   bytesReadBarChart,
   latencyBarChart,
   maxMemUsageBarChart,
@@ -54,10 +53,6 @@ storiesOf("BarCharts", module)
     const chartFactory = countBarChart(statements);
     return chartFactory(statements[0]);
   })
-  .add("rowsReadBarChart", () => {
-    const chartFactory = rowsReadBarChart(statements);
-    return chartFactory(statements[0]);
-  })
   .add("bytesReadBarChart", () => {
     const chartFactory = bytesReadBarChart(statements);
     return chartFactory(statements[0]);
@@ -83,10 +78,6 @@ storiesOf("BarCharts/within column (150px)", module)
   .addDecorator(withinColumn())
   .add("countBarChart", () => {
     const chartFactory = countBarChart(statements);
-    return chartFactory(statements[0]);
-  })
-  .add("rowsReadBarChart", () => {
-    const chartFactory = rowsReadBarChart(statements);
     return chartFactory(statements[0]);
   })
   .add("bytesReadBarChart", () => {

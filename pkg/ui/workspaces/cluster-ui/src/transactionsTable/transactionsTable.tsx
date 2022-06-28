@@ -18,9 +18,7 @@ import {
 } from "../sortedtable";
 import {
   transactionsCountBarChart,
-  transactionsRowsReadBarChart,
   transactionsBytesReadBarChart,
-  transactionsRowsWrittenBarChart,
   transactionsLatencyBarChart,
   transactionsContentionBarChart,
   transactionsMaxMemUsageBarChart,
@@ -94,15 +92,7 @@ export function makeTransactionsColumns(
   };
 
   const countBar = transactionsCountBarChart(transactions);
-  const rowsReadBar = transactionsRowsReadBarChart(
-    transactions,
-    defaultBarChartOptions,
-  );
   const bytesReadBar = transactionsBytesReadBarChart(
-    transactions,
-    defaultBarChartOptions,
-  );
-  const rowsWrittenBar = transactionsRowsWrittenBarChart(
     transactions,
     defaultBarChartOptions,
   );
@@ -160,12 +150,20 @@ export function makeTransactionsColumns(
         FixLong(Number(item.stats_data.stats.count)),
     },
     {
-      name: "rowsRead",
-      title: statisticsTableTitles.rowsRead(statType),
-      cell: rowsReadBar,
+      name: "rowsProcessed",
+      title: statisticsTableTitles.rowsProcessed(statType),
+      cell: (item: TransactionInfo) =>
+        `${FixLong(
+          Number(item.stats_data.stats.rows_read.mean),
+        )} Reads / ${FixLong(
+          Number(item.stats_data.stats.rows_written?.mean),
+        )} Writes`,
       className: cx("statements-table__col-rows-read"),
       sort: (item: TransactionInfo) =>
-        FixLong(Number(item.stats_data.stats.rows_read.mean)),
+        FixLong(
+          Number(item.stats_data.stats.rows_read.mean) +
+            Number(item.stats_data.stats.rows_written?.mean),
+        ),
     },
     {
       name: "bytesRead",
@@ -174,15 +172,6 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-bytes-read"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.bytes_read.mean)),
-    },
-    {
-      name: "rowsWritten",
-      title: statisticsTableTitles.rowsWritten(statType),
-      cell: rowsWrittenBar,
-      className: cx("statements-table__col-rows-written"),
-      sort: (item: TransactionInfo) =>
-        FixLong(Number(item.stats_data.stats.rows_written?.mean)),
-      showByDefault: false,
     },
     {
       name: "time",
