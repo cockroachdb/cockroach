@@ -193,7 +193,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkStoringColumns(tableDesc, n.Storing); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing); err != nil {
 		return nil, err
 	}
 
@@ -315,8 +315,22 @@ func makeIndexDescriptor(
 	return &indexDesc, nil
 }
 
-func checkStoringColumns(desc catalog.TableDescriptor, names tree.NameList) error {
-	for i, colName := range names {
+func checkIndexColumns(
+	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList,
+) error {
+	for i, colDef := range columns {
+		col, err := desc.FindColumnWithName(colDef.Column)
+		if err != nil {
+			return errors.Wrapf(err, "finding column %d", i)
+		}
+		if col.IsSystemColumn() {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot index system column %v", colDef.Column,
+			)
+		}
+	}
+	for i, colName := range storing {
 		col, err := desc.FindColumnWithName(colName)
 		if err != nil {
 			return errors.Wrapf(err, "finding store column %d", i)
