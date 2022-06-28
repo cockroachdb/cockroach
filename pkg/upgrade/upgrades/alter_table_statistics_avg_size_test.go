@@ -148,7 +148,7 @@ func getDeprecatedTableStatisticsDescriptor() *descpb.TableDescriptor {
 			ID:                  1,
 			Unique:              true,
 			KeyColumnNames:      []string{"tableID", "statisticID"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 			KeyColumnIDs:        []descpb.ColumnID{1, 2},
 		},
 		NextIndexID:    2,

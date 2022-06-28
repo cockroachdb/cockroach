@@ -281,7 +281,7 @@ func (w index) GetKeyColumnName(columnOrdinal int) string {
 
 // GetKeyColumnDirection returns the direction of the columnOrdinal-th column in
 // the index key.
-func (w index) GetKeyColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction {
+func (w index) GetKeyColumnDirection(columnOrdinal int) catpb.IndexColumn_Direction {
 	return w.desc.KeyColumnDirections[columnOrdinal]
 }
 

@@ -68,6 +68,7 @@ var (
 				targetStatusEq(target1, target2, scpb.ToAbsent),
 			}
 		})
+
 	toAbsentIn = func(status scpb.Status) rel.Rule4 {
 		ss := status.String()
 		return screl.Schema.Def4(

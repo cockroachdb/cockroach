@@ -54,7 +54,7 @@ var validTableDesc = &descpb.Descriptor{
 				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"col"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				Version:             descpb.LatestIndexDescriptorVersion,
 				EncodingType:        descpb.PrimaryIndexEncoding,

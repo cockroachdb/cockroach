@@ -78,7 +78,10 @@ func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mut
 }
 
 func mutationStateChange(
-	tbl *tabledesc.Mutable, f MutationSelector, exp, next descpb.DescriptorMutation_State,
+	tbl *tabledesc.Mutable,
+	f MutationSelector,
+	exp, next descpb.DescriptorMutation_State,
+	direction descpb.DescriptorMutation_Direction,
 ) error {
 	mut, err := FindMutation(tbl, f)
 	if err != nil {
@@ -90,6 +93,7 @@ func mutationStateChange(
 			tbl.GetID(), exp, m.State, tbl)
 	}
 	m.State = next
+	m.Direction = direction
 	return nil
 }
 
@@ -144,18 +148,6 @@ func (m *visitor) removeMutation(
 		}
 	}
 	return cpy, nil
-}
-
-func columnNamesFromIDs(tbl *tabledesc.Mutable, columnIDs descpb.ColumnIDs) ([]string, error) {
-	storeColNames := make([]string, 0, len(columnIDs))
-	for _, colID := range columnIDs {
-		column, err := tbl.FindColumnWithID(colID)
-		if err != nil {
-			return nil, err
-		}
-		storeColNames = append(storeColNames, column.GetName())
-	}
-	return storeColNames, nil
 }
 
 // MutationSelector defines a predicate on a catalog.Mutation with no

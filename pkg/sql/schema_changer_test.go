@@ -7729,7 +7729,7 @@ func TestSchemaChangeWhileAddingOrDroppingTTL(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT);`,
 			successfulChange:        `ALTER TABLE t.test SET (ttl_expire_after = '10 minutes')`,
-			conflictingSchemaChange: `ALTER TABLE t.test ADD COLUMN y int`,
+			conflictingSchemaChange: `ALTER TABLE t.test ADD COLUMN y int DEFAULT 42`,
 			expected: func(tableID uint32) string {
 				return fmt.Sprintf(`pq: relation "test" \(%d\): cannot perform a schema change operation while a TTL change is in progress`, tableID)
 			},
@@ -7740,7 +7740,7 @@ CREATE TABLE t.test (x INT);`,
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 			successfulChange:        `ALTER TABLE t.test RESET (ttl)`,
-			conflictingSchemaChange: `ALTER TABLE t.test ADD COLUMN y int`,
+			conflictingSchemaChange: `ALTER TABLE t.test ADD COLUMN y int DEFAULT 42`,
 			expected: func(tableID uint32) string {
 				return fmt.Sprintf(`pq: relation "test" \(%d\): cannot perform a schema change operation while a TTL change is in progress`, tableID)
 			},
@@ -7751,7 +7751,7 @@ CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
 			setup: `
 CREATE DATABASE t;
 CREATE TABLE t.test (x INT);`,
-			successfulChange:        `ALTER TABLE t.test ADD COLUMN y int`,
+			successfulChange:        `ALTER TABLE t.test ADD COLUMN y int DEFAULT 42`,
 			conflictingSchemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 minutes')`,
 			expected: func(tableID uint32) string {
 				return `pq: cannot modify TTL settings while another schema change on the table is being processed`

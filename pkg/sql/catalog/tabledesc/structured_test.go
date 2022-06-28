@@ -39,9 +39,9 @@ import (
 
 // Makes an descpb.IndexDescriptor with all columns being ascending.
 func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescriptor {
-	dirs := make([]descpb.IndexDescriptor_Direction, 0, len(columnNames))
+	dirs := make([]catpb.IndexColumn_Direction, 0, len(columnNames))
 	for range columnNames {
-		dirs = append(dirs, descpb.IndexDescriptor_ASC)
+		dirs = append(dirs, catpb.IndexColumn_ASC)
 	}
 	idx := descpb.IndexDescriptor{
 		ID:                  descpb.IndexID(0),
@@ -113,8 +113,8 @@ func TestAllocateIDs(t *testing.T) {
 		PrimaryIndex: descpb.IndexDescriptor{
 			ID: 1, Name: "c", KeyColumnIDs: []descpb.ColumnID{1, 2},
 			KeyColumnNames: []string{"a", "b"},
-			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC,
-				descpb.IndexDescriptor_ASC},
+			KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC,
+				catpb.IndexColumn_ASC},
 			StoreColumnIDs:   descpb.ColumnIDs{3},
 			StoreColumnNames: []string{"c"},
 			EncodingType:     descpb.PrimaryIndexEncoding,
@@ -127,7 +127,7 @@ func TestAllocateIDs(t *testing.T) {
 				Name:                "d",
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnNames:      []string{"b", "a"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			{
@@ -135,7 +135,7 @@ func TestAllocateIDs(t *testing.T) {
 				Name:                "e",
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeyColumnNames:      []string{"b"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
@@ -144,7 +144,7 @@ func TestAllocateIDs(t *testing.T) {
 				Name:                "f",
 				KeyColumnIDs:        []descpb.ColumnID{3},
 				KeyColumnNames:      []string{"c"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
@@ -364,7 +364,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				},
 				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
 			},
@@ -394,7 +394,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.LatestIndexDescriptorVersion,
 					ConstraintID:        1,
@@ -430,7 +430,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.LatestIndexDescriptorVersion,
 					ConstraintID:        1,
@@ -441,7 +441,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Name:                "other",
 						KeyColumnIDs:        []descpb.ColumnID{1},
 						KeyColumnNames:      []string{"foo"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 						KeySuffixColumnIDs:  []descpb.ColumnID{1}, // This corruption is benign but prevents bumping Version.
 						Version:             descpb.SecondaryIndexFamilyFormatVersion,
 					},
@@ -470,7 +470,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 					Version:             descpb.LatestIndexDescriptorVersion,
 					ConstraintID:        1,
 				},
@@ -480,7 +480,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Name:                "other",
 						KeyColumnIDs:        []descpb.ColumnID{1},
 						KeyColumnNames:      []string{"foo"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 						KeySuffixColumnIDs:  []descpb.ColumnID{1},
 						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					},
@@ -512,7 +512,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 					ConstraintID:        1,
 				},
 				Indexes: []descpb.IndexDescriptor{
@@ -521,7 +521,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Name:                "other",
 						KeyColumnIDs:        []descpb.ColumnID{1},
 						KeyColumnNames:      []string{"foo"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 					{
@@ -529,7 +529,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Name:                "another",
 						KeyColumnIDs:        []descpb.ColumnID{2},
 						KeyColumnNames:      []string{"bar"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 				},
@@ -561,7 +561,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Name:                "primary",
 					KeyColumnIDs:        []descpb.ColumnID{1, 2},
 					KeyColumnNames:      []string{"foo", "bar"},
-					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 					EncodingType:        descpb.PrimaryIndexEncoding,
 					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 					ConstraintID:        1,
@@ -572,7 +572,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Name:                "other",
 						KeyColumnIDs:        []descpb.ColumnID{1},
 						KeyColumnNames:      []string{"foo"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 						EncodingType:        descpb.SecondaryIndexEncoding,
 						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					},
@@ -581,7 +581,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Name:                "another",
 						KeyColumnIDs:        []descpb.ColumnID{2},
 						KeyColumnNames:      []string{"bar"},
-						KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 						EncodingType:        descpb.SecondaryIndexEncoding,
 						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					},

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	protoreflecttest "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/test"
@@ -68,7 +69,7 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 				ID:                  500,
 				Unique:              true,
 				KeyColumnNames:      []string{"foo", "bar", "buz"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				GeoConfig: geoindex.Config{
 					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
 						MinLevel: 123,
