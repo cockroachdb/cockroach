@@ -180,6 +180,9 @@ describe("Database Table Page", function () {
           indexNames: [],
           grants: [],
           statsLastUpdated: null,
+          livePercentage: 0,
+          liveBytes: 0,
+          totalBytes: 0,
         },
         automaticStatsCollectionEnabled: true,
         stats: {
@@ -216,6 +219,9 @@ describe("Database Table Page", function () {
         num_replicas: 5,
       },
       stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+      data_total_bytes: new Long(456789),
+      data_live_bytes: new Long(12345),
+      data_live_percentage: 2.0,
     });
 
     await driver.refreshTableDetails();
@@ -234,6 +240,9 @@ describe("Database Table Page", function () {
       statsLastUpdated: util.TimestampToMoment(
         makeTimestamp("0001-01-01T00:00:00Z"),
       ),
+      livePercentage: 2.0,
+      liveBytes: 12345,
+      totalBytes: 456789,
     });
   });
 
