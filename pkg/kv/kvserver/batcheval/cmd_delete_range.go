@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -67,8 +68,8 @@ func DeleteRange(
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
 
-	// Use experimental MVCC range tombstone if requested.
-	if args.UseRangeTombstone {
+	// Use MVCC range tombstone if requested.
+	if args.UseRangeTombstone || args.Predicates != nil {
 		if cArgs.Header.Txn != nil {
 			return result.Result{}, ErrTransactionUnsupported
 		}
@@ -85,8 +86,32 @@ func DeleteRange(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
-		err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
-			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
+		if args.Predicates == nil {
+			err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
+				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
+			return result.Result{}, err
+		}
+		maxBatchSize := h.MaxSpanRequestKeys
+		if h.MaxSpanRequestKeys == 0 {
+			maxBatchSize = math.MaxInt64
+		}
+
+		// The minimum number of keys required in a run to use a range tombstone
+		//
+		// TODO (msbutler): Tune the threshold once DeleteRange and DeleteRangeUsingTombstone have
+		// been further optimized.
+		defaultRangeTombstoneThreshold := int64(64)
+		resumeSpan, err := storage.PredicateMVCCDeleteRange(ctx, readWriter, cArgs.Stats,
+			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
+			args.Predicates, maxBatchSize, maxRevertRangeBatchBytes, defaultRangeTombstoneThreshold)
+
+		// TODO (msbutler): plumb number of keys deleted into response, if needed
+		if resumeSpan != nil {
+			reply.ResumeSpan = resumeSpan
+			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		}
+		// Return result is always empty, since the reply is populated into the
+		// resp pointer that's passed into the function
 		return result.Result{}, err
 	}
 
