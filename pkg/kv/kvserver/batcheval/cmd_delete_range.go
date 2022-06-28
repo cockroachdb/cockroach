@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -68,7 +69,7 @@ func DeleteRange(
 	reply := resp.(*roachpb.DeleteRangeResponse)
 
 	// Use experimental MVCC range tombstone if requested.
-	if args.UseExperimentalRangeTombstone {
+	if args.UseExperimentalRangeTombstone || args.Predicates != nil {
 		if cArgs.Header.Txn != nil {
 			return result.Result{}, ErrTransactionUnsupported
 		}
@@ -85,8 +86,27 @@ func DeleteRange(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
-		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
-			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
+		if args.Predicates == nil {
+			err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
+				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
+			return result.Result{}, err
+		}
+		maxBatchSize := h.MaxSpanRequestKeys
+		if h.MaxSpanRequestKeys == 0 {
+			maxBatchSize = math.MaxInt64
+		}
+
+		// the minimum number of keys required in a run to use a range tombstone
+		defaultRangeTombstoneThreshold := 64
+		resumeSpan, err := storage.ExperimentalPredicateMVCCDeleteRange(ctx, readWriter, cArgs.Stats,
+			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
+			args.Predicates, maxBatchSize, maxRevertRangeBatchBytes, defaultRangeTombstoneThreshold)
+
+		if resumeSpan != nil {
+			reply.ResumeSpan = resumeSpan
+			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		}
+		// TODO(msbutler): build correct result response
 		return result.Result{}, err
 	}
 

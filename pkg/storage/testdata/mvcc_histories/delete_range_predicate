@@ -1,0 +1,72 @@
+# Tests MVCC Del Range with timestamp predicate.
+# Note: due to the low number of keys in the engine,
+# only point tombstones will get issued.
+#
+# Set up some point keys, point tombstones x, range tombstones o--o,
+# and intents [].
+#
+# 7                                [i7]
+# 6
+# 5
+# 4  x           d4      f4  x   h4            o-------------------o
+# 3      b3
+# 2  a2              e2      g2
+# 1              d1
+# 0
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+run ok
+put k=a ts=2 v=a2
+del k=a ts=4
+put k=b ts=3 v=b3
+put k=d ts=1 v=d1
+put k=d ts=4 v=d4
+put k=e ts=2 v=e2
+put k=f ts=4 v=f4
+put k=g ts=2 v=g2
+del k=g ts=4
+put k=h ts=4 v=h4
+del_range_ts k=k end=p ts=4
+with t=A
+  txn_begin ts=7
+  put k=i v=i7
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# Writing next to or above point keys and tombstones should work.
+run ok
+del_range_pred k=a end=i ts=5 predTs=3 rangeThreshold=2
+----
+>> at end:
+rangekey: {f-i}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# error on inline
+
+# error on intent

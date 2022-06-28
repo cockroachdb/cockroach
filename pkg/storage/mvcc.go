@@ -2295,8 +2295,16 @@ func MVCCClearTimeRange(
 	})
 	defer iter.Close()
 
+	// clearedMetaKey is the latest surfaced key that will get cleared
 	var clearedMetaKey MVCCKey
-	var clearedMeta, restoredMeta enginepb.MVCCMetadata
+
+	// clearedMeta contains metadata on the clearedMetaKey
+	var clearedMeta enginepb.MVCCMetadata
+
+	// restoredMeta contains metadata on the previous version the clearedMetaKey.
+	// Once the key in clearedMetaKey is cleared, the key represented in
+	// restoredMeta becomes the latest version of this MVCC key.
+	var restoredMeta enginepb.MVCCMetadata
 	iter.SeekGE(MVCCKey{Key: key})
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -2438,6 +2446,176 @@ func MVCCDeleteRange(
 		}
 	}
 	return keys, res.ResumeSpan, res.NumKeys, nil
+}
+
+// ExperimentalPredicateMVCCDeleteRange deletes all MVCC versions within the
+// span [key, endKey) which have timestamps in the span (startTime, endTime].
+// This can have the apparent effect of "reverting" the range to startTime,
+// though all older revisions of deleted keys will be GC'ed. Long runs of keys
+// will get deleted with a range Tombstone, while smaller runs
+// will get deleted with point tombstones.
+//
+// Limiting the number of keys or ranges of keys processed can still cause a
+// batch that is too large -- in number of bytes -- for raft to replicate if the
+// keys are very large. So if the total length of the keys or key spans cleared
+// exceeds maxBatchByteSize it will also stop and return a resume span.
+//
+// If the underlying iterator encounters an intent with a timestamp in the span
+// (startTime, endTime], or any inline meta, this method will return an error.
+func ExperimentalPredicateMVCCDeleteRange(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	endTime hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
+	leftPeekBound, rightPeekBound roachpb.Key,
+	predicates *roachpb.DeleteRangePredicates,
+	maxBatchSize, maxBatchByteSize int64,
+	rangeTombstoneThreshold int,
+) (*roachpb.Span, error) {
+
+	var resume *roachpb.Span
+	var batchSize int64
+	var batchByteSize int64
+
+	var runSize int
+	var runByteSize int64
+	var runStart, runEnd MVCCKey
+
+	if ms == nil {
+		return nil, errors.AssertionFailedf(
+			"MVCCStats passed in to ExperimentalPredicateMVCCDeleteRange must be non-nil to ensure proper stats" +
+				" computation during Delete operations")
+	}
+
+	matchKey := func(k MVCCKey, v MVCCValue) bool {
+		if endTime.Less(k.Timestamp) {
+			return false
+		}
+		if k.Timestamp.LessEq(predicates.ExperimentalPredicateTime) {
+			return false
+		}
+
+		// Note: we match a key even if its latest value is a tombstone,
+		// as we'd like to create long runs that could get range deleted.
+		return true
+	}
+
+	flushDeleteKeys := func(nonMatch MVCCKey) error {
+		if runSize > rangeTombstoneThreshold ||
+			// Even if we didn't get a large enough number of keys to switch to
+			// using range tombstones, the byte size of the keys we did get is now too large to
+			// encode them all within the byte size limit, so use a range tombstone anyway.
+			batchByteSize+runByteSize >= maxBatchByteSize {
+			if err := ExperimentalMVCCDeleteRangeUsingTombstone(ctx, rw, ms,
+				runStart.Key, nonMatch.Key, endTime, localTimestamp, leftPeekBound, rightPeekBound,
+				0); err != nil {
+				return err
+			}
+			batchByteSize += int64(runStart.EncodedSize() + nonMatch.EncodedSize())
+			batchSize++
+		} else if runSize > 0 {
+			// Use Point tombstones
+			batchByteSize += runByteSize
+			batchSize += int64(runSize)
+			_, _, _, err := MVCCDeleteRange(
+				ctx, rw, ms, runStart.Key, nonMatch.Key,
+				0, endTime, localTimestamp, nil, false)
+			if err != nil {
+				return err
+			}
+		}
+		runSize = 0
+		runStart = MVCCKey{}
+		runEnd = MVCCKey{}
+		return nil
+	}
+
+	// Using the IncrementalIterator with the time-bound iter optimization could
+	// potentially be a big win here -- the expected use-case for this is to run
+	// over an entire table's span with a very recent timestamp, rolling back just
+	// the writes of some failed IMPORT and that could very likely only have hit
+	// some small subset of the table's keyspace. However to get the stats right
+	// we need a non-time-bound iter e.g. we need to know if there is an older key
+	// under the one we are clearing to know if we're changing the number of live
+	// keys. The MVCCIncrementalIterator uses a non-time-bound iter as its source
+	// of truth, and only uses the TBI iterator as an optimization when finding
+	// the next KV to iterate over. This pattern allows us to quickly skip over
+	// swaths of uninteresting keys, but then use a normal iteration to actually
+	// do the delete including updating the live key stats correctly.
+	//
+	// The MVCCIncrementalIterator checks for and fails on any intents in our
+	// time-range, as we do not want to clear any running transactions. We don't
+	// _expect_ to hit this since the RevertRange is only intended for non-live
+	// key spans, but there could be an intent leftover.
+	iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
+		EndKey:    endKey,
+		StartTime: predicates.ExperimentalPredicateTime,
+		EndTime:   endTime,
+	})
+	defer iter.Close()
+
+	iter.SeekGE(MVCCKey{Key: startKey})
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		k := iter.UnsafeKey()
+		vRaw := iter.UnsafeValue()
+		v, err := DecodeMVCCValue(vRaw)
+		if err != nil {
+			return nil, err
+		}
+		if k.Key.Equal(runEnd.Key) {
+			// If we've already added this key to the run, move on.
+			//
+			// TODO(msbutler): we could introduce iter.NextKeyIgnoringTime(
+			// ) to skip older versions of keys that we've already planned to delete
+			iter.NextIgnoringTime()
+		} else if matchKey(k, v) {
+			// Add the key to the run.
+			if batchSize >= maxBatchSize || batchByteSize > maxBatchByteSize {
+				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
+				break
+			}
+
+			if runSize == 0 {
+				runStart.Key = append(runStart.Key[:0], k.Key...)
+				runStart.Timestamp = k.Timestamp
+			}
+			runSize++
+			runByteSize += int64(k.EncodedSize())
+			runEnd.Key = append(runEnd.Key[:0], k.Key...)
+			runEnd.Timestamp = k.Timestamp
+
+			// Move the iterator to the next key/value in linear iteration even if it
+			// lies outside (startTime, endTime].
+			//
+			// If iter lands on an older version of the current key,
+			// we can iterate to the next key/value.
+			//
+			// If iter lands on the next key, it will either add to the current run of
+			// keys to be deleted, or trigger a flush depending on whether or not it
+			// lies in our time bounds respectively.
+			iter.NextIgnoringTime()
+		} else {
+			// This key does not match, so we need to flush our run of matching keys.
+			if err := flushDeleteKeys(k); err != nil {
+				return nil, err
+			}
+			// Move the incremental iterator to the next valid key that can be rolled
+			// back. If TBI was enabled when initializing the incremental iterator,
+			// this step could jump over large swaths of keys that do not qualify for
+			// clearing.
+			iter.Next()
+		}
+	}
+
+	return resume, flushDeleteKeys(MVCCKey{Key: endKey})
 }
 
 // ExperimentalMVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at

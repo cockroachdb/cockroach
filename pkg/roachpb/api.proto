@@ -360,6 +360,13 @@ message DeleteRangeRequest {
   // development, and have severe limitations including being ignored by all
   // KV and MVCC APIs and only being stored in memory.
   bool use_experimental_range_tombstone = 5;
+
+  DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = true];
+}
+
+message DeleteRangePredicates {
+  // ExperimentalTargetTime specifies a exclusive lower bound to surface keys for deletion.
+  util.hlc.Timestamp experimental_predicate_time = 6 [(gogoproto.nullable) = false];
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
