@@ -75,6 +75,7 @@ func (s *spanStatsServer) dialNode(ctx context.Context, nodeID roachpb.NodeID) (
 type uniqueBucket struct {
 	sp            *roachpb.Span
 	batchRequests uint64
+	nBytes				uint64
 }
 
 func (s *spanStatsServer) GetNodeSpanStats(
@@ -84,7 +85,7 @@ func (s *spanStatsServer) GetNodeSpanStats(
 	uniqueBuckets := make(map[string]uniqueBucket)
 
 	if err := s.server.node.stores.VisitStores(func(store *kvserver.Store) error {
-		store.VisitSpanStatsBuckets(func(span *roachpb.Span, batchRequests uint64) {
+		store.VisitSpanStatsBuckets(func(span *roachpb.Span, batchRequests uint64, nBytes uint64) {
 			spanAsString := span.String()
 			if stat, ok := uniqueBuckets[spanAsString]; ok {
 				stat.batchRequests += batchRequests
@@ -92,6 +93,7 @@ func (s *spanStatsServer) GetNodeSpanStats(
 				uniqueBuckets[spanAsString] = uniqueBucket{
 					sp:            span,
 					batchRequests: batchRequests,
+					nBytes: nBytes,
 				}
 			}
 		})
@@ -107,6 +109,7 @@ func (s *spanStatsServer) GetNodeSpanStats(
 		res.Stats = append(res.Stats, &serverpb.GetNodeSpanStatsResponse_NodeSpanStat{
 			Span:          bucket.sp,
 			BatchRequests: bucket.batchRequests,
+			NBytes: bucket.nBytes,
 		})
 	}
 
@@ -166,6 +169,7 @@ func (s *spanStatsServer) GetSpanStatistics(
 				uniqueBuckets[spanAsString] = uniqueBucket{
 					sp:            bucket.Span,
 					batchRequests: bucket.BatchRequests,
+					nBytes: bucket.NBytes,
 				}
 			}
 		}
@@ -181,6 +185,7 @@ func (s *spanStatsServer) GetSpanStatistics(
 			},
 			Span:          bucket.sp,
 			BatchRequests: bucket.batchRequests,
+			NBytes: bucket.nBytes,
 		})
 	}
 

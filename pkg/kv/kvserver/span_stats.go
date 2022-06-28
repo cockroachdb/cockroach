@@ -24,7 +24,9 @@ func (s *Store) SetBucketBoundaries() error {
 	s.VisitReplicas(func(replica *Replica) (wantMore bool) {
 		desc := replica.Desc()
 
-		err = hist.addBucket(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+		// TODO: is this the correct time to query bytes?
+		nBytes := replica.GetMVCCStats().LiveBytes // do not aggregate.
+		err = hist.addBucket(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), uint64(nBytes))
 
 		if err != nil {
 			return false
@@ -44,7 +46,7 @@ func (s *Store) SetBucketBoundaries() error {
 
 
 // TODO: use start and end times. Currently assuming the request only cares about the current active histogram.
-func (s *Store) VisitSpanStatsBuckets(visitor func(span *roachpb.Span, batchRequests uint64)) {
+func (s *Store) VisitSpanStatsBuckets(visitor func(span *roachpb.Span, batchRequests uint64, nBytes uint64)) {
 
 	// TODO: acquire mutex lock?
 	it := s.spanStatsHistogram.tree.Iterator()
@@ -55,7 +57,7 @@ func (s *Store) VisitSpanStatsBuckets(visitor func(span *roachpb.Span, batchRequ
 			break
 		}
 		bucket := i.(*spanStatsHistogramBucket)
-		visitor(&bucket.sp, bucket.counter)
+		visitor(&bucket.sp, bucket.counter, bucket.nBytes)
 	}
 }
 
@@ -73,13 +75,14 @@ type spanStatsHistogram struct {
 	lastBucketId uint64
 }
 
-func (s *spanStatsHistogram) addBucket(startKey, endKey roachpb.Key) error {
+func (s *spanStatsHistogram) addBucket(startKey, endKey roachpb.Key, nBytes uint64) error {
 	s.lastBucketId++
 
 	bucket := spanStatsHistogramBucket{
 		sp:      roachpb.Span{Key: startKey, EndKey: endKey},
 		id:      uintptr(s.lastBucketId),
 		counter: 0,
+		nBytes: nBytes,
 	}
 
 	return s.tree.Insert(&bucket, false)
@@ -95,6 +98,7 @@ type spanStatsHistogramBucket struct {
 	sp      roachpb.Span
 	id      uintptr
 	counter uint64
+	nBytes 	uint64
 }
 
 func (s *spanStatsHistogramBucket) Range() interval.Range {

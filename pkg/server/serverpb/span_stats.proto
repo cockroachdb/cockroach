@@ -32,6 +32,7 @@ message SpanStatistics {
   SpanPretty pretty = 1;
   roachpb.Span span = 2;
   uint64 batch_requests = 3;
+  uint64 n_bytes = 4;
 }
 
 message Sample {
@@ -53,6 +54,7 @@ message GetNodeSpanStatsResponse {
   message NodeSpanStat {
     roachpb.Span span = 1;
     uint64 batch_requests = 2;
+    uint64 n_bytes = 3;
   }
   repeated NodeSpanStat stats = 1;
 }
