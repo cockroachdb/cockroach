@@ -2003,6 +2003,13 @@ func TestTenantLogic_virtual_columns(
 	runLogicTest(t, "virtual_columns")
 }
 
+func TestTenantLogic_virtual_table_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "virtual_table_privileges")
+}
+
 func TestTenantLogic_void(
 	t *testing.T,
 ) {
