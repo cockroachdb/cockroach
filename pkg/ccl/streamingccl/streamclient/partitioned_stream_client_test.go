@@ -11,6 +11,7 @@ package streamclient
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,16 +24,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -189,7 +194,12 @@ INSERT INTO d.t2 VALUES (2);
 
 	// Test if Subscribe can react to cancellation signal.
 	cancelFn()
-	require.ErrorIs(t, cg.Wait(), context.Canceled)
+
+	// When the context is cancelled, lib/pq sends a query cancellation message to
+	// the server. Occasionally, we see the error from this cancellation before
+	// the subscribe function sees our local context cancellation.
+	err = cg.Wait()
+	require.True(t, errors.Is(err, context.Canceled) || isQueryCanceledError(err))
 
 	// Testing client.Complete()
 	err = client.Complete(ctx, streaming.StreamID(999))
@@ -204,4 +214,13 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'
 	require.NoError(t, client.Complete(ctx, streamID))
 	h.SysDB.CheckQueryResultsRetry(t,
 		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})
+}
+
+// isQueryCanceledError returns true if the error appears to be a query cancelled error.
+func isQueryCanceledError(err error) bool {
+	var pqErr pq.Error
+	if ok := errors.As(err, &pqErr); ok {
+		return pqErr.Code == pq.ErrorCode(pgcode.QueryCanceled.String())
+	}
+	return strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error())
 }
