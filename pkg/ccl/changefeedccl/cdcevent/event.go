@@ -98,6 +98,9 @@ func (r Row) DatumAt(at int) (tree.Datum, error) {
 		return nil, errors.AssertionFailedf("column at %d out of bounds", at)
 	}
 	col := r.cols[at]
+	if col.ord >= len(r.datums) {
+		return nil, errors.AssertionFailedf("column ordinal at %d out of bounds", col.ord)
+	}
 	encDatum := r.datums[col.ord]
 	if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
 		return nil, errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
