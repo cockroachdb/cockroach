@@ -1,0 +1,190 @@
+setup
+CREATE DATABASE db;
+CREATE SCHEMA db.sc;
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++schema {104 0 sc} -> 106
+
+test
+DROP SCHEMA db.sc;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
+## StatementPhase stage 1 of 1 with 3 MutationType ops
+delete schema namespace entry {104 0 sc} -> 106
+upsert descriptor #104
+   database:
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: db
+     privileges:
+  ...
+       public:
+         id: 105
+  -    sc:
+  -      id: 106
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+   schema:
+     id: 106
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: sc
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     id: 104
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: db
+     privileges:
+  ...
+upsert descriptor #106
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc›
+  +        statement: DROP SCHEMA db.sc
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    targets:
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 106
+  +          name: sc
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 106
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          privileges: 2
+  +          userName: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 106
+  +          privileges: 2
+  +          userName: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schema:
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaParent:
+  +          parentDatabaseId: 104
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 106
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sc
+     parentId: 104
+  ...
+create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
+  descriptor IDs: [104 106]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+upsert descriptor #104
+   database:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: db
+     privileges:
+  ...
+       public:
+         id: 105
+  -  version: "3"
+  +  version: "4"
+delete descriptor #106
+write *eventpb.DropSchema to event log for descriptor #106: DROP SCHEMA ‹db›.‹sc›
+update progress of schema change job #1: "all stages completed"
+commit transaction #3
+# end PostCommitPhase
+
+setup
+CREATE SCHEMA db.sc;
+CREATE TABLE db.sc.t (k INT, v STRING);
+CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
+----
+...
++schema {104 0 sc} -> 107
++object {104 107 t} -> 108
++object {104 107 e} -> 109
++object {104 107 _e} -> 110
