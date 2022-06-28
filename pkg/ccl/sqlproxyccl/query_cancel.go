@@ -14,6 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgio"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 )
 
@@ -36,13 +38,8 @@ func makeCancelInfo(
 	origKeyData *pgproto3.BackendKeyData, localAddr, crdbAddr, clientAddr net.Addr,
 ) *cancelInfo {
 	proxySecretID := randutil.FastUint32()
-	localIP := localAddr.(*net.TCPAddr).IP.To4()
-	if localIP == nil {
-		// IP may be nil if the local address was an IPv6 address.
-		localIP = make([]byte, 4)
-	}
 	proxyKeyData := &pgproto3.BackendKeyData{
-		ProcessID: binary.BigEndian.Uint32(localIP),
+		ProcessID: encodeIP(localAddr.(*net.TCPAddr).IP),
 		SecretKey: proxySecretID,
 	}
 	return &cancelInfo{
@@ -53,10 +50,21 @@ func makeCancelInfo(
 	}
 }
 
-// proxyIP returns the IP address that is embedded in the given CancelRequest.
-func toProxyIP(req *pgproto3.CancelRequest) net.IP {
+// encodeIP returns a uint32 that contains the given IPv4 address. If the
+// address is IPv6, then 0 is returned.
+func encodeIP(src net.IP) uint32 {
+	i := src.To4()
+	if i == nil {
+		// i may be nil if the address was an IPv6 address.
+		i = make([]byte, 4)
+	}
+	return binary.BigEndian.Uint32(i)
+}
+
+// decodeIP returns the IP address that is encoded in the uint32.
+func decodeIP(src uint32) net.IP {
 	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, req.ProcessID)
+	binary.BigEndian.PutUint32(ip, src)
 	return ip
 }
 
@@ -97,4 +105,43 @@ func (c *cancelInfoMap) getCancelInfo(proxySecretID uint32) (*cancelInfo, bool) 
 	defer c.RUnlock()
 	i, ok := c.m[proxySecretID]
 	return i, ok
+}
+
+// proxyCancelRequestCode identifies a proxyCancelRequest and distinguishes it
+// from CancelRequest, StartupMessage, SSLRequest, and GSSEncRequest.
+const proxyCancelRequestCode = 80877101
+
+// proxyCancelRequest is a pgwire cancel request that must be forwarded from
+// one proxy to another.
+type proxyCancelRequest struct {
+	ProxyIP   net.IP
+	SecretKey uint32
+	ClientIP  net.IP
+}
+
+// Frontend identifies this message as sendable by a PostgreSQL frontend.
+func (*proxyCancelRequest) Frontend() {}
+
+func (r *proxyCancelRequest) Decode(src []byte) error {
+	if len(src) != 16 {
+		return errors.New("bad cancel request size")
+	}
+	requestCode := binary.BigEndian.Uint32(src)
+	if requestCode != proxyCancelRequestCode {
+		return errors.New("bad proxy cancel request code")
+	}
+	r.ProxyIP = decodeIP(binary.BigEndian.Uint32(src[4:]))
+	r.SecretKey = binary.BigEndian.Uint32(src[8:])
+	r.ClientIP = decodeIP(binary.BigEndian.Uint32(src[12:]))
+	return nil
+}
+
+// Encode encodes src into dst. dst will include the 4 byte message length.
+func (r *proxyCancelRequest) Encode(dst []byte) []byte {
+	dst = pgio.AppendInt32(dst, 20)
+	dst = pgio.AppendInt32(dst, proxyCancelRequestCode)
+	dst = pgio.AppendUint32(dst, encodeIP(r.ProxyIP))
+	dst = pgio.AppendUint32(dst, r.SecretKey)
+	dst = pgio.AppendUint32(dst, encodeIP(r.ClientIP))
+	return dst
 }

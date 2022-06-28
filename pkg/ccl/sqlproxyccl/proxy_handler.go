@@ -462,8 +462,13 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 
 // handleCancelRequest handles a pgwire query cancel request by either
 // forwarding it to a SQL node or to another proxy.
-func (handler *proxyHandler) handleCancelRequest(cr *pgproto3.CancelRequest) error {
+func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest) error {
 	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
+		if !ci.clientAddr.(*net.TCPAddr).IP.Equal(cr.ClientIP) {
+			// If the IP associated with the cancelInfo does not match the IP from
+			// which the request came, then ignore it.
+			return errors.Errorf("mismatched client IP for cancel request")
+		}
 		cancelConn, err := net.DialTimeout("tcp", ci.crdbAddr.String(), 5*time.Second)
 		if err != nil {
 			return err
@@ -472,11 +477,11 @@ func (handler *proxyHandler) handleCancelRequest(cr *pgproto3.CancelRequest) err
 		if err := cancelConn.SetDeadline(timeutil.Now().Add(5 * time.Second)); err != nil {
 			return err
 		}
-		cr = &pgproto3.CancelRequest{
+		crdbRequest := &pgproto3.CancelRequest{
 			ProcessID: ci.origBackendKeyData.ProcessID,
 			SecretKey: ci.origBackendKeyData.SecretKey,
 		}
-		buf := cr.Encode(nil /* buf */)
+		buf := crdbRequest.Encode(nil /* buf */)
 		if _, err := cancelConn.Write(buf); err != nil {
 			return err
 		}
@@ -484,7 +489,21 @@ func (handler *proxyHandler) handleCancelRequest(cr *pgproto3.CancelRequest) err
 			return err
 		}
 	}
-	// TODO(rafi): add logic for forwarding to another proxy.
+	forwardConn, err := net.DialTimeout("tcp", cr.ProxyIP.String()+":26257", 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer forwardConn.Close()
+	if err := forwardConn.SetDeadline(timeutil.Now().Add(5 * time.Second)); err != nil {
+		return err
+	}
+	buf := cr.Encode(nil /* buf */)
+	if _, err := forwardConn.Write(buf); err != nil {
+		return err
+	}
+	if _, err := forwardConn.Read(buf); err != io.EOF {
+		return err
+	}
 	return nil
 }
 

@@ -10,6 +10,9 @@ package sqlproxyccl
 
 import (
 	"crypto/tls"
+	"encoding/binary"
+	"fmt"
+	"io"
 	"net"
 
 	"github.com/jackc/pgproto3/v2"
@@ -29,7 +32,7 @@ type FrontendAdmitInfo struct {
 	// client.
 	SniServerName string
 	// CancelRequest corresponds to a cancel request received from the client.
-	CancelRequest *pgproto3.CancelRequest
+	CancelRequest *proxyCancelRequest
 }
 
 // FrontendAdmit is the default implementation of a frontend admitter. It can
@@ -46,7 +49,7 @@ var FrontendAdmit = func(
 	// the latter will not call `Close` method of `tls.Conn`.
 
 	// Read first message from client.
-	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
+	m, err := receiveStartupMessage(pgproto3.NewChunkReader(conn))
 	if err != nil {
 		return &FrontendAdmitInfo{
 			Conn: conn, Err: newErrorf(codeClientReadFailed, "while receiving startup message"),
@@ -54,10 +57,22 @@ var FrontendAdmit = func(
 	}
 
 	// CancelRequest is unencrypted and unauthenticated, regardless of whether
-	// the server requires TLS connections. For now, ignore the request to cancel,
-	// and send back a nil StartupMessage, which will cause the proxy to just
-	// close the connection in response.
+	// the server requires TLS connections.
 	if c, ok := m.(*pgproto3.CancelRequest); ok {
+		// Craft a proxyCancelRequest in case we need to forward the request.
+		cr := &proxyCancelRequest{
+			ProxyIP:   decodeIP(c.ProcessID),
+			SecretKey: c.SecretKey,
+			ClientIP:  conn.RemoteAddr().(*net.TCPAddr).IP,
+		}
+		return &FrontendAdmitInfo{
+			Conn:          conn,
+			CancelRequest: cr,
+		}
+	}
+	// proxyCancelRequest is also unencrypted, and if it's received we can
+	// deal with it as-is.
+	if c, ok := m.(*proxyCancelRequest); ok {
 		return &FrontendAdmitInfo{
 			Conn:          conn,
 			CancelRequest: c,
@@ -120,4 +135,63 @@ var FrontendAdmit = func(
 		Conn: conn,
 		Err:  newErrorf(code, "unsupported post-TLS startup message: %T", m),
 	}
+}
+
+// receiveStartupMessage receives the initial connection message. This is a
+// replacement for the (*Backend).ReceiveStartupMessage function from
+// jackc/pgproto3. We need this customized implementation in order to support
+// our proxyCancelRequest message, which is used to forward pgwire cancel
+// requests from one proxy to another. This
+// will return either a StartupMessage, SSLRequest, GSSEncRequest,
+// CancelRequest, or proxyCancelRequest.
+func receiveStartupMessage(cr pgproto3.ChunkReader) (pgproto3.FrontendMessage, error) {
+	buf, err := cr.Next(4)
+	if err != nil {
+		return nil, err
+	}
+	msgSize := int(binary.BigEndian.Uint32(buf) - 4)
+
+	if msgSize < 4 || msgSize > 10000 {
+		return nil, fmt.Errorf("invalid length of startup packet: %d", msgSize)
+	}
+
+	buf, err = cr.Next(msgSize)
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return nil, err
+	}
+
+	code := binary.BigEndian.Uint32(buf)
+
+	const (
+		protocolVersionNumber = 196608 // 3.0
+		cancelRequestCode     = 80877102
+		sslRequestNumber      = 80877103
+		gssEncReqNumber       = 80877104
+		// customProxyCancelRequestCode is defined here to make it more clear
+		// how it is used alongside the other protocol codes.
+		customProxyCancelRequestCode = proxyCancelRequestCode
+	)
+	var m pgproto3.FrontendMessage
+	switch code {
+	case protocolVersionNumber:
+		m = &pgproto3.StartupMessage{}
+	case sslRequestNumber:
+		m = &pgproto3.SSLRequest{}
+	case cancelRequestCode:
+		m = &pgproto3.CancelRequest{}
+	case gssEncReqNumber:
+		m = &pgproto3.GSSEncRequest{}
+	case customProxyCancelRequestCode:
+		m = &proxyCancelRequest{}
+	default:
+		return nil, fmt.Errorf("unknown startup message code: %d", code)
+	}
+	err = m.Decode(buf)
+	if err != nil {
+		return nil, err
+	}
+	return m, nil
 }
