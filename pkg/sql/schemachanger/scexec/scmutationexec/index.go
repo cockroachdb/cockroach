@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -382,7 +381,6 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	// As a special case, avoid removing any columns from dropped indexes.
 	// The index is going to be removed, so it doesn't matter if it references
 	// dropped columns.
-	log.Infof(ctx, "yo sup, %d %d %v %v %v", op.IndexID, op.ColumnID, index.Dropped(), index.DeleteOnly(), index.Public())
 	if index.Dropped() {
 		return nil
 	}
