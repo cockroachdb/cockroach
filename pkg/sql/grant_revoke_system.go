@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -135,7 +136,7 @@ func (*changeNonDescriptorBackedPrivilegesNode) Close(context.Context)        {}
 func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject() catalog.SyntheticPrivilegeObject {
 	switch n.grantOn {
 	case privilege.Global:
-		return catalog.SystemClusterPrivilegeObject
+		return syntheticprivilege.GlobalPrivilegeObject
 	default:
 		panic(errors.AssertionFailedf("unknown grant on object %v", n.grantOn))
 	}

@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "systemprivilege",
+    srcs = ["system_privilege.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/systemprivilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "systemprivilege_test",
+    srcs = ["system_privilege_test.go"],
+    embed = [":systemprivilege"],
+    deps = [
+        "//pkg/sql/catalog",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "syntheticprivilege",
+    srcs = [
+        "global_privilege.go",
+        "synthetic_privilege_registry.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/catconstants",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "syntheticprivilege_test",
+    srcs = ["synthetic_privilege_registry_test.go"],
+    embed = [":syntheticprivilege"],
+    deps = [
+        "//pkg/sql/catalog",
+        "@com_github_stretchr_testify//require",
+    ],
+)

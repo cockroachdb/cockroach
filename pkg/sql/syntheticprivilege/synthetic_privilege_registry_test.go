@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package systemprivilege
+package syntheticprivilege
 
 import (
 	"reflect"
@@ -30,7 +30,7 @@ func TestParsePrivilegePath(t *testing.T) {
 		},
 		{
 			regex:        "/global/",
-			expectedType: catalog.SystemClusterPrivilegeObject,
+			expectedType: GlobalPrivilegeObject,
 		},
 		{
 			regex: "/global/unexpected",
