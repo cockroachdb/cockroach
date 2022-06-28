@@ -12,16 +12,13 @@ package stmtdiagnostics
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -38,7 +35,7 @@ import (
 )
 
 var pollingInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second)
@@ -80,19 +77,9 @@ type Registry struct {
 
 		rand *rand.Rand
 	}
-	st     *cluster.Settings
-	ie     sqlutil.InternalExecutor
-	db     *kv.DB
-	gossip gossip.OptionalGossip
-
-	// gossipUpdateChan is used to notify the polling loop that a diagnostics
-	// request has been added. The gossip callback will not block sending on this
-	// channel.
-	gossipUpdateChan chan RequestID
-	// gossipCancelChan is used to notify the polling loop that a diagnostics
-	// request has been canceled. The gossip callback will not block sending on
-	// this channel.
-	gossipCancelChan chan RequestID
+	st *cluster.Settings
+	ie sqlutil.InternalExecutor
+	db *kv.DB
 }
 
 // Request describes a statement diagnostics request along with some conditional
@@ -113,25 +100,13 @@ func (r *Request) isConditional() bool {
 }
 
 // NewRegistry constructs a new Registry.
-func NewRegistry(
-	ie sqlutil.InternalExecutor, db *kv.DB, gw gossip.OptionalGossip, st *cluster.Settings,
-) *Registry {
+func NewRegistry(ie sqlutil.InternalExecutor, db *kv.DB, st *cluster.Settings) *Registry {
 	r := &Registry{
-		ie:               ie,
-		db:               db,
-		gossip:           gw,
-		gossipUpdateChan: make(chan RequestID, 1),
-		gossipCancelChan: make(chan RequestID, 1),
-		st:               st,
+		ie: ie,
+		db: db,
+		st: st,
 	}
 	r.mu.rand = rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-
-	// Some tests pass a nil gossip, and gossip is not available on SQL tenant
-	// servers.
-	g, ok := gw.Optional(47893)
-	if ok && g != nil {
-		g.RegisterCallback(gossip.KeyGossipStatementDiagnosticsRequest, r.gossipNotification)
-	}
 	return r
 }
 
@@ -187,17 +162,6 @@ func (r *Registry) poll(ctx context.Context) {
 		select {
 		case <-pollIntervalChanged:
 			continue // go back around and maybe reset the timer
-		case reqID := <-r.gossipUpdateChan:
-			if r.findRequest(reqID) {
-				continue // request already exists, don't do anything
-			}
-			// Poll the data.
-		case reqID := <-r.gossipCancelChan:
-			r.cancelRequest(reqID)
-			// No need to poll the data (unlike above) because we don't have to
-			// read anything of the system table to remove the request from the
-			// registry.
-			continue
 		case <-timer.C:
 			timer.Read = true
 		case <-ctx.Done():
@@ -239,12 +203,6 @@ func (r *Registry) addRequestInternalLocked(
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
 	}
-}
-
-func (r *Registry) findRequest(requestID RequestID) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.findRequestLocked(requestID)
 }
 
 // findRequestLocked returns whether the request already exists. If the request
@@ -291,11 +249,6 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
-	g, err := r.gossip.OptionalErr(48274)
-	if err != nil {
-		return 0, err
-	}
-
 	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs)
 	if !isSamplingProbabilitySupported && samplingProbability != 0 {
 		return 0, errors.New(
@@ -315,7 +268,7 @@ func (r *Registry) insertRequestInternal(
 
 	var reqID RequestID
 	var expiresAt time.Time
-	err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
 			sessiondata.InternalExecutorOverride{
@@ -393,23 +346,11 @@ func (r *Registry) insertRequestInternal(
 		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
 	}()
 
-	// Notify all the other nodes that they have to poll.
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(reqID))
-	if err := g.AddInfo(gossip.KeyGossipStatementDiagnosticsRequest, buf, 0 /* ttl */); err != nil {
-		log.Warningf(ctx, "error notifying of diagnostics request: %s", err)
-	}
-
 	return reqID, nil
 }
 
 // CancelRequest is part of the server.StmtDiagnosticsRequester interface.
 func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
-	g, err := r.gossip.OptionalErr(48274)
-	if err != nil {
-		return err
-	}
-
 	row, err := r.ie.QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User: username.RootUserName(),
@@ -434,13 +375,6 @@ func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 
 	reqID := RequestID(requestID)
 	r.cancelRequest(reqID)
-
-	// Notify all the other nodes that this request has been canceled.
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(reqID))
-	if err := g.AddInfo(gossip.KeyGossipStatementDiagnosticsRequestCancellation, buf, 0 /* ttl */); err != nil {
-		log.Warningf(ctx, "error notifying of diagnostics request cancellation: %s", err)
-	}
 
 	return nil
 }
@@ -731,27 +665,4 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// gossipNotification is called in response to a gossip update informing us that
-// we need to poll.
-func (r *Registry) gossipNotification(s string, value roachpb.Value) {
-	switch s {
-	case gossip.KeyGossipStatementDiagnosticsRequest:
-		select {
-		case r.gossipUpdateChan <- RequestID(binary.LittleEndian.Uint64(value.RawBytes)):
-		default:
-			// Don't pile up on these requests and don't block gossip.
-		}
-	case gossip.KeyGossipStatementDiagnosticsRequestCancellation:
-		select {
-		case r.gossipCancelChan <- RequestID(binary.LittleEndian.Uint64(value.RawBytes)):
-		default:
-			// Don't pile up on these requests and don't block gossip.
-		}
-	default:
-		// We don't expect any other notifications. Perhaps in a future version
-		// we added other keys with the same prefix.
-		return
-	}
 }
