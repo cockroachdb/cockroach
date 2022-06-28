@@ -28,10 +28,15 @@ const (
 	// backup is not said to have complete table coverage unless it was created
 	// by a `BACKUP TO` command.
 	RequestedDescriptors DescriptorCoverage = iota
+
 	// AllDescriptors table coverage means that backup is guaranteed to have all the
 	// relevant data in the cluster. These can only be created by running a
 	// full cluster backup with `BACKUP TO`.
 	AllDescriptors
+
+	// SystemUsers coverage indicates that only the system.users
+	// table will covered in the restore.
+	SystemUsers
 )
 
 // BackupOptions describes options for the BACKUP execution.
@@ -139,9 +144,7 @@ var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets TargetList
-	// Whether this is the RESTORE SYSTEM USERS variant of RESTORE statement.
-	SystemUsers        bool
+	Targets            TargetList
 	DescriptorCoverage DescriptorCoverage
 
 	// From contains the URIs for the backup(s) we seek to restore.

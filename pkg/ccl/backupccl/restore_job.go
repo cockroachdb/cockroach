@@ -1265,6 +1265,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
+	// To maintain mixed version compatibility where we plan RESTORE SYSTEM USERS on 22.1
+	// (not aware of the tree.SystemUsers enum) but execute on 22.2.
+	if details.RestoreSystemUsers {
+		details.DescriptorCoverage = tree.SystemUsers
+	}
+
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption,
 	)
@@ -1509,7 +1515,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := r.cleanupTempSystemTables(ctx, nil /* txn */); err != nil {
 			return err
 		}
-	} else if details.RestoreSystemUsers {
+	} else if details.DescriptorCoverage == tree.SystemUsers {
 		if err := r.restoreSystemUsers(ctx, p.ExecCfg().DB, mainData.systemTables); err != nil {
 			return err
 		}
@@ -1676,7 +1682,7 @@ func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
 // This is the last of the IDs pre-allocated by the restore planner.
 // TODO(postamar): Store it directly in the details instead? This is brittle.
 func tempSystemDatabaseID(details jobspb.RestoreDetails) descpb.ID {
-	if details.DescriptorCoverage != tree.AllDescriptors && !details.RestoreSystemUsers {
+	if details.DescriptorCoverage != tree.AllDescriptors && details.DescriptorCoverage != tree.SystemUsers {
 		return descpb.InvalidID
 	}
 	var maxPreAllocatedID descpb.ID
