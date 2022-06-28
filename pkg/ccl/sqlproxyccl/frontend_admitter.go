@@ -29,7 +29,7 @@ type FrontendAdmitInfo struct {
 	// client.
 	SniServerName string
 	// CancelRequest corresponds to a cancel request received from the client.
-	CancelRequest *pgproto3.CancelRequest
+	CancelRequest *proxyCancelRequest
 }
 
 // FrontendAdmit is the default implementation of a frontend admitter. It can
@@ -54,13 +54,17 @@ var FrontendAdmit = func(
 	}
 
 	// CancelRequest is unencrypted and unauthenticated, regardless of whether
-	// the server requires TLS connections. For now, ignore the request to cancel,
-	// and send back a nil StartupMessage, which will cause the proxy to just
-	// close the connection in response.
+	// the server requires TLS connections.
 	if c, ok := m.(*pgproto3.CancelRequest); ok {
+		// Craft a proxyCancelRequest in case we need to forward the request.
+		cr := &proxyCancelRequest{
+			ProxyIP:   decodeIP(c.ProcessID),
+			SecretKey: c.SecretKey,
+			ClientIP:  conn.RemoteAddr().(*net.TCPAddr).IP,
+		}
 		return &FrontendAdmitInfo{
 			Conn:          conn,
-			CancelRequest: c,
+			CancelRequest: cr,
 		}
 	}
 

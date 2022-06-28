@@ -46,13 +46,8 @@ type cancelInfo struct {
 // and cancel key.
 func makeCancelInfo(localAddr, clientAddr net.Addr) *cancelInfo {
 	proxySecretID := randutil.FastUint32()
-	localIP := localAddr.(*net.TCPAddr).IP.To4()
-	if localIP == nil {
-		// IP may be nil if the local address was an IPv6 address.
-		localIP = make([]byte, 4)
-	}
 	proxyKeyData := &pgproto3.BackendKeyData{
-		ProcessID: binary.BigEndian.Uint32(localIP),
+		ProcessID: encodeIP(localAddr.(*net.TCPAddr).IP),
 		SecretKey: proxySecretID,
 	}
 	return &cancelInfo{
@@ -61,10 +56,21 @@ func makeCancelInfo(localAddr, clientAddr net.Addr) *cancelInfo {
 	}
 }
 
-// proxyIP returns the IP address that is embedded in the given CancelRequest.
-func toProxyIP(req *pgproto3.CancelRequest) net.IP {
+// encodeIP returns a uint32 that contains the given IPv4 address. If the
+// address is IPv6, then 0 is returned.
+func encodeIP(src net.IP) uint32 {
+	i := src.To4()
+	if i == nil {
+		// i may be nil if the address was an IPv6 address.
+		i = make([]byte, 4)
+	}
+	return binary.BigEndian.Uint32(i)
+}
+
+// decodeIP returns the IP address that is encoded in the uint32.
+func decodeIP(src uint32) net.IP {
 	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, req.ProcessID)
+	binary.BigEndian.PutUint32(ip, src)
 	return ip
 }
 
@@ -154,4 +160,34 @@ func (c *cancelInfoMap) getCancelInfo(proxySecretID uint32) (*cancelInfo, bool) 
 	defer c.RUnlock()
 	i, ok := c.m[proxySecretID]
 	return i, ok
+}
+
+const proxyCancelRequestLen = 12
+
+// proxyCancelRequest is a pgwire cancel request that is forwarded from
+// one proxy to another.
+type proxyCancelRequest struct {
+	ProxyIP   net.IP
+	SecretKey uint32
+	ClientIP  net.IP
+}
+
+// Decode decodes src into r.
+func (r *proxyCancelRequest) Decode(src []byte) error {
+	if len(src) != proxyCancelRequestLen {
+		return errors.New("bad cancel request size")
+	}
+	r.ProxyIP = decodeIP(binary.BigEndian.Uint32(src))
+	r.SecretKey = binary.BigEndian.Uint32(src[4:])
+	r.ClientIP = decodeIP(binary.BigEndian.Uint32(src[8:]))
+	return nil
+}
+
+// Encode encodes r and returns the bytes.
+func (r *proxyCancelRequest) Encode() []byte {
+	dst := make([]byte, proxyCancelRequestLen)
+	binary.BigEndian.PutUint32(dst, encodeIP(r.ProxyIP))
+	binary.BigEndian.PutUint32(dst[4:], r.SecretKey)
+	binary.BigEndian.PutUint32(dst[8:], encodeIP(r.ClientIP))
+	return dst
 }
