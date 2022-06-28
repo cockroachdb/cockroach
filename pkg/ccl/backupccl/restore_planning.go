@@ -1103,11 +1103,14 @@ func restorePlanHook(
 
 	var newDBNameFn func() (string, error)
 	if restoreStmt.Options.NewDBName != nil {
-		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || len(restoreStmt.Targets.
-			Databases) != 1 || restoreStmt.DescriptorCoverage == tree.SystemUsers {
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
+			len(restoreStmt.Targets.Databases) != 1 {
 			err = errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
 				" database")
 			return nil, nil, nil, false, err
+		}
+		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
+			return nil, nil, nil, false, errors.New("cannot set new_db_name option when only restoring system users")
 		}
 		newDBNameFn, err = p.TypeAsString(ctx, restoreStmt.Options.NewDBName, "RESTORE")
 		if err != nil {
@@ -1807,14 +1810,6 @@ func doRestorePlan(
 		encodedTables[i] = table.TableDesc()
 	}
 
-	// To maintain mixed version compatibility when we plan on 22.2 ( aware of the
-	// tree.SystemUsers enum) and execute on 22.1 (not aware of tree.SystemUsers
-	// enum), keep the RestoreSystemUsers field in jobspb.RestoreDetails
-	var restoreSystemUsers bool
-	if restoreStmt.DescriptorCoverage == tree.SystemUsers {
-		restoreSystemUsers = true
-	}
-
 	jr := jobs.Record{
 		Description: description,
 		Username:    p.User(),
@@ -1837,7 +1832,14 @@ func doRestorePlan(
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
 			DebugPauseOn:       debugPauseOn,
-			RestoreSystemUsers: restoreSystemUsers,
+
+			// A RESTORE SYSTEM USERS planned on a 22.1 node will use the
+			// RestoreSystemUsers field in the job details to identify this flavour of
+			// RESTORE. We must continue to check this field for mixed-version
+			// compatability.
+			//
+			// TODO(msbutler): Delete in 23.1
+			RestoreSystemUsers: restoreStmt.DescriptorCoverage == tree.SystemUsers,
 			PreRewriteTenantId: oldTenantID,
 			Validation:         jobspb.RestoreValidation_DefaultRestore,
 		},

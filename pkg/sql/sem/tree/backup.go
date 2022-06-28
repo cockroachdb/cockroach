@@ -15,9 +15,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// DescriptorCoverage specifies whether or not a subset of descriptors were
-// requested or if all the descriptors were requested, so all the descriptors
-// are covered in a given backup.
+// DescriptorCoverage specifies the subset of descriptors that are requested during a backup
+// or a restore.
 type DescriptorCoverage int32
 
 const (
@@ -35,7 +34,7 @@ const (
 	AllDescriptors
 
 	// SystemUsers coverage indicates that only the system.users
-	// table will covered in the restore.
+	// table will be restored from the backup.
 	SystemUsers
 )
 
