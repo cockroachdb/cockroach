@@ -43,6 +43,7 @@ import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
 import { performanceTuningRecipes } from "src/util/docs";
+import { DATE_FORMAT_24_UTC } from "src/util/format";
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
@@ -241,9 +242,7 @@ export class DatabaseTablePage extends React.Component<
     if (lastReset.isSame(this.minDate)) {
       return "Last reset: Never";
     } else {
-      return (
-        "Last reset: " + lastReset.format("MMM DD, YYYY [at] H:mm [(UTC)]")
-      );
+      return "Last reset: " + lastReset.format(DATE_FORMAT_24_UTC);
     }
   }
 

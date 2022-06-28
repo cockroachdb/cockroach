@@ -33,7 +33,7 @@ import {
   SortSetting,
   util,
 } from "@cockroachlabs/cluster-ui";
-import { Percentage } from "src/util/format";
+import { DATE_FORMAT_24_UTC, Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
@@ -440,7 +440,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "decommissionedSince",
       title: "decommissioned on",
       render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        record.decommissionedDate.format("LL[ at ]H:mm UTC"),
+        record.decommissionedDate.format(DATE_FORMAT_24_UTC),
     },
     {
       key: "status",

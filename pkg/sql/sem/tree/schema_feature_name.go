@@ -24,7 +24,7 @@ func GetSchemaFeatureNameFromStmt(stmt Statement) SchemaFeatureName {
 
 	switch stmt.(type) {
 	case *CommentOnDatabase, *CommentOnSchema, *CommentOnTable,
-		*CommentOnColumn, *CommentOnIndex, *CommentOnConstraint:
+		*CommentOnColumn, *CommentOnIndex, *CommentOnConstraint, *DropOwnedBy:
 		return SchemaFeatureName(statementTag)
 	}
 	// Only grab the first two words (i.e. ALTER TABLE, etc..).

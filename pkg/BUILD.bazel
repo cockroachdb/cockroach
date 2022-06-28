@@ -10,6 +10,8 @@ ALL_TESTS = [
     "//pkg/build/starlarkutil:starlarkutil_test",
     "//pkg/build/util:util_test",
     "//pkg/ccl/backupccl/backupdest:backupdest_test",
+    "//pkg/ccl/backupccl/backupinfo:backupinfo_disallowed_imports_test",
+    "//pkg/ccl/backupccl/backupinfo:backupinfo_test",
     "//pkg/ccl/backupccl/backupresolver:backupresolver_test",
     "//pkg/ccl/backupccl:backupccl_test",
     "//pkg/ccl/baseccl:baseccl_test",

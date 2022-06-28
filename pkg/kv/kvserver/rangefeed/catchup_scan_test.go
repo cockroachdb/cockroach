@@ -26,6 +26,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO(erikgrinaker): This should be migrated to a data-driven test harness for
+// end-to-end rangefeed testing, with more exhaustive test cases. See:
+// https://github.com/cockroachdb/cockroach/issues/82715
+//
+// For now, see rangefeed_external_test.go for rudimentary range key tests.
 func TestCatchupScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -198,6 +198,13 @@ func (r *registration) validateEvent(event *roachpb.RangeFeedEvent) {
 		if t.WriteTS.IsEmpty() {
 			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Timestamp: %v", t))
 		}
+	case *roachpb.RangeFeedDeleteRange:
+		if len(t.Span.Key) == 0 || len(t.Span.EndKey) == 0 {
+			panic(fmt.Sprintf("unexpected empty key in RangeFeedDeleteRange.Span: %v", t))
+		}
+		if t.Timestamp.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedDeleteRange.Timestamp: %v", t))
+		}
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
@@ -243,6 +250,12 @@ func (r *registration) maybeStripEvent(event *roachpb.RangeFeedEvent) *roachpb.R
 			}
 			t = copyOnWrite().(*roachpb.RangeFeedCheckpoint)
 			t.Span = r.span
+		}
+	case *roachpb.RangeFeedDeleteRange:
+		// Truncate the range tombstone to the registration bounds.
+		if i := t.Span.Intersect(r.span); !i.Equal(t.Span) {
+			t = copyOnWrite().(*roachpb.RangeFeedDeleteRange)
+			t.Span = i.Clone()
 		}
 	case *roachpb.RangeFeedSSTable:
 		// SSTs are always sent in their entirety, it is up to the caller to
@@ -440,6 +453,8 @@ func (reg *registry) PublishToOverlapping(
 		minTS = t.Value.Timestamp
 	case *roachpb.RangeFeedSSTable:
 		minTS = t.WriteTS
+	case *roachpb.RangeFeedDeleteRange:
+		minTS = t.Timestamp
 	case *roachpb.RangeFeedCheckpoint:
 		// Always publish checkpoint notifications, regardless of a registration's
 		// starting timestamp.

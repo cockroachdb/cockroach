@@ -190,9 +190,9 @@ func (s *Container) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
 	lastSampled := s.getLogicalPlanLastSampled(sampledPlanKey{
-		anonymizedStmt: fingerprint,
-		implicitTxn:    implicitTxn,
-		database:       database,
+		stmtNoConstants: fingerprint,
+		implicitTxn:     implicitTxn,
+		database:        database,
 	})
 	return s.shouldSaveLogicalPlanDescription(lastSampled)
 }

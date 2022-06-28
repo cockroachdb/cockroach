@@ -175,7 +175,7 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 	opts.FS = vfs.Default
 	opts.LBaseMaxBytes = lBaseMaxBytes
 	opts.ReadOnly = readOnly
-	opts.FormatMajorVersion = pebble.FormatBlockPropertyCollector
+	opts.FormatMajorVersion = pebble.FormatRangeKeys
 	peb, err := storage.NewPebble(
 		context.Background(),
 		storage.PebbleConfig{

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
@@ -140,7 +141,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		require.True(t, isGZipped(backupManifestBytes))
+		require.True(t, backupinfo.IsGZipped(backupManifestBytes))
 	})
 
 	sqlDB.Exec(t, "CREATE DATABASE data2")
@@ -297,7 +298,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					require.True(t, isGZipped(backupPartitionBytes))
+					require.True(t, backupinfo.IsGZipped(backupPartitionBytes))
 				}
 			}
 		}
@@ -1535,7 +1536,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			testName            string
 			checkpointDirectory string
 		}{
-			{testName: "backup-progress-directory", checkpointDirectory: "/" + backupProgressDirectory},
+			{testName: "backup-progress-directory", checkpointDirectory: "/" + backupinfo.BackupProgressDirectory},
 			{testName: "backup-base-directory", checkpointDirectory: ""},
 		} {
 			item := item
@@ -1561,7 +1562,7 @@ func TestBackupRestoreResume(t *testing.T) {
 				if err := os.MkdirAll(backupDir+item.checkpointDirectory, 0755); err != nil {
 					t.Fatal(err)
 				}
-				checkpointFile := backupDir + item.checkpointDirectory + "/" + backupManifestCheckpointName
+				checkpointFile := backupDir + item.checkpointDirectory + "/" + backupinfo.BackupManifestCheckpointName
 				if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 					t.Fatal(err)
 				}
@@ -1581,8 +1582,8 @@ func TestBackupRestoreResume(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if isGZipped(backupManifestBytes) {
-					backupManifestBytes, err = decompressData(ctx, nil, backupManifestBytes)
+				if backupinfo.IsGZipped(backupManifestBytes) {
+					backupManifestBytes, err = backupinfo.DecompressData(ctx, nil, backupManifestBytes)
 					require.NoError(t, err)
 				}
 				var backupManifest backuppb.BackupManifest
@@ -3918,8 +3919,8 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if isGZipped(backupManifestBytes) {
-			backupManifestBytes, err = decompressData(context.Background(), nil, backupManifestBytes)
+		if backupinfo.IsGZipped(backupManifestBytes) {
+			backupManifestBytes, err = backupinfo.DecompressData(context.Background(), nil, backupManifestBytes)
 			require.NoError(t, err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
@@ -5774,8 +5775,7 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	statsTable := backuppb.StatsTable{
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
 	}
-	require.NoError(t, writeTableStatistics(ctx, store, backupStatisticsFileName,
-		nil /* encryption */, &statsTable))
+	require.NoError(t, backupinfo.WriteTableStatistics(ctx, store, nil /* encryption */, &statsTable))
 
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s" WITH skip_missing_foreign_keys, into_db = "%s"`,
@@ -5783,7 +5783,7 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 
 	// Delete the stats file to ensure a restore can succeed even if statistics do
 	// not exist.
-	require.NoError(t, store.Delete(ctx, backupStatisticsFileName))
+	require.NoError(t, store.Delete(ctx, backupinfo.BackupStatisticsFileName))
 	sqlDB.Exec(t, `CREATE DATABASE "data 3"`)
 	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s" WITH skip_missing_foreign_keys, into_db = "%s"`,
 		dest, "data 3"))
@@ -8018,8 +8018,8 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	for i := 0; i < magic; i++ {
 		desc.Files = append(desc.Files, backuppb.BackupManifest_File{Path: fmt.Sprintf("%d-file-%d", i, i)})
 	}
-	require.NoError(t, writeBackupManifest(ctx, st, storage, "testmanifest", encOpts, desc))
-	_, sz, err := readBackupManifest(ctx, &mem, storage, "testmanifest", encOpts)
+	require.NoError(t, backupinfo.WriteBackupManifest(ctx, st, storage, "testmanifest", encOpts, desc))
+	_, sz, err := backupinfo.ReadBackupManifest(ctx, &mem, storage, "testmanifest", encOpts)
 	require.NoError(t, err)
 	mem.Shrink(ctx, sz)
 	mem.Close(ctx)
@@ -8041,7 +8041,7 @@ func TestManifestTooNew(t *testing.T) {
 	manifestPath := filepath.Join(rawDir, "too_new", backupbase.BackupManifestName)
 	manifestData, err := ioutil.ReadFile(manifestPath)
 	require.NoError(t, err)
-	manifestData, err = decompressData(context.Background(), nil, manifestData)
+	manifestData, err = backupinfo.DecompressData(context.Background(), nil, manifestData)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
 	require.NoError(t, protoutil.Unmarshal(manifestData, &backupManifest))
@@ -8052,9 +8052,9 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ioutil.WriteFile(manifestPath, manifestData, 0644 /* perm */))
 	// Also write the checksum file to match the new manifest.
-	checksum, err := getChecksum(manifestData)
+	checksum, err := backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath+backupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	require.NoError(t, ioutil.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
 	// Verify we reject it.
 	sqlDB.ExpectErr(t, "backup from version 99.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
@@ -8065,9 +8065,9 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ioutil.WriteFile(manifestPath, manifestData, 0644 /* perm */))
 	// Also write the checksum file to match the new manifest.
-	checksum, err = getChecksum(manifestData)
+	checksum, err = backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath+backupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	require.NoError(t, ioutil.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 
 	// Prove we can restore again.
 	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
@@ -8079,9 +8079,9 @@ func TestManifestTooNew(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ioutil.WriteFile(manifestPath, manifestData, 0644 /* perm */))
 	// Also write the checksum file to match the new manifest.
-	checksum, err = getChecksum(manifestData)
+	checksum, err = backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(manifestPath+backupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	require.NoError(t, ioutil.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
 	// Prove we can restore again.
 	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -9787,8 +9787,8 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	require.NoError(t, store.List(ctx, latestFilePath+"/progress/", "", func(f string) error {
 		// Don't double count checkpoints as there will be the manifest and
 		// the checksum.
-		if !strings.HasSuffix(f, backupManifestChecksumSuffix) {
-			if strings.HasPrefix(f, backupManifestCheckpointName) {
+		if !strings.HasSuffix(f, backupinfo.BackupManifestChecksumSuffix) {
+			if strings.HasPrefix(f, backupinfo.BackupManifestCheckpointName) {
 				actualNumCheckpointsWritten++
 			}
 		}
@@ -9814,7 +9814,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 	numCheckpoints := 5
 
 	for i := 0; i < numCheckpoints; i++ {
-		checkpoints = append(checkpoints, newTimestampedCheckpointFileName())
+		checkpoints = append(checkpoints, backupinfo.NewTimestampedCheckpointFileName())
 		// Occasionally, we call newTimestampedCheckpointFileName() in succession
 		// too fast and the timestamp is the same. So wait for a moment to
 		// avoid that.
@@ -9914,7 +9914,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 			require.NoError(t, err)
 			for _, checkpoint := range checkpoints {
 				var desc []byte
-				require.NoError(t, cloud.WriteFile(ctx, store, backupProgressDirectory+"/"+checkpoint, bytes.NewReader(desc)))
+				require.NoError(t, cloud.WriteFile(ctx, store, backupinfo.BackupProgressDirectory+"/"+checkpoint, bytes.NewReader(desc)))
 			}
 			require.NoError(t, err)
 			var actual string

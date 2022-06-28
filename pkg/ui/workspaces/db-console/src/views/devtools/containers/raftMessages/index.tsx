@@ -23,6 +23,7 @@ import {
 } from "src/redux/hover";
 import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { nodeIDAttr } from "src/util/constants";
 import {
   GraphDashboardProps,
@@ -42,7 +43,6 @@ import {
   TimeWindow,
   TimeScale,
   setMetricsFixedWindow,
-  setTimeScale,
 } from "src/redux/timeScale";
 
 interface NodeGraphsOwnProps {
@@ -203,7 +203,7 @@ const mapDispatchToProps = {
   hoverOn: hoverOnAction,
   hoverOff: hoverOffAction,
   setMetricsFixedWindow: setMetricsFixedWindow,
-  setTimeScale,
+  setTimeScale: setGlobalTimeScaleAction,
 };
 
 export default withRouter(

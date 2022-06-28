@@ -1483,15 +1483,16 @@ func doRestorePlan(
 	if len(from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
 		// This could be either INTO-syntax, OR TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifests(
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
 			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
 			fullyResolvedIncrementalsDirectory, endTime, encryption, p.User(),
 		)
 	} else {
 		// Incremental layers are specified explicitly.
 		// This implies the old, deprecated TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsExplicitIncrementals(
-			ctx, &mem, mkStore, from, endTime, encryption, p.User())
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err =
+			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, from,
+				endTime, encryption, p.User())
 	}
 
 	if err != nil {

@@ -8,13 +8,8 @@
 
 package backupbase
 
+// TODO(adityamaru): Move constants to relevant backupccl packages.
 const (
-	// IncludeManifest is a named const that can be passed to FindPriorBackups.
-	IncludeManifest = true
-
-	// OmitManifest is a named const that can be passed to FindPriorBackups.
-	OmitManifest = false
-
 	// LatestFileName is the name of a file in the collection which contains the
 	// path of the most recently taken full backup in the backup collection.
 	LatestFileName = "LATEST"

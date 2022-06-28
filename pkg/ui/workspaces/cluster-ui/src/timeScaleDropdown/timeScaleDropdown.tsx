@@ -12,10 +12,10 @@ import React, { useMemo } from "react";
 import moment from "moment";
 import classNames from "classnames/bind";
 import {
-  TimeScale,
-  TimeWindow,
   ArrowDirection,
+  TimeScale,
   TimeScaleOptions,
+  TimeWindow,
 } from "./timeScaleTypes";
 import TimeFrameControls from "./timeFrameControls";
 import RangeSelect, {
@@ -262,4 +262,21 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       />
     </div>
   );
+};
+
+// getValidOption check if the option selected is valid. If is valid returns
+// the selected option, otherwise  returns the first valid option.
+export const getValidOption = (
+  currentScale: TimeScale,
+  options: TimeScaleOptions,
+): TimeScale => {
+  if (!(currentScale.key in options)) {
+    const firstValidKey = Object.keys(options)[0];
+    return {
+      ...options[firstValidKey],
+      key: firstValidKey,
+      fixedWindowEnd: false,
+    };
+  }
+  return currentScale;
 };
