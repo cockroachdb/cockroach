@@ -15,11 +15,13 @@ go_library(
         "sender.go",
         "sentry.go",
         "templates.go",
+        "update_versions.go",
         "versionmap.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/util/timeutil",
         "@com_github_andygrunwald_go_jira//:go-jira",
         "@com_github_google_go_github_v42//github",
         "@com_github_jordan_wright_email//:email",
@@ -41,13 +43,17 @@ go_test(
     srcs = [
         "blockers_test.go",
         "sender_test.go",
+        "versionmap_test.go",
     ],
     data = glob([
         "templates/**",
         "testdata/**",
     ]),
     embed = [":release_lib"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "@com_github_masterminds_semver_v3//:semver",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")
