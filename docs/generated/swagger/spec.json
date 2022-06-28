@@ -1523,6 +1523,24 @@
           "type": "string",
           "x-go-name": "CreateTableStatement"
         },
+        "data_live_bytes": {
+          "description": "data_live_bytes is the size in bytes of live (non MVCC) data on the table.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DataLiveBytes"
+        },
+        "data_live_percentage": {
+          "description": "data_live_percentage is the percentage of live (non MVCC) data on the table.",
+          "type": "number",
+          "format": "float",
+          "x-go-name": "DataLivePercentage"
+        },
+        "data_total_bytes": {
+          "description": "data_total_bytes is the size in bytes of live and non-live data on the table.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DataTotalBytes"
+        },
         "descriptor_id": {
           "description": "descriptor_id is an identifier used to uniquely identify this table.\nIt can be used to find events pertaining to this table by filtering on\nthe 'target_id' field of events.",
           "type": "integer",

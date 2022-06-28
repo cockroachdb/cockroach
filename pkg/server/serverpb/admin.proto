@@ -218,6 +218,12 @@ message TableDetailsResponse {
   // has_index_recommendations notifies if the there are index recommendations
   // on this table.
   bool has_index_recommendations = 11;
+  // data_total_bytes is the size in bytes of live and non-live data on the table.
+  int64 data_total_bytes = 12;
+  // data_live_bytes is the size in bytes of live (non MVCC) data on the table.
+  int64 data_live_bytes = 13;
+  // data_live_percentage is the percentage of live (non MVCC) data on the table.
+  float data_live_percentage = 14;
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive
