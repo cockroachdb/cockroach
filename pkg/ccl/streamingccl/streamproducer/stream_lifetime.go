@@ -241,18 +241,25 @@ func getReplicationStreamSpec(
 }
 
 func completeReplicationStream(
-	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
+	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID, ingestionCutover bool,
 ) error {
 	// Update the producer job that a cutover happens on the consumer side.
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
 	const useReadLock = false
 	return registry.UpdateJobWithTxn(evalCtx.Ctx(), jobspb.JobID(streamID), txn, useReadLock,
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			if (md.Status == jobs.StatusRunning || md.Status == jobs.StatusPending) &&
-				!md.Progress.GetStreamReplication().IngestionCutOver {
-				p := md.Progress
-				p.GetStreamReplication().IngestionCutOver = true
-				ju.UpdateProgress(p)
+			if md.Status == jobs.StatusRunning || md.Status == jobs.StatusPending {
+				if !ingestionCutover {
+					ju.UpdateStatus(jobs.StatusCancelRequested)
+					return nil
+				}
+
+				// Mark ingestion as cutover to make the resumer exit successfully.
+				if !md.Progress.GetStreamReplication().IngestionCutOver {
+					p := md.Progress
+					p.GetStreamReplication().IngestionCutOver = true
+					ju.UpdateProgress(p)
+				}
 			}
 			return nil
 		})

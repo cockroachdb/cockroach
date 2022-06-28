@@ -207,7 +207,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 
 		log.Infof(ctx, "starting to complete the producer job %d", streamID)
 		// Completes the producer job in the source cluster.
-		return client.Complete(ctx, streamID)
+		return client.Complete(ctx, streamID, true /* ingestionCutover */)
 	}
 	return errors.CombineErrors(ingestWithClient(), client.Close())
 }

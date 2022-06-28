@@ -437,7 +437,9 @@ func (m *randomStreamClient) Subscribe(
 }
 
 // Complete implements the streamclient.Client interface.
-func (m *randomStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+func (m *randomStreamClient) Complete(
+	ctx context.Context, streamID streaming.StreamID, ingestionCutover bool,
+) error {
 	return nil
 }
 
