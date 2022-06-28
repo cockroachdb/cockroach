@@ -99,6 +99,15 @@ var columnBackfillBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt, /* validateFn */
 )
 
+// columnBackfillUpdateChunkSizeThresholdBytes is the byte size threshold beyond which
+// an update batch is run at once when adding or removing columns.
+var columnBackfillUpdateChunkSizeThresholdBytes = settings.RegisterIntSetting(
+	"bulkio.column_backfill.update_chunk_size_threshold_bytes",
+	"the batch size in bytes above which an update is immediately run when adding/removing columns",
+	10<<20,                  /* 10 MiB */
+	settings.NonNegativeInt, /* validateFn */
+)
+
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
@@ -1290,6 +1299,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 	ctx context.Context,
 	version descpb.DescriptorVersion,
 	backfillChunkSize int64,
+	backfillUpdateChunkSizeThresholdBytes uint64,
 	filter backfill.MutationFilter,
 ) error {
 	duration := checkpointInterval
@@ -1384,7 +1394,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			defer recv.Release()
 
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn, true /* distribute */)
-			spec, err := initColumnBackfillerSpec(*tableDesc.TableDesc(), duration, chunkSize, readAsOf)
+			spec, err := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
 			if err != nil {
 				return err
 			}
@@ -1988,8 +1998,12 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	log.Infof(ctx, "clearing and backfilling columns")
 
 	if err := sc.distColumnBackfill(
-		ctx, version, columnBackfillBatchSize.Get(&sc.settings.SV),
-		backfill.ColumnMutationFilter); err != nil {
+		ctx,
+		version,
+		columnBackfillBatchSize.Get(&sc.settings.SV),
+		uint64(columnBackfillUpdateChunkSizeThresholdBytes.Get(&sc.settings.SV)),
+		backfill.ColumnMutationFilter,
+	); err != nil {
 		return err
 	}
 	log.Info(ctx, "finished clearing and backfilling columns")
@@ -2451,9 +2465,12 @@ func columnBackfillInTxn(
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
-		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, sp, rowinfra.RowLimit(columnBackfillBatchSize.Get(&evalCtx.Settings.SV)),
-			false /*alsoCommit*/, traceKV)
+		scanBatchSize := rowinfra.RowLimit(columnBackfillBatchSize.Get(&evalCtx.Settings.SV))
+		updateChunkSizeThresholdBytes := rowinfra.BytesLimit(columnBackfillUpdateChunkSizeThresholdBytes.Get(&evalCtx.Settings.SV))
+		const alsoCommit = false
+		sp.Key, err = backfiller.RunColumnBackfillChunk(
+			ctx, txn, tableDesc, sp, scanBatchSize, updateChunkSizeThresholdBytes, alsoCommit, traceKV,
+		)
 		if err != nil {
 			return err
 		}
