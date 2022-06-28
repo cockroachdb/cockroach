@@ -13,12 +13,12 @@ CREATE SEQUENCE db.public.sq1;
 test
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
 ----
+begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
@@ -914,12 +914,12 @@ notified job registry to adopt jobs: [2]
 test
 ALTER TABLE db.public.tbl ADD COLUMN k INT NOT NULL DEFAULT 42
 ----
+begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #106
@@ -1911,12 +1911,12 @@ notified job registry to adopt jobs: [2]
 test
 ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1')
 ----
+begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 16 MutationType ops
 upsert descriptor #106

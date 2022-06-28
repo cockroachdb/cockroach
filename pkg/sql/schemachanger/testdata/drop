@@ -10,10 +10,10 @@ CREATE SCHEMA db.sc;
 test
 DROP SCHEMA db.sc;
 ----
+begin transaction #1
 checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 3 MutationType ops
 delete schema namespace entry {104 0 sc} -> 106
@@ -192,9 +192,9 @@ CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 test
 DROP TABLE db.sc.t;
 ----
+begin transaction #1
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
 delete object namespace entry {104 107 t} -> 108
@@ -985,10 +985,10 @@ notified job registry to adopt jobs: [2]
 test
 DROP SCHEMA db.sc CASCADE;
 ----
+begin transaction #1
 checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 7 MutationType ops
 delete schema namespace entry {104 0 sc} -> 107
@@ -1402,9 +1402,9 @@ commit transaction #3
 test
 DROP DATABASE db CASCADE;
 ----
+begin transaction #1
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
 delete database namespace entry {0 0 db} -> 104
@@ -1682,9 +1682,9 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 test
 DROP DATABASE db1 CASCADE
 ----
+begin transaction #1
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
-begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 56 MutationType ops
 delete database namespace entry {0 0 db1} -> 111
