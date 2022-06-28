@@ -173,14 +173,74 @@ func TestInvalidData(t *testing.T) {
 	})
 }
 
+// TestTooManyAttributesInSchema tests that a schema with too many attributes
+// causes an error.
+func TestTooManyAttributesInSchema(t *testing.T) {
+	// At time of writing, there are two system attributes. That leaves 30
+	// bits of the 32-bit ordinal set for use by the user.
+	type tooManyAttrs struct {
+		F0, F1, F2, F3, F4, F5, F6, F7, F8, F9           *uint32
+		F10, F11, F12, F13, F14, F15, F16, F17, F18, F19 *uint32
+		F20, F21, F22, F23, F24, F25, F26, F27, F28, F29 *uint32
+		F30                                              *uint32
+	}
+	justEnoughMappings := []rel.EntityMappingOption{
+		rel.EntityAttr(stringAttr("A0"), "F0"),
+		rel.EntityAttr(stringAttr("A1"), "F1"),
+		rel.EntityAttr(stringAttr("A2"), "F2"),
+		rel.EntityAttr(stringAttr("A3"), "F3"),
+		rel.EntityAttr(stringAttr("A4"), "F4"),
+		rel.EntityAttr(stringAttr("A5"), "F5"),
+		rel.EntityAttr(stringAttr("A6"), "F6"),
+		rel.EntityAttr(stringAttr("A7"), "F7"),
+		rel.EntityAttr(stringAttr("A8"), "F8"),
+		rel.EntityAttr(stringAttr("A9"), "F9"),
+		rel.EntityAttr(stringAttr("A10"), "F10"),
+		rel.EntityAttr(stringAttr("A11"), "F11"),
+		rel.EntityAttr(stringAttr("A12"), "F12"),
+		rel.EntityAttr(stringAttr("A13"), "F13"),
+		rel.EntityAttr(stringAttr("A14"), "F14"),
+		rel.EntityAttr(stringAttr("A15"), "F15"),
+		rel.EntityAttr(stringAttr("A16"), "F16"),
+		rel.EntityAttr(stringAttr("A17"), "F17"),
+		rel.EntityAttr(stringAttr("A18"), "F18"),
+		rel.EntityAttr(stringAttr("A19"), "F19"),
+		rel.EntityAttr(stringAttr("A20"), "F20"),
+		rel.EntityAttr(stringAttr("A21"), "F21"),
+		rel.EntityAttr(stringAttr("A22"), "F22"),
+		rel.EntityAttr(stringAttr("A23"), "F23"),
+		rel.EntityAttr(stringAttr("A24"), "F24"),
+		rel.EntityAttr(stringAttr("A25"), "F25"),
+		rel.EntityAttr(stringAttr("A26"), "F26"),
+		rel.EntityAttr(stringAttr("A27"), "F27"),
+		rel.EntityAttr(stringAttr("A28"), "F28"),
+		rel.EntityAttr(stringAttr("A29"), "F29"),
+	}
+	{
+		_, err := rel.NewSchema("just_enough",
+			rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)), justEnoughMappings...),
+		)
+		require.NoError(t, err)
+	}
+	{
+		_, err := rel.NewSchema("too_many",
+			rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
+				append(justEnoughMappings, rel.EntityAttr(stringAttr("A30"), "F30"))...,
+			),
+		)
+		require.Regexp(t, "too many attributes", err)
+	}
+}
+
 type stringAttr string
 
 func (sa stringAttr) String() string { return string(sa) }
 
-// TestTooManyAttributes tests that errors are returned whenever a predicate
-// is constructed with too many attributes. One could imagine disallowing this
-// altogether in the schema, but it's somewhat onerous to do so.
-func TestTooManyAttributes(t *testing.T) {
+// TestTooManyAttributesInValues tests that errors are returned whenever a
+// predicate is constructed with too many attributes. One could imagine
+// disallowing this altogether in the schema, but it's somewhat onerous to do
+// so.
+func TestTooManyAttributesInValues(t *testing.T) {
 	type tooManyAttrs struct {
 		F1, F2, F3, F4, F5, F6, F7, F8 *uint32
 	}
