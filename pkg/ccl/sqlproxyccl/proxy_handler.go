@@ -9,9 +9,11 @@
 package sqlproxyccl
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"net"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -306,7 +308,8 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	// Cancel requests are sent on a separate connection, and have no response,
 	// so we can close the connection immediately after handling them.
 	if cr := fe.CancelRequest; cr != nil {
-		if err := handler.handleCancelRequest(cr); err != nil {
+		_ = incomingConn.Close()
+		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
 			// Lots of noise from this log indicates that somebody is spamming
 			// fake cancel requests.
 			log.Warningf(
@@ -484,11 +487,24 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 
 // handleCancelRequest handles a pgwire query cancel request by either
 // forwarding it to a SQL node or to another proxy.
-func (handler *proxyHandler) handleCancelRequest(cr *pgproto3.CancelRequest) error {
+func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest, allowForward bool) error {
+	const timeout = 2 * time.Second
 	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
-		return ci.sendCancelToBackend(nil /* requestClientIP */)
+		return ci.sendCancelToBackend(cr.ClientIP)
 	}
-	// TODO(rafi): add logic for forwarding to another proxy.
+	// Only forward the request if it hasn't already been sent to the correct proxy.
+	if !allowForward {
+		return nil
+	}
+	u := "https://" + cr.ProxyIP.String() + ":8080/_status/cancel"
+	reqBody := bytes.NewReader(cr.Encode())
+	client := http.Client{
+		Timeout: timeout,
+	}
+
+	if _, err := client.Post(u, "application/octet-stream", reqBody); err != nil {
+		return err
+	}
 	return nil
 }
 
