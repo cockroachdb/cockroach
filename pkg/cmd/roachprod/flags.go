@@ -244,7 +244,9 @@ func initFlags() {
 		"open", false, "open the grafana dashboard url on the browser")
 
 	grafanaStopCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
-		"the absolute path to dump prometheus data to. If empty, no data will get dumped")
+		"the absolute path on the machine running roachprod to dump prometheus data to.\n"+
+			"In the dump-dir, the 'prometheus-docker-run.sh' bash script allows the user to interact\n"+
+			"with the dumped data. If empty, no data will get dumped.")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),

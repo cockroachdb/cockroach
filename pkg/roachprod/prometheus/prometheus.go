@@ -436,7 +436,7 @@ func Shutdown(
 		"stop prometheus",
 		"sudo systemctl stop prometheus || echo 'Stopped prometheus'",
 	); err != nil {
-		l.Printf("Failed to stop prometheus server")
+		l.Printf("Failed to stop prometheus server: %v", err)
 	}
 	return nil
 }

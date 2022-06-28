@@ -1430,6 +1430,7 @@ func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string, dump
 	return nil
 }
 
+// GrafanaURL returns a url to the grafana dashboard
 func GrafanaURL(
 	ctx context.Context, l *logger.Logger, clusterName string, openInBrowser bool,
 ) ([]string, error) {
