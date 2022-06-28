@@ -65,6 +65,7 @@ import {
   TimeScaleDropdown,
   TimeScale,
   toDateRange,
+  timeScaleToString,
 } from "../timeScaleDropdown";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import moment from "moment";
@@ -485,6 +486,8 @@ export class TransactionsPage extends React.Component<
               // List of all columns that will be displayed based on the column selection.
               const displayColumns = columns.filter(c => isColumnSelected(c));
 
+              const period = timeScaleToString(this.props.timeScale);
+
               return (
                 <>
                   <section className={statisticsClasses.tableContainerClass}>
@@ -498,6 +501,7 @@ export class TransactionsPage extends React.Component<
                       totalCount={transactionsToDisplay.length}
                       arrayItemName="transactions"
                       activeFilters={activeFilters}
+                      period={period}
                       onClearFilters={this.onClearFilters}
                     />
                     <TransactionsTable
