@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -358,7 +359,7 @@ func (tc *pebbleDataBlockMVCCTimeIntervalRangeCollector) Add(
 ) error {
 	// TODO(erikgrinaker): should reuse a buffer for keysDst, but keyspan.Key is
 	// not exported by Pebble.
-	span, err := sstable.DecodeRangeKey(key, value, nil)
+	span, err := rangekey.Decode(key, value, nil)
 	if err != nil {
 		return errors.Wrapf(err, "decoding range key at %s", key)
 	}

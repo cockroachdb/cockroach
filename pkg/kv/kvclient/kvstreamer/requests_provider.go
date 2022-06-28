@@ -79,8 +79,16 @@ type singleRangeBatch struct {
 	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
 	subRequestIdx []int32
 	// reqsReservedBytes tracks the memory reservation against the budget for
-	// the memory usage of reqs.
+	// the memory usage of reqs, excluding the overhead.
 	reqsReservedBytes int64
+	// overheadAccountedFor tracks the memory reservation against the budget for
+	// the overhead of the reqs slice (i.e. of roachpb.RequestUnion objects).
+	// Since we reuse the same reqs slice for resume requests, this can be
+	// released only when the BatchResponse doesn't have any resume spans.
+	//
+	// RequestUnion.Size() ignores the overhead of RequestUnion object, so we
+	// need to account for it separately.
+	overheadAccountedFor int64
 	// minTargetBytes, if positive, indicates the minimum TargetBytes limit that
 	// this singleRangeBatch should be sent with in order for the response to
 	// not be empty. Note that TargetBytes of at least minTargetBytes is
