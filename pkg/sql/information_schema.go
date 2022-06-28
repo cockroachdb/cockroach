@@ -365,7 +365,11 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			for _, u := range table.GetPrivileges().Users {
+			privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
+			if err != nil {
+				return err
+			}
+			for _, u := range privDesc.Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
 						for _, cd := range table.PublicColumns() {
@@ -1366,19 +1370,22 @@ func populateTablePrivileges(
 			tbNameStr := tree.NewDString(table.GetName())
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
-			var tableType privilege.ObjectType
-			if table.IsSequence() {
-				tableType = privilege.Sequence
-			} else {
-				tableType = privilege.Table
+			tableType := table.GetObjectType()
+			desc, err := table.GetPrivilegeDescriptor(ctx, p)
+			if err != nil {
+				return err
 			}
-			for _, u := range table.GetPrivileges().Show(tableType, true /* showImplicitOwnerPrivs */) {
+			for _, u := range desc.Show(tableType, true /* showImplicitOwnerPrivs */) {
 				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
 					// We use this function to check for the grant option so that the
 					// object owner also gets is_grantable=true.
+					privs, err := table.GetPrivilegeDescriptor(ctx, p)
+					if err != nil {
+						return err
+					}
 					grantOptionErr := p.CheckGrantOptionsForUser(
-						ctx, table.GetPrivileges(), table, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
+						ctx, privs, table, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
 					)
 					if err := addRow(
 						tree.DNull,                          // grantor

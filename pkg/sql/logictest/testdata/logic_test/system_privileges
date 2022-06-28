@@ -176,7 +176,7 @@ user testuser
 statement ok
 SELECT * FROM crdb_internal.node_statement_statistics;
 
-user root 
+user root
 
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
@@ -215,7 +215,7 @@ user testuser
 statement ok
 SELECT * FROM crdb_internal.node_statement_statistics;
 
-user root 
+user root
 
 query TTTT
 SELECT * FROM system.privileges ORDER BY 1, 2
