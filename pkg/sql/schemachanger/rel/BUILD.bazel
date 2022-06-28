@@ -48,6 +48,7 @@ go_test(
     size = "small",
     srcs = [
         "bench_test.go",
+        "ordinal_set_test.go",
         "rel_internal_test.go",
         "rel_test.go",
     ],

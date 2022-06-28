@@ -151,7 +151,7 @@ func (sb *schemaBuilder) maybeAddAttribute(a Attr, typ reflect.Type) ordinal {
 	ord, exists := sb.attrToOrdinal[a]
 	if !exists {
 		ord = ordinal(len(sb.attrs))
-		if ord >= maxUserAttribute {
+		if ord > maxOrdinal {
 			panic(errors.Errorf("too many attributes"))
 		}
 		sb.attrs = append(sb.attrs, a)
