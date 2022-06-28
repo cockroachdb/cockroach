@@ -190,6 +190,10 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
+	if err := checkStoringColumns(tableDesc, n.Storing); err != nil {
+		return nil, err
+	}
+
 	indexDesc := descpb.IndexDescriptor{
 		Name:              string(n.Name),
 		Unique:            n.Unique,
@@ -302,6 +306,28 @@ func makeIndexDescriptor(
 	}
 
 	return &indexDesc, nil
+}
+
+func checkStoringColumns(desc catalog.TableDescriptor, names tree.NameList) error {
+	for i, colName := range names {
+		col, err := desc.FindColumnWithName(colName)
+		if err != nil {
+			return errors.Wrapf(err, "finding store column %d", i)
+		}
+		if col.IsVirtual() {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"index cannot store virtual column %v", colName,
+			)
+		}
+		if col.IsSystemColumn() {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"index cannot store system column %v", colName,
+			)
+		}
+	}
+	return nil
 }
 
 // validateColumnsAreAccessible validates that the columns for an index are
