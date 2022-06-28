@@ -37,9 +37,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const pollingIntervalSettingName = "sql.stmt_diagnostics.poll_interval"
+
 var pollingInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"sql.stmt_diagnostics.poll_interval",
+	pollingIntervalSettingName,
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second)
 
@@ -291,11 +293,6 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
-	g, err := r.gossip.OptionalErr(48274)
-	if err != nil {
-		return 0, err
-	}
-
 	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs)
 	if !isSamplingProbabilitySupported && samplingProbability != 0 {
 		return 0, errors.New(
@@ -315,7 +312,7 @@ func (r *Registry) insertRequestInternal(
 
 	var reqID RequestID
 	var expiresAt time.Time
-	err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
 		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
 			sessiondata.InternalExecutorOverride{
@@ -393,23 +390,17 @@ func (r *Registry) insertRequestInternal(
 		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
 	}()
 
-	// Notify all the other nodes that they have to poll.
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(reqID))
-	if err := g.AddInfo(gossip.KeyGossipStatementDiagnosticsRequest, buf, 0 /* ttl */); err != nil {
-		log.Warningf(ctx, "error notifying of diagnostics request: %s", err)
-	}
-
-	return reqID, nil
+	err = r.notifyThroughGossip(
+		ctx,
+		reqID,
+		gossip.KeyGossipStatementDiagnosticsRequest,
+		"diagnostics request", /* gossipInfoErr */
+	)
+	return reqID, err
 }
 
 // CancelRequest is part of the server.StmtDiagnosticsRequester interface.
 func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
-	g, err := r.gossip.OptionalErr(48274)
-	if err != nil {
-		return err
-	}
-
 	row, err := r.ie.QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User: username.RootUserName(),
@@ -435,13 +426,42 @@ func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 	reqID := RequestID(requestID)
 	r.cancelRequest(reqID)
 
-	// Notify all the other nodes that this request has been canceled.
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(reqID))
-	if err := g.AddInfo(gossip.KeyGossipStatementDiagnosticsRequestCancellation, buf, 0 /* ttl */); err != nil {
-		log.Warningf(ctx, "error notifying of diagnostics request cancellation: %s", err)
-	}
+	return r.notifyThroughGossip(
+		ctx,
+		reqID,
+		gossip.KeyGossipStatementDiagnosticsRequestCancellation,
+		"diagnostics request cancellation", /* gossipInfoErr */
+	)
+}
 
+// notifyThroughGossip attempts to notify other nodes about a new / canceled
+// request through gossip, if it's available, if not, it ensures that the
+// polling mechanism is not disabled.
+func (r *Registry) notifyThroughGossip(
+	ctx context.Context, reqID RequestID, gossipKey string, gossipInfoErr string,
+) error {
+	g, err := r.gossip.OptionalErr(48274)
+	if err == nil {
+		// Notify all the other nodes about this request.
+		//
+		// Note that it is ok if we don't immediately notify others about the
+		// request because pollRequests() will update the registry on other
+		// nodes accordingly, by reading from the system table.
+		buf := make([]byte, 8)
+		binary.LittleEndian.PutUint64(buf, uint64(reqID))
+		if err := g.AddInfo(gossipKey, buf, 0 /* ttl */); err != nil {
+			log.Warningf(ctx, "error notifying of %s: %s", gossipInfoErr, err)
+		}
+	} else {
+		// Ensure that the polling is not disabled when we don't have access to
+		// gossip.
+		if pollingInterval.Get(&r.st.SV).Nanoseconds() == 0 {
+			return errors.Newf(
+				"statement diagnostics won't work until %q is set to positive value",
+				pollingIntervalSettingName,
+			)
+		}
+	}
 	return nil
 }
 
