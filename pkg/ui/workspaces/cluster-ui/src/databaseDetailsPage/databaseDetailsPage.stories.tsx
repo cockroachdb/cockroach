@@ -105,6 +105,9 @@ function createTable(): DatabaseDetailsPageDataTable {
       grants: grants,
       statsLastUpdated: moment("0001-01-01T00:00:00Z"),
       hasIndexRecommendations: false,
+      livePercentage: _.random(0, 100),
+      liveBytes: _.random(0, 10000),
+      totalBytes: _.random(0, 10000),
     },
     stats: {
       loading: false,

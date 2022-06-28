@@ -34,6 +34,9 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     indexNames: [],
     grants: [],
     statsLastUpdated: moment("0001-01-01T00:00:00Z"),
+    livePercentage: 2.7,
+    liveBytes: 12345,
+    totalBytes: 456789,
   },
   stats: {
     loading: true,
@@ -91,6 +94,9 @@ const withData: DatabaseTablePageProps = {
       },
     ],
     statsLastUpdated: moment("0001-01-01T00:00:00Z"),
+    livePercentage: 2.7,
+    liveBytes: 12345,
+    totalBytes: 456789,
   },
   showNodeRegionsSection: true,
   stats: {
