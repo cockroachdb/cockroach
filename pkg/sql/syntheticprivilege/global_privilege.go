@@ -15,10 +15,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,14 +36,9 @@ type GlobalPrivilege struct{}
 // GlobalPrivilege.
 const GlobalPrivilegeObjectType = "Global"
 
-// ToString implements the SyntheticPrivilegeObject interface.
-func (p *GlobalPrivilege) ToString() string {
+// GetPath implements the SyntheticPrivilegeObject interface.
+func (p *GlobalPrivilege) GetPath() string {
 	return "/global/"
-}
-
-// PrivilegeObjectType implements the SyntheticPrivilegeObject interface.
-func (p *GlobalPrivilege) PrivilegeObjectType() privilege.ObjectType {
-	return privilege.Global
 }
 
 // GlobalPrivilegeObject is one of one since it is global.
@@ -58,9 +53,8 @@ func (p *GlobalPrivilege) GetPrivilegeDescriptor(
 }
 
 // GetObjectType implements the PrivilegeObject interface.
-func (p *GlobalPrivilege) GetObjectType() string {
-	// TODO(richardjcai): Turn this into a const map somewhere.
-	return GlobalPrivilegeObjectType
+func (p *GlobalPrivilege) GetObjectType() privilege.ObjectType {
+	return privilege.Global
 }
 
 // GetName implements the PrivilegeObject interface.
@@ -73,17 +67,15 @@ func (p *GlobalPrivilege) GetName() string {
 func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	ctx context.Context,
 	planner eval.Planner,
-	systemTablePrivilegeObject catalog.SyntheticPrivilegeObject,
+	systemTablePrivilegeObject privilegeobject.SyntheticPrivilegeObject,
 ) (privileges *catpb.PrivilegeDescriptor, retErr error) {
 	query := fmt.Sprintf(
 		`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
 		catconstants.SystemPrivilegeTableName,
-		systemTablePrivilegeObject.ToString())
+		systemTablePrivilegeObject.GetPath())
 
 	it, err := planner.QueryIteratorEx(ctx, `get-system-privileges`,
-		sessiondata.InternalExecutorOverride{
-			User: username.RootUserName(),
-		}, query)
+		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return nil, err
 	}
@@ -123,11 +115,11 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		}
 		privsWithGrantOption := privilege.ListFromBitField(
 			privs.ToBitField()&grantOptions.ToBitField(),
-			systemTablePrivilegeObject.PrivilegeObjectType(),
+			systemTablePrivilegeObject.GetObjectType(),
 		)
 		privsWithoutGrantOption := privilege.ListFromBitField(
 			privs.ToBitField()&^privsWithGrantOption.ToBitField(),
-			systemTablePrivilegeObject.PrivilegeObjectType(),
+			systemTablePrivilegeObject.GetObjectType(),
 		)
 		privileges.Grant(
 			username.MakeSQLUsernameFromPreNormalizedString(string(user)),
@@ -141,7 +133,18 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		)
 	}
 
-	privilegeObjectType := systemTablePrivilegeObject.PrivilegeObjectType()
+	// To avoid having to insert a row for public for each virtual
+	// table into system.privileges, we assume that if there is
+	// NO entry for public in the PrivilegeDescriptor, Public has
+	// grant. If there is an empty row for Public, then public
+	// does not have grant.
+	if systemTablePrivilegeObject.GetObjectType() == privilege.VirtualTable {
+		if _, found := privileges.FindUser(username.PublicRoleName()); !found {
+			privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
+		}
+	}
+
+	privilegeObjectType := systemTablePrivilegeObject.GetObjectType()
 	// We use InvalidID to skip checks on the root/admin roles having
 	// privileges.
 	if err := privileges.Validate(descpb.InvalidID, privilegeObjectType, systemTablePrivilegeObject.GetName(), privilege.GetValidPrivilegesForObject(privilegeObjectType)); err != nil {

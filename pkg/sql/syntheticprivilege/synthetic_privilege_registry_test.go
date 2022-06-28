@@ -14,14 +14,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/stretchr/testify/require"
 )
 
 func TestParsePrivilegePath(t *testing.T) {
 	for _, tc := range []struct {
 		regex        string
-		expectedType catalog.SyntheticPrivilegeObject
+		expectedType privilegeobject.SyntheticPrivilegeObject
 		error        string
 	}{
 		{
@@ -46,7 +46,7 @@ func TestParsePrivilegePath(t *testing.T) {
 		} else {
 			require.NoError(t, err)
 			require.Equal(t, reflect.TypeOf(actualType), reflect.TypeOf(tc.expectedType))
-			require.Equal(t, actualType.ToString(), tc.expectedType.ToString())
+			require.Equal(t, actualType.GetPath(), tc.expectedType.GetPath())
 		}
 	}
 }

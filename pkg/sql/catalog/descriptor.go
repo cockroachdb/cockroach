@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -153,7 +154,7 @@ type LeasableDescriptor interface {
 type Descriptor interface {
 	NameEntry
 	LeasableDescriptor
-	PrivilegeObject
+	privilegeobject.PrivilegeObject
 
 	// GetPrivileges returns this descriptor's PrivilegeDescriptor, which
 	// describes the set of privileges that users have to use, modify, or delete
