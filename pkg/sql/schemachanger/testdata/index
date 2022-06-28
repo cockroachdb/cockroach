@@ -10,9 +10,9 @@ CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 test
 CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 ----
-checking for feature: CREATE INDEX
 begin transaction #1
 # begin StatementPhase
+checking for feature: CREATE INDEX
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #106
   ...
