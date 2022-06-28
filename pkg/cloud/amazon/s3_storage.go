@@ -352,7 +352,9 @@ func newClient(
 	sess.Config.Region = aws.String(region)
 
 	c := s3.New(sess)
-	u := s3manager.NewUploader(sess)
+	u := s3manager.NewUploader(sess, func(uploader *s3manager.Uploader) {
+		uploader.PartSize = cloud.WriteChunkSize.Get(&settings.SV)
+	})
 	return s3Client{client: c, uploader: u}, region, nil
 }
 
