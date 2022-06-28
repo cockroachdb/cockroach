@@ -495,9 +495,14 @@ func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorStat
 	desc.DeclarativeSchemaChangerState = state
 }
 
-// GetObjectType implements the PrivilegeObject interface.
-func (desc *immutable) GetObjectType() string {
+// GetObjectTypeName implements the PrivilegeObject interface.
+func (desc *immutable) GetObjectTypeName() string {
 	return string(desc.DescriptorType())
+}
+
+// GetObjectType implements the PrivilegeObject interface.
+func (desc *immutable) GetObjectType() privilege.ObjectType {
+	return privilege.Database
 }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.

@@ -32,6 +32,11 @@ var registry = []*Metadata{
 		regex:  regexp.MustCompile("(/global/)$"),
 		val:    reflect.TypeOf((*GlobalPrivilege)(nil)),
 	},
+	{
+		prefix: "/vtable",
+		regex:  regexp.MustCompile(`(/vtable/((?P<SchemaName>.*))/((?P<TableName>.*)))$`),
+		val:    reflect.TypeOf((*VirtualTablePrivilege)(nil)),
+	},
 }
 
 func findMetadata(val string) *Metadata {
@@ -71,7 +76,23 @@ func Parse(privPath string) (catalog.SyntheticPrivilegeObject, error) {
 		if idx == -1 {
 			return nil, errors.AssertionFailedf("no field found with name %s", f.Name)
 		}
-		v.Elem().Field(i).Set(reflect.ValueOf(matches[idx]))
+		val := reflect.ValueOf(matches[idx])
+		val, err := unmarshal(val, f)
+		if err != nil {
+			return nil, err
+		}
+		v.Elem().Field(i).Set(val)
 	}
 	return v.Interface().(catalog.SyntheticPrivilegeObject), nil
+}
+
+func unmarshal(val reflect.Value, f reflect.StructField) (reflect.Value, error) {
+	switch f.Name {
+	case "TableName":
+		return val, nil
+	case "SchemaName":
+		return val, nil
+	default:
+		panic(errors.AssertionFailedf("unhandled type %v", f.Type))
+	}
 }

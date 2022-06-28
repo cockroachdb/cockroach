@@ -6,10 +6,12 @@ go_library(
     srcs = [
         "global_privilege.go",
         "synthetic_privilege_registry.go",
+        "vtable_privilege.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",

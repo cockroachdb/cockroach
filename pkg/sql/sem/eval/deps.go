@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -324,6 +325,13 @@ type Planner interface {
 	// The fields set in session that are set override the respective fields if they
 	// have previously been set through SetSessionData().
 	QueryIteratorEx(ctx context.Context, opName string, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
+
+	// IsActive returns if the version specified by key is active.
+	IsActive(ctx context.Context, key clusterversion.Key) bool
+
+	// GetVirtualSchemaNameByID returns the name of the virtual schema given
+	// the id and whether or not it was found.
+	GetVirtualSchemaNameByID(id catid.DescID) (string, bool)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
