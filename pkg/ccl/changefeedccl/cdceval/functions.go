@@ -27,16 +27,36 @@ import (
 // However, we can provide reasonable overrides to a small set of stable
 // functions that make sense in the context of CDC.
 var supportedVolatileBuiltinFunctions = makeStringSet(
-	// These functions can be supported given that we set the statement
-	// and transaction timestamp to be equal to MVCC timestamp of the event.
-	// TODO(yevgeniy): We also define cdc specific functions, s.a. cdc_mvcc_timestamp
-	//  Maybe delete cdc_ overrides; or.... maybe disallow these builtins in favor of cdc_ specific overrides?
+	// These functions can be supported given that we set the statement and
+	// transaction timestamp to be equal to MVCC timestamp of the event.
 	"current_date",
 	"current_timestamp",
 	"localtimestamp",
+	"localtime",
 	"now",
 	"statement_timestamp",
 	"transaction_timestamp",
+	"timeofday",
+	"timezone",
+
+	// jsonb functions are stable because they depend on eval
+	// context DataConversionConfig
+	"jsonb_build_array",
+	"jsonb_build_object",
+	"to_json",
+	"to_jsonb",
+	"row_to_json",
+
+	// Misc functions that depend on eval context.
+	"overlaps",
+	"pg_collation_for",
+	"pg_typeof",
+	"quote_literal",
+	"quote_nullable",
+
+	// TODO(yevgeniy): Support geometry.
+	//"st_asgeojson",
+	//"st_estimatedextent",
 )
 
 // CDC Specific functions.
