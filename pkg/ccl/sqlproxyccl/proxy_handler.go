@@ -303,8 +303,21 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		return fe.Err
 	}
 
-	// This currently only happens for CancelRequest type of startup messages
-	// that we don't support. Return nil to the server, which simply closes the
+	// Cancel requests are sent on a separate connection, and have no response,
+	// so we can close the connection immediately after handling them.
+	if cr := fe.CancelRequest; cr != nil {
+		if err := handler.handleCancelRequest(cr); err != nil {
+			// Lots of noise from this log indicates that somebody is spamming
+			// fake cancel requests.
+			log.Warningf(
+				ctx, "could not handle cancel request from client %s: %v",
+				incomingConn.RemoteAddr().String(), err,
+			)
+		}
+		return nil
+	}
+
+	// This should not happen. Return nil to the server, which simply closes the
 	// connection.
 	if fe.Msg == nil {
 		return nil
@@ -469,6 +482,16 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 		handler.metrics.updateForError(err)
 		return err
 	}
+}
+
+// handleCancelRequest handles a pgwire query cancel request by either
+// forwarding it to a SQL node or to another proxy.
+func (handler *proxyHandler) handleCancelRequest(cr *pgproto3.CancelRequest) error {
+	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
+		return ci.sendCancelToBackend(nil /* requestClientIP */)
+	}
+	// TODO(rafi): add logic for forwarding to another proxy.
+	return nil
 }
 
 // startPodWatcher runs on a background goroutine and listens to pod change

@@ -10,10 +10,14 @@ package sqlproxyccl
 
 import (
 	"encoding/binary"
+	"io"
 	"net"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 )
 
@@ -57,11 +61,10 @@ func makeCancelInfo(localAddr, clientAddr net.Addr) *cancelInfo {
 	}
 }
 
-// proxyIP returns the IP address of the sqlproxy instance that created this
-// cancelInfo.
-func (c *cancelInfo) proxyIP() net.IP {
+// proxyIP returns the IP address that is embedded in the given CancelRequest.
+func toProxyIP(req *pgproto3.CancelRequest) net.IP {
 	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, c.proxyBackendKeyData.ProcessID)
+	binary.BigEndian.PutUint32(ip, req.ProcessID)
 	return ip
 }
 
@@ -79,6 +82,45 @@ func (c *cancelInfo) setNewBackend(
 	defer c.mu.Unlock()
 	c.mu.origBackendKeyData = newBackendKeyData
 	c.mu.crdbAddr = newCrdbAddr
+}
+
+// sendCancelToBackend sends a cancel request to the backend after checking that
+// the given client IP is allowed to send this request.
+func (c *cancelInfo) sendCancelToBackend(requestClientIP net.IP) error {
+	const timeout = 2 * time.Second
+	if !c.clientAddr.IP.Equal(requestClientIP) {
+		// If the IP associated with the cancelInfo does not match the IP from
+		// which the request came, then ignore it.
+		return errors.Errorf("mismatched client IP for cancel request")
+	}
+	var crdbAddr net.Addr
+	var origBackendKeyData *pgproto3.BackendKeyData
+	func() {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+		crdbAddr = c.mu.crdbAddr
+		origBackendKeyData = c.mu.origBackendKeyData
+	}()
+	cancelConn, err := net.DialTimeout("tcp", crdbAddr.String(), timeout)
+	if err != nil {
+		return err
+	}
+	defer cancelConn.Close()
+	if err := cancelConn.SetDeadline(timeutil.Now().Add(timeout)); err != nil {
+		return err
+	}
+	crdbRequest := &pgproto3.CancelRequest{
+		ProcessID: origBackendKeyData.ProcessID,
+		SecretKey: origBackendKeyData.SecretKey,
+	}
+	buf := crdbRequest.Encode(nil /* buf */)
+	if _, err := cancelConn.Write(buf); err != nil {
+		return err
+	}
+	if _, err := cancelConn.Read(buf); err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 // cancelInfoMap contains all the cancelInfo objects that this proxy instance
