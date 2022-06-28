@@ -22,7 +22,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -79,6 +81,39 @@ type s3Storage struct {
 
 	opts   s3ClientConfig
 	cached *s3Client
+}
+
+var _ request.Retryer = &customRetryer{}
+
+// customRetryer implements the `request.Retryer` interface and allows for
+// customization of the retry behavior of an AWS client.
+type customRetryer struct {
+	client.DefaultRetryer
+}
+
+// isErrReadConnectionReset returns true if the underlying error is a read
+// connection reset error.
+//
+// NB: A read connection reset error is thrown when the SDK is unable to read
+// the response of an underlying API request due to a connection reset. The
+// DefaultRetryer in the AWS SDK does not treat this error as a retryable error
+// since the SDK does not have knowledge about the idempotence of the request,
+// and whether it is safe to retry -
+// https://github.com/aws/aws-sdk-go/pull/2926#issuecomment-553637658.
+//
+// In CRDB all operations with s3 (read, write, list) are considered idempotent,
+// and so we can treat the read connection reset error as retryable too.
+func isErrReadConnectionReset(err error) bool {
+	// The error string must match the one in
+	// github.com/aws/aws-sdk-go/aws/request/connection_reset_error.go. This is
+	// unfortunate but the only solution until the SDK exposes a specialized error
+	// code or type for this class of errors.
+	return err != nil && strings.Contains(err.Error(), "read: connection reset")
+}
+
+// ShouldRetry implements the request.Retryer interface.
+func (sr *customRetryer) ShouldRetry(r *request.Request) bool {
+	return sr.DefaultRetryer.ShouldRetry(r) || isErrReadConnectionReset(r.Error)
 }
 
 // s3Client wraps an SDK client and uploader for a given session.
@@ -340,6 +375,12 @@ func newClient(
 		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
 	}
 
+	retryer := &customRetryer{
+		DefaultRetryer: client.DefaultRetryer{
+			NumMaxRetries: *opts.Config.MaxRetries,
+		},
+	}
+	opts.Config.Retryer = retryer
 	sess, err := session.NewSessionWithOptions(opts)
 	if err != nil {
 		return s3Client{}, "", errors.Wrap(err, "new aws session")
