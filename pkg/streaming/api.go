@@ -46,8 +46,11 @@ type ReplicationStreamManager interface {
 		tenantID uint64,
 	) (StreamID, error)
 
-	// UpdateReplicationStreamProgress updates the progress of a replication stream on the producer side.
-	UpdateReplicationStreamProgress(
+	// HeartbeatReplicationStream sends a heartbeat to the replication stream producer, indicating
+	// consumer has consumed until the given 'frontier' timestamp. This updates the producer job
+	// progress and extends its life, and the new producer progress will be returned.
+	// If 'frontier' is hlc.MaxTimestamp, returns the producer progress without updating it.
+	HeartbeatReplicationStream(
 		evalCtx *eval.Context,
 		streamID StreamID,
 		frontier hlc.Timestamp,
