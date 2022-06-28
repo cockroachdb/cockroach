@@ -17,7 +17,7 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error index "t_b_idx" cannot store virtual column "v"
+statement error pgcode 0A000 index cannot store virtual column v
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,

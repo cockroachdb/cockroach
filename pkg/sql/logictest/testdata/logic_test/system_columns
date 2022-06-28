@@ -207,10 +207,10 @@ CREATE INDEX idx ON tab3(x, tableoid)
 statement error pgcode XXUUU index "idx" contains unknown column "crdb_internal_mvcc_timestamp"
 CREATE INDEX idx ON tab3(x, crdb_internal_mvcc_timestamp)
 
-statement error pgcode XXUUU index "idx" contains stored column "tableoid" with unknown ID 4294967294
+statement error pgcode 0A000 index cannot store system column tableoid
 CREATE INDEX idx ON tab3(x) STORING (tableoid)
 
-statement error pgcode XXUUU  index "idx" contains stored column "crdb_internal_mvcc_timestamp" with unknown ID 4294967295
+statement error pgcode 0A000 index cannot store system column crdb_internal_mvcc_timestamp
 CREATE INDEX idx ON tab3(x) STORING (crdb_internal_mvcc_timestamp)
 
 statement error pgcode 42703 column "crdb_internal_mvcc_timestamp" does not exist
