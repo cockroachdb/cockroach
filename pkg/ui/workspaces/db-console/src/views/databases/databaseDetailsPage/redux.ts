@@ -149,6 +149,11 @@ export const mapStateToProps = createSelector(
               : null,
             hasIndexRecommendations:
               details?.data?.has_index_recommendations || false,
+            totalBytes: FixLong(
+              details?.data?.data_total_bytes || 0,
+            ).toNumber(),
+            liveBytes: FixLong(details?.data?.data_live_bytes || 0).toNumber(),
+            livePercentage: details?.data?.data_live_percentage || 0,
           },
           stats: {
             loading: !!stats?.inFlight,
