@@ -281,7 +281,26 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 			for idx, c := range allConns {
 				if err := c.PingContext(ctx); err != nil {
 					logStmt(stmt)
-					t.Fatalf("ping node %d: %v\nprevious sql:\n%s;", idx+1, err, stmt)
+					nodeID := idx + 1
+					errStr := fmt.Sprintf("ping node %d: %v\n", nodeID, err)
+					hintStr := fmt.Sprintf(
+						"HINT: node likely crashed, check logs in artifacts > logs/%d.unredacted\n",
+						nodeID,
+					)
+
+					var sb strings.Builder
+					// Print the error message and a hint.
+					sb.WriteString(errStr)
+					sb.WriteString(hintStr)
+					// Print the previous SQL.
+					sb.WriteString(fmt.Sprintf("previous sql:\n%s;", stmt))
+					// Print the error message and hint again because
+					// github-post prunes the top of the error message away when
+					// the SQL is too long.
+					sb.WriteString(errStr)
+					sb.WriteString(hintStr)
+
+					t.Fatalf(sb.String())
 				}
 			}
 		}
@@ -295,12 +314,13 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 			clusterSpec = r.MakeClusterSpec(numNodes)
 		}
 		r.Add(registry.TestSpec{
-			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			// NB: sqlsmith failures should never block a release.
+			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Owner:           registry.OwnerSQLQueries,
 			Cluster:         clusterSpec,
 			Timeout:         time.Minute * 20,
 			RequiresLicense: true,
+			// NB: sqlsmith failures should never block a release.
+			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
