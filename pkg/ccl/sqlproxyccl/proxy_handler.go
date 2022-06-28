@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net"
 	"regexp"
 	"strconv"
@@ -297,8 +298,21 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		return fe.Err
 	}
 
-	// This currently only happens for CancelRequest type of startup messages
-	// that we don't support. Return nil to the server, which simply closes the
+	// Cancel requests are sent on a separate connection, and have no response,
+	// so we can close the connection immediately after handling them.
+	if cr := fe.CancelRequest; cr != nil {
+		if err := handler.handleCancelRequest(cr); err != nil {
+			// Lots of noise from this log indicates that somebody is spamming
+			// fake cancel requests.
+			log.Warningf(
+				ctx, "could not handle cancel request from client %s: %v",
+				incomingConn.Conn.RemoteAddr().String(), err,
+			)
+		}
+		return nil
+	}
+
+	// This should not happen. Return nil to the server, which simply closes the
 	// connection.
 	if fe.Msg == nil {
 		return nil
@@ -444,6 +458,34 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		handler.metrics.updateForError(err)
 		return err
 	}
+}
+
+// handleCancelRequest handles a pgwire query cancel request by either
+// forwarding it to a SQL node or to another proxy.
+func (handler *proxyHandler) handleCancelRequest(cr *pgproto3.CancelRequest) error {
+	if ci, ok := handler.cancelInfoMap.getCancelInfo(cr.SecretKey); ok {
+		cancelConn, err := net.DialTimeout("tcp", ci.crdbAddr.String(), 5*time.Second)
+		if err != nil {
+			return err
+		}
+		defer cancelConn.Close()
+		if err := cancelConn.SetDeadline(timeutil.Now().Add(5 * time.Second)); err != nil {
+			return err
+		}
+		cr = &pgproto3.CancelRequest{
+			ProcessID: ci.origBackendKeyData.ProcessID,
+			SecretKey: ci.origBackendKeyData.SecretKey,
+		}
+		buf := cr.Encode(nil /* buf */)
+		if _, err := cancelConn.Write(buf); err != nil {
+			return err
+		}
+		if _, err := cancelConn.Read(buf); err != io.EOF {
+			return err
+		}
+	}
+	// TODO(rafi): add logic for forwarding to another proxy.
+	return nil
 }
 
 // startPodWatcher runs on a background goroutine and listens to pod change

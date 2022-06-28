@@ -53,11 +53,10 @@ func makeCancelInfo(
 	}
 }
 
-// proxyIP returns the IP address of the sqlproxy instance that created this
-// cancelInfo.
-func (c *cancelInfo) proxyIP() net.IP {
+// proxyIP returns the IP address that is embedded in the given CancelRequest.
+func toProxyIP(req *pgproto3.CancelRequest) net.IP {
 	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, c.proxyBackendKeyData.ProcessID)
+	binary.BigEndian.PutUint32(ip, req.ProcessID)
 	return ip
 }
 
