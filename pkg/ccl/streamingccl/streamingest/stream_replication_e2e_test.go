@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -194,6 +196,16 @@ func configureClusterSettings(setting map[string]string) []string {
 	return res
 }
 
+func streamIngestionStats(
+	t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
+) *streampb.StreamIngestionStats {
+	stats, rawStats := &streampb.StreamIngestionStats{}, make([]byte, 0)
+	row := sqlRunner.QueryRow(t, "SELECT crdb_internal.stream_ingestion_stats_pb($1)", ingestionJobID)
+	row.Scan(&rawStats)
+	require.NoError(t, protoutil.Unmarshal(rawStats, stats))
+	return stats
+}
+
 func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -252,8 +264,8 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 		c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 			sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 		})
-
 		c.cutover(producerJobID, ingestionJobID, cutoverTime)
+
 		c.compareResult("SELECT * FROM d.t1")
 		c.compareResult("SELECT * FROM d.t2")
 		c.compareResult("SELECT * FROM d.x")
@@ -315,6 +327,10 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
+
+	stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+	require.True(t, srcTime.Before(stats.ReplicationLagInfo.MinIngestedTimestamp.GoTime()))
+	require.Equal(t, "", stats.ProducerError)
 
 	// Make producer job easily times out
 	c.srcSysSQL.ExecMultiple(t, configureClusterSettings(map[string]string{
