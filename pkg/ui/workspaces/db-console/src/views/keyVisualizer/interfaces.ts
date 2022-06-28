@@ -7,6 +7,8 @@ export interface SpanStatistics {
   // pretty
   pretty: { startKey: string; endKey: string };
   batchRequests: number;
+  batchRequestsNormalized: number;
+  nBytes: number;
 }
 
 export interface GetSamplesResponse {

@@ -5,8 +5,15 @@ import {
   CanvasHeight,
   YAxisLabelPadding,
   XAxisLabelPadding,
+  MaxZoom,
+  MaxLabelsYAxis,
+  MaxLabelsXAxis,
 } from "./constants";
 import { KeyVisualizerProps, SpanStatistics } from "./interfaces";
+
+function lerp(a: number, b: number, t: number) {
+  return (1 - t) * a + t * b;
+}
 
 function drawBucket(
   pixels: any,
@@ -14,7 +21,7 @@ function drawBucket(
   y: number,
   width: number,
   height: number,
-  color: number[],
+  color: number[]
 ) {
   // clip if not on screen
   if (x > CanvasWidth || x + width < 0 || y > CanvasHeight || y + height < 0) {
@@ -46,6 +53,55 @@ function drawBucket(
   }
 }
 
+function filterAxisLabels(
+  zoom: number,
+  panOffset: number,
+  offets: Record<string, number>,
+  maxLabels: number,
+  canvasLength: number
+): Record<string, number> {
+  // find y bounds of current view
+  // find all labels that want to exist between these bounds
+  // if that number <= max, do nothing
+  // if > Max, reduce by factor of n / Max
+
+  const zoomFactor = 1 / zoom; // percentage of the canvas you can see
+  const windowSize = zoomFactor * canvasLength * MaxZoom;
+  const min = zoomFactor * MaxZoom * -panOffset;
+  const max = min + windowSize;
+
+  const labelsInWindow = [] as string[];
+  for (const [key, offset] of Object.entries(offets)) {
+    const offsetTransformed = offset * MaxZoom;
+    if (offsetTransformed >= min && offsetTransformed <= max) {
+      labelsInWindow.push(key);
+    }
+  }
+
+  let labelsReduced = [] as string[];
+  if (labelsInWindow.length > maxLabels) {
+    // reduce by factor ceil(len / MaxLabels)
+    const labelsToSkip = Math.ceil(labelsInWindow.length / maxLabels);
+
+    // preserve the first and last label.
+    const first = labelsInWindow[0];
+    const last = labelsInWindow[labelsInWindow.length - 1];
+
+    labelsReduced.push(first);
+    for (let i = 1; i < labelsInWindow.length - 2; i += labelsToSkip) {
+      labelsReduced.push(labelsInWindow[i]);
+    }
+    labelsReduced.push(last);
+  } else {
+    labelsReduced = labelsInWindow;
+  }
+
+  return labelsReduced.reduce((acc, key) => {
+    acc[key] = offets[key];
+    return acc;
+  }, {} as Record<string, number>);
+}
+
 export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
   xPanOffset = 0;
   yPanOffset = 0;
@@ -56,7 +112,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   ctx: CanvasRenderingContext2D;
   panHandlerThrottled: (
-    e: React.MouseEvent<HTMLCanvasElement, MouseEvent>,
+    e: React.MouseEvent<HTMLCanvasElement, MouseEvent>
   ) => void;
   zoomHandlerThrottled: (e: React.WheelEvent<HTMLCanvasElement>) => void;
   hoverHandlerThrottled: any;
@@ -77,7 +133,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
         0,
         0,
         this.ctx.canvas.width,
-        this.ctx.canvas.height,
+        this.ctx.canvas.height
       );
       const pixels = imageData.data;
 
@@ -93,11 +149,11 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
           const { x, y, width, height } = this.computeBucket(
             i,
             nSamples,
-            bucket,
+            bucket
           );
 
           // compute color
-          const color = [bucket.batchRequests / this.props.highestTemp, 0, 0];
+          const color = [bucket.batchRequestsNormalized / this.props.highestTemp, 0, 0];
 
           drawBucket(
             pixels,
@@ -105,7 +161,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
             Math.ceil(y),
             Math.ceil(width),
             Math.ceil(height),
-            color,
+            color
           );
         }
       }
@@ -115,37 +171,62 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
       // console.log("render time: ", window.performance.now() - startTime);
 
       // render y axis
-      // choose 10 values to display
-
       this.ctx.fillStyle = "white";
       this.ctx.font = "12px sans-serif";
-      let labelCount = 0;
-      // const nSkip = 1;
-      for (const [key, yOffset] of Object.entries(this.props.yOffsetForKey)) {
-        labelCount++;
-        // if (labelCount % nSkip === 0) {
+
+      const yAxisLabels: Record<string, number> = filterAxisLabels(
+        this.xZoomFactor,
+        this.yPanOffset,
+        this.props.yOffsetForKey,
+        MaxLabelsYAxis,
+        CanvasHeight
+      );
+
+      for (let [key, yOffset] of Object.entries(yAxisLabels)) {
         this.ctx.fillText(
           key,
           YAxisLabelPadding,
-          yOffset * this.yZoomFactor + this.yPanOffset,
+          yOffset * this.yZoomFactor + this.yPanOffset
         );
-        // }
       }
 
       // render x axis
-      for (let i = 0; i < nSamples; i++) {
-        const sample = this.props.response.samples[i];
+      // TODO: move this up so it's not computed every frame
+      const xOffsetForSampleTime = this.props.response.samples.reduce(
+        (acc, sample, index) => {
+          const wallTimeMs = sample.sampleTime.wallTime / 1e6;
+          const timeString = new Date(wallTimeMs).toISOString();
+          const offset =
+            (index * CanvasWidth) / this.props.response.samples.length;
+          acc[timeString] = offset;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
 
-        const timeString = new Date(
-          sample.sampleTime.wallTime / 1e6,
-        ).toUTCString();
-        const x =
-          YAxisLabelPadding +
-          this.xPanOffset +
-          (i * CanvasWidth * this.xZoomFactor) / nSamples;
+      const xAxisLabels = filterAxisLabels(
+        this.xZoomFactor,
+        this.xPanOffset,
+        xOffsetForSampleTime,
+        MaxLabelsXAxis,
+        CanvasWidth
+      );
 
-        const y = CanvasHeight - XAxisLabelPadding;
-        this.ctx.fillText(timeString, x, y);
+      for (let [timestring, xOffset] of Object.entries(xAxisLabels)) {
+        // split timestring and render each part
+        const [s1, s2] = timestring.split("T");
+
+        this.ctx.fillText(
+          s1,
+          YAxisLabelPadding + this.xPanOffset + xOffset * this.xZoomFactor,
+          CanvasHeight - XAxisLabelPadding
+        );
+
+        this.ctx.fillText(
+          s2,
+          YAxisLabelPadding + this.xPanOffset + xOffset * this.xZoomFactor,
+          CanvasHeight - 2.5 * XAxisLabelPadding
+        );
       }
     }); // end RAF
   };
@@ -185,16 +266,24 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
 
   handleCanvasScroll = (e: any) => {
     if (!this.zoomHandlerThrottled) {
-      this.zoomHandlerThrottled = throttle(e => {
+      this.zoomHandlerThrottled = throttle((e) => {
         // normalize value and negate so that "scrolling up" zooms in
         const deltaY = -e.deltaY / 100;
 
         this.yZoomFactor += deltaY;
         this.xZoomFactor += deltaY;
 
-        // clamp zoom factor between 1 and 10
-        this.yZoomFactor = Math.max(1, Math.min(20, this.yZoomFactor));
-        this.xZoomFactor = Math.max(1, Math.min(20, this.xZoomFactor));
+        // clamp zoom factor between 1 and MaxZoom
+        this.yZoomFactor = Math.max(1, Math.min(MaxZoom, this.yZoomFactor));
+        this.xZoomFactor = Math.max(1, Math.min(MaxZoom, this.xZoomFactor));
+
+        // find mouse coordinates in terms of current window
+        const windowPercentageX = (e.nativeEvent.offsetX / CanvasWidth)
+        const windowPercentageY = (e.nativeEvent.offsetY / CanvasHeight)
+
+        const z = this.xZoomFactor === 1 ? 0 : (this.xZoomFactor - 1) / (MaxZoom - 1)
+        this.xPanOffset = windowPercentageX * CanvasWidth * MaxZoom * z * -1
+        this.yPanOffset = windowPercentageY * CanvasHeight * MaxZoom * z * -1
 
         // if zoomed out, reset pan
         if (this.yZoomFactor === 1 && this.xZoomFactor === 1) {
@@ -211,7 +300,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
 
   handleCanvasPan = (e: any) => {
     if (!this.panHandlerThrottled) {
-      this.panHandlerThrottled = throttle(e => {
+      this.panHandlerThrottled = throttle((e) => {
         this.xPanOffset += e.movementX;
         this.yPanOffset += e.movementY;
 
@@ -243,7 +332,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
 
   handleCanvasHover = (e: any) => {
     if (!this.hoverHandlerThrottled) {
-      this.hoverHandlerThrottled = throttle(e => {
+      this.hoverHandlerThrottled = throttle((e) => {
         const mouseX = e.nativeEvent.offsetX;
         const mouseY = e.nativeEvent.offsetY;
         const nSamples = this.props.response.samples.length;
@@ -259,7 +348,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
             const { x, y, width, height } = this.computeBucket(
               i,
               nSamples,
-              bucket,
+              bucket
             );
 
             if (
@@ -269,7 +358,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
               mouseY <= y + height
             ) {
               const timeString = new Date(
-                sample.sampleTime.wallTime / 1e6,
+                sample.sampleTime.wallTime / 1e6
               ).toUTCString();
               this.props.setTooltipDetails(mouseX, mouseY, timeString, bucket);
               break iterate_samples;
@@ -285,7 +374,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
   render() {
     return (
       <canvas
-        onWheel={e => {
+        onWheel={(e) => {
           e.persist();
           this.handleCanvasScroll(e);
         }}
@@ -297,7 +386,7 @@ export class KeyVisualizer extends React.PureComponent<KeyVisualizerProps> {
           this.isPanning = false;
           this.props.setShowTooltip(true);
         }}
-        onMouseMove={e => {
+        onMouseMove={(e) => {
           e.persist();
 
           if (this.isPanning) {

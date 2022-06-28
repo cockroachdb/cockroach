@@ -6,6 +6,7 @@ import {
   SpanDetailTooltip,
   SpanDetailTooltipProps,
 } from "oss/src/views/keyVisualizer/spanDetailTooltip";
+import { RESET_SQL_STATS_COMPLETE } from "oss/src/redux/sqlStats";
 
 interface KeyVisualizerPageState {
   response: GetSamplesResponse;
@@ -33,6 +34,8 @@ export default class KeyVisualizerPage extends React.Component<
   // 3) writes these values and the response to state, for consumption by the visualizer.
   processResponse(response: GetSamplesResponse) {
     let highestBatchRequests = 0;
+    let highestBytes = 0;
+
     for (const sample of response.samples) {
       for (const stat of sample.spanStats) {
         // hack to deal with qps -> batchRequests transition
@@ -40,17 +43,40 @@ export default class KeyVisualizerPage extends React.Component<
         if (stat.batchRequests === undefined) {
           stat.batchRequests = 0;
         } else {
-
           // hack to deal with json marshaller encoding integers as strings.
           stat.batchRequests = parseInt(String(stat.batchRequests));
         }
 
-        // maintain highest batch request value
-        if (stat.batchRequests > highestBatchRequests) {
-          highestBatchRequests = stat.batchRequests;
+        if (stat.nBytes === undefined) {
+          stat.nBytes = 0
+        } else {
+          stat.nBytes = parseInt(String(stat.nBytes));
+        }
+
+
+        if (stat.nBytes > highestBytes) {
+          highestBytes = stat.nBytes
         }
       }
     }
+
+
+    for (let sample of response.samples) {
+      for (const stat of sample.spanStats) {
+        const normalizedBytes = stat.nBytes / highestBytes;
+        if (normalizedBytes !== 0) {
+          stat.batchRequestsNormalized = stat.batchRequests * normalizedBytes;
+        } else {
+          stat.batchRequestsNormalized = 0; // TODO: revisit this.
+        }
+
+        // maintain highest batch request value
+        if (stat.batchRequestsNormalized > highestBatchRequests) {
+          highestBatchRequests = stat.batchRequestsNormalized;
+        }
+      }
+    }
+
 
     // compute height of each key
     const yOffsetForKey = response.keys.reduce((acc, curr, index) => {
@@ -60,9 +86,10 @@ export default class KeyVisualizerPage extends React.Component<
       return acc;
     }, {} as any);
 
-    console.log(response);
-    console.log(yOffsetForKey);
-    console.log(highestBatchRequests);
+    console.log("response: ", response);
+    console.log("key offsets: ", yOffsetForKey);
+    console.log("highest bytes: ", highestBytes);
+    console.log("highest batch requests: ", highestBatchRequests);
 
     this.setState({
       response,
@@ -72,7 +99,7 @@ export default class KeyVisualizerPage extends React.Component<
   }
 
   componentDidMount() {
-    fetch("http://localhost:3000/_status/v1/key-visualizer")
+    fetch("http://localhost:8080/_status/v1/key-visualizer")
       .then(res => res.json())
       .then(response => this.processResponse(response));
   }

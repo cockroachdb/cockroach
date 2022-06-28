@@ -25,6 +25,8 @@ export const SpanDetailTooltip: React.FunctionComponent<SpanDetailTooltipProps> 
       <p>start key: {props.spanStats?.pretty.startKey}</p>
       <p>end key: {props.spanStats?.pretty.endKey}</p>
       <p>batch reqs: {props.spanStats?.batchRequests}</p>
+      <p>batch reqs normalized: {props.spanStats?.batchRequestsNormalized}</p>
+      <p>bytes: {props.spanStats?.nBytes}</p>
     </div>
   );
 };
