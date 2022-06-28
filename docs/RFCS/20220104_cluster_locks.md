@@ -1,11 +1,13 @@
 # KV Lock Observability RFC
 
-* Feature Name: `crdb_locks`
-* Status: accepted
+* Feature Name: `cluster_locks`
+* Status: completed
 * Start Date: 2022-01-04
 * Authors: Alex Sarkesian
 * RFC PR: [#75541](https://github.com/cockroachdb/cockroach/pull/75541)
 * Cockroach Issue: [#67589](https://github.com/cockroachdb/cockroach/issues/67589)
+
+***NOTE: The design described ahead in this RFC constitutes the initial proposal, and some details (such as the request API) may have changed slightly from the initial design in the implementation process.***
 
 [TOC levels=1-3 markdown]: #
 
@@ -25,19 +27,18 @@
 - [Use Cases](#use-cases)
   * [Use Case Matrix](#use-case-matrix)
   * [Examples](#examples)
-- [Open Questions](#open-questions)
 - [Future Work](#future-work)
 
 # Summary
 
-This design doc RFC proposes the implementation of a virtual `crdb_locks` table 
+This design doc RFC proposes the implementation of a virtual `cluster_locks` table 
 to enable observability of a point-in-time view of lock holders within a given 
 cluster.  Such a view would be able to show which transactions are holding 
 locks on which spans across the ranges of a cluster, as well as which 
 transactions may be waiting on a given lock.  This information, in conjunction 
 with other virtual tables, would allow a user to identify the individual 
 transactions and queries causing other transactions to wait on a lock at a 
-given point in time.  The `crdb_locks` virtual table would provide a 
+given point in time.  The `cluster_locks` virtual table would provide a 
 client-level view into the Lock Table of each KV range’s Concurrency Manager.  This 
 also means that the view will only incorporate locks managed by the Lock 
 Table, and not request-level latches or replicated locks that are not 
@@ -81,7 +82,7 @@ state and contention is therefore currently missing, and has been
 There are a number of use cases for visualizing contention in a running 
 database or cluster, as elaborated below in [Use Cases](#use-cases).  These 
 use cases exist for both engineers and TSEs as well as users and administrators 
-of CockroachDB, and while ``crdb_locks`` is intended for use by any type of 
+of CockroachDB, and while ``cluster_locks`` is intended for use by any type of 
 user looking to investigate contention among lockholders in a cluster, it is 
 one of several tools that can be used to investigate contention, and how it 
 fits in with other tools is described further below in [Alternatives](#alternatives).  The 
@@ -149,23 +150,23 @@ transaction to obtain the lock.
 5. **We do not track lock acquisition or lock wait start times.**  While 
 this is a current limitation, given that there has already been some [planned work](https://github.com/cockroachdb/cockroach/issues/67619)
 around this, we could consider it in the scope of this work to include both of 
-these (and thus remove this limitation).
+these (and thus remove this limitation). (**Follow-up note**: This has been implemented as part of [#76395](https://github.com/cockroachdb/cockroach/pull/76395))
 
 # Technical Design
 
-The `crdb_internal.crdb_locks` table will be implemented as a [virtual schema table](https://github.com/cockroachdb/cockroach/blob/2b7ba8c72bd5031a5ae28945b5906ef0d407e6be/pkg/sql/crdb_internal.go) 
+The `crdb_internal.cluster_locks` table will be implemented as a [virtual schema table](https://github.com/cockroachdb/cockroach/blob/2b7ba8c72bd5031a5ae28945b5906ef0d407e6be/pkg/sql/crdb_internal.go) 
 at the SQL level, and will be populated by making KV requests across the ranges 
 in the cluster.  Each KV request will be evaluated using the corresponding 
 range’s Concurrency Manager, which will populate the response.  These combined 
-responses will be used as necessary to populate the `crdb_locks` table.
+responses will be used as necessary to populate the `cluster_locks` table.
 
 ## Virtual Table
 
-Schema for **`crdb_internal.crdb_locks`**:
+Schema for **`crdb_internal.cluster_locks`**:
 
 
 ```
-CREATE TABLE crdb_internal.crdb_locks (
+CREATE TABLE crdb_internal.cluster_locks (
   range_id INT,           -- the ID of the range that contains the lock
   table_id INT,           -- the id of the table to which the range with this lock belongs
   database_name STRING,   -- the name of the individual database
@@ -180,6 +181,7 @@ CREATE TABLE crdb_internal.crdb_locks (
   durability STRING,      -- the durability of the lock [REPLICATED, UNREPLICATED] (NULL if not held)
   granted BOOL,           -- represents if this transaction is holding the lock or waiting on the lock
   contended BOOL,         -- represents if this lock has active waiters
+  duration INTERVAL,      -- represents how long the lock has been held (or waiter has been waiting)
 );
 ```
 
@@ -317,12 +319,12 @@ lock is only tracked [within the waiting Goroutine for the purposes of Contentio
 and not maintained within the lock wait queue itself, we will need to modify 
 this if we want to be able to display the time spent waiting in our virtual 
 table view.  As this would be a highly useful feature, it is likely worth the 
-time needed to make this change, but it does not exist at the moment.
+time needed to make this change, but it does not exist at the moment. (**Follow-up note**: This has been implemented as part of [#76395](https://github.com/cockroachdb/cockroach/pull/76395)).
 
 **Note on Lock Aquisition Time**: Similar to the above, we do not currently 
 track the time a lockholder acquires a lock.  This could be resolved by 
 incorporating the [planned work to track this](https://github.com/cockroachdb/cockroach/issues/67619) 
-into the scope of this project.
+into the scope of this project. (**Follow-up note**: This has been implemented as part of [#76395](https://github.com/cockroachdb/cockroach/pull/76395)).
 
 One last point worth noting is that while non-transactional lock holders will 
 not show up in the lock table, they _can_ show up in lock wait queues (as 
@@ -376,7 +378,7 @@ Active Tracing Spans Registry, for which there is
 [currently ongoing work to visualize with a UI](https://github.com/cockroachdb/cockroach/pull/74318), 
 would be useful to show traces for currently active operations, including those 
 contending on locks, but does not specifically map to the use case a virtual 
-table like ``crdb_locks`` would provide.  That said, it will likely be worth it 
+table like ``cluster_locks`` would provide.  That said, it will likely be worth it 
 to coordinate these efforts, as they can work together to better enable 
 CockroachDB users and developers.  The Contention Events framework 
 (i.e.`crdb_internal.cluster_contended_*` tables), for which there is 
@@ -390,10 +392,10 @@ insight into what is _currently_ blocking a particular transaction.
 Given that the Active Tracing Spans Registry is also intended to visualize what 
 transactions are actively running (and potentially holding locks), albeit in a 
 much more engineer-focused, in-depth manner, it could be theoretically possible 
-to implement something like `crdb_locks` using it as infrastructure.  At this 
+to implement something like `cluster_locks` using it as infrastructure.  At this 
 point in time, however, this may not be the best approach, especially as it 
 would likely require more complexity to narrow down the data in the Active 
-Tracing Spans into a view like `crdb_locks`, it would be additional indirection 
+Tracing Spans into a view like `cluster_locks`, it would be additional indirection 
 rather than interfacing with the Lock Table directly, and additionally there 
 are currently limitations that restrict viewing the Active Tracing Spans to a 
 single node rather than cluster-wide. 
@@ -429,10 +431,10 @@ other tools mentioned above for a deeper investigation.
 
 ## Use Case Matrix
 
-|                         | Historical View                         | Live View              |
-| ----------------------- | --------------------------------------- | ---------------------- |
-| **For Engineers/TSEs**  | Jaeger/etc, Splunk (potentially)        | Active Tracing Spans   |
-| **For Users/DB Admins** | Contention Events (via SQL, Dashboards) | `crdb_locks` (via SQL) |
+|                         | Historical View                         | Live View                 |
+| ----------------------- | --------------------------------------- | ------------------------- |
+| **For Engineers/TSEs**  | Jaeger/etc, Splunk (potentially)        | Active Tracing Spans      |
+| **For Users/DB Admins** | Contention Events (via SQL, Dashboards) | `cluster_locks` (via SQL) |
 
 ## Examples
 
@@ -448,7 +450,7 @@ SELECT
   s.node_id,
   s.user_name,
   s.client_address
-FROM crdb_internal.crdb_locks l
+FROM crdb_internal.cluster_locks l
 JOIN crdb_internal.cluster_transactions t ON l.txn_id = t.id
 JOIN crdb_internal.cluster_sessions s ON t.session_id = s.session_id
 WHERE l.granted = true;
@@ -468,8 +470,8 @@ SELECT
   lh.lock_key_pretty,
   lh.txn_id AS lock_holder,
   lw.txn_id AS lock_waiter
-FROM crdb_internal.crdb_locks lh
-JOIN crdb_internal.crdb_locks lw ON lh.lock_key = lw.lock_key
+FROM crdb_internal.cluster_locks lh
+JOIN crdb_internal.cluster_locks lw ON lh.lock_key = lw.lock_key
 WHERE lh.granted = true AND lh.txn_id IS DISTINCT FROM lw.txn_id;
 ```
 ```
@@ -486,8 +488,8 @@ SELECT
   lh.range_id,
   lh.lock_key_pretty,
   q.query as waiting_query
-FROM crdb_internal.crdb_locks lh
-JOIN crdb_internal.crdb_locks lw ON lh.lock_key = lw.lock_key
+FROM crdb_internal.cluster_locks lh
+JOIN crdb_internal.cluster_locks lw ON lh.lock_key = lw.lock_key
 JOIN crdb_internal.cluster_queries q ON lw.txn_id = q.txn_id
 WHERE lh.granted = true AND lh.txn_id IS DISTINCT FROM lw.txn_id;
 ```
@@ -505,7 +507,7 @@ SELECT
   l.range_id,
   l.lock_key_pretty,
   COUNT(*) AS waiter_count
-FROM crdb_internal.crdb_locks l
+FROM crdb_internal.cluster_locks l
 WHERE l.granted=false
 GROUP BY l.database_name, l.table_name, l.range_id, l.lock_key_pretty;
 ```
@@ -515,14 +517,11 @@ GROUP BY l.database_name, l.table_name, l.range_id, l.lock_key_pretty;
   tpcc          | item       |       72 | /Table/62/1/325/0 |            1
 ```
 
-# Open Questions
-
-* Special considerations for tenant SQL pods in Serverless
 
 # Future Work
 
 * Incorporating replicated locks not managed by the Lock Table
 * Incorporating contention within the Latch Manager.
 * Implementing as part of the information schema and/or with additional SQL syntax such as `SHOW LOCKS`
-* Push-down filters for particular ranges, client sessions, etc.
+* Push-down filters for particular ranges, client sessions, etc. (**Note**: This has been added as part of [#79623](https://github.com/cockroachdb/cockroach/pull/79623)).
 * Observability in Dashboards
