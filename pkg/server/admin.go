@@ -897,6 +897,37 @@ func (s *adminServer) tableDetailsHelper(
 		resp.CreateTableStatement = createStmt
 	}
 
+	// MVCC Garbage result.
+	row, cols, err = s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+		ctx, "admin-show-mvcc-garbage-pct", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: userName},
+		fmt.Sprintf("WITH "+
+			"range_stats AS ("+
+			"SELECT "+
+			"crdb_internal.range_stats(start_key) AS d "+
+			"FROM crdb_internal.ranges_no_leases "+
+			"WHERE table_id = '%s'::REGCLASS), "+
+			"aggregated AS ("+
+			"SELECT "+
+			"sum((d->>'live_bytes')::INT8) AS live, "+
+			"sum((d->>'key_bytes')::INT8 + (d->>'val_bytes')::INT8) AS total "+
+			"FROM range_stats) "+
+			"SELECT COALESCE((total - live) / NULLIF(total,0), 0)::FLOAT as garbage_percentage "+
+			"FROM aggregated", escQualTable),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row != nil {
+		scanner := makeResultScanner(cols)
+		const garbagePctCol = "garbage_percentage"
+		var garbagePct float32
+		if err := scanner.Scan(row, garbagePctCol, &garbagePct); err != nil {
+			return nil, err
+		}
+		resp.GarbagePercentage = garbagePct
+	}
+
 	// Marshal SHOW STATISTICS result.
 	row, cols, err = s.server.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-show-statistics", nil, /* txn */
