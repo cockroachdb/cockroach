@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -22,14 +23,19 @@ import (
 )
 
 func initColumnBackfillerSpec(
-	desc descpb.TableDescriptor, duration time.Duration, chunkSize int64, readAsOf hlc.Timestamp,
+	tbl catalog.TableDescriptor,
+	duration time.Duration,
+	chunkSize int64,
+	updateChunkSizeThresholdBytes uint64,
+	readAsOf hlc.Timestamp,
 ) (execinfrapb.BackfillerSpec, error) {
 	return execinfrapb.BackfillerSpec{
-		Table:     desc,
-		Duration:  duration,
-		ChunkSize: chunkSize,
-		ReadAsOf:  readAsOf,
-		Type:      execinfrapb.BackfillerSpec_Column,
+		Table:                         *tbl.TableDesc(),
+		Duration:                      duration,
+		ChunkSize:                     chunkSize,
+		UpdateChunkSizeThresholdBytes: updateChunkSizeThresholdBytes,
+		ReadAsOf:                      readAsOf,
+		Type:                          execinfrapb.BackfillerSpec_Column,
 	}, nil
 }
 
