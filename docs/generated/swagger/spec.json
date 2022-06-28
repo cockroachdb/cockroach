@@ -1523,11 +1523,41 @@
           "type": "string",
           "x-go-name": "CreateTableStatement"
         },
+        "data_non_live_bytes": {
+          "description": "data_non_live_bytes is the size in bytes of non-live (MVCC) data on the table.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DataNonLiveBytes"
+        },
+        "data_non_live_percentage": {
+          "description": "data_non_live_percentage is the percentage of non-live (MVCC) data on the table.",
+          "type": "number",
+          "format": "float",
+          "x-go-name": "DataNonLivePercentage"
+        },
+        "data_total_bytes": {
+          "description": "data_total_bytes is the size in bytes of live and non-live data on the table.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DataTotalBytes"
+        },
         "descriptor_id": {
           "description": "descriptor_id is an identifier used to uniquely identify this table.\nIt can be used to find events pertaining to this table by filtering on\nthe 'target_id' field of events.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "DescriptorID"
+        },
+        "garbage_bytes": {
+          "description": "garbage_bytes is the size in byes of existing MVCC garbage on the table.",
+          "type": "integer",
+          "format": "uint64",
+          "x-go-name": "GarbageBytes"
+        },
+        "garbage_percentage": {
+          "description": "garbage_percentage is the percentage of existing MVCC garbage on the table.",
+          "type": "number",
+          "format": "float",
+          "x-go-name": "GarbagePercentage"
         },
         "grants": {
           "type": "array",
