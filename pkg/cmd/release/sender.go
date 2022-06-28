@@ -31,6 +31,7 @@ const (
 	templatePrefixPostBlockersPastPrep      = "post-blockers.past-prep"
 
 	templatePrefixTemplateBlockers = "template-blockers"
+	templatePrefixUpdateVersions   = "update-versions"
 )
 
 type messageDataPickSHA struct {
@@ -39,6 +40,11 @@ type messageDataPickSHA struct {
 	TrackingIssue    string
 	TrackingIssueURL htmltemplate.URL
 	DiffURL          htmltemplate.URL
+}
+
+type messageDataUpdateVersions struct {
+	Version string
+	PRs     []htmltemplate.URL
 }
 
 // ProjectBlocker lists the number of blockers per project.
@@ -201,6 +207,18 @@ func sendMailPickSHA(args messageDataPickSHA, opts sendOpts) error {
 	template := messageTemplates{
 		SubjectPrefix: templatePrefixPickSHA,
 		BodyPrefixes:  []string{templatePrefixPickSHA},
+	}
+	msg, err := newMessage(opts.templatesDir, template, args)
+	if err != nil {
+		return fmt.Errorf("newMessage: %w", err)
+	}
+	return sendmail(msg, opts)
+}
+
+func sendMailUpdateVersions(args messageDataUpdateVersions, opts sendOpts) error {
+	template := messageTemplates{
+		SubjectPrefix: templatePrefixUpdateVersions,
+		BodyPrefixes:  []string{templatePrefixUpdateVersions},
 	}
 	msg, err := newMessage(opts.templatesDir, template, args)
 	if err != nil {
