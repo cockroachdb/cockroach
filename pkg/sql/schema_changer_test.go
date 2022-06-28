@@ -8286,6 +8286,43 @@ func TestVirtualColumnNotAllowedInPkeyBefore22_1(t *testing.T) {
 	require.Equal(t, "pq: cannot use virtual column \"b\" in primary key", err.Error())
 }
 
+func TestHashShardedIndexNotSupportedInMixedVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V21_2),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	expectedErrMsg := "pq: cannot create hash sharded index on a node running binary newer than 21.2 in a mixed"
+
+	_, err := sqlDB.Exec(`CREATE TABLE t (a INT PRIMARY kEY USING HASH)`)
+	require.Error(t, err)
+	require.Regexp(t, expectedErrMsg, err.Error())
+
+	_, err = sqlDB.Exec(`CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b) USING HASH)`)
+	require.Error(t, err)
+	require.Regexp(t, expectedErrMsg, err.Error())
+
+	_, err = sqlDB.Exec(`CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL)`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b) USING HASH`)
+	require.Error(t, err)
+	require.Regexp(t, expectedErrMsg, err.Error())
+
+	_, err = sqlDB.Exec(`CREATE INDEX idx_t_hash ON t(b) USING HASH`)
+	require.Error(t, err)
+	require.Regexp(t, expectedErrMsg, err.Error())
+}
+
 // TestColumnBackfillProcessingDoesNotHoldLockOnJobsTable is a
 // regression test to ensure that when the column backfill progresses
 // to the next backfill chunk and it needs to update its progress, it
