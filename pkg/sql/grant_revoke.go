@@ -61,6 +61,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 			changePrivilegesNode: changePrivilegesNode{
 				isGrant:         true,
 				withGrantOption: n.WithGrantOption,
+				targets:         n.Targets,
 				grantees:        grantees,
 				desiredprivs:    n.Privileges,
 				grantOn:         grantOn,
@@ -118,6 +119,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 			changePrivilegesNode: changePrivilegesNode{
 				isGrant:         false,
 				withGrantOption: n.GrantOptionFor,
+				targets:         n.Targets,
 				grantees:        grantees,
 				desiredprivs:    n.Privileges,
 				grantOn:         grantOn,
@@ -459,6 +461,9 @@ func (p *planner) getGrantOnObject(
 			incIAMFunc(sqltelemetry.OnTable)
 			return privilege.Table, nil
 		}
+		if composition == virtualTablesOnly {
+			return privilege.VirtualTable, nil
+		}
 		incIAMFunc(sqltelemetry.OnSequence)
 		return privilege.Sequence, nil
 	}
@@ -475,6 +480,8 @@ const (
 	sequenceOnly
 	// If there's any table in the target list.
 	containsTable
+	// If all targets are virtual tables.
+	virtualTablesOnly
 )
 
 // getTablePatternsComposition gets the given grant target list's
@@ -499,10 +506,39 @@ func (p *planner) getTablePatternsComposition(
 		if err != nil {
 			return unknownComposition, err
 		}
-		muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, objectIDs...)
+
+		// Check if the table is a virtual table.
+		var virtualTableIDs descpb.IDs
+		var nonVirtualTableIDs descpb.IDs
+		for _, objectID := range objectIDs {
+			isVirtual := false
+			for _, vs := range virtualSchemas {
+				if _, ok := vs.tableDefs[objectID]; ok {
+					isVirtual = true
+					break
+				}
+			}
+
+			if isVirtual {
+				virtualTableIDs = append(nonVirtualTableIDs, objectID)
+			} else {
+				nonVirtualTableIDs = append(virtualTableIDs, objectID)
+			}
+		}
+
+		if len(nonVirtualTableIDs) != 0 && len(virtualTableIDs) != 0 {
+			return unknownComposition, errors.Newf("cannot mix grants between virtual and non-virtual tables")
+		}
+
+		if len(nonVirtualTableIDs) == 0 {
+			return virtualTablesOnly, nil
+		}
+
+		muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, nonVirtualTableIDs...)
 		if err != nil {
 			return unknownComposition, err
 		}
+
 		for _, mut := range muts {
 			if mut != nil && mut.DescriptorType() == catalog.Table {
 				tableDesc, err := catalog.AsTableDescriptor(mut)

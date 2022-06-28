@@ -126,15 +126,6 @@ func NewCustomSuperuserPrivilegeDescriptor(
 	}
 }
 
-// NewVirtualTablePrivilegeDescriptor is used to construct a privilege descriptor
-// owned by the node user which has SELECT privilege for the public role. It is
-// used for virtual tables.
-func NewVirtualTablePrivilegeDescriptor() *PrivilegeDescriptor {
-	return NewPrivilegeDescriptor(
-		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, username.NodeUserName(),
-	)
-}
-
 // NewVirtualSchemaPrivilegeDescriptor is used to construct a privilege descriptor
 // owned by the node user which has USAGE privilege for the public role. It is
 // used for virtual schemas.
@@ -493,9 +484,10 @@ func (p PrivilegeDescriptor) Show(
 			Privileges: privileges,
 		})
 	}
+
 	// The node user owns system tables, but since it's just an internal reserved
 	// name, we don't show node's privileges here.
-	if showImplicitOwnerPrivs && !sawOwner && !p.Owner().IsNodeUser() {
+	if showImplicitOwnerPrivs && !sawOwner && !p.Owner().IsNodeUser() && !p.Owner().Undefined() {
 		ret = append(ret, UserPrivilege{
 			User:       p.Owner(),
 			Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}},

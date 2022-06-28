@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -130,8 +131,8 @@ func (p synthetic) GetName() string {
 }
 
 // GetObjectType implements the PrivilegeObject interface.
-func (p synthetic) GetObjectType() string {
-	return string(p.DescriptorType())
+func (p synthetic) GetObjectType() privilege.ObjectType {
+	return privilege.Schema
 }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegeobject"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -72,9 +73,9 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 
 // ValidateSyntheticPrivilegeObject validates a SyntheticPrivilegeObject.
 func ValidateSyntheticPrivilegeObject(
-	systemPrivilegeObject catalog.SyntheticPrivilegeObject,
+	systemPrivilegeObject privilegeobject.SyntheticPrivilegeObject,
 ) error {
-	out, err := syntheticprivilege.Parse(systemPrivilegeObject.ToString())
+	out, err := syntheticprivilege.Parse(systemPrivilegeObject.GetPath())
 	if err != nil {
 		return err
 	}

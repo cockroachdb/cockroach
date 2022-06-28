@@ -246,6 +246,7 @@ ORDER BY object_type, object_name`, [][]string{
 	})
 
 	t.Run("zoneconfig_privilege_restore", func(t *testing.T) {
+		skip.WithIssue(t, 84359)
 		dirs, err := ioutil.ReadDir(privilegeDirs)
 		require.NoError(t, err)
 		for _, dir := range dirs {
