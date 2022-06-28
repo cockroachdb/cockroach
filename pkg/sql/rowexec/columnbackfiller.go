@@ -102,7 +102,11 @@ func (cb *columnBackfiller) CurrentBufferFill() float32 {
 
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
-	ctx context.Context, sp roachpb.Span, chunkSize rowinfra.RowLimit, _ hlc.Timestamp,
+	ctx context.Context,
+	sp roachpb.Span,
+	chunkSize rowinfra.RowLimit,
+	updateChunkSizeThresholdBytes rowinfra.BytesLimit,
+	_ hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
 	var commitWaitFn func(context.Context) error
@@ -123,7 +127,6 @@ func (cb *columnBackfiller) runChunk(
 			// waiting for consistency when backfilling a column on GLOBAL tables.
 			commitWaitFn = txn.DeferCommitWait(ctx)
 
-			// TODO(knz): do KV tracing in DistSQL processors.
 			var err error
 			key, err = cb.RunColumnBackfillChunk(
 				ctx,
@@ -131,8 +134,9 @@ func (cb *columnBackfiller) runChunk(
 				cb.desc,
 				sp,
 				chunkSize,
-				true,  /*alsoCommit*/
-				false, /*traceKV*/
+				updateChunkSizeThresholdBytes,
+				true, /*alsoCommit*/
+				cb.flowCtx.TraceKV,
 			)
 			return err
 		})
