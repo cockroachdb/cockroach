@@ -1342,6 +1342,12 @@
           "format": "int64",
           "x-go-name": "DescriptorID"
         },
+        "garbage_percentage": {
+          "description": "garbage_percentage is the percentage of existing MVCC garbage on the table.",
+          "type": "number",
+          "format": "float",
+          "x-go-name": "GarbagePercentage"
+        },
         "grants": {
           "type": "array",
           "items": {
