@@ -295,6 +295,22 @@ func revertToCutoverTimestamp(
 	return j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
 }
 
+func cancelProducerJob(
+	ctx context.Context, streamID streaming.StreamID, addr streamingccl.StreamAddress,
+) {
+	client, err := streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
+	if err != nil {
+		log.Warningf(ctx, "encountered error when createing the stream client: %v", err)
+		return
+	}
+	if err = client.Complete(ctx, streamID, false /* ingestionCutover*/); err != nil {
+		log.Warningf(ctx, "encountered error when canceling the producer job: %v", err)
+	}
+	if err = client.Close(); err != nil {
+		log.Warningf(ctx, "encountered error when closing the stream client: %v", err)
+	}
+}
+
 // OnFailOrCancel is part of the jobs.Resumer interface.
 // There is a know race between the ingestion processors shutting down, and
 // OnFailOrCancel being invoked. As a result of which we might see some keys
@@ -304,8 +320,29 @@ func revertToCutoverTimestamp(
 // TODO(adityamaru): Add ClearRange logic once we have introduced
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
-	return nil
+func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	db := jobExecCtx.ExecCfg().DB
+	p := s.job.Payload()
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+
+	// Cancel the producer job even when the revert has error. The source job's
+	// protected timestamp is no longer needed as this ingestion job won't resume
+	// ingestion anymore.
+	defer cancelProducerJob(ctx,
+		streaming.StreamID(details.StreamID),
+		streamingccl.StreamAddress(details.StreamAddress))
+
+	// TODO(casper): deal with very large tenant.
+	// TODO(casper): ensure the tenant is offline while we revert it.
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    p.GetStreamIngestion().Span.Key,
+			EndKey: p.GetStreamIngestion().Span.EndKey,
+		},
+	})
+	return db.Run(ctx, &b)
 }
 
 var _ jobs.Resumer = &streamIngestionResumer{}
