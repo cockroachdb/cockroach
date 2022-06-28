@@ -50,6 +50,12 @@ const (
 	localPrefixByte = '\x01'
 	// LocalMaxByte is the end of the local key range.
 	LocalMaxByte = '\x02'
+	// PrevishKeyLength is a reasonable key length to use for Key.Prevish(),
+	// typically when peeking to the left of a known key. We want this to be as
+	// tight as possible, since it can e.g. be used for latch spans. However, the
+	// exact previous key has infinite length, so we assume that most keys are
+	// less than 1024 bytes, or have a fairly unique 1024-byte prefix.
+	PrevishKeyLength = 1024
 )
 
 var (
@@ -155,6 +161,21 @@ func (k Key) Clone() Key {
 // value should be treated as immutable after.
 func (k Key) Next() Key {
 	return Key(encoding.BytesNext(k))
+}
+
+// Prevish returns a previous key in lexicographic sort order. It is impossible
+// in general to find the exact immediate predecessor key, because it has an
+// infinite number of 0xff bytes at the end, so this returns the nearest
+// previous key right-padded with 0xff up to length bytes. An infinite number of
+// keys may exist between Key and Key.Prevish(), as keys have unbounded length.
+// This also implies that k.Prevish().IsPrev(k) will often be false.
+//
+// PrevishKeyLength can be used as a reasonable length in most situations.
+//
+// The method may only take a shallow copy of the Key, so both the receiver and
+// the return value should be treated as immutable after.
+func (k Key) Prevish(length int) Key {
+	return Key(encoding.BytesPrevish(k, length))
 }
 
 // IsPrev is a more efficient version of k.Next().Equal(m).
