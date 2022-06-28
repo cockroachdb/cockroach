@@ -25,6 +25,7 @@ import {
   ExecutionType,
   ExecutionsColumn,
 } from "../execTableCommon";
+import { DATE_FORMAT } from "../../util";
 
 interface ActiveTransactionsTable {
   data: ActiveTransaction[];
@@ -75,8 +76,7 @@ export function makeActiveTransactionsColumns(): ColumnDescriptor<ActiveTransact
     {
       name: "startTime",
       title: executionsTableTitles.startTime(execType),
-      cell: (item: ActiveTransaction) =>
-        item.start.format("MMM D, YYYY [at] H:mm"),
+      cell: (item: ActiveTransaction) => item.start.format(DATE_FORMAT),
       sort: (item: ActiveTransaction) => item.start.unix(),
     },
     {

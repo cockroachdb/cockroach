@@ -375,6 +375,11 @@ func (d *buildDeps) IncrementEnumCounter(counterType sqltelemetry.EnumTelemetryT
 	sqltelemetry.IncrementEnumCounter(counterType)
 }
 
+// IncrementDropOwnedByCounter implements the scbuild.Dependencies interface.
+func (d *buildDeps) IncrementDropOwnedByCounter() {
+	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
+}
+
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
 }

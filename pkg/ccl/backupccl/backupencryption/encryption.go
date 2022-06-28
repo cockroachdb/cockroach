@@ -32,6 +32,13 @@ const (
 	// backupEncryptionInfoFile is the file name used to store the serialized
 	// EncryptionInfo proto while the backup is in progress.
 	backupEncryptionInfoFile = "ENCRYPTION-INFO"
+
+	// BackupOptEncKMS is the option name in a BACKUP statement to specify a KMS
+	// URI for encryption.
+	BackupOptEncKMS = "kms"
+	// BackupOptEncPassphrase is the option name in a BACKUP statement to specify
+	// a passphrase for encryption.
+	BackupOptEncPassphrase = "encryption_passphrase"
 )
 
 // ErrEncryptionInfoRead is a special error returned when the ENCRYPTION-INFO

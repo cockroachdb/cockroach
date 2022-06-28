@@ -71,9 +71,6 @@ export const statementsRetries = docsURL(
 export const transactionRetryErrorReference = docsURL(
   "transaction-retry-error-reference.html",
 );
-export const statementsTimeInterval = docsURL(
-  "ui-statements-page.html#time-interval",
-);
 export const capacityMetrics = docsURL(
   "ui-cluster-overview-page.html#capacity-metrics",
 );

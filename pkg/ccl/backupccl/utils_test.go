@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -382,7 +383,7 @@ func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) 
 	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupbase.BackupManifestName)
 	require.NoError(t, err)
 	var backupManifest backuppb.BackupManifest
-	decompressedBytes, err := decompressData(ctx, nil, backupManifestBytes)
+	decompressedBytes, err := backupinfo.DecompressData(ctx, nil, backupManifestBytes)
 	require.NoError(t, err)
 	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))
 	spans := make([]roachpb.Span, 0, len(backupManifest.Files))

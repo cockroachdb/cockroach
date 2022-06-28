@@ -196,17 +196,18 @@ func (s *testIterator) curKV() storage.MVCCKeyValue {
 
 // HasPointAndRange implements SimpleMVCCIterator.
 func (s *testIterator) HasPointAndRange() (bool, bool) {
-	panic("not implemented")
+	ok, err := s.Valid()
+	return ok && err == nil, false
 }
 
 // RangeBounds implements SimpleMVCCIterator.
 func (s *testIterator) RangeBounds() roachpb.Span {
-	panic("not implemented")
+	return roachpb.Span{}
 }
 
 // RangeTombstones implements SimpleMVCCIterator.
 func (s *testIterator) RangeKeys() []storage.MVCCRangeKeyValue {
-	panic("not implemented")
+	return []storage.MVCCRangeKeyValue{}
 }
 
 func TestInitResolvedTSScan(t *testing.T) {

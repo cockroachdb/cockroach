@@ -2118,6 +2118,14 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
 		transactionFingerprintID :=
 			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+
+		err := ex.txnFingerprintIDCache.Add(transactionFingerprintID)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf(ctx, "failed to enqueue transactionFingerprintID = %d: %s", transactionFingerprintID, err)
+			}
+		}
+
 		if !implicit {
 			ex.statsCollector.EndExplicitTransaction(
 				ctx,
@@ -2131,7 +2139,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 				transactionFingerprintID,
 			)
 		}
-		err := ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -2227,6 +2235,7 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
+	ex.totalActiveTimeStopWatch.Stop()
 	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	}

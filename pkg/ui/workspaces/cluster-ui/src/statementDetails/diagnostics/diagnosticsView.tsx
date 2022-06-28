@@ -31,6 +31,7 @@ import {
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath } from "../../api";
+import { DATE_FORMAT_24_UTC } from "../../util";
 
 type IStatementDiagnosticsReport =
   cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -127,7 +128,7 @@ export class DiagnosticsView extends React.Component<
       defaultSortOrder: "descend",
       render: (_text, record) => {
         const timestamp = record.requested_at.seconds.toNumber() * 1000;
-        return moment.utc(timestamp).format("LL[ at ]H:mm");
+        return moment.utc(timestamp).format(DATE_FORMAT_24_UTC);
       },
     },
     {

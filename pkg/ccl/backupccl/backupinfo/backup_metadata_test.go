@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package backupinfo_test
 
 import (
 	"context"
@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -39,7 +41,8 @@ func TestMetadataSST(t *testing.T) {
 	ctx := context.Background()
 	const numAccounts = 1
 	userfile := "userfile:///0"
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backuputils.BackupRestoreTestSetup(t, backuputils.SingleNode, numAccounts,
+		backuputils.InitManualReplication)
 	defer cleanupFn()
 
 	// Check that backup metadata is correct on full cluster backup.
@@ -86,7 +89,7 @@ func checkMetadata(
 		t.Fatal(err)
 	}
 
-	bm, err := newBackupMetadata(ctx, store, metadataSSTName, nil)
+	bm, err := backupinfo.NewBackupMetadata(ctx, store, backupinfo.MetadataSSTName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +113,7 @@ func checkMetadata(
 	checkStats(ctx, t, store, m, bm)
 }
 
-func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
+func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata) {
 	expectedManifest := *m
 	expectedManifest.Descriptors = nil
 	expectedManifest.DescriptorChanges = nil
@@ -124,7 +127,7 @@ func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata)
 }
 
 func checkDescriptors(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaDescs []descpb.Descriptor
 	var desc descpb.Descriptor
@@ -143,7 +146,7 @@ func checkDescriptors(
 }
 
 func checkDescriptorChanges(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaRevs []backuppb.BackupManifest_DescriptorRevision
 	var rev backuppb.BackupManifest_DescriptorRevision
@@ -165,7 +168,9 @@ func checkDescriptorChanges(
 	require.Equal(t, m.DescriptorChanges, metaRevs)
 }
 
-func checkFiles(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
+func checkFiles(
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
+) {
 	var metaFiles []backuppb.BackupManifest_File
 	var file backuppb.BackupManifest_File
 	it := bm.FileIter(ctx)
@@ -181,7 +186,9 @@ func checkFiles(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, b
 	require.Equal(t, m.Files, metaFiles)
 }
 
-func checkSpans(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata) {
+func checkSpans(
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
+) {
 	var metaSpans []roachpb.Span
 	var span roachpb.Span
 	it := bm.SpanIter(ctx)
@@ -198,7 +205,7 @@ func checkSpans(ctx context.Context, t *testing.T, m *backuppb.BackupManifest, b
 }
 
 func checkIntroducedSpans(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaSpans []roachpb.Span
 	var span roachpb.Span
@@ -215,7 +222,7 @@ func checkIntroducedSpans(
 }
 
 func checkTenants(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaTenants []descpb.TenantInfoWithUsage
 	var tenant descpb.TenantInfoWithUsage
@@ -237,9 +244,9 @@ func checkStats(
 	t *testing.T,
 	store cloud.ExternalStorage,
 	m *backuppb.BackupManifest,
-	bm *BackupMetadata,
+	bm *backupinfo.BackupMetadata,
 ) {
-	expectedStats, err := getStatisticsFromBackup(ctx, store, nil, *m)
+	expectedStats, err := backupinfo.GetStatisticsFromBackup(ctx, store, nil, *m)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,8 +278,8 @@ func testingReadBackupManifest(
 	if err != nil {
 		return nil, err
 	}
-	if isGZipped(bytes) {
-		descBytes, err := decompressData(ctx, nil, bytes)
+	if backupinfo.IsGZipped(bytes) {
+		descBytes, err := backupinfo.DecompressData(ctx, nil, bytes)
 		if err != nil {
 			return nil, err
 		}

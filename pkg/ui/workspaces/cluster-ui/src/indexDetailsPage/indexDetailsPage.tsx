@@ -26,7 +26,7 @@ import { SummaryCard } from "../summaryCard";
 import moment, { Moment } from "moment";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
-import { performanceTuningRecipes } from "../util";
+import { DATE_FORMAT_24_UTC, performanceTuningRecipes } from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -127,7 +127,7 @@ export class IndexDetailsPage extends React.Component<
     if (timestamp.isSame(minDate)) {
       return "Never";
     } else {
-      return timestamp.format("MMM DD, YYYY [at] H:mm [(UTC)]");
+      return timestamp.format(DATE_FORMAT_24_UTC);
     }
   }
 

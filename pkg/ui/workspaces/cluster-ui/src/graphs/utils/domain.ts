@@ -15,6 +15,7 @@ import {
   BytesFitScale,
   ComputeByteScale,
   ComputeDurationScale,
+  DATE_WITH_SECONDS_FORMAT_24_UTC,
   DurationFitScale,
 } from "src/util/format";
 
@@ -264,7 +265,7 @@ const timeIncrements: number[] = timeIncrementDurations.map(inc =>
 );
 
 export function formatTimeStamp(timeMillis: number): string {
-  return moment.utc(timeMillis).format("HH:mm:ss on MMM Do, YYYY");
+  return moment.utc(timeMillis).format(DATE_WITH_SECONDS_FORMAT_24_UTC);
 }
 
 function ComputeTimeAxisDomain(extent: Extent): AxisDomain {

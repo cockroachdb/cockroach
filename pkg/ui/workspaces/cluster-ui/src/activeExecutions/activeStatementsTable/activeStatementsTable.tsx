@@ -25,6 +25,7 @@ import {
   ExecutionType,
   ExecutionsColumn,
 } from "../execTableCommon";
+import { DATE_FORMAT } from "../../util";
 
 interface ActiveStatementsTable {
   data: ActiveStatement[];
@@ -73,8 +74,7 @@ export function makeActiveStatementsColumns(): ColumnDescriptor<ActiveStatement>
     {
       name: "startTime",
       title: executionsTableTitles.startTime(execType),
-      cell: (item: ActiveStatement) =>
-        item.start.format("MMM D, YYYY [at] H:mm"),
+      cell: (item: ActiveStatement) => item.start.format(DATE_FORMAT),
       sort: (item: ActiveStatement) => item.start.unix(),
     },
     {

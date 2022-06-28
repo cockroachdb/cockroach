@@ -973,7 +973,7 @@ func mvccGetMetadata(
 	// metadata), or the point version's timestamp if it was a tombstone.
 	if hasRange {
 		rangeKeys := iter.RangeKeys()
-		if rkv, ok := firstRangeKeyAbove(rangeKeys, unsafeKey.Timestamp); ok {
+		if rkv, ok := FirstRangeKeyAbove(rangeKeys, unsafeKey.Timestamp); ok {
 			meta.Deleted = true
 			meta.Timestamp = rangeKeys[0].RangeKey.Timestamp.ToLegacyTimestamp()
 			keyLastSeen := rkv.RangeKey.Timestamp
@@ -2735,8 +2735,19 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 		}
 	}
 
-	// Write the tombstone.
-	return rw.ExperimentalPutMVCCRangeKey(rangeKey, value)
+	if err := rw.ExperimentalPutMVCCRangeKey(rangeKey, value); err != nil {
+		return err
+	}
+
+	// Record the logical operation, for rangefeed emission.
+	rw.LogLogicalOp(MVCCDeleteRangeOpType, MVCCLogicalOpDetails{
+		Safe:      true,
+		Key:       rangeKey.StartKey,
+		EndKey:    rangeKey.EndKey,
+		Timestamp: rangeKey.Timestamp,
+	})
+
+	return nil
 }
 
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
@@ -3798,7 +3809,7 @@ func mvccResolveWriteIntent(
 			// synthesize a point tombstone at the lowest range tombstone covering it.
 			// This is where the point key ceases to exist, contributing to GCBytesAge.
 			if len(unsafeNextValueRaw) > 0 {
-				if rk, found := firstRangeKeyAbove(iter.RangeKeys(), unsafeNextKey.Timestamp); found {
+				if rk, found := FirstRangeKeyAbove(iter.RangeKeys(), unsafeNextKey.Timestamp); found {
 					unsafeNextKey.Timestamp = rk.RangeKey.Timestamp
 					unsafeNextValueRaw = []byte{}
 				}
@@ -4485,7 +4496,7 @@ func ComputeStatsForRangeWithVisitors(
 		// only take them into account for versioned values.
 		var nextRangeTombstone hlc.Timestamp
 		if isValue {
-			if rkv, ok := firstRangeKeyAbove(rangeKeys, unsafeKey.Timestamp); ok {
+			if rkv, ok := FirstRangeKeyAbove(rangeKeys, unsafeKey.Timestamp); ok {
 				nextRangeTombstone = rkv.RangeKey.Timestamp
 			}
 		}

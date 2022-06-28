@@ -57,9 +57,6 @@ export const statementsSql = docsURL(
 export const statementsRetries = docsURL(
   "transactions.html#transaction-retries",
 );
-export const statementsTimeInterval = docsURL(
-  "ui-statements-page.html#time-interval",
-);
 export const readFromDisk = docsURL(
   "architecture/life-of-a-distributed-transaction.html#reads-from-the-storage-layer",
 );

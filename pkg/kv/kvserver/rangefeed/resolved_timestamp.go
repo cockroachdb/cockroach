@@ -142,6 +142,10 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		rts.assertOpAboveRTS(op, t.Timestamp)
 		return false
 
+	case *enginepb.MVCCDeleteRangeOp:
+		rts.assertOpAboveRTS(op, t.Timestamp)
+		return false
+
 	case *enginepb.MVCCWriteIntentOp:
 		rts.assertOpAboveRTS(op, t.Timestamp)
 		return rts.intentQ.IncRef(t.TxnID, t.TxnKey, t.TxnMinTimestamp, t.Timestamp)
