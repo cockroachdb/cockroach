@@ -13,6 +13,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
+import { Helmet } from "react-helmet";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -216,7 +217,7 @@ export class TransactionDetails extends React.Component<
 
     // Get all the stmts matching the transaction's fingerprint ID. Then we filter
     // by those statements actually associated with the current transaction.
-    const stmts = getStatementsByFingerprintId(
+    return getStatementsByFingerprintId(
       statementFingerprintIds,
       statements,
     ).filter(
@@ -224,8 +225,6 @@ export class TransactionDetails extends React.Component<
         s.key.key_data.transaction_fingerprint_id.toString() ===
         this.props.transactionFingerprintId,
     );
-
-    return stmts;
   };
 
   render(): React.ReactElement {
@@ -237,6 +236,7 @@ export class TransactionDetails extends React.Component<
 
     return (
       <div>
+        <Helmet title={"Details | Transactions"} />
         <section className={baseHeadingClasses.wrapper}>
           <Button
             onClick={this.backToTransactionsClick}
