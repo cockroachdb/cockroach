@@ -772,7 +772,7 @@ var roachprodRetryOptions = retry.Options{
 	MaxRetries:     10,
 }
 
-// repeatRun is the same function as c.Run but with an automatic retry loop.
+// RepeatRun is the same function as c.Run, but with an automatic retry loop.
 func (c *SyncedCluster) RepeatRun(
 	ctx context.Context, l *logger.Logger, stdout, stderr io.Writer, nodes Nodes, title,
 	cmd string,

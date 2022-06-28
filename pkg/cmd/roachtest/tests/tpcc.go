@@ -1436,6 +1436,7 @@ func setupPrometheusForTPCC(
 		cfg = &prometheus.Config{}
 		workloadNode := c.Node(c.Spec().NodeCount).InstallNodes()[0]
 		cfg.WithPrometheusNode(workloadNode)
+		cfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
 		cfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
 		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
 			"/", makeWorkloadScrapeNodes(workloadNode, workloadInstances)))

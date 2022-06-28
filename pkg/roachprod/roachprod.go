@@ -1405,7 +1405,7 @@ func StartGrafana(
 		return err
 	}
 	for i, url := range urls {
-		fmt.Printf("Grafana dashboard %d: %s", i, url)
+		fmt.Printf("Grafana dashboard %d: %s\n", i, url)
 	}
 	return nil
 }
@@ -1430,6 +1430,7 @@ func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string, dump
 	return nil
 }
 
+// GrafanaURL returns a url to the grafana dashboard
 func GrafanaURL(
 	ctx context.Context, l *logger.Logger, clusterName string, openInBrowser bool,
 ) ([]string, error) {
