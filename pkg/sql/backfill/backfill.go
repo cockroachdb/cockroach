@@ -275,6 +275,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	tableDesc catalog.TableDescriptor,
 	sp roachpb.Span,
 	chunkSize rowinfra.RowLimit,
+	updateChunkSizeThresholdBytes rowinfra.BytesLimit,
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
@@ -389,6 +390,20 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			ctx, b, oldValues, updateValues, pm, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
+		}
+
+		// Exit early to flush if the batch byte size exceeds a predefined
+		// threshold. This can happen when table rows are more on the "fat" side,
+		// typically with large BYTES or JSONB columns.
+		//
+		// This helps prevent exceedingly large raft commands which will
+		// for instance cause schema changes to be unable to either proceed or to
+		// roll back.
+		//
+		// The threshold is ignored when zero.
+		//
+		if updateChunkSizeThresholdBytes > 0 && b.ApproximateMutationBytes() >= int(updateChunkSizeThresholdBytes) {
+			break
 		}
 	}
 	// Write the new row values.
