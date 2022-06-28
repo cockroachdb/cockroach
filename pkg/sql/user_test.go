@@ -165,9 +165,12 @@ GRANT admin TO foo`); err != nil {
 				if _, err := dbSQL.Exec(ctx, "SELECT 1"); err != nil {
 					t.Fatal(err)
 				}
-				var isSuperuser string
-				require.NoError(t, dbSQL.QueryRow(ctx, "SHOW is_superuser").Scan(&isSuperuser))
-				require.Equal(t, "on", isSuperuser)
+				// TODO(richardjcai): Previously we had a check
+				// for `SHOW is_superuser` here, this was
+				// removed after adding privileges for virtual
+				// tables due to system.privileges not having
+				// a cache. We cannot perform the query without
+				// the cache while the system range is out.
 			}()
 
 			t.Log("-- expect timeout --")

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -591,15 +592,23 @@ https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
 	unimplemented: true,
 }
 
-func getOwnerOID(desc catalog.Descriptor) tree.Datum {
-	owner := getOwnerOfDesc(desc)
+func getOwnerOID(ctx context.Context, p eval.Planner, desc catalog.Descriptor) (tree.Datum, error) {
+	owner, err := getOwnerOfPrivilegeObject(ctx, p, desc)
+	if err != nil {
+		return nil, err
+	}
 	h := makeOidHasher()
-	return h.UserOid(owner)
+	return h.UserOid(owner), nil
 }
 
-func getOwnerName(desc catalog.Descriptor) tree.Datum {
-	owner := getOwnerOfDesc(desc)
-	return tree.NewDName(owner.Normalized())
+func getOwnerName(
+	ctx context.Context, p eval.Planner, desc catalog.Descriptor,
+) (tree.Datum, error) {
+	owner, err := getOwnerOfPrivilegeObject(ctx, p, desc)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDName(owner.Normalized()), nil
 }
 
 var (
@@ -647,6 +656,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			}
 			relOptions = relOptionsArr
 		}
+		ownerOid, err := getOwnerOID(ctx, p, table)
+		if err != nil {
+			return err
+		}
 		namespaceOid := h.NamespaceOid(db.GetID(), scName)
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
@@ -654,7 +667,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			namespaceOid,                   // relnamespace
 			tableIDToTypeOID(table),        // reltype (PG creates a composite type in pg_type for each table)
 			oidZero,                        // reloftype (used for type tables, which is unsupported)
-			getOwnerOID(table),             // relowner
+			ownerOid,                       // relowner
 			relAm,                          // relam
 			oidZero,                        // relfilenode
 			oidZero,                        // reltablespace
@@ -704,13 +717,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			if index.GetType() == descpb.IndexDescriptor_INVERTED {
 				indexType = invertedIndexOid
 			}
+			ownerOid, err := getOwnerOID(ctx, p, table)
+			if err != nil {
+				return err
+			}
 			return addRow(
 				h.IndexOid(table.GetID(), index.GetID()), // oid
 				tree.NewDName(index.GetName()),           // relname
 				namespaceOid,                             // relnamespace
 				oidZero,                                  // reltype
 				oidZero,                                  // reloftype
-				getOwnerOID(table),                       // relowner
+				ownerOid,                                 // relowner
 				indexType,                                // relam
 				oidZero,                                  // relfilenode
 				oidZero,                                  // reltablespace
@@ -1197,10 +1214,14 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /*all databases*/, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
+				ownerOid, err := getOwnerOID(ctx, p, db)
+				if err != nil {
+					return err
+				}
 				return addRow(
 					dbOid(db.GetID()),           // oid
 					tree.NewDName(db.GetName()), // datname
-					getOwnerOID(db),             // datdba
+					ownerOid,                    // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
 					builtins.DatEncodingUTFId,  // encoding
@@ -2023,6 +2044,10 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 				if !desc.MaterializedView() {
 					return nil
 				}
+				owner, err := getOwnerName(ctx, p, desc)
+				if err != nil {
+					return err
+				}
 				// Note that the view query printed will not include any column aliases
 				// specified outside the initial view query into the definition
 				// returned, unlike postgres. For example, for the view created via
@@ -2034,7 +2059,7 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 				return addRow(
 					tree.NewDName(scName),         // schemaname
 					tree.NewDName(desc.GetName()), // matviewname
-					getOwnerName(desc),            // matviewowner
+					owner,                         // matviewowner
 					tree.DNull,                    // tablespace
 					tree.MakeDBool(len(desc.PublicNonPrimaryIndexes()) > 0), // hasindexes
 					tree.DBoolTrue,                       // ispopulated,
@@ -2055,7 +2080,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					ownerOID := tree.DNull
 					if sc.SchemaKind() == catalog.SchemaUserDefined {
-						ownerOID = getOwnerOID(sc)
+						var err error
+						ownerOID, err = getOwnerOID(ctx, p, sc)
+						if err != nil {
+							return err
+						}
 					} else if sc.SchemaKind() == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
 						//
@@ -2659,8 +2688,12 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		// Populating table descriptor dependencies with roles
 		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
-				owner := table.GetPrivileges().Owner()
-				for _, u := range table.GetPrivileges().Show(privilege.Table, true /* showImplicitOwnerPrivs */) {
+				privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
+				if err != nil {
+					return err
+				}
+				owner := privDesc.Owner()
+				for _, u := range privDesc.Show(privilege.Table, true /* showImplicitOwnerPrivs */) {
 					if err := addSharedDependency(
 						dbOid(db.GetID()),       // dbid
 						pgClassOid,              // classid
@@ -2732,10 +2765,14 @@ https://www.postgresql.org/docs/9.5/view-pg-tables.html`,
 				if !table.IsTable() {
 					return nil
 				}
+				owner, err := getOwnerName(ctx, p, table)
+				if err != nil {
+					return err
+				}
 				return addRow(
 					tree.NewDName(scName),          // schemaname
 					tree.NewDName(table.GetName()), // tablename
-					getOwnerName(table),            // tableowner
+					owner,                          // tableowner
 					tree.DNull,                     // tablespace
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
 					tree.DBoolFalse, // hasrules
@@ -2824,6 +2861,8 @@ func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
 }
 
 func addPGTypeRowForTable(
+	ctx context.Context,
+	p eval.Planner,
 	h oidHasher,
 	db catalog.DatabaseDescriptor,
 	scName string,
@@ -2831,11 +2870,15 @@ func addPGTypeRowForTable(
 	addRow func(...tree.Datum) error,
 ) error {
 	nspOid := h.NamespaceOid(db.GetID(), scName)
+	ownerOID, err := getOwnerOID(ctx, p, table)
+	if err != nil {
+		return err
+	}
 	return addRow(
 		tableIDToTypeOID(table),        // oid
 		tree.NewDName(table.GetName()), // typname
 		nspOid,                         // typnamespace
-		getOwnerOID(table),             // typowner
+		ownerOID,                       // typowner
 		negOneVal,                      // typlen
 		tree.DBoolFalse,                // typbyval (is it fixedlen or not)
 		typTypeComposite,               // typtype
@@ -2998,7 +3041,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					dbContext,
 					virtualCurrentDB,
 					func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor, lookup tableLookupFn) error {
-						return addPGTypeRowForTable(h, db, scName, table, addRow)
+						return addPGTypeRowForTable(ctx, p, h, db, scName, table, addRow)
 					},
 				); err != nil {
 					return err
@@ -3015,7 +3058,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						if err != nil {
 							return err
 						}
-						return addPGTypeRow(h, nspOid, getOwnerOID(typDesc), typ, addRow)
+						ownerOid, err := getOwnerOID(ctx, p, typDesc)
+						if err != nil {
+							return err
+						}
+						return addPGTypeRow(h, nspOid, ownerOid, typ, addRow)
 					},
 				)
 			},
@@ -3083,6 +3130,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						return false, err
 					}
 					if err := addPGTypeRowForTable(
+						ctx,
+						p,
 						h,
 						db,
 						sc.GetName(),
@@ -3099,7 +3148,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if err != nil {
 					return false, err
 				}
-				if err := addPGTypeRow(h, nspOid, getOwnerOID(typDesc), typ, addRow); err != nil {
+				ownerOid, err := getOwnerOID(ctx, p, typDesc)
+				if err != nil {
+					return false, err
+				}
+				if err := addPGTypeRow(h, nspOid, ownerOid, typ, addRow); err != nil {
 					return false, err
 				}
 
@@ -3335,7 +3388,10 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 				if sequenceValue != opts.Start-opts.Increment {
 					lastValue = tree.NewDInt(tree.DInt(sequenceValue))
 				}
-
+				owner, err := getOwnerName(ctx, p, table)
+				if err != nil {
+					return err
+				}
 				// sequenceowner refers to the username that owns the sequence which is
 				// available in the table descriptor that can be changed by ALTER
 				// SEQUENCE sequencename OWNER TO username. Sequence opts have a
@@ -3345,7 +3401,7 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 				return addRow(
 					tree.NewDString(scName),                 // schemaname
 					tree.NewDString(table.GetName()),        // sequencename
-					getOwnerName(table),                     // sequenceowner
+					owner,                                   // sequenceowner
 					tree.NewDOid(oid.T_int8),                // data_type
 					tree.NewDInt(tree.DInt(opts.Start)),     // start_value
 					tree.NewDInt(tree.DInt(opts.MinValue)),  // min_value
@@ -4121,6 +4177,10 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 				if !desc.IsView() || desc.MaterializedView() {
 					return nil
 				}
+				owner, err := getOwnerName(ctx, p, desc)
+				if err != nil {
+					return err
+				}
 				// Note that the view query printed will not include any column aliases
 				// specified outside the initial view query into the definition
 				// returned, unlike postgres. For example, for the view created via
@@ -4132,7 +4192,7 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 				return addRow(
 					tree.NewDName(scName),                // schemaname
 					tree.NewDName(desc.GetName()),        // viewname
-					getOwnerName(desc),                   // viewowner
+					owner,                                // viewowner
 					tree.NewDString(desc.GetViewQuery()), // definition
 				)
 			})

@@ -1969,6 +1969,13 @@ func TestLogic_virtual_columns(
 	runLogicTest(t, "virtual_columns")
 }
 
+func TestLogic_virtual_table_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "virtual_table_privileges")
+}
+
 func TestLogic_void(
 	t *testing.T,
 ) {

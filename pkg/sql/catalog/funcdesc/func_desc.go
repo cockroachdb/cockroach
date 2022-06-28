@@ -437,8 +437,8 @@ func (desc *Mutable) SetFuncBody(v string) {
 }
 
 // GetObjectType implements the PrivilegeObject interface.
-func (desc *immutable) GetObjectType() string {
-	return string(desc.DescriptorType())
+func (desc *immutable) GetObjectType() privilege.ObjectType {
+	return privilege.Function
 }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.

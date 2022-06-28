@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -409,6 +410,11 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// IsActive is part of the Planner interface.
+func (ep *DummyEvalPlanner) IsActive(_ context.Context, _ clusterversion.Key) bool {
+	return true
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
