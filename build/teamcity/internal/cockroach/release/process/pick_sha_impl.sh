@@ -12,7 +12,7 @@ release_bucket=release-automation-dev
 
 # override dev defaults with production values
 if [[ -z "${DRY_RUN}" ]] ; then
-  echo "Dry run"
+  echo "Setting production values"
   google_credentials="$METADATA_PUBLISHER_GOOGLE_CREDENTIALS_PROD"
   to=releases@cockroachlabs.com
   qualify_bucket=release-automation-prod
