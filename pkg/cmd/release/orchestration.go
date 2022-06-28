@@ -53,6 +53,8 @@ func init() {
 }
 
 func setOrchestrationVersion(_ *cobra.Command, _ []string) error {
+	// make sure we have the leading "v" in the version
+	orchestrationFlags.version = "v" + strings.TrimPrefix(orchestrationFlags.version, "v")
 	dirInfo, err := os.Stat(orchestrationFlags.templatesDir)
 	if err != nil {
 		return fmt.Errorf("cannot stat templates directory: %w", err)

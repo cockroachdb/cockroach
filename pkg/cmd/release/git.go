@@ -117,7 +117,11 @@ func findVersions(text string) []*semver.Version {
 // It ignores non-semantic versions and tags with the alpha.0* suffix.
 func findPreviousRelease(releaseSeries string) (string, error) {
 	// TODO: filter version using semantic version, not a git pattern
-	cmd := exec.Command("git", "tag", "--list", fmt.Sprintf("v%s.*", releaseSeries))
+	pattern := "v*"
+	if releaseSeries != "" {
+		pattern = fmt.Sprintf("v%s.*", releaseSeries)
+	}
+	cmd := exec.Command("git", "tag", "--list", pattern)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("cannot get version from tags: %w", err)
