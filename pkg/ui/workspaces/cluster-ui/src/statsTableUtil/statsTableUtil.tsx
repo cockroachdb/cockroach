@@ -52,8 +52,7 @@ export const statisticsColumnLabels = {
   networkBytes: "Network",
   regionNodes: "Regions/Nodes",
   retries: "Retries",
-  rowsRead: "Rows Read",
-  rowsWritten: "Rows Written",
+  rowsProcessed: "Rows Processed",
   statements: "Statements",
   statementsCount: "Statements",
   time: "Time",
@@ -385,7 +384,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
-  rowsRead: (statType: StatisticType) => {
+  rowsProcessed: (statType: StatisticType) => {
     let contentModifier = "";
     let fingerprintModifier = "";
     switch (statType) {
@@ -409,24 +408,20 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {"Aggregation of all rows "}
+              {"Average (mean) number of rows "}
               <Anchor href={readFromDisk} target="_blank">
-                read from disk
+                read
               </Anchor>
-              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
+              {" and "}
+              <Anchor href={writtenToDisk} target="_blank">
+                written
               </Anchor>
-              .&nbsp;
-            </p>
-            <p>
-              The gray bar indicates the mean number of rows read from disk. The
-              blue bar indicates one standard deviation from the mean.
+              {` to disk across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the specified time interval.`}
             </p>
           </>
         }
       >
-        {getLabel("rowsRead")}
+        {getLabel("rowsProcessed")}
       </Tooltip>
     );
   },
@@ -472,51 +467,6 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("bytesRead")}
-      </Tooltip>
-    );
-  },
-  rowsWritten: (statType: StatisticType) => {
-    let contentModifier = "";
-    let fingerprintModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statements;
-        break;
-      case "transactionDetails":
-        contentModifier = contentModifiers.statements;
-        fingerprintModifier =
-          " for this " + contentModifiers.transactionFingerprint;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <>
-            <p>
-              {"Aggregation of all rows "}
-              <Anchor href={writtenToDisk} target="_blank">
-                written to disk
-              </Anchor>
-              {` across all operators for ${contentModifier} with this fingerprint${fingerprintModifier} within the last hour or specified `}
-              <Anchor href={statementsTimeInterval} target="_blank">
-                time interval
-              </Anchor>
-              .&nbsp;
-            </p>
-            <p>
-              The gray bar indicates the mean number of rows written to disk.
-              The blue bar indicates one standard deviation from the mean.
-            </p>
-          </>
-        }
-      >
-        {getLabel("rowsWritten")}
       </Tooltip>
     );
   },
