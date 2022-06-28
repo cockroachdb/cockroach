@@ -545,6 +545,13 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 func (b *propBuf) maybeRejectUnsafeProposalLocked(
 	ctx context.Context, raftGroup proposerRaft, p *ProposalData,
 ) (rejected bool) {
+	if raftGroup == nil {
+		// If we do not have a raft group, we won't try to propose this proposal.
+		// Instead, we will register the proposal so that it can be reproposed later
+		// with a raft group. Wait until that point to determine whether to reject
+		// the proposal or not.
+		return false
+	}
 	switch {
 	case p.Request.IsSingleRequestLeaseRequest():
 		// Handle an edge case about lease acquisitions: we don't want to forward
@@ -611,9 +618,6 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 // leaderStatusRLocked returns the rangeLeaderInfo for the provided raft group,
 // or an empty rangeLeaderInfo if the raftGroup is nil.
 func (b *propBuf) leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
-	if raftGroup == nil {
-		return rangeLeaderInfo{}
-	}
 	leaderInfo := b.p.leaderStatusRLocked(ctx, raftGroup)
 	// Sanity check.
 	if leaderInfo.leaderKnown && leaderInfo.leader == b.p.getReplicaID() &&
