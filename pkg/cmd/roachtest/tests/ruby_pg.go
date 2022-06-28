@@ -174,10 +174,7 @@ func registerRubyPG(r registry.Registry) {
 
 		// Find all the failed and errored tests.
 		results := newORMTestsResults()
-		blocklistName, expectedFailures, _, _ := rubyPGBlocklist.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No ruby-pg blocklist defined for cockroach version %s", version)
-		}
+		blocklistName, expectedFailures, _, _ := "rubyPGBlocklist", rubyPGBlocklist, "rubyPGIgnorelist", rubyPGIgnorelist
 
 		scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 		totalTests := int64(0)
