@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package batcheval_test
+package batcheval
 
 import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -35,6 +36,8 @@ func TestDeleteRangeTombstone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	storage.DisableMetamorphicSimpleValueEncoding(t)
+
 	// Initial data for each test. x is point tombstone, [] is intent,
 	// o---o is range tombstone.
 	//
@@ -44,19 +47,26 @@ func TestDeleteRangeTombstone(t *testing.T) {
 	// 2      b2      d2      o-------o
 	// 1
 	//    a   b   c   d   e   f   g   h   i
+	//
+	// We also write two range tombstones abutting the Raft range a-z at [Z-a)@100
+	// and [z-|)@100. Writing a range tombstone should not merge with these.
 	writeInitialData := func(t *testing.T, ctx context.Context, rw storage.ReadWriter) {
 		t.Helper()
 		var localTS hlc.ClockTimestamp
-		txn := roachpb.MakeTransaction("test", nil /* baseKey */, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 5}, 0, 0)
-		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("b"), hlc.Timestamp{WallTime: 2}, localTS, roachpb.MakeValueFromString("b2"), nil))
-		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("c"), hlc.Timestamp{WallTime: 4}, localTS, roachpb.MakeValueFromString("c4"), nil))
-		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 2}, localTS, roachpb.MakeValueFromString("d2"), nil))
-		require.NoError(t, storage.MVCCDelete(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 3}, localTS, nil))
-		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("i"), hlc.Timestamp{WallTime: 5}, localTS, roachpb.MakeValueFromString("i5"), &txn))
-		require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("f"), roachpb.Key("h"), hlc.Timestamp{WallTime: 3}, localTS, 0))
+
+		txn := roachpb.MakeTransaction("test", nil /* baseKey */, roachpb.NormalUserPriority, hlc.Timestamp{WallTime: 5e9}, 0, 0)
+		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("b"), hlc.Timestamp{WallTime: 2e9}, localTS, roachpb.MakeValueFromString("b2"), nil))
+		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("c"), hlc.Timestamp{WallTime: 4e9}, localTS, roachpb.MakeValueFromString("c4"), nil))
+		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 2e9}, localTS, roachpb.MakeValueFromString("d2"), nil))
+		require.NoError(t, storage.MVCCDelete(ctx, rw, nil, roachpb.Key("d"), hlc.Timestamp{WallTime: 3e9}, localTS, nil))
+		require.NoError(t, storage.MVCCPut(ctx, rw, nil, roachpb.Key("i"), hlc.Timestamp{WallTime: 5e9}, localTS, roachpb.MakeValueFromString("i5"), &txn))
+		require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("f"), roachpb.Key("h"), hlc.Timestamp{WallTime: 3e9}, localTS, nil, nil, 0))
+		require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("Z"), roachpb.Key("a"), hlc.Timestamp{WallTime: 100e9}, localTS, nil, nil, 0))
+		require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, rw, nil, roachpb.Key("z"), roachpb.Key("|"), hlc.Timestamp{WallTime: 100e9}, localTS, nil, nil, 0))
 	}
 
 	now := hlc.ClockTimestamp{Logical: 9}
+	rangeStart, rangeEnd := roachpb.Key("a"), roachpb.Key("z")
 
 	testcases := map[string]struct {
 		start      string
@@ -68,54 +78,68 @@ func TestDeleteRangeTombstone(t *testing.T) {
 		expectErr  interface{} // error type, substring, or true (any)
 	}{
 		"above points succeed": {
-			start:     "a",
-			end:       "f",
-			ts:        10,
-			expectErr: nil,
+			start: "a",
+			end:   "f",
+			ts:    10e9,
 		},
 		"above range tombstone succeed": {
 			start:     "f",
 			end:       "h",
-			ts:        10,
+			ts:        10e9,
 			expectErr: nil,
+		},
+		"merging succeeds": {
+			start: "e",
+			end:   "f",
+			ts:    3e9,
+		},
+		"adjacent to external LHS range key": {
+			start: "a",
+			end:   "f",
+			ts:    100e9,
+		},
+		"adjacent to external RHS range key": {
+			start: "q",
+			end:   "z",
+			ts:    100e9,
 		},
 		"transaction errors": {
 			start:     "a",
 			end:       "f",
-			ts:        10,
+			ts:        10e9,
 			txn:       true,
-			expectErr: batcheval.ErrTransactionUnsupported,
+			expectErr: ErrTransactionUnsupported,
 		},
 		"inline errors": {
 			start:     "a",
 			end:       "f",
-			ts:        10,
+			ts:        10e9,
 			inline:    true,
 			expectErr: "Inline can't be used with range tombstones",
 		},
 		"returnKeys errors": {
 			start:      "a",
 			end:        "f",
-			ts:         10,
+			ts:         10e9,
 			returnKeys: true,
 			expectErr:  "ReturnKeys can't be used with range tombstones",
 		},
 		"intent errors with WriteIntentError": {
 			start:     "i",
 			end:       "j",
-			ts:        10,
+			ts:        10e9,
 			expectErr: &roachpb.WriteIntentError{},
 		},
 		"below point errors with WriteTooOldError": {
 			start:     "a",
 			end:       "d",
-			ts:        1,
+			ts:        1e9,
 			expectErr: &roachpb.WriteTooOldError{},
 		},
 		"below range tombstone errors with WriteTooOldError": {
 			start:     "f",
 			end:       "h",
-			ts:        1,
+			ts:        1e9,
 			expectErr: &roachpb.WriteTooOldError{},
 		},
 	}
@@ -134,32 +158,52 @@ func TestDeleteRangeTombstone(t *testing.T) {
 				Timestamp: hlc.Timestamp{WallTime: tc.ts},
 			}
 
-			var txn *roachpb.Transaction
-			if tc.txn {
-				tx := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
-				txn = &tx
+			// Prepare the request and environment.
+			evalCtx := &MockEvalCtx{
+				ClusterSettings: st,
+				Desc: &roachpb.RangeDescriptor{
+					StartKey: roachpb.RKey(rangeStart),
+					EndKey:   roachpb.RKey(rangeEnd),
+				},
 			}
 
+			h := roachpb.Header{
+				Timestamp: rangeKey.Timestamp,
+			}
+			if tc.txn {
+				txn := roachpb.MakeTransaction("txn", nil /* baseKey */, roachpb.NormalUserPriority, rangeKey.Timestamp, 0, 0)
+				h.Txn = &txn
+			}
+
+			req := &roachpb.DeleteRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    rangeKey.StartKey,
+					EndKey: rangeKey.EndKey,
+				},
+				UseExperimentalRangeTombstone: true,
+				Inline:                        tc.inline,
+				ReturnKeys:                    tc.returnKeys,
+			}
+
+			ms := computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime)
+
+			// Use a spanset batch to assert latching of all accesses. In particular,
+			// the additional seeks necessary to check for adjacent range keys that we
+			// may merge with (for stats purposes) which should not cross the range
+			// bounds.
+			var latchSpans, lockSpans spanset.SpanSet
+			declareKeysDeleteRange(evalCtx.Desc, &h, req, &latchSpans, &lockSpans, 0)
+			batch := spanset.NewBatchAt(engine.NewBatch(), &latchSpans, h.Timestamp)
+			defer batch.Close()
+
 			// Run the request.
-			var ms enginepb.MVCCStats
 			resp := &roachpb.DeleteRangeResponse{}
-			_, err := batcheval.DeleteRange(ctx, engine, batcheval.CommandArgs{
-				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
+			_, err := DeleteRange(ctx, batch, CommandArgs{
+				EvalCtx: evalCtx.EvalContext(),
 				Stats:   &ms,
 				Now:     now,
-				Header: roachpb.Header{
-					Timestamp: rangeKey.Timestamp,
-					Txn:       txn,
-				},
-				Args: &roachpb.DeleteRangeRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key:    rangeKey.StartKey,
-						EndKey: rangeKey.EndKey,
-					},
-					UseExperimentalRangeTombstone: true,
-					Inline:                        tc.inline,
-					ReturnKeys:                    tc.returnKeys,
-				},
+				Header:  h,
+				Args:    req,
 			}, resp)
 
 			// Check the error.
@@ -177,6 +221,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			require.NoError(t, batch.Commit(true))
 
 			// Check that the range tombstone was written successfully.
 			iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
@@ -215,7 +260,36 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			require.True(t, value.IsTombstone())
 			require.Equal(t, now, value.LocalTimestamp)
 
-			// TODO(erikgrinaker): This should test MVCC stats when implemented.
+			// Check that range tombstone stats were updated correctly.
+			require.Equal(t, computeStats(t, engine, rangeStart, rangeEnd, rangeKey.Timestamp.WallTime), ms)
 		})
 	}
+}
+
+// computeStats computes MVCC stats for the given range.
+//
+// TODO(erikgrinaker): This, storage.computeStats(), and engineStats() should be
+// moved into a testutils package, somehow avoiding import cycles with storage
+// tests.
+func computeStats(
+	t *testing.T, reader storage.Reader, from, to roachpb.Key, nowNanos int64,
+) enginepb.MVCCStats {
+	t.Helper()
+
+	if len(from) == 0 {
+		from = keys.LocalMax
+	}
+	if len(to) == 0 {
+		to = keys.MaxKey
+	}
+
+	iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: from,
+		UpperBound: to,
+	})
+	defer iter.Close()
+	ms, err := storage.ComputeStatsForRange(iter, from, to, nowNanos)
+	require.NoError(t, err)
+	return ms
 }

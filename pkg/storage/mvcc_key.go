@@ -13,6 +13,7 @@ package storage
 import (
 	"encoding/binary"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -263,8 +264,8 @@ func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
 
 // encodedMVCCKeyLength returns the encoded length of the given MVCCKey.
 func encodedMVCCKeyLength(key MVCCKey) int {
-	// NB: We don't call into encodedMVCCKeyPrefixLength() or
-	// encodedMVCCTimestampSuffixLength() here because the additional function
+	// NB: We don't call into EncodedMVCCKeyPrefixLength() or
+	// EncodedMVCCTimestampSuffixLength() here because the additional function
 	// call overhead is significant.
 	keyLen := len(key.Key) + mvccEncodedTimeSentinelLen
 	if !key.Timestamp.IsEmpty() {
@@ -280,9 +281,9 @@ func encodedMVCCKeyLength(key MVCCKey) int {
 	return keyLen
 }
 
-// encodedMVCCKeyPrefixLength returns the encoded length of a roachpb.Key prefix
+// EncodedMVCCKeyPrefixLength returns the encoded length of a roachpb.Key prefix
 // including the sentinel byte.
-func encodedMVCCKeyPrefixLength(key roachpb.Key) int {
+func EncodedMVCCKeyPrefixLength(key roachpb.Key) int {
 	return len(key) + mvccEncodedTimeSentinelLen
 }
 
@@ -300,10 +301,10 @@ func encodedMVCCTimestampLength(ts hlc.Timestamp) int {
 	return tsLen
 }
 
-// encodedMVCCTimestampSuffixLength returns the encoded length of the
+// EncodedMVCCTimestampSuffixLength returns the encoded length of the
 // given MVCC timestamp, including the length suffix. It returns 0
 // if the timestamp is empty.
-func encodedMVCCTimestampSuffixLength(ts hlc.Timestamp) int {
+func EncodedMVCCTimestampSuffixLength(ts hlc.Timestamp) int {
 	// This is backwards, see comment in encodedMVCCTimestampLength() for why.
 	return encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
 }
@@ -389,6 +390,19 @@ func (k MVCCRangeKey) Compare(o MVCCRangeKey) int {
 	return k.EndKey.Compare(o.EndKey)
 }
 
+// EncodedSize returns the encoded size of this range key. This does not
+// accurately reflect the on-disk size of the key, due to Pebble range key
+// stacking and fragmentation.
+//
+// NB: This calculation differs from MVCCKey in that MVCCKey.EncodedSize()
+// incorrectly always uses 13 bytes for the timestamp while this method
+// calculates the actual encoded size.
+func (k MVCCRangeKey) EncodedSize() int {
+	return EncodedMVCCKeyPrefixLength(k.StartKey) +
+		EncodedMVCCKeyPrefixLength(k.EndKey) +
+		EncodedMVCCTimestampSuffixLength(k.Timestamp)
+}
+
 // String formats the range key.
 func (k MVCCRangeKey) String() string {
 	s := roachpb.Span{Key: k.StartKey, EndKey: k.EndKey}.String()
@@ -422,4 +436,20 @@ func (k MVCCRangeKey) Validate() (err error) {
 	default:
 		return nil
 	}
+}
+
+// firstRangeKeyAbove does a binary search for the first range key at or above
+// the given timestamp. It assumes the range keys are ordered in descending
+// timestamp order, as returned by SimpleMVCCIterator.RangeKeys(). Returns false
+// if no matching range key was found.
+func firstRangeKeyAbove(rangeKeys []MVCCRangeKeyValue, ts hlc.Timestamp) (MVCCRangeKeyValue, bool) {
+	// This is kind of odd due to sort.Search() semantics: we do a binary search
+	// for the first range tombstone that's below the timestamp, then return the
+	// previous range tombstone if any.
+	if i := sort.Search(len(rangeKeys), func(i int) bool {
+		return rangeKeys[i].RangeKey.Timestamp.Less(ts)
+	}); i > 0 {
+		return rangeKeys[i-1], true
+	}
+	return MVCCRangeKeyValue{}, false
 }
