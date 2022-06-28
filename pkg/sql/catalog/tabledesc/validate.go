@@ -508,14 +508,18 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(errors.AssertionFailedf("invalid parent ID %d", desc.GetParentID()))
 	}
 
-	// Validate the privilege descriptor.
-	if desc.Privileges == nil {
-		vea.Report(errors.AssertionFailedf("privileges not set"))
-	} else {
-		if desc.IsSequence() {
-			vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Sequence))
+	// VirtualTables have their privileges stored in system.privileges which
+	// is validated outside of the descriptor.
+	if !desc.IsVirtualTable() {
+		// Validate the privilege descriptor.
+		if desc.Privileges == nil {
+			vea.Report(errors.AssertionFailedf("privileges not set"))
 		} else {
-			vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+			if desc.IsSequence() {
+				vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Sequence))
+			} else {
+				vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Table))
+			}
 		}
 	}
 

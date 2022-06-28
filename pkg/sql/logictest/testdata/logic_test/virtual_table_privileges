@@ -1,0 +1,62 @@
+statement ok
+CREATE TABLE t()
+
+query B
+select has_table_privilege('testuser', 't', 'select');
+----
+false
+
+statement ok
+GRANT SELECT ON TABLE t TO public
+
+query B
+select has_table_privilege('testuser', 't', 'select');
+----
+true
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+user root
+
+statement ok
+REVOKE SELECT ON TABLE crdb_internal.tables FROM public
+
+query B
+select has_table_privilege('testuser', 'crdb_internal.tables', 'select');
+----
+false
+
+statement ok
+GRANT SELECT ON TABLE crdb_internal.tables TO public
+
+query B
+select has_table_privilege('testuser', 'crdb_internal.tables', 'select');
+----
+true
+
+statement ok
+REVOKE SELECT ON TABLE crdb_internal.tables FROM public
+
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on relation tables
+SELECT * FROM crdb_internal.tables
+
+user root
+
+statement ok
+GRANT SELECT ON TABLE crdb_internal.tables TO public
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.tables
+
+statement error pq: invalid privilege type USAGE for virtual_table
+GRANT USAGE ON TABLE crdb_internal.tables TO testuser
+
+statement error pq: invalid privilege type ZONECONFIG for virtual_table
+GRANT ZONECONFIG ON TABLE crdb_internal.tables TO testuser
