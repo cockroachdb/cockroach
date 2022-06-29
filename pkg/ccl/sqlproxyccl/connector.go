@@ -122,9 +122,16 @@ func (c *connector) OpenTenantConnWithToken(
 	// only return once we've seen a ReadyForQuery message.
 	//
 	// NOTE: This will need to be updated when we implement query cancellation.
-	if err := readTokenAuthResult(serverConn); err != nil {
+	newBackendKeyData, err := readTokenAuthResult(serverConn)
+	if err != nil {
 		return nil, err
 	}
+	func() {
+		c.CancelInfo.mu.Lock()
+		defer c.CancelInfo.mu.Unlock()
+		c.CancelInfo.mu.origBackendKeyData = newBackendKeyData
+		c.CancelInfo.mu.crdbAddr = serverConn.RemoteAddr()
+	}()
 	log.Infof(ctx, "connected to %s through token-based auth", serverConn.RemoteAddr())
 	return serverConn, nil
 }

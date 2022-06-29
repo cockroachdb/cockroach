@@ -307,7 +307,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	}
 
 	// Cancel requests are sent on a separate connection, and have no response,
-	// so we can close the connection immediately after handling them.
+	// so we can close the connection immediately, then handle the request. This
+	// prevents the client from using latency to learn if we are processing the
+	// request or not.
 	if cr := fe.CancelRequest; cr != nil {
 		_ = incomingConn.Close()
 		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
@@ -433,6 +435,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	connBegin := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
+		handler.cancelInfoMap.deleteCancelInfo(connector.CancelInfo.proxySecretID())
 	}()
 
 	// Pass ownership of conn and crdbConn to the forwarder.
@@ -483,7 +486,15 @@ func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest, allowFo
 			// which the request came, then ignore it.
 			return errors.Errorf("mismatched client IP for cancel request")
 		}
-		cancelConn, err := net.DialTimeout("tcp", ci.crdbAddr.String(), timeout)
+		var crdbAddr net.Addr
+		var origBackendKeyData *pgproto3.BackendKeyData
+		func() {
+			ci.mu.RLock()
+			defer ci.mu.RUnlock()
+			crdbAddr = ci.mu.crdbAddr
+			origBackendKeyData = ci.mu.origBackendKeyData
+		}()
+		cancelConn, err := net.DialTimeout("tcp", crdbAddr.String(), timeout)
 		if err != nil {
 			return err
 		}
@@ -492,8 +503,8 @@ func (handler *proxyHandler) handleCancelRequest(cr *proxyCancelRequest, allowFo
 			return err
 		}
 		crdbRequest := &pgproto3.CancelRequest{
-			ProcessID: ci.origBackendKeyData.ProcessID,
-			SecretKey: ci.origBackendKeyData.SecretKey,
+			ProcessID: origBackendKeyData.ProcessID,
+			SecretKey: origBackendKeyData.SecretKey,
 		}
 		buf := crdbRequest.Encode(nil /* buf */)
 		if _, err := cancelConn.Write(buf); err != nil {
