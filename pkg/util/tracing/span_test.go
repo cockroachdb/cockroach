@@ -405,6 +405,23 @@ func TestRecordingMaxSpans(t *testing.T) {
 	require.Len(t, root.StructuredRecords, extraChildren)
 }
 
+// TestRecordingFinishWithMaxSpans is a regression test to ensure that a verbose
+// recording does not erroneously panic in Finish because it has too many children.
+func TestRecordingFinishWithMaxSpans(t *testing.T) {
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithRecording(tracingpb.RecordingVerbose))
+	defer root.Finish()
+
+	sp := tr.StartSpan("span-under-test", WithParent(root))
+	extraChildren := 10
+	numChildren := maxRecordedSpansPerTrace + extraChildren
+	for i := 0; i < numChildren; i++ {
+		child := tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
+		child.Finish()
+	}
+	require.NotPanics(t, sp.Finish)
+}
+
 type explodyNetTr struct {
 	trace.Trace
 }

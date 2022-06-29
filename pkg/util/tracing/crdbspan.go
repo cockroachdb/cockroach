@@ -543,8 +543,13 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRecording tracingpb.Recordi
 		}
 
 		// We don't have space for this recording. Let's collect just the structured
-		// records by falling through.
-		fallthrough
+		// records.
+		for ci := range childRecording {
+			child := &childRecording[ci]
+			for i := range child.StructuredRecords {
+				s.recordInternalLocked(&child.StructuredRecords[i], &s.mu.recording.structured)
+			}
+		}
 	case tracingpb.RecordingStructured:
 		if len(childRecording) != 1 {
 			panic(fmt.Sprintf("RecordingStructured has %d recordings; expected 1", len(childRecording)))
