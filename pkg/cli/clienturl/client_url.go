@@ -177,13 +177,21 @@ func (u *urlParser) SetUser(user string) {
 // SetHost implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetHost(host string) {
 	u.clientOpts.ServerHost = host
-	u.fl.Lookup(cliflags.ClientHost.Name).Changed = true
+	// Also update the flag, so that subsequent CLI parameters
+	// pick up the change. NB: 'cockroach demo' does not have a --host flag.
+	if f := u.fl.Lookup(cliflags.ClientHost.Name); f != nil {
+		f.Changed = true
+	}
 }
 
 // SetPort implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetPort(port string) {
 	u.clientOpts.ServerPort = port
-	u.fl.Lookup(cliflags.ClientPort.Name).Changed = true
+	// Also update the flag, so that subsequent CLI parameters
+	// pick up the change. NB: 'cockroach demo' does not have a --host flag.
+	if f := u.fl.Lookup(cliflags.ClientPort.Name); f != nil {
+		f.Changed = true
+	}
 }
 
 // SetDatabase implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
@@ -208,19 +216,27 @@ func (u *urlParser) SetDatabase(db string) {
 // CertsDirFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) CertsDirFlag() (bool, string) {
 	flCertsDir := u.fl.Lookup(cliflags.CertsDir.Name)
+	if flCertsDir == nil {
+		return false, ""
+	}
 	return flCertsDir.Changed, flCertsDir.Value.String()
 }
 
 // SetCertsDir implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetCertsDir(certsDir string) {
 	flCertsDir := u.fl.Lookup(cliflags.CertsDir.Name)
-	_ = flCertsDir.Value.Set(certsDir)
-	flCertsDir.Changed = true
+	if flCertsDir != nil {
+		_ = flCertsDir.Value.Set(certsDir)
+		flCertsDir.Changed = true
+	}
 }
 
 // InsecureFlag implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) InsecureFlag() (bool, bool) {
 	flInsecure := u.fl.Lookup(cliflags.ClientInsecure.Name)
+	if flInsecure == nil {
+		return false, false
+	}
 	vb, _ := strconv.ParseBool(flInsecure.Value.String())
 	return flInsecure.Changed, vb
 }
@@ -228,7 +244,9 @@ func (u *urlParser) InsecureFlag() (bool, bool) {
 // SetInsecure implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
 func (u *urlParser) SetInsecure(insecure bool) {
 	flInsecure := u.fl.Lookup(cliflags.ClientInsecure.Name)
-	_ = flInsecure.Value.Set(strconv.FormatBool(insecure))
+	if flInsecure != nil {
+		_ = flInsecure.Value.Set(strconv.FormatBool(insecure))
+	}
 }
 
 // NewStrictTLSConfigurationError implements the clientsecopts.CLIFlagInterfaceForClientURL interface.
