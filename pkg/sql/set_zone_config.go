@@ -157,6 +157,79 @@ func loadYAML(dst interface{}, yamlString string) {
 	}
 }
 
+func (p *planner) getUpdatedZoneConfigYamlConfig(
+	ctx context.Context, n tree.Expr,
+) (tree.TypedExpr, error) {
+	var yamlConfig tree.TypedExpr
+
+	if n != nil {
+		// We have a CONFIGURE ZONE = <expr> assignment.
+		// This can be either a literal NULL (deletion), or a string containing YAML.
+		// We also support byte arrays for backward compatibility with
+		// previous versions of CockroachDB.
+
+		var err error
+		yamlConfig, err = p.analyzeExpr(
+			ctx, n, nil, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
+		if err != nil {
+			return nil, err
+		}
+
+		switch typ := yamlConfig.ResolvedType(); typ.Family() {
+		case types.UnknownFamily:
+			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
+		case types.StringFamily:
+		case types.BytesFamily:
+		default:
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"zone config must be of type string or bytes, not %s", typ)
+		}
+	}
+	return yamlConfig, nil
+}
+
+func (p *planner) getUpdatedZoneConfigOptions(
+	ctx context.Context, n tree.KVOptions, telemetryName string,
+) (map[tree.Name]optionValue, error) {
+
+	var options map[tree.Name]optionValue
+	if n != nil {
+		// We have a CONFIGURE ZONE USING ... assignment.
+		// Here we are constrained by the supported ZoneConfig fields,
+		// as described by supportedZoneConfigOptions above.
+
+		options = make(map[tree.Name]optionValue)
+		for _, opt := range n {
+			if _, alreadyExists := options[opt.Key]; alreadyExists {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
+			}
+			req, ok := supportedZoneConfigOptions[opt.Key]
+			if !ok {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
+			}
+			telemetry.Inc(
+				sqltelemetry.SchemaSetZoneConfigCounter(
+					telemetryName,
+					string(opt.Key),
+				),
+			)
+			if opt.Value == nil {
+				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
+				continue
+			}
+			valExpr, err := p.analyzeExpr(
+				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
+			if err != nil {
+				return nil, err
+			}
+			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
+		}
+	}
+	return options, nil
+}
+
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
@@ -186,66 +259,14 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 
-	var yamlConfig tree.TypedExpr
-
-	if n.YAMLConfig != nil {
-		// We have a CONFIGURE ZONE = <expr> assignment.
-		// This can be either a literal NULL (deletion), or a string containing YAML.
-		// We also support byte arrays for backward compatibility with
-		// previous versions of CockroachDB.
-
-		var err error
-		yamlConfig, err = p.analyzeExpr(
-			ctx, n.YAMLConfig, nil, tree.IndexedVarHelper{}, types.String, false /*requireType*/, "configure zone")
-		if err != nil {
-			return nil, err
-		}
-
-		switch typ := yamlConfig.ResolvedType(); typ.Family() {
-		case types.UnknownFamily:
-			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
-		case types.StringFamily:
-		case types.BytesFamily:
-		default:
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-				"zone config must be of type string or bytes, not %s", typ)
-		}
+	yamlConfig, err := p.getUpdatedZoneConfigYamlConfig(ctx, n.YAMLConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	var options map[tree.Name]optionValue
-	if n.Options != nil {
-		// We have a CONFIGURE ZONE USING ... assignment.
-		// Here we are constrained by the supported ZoneConfig fields,
-		// as described by supportedZoneConfigOptions above.
-
-		options = make(map[tree.Name]optionValue)
-		for _, opt := range n.Options {
-			if _, alreadyExists := options[opt.Key]; alreadyExists {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
-			}
-			req, ok := supportedZoneConfigOptions[opt.Key]
-			if !ok {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
-			}
-			telemetry.Inc(
-				sqltelemetry.SchemaSetZoneConfigCounter(
-					n.ZoneSpecifier.TelemetryName(),
-					string(opt.Key),
-				),
-			)
-			if opt.Value == nil {
-				options[opt.Key] = optionValue{inheritValue: true, explicitValue: nil}
-				continue
-			}
-			valExpr, err := p.analyzeExpr(
-				ctx, opt.Value, nil, tree.IndexedVarHelper{}, req.requiredType, true /*requireType*/, string(opt.Key))
-			if err != nil {
-				return nil, err
-			}
-			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
-		}
+	options, err := p.getUpdatedZoneConfigOptions(ctx, n.Options, n.ZoneSpecifier.TelemetryName())
+	if err != nil {
+		return nil, err
 	}
 
 	return &setZoneConfigNode{
