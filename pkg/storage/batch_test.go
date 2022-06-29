@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func mvccKey(k interface{}) MVCCKey {
@@ -74,34 +75,22 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			}
 			defer b.Close()
 
-			if err := b.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, b.PutUnversioned(mvccKey("a").Key, []byte("value")))
+
 			// Write an engine value to be deleted.
-			if err := e.PutUnversioned(mvccKey("b").Key, []byte("value")); err != nil {
-				t.Fatal(err)
-			}
-			if err := b.ClearUnversioned(mvccKey("b").Key); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, e.PutUnversioned(mvccKey("b").Key, []byte("value")))
+			require.NoError(t, b.ClearUnversioned(mvccKey("b").Key))
+
 			// Write an engine value to be merged.
-			if err := e.PutUnversioned(mvccKey("c").Key, appender("foo")); err != nil {
-				t.Fatal(err)
-			}
-			if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, e.PutUnversioned(mvccKey("c").Key, appender("foo")))
+			require.NoError(t, b.Merge(mvccKey("c"), appender("bar")))
+
 			// Write a key with an empty value.
-			if err := b.PutUnversioned(mvccKey("e").Key, nil); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, b.PutUnversioned(mvccKey("e").Key, nil))
+
 			// Write an engine value to be single deleted.
-			if err := e.PutUnversioned(mvccKey("d").Key, []byte("before")); err != nil {
-				t.Fatal(err)
-			}
-			if err := b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, e.PutUnversioned(mvccKey("d").Key, []byte("before")))
+			require.NoError(t, b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}))
 
 			// Check all keys are in initial state (nothing from batch has gone
 			// through to engine until commit).
@@ -111,12 +100,8 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 				{Key: mvccKey("d"), Value: []byte("before")},
 			}
 			kvs, err := Scan(e, localMax, roachpb.KeyMax, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(expValues, kvs) {
-				t.Fatalf("%v != %v", kvs, expValues)
-			}
+			require.NoError(t, err)
+			require.Equal(t, expValues, kvs)
 
 			// Now, merged values should be:
 			expValues = []MVCCKeyValue{
@@ -127,25 +112,15 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			if !writeOnly {
 				// Scan values from batch directly.
 				kvs, err = Scan(b, localMax, roachpb.KeyMax, 0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !reflect.DeepEqual(expValues, kvs) {
-					t.Errorf("%v != %v", kvs, expValues)
-				}
+				require.NoError(t, err)
+				require.Equal(t, expValues, kvs)
 			}
 
 			// Commit batch and verify direct engine scan yields correct values.
-			if err := commit(e, b); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, commit(e, b))
 			kvs, err = Scan(e, localMax, roachpb.KeyMax, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(expValues, kvs) {
-				t.Errorf("%v != %v", kvs, expValues)
-			}
+			require.NoError(t, err)
+			require.Equal(t, expValues, kvs)
 		})
 	}
 }
@@ -291,24 +266,17 @@ func TestBatchRepr(t *testing.T) {
 		repr := b.Repr()
 
 		r, err := NewPebbleBatchReader(repr)
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
+		require.NoError(t, err)
+
 		const expectedCount = 5
-		if count := r.Count(); count != expectedCount {
-			t.Fatalf("bad count: RocksDBBatchReader.Count expected %d, but found %d", expectedCount, count)
-		}
-		if count, err := PebbleBatchCount(repr); err != nil {
-			t.Fatal(err)
-		} else if count != expectedCount {
-			t.Fatalf("bad count: RocksDBBatchCount expected %d, but found %d", expectedCount, count)
-		}
+		require.Equal(t, expectedCount, r.Count())
+		count, err := PebbleBatchCount(repr)
+		require.NoError(t, err)
+		require.Equal(t, expectedCount, count)
 
 		var ops []string
 		for i := 0; i < r.Count(); i++ {
-			if ok := r.Next(); !ok {
-				t.Fatalf("%d: unexpected end of batch", i)
-			}
+			require.True(t, r.Next())
 			switch r.BatchType() {
 			case BatchTypeDeletion:
 				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.Key())))
@@ -321,12 +289,8 @@ func TestBatchRepr(t *testing.T) {
 				ops = append(ops, fmt.Sprintf("single_delete(%s)", string(r.Key())))
 			}
 		}
-		if err != nil {
-			t.Fatalf("unexpected err during iteration: %+v", err)
-		}
-		if ok := r.Next(); ok {
-			t.Errorf("expected end of batch")
-		}
+		require.NoError(t, r.Error())
+		require.False(t, r.Next())
 
 		// The keys in the batch have the internal MVCC encoding applied which for
 		// this test implies an appended 0 byte.
@@ -337,9 +301,7 @@ func TestBatchRepr(t *testing.T) {
 			"put(e\x00,)",
 			"single_delete(d\x00)",
 		}
-		if !reflect.DeepEqual(expOps, ops) {
-			t.Fatalf("expected %v, but found %v", expOps, ops)
-		}
+		require.Equal(t, expOps, ops)
 
 		return e.ApplyBatchRepr(repr, false /* sync */)
 	})
@@ -1142,4 +1104,98 @@ func TestDecodeKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPebbleBatchReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	DisableMetamorphicSimpleValueEncoding(t)
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// TODO(erikgrinaker): We use an unindexed batch to force ClearRawRange to
+	// drop a Pebble range tombstone even if there are no range keys below it. It
+	// should unconditionally drop one. See:
+	// https://github.com/cockroachdb/cockroach/issues/83032
+	b := eng.NewUnindexedBatch(false)
+	defer b.Close()
+
+	// Write some basic data.
+	require.NoError(t, b.PutEngineKey(engineKey("engineKey", 0), []byte("engineValue")))
+	require.NoError(t, b.PutMVCC(pointKey("mvccKey", 1), stringValue("mvccValue")))
+	require.NoError(t, b.PutMVCC(pointKey("mvccTombstone", 1), MVCCValue{}))
+	require.NoError(t, b.ExperimentalPutEngineRangeKey(roachpb.Key("rangeFrom"), roachpb.Key("rangeTo"), []byte{7}, []byte("engineRangeKey")))
+
+	// Clear some already empty keys.
+	require.NoError(t, b.ClearMVCC(pointKey("mvccKey", 9)))
+	require.NoError(t, b.ExperimentalClearMVCCRangeKey(rangeKey("rangeFrom", "rangeTo", 9)))
+	require.NoError(t, b.ClearRawRange(roachpb.Key("clearFrom"), roachpb.Key("clearTo"))) // both points and ranges
+
+	// Read it back.
+	expect := []struct {
+		batchType BatchType
+		key       string
+		ts        int
+		endKey    string
+		value     []byte
+		rangeKeys []EngineRangeKeyValue
+	}{
+		{BatchTypeValue, "engineKey", 0, "", []byte("engineValue"), nil},
+		{BatchTypeValue, "mvccKey", 1, "", stringValueRaw("mvccValue"), nil},
+		{BatchTypeValue, "mvccTombstone", 1, "", []byte{}, nil},
+		{BatchTypeRangeKeySet, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
+			{Version: []byte{7}, Value: []byte("engineRangeKey")},
+		}},
+
+		{BatchTypeDeletion, "mvccKey", 9, "", nil, nil},
+		{BatchTypeRangeKeyUnset, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
+			{Version: EncodeMVCCTimestampSuffix(wallTS(9)), Value: nil},
+		}},
+		{BatchTypeRangeDeletion, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
+		{BatchTypeRangeKeyDelete, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
+	}
+
+	r, err := NewPebbleBatchReader(b.Repr())
+	require.NoError(t, err)
+
+	require.Equal(t, len(expect), r.Count())
+
+	for _, e := range expect {
+		t.Logf("batchType=%v key=%s endKey=%s", e.batchType, e.key, e.endKey)
+		require.True(t, r.Next())
+		require.Equal(t, e.batchType, r.BatchType())
+
+		key, err := r.MVCCKey()
+		require.NoError(t, err)
+		require.Equal(t, pointKey(e.key, e.ts), key)
+
+		eKey, err := r.EngineKey()
+		require.NoError(t, err)
+		require.Equal(t, engineKey(e.key, e.ts), eKey)
+
+		if len(e.endKey) > 0 {
+			eKey, err = r.EngineEndKey()
+			require.NoError(t, err)
+			require.Equal(t, engineKey(e.endKey, e.ts), eKey)
+		} else {
+			_, err = r.EngineEndKey()
+			require.Error(t, err)
+		}
+
+		switch e.batchType {
+		case BatchTypeRangeKeySet, BatchTypeRangeKeyUnset:
+			rkvs, err := r.EngineRangeKeys()
+			require.NoError(t, err)
+			require.Equal(t, e.rangeKeys, rkvs)
+		case BatchTypeDeletion:
+			require.Nil(t, e.value)
+		default:
+			require.Equal(t, e.value, r.Value())
+		}
+	}
+
+	require.False(t, r.Next())
+	require.NoError(t, r.Error())
 }
