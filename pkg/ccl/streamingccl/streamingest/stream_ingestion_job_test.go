@@ -149,14 +149,11 @@ SET enable_experimental_stream_replication = true;
 	defer cleanupSink()
 
 	var ingestionJobID, streamProducerJobID int64
-	var startTime string
-	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
-
 	destSQL.ExpectErr(t, "pq: either old tenant ID 10 or the new tenant ID 1 cannot be system tenant",
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
 		pgURL.String())
 	destSQL.QueryRow(t,
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT 20`,
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT 20`,
 		pgURL.String(),
 	).Scan(&ingestionJobID)
 
@@ -227,14 +224,12 @@ func TestCutoverBuiltin(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db := sqlDB.DB
 
-	startTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	streamIngestJobRecord := jobs.Record{
 		Description: "test stream ingestion",
 		Username:    username.RootUserName(),
 		Details: jobspb.StreamIngestionDetails{
 			StreamAddress: "randomgen://test",
 			Span:          roachpb.Span{Key: keys.LocalMax, EndKey: keys.LocalMax.Next()},
-			StartTime:     startTimestamp,
 		},
 		Progress: jobspb.StreamIngestionProgress{},
 	}

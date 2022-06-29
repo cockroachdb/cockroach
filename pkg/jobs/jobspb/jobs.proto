@@ -85,8 +85,6 @@ message StreamIngestionDetails {
   // a span. Note that KVs received from the stream may need to be re-keyed into
   // this span.
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
-  // The job will ingest events from StartTime onwards.
-  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   
   reserved 5;
   roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
@@ -109,6 +107,11 @@ message StreamIngestionProgress {
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID",
       (gogoproto.nullable) = false];
   }
+
+  // The job will ingest events from StartTime onwards during the current run.
+  // This may change when the the ingestion job gets resumed from the previous checkpoint.
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+
   // CutoverTime is set to signal to the stream ingestion job to complete its
   // ingestion. This involves stopping any subsequent ingestion, and rolling
   // back any additional ingested data, to bring the ingested cluster to a
