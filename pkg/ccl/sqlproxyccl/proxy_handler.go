@@ -306,7 +306,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	}
 
 	// Cancel requests are sent on a separate connection, and have no response,
-	// so we can close the connection immediately after handling them.
+	// so we can close the connection immediately, then handle the request. This
+	// prevents the client from using latency to learn if we are processing the
+	// request or not.
 	if cr := fe.CancelRequest; cr != nil {
 		_ = incomingConn.Close()
 		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
@@ -435,6 +437,7 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn net.Conn) 
 	connBegin := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
+		handler.cancelInfoMap.deleteCancelInfo(connector.CancelInfo.proxySecretID())
 	}()
 
 	// Wrap the client connection with an error annotater. WARNING: The TLS
