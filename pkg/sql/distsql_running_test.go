@@ -164,13 +164,12 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			nil, /* testingPushCallback */
 		)
 
-		// We need to re-plan every time, since close() below makes
-		// the plan unusable across retries.
+		// We need to re-plan every time, since the plan is closed automatically
+		// by PlanAndRun() below making it unusable across retries.
 		p.stmt = makeStatement(stmt, clusterunique.ID{})
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
-		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
 		// We need distribute = true so that executing the plan involves marshaling

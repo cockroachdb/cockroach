@@ -441,7 +441,8 @@ type checkPlan struct {
 	plan planMaybePhysical
 }
 
-// close calls Close on all plan trees.
+// close calls Close on all plan trees. close can be called multiple times, and
+// all calls except for the first one are no-ops.
 func (p *planComponents) close(ctx context.Context) {
 	p.main.Close(ctx)
 	for i := range p.subqueryPlans {

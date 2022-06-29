@@ -254,6 +254,11 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planComponents)
 // runPlanInsidePlan is used to run a plan and gather the results in the
 // resultWriter, as part of the execution of an "outer" plan.
 func runPlanInsidePlan(params runParams, plan *planComponents, resultWriter rowResultWriter) error {
+	// The plan should be closed below (either in PlanAndRunSubqueries or
+	// PlanAndRun), and this defer is an additional safeguard against the
+	// execution infra forgetting to do this - closing the plan multiple times
+	// is safe.
+	defer plan.close(params.ctx)
 	recv := MakeDistSQLReceiver(
 		params.ctx, resultWriter, tree.Rows,
 		params.ExecCfg().RangeDescriptorCache,
