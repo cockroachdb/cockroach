@@ -100,6 +100,13 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 	}
 }
 
+// ZoneConfigAndOptions wraps the yaml config and option for a zone config node.
+// It can be used in tree.SetZoneConfig or tree.AlterDatabaseSetZoneConfigExtension.
+type ZoneConfigAndOptions struct {
+	YAMLConfig Expr
+	Options    KVOptions
+}
+
 // SetZoneConfig represents an ALTER DATABASE/TABLE... CONFIGURE ZONE
 // statement.
 type SetZoneConfig struct {
@@ -110,6 +117,16 @@ type SetZoneConfig struct {
 	SetDefault bool
 	YAMLConfig Expr
 	Options    KVOptions
+}
+
+// GetYAMLConfig returns the YAMLConfig stored in SetZoneConfig.
+func (node *SetZoneConfig) GetYAMLConfig() Expr {
+	return node.YAMLConfig
+}
+
+// GetOptions returns the zone config options stored in SetZoneConfig.
+func (node *SetZoneConfig) GetOptions() KVOptions {
+	return node.Options
 }
 
 // Format implements the NodeFormatter interface.
