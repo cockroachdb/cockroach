@@ -247,7 +247,7 @@ SHOW INDEXES FROM DATABASE (database_name)
 SHOW KEYS FROM DATABASE (database_name) 
 ```
 
-```sql
+```
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit ***is_hidden***
                                                                                             ***is_invisible***
                                                                                             ***is_not_invisible*** 
@@ -275,6 +275,123 @@ grammar. I'm not sure if this was the reason why we chose `NOT VISIBLE`.
 PostgreSQL currently doesn't support invisible index or invisible column
 feature. We can also try supporting both `NOT VISIBLE` and `INVISIBLE`, but more
 work would be needed to find a grammar rule that allows both.
+
+### Update on Discussion
+Invisible index feature is introducing three new user facing syntaxes. 
+When users are creating a new invisible index with `CREATE TABLE`, `CREATE
+INDEX`, or `ALTER INDEX`, they will need to specify whether the index is
+invisible. The two options that we have discussed are `NOT VISIBLE`,
+`INVISIBLE`.
+[MySQL](https://dev.mysql.com/doc/refman/8.0/en/invisible-indexes.html) and
+[Oracle](https://oracle-base.com/articles/11g/invisible-indexes-11gr1) both
+support `INVISIBLE` instead. Invisible column feature is using `NOT VISIBLE`.
+But we have decided that being consistent with the invisible column feature is
+more important.
+
+The second user-facing syntax is related to SQL statements like`SHOW INDEX`. The
+three options are `is_hidden`, `visible`, or `is_visible`.
+[MySQL](https://dev.mysql.com/doc/refman/8.0/en/show-index.html) is using
+`visible`. Invisible column feature is using
+[`is_hidden`](https://www.cockroachlabs.com/docs/stable/show-columns.html). And
+now we want to decide if it is more important to stay consistent with the
+invisible column feature and use `is_hidden` or to stay consistent with the
+first user-facing syntax and use `is_visible` or `visible`.
+
+The third user-facing syntax is with `crdb_internal.table_indexes`. Invisible
+column feature is using `hidden` in `table_columns`. MySQL uses
+[`INFORMATION_SCHEMA.STATISTICS`](https://dev.mysql.com/doc/refman/8.0/en/information-schema-statistics-table.html)
+and has `is_visible`. Oracle uses
+[`all_indexes`](https://docs.oracle.com/cd/E18283_01/server.112/e17110/statviews_1106.htm)
+and has `visibility.`
+
+We are also introducing another field in the index descriptor (just for internal
+use). The options are `hidden`, `invisible`. The invisible column feature is
+using `hidden` in column descriptor.  If we decide to choose `visible` for all
+invisible index syntax mentioned above, we can use `invisible` here to be more
+consistent. My slight preference is to use either hidden or invisible (not
+visible) for the index descriptor since the default behavior for a new index is
+visible, and the default boolean value is false.
+
+Another thing to note is that MySQL introduces a new column in
+`INFORMATION_SCHEMA.STATISTICS`. We are now introducing a new column in 
+`crdb_internal.table_indexes`, but we can add a new column to
+`INFORMATION_SCHEMA.STATISTICS` as well.
+
+### Technical Design
+
+Constraint check with this invisible index feature adds another level of
+complexity to consider. To illustrate, consider when there is a parent table and
+a child table. A unique index or a unique constraint is required on the parent
+table column in order to create a child table referencing the column. When user
+performs an insert on the child table, the optimizer will choose this unique
+index to perform a FK check. However, user can now mark an unique index on the
+parent table as invisible. The question now is whether the optimizer should
+still ignore this invisible unique index or not. If not, the optimizer would
+have to perform a full table scan for an INSERT statement. The same question
+applies when we try to perform an unique constraint check. If yes, the optimizer
+is using an invisible index.
+
+The decision is to temporarily disable invisible index feature during any
+constraint checks. 
+
+This has some benefits. 
+1. This is the standardized way in other SQL engines, such as MySQL. 
+2. Creating a child table requires an unique constraint on the parent table.
+ Marking this unique index as invisible doesn't really make sense. If user tries
+ to do that, we should still use this index for constraint check. This almost
+ never causes any performance drops.
+
+This also has some drawbacks. Users can no longer mark an index as invisible and
+believe that this is equivalent to dropping an index.
+
+During constraint check, we still want to use the invisible index.
+
+Concerns are mainly about insert, update, delete, upsert, and especially when
+they are used with FK parent and child tables. When we are performing insert to
+the child table, a constraint check on the parent table will take place. And an
+invisible unique index will cause some concerns -> potential full table scan.
+This is a FK check. When we are performing delete or update on the parent table,
+a constraint check on the child table will take place. And an invisible
+secondary or unique index on the FK column will cause some concerns -> also
+potential full table scan.  This is a constraint check. To solve this problem,
+we can consider having a flag whenever we are performing some constraint check.
+This is a problem even if we are just supporting invisible non unique indexes.
+When we are inserting or updating on conflict in just one table, this is not a
+constraint check during EXPLAIN. Would require some other flags.
+
+We could consider use this as a general rule: When users are trying to change a
+constraint that is necessary to perform certain actions, we should either
+disallow this by giving an error or we just use the index as they are visible
+and give a reminder that we are using the index. Special case for FK secondary
+index on child table as it was not necessary, but we will still use the index
+for constraint check. For example, a unique constraint was necessary to perform
+INSERT ON CONFLICT. If the user tries to make that unique constraint invisible,
+we will either give an error or give some hint to tell the user that we will be
+treating this constraint as visible if they try to perform INSERT ON CONFLICT
+later on. Similarly for FK constraints, we can give an error or a hint when they
+are trying to mark the unique index on parent table or index on FK in child
+table invisible.
+
+
+
+To disable invisible index during any constraint check...
+Whenever we are calling buildScan in `pkg/sql/opt/optbuilder/select.go`, we will pass in a boolean flag to indicate if the invisible index feature should be disabled during the scan.
+Inside buildScan, it will pass in this flag to scanPrivate.Flags for ForEachStartingAfter under `pkg/sql/opt/xform/scan_index_iter.go`
+
+This following section summarizes which part of optimizer disables invisible index feature and which part enables. 
+BuildScan is called in the following functions. 
+1. `func (cb *onDeleteFastCascadeBuilder) Build`: called by planCascade for ON DELETE CASCADE disable invisible index
+2. `func (b *Builder) buildDeleteCascadeMutationInput`: called by onDeleteSetBuilder and also by onDeleteCascadeBuilder for ON DELETE CASCADE, ON DELETE SET DEFAULT, ON DELETE SET NULL, disable invisible index
+3. `func (b *Builder) buildUpdateCascadeMutationInput`: called by planCascade for ON UPDATE CASCADE, SET DEFAULT, SET NULL, disable invisible index
+4. `func (mb *mutationBuilder) buildInputForDelete`: called by buildInputForDelete which builds a memo group for DeleteOp, enable invisible index
+5. `func (mb *mutationBuilder) buildInputForUpdate`: called by buildInputForUpdate which builds a memo group for UpdateOp, enable invisible index
+6. `func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter`: called by buildInsertForNothing INSERT ON CONFLICT DO NOTHING, disable invisible index
+7. `func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter`: called by buildInputForUpsert INSERT, UPSERT ON CONFLICT, DO UPDATE SET, disable invisible index
+8. `func (h *arbiterPredicateHelper) tableScope`: called by findArbiters INSERT ON CONFLICT DO NOTHING, UPSERT, INSERT ON CONFLICT DO UPDATE SET, disable invisible index
+9. `func (h *fkCheckHelper) buildOtherTableScan`: called by buildFKChecksAndCascadeForDelete, buildFKChecksForUpdate, buildFKChecksForUpsert, buildFKChecksForInsert, disable invisible index
+10. `func (h *uniqueCheckHelper) buildTableScan`: called by buildUniqueChecksForInsert, buildUniqueChecksForUpdate, buildUniqueChecksForUpsert, disable invisible index
+11. `func (b *Builder) buildDataSource`: called by buildJoin, buildInputForUpdate, buildSelectClause, enable invisible index
+12. `func (b *Builder) buildScanFromTableRef`: called by buildDataSource
 
 ## Later Discussion: Fine-Grained Control of Index Visibility
 Later on, we want to extend this feature and allow a more fine-grained control
