@@ -2290,6 +2290,10 @@ func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
 	require.Empty(t, scanRangeKeys(t, eng))
 }
 
+// TODO(erikgrinaker): The below test helpers should be moved to
+// testutils/storageutils instead, but that requires storage tests to be in the
+// storage_test package to avoid import cycles.
+
 // scanRangeKeys scans all range keys from the reader.
 func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKeyValue {
 	t.Helper()

@@ -393,7 +393,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
-        "//pkg/testutils/sstutil",
+        "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
         "//pkg/ts",
         "//pkg/ts/tspb",

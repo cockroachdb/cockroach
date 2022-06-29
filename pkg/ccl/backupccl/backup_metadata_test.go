@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupinfo_test
+package backupccl_test
 
 import (
 	"context"

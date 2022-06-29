@@ -234,6 +234,8 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 	}
 }
 
+// TODO(erikgrinaker): Use testutils/storageutils instead when test code is
+// moved to storage_test to avoid circular deps.
 func stringValue(s string) MVCCValue {
 	return MVCCValue{Value: roachpb.MakeValueFromString(s)}
 }
