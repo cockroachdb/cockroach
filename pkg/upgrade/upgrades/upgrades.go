@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/errors"
 )
@@ -31,6 +32,13 @@ func GetUpgrade(key clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
 
 // NoPrecondition is a PreconditionFunc that doesn't check anything.
 func NoPrecondition(context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps) error {
+	return nil
+}
+
+// NoTenantUpgradeFunc is a TenantUpgradeFunc that doesn't do anything.
+func NoTenantUpgradeFunc(
+	context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps, *jobs.Job,
+) error {
 	return nil
 }
 
@@ -124,6 +132,12 @@ var upgrades = []upgrade.Upgrade{
 		toCV(clusterversion.SeedSpanCountTable),
 		NoPrecondition,
 		seedSpanCountTableMigration,
+	),
+	upgrade.NewTenantUpgrade(
+		"ensure preconditions are met before starting upgrading to v22.2",
+		toCV(clusterversion.Start22_2),
+		preconditionBeforeStartingAnUpgrade,
+		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
 		"upgrade sequences to be referenced by ID",
