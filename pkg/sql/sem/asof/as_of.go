@@ -63,6 +63,9 @@ func resolveFuncType(asOf tree.AsOfClause, searchPath tree.SearchPath) funcType 
 	if !ok {
 		return funcTypeInvalid
 	}
+	if !fe.Func.IsResolved() {
+		panic("Function should have been resolved: as_of.go:resolveFuncType")
+	}
 	def, err := fe.Func.Resolve(searchPath)
 	if err != nil {
 		return funcTypeInvalid

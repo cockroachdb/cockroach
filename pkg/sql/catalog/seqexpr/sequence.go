@@ -46,6 +46,9 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
+	if !funcExpr.Func.IsResolved() {
+		return nil, pgerror.New(pgcode.AmbiguousFunction, "Function should have been resolved: GetSequenceFromFunc")
+	}
 	def, err := funcExpr.Func.Resolve(tree.EmptySearchPath)
 	if err != nil {
 		return nil, err

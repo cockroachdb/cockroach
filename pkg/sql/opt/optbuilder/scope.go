@@ -1014,6 +1014,9 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
+		if !t.Func.IsResolved() {
+			panic(errors.AssertionFailedf("function should have been resolved: scope.VisitPre"))
+		}
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
 		if err != nil {
 			panic(err)
@@ -1495,6 +1498,9 @@ func (s *scope) replaceCount(
 				e := &cpy
 				e.Exprs = tree.Exprs{tree.DBoolTrue}
 
+				if !e.Func.IsResolved() {
+					panic(errors.AssertionFailedf("function should have been resolved: scope.replaceCount-1"))
+				}
 				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
 				if err != nil {
 					panic(err)
@@ -1520,6 +1526,9 @@ func (s *scope) replaceCount(
 			semaCtx := tree.MakeSemaContext()
 			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
+			}
+			if !e.Func.IsResolved() {
+				panic(errors.AssertionFailedf("function should have been resolved: scope.replaceCount-2"))
 			}
 			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
 			if err != nil {

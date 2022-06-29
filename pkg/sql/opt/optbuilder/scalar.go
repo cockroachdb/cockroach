@@ -523,6 +523,9 @@ func (b *Builder) buildFunction(
 		}
 	}
 
+	if !f.Func.IsResolved() {
+		panic(errors.AssertionFailedf("function should have been resolved: Builder.buildFunction"))
+	}
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
 		panic(err)

@@ -98,6 +98,9 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 
 		var def *tree.FunctionDefinition
 		if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
+			if !funcExpr.Func.IsResolved() {
+				panic(errors.AssertionFailedf("function should have been resolved: Builder.buildZip"))
+			}
 			if def, err = funcExpr.Func.Resolve(b.semaCtx.SearchPath); err != nil {
 				panic(err)
 			}

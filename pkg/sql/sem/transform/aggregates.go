@@ -33,6 +33,9 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			// aggregate function, but it can contain aggregate functions.
 			return true, expr
 		}
+		if !t.Func.IsResolved() {
+			panic("Function should have been resolved: IsAggregateVisitor.VisitPre")
+		}
 		fd, err := t.Func.Resolve(&v.searchPath)
 		if err != nil {
 			return false, expr
