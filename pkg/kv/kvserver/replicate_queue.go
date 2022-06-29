@@ -486,6 +486,22 @@ func (rq *replicateQueue) shouldQueue(
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
 	}
+	if status.State == kvserverpb.LeaseState_EXPIRED {
+		raftStatus := repl.RaftStatus()
+		// The lease for this range is currently expired, if this replica
+		// is the raft leader then it is necessary that it acquires the lease.
+		// There is no requirement that the expired lease belongs to this
+		// replica, as regardless of the lease history, the current leader
+		// should hold the lease.
+		if raftStatus != nil && raftStatus.RaftState == raft.StateLeader {
+			log.VEventf(ctx, 2, "expired lease, raft leader, acquiring lease and enqueuing")
+			_, err := repl.redirectOnOrAcquireLease(ctx)
+			if err == nil {
+				return true, 0
+			}
+			return false, 0
+		}
+	}
 
 	return false, 0
 }
