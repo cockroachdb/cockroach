@@ -75,7 +75,7 @@ func (ti testInfra) newExecDeps(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{},
 		scdeps.NewConstantClock(timeutil.Now()),
-		noopMetadataUpdaterFactory{},
+		noopMetadataUpdater{},
 		noopEventLogger{},
 		noopStatsReferesher{},
 		&scexec.TestingKnobs{},
@@ -501,20 +501,9 @@ type noopStatsReferesher struct{}
 func (noopStatsReferesher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
 }
 
-type noopMetadataUpdaterFactory struct{}
-
-var _ scexec.DescriptorMetadataUpdaterFactory = noopMetadataUpdaterFactory{}
-
 type noopMetadataUpdater struct{}
 
 var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
-
-// NewMetadataUpdater implements scexec.DescriptorMetadataUpdaterFactory.
-func (noopMetadataUpdaterFactory) NewMetadataUpdater(
-	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
-) scexec.DescriptorMetadataUpdater {
-	return &noopMetadataUpdater{}
-}
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpsertDescriptorComment(

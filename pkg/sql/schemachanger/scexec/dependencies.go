@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -352,15 +351,6 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
-}
-
-// DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given
-// transaction and context.
-type DescriptorMetadataUpdaterFactory interface {
-	// NewMetadataUpdater creates a new DescriptorMetadataUpdater.
-	NewMetadataUpdater(
-		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
-	) DescriptorMetadataUpdater
 }
 
 // StatsRefreshQueue queues table for stats refreshes.

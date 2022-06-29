@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -242,6 +243,14 @@ func newSchemaChangerTxnRunDependencies(
 	schemaChangerJobID jobspb.JobID,
 	stmts []string,
 ) scexec.Dependencies {
+	metaDataUpdater := descmetadata.NewMetadataUpdater(
+		evalContext.Context,
+		execCfg.InternalExecutorFactory,
+		descriptors,
+		&execCfg.Settings.SV,
+		txn,
+		sessionData,
+	)
 	return scdeps.NewExecutorDependencies(
 		execCfg.Codec,
 		sessionData,
@@ -258,7 +267,7 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
-		execCfg.DescMetadaUpdaterFactory,
+		metaDataUpdater,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		execCfg.StatsRefresher,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,

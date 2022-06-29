@@ -45,7 +45,7 @@ func NewJobRunDependencies(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	indexValidator scexec.IndexValidator,
-	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
+	metadataUpdaterFactory MetadataUpdaterFactory,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
 	statements []string,
@@ -67,7 +67,7 @@ func NewJobRunDependencies(
 		testingKnobs:          testingKnobs,
 		statements:            statements,
 		indexValidator:        indexValidator,
-		commentUpdaterFactory: commentUpdaterFactory,
+		commentUpdaterFactory: metadataUpdaterFactory,
 		sessionData:           sessionData,
 		kvTrace:               kvTrace,
 		statsRefresher:        statsRefresher,
@@ -82,7 +82,7 @@ type jobExecutionDeps struct {
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
 	merger                scexec.Merger
-	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
+	commentUpdaterFactory MetadataUpdaterFactory
 	rangeCounter          backfiller.RangeCounter
 	jobRegistry           *jobs.Registry
 	job                   *jobs.Job
@@ -137,7 +137,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			statements:              d.statements,
 			user:                    pl.UsernameProto.Decode(),
 			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
-			commentUpdaterFactory:   d.commentUpdaterFactory,
+			metadataUpdater:         d.commentUpdaterFactory(ctx, descriptors, txn),
 			sessionData:             d.sessionData,
 			testingKnobs:            d.testingKnobs,
 		}
