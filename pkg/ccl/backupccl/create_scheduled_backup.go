@@ -526,7 +526,7 @@ func checkForExistingBackupsInCollection(
 			collectionURI)
 	}
 	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-		return errors.Newf("unexpected error occurred when checking for existing backups in %s",
+		return errors.Wrapf(err, "unexpected error occurred when checking for existing backups in %s",
 			collectionURI)
 	}
 
