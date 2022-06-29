@@ -12,8 +12,11 @@ package sslocal_test
 
 import (
 	"context"
+	"github.com/jackc/pgx/v4"
 	"math"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -668,4 +671,52 @@ func TestUnprivilegedUserReset(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testData := []struct {
+		query        string
+		placeholders []interface{}
+		phaseTimes   *sessionphase.Times
+	}{
+		{
+			query:        "SELECT $1::INT8",
+			placeholders: []interface{}{1},
+			phaseTimes:   nil,
+		},
+	}
+
+	currentTestCaseIdx := 0
+	const fiveSeconds = time.Second * 5
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnRecordTxnFinish: func(phaseTimes *sessionphase.Times) {
+			testData[currentTestCaseIdx].phaseTimes = phaseTimes
+		},
+	}
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "StartServer", url.User(username.RootUser))
+	defer cleanupGoDB()
+	conn, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(t, err, "error connecting with pg url")
+
+	for _, tc := range testData {
+		// Make extended protocol query
+		_ = conn.QueryRow(ctx, tc.query, tc.placeholders, pgx.QuerySimpleProtocol(false))
+		// Ensure test case phase times are populated by query txn.
+		require.True(t, tc.phaseTimes != nil)
+		// Ensure SessionTransactionStarted variable is populated.
+		require.True(t, tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted) != time.Time{})
+		// Ensure compute transaction service latency is within a reasonable threshold.
+		require.True(t, tc.phaseTimes.GetTransactionServiceLatency() < fiveSeconds)
+		currentTestCaseIdx++
+	}
 }
