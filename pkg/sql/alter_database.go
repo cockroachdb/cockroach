@@ -1653,3 +1653,66 @@ func (p *planner) addSuperRegion(
 		desc,
 	)
 }
+
+type alterDatabaseSetZoneConfigExtensionNode struct {
+	n          *tree.AlterDatabaseSetZoneConfigExtension
+	desc       *dbdesc.Mutable
+	yamlConfig tree.TypedExpr
+	options    map[tree.Name]optionValue
+}
+
+// AlterDatabaseSetZoneConfigExtension transforms a
+// tree.AlterDatabaseSetZoneConfigExtension into a plan node.
+func (p *planner) AlterDatabaseSetZoneConfigExtension(
+	ctx context.Context, n *tree.AlterDatabaseSetZoneConfigExtension,
+) (planNode, error) {
+
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	yamlConfig, err := p.getUpdatedZoneConfigYamlConfig(ctx, n)
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := p.getUpdatedZoneConfigOptions(ctx, n, "database")
+	if err != nil {
+		return nil, err
+	}
+
+	if n.SetDefault {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"unsupported zone config parameter: SET DEFAULT")
+	}
+
+	return &alterDatabaseSetZoneConfigExtensionNode{
+		n:          n,
+		desc:       dbDesc,
+		yamlConfig: yamlConfig,
+		options:    options,
+	}, nil
+}
+
+func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) error {
+	return nil
+}
+
+func (n *alterDatabaseSetZoneConfigExtensionNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseSetZoneConfigExtensionNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseSetZoneConfigExtensionNode) Close(context.Context)        {}
