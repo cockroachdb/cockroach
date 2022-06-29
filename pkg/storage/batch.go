@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 )
 
 // BatchType represents the type of an entry in an encoded Pebble batch.
@@ -42,6 +43,9 @@ const (
 	// BatchTypeColumnFamilyBlobIndex      BatchType = 0x10
 	// BatchTypeBlobIndex                  BatchType = 0x11
 	// BatchMaxValue                       BatchType = 0x7F
+	BatchTypeRangeKeyDelete BatchType = 0x13
+	BatchTypeRangeKeyUnset  BatchType = 0x14
+	BatchTypeRangeKeySet    BatchType = 0x15
 )
 
 const (
@@ -156,33 +160,64 @@ func (r *PebbleBatchReader) EngineKey() (EngineKey, error) {
 }
 
 // Value returns the value of the current batch entry. Value panics if the
-// BatchType is BatchTypeDeleted.
+// BatchType is a point key deletion.
 func (r *PebbleBatchReader) Value() []byte {
-	if r.typ == BatchTypeDeletion || r.typ == BatchTypeSingleDeletion {
+	switch r.typ {
+	case BatchTypeDeletion, BatchTypeSingleDeletion:
 		panic("cannot call Value on a deletion entry")
+	default:
+		return r.value
 	}
-	return r.value
 }
 
-// MVCCEndKey returns the MVCC end key of the current batch entry.
-//lint:ignore U1001 unused
-func (r *PebbleBatchReader) MVCCEndKey() (MVCCKey, error) {
-	if r.typ != BatchTypeRangeDeletion {
-		panic("can only ask for EndKey on a range deletion entry")
-	}
-	return DecodeMVCCKey(r.Value())
-}
-
-// EngineEndKey returns the engine end key of the current batch entry.
+// EngineEndKey returns the engine end key of the current ranged batch entry.
 func (r *PebbleBatchReader) EngineEndKey() (EngineKey, error) {
-	if r.typ != BatchTypeRangeDeletion {
-		panic("can only ask for EndKey on a range deletion entry")
+	var rawKey []byte
+	switch r.typ {
+	case BatchTypeRangeDeletion, BatchTypeRangeKeyDelete:
+		rawKey = r.Value()
+
+	case BatchTypeRangeKeySet, BatchTypeRangeKeyUnset:
+		rangeKeys, err := r.rangeKeys()
+		if err != nil {
+			return EngineKey{}, err
+		}
+		rawKey = rangeKeys.End
+
+	default:
+		return EngineKey{}, errors.AssertionFailedf(
+			"can only ask for EndKey on a ranged entry, got %v", r.typ)
 	}
-	key, ok := DecodeEngineKey(r.Value())
+
+	key, ok := DecodeEngineKey(rawKey)
 	if !ok {
-		return key, errors.Errorf("invalid encoded engine key: %x", r.Value())
+		return key, errors.Errorf("invalid encoded engine key: %x", rawKey)
 	}
 	return key, nil
+}
+
+// EngineRangeKeys returns the engine range key values at the current entry.
+func (r *PebbleBatchReader) EngineRangeKeys() ([]EngineRangeKeyValue, error) {
+	switch r.typ {
+	case BatchTypeRangeKeySet, BatchTypeRangeKeyUnset:
+	default:
+		return nil, errors.AssertionFailedf(
+			"can only ask for range keys on a range key entry, got %v", r.typ)
+	}
+	rangeKeys, err := r.rangeKeys()
+	if err != nil {
+		return nil, err
+	}
+	rkvs := make([]EngineRangeKeyValue, 0, len(rangeKeys.Keys))
+	for _, rk := range rangeKeys.Keys {
+		rkvs = append(rkvs, EngineRangeKeyValue{Version: rk.Suffix, Value: rk.Value})
+	}
+	return rkvs, nil
+}
+
+// rangeKeys decodes and returns the current Pebble range key.
+func (r *PebbleBatchReader) rangeKeys() (rangekey.Span, error) {
+	return rangekey.Decode(pebble.InternalKey{UserKey: r.key, Trailer: uint64(r.typ)}, r.value, nil)
 }
 
 // Next advances to the next entry in the batch, returning false when the batch
