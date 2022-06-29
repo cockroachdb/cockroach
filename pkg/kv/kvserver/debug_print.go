@@ -152,7 +152,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 		return "<nil>\n", nil
 	}
 
-	r, err := storage.NewRocksDBBatchReader(writeBatch.Data)
+	r, err := storage.NewPebbleBatchReader(writeBatch.Data)
 	if err != nil {
 		return "", err
 	}
