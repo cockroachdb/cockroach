@@ -100,7 +100,7 @@ func updateReplicationStreamProgress(
 	ptsProvider protectedts.Provider,
 	registry *jobs.Registry,
 	streamID streaming.StreamID,
-	ts hlc.Timestamp,
+	consumedTime hlc.Timestamp,
 	txn *kv.Txn,
 ) (status streampb.StreamReplicationStatus, err error) {
 	const useReadLock = false
@@ -123,11 +123,19 @@ func updateReplicationStreamProgress(
 				return nil
 			}
 
-			if shouldUpdatePTS := ptsRecord.Timestamp.Less(ts); shouldUpdatePTS {
-				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, ts); err != nil {
+			// TODO(casper): Error out when the protected timestamp moves backward as the ingestion
+			// processors may consume kv changes that are not protected. We are fine for now
+			// for the sake of long GC window.
+			// Now this can happen because the frontier processor moves forward the protected timestamp
+			// in the source cluster through heartbeats before it reports the new frontier to the
+			// ingestion job resumer which later updates the job high watermark. When we retry another
+			// ingestion using the previous ingestion high watermark, it can fall behind the
+			// source cluster protected timestamp.
+			if shouldUpdatePTS := ptsRecord.Timestamp.Less(consumedTime); shouldUpdatePTS {
+				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, consumedTime); err != nil {
 					return err
 				}
-				status.ProtectedTimestamp = &ts
+				status.ProtectedTimestamp = &consumedTime
 			}
 			// Allow expiration time to go backwards as user may set a smaller timeout.
 			md.Progress.GetStreamReplication().Expiration = expiration
@@ -180,7 +188,8 @@ func heartbeatReplicationStream(
 	}
 
 	return updateReplicationStreamProgress(evalCtx.Ctx(),
-		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry, streamID, frontier, txn)
+		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
+		streamID, frontier, txn)
 }
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
