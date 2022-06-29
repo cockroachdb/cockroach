@@ -69,6 +69,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
     ],
 )
