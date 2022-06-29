@@ -14,7 +14,7 @@ import Adapter from "enzyme-adapter-react-16";
 Enzyme.configure({ adapter: new Adapter() });
 
 /**
- * Various thing in DB Console use global fetch. `fetch` is generally
+ * Various things in DB Console use global fetch. `fetch` is generally
  * available in modern browsers but is not standard in NodeJS until
  * version 18.0.0. I am mocking here to generally not cause errors in
  * Jest when loading large parts of the application. If a test actually
