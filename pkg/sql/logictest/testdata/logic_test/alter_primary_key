@@ -77,6 +77,10 @@ SELECT y, z, v FROM t@i2
 12 13 15
 17 18 20
 
+# Regression test for issue #81522.
+statement error pgcode 42611 expressions such as \"gen_random_uuid\(\)\" are not allowed in primary index definition
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (gen_random_uuid());
+
 # Test that composite values are encoded correctly in covering indexes.
 statement ok
 CREATE TABLE t_composite (x INT PRIMARY KEY, y DECIMAL NOT NULL);
