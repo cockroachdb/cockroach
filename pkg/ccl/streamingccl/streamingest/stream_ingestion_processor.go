@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -96,6 +97,9 @@ type streamIngestionProcessor struct {
 	// streamPartitionClients are a collection of streamclient.Client created for
 	// consuming multiple partitions from a stream.
 	streamPartitionClients []streamclient.Client
+
+	// cutoverProvider indicates when the cutover time has been reached.
+	cutoverProvider cutoverProvider
 
 	// Checkpoint events may need to be buffered if they arrive within the same
 	// minimumFlushInterval.
@@ -181,10 +185,14 @@ func newStreamIngestionDataProcessor(
 		curBatch:            make([]storage.MVCCKeyValue, 0),
 		bufferedCheckpoints: make(map[string]hlc.Timestamp),
 		maxFlushRateTimer:   timeutil.NewTimer(),
-		cutoverCh:           make(chan struct{}),
-		closePoller:         make(chan struct{}),
-		rekeyer:             rekeyer,
-		rewriteToDiffKey:    spec.TenantRekey.NewID != spec.TenantRekey.OldID,
+		cutoverProvider: &cutoverFromJobProgress{
+			jobID:    jobspb.JobID(spec.JobID),
+			registry: flowCtx.Cfg.JobRegistry,
+		},
+		cutoverCh:        make(chan struct{}),
+		closePoller:      make(chan struct{}),
+		rekeyer:          rekeyer,
+		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -352,9 +360,7 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 	ctx context.Context, stopPoller chan struct{},
 ) error {
 	sv := &sip.flowCtx.Cfg.Settings.SV
-	registry := sip.flowCtx.Cfg.JobRegistry
 	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
-	jobID := sip.spec.JobID
 	defer tick.Stop()
 	for {
 		select {
@@ -363,20 +369,11 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			j, err := registry.LoadJob(ctx, jobspb.JobID(jobID))
+			cutoverReached, err := sip.cutoverProvider.cutoverReached(ctx)
 			if err != nil {
 				return err
 			}
-			progress := j.Progress()
-			var sp *jobspb.Progress_StreamIngest
-			var ok bool
-			if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-				return errors.Newf("unknown progress type %T in stream ingestion job %d",
-					j.Progress().Progress, jobID)
-			}
-			// Job has been signaled to complete.
-			if resolvedTimestamp := progress.GetHighWater(); !sp.StreamIngest.CutoverTime.IsEmpty() &&
-				resolvedTimestamp != nil && sp.StreamIngest.CutoverTime.Less(*resolvedTimestamp) {
+			if cutoverReached {
 				sip.cutoverCh <- struct{}{}
 				return nil
 			}
@@ -662,6 +659,40 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	sip.bufferedCheckpoints = make(map[string]hlc.Timestamp)
 
 	return &flushedCheckpoints, sip.batcher.Reset(ctx)
+}
+
+// cutoverProvider allows us to override how we decide when the job has reached
+// the cutover places in tests.
+type cutoverProvider interface {
+	cutoverReached(context.Context) (bool, error)
+}
+
+// custoverFromJobProgress is a cutoverProvider that decides whether the cutover
+// time has been reached based on the progress stored on the job record.
+type cutoverFromJobProgress struct {
+	registry *jobs.Registry
+	jobID    jobspb.JobID
+}
+
+func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
+	j, err := c.registry.LoadJob(ctx, c.jobID)
+	if err != nil {
+		return false, err
+	}
+	progress := j.Progress()
+	var sp *jobspb.Progress_StreamIngest
+	var ok bool
+	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
+		return false, errors.Newf("unknown progress type %T in stream ingestion job %d",
+			j.Progress().Progress, c.jobID)
+	}
+	// Job has been signaled to complete.
+	if resolvedTimestamp := progress.GetHighWater(); !sp.StreamIngest.CutoverTime.IsEmpty() &&
+		resolvedTimestamp != nil && sp.StreamIngest.CutoverTime.Less(*resolvedTimestamp) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func init() {

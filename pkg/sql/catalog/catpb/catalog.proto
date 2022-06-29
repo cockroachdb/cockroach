@@ -216,6 +216,8 @@ message RowLevelTTL {
   // LabelMetrics is true if metrics for the TTL job should add a label containing
   // the relation name.
   optional bool label_metrics = 10 [(gogoproto.nullable) = false];
+  // ExpirationExpr is the custom assigned expression for calculating when the TTL should apply to a row.
+  optional string expiration_expr = 11 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
 }
 
 // AutoStatsSettings represents settings related to automatic statistics

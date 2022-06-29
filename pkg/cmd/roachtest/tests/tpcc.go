@@ -99,7 +99,6 @@ type workloadInstance struct {
 }
 
 const workloadPProfStartPort = 33333
-const workloadPrometheusPort = 2112
 
 // tpccImportCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster.
@@ -183,8 +182,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		workloadInstances = append(
 			workloadInstances,
 			workloadInstance{
-				nodes:          c.Range(1, c.Spec().NodeCount-1),
-				prometheusPort: workloadPrometheusPort,
+				nodes: c.Range(1, c.Spec().NodeCount-1),
 			},
 		)
 	}
@@ -202,7 +200,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 			return
 		}
 		cep, err := opts.ChaosEventsProcessor(
-			promCfg.PrometheusNode,
+			c.Nodes(int(promCfg.PrometheusNode[0])),
 			workloadInstances,
 		)
 		if err != nil {
@@ -1401,13 +1399,13 @@ func registerTPCCBench(r registry.Registry) {
 
 // makeWorkloadScrapeNodes creates a ScrapeNode for every workloadInstance.
 func makeWorkloadScrapeNodes(
-	workloadNode option.NodeListOption, workloadInstances []workloadInstance,
+	workloadNode install.Node, workloadInstances []workloadInstance,
 ) []prometheus.ScrapeNode {
 	workloadScrapeNodes := make([]prometheus.ScrapeNode, len(workloadInstances))
 	for i, workloadInstance := range workloadInstances {
 		workloadScrapeNodes[i] = prometheus.ScrapeNode{
-			Nodes: workloadNode,
-			Port:  workloadInstance.prometheusPort,
+			Node: workloadNode,
+			Port: workloadInstance.prometheusPort,
 		}
 	}
 	return workloadScrapeNodes
@@ -1435,14 +1433,14 @@ func setupPrometheusForTPCC(
 		if opts.DisablePrometheus {
 			return nil, func() {}
 		}
-		workloadNode := c.Node(c.Spec().NodeCount)
-		cfg = &prometheus.Config{
-			PrometheusNode: workloadNode,
-			// Scrape each CockroachDB node and the workload node.
-			ScrapeConfigs: append(prometheus.MakeInsecureCockroachScrapeConfig(c.Range(1, c.Spec().NodeCount-1)),
-				prometheus.MakeWorkloadScrapeConfig("workload", makeWorkloadScrapeNodes(workloadNode, workloadInstances)),
-			),
-		}
+		cfg = &prometheus.Config{}
+		workloadNode := c.Node(c.Spec().NodeCount).InstallNodes()[0]
+		cfg.WithPrometheusNode(workloadNode)
+		cfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+		cfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
+			"/", makeWorkloadScrapeNodes(workloadNode, workloadInstances)))
+
 	}
 	if opts.DisablePrometheus {
 		t.Fatal("test has PrometheusConfig but DisablePrometheus was on")
@@ -1451,15 +1449,14 @@ func setupPrometheusForTPCC(
 		t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
 		return nil, func() {}
 	}
-	_, saveSnap, err := prometheus.Init(
-		ctx,
-		*cfg,
-		c,
-		t.L(),
-		repeatRunner{C: c, T: t}.repeatRunE,
-	)
-	if err != nil {
+
+	if err := c.StartGrafana(ctx, t.L(), cfg); err != nil {
 		t.Fatal(err)
 	}
-	return cfg, func() { saveSnap(t.ArtifactsDir()) }
+	cleanupFunc := func() {
+		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
+			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
+		}
+	}
+	return cfg, cleanupFunc
 }

@@ -1472,8 +1472,8 @@ func NewTableDesc(
 		}
 	}
 
-	// Create the TTL column if one does not already exist.
-	if ttl := desc.GetRowLevelTTL(); ttl != nil {
+	// Create the TTL automatic column (crdb_internal_expiration) if one does not already exist.
+	if ttl := desc.GetRowLevelTTL(); ttl != nil && ttl.HasDurationExpr() {
 		if err := checkTTLEnabledForCluster(ctx, st); err != nil {
 			return nil, err
 		}

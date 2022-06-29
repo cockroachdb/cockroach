@@ -1,4 +1,4 @@
-# LogicTest: 5node-default-configs !5node-metadata
+# LogicTest: 5node-default-configs
 
 # Regression test for nested tuple enum hydration (#74189)
 statement ok

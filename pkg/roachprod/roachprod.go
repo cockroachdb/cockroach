@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -819,7 +820,7 @@ func Put(
 	if err != nil {
 		return err
 	}
-	return c.Put(ctx, l, src, dest)
+	return c.Put(ctx, l, c.Nodes, src, dest)
 }
 
 // Get copies a remote file from the nodes in a cluster.
@@ -833,7 +834,7 @@ func Get(l *logger.Logger, clusterName, src, dest string) error {
 	if err != nil {
 		return err
 	}
-	return c.Get(l, src, dest)
+	return c.Get(l, c.Nodes, src, dest)
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -877,43 +878,44 @@ func PgURL(
 	return urls, nil
 }
 
-// AdminURL generates admin UI URLs for the nodes in a cluster.
-func AdminURL(
-	l *logger.Logger, clusterName, path string, usePublicIPs, openInBrowser, secure bool,
-) ([]string, error) {
-	if err := LoadClusters(); err != nil {
-		return nil, err
-	}
-	c, err := newCluster(l, clusterName, install.SecureOption(secure))
-	if err != nil {
-		return nil, err
-	}
+type urlConfig struct {
+	path          string
+	usePublicIP   bool
+	openInBrowser bool
+	secure        bool
+	port          int
+}
 
+func urlGenerator(
+	c *install.SyncedCluster, l *logger.Logger, nodes install.Nodes, config urlConfig,
+) ([]string, error) {
 	var urls []string
-	for i, node := range c.TargetNodes() {
+	for i, node := range nodes {
 		host := vm.Name(c.Name, int(node)) + "." + gce.Subdomain
 
 		// verify DNS is working / fallback to IPs if not.
-		if i == 0 && !usePublicIPs {
+		if i == 0 && !config.usePublicIP {
 			if _, err := net.LookupHost(host); err != nil {
 				fmt.Fprintf(l.Stderr, "no valid DNS (yet?). might need to re-run `sync`?\n")
-				usePublicIPs = true
+				config.usePublicIP = true
 			}
 		}
 
-		if usePublicIPs {
+		if config.usePublicIP {
 			host = c.VMs[node-1].PublicIP
 		}
-		port := c.NodeUIPort(node)
+		if config.port == 0 {
+			config.port = c.NodeUIPort(node)
+		}
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
 		}
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
+		if !strings.HasPrefix(config.path, "/") {
+			config.path = "/" + config.path
 		}
-		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, path)
-		if openInBrowser {
+		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, config.port, config.path)
+		if config.openInBrowser {
 			if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
 				return nil, err
 			}
@@ -922,6 +924,26 @@ func AdminURL(
 		}
 	}
 	return urls, nil
+}
+
+// AdminURL generates admin UI URLs for the nodes in a cluster.
+func AdminURL(
+	l *logger.Logger, clusterName, path string, usePublicIP, openInBrowser, secure bool,
+) ([]string, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return nil, err
+	}
+	uConfig := urlConfig{
+		path:          path,
+		usePublicIP:   usePublicIP,
+		openInBrowser: openInBrowser,
+		secure:        secure,
+	}
+	return urlGenerator(c, l, c.TargetNodes(), uConfig)
 }
 
 // PprofOpts specifies the options needed by Pprof().
@@ -1333,4 +1355,104 @@ func InitProviders() map[string]string {
 	}
 
 	return providersState
+}
+
+// StartGrafana spins up a prometheus and grafana instance on the last node provided and scrapes
+// from all other nodes.
+func StartGrafana(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	grafanaURL string,
+	promCfg *prometheus.Config, // passed iff grafanaURL is empty
+) error {
+	if grafanaURL != "" && promCfg != nil {
+		return errors.New("cannot pass grafanaURL and a non empty promCfg")
+	}
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return err
+	}
+
+	if promCfg == nil {
+		promCfg = &prometheus.Config{}
+		// Configure the prometheus/grafana servers to run on the last node in the cluster
+		promCfg.WithPrometheusNode(nodes[len(nodes)-1])
+
+		// Configure scraping on all nodes in the cluster
+		promCfg.WithCluster(nodes)
+		promCfg.WithNodeExporter(nodes)
+
+		// By default, spin up a grafana server
+		promCfg.Grafana.Enabled = true
+		if grafanaURL != "" {
+			promCfg.WithGrafanaDashboard(grafanaURL)
+		}
+	}
+	_, err = prometheus.Init(ctx, l, c, *promCfg)
+	if err != nil {
+		return err
+	}
+	urls, err := GrafanaURL(ctx, l, clusterName, false)
+	if err != nil {
+		return err
+	}
+	for i, url := range urls {
+		fmt.Printf("Grafana dashboard %d: %s\n", i, url)
+	}
+	return nil
+}
+
+// StopGrafana shuts down prometheus and grafana servers on the last node in
+// the cluster, if they exist.
+func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string, dumpDir string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return err
+	}
+	if err := prometheus.Shutdown(ctx, c, l, nodes, dumpDir); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GrafanaURL returns a url to the grafana dashboard
+func GrafanaURL(
+	ctx context.Context, l *logger.Logger, clusterName string, openInBrowser bool,
+) ([]string, error) {
+	if err := LoadClusters(); err != nil {
+		return nil, err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return nil, err
+	}
+	// grafana is assumed to be running on the last node in the target
+	grafanaNode := install.Nodes{nodes[len(nodes)-1]}
+
+	uConfig := urlConfig{
+		usePublicIP:   true,
+		openInBrowser: openInBrowser,
+		secure:        false,
+		port:          3000,
+	}
+	return urlGenerator(c, l, grafanaNode, uConfig)
 }

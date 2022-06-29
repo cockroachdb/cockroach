@@ -544,8 +544,6 @@ type testClusterConfig struct {
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
 	sqlExecUseDisk bool
-	// if set, enables DistSQL metadata propagation tests.
-	distSQLMetadataTestEnabled bool
 	// if set and the -test.short flag is passed, skip this config.
 	skipShort bool
 	// If not empty, bootstrapVersion controls what version the cluster will be
@@ -786,14 +784,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize:   "off",
 	},
 	{
-		name:                       "fakedist-metadata",
-		numNodes:                   3,
-		useFakeSpanResolver:        true,
-		overrideDistSQLMode:        "on",
-		distSQLMetadataTestEnabled: true,
-		skipShort:                  true,
-	},
-	{
 		name:                "fakedist-disk",
 		numNodes:            3,
 		useFakeSpanResolver: true,
@@ -817,13 +807,6 @@ var logicTestConfigs = []testClusterConfig{
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #75569 for more info.
 		disableDefaultTestTenant: true,
-	},
-	{
-		name:                       "5node-metadata",
-		numNodes:                   5,
-		overrideDistSQLMode:        "on",
-		distSQLMetadataTestEnabled: true,
-		skipShort:                  true,
 	},
 	{
 		name:                "5node-disk",
@@ -1028,7 +1011,6 @@ var (
 		"local-spec-planning",
 		"fakedist",
 		"fakedist-vec-off",
-		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
 	}
@@ -1036,7 +1018,6 @@ var (
 	fiveNodeDefaultConfigName  = "5node-default-configs"
 	fiveNodeDefaultConfigNames = []string{
 		"5node",
-		"5node-metadata",
 		"5node-disk",
 		"5node-spec-planning",
 	}
@@ -1780,16 +1761,9 @@ func (t *logicTest) newCluster(
 		// relocate ranges correctly.
 		params.ReplicationMode = base.ReplicationAuto
 	}
-	distSQLKnobs := &execinfra.TestingKnobs{
-		MetadataTestLevel: execinfra.Off,
+	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
+		ForceDiskSpill: cfg.sqlExecUseDisk,
 	}
-	if cfg.sqlExecUseDisk {
-		distSQLKnobs.ForceDiskSpill = true
-	}
-	if cfg.distSQLMetadataTestEnabled {
-		distSQLKnobs.MetadataTestLevel = execinfra.On
-	}
-	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 	if cfg.bootstrapVersion != (roachpb.Version{}) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}

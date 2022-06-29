@@ -231,6 +231,11 @@ func TestTelemetryLogging(t *testing.T) {
 				if !distRe.MatchString(e.Message) {
 					t.Errorf("expected to find Distribution but none was found")
 				}
+				// Match plan gist on any non-empty string value.
+				planGist := regexp.MustCompile("\"PlanGist\":(\"\\S+\")")
+				if !planGist.MatchString(e.Message) {
+					t.Errorf("expected to find PlanGist but none was found in: %s", e.Message)
+				}
 				for _, eTag := range tc.expectedUnredactedTags {
 					for _, tag := range strings.Split(e.Tags, ",") {
 						kv := strings.Split(tag, "=")

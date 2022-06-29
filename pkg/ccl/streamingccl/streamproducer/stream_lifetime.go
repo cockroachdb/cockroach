@@ -191,10 +191,10 @@ func getReplicationStreamSpec(
 	// Returns error if the replication stream is not active
 	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJob(evalCtx.Ctx(), jobspb.JobID(streamID))
 	if err != nil {
-		return nil, errors.Wrapf(err, "Replication stream %d has error", streamID)
+		return nil, errors.Wrapf(err, "replication stream %d has error", streamID)
 	}
 	if j.Status() != jobs.StatusRunning {
-		return nil, errors.Errorf("Replication stream %d is not running", streamID)
+		return nil, errors.Errorf("replication stream %d is not running", streamID)
 	}
 
 	// Partition the spans with SQLPlanner

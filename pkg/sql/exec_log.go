@@ -389,6 +389,7 @@ func (p *planner) maybeLogStatementInternal(
 				SkippedQueries:       skippedQueries,
 				CostEstimate:         p.curPlan.instrumentation.costEstimate,
 				Distribution:         p.curPlan.instrumentation.distribution.String(),
+				PlanGist:             p.curPlan.instrumentation.planGist.String(),
 			}})
 		} else {
 			telemetryMetrics.incSkippedQueryCount()

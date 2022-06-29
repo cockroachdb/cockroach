@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -47,7 +48,7 @@ func NewSetter(tableDesc *tabledesc.Mutable) *Setter {
 // RunPostChecks implements the Setter interface.
 func (po *Setter) RunPostChecks() error {
 	ttl := po.tableDesc.GetRowLevelTTL()
-	if po.setAutomaticColumn && (ttl == nil || ttl.DurationExpr == "") {
+	if po.setAutomaticColumn && (ttl == nil || !ttl.HasDurationExpr()) {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			`"ttl_expire_after" must be set if "ttl_automatic_column" is set`,
@@ -197,10 +198,19 @@ var tableParams = map[string]tableParam{
 			var d *tree.DInterval
 			if stringVal, err := paramparse.DatumAsString(evalCtx, key, datum); err == nil {
 				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
-				if err != nil || d == nil {
+				if err != nil {
+					return pgerror.Wrapf(
+						err,
+						pgcode.InvalidParameterValue,
+						`value of %q must be an interval`,
+						key,
+					)
+				}
+				if d == nil {
 					return pgerror.Newf(
 						pgcode.InvalidParameterValue,
-						`value of "ttl_expire_after" must be an interval`,
+						`value of %q must be an interval`,
+						key,
 					)
 				}
 			} else {
@@ -209,7 +219,7 @@ var tableParams = map[string]tableParam{
 				if !ok || d == nil {
 					return pgerror.Newf(
 						pgcode.InvalidParameterValue,
-						`value of "%s" must be an interval`,
+						`value of %q must be an interval`,
 						key,
 					)
 				}
@@ -218,7 +228,7 @@ var tableParams = map[string]tableParam{
 			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
 				return pgerror.Newf(
 					pgcode.InvalidParameterValue,
-					`value of "%s" must be at least zero`,
+					`value of %q must be at least zero`,
 					key,
 				)
 			}
@@ -227,13 +237,38 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			return errors.WithHintf(
-				pgerror.Newf(
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DurationExpr = ""
+			}
+			return nil
+		},
+	},
+	`ttl_expiration_expression`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			stringVal, err := paramparse.DatumAsString(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			stringVal = strings.TrimSpace(stringVal)
+			// todo(wall): add type checking https://github.com/cockroachdb/cockroach/issues/76916
+			_, err = parser.ParseExpr(stringVal)
+			if err != nil {
+				return pgerror.Wrapf(
+					err,
 					pgcode.InvalidParameterValue,
-					`resetting "ttl_expire_after" is not permitted`,
-				),
-				"use `RESET (ttl)` to remove TTL from the table",
-			)
+					`value of %q must be a valid expression`,
+					key,
+				)
+			}
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.ExpirationExpr = catpb.Expression(stringVal)
+			return nil
+		},
+		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.ExpirationExpr = ""
+			}
+			return nil
 		},
 	},
 	`ttl_select_batch_size`: {

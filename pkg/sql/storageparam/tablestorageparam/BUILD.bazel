@@ -10,6 +10,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/paramparse",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",

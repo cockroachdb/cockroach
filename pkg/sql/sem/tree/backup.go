@@ -15,9 +15,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// DescriptorCoverage specifies whether or not a subset of descriptors were
-// requested or if all the descriptors were requested, so all the descriptors
-// are covered in a given backup.
+// DescriptorCoverage specifies the subset of descriptors that are requested during a backup
+// or a restore.
 type DescriptorCoverage int32
 
 const (
@@ -28,10 +27,15 @@ const (
 	// backup is not said to have complete table coverage unless it was created
 	// by a `BACKUP TO` command.
 	RequestedDescriptors DescriptorCoverage = iota
+
 	// AllDescriptors table coverage means that backup is guaranteed to have all the
 	// relevant data in the cluster. These can only be created by running a
 	// full cluster backup with `BACKUP TO`.
 	AllDescriptors
+
+	// SystemUsers coverage indicates that only the system.users
+	// table will be restored from the backup.
+	SystemUsers
 )
 
 // BackupOptions describes options for the BACKUP execution.
@@ -139,9 +143,7 @@ var _ NodeFormatter = &RestoreOptions{}
 
 // Restore represents a RESTORE statement.
 type Restore struct {
-	Targets TargetList
-	// Whether this is the RESTORE SYSTEM USERS variant of RESTORE statement.
-	SystemUsers        bool
+	Targets            TargetList
 	DescriptorCoverage DescriptorCoverage
 
 	// From contains the URIs for the backup(s) we seek to restore.

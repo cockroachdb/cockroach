@@ -100,13 +100,8 @@ message ProcessorCoreUnion {
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
   optional ReadImportDataSpec readImport = 13;
-  reserved 14;
-  reserved 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
-  reserved 17;
-  optional MetadataTestSenderSpec metadataTestSender = 18;
-  optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
   optional WindowerSpec windower = 23;
@@ -126,7 +121,7 @@ message ProcessorCoreUnion {
   optional ExportSpec exporter = 37;
   optional IndexBackfillMergerSpec indexBackfillMerger = 38;
 
-  reserved 6, 12;
+  reserved 6, 12, 14, 17, 18, 19, 20;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -146,13 +141,4 @@ message LocalPlanNodeSpec {
   optional uint32 RowSourceIdx = 1 [(gogoproto.nullable) = false];
   optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
   optional string Name = 3 [(gogoproto.nullable) = false];
-}
-
-message MetadataTestSenderSpec {
-  optional string id = 1 [(gogoproto.nullable) = false,
-                         (gogoproto.customname) = "ID"];
-}
-
-message MetadataTestReceiverSpec {
-  repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
 }
