@@ -463,6 +463,17 @@ func (rq *replicateQueue) shouldQueue(
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
 	}
+	if !status.IsValid() {
+		// The lease for this range is currently invalid, if this replica is
+		// the raft leader then it is necessary that it acquires the lease. We
+		// enqueue it regardless of being a leader or follower, where the
+		// leader at the time of processing will succeed. There is no
+		// requirement that the expired lease belongs to this replica, as
+		// regardless of the lease history, the current leader should hold the
+		// lease.
+		log.VEventf(ctx, 2, "invalid lease, enqueuing")
+		return true, 0
+	}
 
 	return false, 0
 }
