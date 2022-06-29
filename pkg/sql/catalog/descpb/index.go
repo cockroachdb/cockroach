@@ -41,7 +41,9 @@ func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 	return start
 }
 
-// FillColumns sets the column names and directions in desc.
+// FillColumns sets the column names and directions in desc. Note that it does
+// no validation with regards to the existence of the listed columns. It also
+// delegates filling in any IDs until later.
 func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.KeyColumnNames = make([]string, 0, len(elems))
 	desc.KeyColumnDirections = make([]catpb.IndexColumn_Direction, 0, len(elems))

@@ -933,8 +933,12 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		for _, kv := range s.mu.lazyTags {
 			switch v := kv.Value.(type) {
 			case LazyTag:
-				tagGroup := addTagGroup(kv.Key)
+				var tagGroup *tracingpb.TagGroup
 				for _, tag := range v.Render() {
+					if tagGroup == nil {
+						// Only create the tag group if we have at least one child tag.
+						tagGroup = addTagGroup(kv.Key)
+					}
 					childKey := string(tag.Key)
 					childValue := tag.Value.Emit()
 
