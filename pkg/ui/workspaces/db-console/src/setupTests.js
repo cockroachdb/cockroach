@@ -30,6 +30,8 @@ import Adapter from "enzyme-adapter-react-16";
 
 //TODO(barag): does this need to all be in a beforeAll()/afterAll so we can restore all of these mocks?
 
+import "@testing-library/jest-dom";
+
 Enzyme.configure({ adapter: new Adapter() });
 
 /**
