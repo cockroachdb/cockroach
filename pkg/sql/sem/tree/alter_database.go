@@ -190,9 +190,7 @@ type AlterDatabaseSetZoneConfigExtension struct {
 	LocalityLevel LocalityLevel
 	RegionName    Name
 	// CONFIGURE ZONE ...
-	SetDefault bool
-	YAMLConfig Expr
-	Options    KVOptions
+	ZoneConfigSettings *ZoneConfigSettings
 }
 
 var _ Statement = &AlterDatabaseSetZoneConfigExtension{}
@@ -215,29 +213,5 @@ func (node *AlterDatabaseSetZoneConfigExtension) Format(ctx *FmtCtx) {
 		panic(fmt.Sprintf("unexpected locality: %#v", node.LocalityLevel))
 	}
 	ctx.WriteString(" CONFIGURE ZONE ")
-	if node.SetDefault {
-		ctx.WriteString("USING DEFAULT")
-	} else if node.YAMLConfig != nil {
-		if node.YAMLConfig == DNull {
-			ctx.WriteString("DISCARD")
-		} else {
-			ctx.WriteString("= ")
-			ctx.FormatNode(node.YAMLConfig)
-		}
-	} else {
-		ctx.WriteString("USING ")
-		kvOptions := node.Options
-		comma := ""
-		for _, kv := range kvOptions {
-			ctx.WriteString(comma)
-			comma = ", "
-			ctx.FormatNode(&kv.Key)
-			if kv.Value != nil {
-				ctx.WriteString(` = `)
-				ctx.FormatNode(kv.Value)
-			} else {
-				ctx.WriteString(` = COPY FROM PARENT`)
-			}
-		}
-	}
+	node.ZoneConfigSettings.Format(ctx)
 }

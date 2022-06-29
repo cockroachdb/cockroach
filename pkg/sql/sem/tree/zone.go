@@ -100,23 +100,32 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 	}
 }
 
+// ZoneConfigAndOptions wraps the yaml config and option for a zone config node.
+// It can be used in tree.SetZoneConfig or tree.AlterDatabaseSetZoneConfigExtension.
+type ZoneConfigAndOptions struct {
+	YAMLConfig Expr
+	Options    KVOptions
+}
+
 // SetZoneConfig represents an ALTER DATABASE/TABLE... CONFIGURE ZONE
 // statement.
 type SetZoneConfig struct {
 	ZoneSpecifier
 	// AllIndexes indicates that the zone configuration should be applied across
 	// all of a tables indexes. (ALTER PARTITION ... OF INDEX <tablename>@*)
-	AllIndexes bool
+	AllIndexes         bool
+	ZoneConfigSettings *ZoneConfigSettings
+}
+
+// ZoneConfigSettings represents info needed for zone config setting.
+type ZoneConfigSettings struct {
 	SetDefault bool
 	YAMLConfig Expr
 	Options    KVOptions
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetZoneConfig) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER ")
-	ctx.FormatNode(&node.ZoneSpecifier)
-	ctx.WriteString(" CONFIGURE ZONE ")
+func (node *ZoneConfigSettings) Format(ctx *FmtCtx) {
 	if node.SetDefault {
 		ctx.WriteString("USING DEFAULT")
 	} else if node.YAMLConfig != nil {
@@ -142,4 +151,20 @@ func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 			}
 		}
 	}
+}
+
+// GetOptions returns the zone config options stored in SetZoneConfig.
+func (node *SetZoneConfig) GetOptions() KVOptions {
+	if node.ZoneConfigSettings != nil {
+		return node.ZoneConfigSettings.Options
+	}
+	return nil
+}
+
+// Format implements the NodeFormatter interface.
+func (node *SetZoneConfig) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
+	ctx.FormatNode(&node.ZoneSpecifier)
+	ctx.WriteString(" CONFIGURE ZONE ")
+	node.ZoneConfigSettings.Format(ctx)
 }

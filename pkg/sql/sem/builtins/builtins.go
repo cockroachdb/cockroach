@@ -6536,8 +6536,9 @@ enabled.`,
 				if !ok {
 					return nil, errors.Newf("invalid CONFIGURE ZONE statement (type %T): %s", stmt.AST, stmt)
 				}
-				newKVOptions := zs.Options[:0]
-				for _, opt := range zs.Options {
+				opts := zs.GetOptions()
+				newKVOptions := opts[:0]
+				for _, opt := range opts {
 					if _, ok := zonepb.MultiRegionZoneConfigFieldsSet[opt.Key]; !ok {
 						newKVOptions = append(newKVOptions, opt)
 					}
@@ -6545,7 +6546,7 @@ enabled.`,
 				if len(newKVOptions) == 0 {
 					return tree.DNull, nil
 				}
-				zs.Options = newKVOptions
+				zs.ZoneConfigSettings.Options = newKVOptions
 				return tree.NewDString(zs.String()), nil
 			},
 			types.String,

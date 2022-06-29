@@ -49,7 +49,7 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) cat.Zone {
 
 		for i := range index.partitions {
 			if index.partitions[i].name == partitionName {
-				index.partitions[i].zone = makeZoneConfig(stmt.Options)
+				index.partitions[i].zone = makeZoneConfig(stmt.GetOptions())
 				return index.partitions[i].zone
 			}
 		}
@@ -60,13 +60,13 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) cat.Zone {
 
 	// Handle special case of primary index.
 	if stmt.TableOrIndex.Index == "" {
-		tab.Indexes[0].IdxZone = makeZoneConfig(stmt.Options)
+		tab.Indexes[0].IdxZone = makeZoneConfig(stmt.GetOptions())
 		return tab.Indexes[0].IdxZone
 	}
 
 	for _, idx := range tab.Indexes {
 		if idx.IdxName == string(stmt.TableOrIndex.Index) {
-			idx.IdxZone = makeZoneConfig(stmt.Options)
+			idx.IdxZone = makeZoneConfig(stmt.GetOptions())
 			return idx.IdxZone
 		}
 	}

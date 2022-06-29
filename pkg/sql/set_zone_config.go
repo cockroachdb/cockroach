@@ -157,35 +157,9 @@ func loadYAML(dst interface{}, yamlString string) {
 	}
 }
 
-func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
-	if err := checkSchemaChangeEnabled(
-		ctx,
-		p.ExecCfg(),
-		"CONFIGURE ZONE",
-	); err != nil {
-		return nil, err
-	}
-
-	if !p.ExecCfg().Codec.ForSystemTenant() &&
-		!secondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
-		// Return an unimplemented error here instead of referencing the cluster
-		// setting here as zone configurations for secondary tenants are intended to
-		// be hidden.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
-	}
-
-	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
-		return nil, err
-	}
-
-	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
-		ctx,
-		n.ZoneSpecifier,
-		n.Options,
-	); err != nil {
-		return nil, err
-	}
-
+func (p *planner) getUpdatedZoneConfigYamlConfig(
+	ctx context.Context, n *tree.ZoneConfigSettings,
+) (tree.TypedExpr, error) {
 	var yamlConfig tree.TypedExpr
 
 	if n.YAMLConfig != nil {
@@ -211,6 +185,12 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 				"zone config must be of type string or bytes, not %s", typ)
 		}
 	}
+	return yamlConfig, nil
+}
+
+func (p *planner) getUpdatedZoneConfigOptions(
+	ctx context.Context, n *tree.ZoneConfigSettings, telemetryName string,
+) (map[tree.Name]optionValue, error) {
 
 	var options map[tree.Name]optionValue
 	if n.Options != nil {
@@ -231,7 +211,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			}
 			telemetry.Inc(
 				sqltelemetry.SchemaSetZoneConfigCounter(
-					n.ZoneSpecifier.TelemetryName(),
+					telemetryName,
 					string(opt.Key),
 				),
 			)
@@ -247,13 +227,54 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			options[opt.Key] = optionValue{inheritValue: false, explicitValue: valExpr}
 		}
 	}
+	return options, nil
+}
+
+func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"CONFIGURE ZONE",
+	); err != nil {
+		return nil, err
+	}
+
+	if !p.ExecCfg().Codec.ForSystemTenant() &&
+		!secondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		// Return an unimplemented error here instead of referencing the cluster
+		// setting here as zone configurations for secondary tenants are intended to
+		// be hidden.
+		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
+	}
+
+	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
+		ctx,
+		n.ZoneSpecifier,
+		n.GetOptions(),
+	); err != nil {
+		return nil, err
+	}
+
+	yamlConfig, err := p.getUpdatedZoneConfigYamlConfig(ctx, n.ZoneConfigSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	options, err := p.getUpdatedZoneConfigOptions(ctx, n.ZoneConfigSettings, n.ZoneSpecifier.TelemetryName())
+	if err != nil {
+		return nil, err
+	}
 
 	return &setZoneConfigNode{
 		zoneSpecifier: n.ZoneSpecifier,
 		allIndexes:    n.AllIndexes,
 		yamlConfig:    yamlConfig,
 		options:       options,
-		setDefault:    n.SetDefault,
+		setDefault:    n.ZoneConfigSettings.SetDefault,
 	}, nil
 }
 
