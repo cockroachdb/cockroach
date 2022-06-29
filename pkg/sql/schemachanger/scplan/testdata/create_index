@@ -180,21 +180,45 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after index exists
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after index exists
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after index exists
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
@@ -202,15 +226,15 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   rule: index existence precedes index name and comment
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after temp index exists
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after temp index exists
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after temp index exists
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
@@ -400,21 +424,45 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after index exists
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after index exists
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after index exists
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
@@ -422,15 +470,15 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   rule: index existence precedes index name and comment
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after temp index exists
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after temp index exists
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: index-column added to index after temp index exists
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]

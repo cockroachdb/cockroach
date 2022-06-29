@@ -1850,4 +1850,42 @@ statement ok
 DROP DATABASE test CASCADE
 
 statement ok
-CREATE DATABASE test
+CREATE DATABASE test;
+USE test
+
+subtest add_multiple_columns_in_transaction
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY);
+INSERT INTO t VALUES (1), (2), (3)
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always';
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN k INT AS (i + 3) STORED NOT NULL UNIQUE;
+ALTER TABLE t ADD COLUMN j INT DEFAULT 42;
+
+statement ok
+COMMIT
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+   i INT8 NOT NULL,
+   k INT8 NOT NULL AS (i + 3:::INT8) STORED,
+   j INT8 NULL DEFAULT 42:::INT8,
+   CONSTRAINT t_pkey PRIMARY KEY (i ASC),
+   UNIQUE INDEX t_expr_key (k ASC)
+)
+
+query III rowsort
+SELECT * FROM t
+----
+1  4  42
+2  5  42
+3  6  42
