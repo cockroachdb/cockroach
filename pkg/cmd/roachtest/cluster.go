@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2386,4 +2387,14 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 
 func (c *clusterImpl) NewMonitor(ctx context.Context, opts ...option.Option) cluster.Monitor {
 	return newMonitor(ctx, c.t, c, opts...)
+}
+
+func (c *clusterImpl) StartGrafana(
+	ctx context.Context, l *logger.Logger, promCfg *prometheus.Config,
+) error {
+	return roachprod.StartGrafana(ctx, l, c.name, "", promCfg)
+}
+
+func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {
+	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
 }

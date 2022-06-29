@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -131,4 +132,7 @@ type Cluster interface {
 
 	FetchTimeseriesData(ctx context.Context, t test.Test) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
+
+	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error
+	StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error
 }

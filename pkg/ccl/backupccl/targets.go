@@ -339,7 +339,6 @@ func selectTargets(
 	targets tree.TargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
-	restoreSystemUsers bool,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
 	allDescs, lastBackupManifest := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
@@ -347,7 +346,7 @@ func selectTargets(
 		return fullClusterTargetsRestore(allDescs, lastBackupManifest)
 	}
 
-	if restoreSystemUsers {
+	if descriptorCoverage == tree.SystemUsers {
 		systemTables := make([]catalog.Descriptor, 0)
 		var users catalog.Descriptor
 		for _, desc := range allDescs {

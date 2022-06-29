@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

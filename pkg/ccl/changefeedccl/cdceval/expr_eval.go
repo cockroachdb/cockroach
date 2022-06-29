@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,9 +105,10 @@ func (e *Evaluator) initSelectClause(sc *tree.SelectClause) error {
 			"expected at least 1 projection")
 	}
 
+	semaCtx := newSemaCtx()
 	e.selectors = sc.Exprs
 	for _, se := range e.selectors {
-		expr, err := validateExpressionForCDC(se.Expr)
+		expr, err := validateExpressionForCDC(se.Expr, semaCtx)
 		if err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func (e *Evaluator) initSelectClause(sc *tree.SelectClause) error {
 	}
 
 	if sc.Where != nil {
-		expr, err := validateExpressionForCDC(sc.Where.Expr)
+		expr, err := validateExpressionForCDC(sc.Where.Expr, semaCtx)
 		if err != nil {
 			return err
 		}
@@ -207,7 +207,7 @@ func newExprEval(
 	cols := ed.ResultColumns()
 	e := &exprEval{
 		EventDescriptor: ed,
-		semaCtx:         newSemaCtx(ed),
+		semaCtx:         newSemaCtxWithTypeResolver(ed),
 		evalCtx:         evalCtx.Copy(),
 		evalHelper:      &rowContainer{cols: cols},
 		projection:      cdcevent.MakeProjection(ed),
@@ -268,6 +268,7 @@ func (e *exprEval) setupContext(
 	e.rowEvalCtx.prevRow = prevRow
 	e.rowEvalCtx.mvccTS = mvccTS
 	e.evalCtx.TxnTimestamp = mvccTS.GoTime()
+	e.evalCtx.StmtTimestamp = mvccTS.GoTime()
 
 	// Clear out all memo records
 	e.rowEvalCtx.memo.prevJSON = nil
@@ -482,7 +483,8 @@ func (e *exprEval) evalExpr(
 // if it consists of expressions supported by CDC.
 // This visitor is used early to sanity check expression.
 type cdcExprVisitor struct {
-	err error
+	semaCtx *tree.SemaContext
+	err     error
 }
 
 var _ tree.Visitor = (*cdcExprVisitor)(nil)
@@ -490,8 +492,8 @@ var _ tree.Visitor = (*cdcExprVisitor)(nil)
 // validateExpressionForCDC runs quick checks to make sure that expr is valid for
 // CDC use case.  This doesn't catch all the invalid cases, but is a place to pick up
 // obviously wrong expressions.
-func validateExpressionForCDC(expr tree.Expr) (tree.Expr, error) {
-	var v cdcExprVisitor
+func validateExpressionForCDC(expr tree.Expr, semaCtx *tree.SemaContext) (tree.Expr, error) {
+	v := cdcExprVisitor{semaCtx: semaCtx}
 	expr, _ = tree.WalkExpr(&v, expr)
 	if v.err != nil {
 		return nil, v.err
@@ -508,7 +510,7 @@ func (v *cdcExprVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 func (v *cdcExprVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	switch t := expr.(type) {
 	case *tree.FuncExpr:
-		fn, err := checkFunctionSupported(t)
+		fn, err := checkFunctionSupported(t, v.semaCtx)
 		if err != nil {
 			v.err = err
 			return expr
@@ -582,19 +584,9 @@ func (v *cdcNameResolver) VisitPost(expr tree.Expr) tree.Expr {
 	}
 }
 
-func resolveCustomCDCFunction(name string, fnCall *tree.FuncExpr) *tree.FuncExpr {
-	fn, exists := cdcFunctions[name]
-	if !exists {
-		return nil
-	}
-	return &tree.FuncExpr{
-		Func:  tree.ResolvableFunctionReference{FunctionReference: fn},
-		Type:  fnCall.Type,
-		Exprs: fnCall.Exprs,
-	}
-}
-
-func checkFunctionSupported(fnCall *tree.FuncExpr) (*tree.FuncExpr, error) {
+func checkFunctionSupported(
+	fnCall *tree.FuncExpr, semaCtx *tree.SemaContext,
+) (*tree.FuncExpr, error) {
 	var fnName string
 	var fnClass tree.FunctionClass
 	var fnVolatility volatility.V
@@ -610,23 +602,19 @@ func checkFunctionSupported(fnCall *tree.FuncExpr) (*tree.FuncExpr, error) {
 
 	switch fn := fnCall.Func.FunctionReference.(type) {
 	case *tree.UnresolvedName:
-		// We may not have function definition yet if function takes arguments,
-		// or it's one of the custom cdc functions.
-		fnName = fn.String()
-		props, overloads := builtins.GetBuiltinProperties(fn.String())
-		if props == nil {
-			if custom := resolveCustomCDCFunction(fnName, fnCall); custom != nil {
-				return custom, nil
-			}
+		funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
+		if err != nil {
 			return nil, unsupportedFunctionErr()
 		}
-		fnClass = props.Class
-		// Pick highest volatility overload.
-		for _, o := range overloads {
-			if o.Volatility > fnVolatility {
-				fnVolatility = o.Volatility
-			}
+		fnCall = &tree.FuncExpr{
+			Func:  tree.ResolvableFunctionReference{FunctionReference: funDef},
+			Type:  fnCall.Type,
+			Exprs: fnCall.Exprs,
 		}
+		if _, isCDCFn := cdcFunctions[funDef.Name]; isCDCFn {
+			return fnCall, nil
+		}
+		return checkFunctionSupported(fnCall, semaCtx)
 	case *tree.FunctionDefinition:
 		fnName, fnClass = fn.Name, fn.Class
 		if fnCall.ResolvedOverload() != nil {
@@ -721,16 +709,21 @@ func rowEvalContextFromEvalContext(evalCtx *eval.Context) *rowEvalContext {
 const rejectInvalidCDCExprs = (tree.RejectAggregates | tree.RejectGenerators |
 	tree.RejectWindowApplications | tree.RejectNestedGenerators)
 
-// newSemaCtx returns new tree.SemaCtx configured for cdc.
-func newSemaCtx(d *cdcevent.EventDescriptor) *tree.SemaContext {
+// newSemaCtx returns new tree.SemaCtx configured for cdc without type resolver.
+func newSemaCtx() *tree.SemaContext {
 	sema := tree.MakeSemaContext()
 	sema.SearchPath = &cdcCustomFunctionResolver{SearchPath: &sessiondata.DefaultSearchPath}
 	sema.Properties.Require("cdc", rejectInvalidCDCExprs)
+	return &sema
+}
 
+// newSemaCtxWithTypeResolver returns new tree.SemaCtx configured for cdc.
+func newSemaCtxWithTypeResolver(d *cdcevent.EventDescriptor) *tree.SemaContext {
+	sema := newSemaCtx()
 	if d.HasUserDefinedTypes() {
 		sema.TypeResolver = newTypeReferenceResolver(d)
 	}
-	return &sema
+	return sema
 }
 
 // cdcTypeReferenceReesolver is responsible for resolving user defined types.

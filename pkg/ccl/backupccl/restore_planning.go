@@ -175,7 +175,6 @@ func allocateDescriptorRewrites(
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
-	restoreSystemUsers bool,
 ) (jobspb.DescRewriteMap, error) {
 	descriptorRewrites := make(jobspb.DescRewriteMap)
 
@@ -292,7 +291,7 @@ func allocateDescriptorRewrites(
 	// in the backup and current max desc ID in the restoring cluster. This generator
 	// keeps produced the next descriptor ID.
 	var tempSysDBID descpb.ID
-	if descriptorCoverage == tree.AllDescriptors || restoreSystemUsers {
+	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
 		var err error
 		if descriptorCoverage == tree.AllDescriptors {
 			// Restore the key which generates descriptor IDs.
@@ -323,7 +322,7 @@ func allocateDescriptorRewrites(
 			if err != nil {
 				return nil, err
 			}
-		} else if restoreSystemUsers {
+		} else if descriptorCoverage == tree.SystemUsers {
 			tempSysDBID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
 				return nil, err
@@ -706,7 +705,7 @@ func allocateDescriptorRewrites(
 	// backup should have the same ID as they do in the backup.
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
-		if descriptorCoverage == tree.AllDescriptors || restoreSystemUsers {
+		if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
 			if table.ParentID == systemschema.SystemDB.GetID() {
 				// This is a system table that should be marked for descriptor creation.
 				descriptorsToRemap = append(descriptorsToRemap, table)
@@ -988,7 +987,6 @@ func restoreJobDescription(
 	kmsURIs []string,
 ) (string, error) {
 	r := &tree.Restore{
-		SystemUsers:        restore.SystemUsers,
 		DescriptorCoverage: restore.DescriptorCoverage,
 		AsOf:               restore.AsOf,
 		Targets:            restore.Targets,
@@ -1065,7 +1063,7 @@ func restorePlanHook(
 
 	var intoDBFn func() (string, error)
 	if restoreStmt.Options.IntoDB != nil {
-		if restoreStmt.SystemUsers {
+		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
 			return nil, nil, nil, false, errors.New("cannot set into_db option when only restoring system users")
 		}
 		intoDBFn, err = p.TypeAsString(ctx, restoreStmt.Options.IntoDB, "RESTORE")
@@ -1105,12 +1103,13 @@ func restorePlanHook(
 
 	var newDBNameFn func() (string, error)
 	if restoreStmt.Options.NewDBName != nil {
-		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || len(restoreStmt.Targets.Databases) != 1 {
+		if restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
+			len(restoreStmt.Targets.Databases) != 1 {
 			err = errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
 				" database")
 			return nil, nil, nil, false, err
 		}
-		if restoreStmt.SystemUsers {
+		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
 			return nil, nil, nil, false, errors.New("cannot set new_db_name option when only restoring system users")
 		}
 		newDBNameFn, err = p.TypeAsString(ctx, restoreStmt.Options.NewDBName, "RESTORE")
@@ -1581,7 +1580,7 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreStmt.SystemUsers,
+		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
 	)
 	if err != nil {
 		return errors.Wrap(err,
@@ -1734,8 +1733,7 @@ func doRestorePlan(
 		restoreStmt.DescriptorCoverage,
 		restoreStmt.Options,
 		intoDB,
-		newDBName,
-		restoreStmt.SystemUsers)
+		newDBName)
 	if err != nil {
 		return err
 	}
@@ -1835,7 +1833,14 @@ func doRestorePlan(
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
 			DebugPauseOn:       debugPauseOn,
-			RestoreSystemUsers: restoreStmt.SystemUsers,
+
+			// A RESTORE SYSTEM USERS planned on a 22.1 node will use the
+			// RestoreSystemUsers field in the job details to identify this flavour of
+			// RESTORE. We must continue to check this field for mixed-version
+			// compatability.
+			//
+			// TODO(msbutler): Delete in 23.1
+			RestoreSystemUsers: restoreStmt.DescriptorCoverage == tree.SystemUsers,
 			PreRewriteTenantId: oldTenantID,
 			Validation:         jobspb.RestoreValidation_DefaultRestore,
 		},

@@ -842,8 +842,6 @@ func (*DropRole) StatementType() StatementType { return TypeDDL }
 // StatementTag returns a short string identifying the type of statement.
 func (*DropRole) StatementTag() string { return "DROP ROLE" }
 
-func (*DropRole) cclOnlyStatement() {}
-
 func (*DropRole) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.

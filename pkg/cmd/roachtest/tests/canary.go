@@ -109,17 +109,6 @@ var canaryRetryOptions = retry.Options{
 	MaxRetries:     10,
 }
 
-type repeatRunner struct {
-	T test.Test
-	C cluster.Cluster
-}
-
-func (rr repeatRunner) repeatRunE(
-	ctx context.Context, node option.NodeListOption, operation string, args ...string,
-) error {
-	return repeatRunE(ctx, rr.T, rr.C, node, operation, args...)
-}
-
 // repeatRunE is the same function as c.RunE but with an automatic retry loop.
 func repeatRunE(
 	ctx context.Context,

@@ -335,6 +335,9 @@ message RestoreDetails {
 
   // DebugPauseOn describes the events that the job should pause itself on for debugging purposes.
   string debug_pause_on = 20;
+
+  // RestoreSystemUsers is set to true if user runs RESTORE SYSTEM USERS.
+  // TODO(msbutler): delete in 23.1
   bool restore_system_users = 22;
 
   // PreRewrittenTenantID is the ID of tenants[0] in the backup, aka its old ID;

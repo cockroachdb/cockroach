@@ -1480,7 +1480,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := r.cleanupTempSystemTables(ctx, nil /* txn */); err != nil {
 			return err
 		}
-	} else if details.RestoreSystemUsers {
+	} else if isSystemUserRestore(details) {
 		if err := r.restoreSystemUsers(ctx, p.ExecCfg().DB, mainData.systemTables); err != nil {
 			return err
 		}
@@ -1529,6 +1529,16 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 	return nil
+}
+
+// isSystemUserRestore checks if the user called RESTORE SYSTEM USERS and guards
+// against any mixed version issues. In 22.2, details.DescriptorCoverage
+// identifies a system user restore, while in 22.1, details.RestoreSystemUsers
+// identified this flavour of restore.
+//
+// TODO(msbutler): delete in 23.1
+func isSystemUserRestore(details jobspb.RestoreDetails) bool {
+	return details.DescriptorCoverage == tree.SystemUsers || details.RestoreSystemUsers
 }
 
 func revalidateIndexes(
@@ -1647,7 +1657,7 @@ func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
 // This is the last of the IDs pre-allocated by the restore planner.
 // TODO(postamar): Store it directly in the details instead? This is brittle.
 func tempSystemDatabaseID(details jobspb.RestoreDetails) descpb.ID {
-	if details.DescriptorCoverage != tree.AllDescriptors && !details.RestoreSystemUsers {
+	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
 		return descpb.InvalidID
 	}
 	var maxPreAllocatedID descpb.ID

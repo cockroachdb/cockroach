@@ -86,16 +86,6 @@ func (f *FiltererSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
-func (mts *MetadataTestSenderSpec) summary() (string, []string) {
-	return "MetadataTestSender", []string{mts.ID}
-}
-
-// summary implements the diagramCellType interface.
-func (*MetadataTestReceiverSpec) summary() (string, []string) {
-	return "MetadataTestReceiver", []string{}
-}
-
-// summary implements the diagramCellType interface.
 func (v *ValuesCoreSpec) summary() (string, []string) {
 	var bytes uint64
 	for _, b := range v.RawBytes {
