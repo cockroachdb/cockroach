@@ -121,6 +121,16 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	for _, elem := range alterPKNode.Columns {
+		if elem.Column == "" && elem.Expr != nil {
+			return errors.WithHint(
+				pgerror.Newf(
+					pgcode.InvalidColumnDefinition,
+					"expressions such as %q are not allowed in primary index definition",
+					elem.Expr.String(),
+				),
+				"use columns instead",
+			)
+		}
 		col, err := tableDesc.FindColumnWithName(elem.Column)
 		if err != nil {
 			return err
