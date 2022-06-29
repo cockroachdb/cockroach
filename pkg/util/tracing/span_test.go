@@ -410,6 +410,63 @@ func TestRecordingMaxSpans(t *testing.T) {
 	require.Len(t, root.StructuredRecords, extraChildren)
 }
 
+// TestRecordingDowngradesToStructuredIfTooBig finishes a span that has reached
+// the maximum number of recorded spans and asserts that its structured
+// recordings are correctly added to the parent.
+func TestRecordingDowngradesToStructuredIfTooBig(t *testing.T) {
+	now := timeutil.Now()
+	clock := timeutil.NewManualTime(now)
+	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
+
+	s1 := tr.StartSpan("p", WithRecording(tracingpb.RecordingVerbose))
+	s2 := tr.StartSpan("c", WithParent(s1))
+	extraChildren := 10
+	numChildren := maxRecordedSpansPerTrace + extraChildren
+	payload := &types.Int32Value{Value: int32(1)}
+	for i := 0; i < numChildren; i++ {
+		child := tr.StartSpan(fmt.Sprintf("cc%d", i), WithParent(s2))
+		child.RecordStructured(payload)
+		child.Finish()
+	}
+
+	// We expect recordings from sp and up to the maximum number of spans and
+	// structured records from all spans over the max.
+	rec := s2.FinishAndGetConfiguredRecording()
+	require.Len(t, rec, maxRecordedSpansPerTrace+1)
+	require.Len(t, rec[0].StructuredRecords, extraChildren)
+
+	pl, err := types.MarshalAny(payload)
+	require.NoError(t, err)
+	structuredRecordSize := (&tracingpb.StructuredRecord{Time: now, Payload: pl}).MemorySize()
+	maxNumStructuredRecordings := maxStructuredBytesPerSpan / structuredRecordSize
+	if maxNumStructuredRecordings > numChildren {
+		maxNumStructuredRecordings = numChildren
+	}
+
+	// Since s2's child count exceeded the maximum, we don't expect to see any of
+	// its span recordings in s1. But, we should only see as many of s2's
+	// structured recordings as possible.
+	rec2 := s1.FinishAndGetConfiguredRecording()
+	require.Len(t, rec2, 1)
+	require.Len(t, rec2[0].StructuredRecords, maxNumStructuredRecordings)
+}
+
+// Test that a RecordingStructured parent does not panic when asked to ingest a
+// remote verbose recording. Ingesting a recording of different type is unusual,
+// since children are created with the parent's recording mode, but it can
+// happen if the child's recording mode was changed dynamically.
+func TestRemoteSpanWithDifferentRecordingMode(t *testing.T) {
+	tr := NewTracer()
+	s1 := tr.StartSpan("p", WithRecording(tracingpb.RecordingStructured))
+	s2 := tr.StartSpan("c", WithRemoteParentFromSpanMeta(s1.Meta()), WithRecording(tracingpb.RecordingVerbose))
+	s3 := tr.StartSpan("cc", WithParent(s2), WithRecording(tracingpb.RecordingVerbose))
+	s3.Finish()
+	r := s2.FinishAndGetConfiguredRecording()
+	require.NotPanics(t, func() { s1.ImportRemoteRecording(r) })
+	r2 := s1.FinishAndGetConfiguredRecording()
+	require.Len(t, r2, 1)
+}
+
 type explodyNetTr struct {
 	trace.Trace
 }
