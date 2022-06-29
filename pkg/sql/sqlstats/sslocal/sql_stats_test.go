@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -668,4 +669,47 @@ func TestUnprivilegedUserReset(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testData := []struct {
+		query        string
+		placeholders []interface{}
+		phaseTimes   *sessionphase.Times
+	}{
+		{
+			query:        "SELECT $1::INT8",
+			placeholders: []interface{}{1},
+			phaseTimes:   nil,
+		},
+	}
+
+	currentTestCaseIdx := 0
+	const fiveSeconds = time.Second * 5
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnRecordTxnFinish: func(phaseTimes *sessionphase.Times) {
+			testData[currentTestCaseIdx].phaseTimes = phaseTimes
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	for _, tc := range testData {
+		// Make extended protocol query
+		db.QueryRow(tc.query, tc.placeholders...)
+		// Ensure test case phase times are populated by query txn.
+		require.True(t, tc.phaseTimes != nil)
+		// Ensure SessionTransactionStarted variable is populated.
+		require.True(t, tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted) != time.Time{})
+		// Ensure compute transaction service latency is within a reasonable threshold.
+		require.True(t, tc.phaseTimes.GetTransactionServiceLatency() < fiveSeconds)
+		currentTestCaseIdx++
+	}
 }
