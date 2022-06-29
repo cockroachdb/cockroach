@@ -25,117 +25,67 @@ stubComponentInModule("src/views/statements/statementsPage", "default");
 stubComponentInModule("src/views/transactions/transactionsPage", "default");
 
 import React from "react";
-import { assert } from "chai";
 import { Action, Store } from "redux";
 import { createMemoryHistory, MemoryHistory } from "history";
-import { mount } from "enzyme";
+import { screen, render } from "@testing-library/react";
 
 import { App } from "src/app";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
-import ClusterOverview from "src/views/cluster/containers/clusterOverview";
-import NodeList from "src/views/clusterviz/containers/map/nodeList";
-import { ClusterVisualization } from "src/views/clusterviz/containers/map";
-import { NodeGraphs } from "src/views/cluster/containers/nodeGraphs";
-import { NodeOverview } from "src/views/cluster/containers/nodeOverview";
-import { Logs } from "src/views/cluster/containers/nodeLogs";
-import { EventPageUnconnected } from "src/views/cluster/containers/events";
-import { DatabasesPage } from "src/views/databases/databasesPage";
-import { DatabaseDetailsPage } from "src/views/databases/databaseDetailsPage";
-import { DatabaseTablePage } from "src/views/databases/databaseTablePage";
-import DataDistributionPageConnected from "src/views/cluster/containers/dataDistribution";
-import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
-import StatementsPage from "src/views/statements/statementsPage";
-import TransactionsPage from "src/views/transactions/transactionsPage";
-import {
-  JobsPage,
-  StatementDetails,
-  TransactionDetails,
-  ActiveStatementDetails,
-  ActiveTransactionDetails,
-} from "@cockroachlabs/cluster-ui";
-import Debug from "src/views/reports/containers/debug";
-import { ReduxDebug } from "src/views/reports/containers/redux";
-import { CustomChart } from "src/views/reports/containers/customChart";
-import { EnqueueRange } from "src/views/reports/containers/enqueueRange";
-import { RangesMain } from "src/views/devtools/containers/raftRanges";
-import { RaftMessages } from "src/views/devtools/containers/raftMessages";
-import Raft from "src/views/devtools/containers/raft";
-import NotFound from "src/views/app/components/errorMessage/notFound";
-import { ProblemRanges } from "src/views/reports/containers/problemRanges";
-import { Localities } from "src/views/reports/containers/localities";
-import { Nodes } from "src/views/reports/containers/nodes";
-import { DecommissionedNodeHistory } from "src/views/reports";
-import { Network } from "src/views/reports/containers/network";
-import { Settings } from "src/views/reports/containers/settings";
-import { Certificates } from "src/views/reports/containers/certificates";
-import { Range } from "src/views/reports/containers/range";
-import { Stores } from "src/views/reports/containers/stores";
-
 describe("Routing to", () => {
   let history: MemoryHistory<unknown>;
-  let appWrapper: ReturnType<typeof mount>;
 
   beforeEach(() => {
     history = createMemoryHistory({
       initialEntries: ["/"],
     });
     const store: Store<AdminUIState, Action> = createAdminUIStore(history);
-    appWrapper = mount(<App history={history} store={store} />);
-  });
-
-  afterEach(() => {
-    appWrapper.unmount();
+    render(<App history={history} store={store} />);
   });
 
   const navigateToPath = (path: string) => {
     history.push(path);
-    appWrapper.update();
   };
 
   describe("'/' path", () => {
-    it("routes to <ClusterOverview> component", () => {
+    test("routes to <ClusterOverview> component", () => {
       navigateToPath("/");
-      assert.lengthOf(appWrapper.find(ClusterOverview), 1);
+      expect(screen.getByText(/Capacity Usage/)).toBeInTheDocument();
     });
 
-    it("redirected to '/overview'", () => {
+    test("redirected to '/overview'", () => {
       navigateToPath("/");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toBe("/overview/list");
     });
   });
 
   describe("'/overview' path", () => {
-    it("routes to <ClusterOverview> component", () => {
+    test("routes to <ClusterOverview> component", () => {
       navigateToPath("/overview");
-      assert.lengthOf(appWrapper.find(ClusterOverview), 1);
+      expect(screen.getByText(/Capacity Usage/)).toBeInTheDocument();
     });
 
-    it("redirected to '/overview'", () => {
+    test("redirected to '/overview'", () => {
       navigateToPath("/overview");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toBe("/overview/list");
     });
   });
 
   describe("'/overview/list' path", () => {
-    it("routes to <NodeList> component", () => {
+    test("routes to <NodeList> component", () => {
       navigateToPath("/overview");
-      const clusterOverview = appWrapper.find(ClusterOverview);
-      assert.lengthOf(clusterOverview, 1);
-      const nodeList = clusterOverview.find(NodeList);
-      assert.lengthOf(nodeList, 1);
+      expect(screen.getByText(/Capacity Usage/)).toBeInTheDocument();
+      expect(screen.getByText(/Nodes \([\d]\)/)).toBeInTheDocument();
     });
   });
 
   describe("'/overview/map' path", () => {
-    it("routes to <ClusterViz> component", () => {
+    test("routes to <ClusterViz> component", () => {
       navigateToPath("/overview/map");
-      const clusterOverview = appWrapper.find(ClusterOverview);
-      const clusterViz = appWrapper.find(ClusterVisualization);
-      assert.lengthOf(clusterOverview, 1);
-      assert.lengthOf(clusterViz, 1);
+      const elems = screen.getAllByText(/Node Map/);
+      expect(elems.length).toBe(2);
     });
   });
 
@@ -143,69 +93,83 @@ describe("Routing to", () => {
     /* time series metrics */
   }
   describe("'/metrics' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
 
-    it("redirected to '/metrics/overview/cluster'", () => {
+    test("redirected to '/metrics/overview/cluster'", () => {
       navigateToPath("/metrics");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/overview/cluster");
+      expect(location.pathname).toBe("/metrics/overview/cluster");
     });
   });
 
   describe("'/metrics/overview/cluster' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/overview/cluster");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/metrics/overview/node' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/overview/node");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/metrics/:dashboardNameAttr' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
 
-    it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
+    test("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       navigateToPath("/metrics/some-dashboard");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/some-dashboard/cluster");
+      expect(location.pathname).toBe("/metrics/some-dashboard/cluster");
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/cluster' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/cluster");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/node' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/node");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
 
-    it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
+    test("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       navigateToPath("/metrics/some-dashboard/node");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/some-dashboard/cluster");
+      expect(location.pathname).toBe("/metrics/some-dashboard/cluster");
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/node/:nodeIDAttr' path", () => {
-    it("routes to <NodeGraphs> component", () => {
+    test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/node/123");
-      assert.lengthOf(appWrapper.find(NodeGraphs), 1);
+      expect(
+        screen.getByText(/Metrics/i, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -213,29 +177,35 @@ describe("Routing to", () => {
     /* node details */
   }
   describe("'/node' path", () => {
-    it("routes to <NodeList> component", () => {
+    test("routes to <NodeList> component", () => {
       navigateToPath("/node");
-      assert.lengthOf(appWrapper.find(NodeList), 1);
+      // assert.lengthOf(appWrapper.find(NodeList), 1);
+      expect(screen.getByText(/Nodes \([\d]\)/)).toBeInTheDocument();
     });
 
-    it("redirected to '/overview/list'", () => {
+    test("redirected to '/overview/list'", () => {
       navigateToPath("/node");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toBe("/overview/list");
     });
   });
 
   describe("'/node/:nodeIDAttr' path", () => {
-    it("routes to <NodeOverview> component", () => {
+    test("routes to <NodeOverview> component", () => {
       navigateToPath("/node/1");
-      assert.lengthOf(appWrapper.find(NodeOverview), 1);
+      // assert.lengthOf(appWrapper.find(NodeOverview), 1);
+      expect(
+        screen.getByText(/Loading cluster status.*/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/node/:nodeIDAttr/logs' path", () => {
-    it("routes to <Logs> component", () => {
+    test("routes to <Logs> component", () => {
       navigateToPath("/node/1/logs");
-      assert.lengthOf(appWrapper.find(Logs), 1);
+      expect(
+        screen.getByText(/Logs Node.*/, { selector: "h2" }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -243,16 +213,20 @@ describe("Routing to", () => {
     /* events & jobs */
   }
   describe("'/events' path", () => {
-    it("routes to <EventPageUnconnected> component", () => {
+    test("routes to <EventPageUnconnected> component", () => {
       navigateToPath("/events");
-      assert.lengthOf(appWrapper.find(EventPageUnconnected), 1);
+      // assert.lengthOf(appWrapper.find(EventPageUnconnected), 1);
+      expect(
+        screen.getByText(/Events/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/jobs' path", () => {
-    it("routes to <JobsTable> component", () => {
+    test("routes to <JobsTable> component", () => {
       navigateToPath("/jobs");
-      assert.lengthOf(appWrapper.find(JobsPage), 1);
+      // assert.lengthOf(appWrapper.find(JobsTable), 1);
+      expect(screen.getByText(/Jobs/, { selector: "h3" })).toBeInTheDocument();
     });
   });
 
@@ -260,66 +234,73 @@ describe("Routing to", () => {
     /* databases */
   }
   describe("'/databases' path", () => {
-    it("routes to <DatabasesPage> component", () => {
+    test("routes to <DatabasesPage> component", () => {
       navigateToPath("/databases");
-      assert.lengthOf(appWrapper.find(DatabasesPage), 1);
+      expect(
+        screen.getByText(/Databases/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/databases/tables' path", () => {
-    it("redirected to '/databases'", () => {
+    test("redirected to '/databases'", () => {
       navigateToPath("/databases/tables");
       const location = history.location;
-      assert.equal(location.pathname, "/databases");
+      expect(location.pathname).toBe("/databases");
     });
   });
 
   describe("'/databases/grants' path", () => {
-    it("redirected to '/databases'", () => {
+    test("redirected to '/databases'", () => {
       navigateToPath("/databases/grants");
       const location = history.location;
-      assert.equal(location.pathname, "/databases");
+      expect(location.pathname).toBe("/databases");
     });
   });
 
   describe("'/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
-    it("redirected to '/database/:${databaseNameAttr}/table/:${tableNameAttr}'", () => {
+    test("redirected to '/database/:${databaseNameAttr}/table/:${tableNameAttr}'", () => {
       navigateToPath("/databases/database/some-db-name/table/some-table-name");
       const location = history.location;
-      assert.equal(
-        location.pathname,
+      expect(location.pathname).toBe(
         "/database/some-db-name/table/some-table-name",
       );
     });
   });
 
   describe("'/database' path", () => {
-    it("redirected to '/databases'", () => {
+    test("redirected to '/databases'", () => {
       navigateToPath("/database");
       const location = history.location;
-      assert.equal(location.pathname, "/databases");
+      expect(location.pathname).toBe("/databases");
     });
   });
 
   describe("'/database/:${databaseNameAttr}' path", () => {
-    it("routes to <DatabaseDetailsPage> component", () => {
+    test("routes to <DatabaseDetailsPage> component", () => {
       navigateToPath("/database/some-db-name");
-      assert.lengthOf(appWrapper.find(DatabaseDetailsPage), 1);
+      const result = document.querySelector(
+        "[data-componentname=DatabaseDetailsPage]",
+      );
+      expect(result).not.toBeNull();
     });
   });
 
   describe("'/database/:${databaseNameAttr}/table' path", () => {
-    it("redirected to '/databases/:${databaseNameAttr}'", () => {
+    test("redirected to '/databases/:${databaseNameAttr}'", () => {
       navigateToPath("/database/some-db-name/table");
       const location = history.location;
-      assert.equal(location.pathname, "/database/some-db-name");
+      expect(location.pathname).toBe("/database/some-db-name");
     });
   });
 
   describe("'/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
-    it("routes to <DatabaseTablePage> component", () => {
+    test("routes to <DatabaseTablePage> component", () => {
       navigateToPath("/database/some-db-name/table/some-table-name");
-      assert.lengthOf(appWrapper.find(DatabaseTablePage), 1);
+      const result = document.querySelector(
+        "[data-componentname=DatabaseTablePage]",
+      );
+      expect(result).not.toBeNull();
     });
   });
 
@@ -327,9 +308,12 @@ describe("Routing to", () => {
     /* data distribution */
   }
   describe("'/data-distribution' path", () => {
-    it("routes to <DataDistributionPage> component", () => {
+    test("routes to <DataDistributionPage> component", () => {
       navigateToPath("/data-distribution");
-      assert.lengthOf(appWrapper.find(DataDistributionPageConnected), 1);
+      const result = document.querySelector(
+        "[data-componentname=dataDistribution]",
+      );
+      expect(result).not.toBeNull();
     });
   });
 
@@ -337,65 +321,87 @@ describe("Routing to", () => {
     /* statement statistics */
   }
   describe("'/statements' path", () => {
-    it("redirects to '/sql-activity' statement tab", () => {
+    test("redirects to '/sql-activity' statement tab", () => {
       navigateToPath("/statements");
-      assert.lengthOf(appWrapper.find(SQLActivityPage), 1);
+      expect(
+        screen.getByText(/SQL Activity/, { selector: "h3" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("tab", { name: "Statements", selected: true }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/statements/:${appAttr}' path", () => {
-    it("routes to <StatementsPage> component", () => {
+    test("routes to <StatementsPage> component", () => {
       navigateToPath("/statements/%24+internal");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      expect(
+        screen.getByText(/SQL Activity/, { selector: "h3" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("tab", { name: "Statements", selected: true }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
-    it("routes to <StatementDetails> component", () => {
+    test("routes to <StatementDetails> component", () => {
       navigateToPath("/statements/%24+internal/true");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      expect(
+        screen.getByText(/Statement Fingerprint/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    it("routes to <StatementDetails> component", () => {
+    test("routes to <StatementDetails> component", () => {
       navigateToPath("/statements/implicit-txn-attr/statement-attr");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      // assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      expect(
+        screen.getByText(/Statement Fingerprint/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/statement' path", () => {
-    it("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
+    test("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
       navigateToPath("/statement");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toBe(
         "/sql-activity?tab=Statements&view=fingerprints",
       );
     });
   });
 
   describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    it("routes to <StatementDetails> component", () => {
+    test("routes to <StatementDetails> component", () => {
       navigateToPath("/statement/implicit-attr/statement-attr/");
-      assert.lengthOf(appWrapper.find(StatementDetails), 1);
+      expect(
+        screen.getByText(/Statement Fingerprint/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/sql-activity?tab=Statements' path", () => {
-    it("routes to <StatementsPage> component", () => {
+    test("routes to <StatementsPage> component", () => {
       navigateToPath("/sql-activity?tab=Statements");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      expect(
+        screen.getByRole("tab", { name: "Statements", selected: true }),
+      ).toBeInTheDocument();
     });
 
-    it("routes to <StatementsPage> component with view=fingerprints", () => {
+    test("routes to <StatementsPage> component with view=fingerprints", () => {
       navigateToPath("/sql-activity?tab=Statements&view=fingerprints");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      expect(
+        screen.getByRole("tab", { name: "Statements", selected: true }),
+      ).toBeInTheDocument();
     });
 
-    it("routes to <ActiveStatementsView> component with view=active", () => {
+    test("routes to <ActiveStatementsView> component with view=active", () => {
       navigateToPath("/sql-activity?tab=Statements&view=active");
-      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+      expect(
+        screen.getByRole("tab", { name: "Statements", selected: true }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -403,73 +409,90 @@ describe("Routing to", () => {
     /* transactions statistics */
   }
   describe("'/sql-activity?tab=Transactions' path", () => {
-    it("routes to <TransactionsPage> component", () => {
+    test("routes to <TransactionsPage> component", () => {
       navigateToPath("/sql-activity?tab=Transactions");
-      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
+      expect(
+        screen.getByRole("tab", { name: "Transactions", selected: true }),
+      ).toBeInTheDocument();
     });
 
-    it("routes to <TransactionsPage> component with view=fingerprints", () => {
+    test("routes to <TransactionsPage> component with view=fingerprints", () => {
       navigateToPath("/sql-activity?tab=Transactions&view=fingerprints");
-      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
+      expect(
+        screen.getByRole("tab", { name: "Transactions", selected: true }),
+      ).toBeInTheDocument();
     });
 
-    it("routes to <ActiveTransactionsView> component with view=active", () => {
+    test("routes to <ActiveTransactionsView> component with view=active", () => {
       navigateToPath("/sql-activity?tab=Transactions&view=active");
-      assert.lengthOf(appWrapper.find(TransactionsPage), 1);
+      expect(
+        screen.getByRole("tab", { name: "Transactions", selected: true }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/transaction/:aggregated_ts/:txn_fingerprint_id' path", () => {
-    it("routes to <TransactionDetails> component", () => {
+    test("routes to <TransactionDetails> component", () => {
       navigateToPath("/transaction/1637877600/4948941983164833719");
-      assert.lengthOf(appWrapper.find(TransactionDetails), 1);
+      expect(
+        screen.getByText(/Transaction Details/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
   // Active execution details.
 
   describe("'/execution' path", () => {
-    it("'/execution/statement/statementID' routes to <ActiveStatementDetails>", () => {
+    test("'/execution/statement/statementID' routes to <ActiveStatementDetails>", () => {
       navigateToPath("/execution/statement/stmtID");
-      assert.lengthOf(appWrapper.find(ActiveStatementDetails), 1);
+      expect(
+        screen.getByText(/Statement Execution ID:.*/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
 
-    it("'/execution/transaction/transactionID' routes to <ActiveTransactionDetails>", () => {
+    test("'/execution/transaction/transactionID' routes to <ActiveTransactionDetails>", () => {
       navigateToPath("/execution/transaction/transactionID");
-      assert.lengthOf(appWrapper.find(ActiveTransactionDetails), 1);
+      expect(
+        screen.getByText(/Transaction Execution ID:.*/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
   {
     /* debug pages */
   }
   describe("'/debug' path", () => {
-    it("routes to <Debug> component", () => {
+    test("routes to <Debug> component", () => {
       navigateToPath("/debug");
-      assert.lengthOf(appWrapper.find(Debug), 1);
+      expect(
+        screen.getByText(/Advanced Debugging/, { selector: "h3" }),
+      ).toBeInTheDocument();
     });
   });
 
-  // TODO (koorosh): Disabled due to strange failure on internal
-  // behavior of ReduxDebug component under test env.
-  xdescribe("'/debug/redux' path", () => {
-    it("routes to <ReduxDebug> component", () => {
+  describe("'/debug/redux' path", () => {
+    test("routes to <ReduxDebug> component", () => {
       navigateToPath("/debug/redux");
-      assert.lengthOf(appWrapper.find(ReduxDebug), 1);
+      expect(screen.getByText(/Redux State/)).toBeInTheDocument();
     });
   });
 
   describe("'/debug/chart' path", () => {
-    it("routes to <CustomChart> component", () => {
+    test("routes to <CustomChart> component", () => {
       navigateToPath("/debug/chart");
-      // assert.lengthOf(appWrapper.find(Debug), 1);
-      assert.lengthOf(appWrapper.find(CustomChart), 1);
+      expect(
+        screen.getByText(/Custom Chart/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/debug/enqueue_range' path", () => {
-    it("routes to <EnqueueRange> component", () => {
+    test("routes to <EnqueueRange> component", () => {
       navigateToPath("/debug/enqueue_range");
-      assert.lengthOf(appWrapper.find(EnqueueRange), 1);
+      expect(
+        screen.getByText(/Manually enqueue range in a replica queue/, {
+          selector: "h1",
+        }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -477,113 +500,122 @@ describe("Routing to", () => {
     /* raft pages */
   }
   describe("'/raft' path", () => {
-    it("routes to <Raft> component", () => {
+    test("routes to <Raft> component", () => {
       navigateToPath("/raft");
-      assert.lengthOf(appWrapper.find(Raft), 1);
+      expect(screen.getByText(/Raft/, { selector: "h1" })).toBeInTheDocument();
     });
 
-    it("redirected to '/raft/ranges'", () => {
+    test("redirected to '/raft/ranges'", () => {
       navigateToPath("/raft");
       const location = history.location;
-      assert.equal(location.pathname, "/raft/ranges");
+      expect(location.pathname).toBe("/raft/ranges");
     });
   });
 
   describe("'/raft/ranges' path", () => {
-    it("routes to <RangesMain> component", () => {
+    test("routes to <RangesMain> component", () => {
       navigateToPath("/raft/ranges");
-      assert.lengthOf(appWrapper.find(RangesMain), 1);
+      expect(screen.getByText(/Raft/, { selector: "h1" })).toBeInTheDocument();
     });
   });
 
   describe("'/raft/messages/all' path", () => {
-    it("routes to <RaftMessages> component", () => {
+    test("routes to <RaftMessages> component", () => {
       navigateToPath("/raft/messages/all");
-      assert.lengthOf(appWrapper.find(RaftMessages), 1);
+      expect(screen.getByText(/Pending Heartbeats/)).toBeInTheDocument();
     });
   });
 
   describe("'/raft/messages/node/:${nodeIDAttr}' path", () => {
-    it("routes to <RaftMessages> component", () => {
+    test("routes to <RaftMessages> component", () => {
       navigateToPath("/raft/messages/node/node-id-attr");
-      assert.lengthOf(appWrapper.find(RaftMessages), 1);
+      expect(screen.getByText(/Pending Heartbeats/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/problemranges' path", () => {
-    it("routes to <ProblemRanges> component", () => {
+    test("routes to <ProblemRanges> component", () => {
       navigateToPath("/reports/problemranges");
-      assert.lengthOf(appWrapper.find(ProblemRanges), 1);
+      expect(
+        screen.getByText(/Problem Ranges Report/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/reports/problemranges/:nodeIDAttr' path", () => {
     it("routes to <ProblemRanges> component", () => {
       navigateToPath("/reports/problemranges/1");
-      assert.lengthOf(appWrapper.find(ProblemRanges), 1);
+      navigateToPath("/reports/problemranges");
+      expect(
+        screen.getByText(/Problem Ranges Report/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/reports/localities' path", () => {
-    it("routes to <Localities> component", () => {
+    test("routes to <Localities> component", () => {
       navigateToPath("/reports/localities");
-      assert.lengthOf(appWrapper.find(Localities), 1);
+      expect(screen.getByText(/Localities/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/nodes' path", () => {
-    it("routes to <Nodes> component", () => {
+    test("routes to <Nodes> component", () => {
       navigateToPath("/reports/nodes");
-      assert.lengthOf(appWrapper.find(Nodes), 1);
+      expect(screen.getByText(/Node Diagnostics/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/nodes/history' path", () => {
-    it("routes to <DecommissionedNodeHistory> component", () => {
+    test("routes to <DecommissionedNodeHistory> component", () => {
       navigateToPath("/reports/nodes/history");
-      assert.lengthOf(appWrapper.find(DecommissionedNodeHistory), 1);
+      expect(
+        screen.getByText(/Decommissioned Node History/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/reports/network' path", () => {
-    it("routes to <Network> component", () => {
+    test("routes to <Network> component", () => {
       navigateToPath("/reports/network");
-      assert.lengthOf(appWrapper.find(Network), 1);
+      expect(screen.getByText(/Network Diagnostics/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/network/:nodeIDAttr' path", () => {
-    it("routes to <Network> component", () => {
+    test("routes to <Network> component", () => {
       navigateToPath("/reports/network/1");
-      assert.lengthOf(appWrapper.find(Network), 1);
+      expect(screen.getByText(/Network Diagnostics/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/settings' path", () => {
-    it("routes to <Settings> component", () => {
+    test("routes to <Settings> component", () => {
       navigateToPath("/reports/settings");
-      assert.lengthOf(appWrapper.find(Settings), 1);
+      expect(screen.getByText(/Cluster Settings/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/certificates/:nodeIDAttr' path", () => {
-    it("routes to <Certificates> component", () => {
+    test("routes to <Certificates> component", () => {
       navigateToPath("/reports/certificates/1");
-      assert.lengthOf(appWrapper.find(Certificates), 1);
+      expect(screen.getByText(/Certificates/)).toBeInTheDocument();
     });
   });
 
   describe("'/reports/range/:nodeIDAttr' path", () => {
-    it("routes to <Range> component", () => {
+    test("routes to <Range> component", () => {
       navigateToPath("/reports/range/1");
-      assert.lengthOf(appWrapper.find(Range), 1);
+      expect(
+        screen.getByText(/Range Report for.*/, { selector: "h1" }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("'/reports/stores/:nodeIDAttr' path", () => {
-    it("routes to <Stores> component", () => {
+    test("routes to <Stores> component", () => {
       navigateToPath("/reports/stores/1");
-      assert.lengthOf(appWrapper.find(Stores), 1);
+      expect(screen.getByText(/Stores/)).toBeInTheDocument();
     });
   });
 
@@ -591,112 +623,108 @@ describe("Routing to", () => {
     /* old route redirects */
   }
   describe("'/cluster' path", () => {
-    it("redirected to '/metrics/overview/cluster'", () => {
+    test("redirected to '/metrics/overview/cluster'", () => {
       navigateToPath("/cluster");
       const location = history.location;
-      assert.equal(location.pathname, "/metrics/overview/cluster");
+      expect(location.pathname).toBe("/metrics/overview/cluster");
     });
   });
 
   describe("'/cluster/all/:${dashboardNameAttr}' path", () => {
-    it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
+    test("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       const dashboardNameAttr = "some-dashboard-name";
       navigateToPath(`/cluster/all/${dashboardNameAttr}`);
       const location = history.location;
-      assert.equal(location.pathname, `/metrics/${dashboardNameAttr}/cluster`);
+      expect(location.pathname).toBe(`/metrics/${dashboardNameAttr}/cluster`);
     });
   });
 
   describe("'/cluster/node/:${nodeIDAttr}/:${dashboardNameAttr}' path", () => {
-    it("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
+    test("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
       const dashboardNameAttr = "some-dashboard-name";
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/node/${nodeIDAttr}/${dashboardNameAttr}`);
       const location = history.location;
-      assert.equal(
-        location.pathname,
+      expect(location.pathname).toBe(
         `/metrics/${dashboardNameAttr}/node/${nodeIDAttr}`,
       );
     });
   });
 
   describe("'/cluster/nodes' path", () => {
-    it("redirected to '/overview/list'", () => {
+    test("redirected to '/overview/list'", () => {
       navigateToPath("/cluster/nodes");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toBe("/overview/list");
     });
   });
 
   describe("'/cluster/nodes/:${nodeIDAttr}' path", () => {
-    it("redirected to '/node/:${nodeIDAttr}'", () => {
+    test("redirected to '/node/:${nodeIDAttr}'", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}`);
       const location = history.location;
-      assert.equal(location.pathname, `/node/${nodeIDAttr}`);
+      expect(location.pathname).toBe(`/node/${nodeIDAttr}`);
     });
   });
 
   describe("'/cluster/nodes/:${nodeIDAttr}/logs' path", () => {
-    it("redirected to '/node/:${nodeIDAttr}/logs'", () => {
+    test("redirected to '/node/:${nodeIDAttr}/logs'", () => {
       const nodeIDAttr = 1;
       navigateToPath(`/cluster/nodes/${nodeIDAttr}/logs`);
       const location = history.location;
-      assert.equal(location.pathname, `/node/${nodeIDAttr}/logs`);
+      expect(location.pathname).toBe(`/node/${nodeIDAttr}/logs`);
     });
   });
 
   describe("'/cluster/events' path", () => {
-    it("redirected to '/events'", () => {
+    test("redirected to '/events'", () => {
       navigateToPath("/cluster/events");
       const location = history.location;
-      assert.equal(location.pathname, "/events");
+      expect(location.pathname).toBe("/events");
     });
   });
 
   describe("'/cluster/nodes' path", () => {
-    it("redirected to '/overview/list'", () => {
+    test("redirected to '/overview/list'", () => {
       navigateToPath("/cluster/nodes");
       const location = history.location;
-      assert.equal(location.pathname, "/overview/list");
+      expect(location.pathname).toBe("/overview/list");
     });
   });
 
   describe("'/unknown-url' path", () => {
-    it("routes to <errorMessage> component", () => {
+    test("routes to <errorMessage> component", () => {
       navigateToPath("/some-random-ulr");
-      assert.lengthOf(appWrapper.find(NotFound), 1);
+      expect(screen.getByText(/We can.*t find the page.*/)).toBeInTheDocument();
     });
   });
 
   describe("'/statements' path", () => {
-    it("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
+    test("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
       navigateToPath("/statements");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toBe(
         "/sql-activity?tab=Statements&view=fingerprints",
       );
     });
   });
 
   describe("'/sessions' path", () => {
-    it("redirected to '/sql-activity?tab=Sessions'", () => {
+    test("redirected to '/sql-activity?tab=Sessions'", () => {
       navigateToPath("/sessions");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toBe(
         "/sql-activity?tab=Sessions",
       );
     });
   });
 
   describe("'/transactions' path", () => {
-    it("redirected to '/sql-activity?tab=Transactions'", () => {
+    test("redirected to '/sql-activity?tab=Transactions'", () => {
       navigateToPath("/transactions");
       const location = history.location;
-      assert.equal(
-        location.pathname + location.search,
+      expect(location.pathname + location.search).toBe(
         "/sql-activity?tab=Transactions",
       );
     });
