@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -78,7 +80,15 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Codec,
 		execCfg.Settings,
 		execCfg.IndexValidator,
-		execCfg.DescMetadaUpdaterFactory,
+		func(ctx context.Context, descriptors *descs.Collection, txn *kv.Txn) scexec.DescriptorMetadataUpdater {
+			return descmetadata.NewMetadataUpdater(ctx,
+				execCfg.InternalExecutorFactory,
+				descriptors,
+				&execCfg.Settings.SV,
+				txn,
+				execCtx.SessionData(),
+			)
+		},
 		execCfg.StatsRefresher,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -634,7 +635,12 @@ func removeMatchingReferences(
 }
 
 func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	return p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
-		ctx, p.Txn(), p.SessionData(),
+	return descmetadata.NewMetadataUpdater(
+		ctx,
+		p.ExecCfg().InternalExecutorFactory,
+		p.Descriptors(),
+		&p.ExecCfg().Settings.SV,
+		p.txn,
+		p.SessionData(),
 	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
 }
