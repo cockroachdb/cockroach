@@ -2184,8 +2184,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 
 	// Transaction received time is the time at which the statement that prompted
 	// the creation of this transaction was received.
-	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionReceived,
-		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionReceived, txnStart)
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction, timeutil.Now())
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction,
 		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction))
