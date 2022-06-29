@@ -290,7 +290,7 @@ func TestBatchRepr(t *testing.T) {
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
 		repr := b.Repr()
 
-		r, err := NewRocksDBBatchReader(repr)
+		r, err := NewPebbleBatchReader(repr)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -298,7 +298,7 @@ func TestBatchRepr(t *testing.T) {
 		if count := r.Count(); count != expectedCount {
 			t.Fatalf("bad count: RocksDBBatchReader.Count expected %d, but found %d", expectedCount, count)
 		}
-		if count, err := RocksDBBatchCount(repr); err != nil {
+		if count, err := PebbleBatchCount(repr); err != nil {
 			t.Fatal(err)
 		} else if count != expectedCount {
 			t.Fatalf("bad count: RocksDBBatchCount expected %d, but found %d", expectedCount, count)
@@ -1126,7 +1126,7 @@ func TestDecodeKey(t *testing.T) {
 			}
 			repr := b.Repr()
 
-			r, err := NewRocksDBBatchReader(repr)
+			r, err := NewPebbleBatchReader(repr)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
