@@ -23,7 +23,10 @@ func TestAvgResponseEstimator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var e avgResponseEstimator
+	e := avgResponseEstimator{avgResponseSizeMultiple: defaultAvgResponseSizeMultiple}
+	withMultiple := func(s int64) int64 {
+		return int64(float64(s) * defaultAvgResponseSizeMultiple)
+	}
 
 	// Before receiving any responses, we should be using the initial estimate.
 	require.Equal(t, int64(initialAvgResponseSize), e.getAvgResponseSize())
@@ -31,8 +34,9 @@ func TestAvgResponseEstimator(t *testing.T) {
 	// Simulate receiving a single response.
 	firstResponseSize := int64(42)
 	e.update(firstResponseSize, 1)
-	// The estimate should now be exactly the size of that single response.
-	require.Equal(t, firstResponseSize, e.getAvgResponseSize())
+	// The estimate should now be the size of that single response times
+	// defaultAvgResponseSizeMultiple.
+	require.Equal(t, withMultiple(firstResponseSize), e.getAvgResponseSize())
 
 	// Simulate receiving 100 small BatchResponses.
 	smallResponseSize := int64(63)
@@ -40,8 +44,8 @@ func TestAvgResponseEstimator(t *testing.T) {
 		e.update(smallResponseSize*5, 5)
 	}
 	// The estimate should now be pretty close to the size of a single response
-	// in the small BatchResponse.
-	diff := smallResponseSize - e.getAvgResponseSize()
+	// in the small BatchResponse (after adjusting with the multiple).
+	diff := withMultiple(smallResponseSize) - e.getAvgResponseSize()
 	require.True(t, math.Abs(float64(diff))/float64(smallResponseSize) < 0.05)
 
 	// Now simulate receiving 10 large BatchResponses.
@@ -50,7 +54,7 @@ func TestAvgResponseEstimator(t *testing.T) {
 		e.update(largeResponseSize*1000, 1000)
 	}
 	// The estimate should now be pretty close to the size of a single response
-	// in the large BatchResponse.
-	diff = largeResponseSize - e.getAvgResponseSize()
+	// in the large BatchResponse (after adjusting with the multiple).
+	diff = withMultiple(largeResponseSize) - e.getAvgResponseSize()
 	require.True(t, math.Abs(float64(diff))/float64(smallResponseSize) < 0.15)
 }
