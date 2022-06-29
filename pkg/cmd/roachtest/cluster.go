@@ -832,6 +832,9 @@ func (f *clusterFactory) newCluster(
 	// that each create attempt gets a unique cluster name.
 	createVMOpts, providerOpts, err := cfg.spec.RoachprodOpts("", cfg.useIOBarrier)
 	if err != nil {
+		// We must release the allocation because cluster creation is not possible at this point.
+		cfg.alloc.Release()
+
 		return nil, err
 	}
 	if cfg.spec.Cloud != spec.Local {
