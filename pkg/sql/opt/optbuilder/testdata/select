@@ -312,7 +312,7 @@ error (42P01): no data source matches pattern: bar.kv.*
 build
 SELECT kv.*[1] FROM kv
 ----
-error (42804): cannot subscript type tuple{char AS k, char AS v} because it is not an array
+error (42804): cannot subscript type tuple{char AS k, char AS v} because it is not an array or json object
 
 build
 SELECT ARRAY[]

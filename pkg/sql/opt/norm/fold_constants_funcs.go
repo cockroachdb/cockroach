@@ -498,10 +498,19 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) (_ opt.Scalar
 		return nil, false
 	}
 
-	// Case 2: The input is a constant DArray.
+	// Case 2: The input is a constant DArray or DJSON.
 	if memo.CanExtractConstDatum(input) {
+		var resolvedType *types.T
+		switch input.DataType().Family() {
+		case types.JsonFamily:
+			resolvedType = input.DataType()
+		case types.ArrayFamily:
+			resolvedType = input.DataType().ArrayContents()
+		default:
+			panic(errors.AssertionFailedf("expected array or json; found %s", input.DataType().SQLString()))
+		}
 		inputD := memo.ExtractConstDatum(input)
-		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, input.DataType().ArrayContents())
+		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, resolvedType)
 		result, err := eval.Expr(c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
