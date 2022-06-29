@@ -38,8 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -202,8 +200,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			{ID: "1", SubscriptionToken: p1},
 			{ID: "2", SubscriptionToken: p2},
 		}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
-			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient)
+		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient, nil /* cutoverProvider */)
 		require.NoError(t, err)
 
 		actualRows := make(map[string]struct{})
@@ -238,8 +236,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			{SubscriptionToken: streamclient.SubscriptionToken("1")},
 			{SubscriptionToken: streamclient.SubscriptionToken("2")},
 		}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test",
-			partitions, startTime, nil /* interceptEvents */, tenantRekey, &errorStreamClient{})
+		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+			partitions, startTime, nil /* interceptEvents */, tenantRekey, &errorStreamClient{}, nil /* cutoverProvider */)
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -262,8 +260,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		streamingTestingKnob := &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) {
 			processEventCh <- struct{}{}
 		}}
-		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
-			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient, streamingTestingKnob)
+		sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
+			partitions, startTime, nil /* interceptEvents */, tenantRekey, mockClient, nil /* cutoverProvider */, streamingTestingKnob)
 		defer func() {
 			require.NoError(t, sip.forceClientForTests.Close())
 		}()
@@ -310,7 +308,7 @@ func getPartitionSpanToTableID(
 
 	// Aggregate the table IDs which should have been ingested.
 	for _, pa := range partitions {
-		pKey := roachpb.Key(pa.SubscriptionToken)
+		pKey := roachpb.Key(pa.ID)
 		pSpan := roachpb.Span{Key: pKey, EndKey: pKey.Next()}
 		paURL, err := url.Parse(string(pa.SubscriptionToken))
 		require.NoError(t, err)
@@ -401,11 +399,14 @@ func makeTestStreamURI(
 		"&TENANT_ID=" + strconv.Itoa(tenantID)
 }
 
+type noCutover struct{}
+
+func (n noCutover) cutoverReached(context.Context) (bool, error) { return false, nil }
+
 // TestRandomClientGeneration tests the ingestion processor against a random
 // stream workload.
 func TestRandomClientGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 61287, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -414,8 +415,6 @@ func TestRandomClientGeneration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 	kvDB := tc.Server(0).DB()
-	conn := tc.Conns[0]
-	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// TODO: Consider testing variations on these parameters.
 	const tenantID = 20
@@ -447,8 +446,10 @@ func TestRandomClientGeneration(t *testing.T) {
 	require.NoError(t, err)
 	streamValidator := newStreamClientValidator(rekeyer)
 	validator := registerValidatorWithClient(streamValidator)
-	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr, topo,
-		startTime, []streamclient.InterceptFn{cancelAfterCheckpoints, validator}, tenantRekey, nil /* mockClient */)
+
+	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
+		topo, startTime, []streamclient.InterceptFn{cancelAfterCheckpoints, validator}, tenantRekey,
+		streamClient, noCutover{})
 	require.NoError(t, err)
 
 	partitionSpanToTableID := getPartitionSpanToTableID(t, topo)
@@ -466,6 +467,7 @@ func TestRandomClientGeneration(t *testing.T) {
 		if row == nil {
 			break
 		}
+
 		datum := row[0].Datum
 		protoBytes, ok := datum.(*tree.DBytes)
 		require.True(t, ok)
@@ -475,8 +477,8 @@ func TestRandomClientGeneration(t *testing.T) {
 
 		for _, resolvedSpan := range resolvedSpans.ResolvedSpans {
 			if _, ok := partitionSpanToTableID[resolvedSpan.Span.String()]; !ok {
-				t.Fatalf("expected resolved span %v to be either in one of the supplied partition"+
-					" addresses %v", resolvedSpan.Span, topo)
+				t.Fatalf("expected resolved span %v to be in one of the supplied partition"+
+					" addresses %v", resolvedSpan.Span, partitionSpanToTableID)
 			}
 
 			// All resolved timestamp events should be greater than the start time.
@@ -497,11 +499,6 @@ func TestRandomClientGeneration(t *testing.T) {
 	}
 
 	for pSpan, id := range partitionSpanToTableID {
-		numRows, err := strconv.Atoi(sqlDB.QueryStr(t, fmt.Sprintf(
-			`SELECT count(*) FROM defaultdb.%s%d`, streamclient.IngestionTablePrefix, id))[0][0])
-		require.NoError(t, err)
-		require.Greater(t, numRows, 0, "at least 1 row ingested expected")
-
 		// Scan the store for KVs ingested by this partition, and compare the MVCC
 		// KVs against the KVEvents streamed up to the max ingested timestamp for
 		// the partition.
@@ -515,15 +512,15 @@ func runStreamIngestionProcessor(
 	t *testing.T,
 	registry *jobs.Registry,
 	kvDB *kv.DB,
-	streamAddr string,
 	partitions streamclient.Topology,
 	startTime hlc.Timestamp,
 	interceptEvents []streamclient.InterceptFn,
 	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
+	cutoverProvider cutoverProvider,
 ) (*distsqlutils.RowBuffer, error) {
-	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr,
-		partitions, startTime, interceptEvents, tenantRekey, mockClient, nil /* streamingTestingKnobs */)
+	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
+		partitions, startTime, interceptEvents, tenantRekey, mockClient, cutoverProvider, nil /* streamingTestingKnobs */)
 	require.NoError(t, err)
 
 	sip.Run(ctx)
@@ -543,16 +540,19 @@ func getStreamIngestionProcessor(
 	t *testing.T,
 	registry *jobs.Registry,
 	kvDB *kv.DB,
-	streamAddr string,
 	partitions streamclient.Topology,
 	startTime hlc.Timestamp,
 	interceptEvents []streamclient.InterceptFn,
 	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
+	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*streamIngestionProcessor, *distsqlutils.RowBuffer, error) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
+	if mockClient == nil {
+		return nil, nil, errors.AssertionFailedf("non-nil streamclient required")
+	}
 
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer testDiskMonitor.Stop(ctx)
@@ -573,7 +573,7 @@ func getStreamIngestionProcessor(
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	spec.StreamAddress = streamAddr
+	spec.StreamAddress = "http://unused"
 	spec.TenantRekey = tenantRekey
 	spec.PartitionIds = make([]string, len(partitions))
 	spec.PartitionAddresses = make([]string, len(partitions))
@@ -592,8 +592,9 @@ func getStreamIngestionProcessor(
 		t.Fatal("expected the processor that's created to be a split and scatter processor")
 	}
 
-	if mockClient != nil {
-		sip.forceClientForTests = mockClient
+	sip.forceClientForTests = mockClient
+	if cutoverProvider != nil {
+		sip.cutoverProvider = cutoverProvider
 	}
 
 	if interceptable, ok := sip.forceClientForTests.(streamclient.InterceptableStreamClient); ok {
