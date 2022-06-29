@@ -16,6 +16,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/descmetadata",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scexec/backfiller",

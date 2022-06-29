@@ -62,7 +62,7 @@ func NewExecutorDependencies(
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	clock scmutationexec.Clock,
-	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
+	metadataUpdater scexec.DescriptorMetadataUpdater,
 	eventLogger scexec.EventLogger,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
@@ -85,7 +85,7 @@ func NewExecutorDependencies(
 		backfiller:              backfiller,
 		merger:                  merger,
 		backfillerTracker:       backfillTracker,
-		commentUpdaterFactory:   commentUpdaterFactory,
+		metadataUpdater:         metadataUpdater,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
 		user:                    user,
@@ -352,7 +352,7 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	clock                   scmutationexec.Clock
-	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
+	metadataUpdater         scexec.DescriptorMetadataUpdater
 	backfiller              scexec.Backfiller
 	merger                  scexec.Merger
 	backfillerTracker       scexec.BackfillerTracker
@@ -418,13 +418,16 @@ func (d *execDeps) User() username.SQLUsername {
 	return d.user
 }
 
-// CommentUpdater implements the scexec.Dependencies interface.
+// DescriptorMetadataUpdater implements the scexec.Dependencies interface.
 func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.DescriptorMetadataUpdater {
-	return d.commentUpdaterFactory.NewMetadataUpdater(ctx, d.txn, d.sessionData)
+	return d.metadataUpdater
 }
 
 // EventLoggerFactory constructs a new event logger with a txn.
 type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
+
+// MetadataUpdaterFactory constructs a new metadata updater with a txn.
+type MetadataUpdaterFactory = func(ctx context.Context, descriptors *descs.Collection, txn *kv.Txn) scexec.DescriptorMetadataUpdater
 
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {

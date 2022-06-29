@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -1818,8 +1819,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 		// Clean up any comments related to the mutations, specifically if we need
 		// to drop them.
-		metaDataUpdater := sc.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
-			ctx,
+		metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
+			sc.ieFactory,
+			descsCol,
+			&sc.settings.SV,
 			txn,
 			NewFakeSessionData(&sc.settings.SV))
 		for _, comment := range commentsToDelete {
