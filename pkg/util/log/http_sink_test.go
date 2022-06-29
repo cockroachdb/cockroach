@@ -29,6 +29,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	zeroBytes            = logconfig.ByteSize(0)
+	zeroDuration         = time.Duration(0)
+	disabledBufferingCfg = logconfig.CommonBufferSinkConfigWrapper{
+		CommonBufferSinkConfig: logconfig.CommonBufferSinkConfig{
+			MaxStaleness:     &zeroDuration,
+			FlushTriggerSize: &zeroBytes,
+			MaxBufferSize:    &zeroBytes,
+		},
+	}
+)
+
 // testBase sets the provided HTTPDefaults, logs "hello World", captures the
 // resulting request to the server, and validates the body with the provided
 // requestTestFunc.
@@ -173,6 +185,9 @@ func TestMessageReceived(t *testing.T) {
 		// We need to disable keepalives otherwise the HTTP server in the
 		// test will let an async goroutine run waiting for more requests.
 		DisableKeepAlives: &tb,
+		CommonSinkConfig: logconfig.CommonSinkConfig{
+			Buffering: disabledBufferingCfg,
+		},
 	}
 
 	testFn := func(_ http.Header, body string) error {
@@ -201,6 +216,9 @@ func TestHTTPSinkTimeout(t *testing.T) {
 		// We need to disable keepalives otherwise the HTTP server in the
 		// test will let an async goroutine run waiting for more requests.
 		DisableKeepAlives: &tb,
+		CommonSinkConfig: logconfig.CommonSinkConfig{
+			Buffering: disabledBufferingCfg,
+		},
 	}
 
 	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 500*time.Millisecond)
@@ -224,7 +242,8 @@ func TestHTTPSinkContentTypeJSON(t *testing.T) {
 		// test will let an async goroutine run waiting for more requests.
 		DisableKeepAlives: &tb,
 		CommonSinkConfig: logconfig.CommonSinkConfig{
-			Format: &format,
+			Format:    &format,
+			Buffering: disabledBufferingCfg,
 		},
 	}
 
@@ -258,7 +277,8 @@ func TestHTTPSinkContentTypePlainText(t *testing.T) {
 		// test will let an async goroutine run waiting for more requests.
 		DisableKeepAlives: &tb,
 		CommonSinkConfig: logconfig.CommonSinkConfig{
-			Format: &format,
+			Format:    &format,
+			Buffering: disabledBufferingCfg,
 		},
 	}
 
