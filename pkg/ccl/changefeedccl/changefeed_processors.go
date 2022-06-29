@@ -1241,8 +1241,11 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return cf.js.job.Update(cf.Ctx, nil, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
+		// If we're unable to update the job due to the job state, such as during
+		// pause-requested, simply skip the checkpoint
 		if err := md.CheckRunningOrReverting(); err != nil {
-			return err
+			log.Warningf(cf.Ctx, "skipping changefeed checkpoint: %s", err.Error())
+			return nil
 		}
 
 		// Advance resolved timestamp.
