@@ -165,7 +165,7 @@ var authenticate = func(
 // we should merge them back in the future. Instead of having the writer as the
 // other end, the writer should be the same connection. That way, a
 // sqlproxyccl.Conn can be used to read-from, or write-to the same component.
-var readTokenAuthResult = func(conn net.Conn) error {
+var readTokenAuthResult = func(conn net.Conn) (*pgproto3.BackendKeyData, error) {
 	// This interceptor is discarded once this function returns. Just like
 	// pgproto3.NewFrontend, this serverConn object has an internal buffer.
 	// Discarding the buffer is fine since there won't be any other messages
@@ -173,29 +173,32 @@ var readTokenAuthResult = func(conn net.Conn) error {
 	// caller (i.e. proxy) does not forward client messages until then.
 	serverConn := interceptor.NewFrontendConn(conn)
 
+	var backendKeyData *pgproto3.BackendKeyData
 	// The auth step should require only a few back and forths so 20 iterations
 	// should be enough.
 	var i int
 	for ; i < 20; i++ {
 		backendMsg, err := serverConn.ReadMsg()
 		if err != nil {
-			return newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
+			return nil, newErrorf(codeBackendReadFailed, "unable to receive message from backend: %v", err)
 		}
 
 		switch tp := backendMsg.(type) {
-		case *pgproto3.AuthenticationOk, *pgproto3.ParameterStatus, *pgproto3.BackendKeyData:
-			// Do nothing.
+		case *pgproto3.AuthenticationOk, *pgproto3.ParameterStatus:
+		// Do nothing.
+		case *pgproto3.BackendKeyData:
+			backendKeyData = tp
 
 		case *pgproto3.ErrorResponse:
-			return newErrorf(codeAuthFailed, "authentication failed: %s", tp.Message)
+			return nil, newErrorf(codeAuthFailed, "authentication failed: %s", tp.Message)
 
 		case *pgproto3.ReadyForQuery:
-			return nil
+			return backendKeyData, nil
 
 		default:
-			return newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
+			return nil, newErrorf(codeBackendDisconnected, "received unexpected backend message type: %v", tp)
 		}
 	}
 
-	return newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
+	return nil, newErrorf(codeBackendDisconnected, "authentication took more than %d iterations", i)
 }
