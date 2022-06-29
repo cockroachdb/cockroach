@@ -37,7 +37,7 @@ import {
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
-import { formatDate } from "antd/es/date-picker/utils";
+import { DATE_FORMAT } from "src/util/format";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -366,10 +366,7 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table =>
           !table.details.statsLastUpdated
             ? "No table statistics found"
-            : formatDate(
-                table.details.statsLastUpdated,
-                "MMM DD, YYYY [at] H:mm",
-              ),
+            : table.details.statsLastUpdated.format(DATE_FORMAT),
         sort: table => table.details.statsLastUpdated,
         className: cx("database-table__col--table-stats"),
         name: "tableStatsUpdated",
