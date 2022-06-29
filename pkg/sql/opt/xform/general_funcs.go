@@ -372,9 +372,7 @@ func (c *CustomFuncs) findConstantFilterCols(
 			}
 
 			datum := span.StartKey().Value(0)
-			if datum != tree.DNull {
-				constFilterCols[colID] = c.e.f.ConstructConstVal(datum, colTyp)
-			}
+			constFilterCols[colID] = c.e.f.ConstructConstVal(datum, colTyp)
 		}
 	}
 }
