@@ -3212,7 +3212,12 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (1, 1)`)
 
 		cf := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
-		defer closeFeed(t, cf)
+		jobID := cf.(cdctest.EnterpriseTestFeed).JobID()
+		defer func() {
+			// Manually update job status to avoid closeFeed waitng for the registry to cancel it
+			sqlDB.Exec(t, `UPDATE system.jobs SET status = $1 WHERE id = $2`, jobs.StatusFailed, jobID)
+			closeFeed(t, cf)
+		}()
 
 		assertPayloads(t, cf, []string{
 			`foo: [1]->{"after": {"a": 1, "b": 1}}`,
@@ -3220,7 +3225,6 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 
 		// Mimic the claim dying and being cleaned up by
 		// another node.
-		jobID := cf.(cdctest.EnterpriseTestFeed).JobID()
 		sqlDB.Exec(t, `UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`, jobID)
 
 		// Expect that the distflow fails since it can't

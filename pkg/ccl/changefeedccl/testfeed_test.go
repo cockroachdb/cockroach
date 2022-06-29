@@ -418,8 +418,17 @@ func (f *jobFeed) Close() error {
 			close(f.shutdown)
 			return nil
 		}
+		if status == string(jobs.StatusFailed) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.mu.terminalErr = errors.New("changefeed failed")
+			close(f.shutdown)
+			return nil
+		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
 			log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
+		} else {
+			return f.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusCanceled })
 		}
 	}
 

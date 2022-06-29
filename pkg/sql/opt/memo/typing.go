@@ -247,9 +247,18 @@ func typeArrayAgg(e opt.ScalarExpr) *types.T {
 	return types.MakeArray(typ)
 }
 
-// typeIndirection returns the type of the element of the array.
+// typeIndirection returns the type of the element after the indirection
+// is applied.
 func typeIndirection(e opt.ScalarExpr) *types.T {
-	return e.Child(0).(opt.ScalarExpr).DataType().ArrayContents()
+	t := e.Child(0).(opt.ScalarExpr).DataType()
+	switch t.Family() {
+	case types.JsonFamily:
+		return t
+	case types.ArrayFamily:
+		return t.ArrayContents()
+	default:
+		panic(errors.AssertionFailedf("unknown type indirection type %s", t.SQLString()))
+	}
 }
 
 // typeCollate returns the collated string typed with the given locale.
