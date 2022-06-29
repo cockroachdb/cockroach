@@ -63,4 +63,9 @@ message RemoveZoneConfig {
   CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
-
+// SetZoneConfigExtension is recorded when a zone config extension is changed.
+message SetZoneConfigExtension {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}

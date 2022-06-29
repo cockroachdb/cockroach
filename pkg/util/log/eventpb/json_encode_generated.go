@@ -3601,6 +3601,18 @@ func (m *SetZoneConfig) AppendJSONFields(printComma bool, b redact.RedactableByt
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *SetZoneConfigExtension) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonZoneConfigDetails.AppendJSONFields(printComma, b)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *SlowQuery) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

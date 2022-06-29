@@ -560,6 +560,8 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 			z.GC = &tempGC
 		}
 	}
+	// Replacing Constraints, VoterConstraints, LeasePreferences if the existing
+	// one was inherited.
 	if z.InheritedConstraints {
 		if !parent.InheritedConstraints {
 			z.Constraints = parent.Constraints

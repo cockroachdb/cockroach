@@ -292,3 +292,6 @@ func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SetZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *SetZoneConfigExtension) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
