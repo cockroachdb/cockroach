@@ -2923,7 +2923,7 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 		return nil, nil
 	}
 
-	reader, err := NewRocksDBBatchReader(data)
+	reader, err := NewPebbleBatchReader(data)
 	if err != nil {
 		return nil, err
 	}

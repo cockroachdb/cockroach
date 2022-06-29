@@ -293,7 +293,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 		if req.KVBatch != nil {
 			recordBytesReceived(int64(len(req.KVBatch)))
-			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
+			batchReader, err := storage.NewPebbleBatchReader(req.KVBatch)
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
 			}
