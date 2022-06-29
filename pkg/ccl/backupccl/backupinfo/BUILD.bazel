@@ -48,36 +48,16 @@ go_library(
 
 go_test(
     name = "backupinfo_test",
-    srcs = [
-        "backup_metadata_test.go",
-        "main_test.go",
-    ],
+    srcs = ["main_test.go"],
     embed = [":backupinfo"],
     deps = [
-        "//pkg/base",
-        "//pkg/blobs",
-        "//pkg/ccl/backupccl/backupbase",
-        "//pkg/ccl/backupccl/backuppb",
-        "//pkg/ccl/backupccl/backuputils",
         "//pkg/ccl/utilccl",
-        "//pkg/cloud",
-        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
-        "//pkg/security/username",
         "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/stats",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/hlc",
-        "//pkg/util/ioctx",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
     ],
 )
 
