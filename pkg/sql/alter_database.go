@@ -14,8 +14,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type alterDatabaseOwnerNode struct {
@@ -1715,6 +1718,218 @@ func (p *planner) AlterDatabaseSetZoneConfigExtension(
 }
 
 func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) error {
+	// Verify that the database is a multi-region database.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must have associated regions before a zone config extension can be set",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	yamlConfig, deleteZone, err := evaluateYAMLConfig(n.yamlConfig, params)
+	if err != nil {
+		return err
+	}
+
+	//TODO(janexing): do we need to inherit zone configuration information
+	//from parent?
+	optionsStr, _, setters, err := evaluateZoneOptions(n.options, params)
+	if err != nil {
+		return err
+	}
+
+	// Get the type descriptor for the multi-region enum.
+	typeID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	if err != nil {
+		return err
+	}
+	regionNames, err := typeDesc.RegionNames()
+	if err != nil {
+		return err
+	}
+
+	// Verify that the region is present in the database, if necessary.
+	if n.n.LocalityLevel == tree.LocalityLevelTable && n.n.RegionName != "" {
+		found := false
+		for _, region := range regionNames {
+			if region == catpb.RegionName(n.n.RegionName) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return pgerror.Newf(
+				pgcode.UndefinedObject,
+				"region %q has not been added to the database",
+				n.n.RegionName,
+			)
+		}
+	}
+
+	if deleteZone {
+		switch n.n.LocalityLevel {
+		case tree.LocalityLevelGlobal:
+			typeDesc.RegionConfig.ZoneConfigExtensions.Global = nil
+		case tree.LocalityLevelTable:
+			if n.n.RegionName != "" {
+				delete(typeDesc.RegionConfig.ZoneConfigExtensions.RegionalIn, catpb.RegionName(n.n.RegionName))
+			} else {
+				typeDesc.RegionConfig.ZoneConfigExtensions.Regional = nil
+			}
+		default:
+			return errors.AssertionFailedf("unexpected locality level %v", n.n.LocalityLevel)
+		}
+	} else {
+		// Validate the user input.
+		if len(yamlConfig) == 0 || yamlConfig[len(yamlConfig)-1] != '\n' {
+			// YAML values must always end with a newline character. If there is none,
+			// for UX convenience add one.
+			yamlConfig += "\n"
+		}
+
+		// Load settings from YAML. If there was no YAML (e.g. because the
+		// query specified CONFIGURE ZONE USING), the YAML string will be
+		// empty, in which case the unmarshaling will be a no-op. This is
+		// innocuous.
+		newZone := zonepb.NewZoneConfig()
+		if err := yaml.UnmarshalStrict([]byte(yamlConfig), newZone); err != nil {
+			return pgerror.Wrap(err, pgcode.CheckViolation, "could not parse zone config")
+		}
+
+		// Load settings from var = val assignments. If there were no such
+		// settings, (e.g. because the query specified CONFIGURE ZONE = or
+		// USING DEFAULT), the setter slice will be empty and this will be
+		// a no-op. This is innocuous.
+		for _, setter := range setters {
+			// A setter may fail with an error-via-panic. Catch those.
+			if err := func() (err error) {
+				defer func() {
+					if p := recover(); p != nil {
+						if errP, ok := p.(error); ok {
+							// Catch and return the error.
+							err = errP
+						} else {
+							// Nothing we know about, let it continue as a panic.
+							panic(p)
+						}
+					}
+				}()
+
+				setter(newZone)
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+
+		// Validate that there are no conflicts in the zone setup.
+		if err := validateNoRepeatKeysInZone(newZone); err != nil {
+			return err
+		}
+
+		if err := validateZoneAttrsAndLocalities(params.ctx, params.p.ExecCfg(), newZone); err != nil {
+			return err
+		}
+
+		// Finally revalidate everything. Validate only the completeZone config.
+		if err := newZone.Validate(); err != nil {
+			return pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
+		}
+
+		// WIP: (nvanbenschoten) do we want to do this?
+		// (janexing): I don't think so, since the newZone here is not the final
+		// state of the updated zone config.
+		//// Finally check for the extra protection partial zone configs would
+		//// require from changes made to parent zones. The extra protections are:
+		////
+		//// RangeMinBytes and RangeMaxBytes must be set together
+		//// LeasePreferences cannot be set unless Constraints/VoterConstraints are
+		//// explicitly set
+		//// Per-replica constraints cannot be set unless num_replicas is explicitly
+		//// set
+		//// Per-voter constraints cannot be set unless num_voters is explicitly set
+		//if err := newZone.ValidateTandemFields(); err != nil {
+		//	err = errors.Wrap(err, "could not validate zone config")
+		//	err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		//	err = errors.WithHint(err,
+		//		"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
+		//	return err
+		//}
+
+		switch n.n.LocalityLevel {
+		case tree.LocalityLevelGlobal:
+			typeDesc.RegionConfig.ZoneConfigExtensions.Global = newZone
+		case tree.LocalityLevelTable:
+			if n.n.RegionName != "" {
+				if typeDesc.RegionConfig.ZoneConfigExtensions.RegionalIn == nil {
+					typeDesc.RegionConfig.ZoneConfigExtensions.RegionalIn = make(map[catpb.RegionName]zonepb.ZoneConfig)
+				}
+				typeDesc.RegionConfig.ZoneConfigExtensions.RegionalIn[catpb.RegionName(n.n.RegionName)] = *newZone
+			} else {
+				typeDesc.RegionConfig.ZoneConfigExtensions.Regional = newZone
+			}
+		default:
+			return errors.AssertionFailedf("unexpected locality level %v", n.n.LocalityLevel)
+		}
+	}
+
+	if err := params.p.writeTypeSchemaChange(
+		params.ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	updatedRegionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		updatedRegionConfig,
+		params.p.txn,
+		params.p.execCfg,
+		params.p.Descriptors(),
+	); err != nil {
+		return err
+	}
+
+	// Update all tables' zone configurations.
+	if err := params.p.refreshZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
+	// Record that the change has occurred for auditing.
+	eventDetails := eventpb.CommonZoneConfigDetails{
+		Target:  tree.AsStringWithFQNames(n.n, params.Ann()),
+		Config:  strings.TrimSpace(yamlConfig),
+		Options: optionsStr,
+	}
+	var info eventpb.EventPayload
+	if deleteZone {
+		info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
+	} else {
+		// TODO(janexin): it should be AlterDatabasePlacement or SetZoneConfig?
+		// or we should make a new event type for it?
+		info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails}
+	}
+	if err := params.p.logEvent(params.ctx, n.desc.ID, info); err != nil {
+		return err
+	}
+
 	return nil
 }
 

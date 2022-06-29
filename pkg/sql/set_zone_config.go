@@ -340,17 +340,13 @@ type setZoneConfigRun struct {
 // and expects to see its own writes.
 func (n *setZoneConfigNode) ReadingOwnWrites() {}
 
-func (n *setZoneConfigNode) startExec(params runParams) error {
+func evaluateYAMLConfig(expr tree.TypedExpr, params runParams) (string, bool, error) {
 	var yamlConfig string
-	var setters []func(c *zonepb.ZoneConfig)
 	deleteZone := false
-
-	// Evaluate the configuration input.
-	if n.yamlConfig != nil {
-		// From a YAML string.
-		datum, err := eval.Expr(params.EvalContext(), n.yamlConfig)
+	if expr != nil {
+		datum, err := eval.Expr(params.EvalContext(), expr)
 		if err != nil {
-			return err
+			return "", false, err
 		}
 		switch val := datum.(type) {
 		case *tree.DString:
@@ -364,9 +360,16 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We'll add back the missing newline below.
 		yamlConfig = strings.TrimSpace(yamlConfig)
 	}
+	return yamlConfig, deleteZone, nil
+}
+
+func evaluateZoneOptions(
+	options map[tree.Name]optionValue, params runParams,
+) ([]string, []tree.Name, []func(c *zonepb.ZoneConfig), error) {
 	var optionsStr []string
 	var copyFromParentList []tree.Name
-	if n.options != nil {
+	var setters []func(c *zonepb.ZoneConfig)
+	if options != nil {
 		// Set from var = value attributes.
 		//
 		// We iterate over zoneOptionKeys instead of iterating over
@@ -374,7 +377,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// the event log remains deterministic.
 		for i := range zoneOptionKeys {
 			name := (*tree.Name)(&zoneOptionKeys[i])
-			val, ok := n.options[*name]
+			val, ok := options[*name]
 			if !ok {
 				continue
 			}
@@ -391,22 +394,35 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			}
 			datum, err := eval.Expr(params.EvalContext(), expr)
 			if err != nil {
-				return err
+				return nil, nil, nil, err
 			}
 			if datum == tree.DNull {
-				return pgerror.Newf(pgcode.InvalidParameterValue,
+				return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
 			opt := supportedZoneConfigOptions[*name]
 			if opt.checkAllowed != nil {
 				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum); err != nil {
-					return err
+					return nil, nil, nil, err
 				}
 			}
 			setter := opt.setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}
+	}
+	return optionsStr, copyFromParentList, setters, nil
+}
+
+func (n *setZoneConfigNode) startExec(params runParams) error {
+	yamlConfig, deleteZone, err := evaluateYAMLConfig(n.yamlConfig, params)
+	if err != nil {
+		return err
+	}
+
+	optionsStr, copyFromParentList, setters, err := evaluateZoneOptions(n.options, params)
+	if err != nil {
+		return err
 	}
 
 	telemetry.Inc(
