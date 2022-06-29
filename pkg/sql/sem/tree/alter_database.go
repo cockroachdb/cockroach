@@ -195,6 +195,24 @@ type AlterDatabaseSetZoneConfigExtension struct {
 	Options    KVOptions
 }
 
+// GetYAMLConfig returns the YAMLConfig stored in
+// AlterDatabaseSetZoneConfigExtension.
+func (node *AlterDatabaseSetZoneConfigExtension) GetYAMLConfig() Expr {
+	return node.YAMLConfig
+}
+
+// GetOptions returns the zone config options stored in
+// AlterDatabaseSetZoneConfigExtension
+func (node *AlterDatabaseSetZoneConfigExtension) GetOptions() KVOptions {
+	return node.Options
+}
+
+// ZoneConfigSettings contains methods for zone config setting statement.
+type ZoneConfigSettings interface {
+	GetYAMLConfig() Expr
+	GetOptions() KVOptions
+}
+
 var _ Statement = &AlterDatabaseSetZoneConfigExtension{}
 
 // Format implements the NodeFormatter interface.
