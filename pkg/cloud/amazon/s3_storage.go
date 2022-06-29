@@ -13,6 +13,7 @@ package amazon
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"io"
 	"net/url"
 	"path"
@@ -22,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -239,29 +239,6 @@ func MakeS3Storage(
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
-	case cloud.AuthParamAssume:
-		{
-			if conf.RoleArn == "" {
-				return nil, errors.Errorf(
-					"%s is set to '%s', but %s must be set",
-					cloud.AuthParam,
-					cloud.AuthParamAssume,
-					AWSRoleArnParam,
-				)
-			}
-			// User can specify the account that is assuming the role, or if left
-			// unspecified, it will be retrieved from the default credentials
-			// chain.
-			if (conf.AccessKey == "") != (conf.Secret == "") {
-				return nil, errors.Errorf(
-					"%s is set to '%s', but %s and %s must both be set for a specified user or neither for implicit",
-					cloud.AuthParam,
-					cloud.AuthParamAssume,
-					AWSAccessKeyParam,
-					AWSSecretParam,
-				)
-			}
-		}
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
@@ -375,15 +352,20 @@ func newClient(
 		if err != nil {
 			return s3Client{}, "", errors.Wrap(err, "new aws session")
 		}
-	case cloud.AuthParamAssume:
-		if conf.accessKey != "" {
-			opts.Config.WithCredentials(credentials.NewStaticCredentials(conf.accessKey, conf.secret, conf.tempToken))
+	}
+
+	if conf.roleArn != "" {
+		roles := strings.Split(conf.roleArn, ",")
+
+		for _, role := range roles {
+			intermediateCreds := stscreds.NewCredentials(sess, role)
+			opts.Config.Credentials = intermediateCreds
+
+			sess, err = session.NewSessionWithOptions(opts)
+			if err != nil {
+				return s3Client{}, "", errors.Wrap(err, "session with intermediate credentials")
+			}
 		}
-		sess, err = session.NewSessionWithOptions(opts)
-		if err != nil {
-			return s3Client{}, "", errors.Wrap(err, "new aws session")
-		}
-		sess.Config.Credentials = stscreds.NewCredentials(sess, conf.roleArn)
 	}
 
 	region := conf.region

@@ -11,15 +11,10 @@
 package gcp
 
 import (
+	gcs "cloud.google.com/go/storage"
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
-	"net/url"
-	"path"
-	"strings"
-
-	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,6 +30,10 @@ import (
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"io"
+	"net/url"
+	"path"
+	"strings"
 )
 
 const (
@@ -46,6 +45,7 @@ const (
 	CredentialsParam = "CREDENTIALS"
 	// AssumeRoleParam is the email of the service account to assume.
 	AssumeRoleParam = "ASSUME_ROLE"
+
 	// BearerTokenParam is the query parameter for a temporary bearer token. There
 	// is no refresh mechanism associated with this token, so it is up to the user
 	// to ensure that its TTL is longer than the duration of the job or query that
@@ -212,6 +212,7 @@ func createImpersonateCredentials(
 	cfg := impersonate.CredentialsConfig{
 		TargetPrincipal: impersonateTarget,
 		Scopes:          scopes,
+		Delegates:       []string{"rui-limited-access@cockroach-ephemeral.iam.gserviceaccount.com"},
 	}
 
 	source, err := impersonate.CredentialsTokenSource(ctx, cfg, authOpts...)
@@ -255,7 +256,7 @@ func (g *gcsStorage) ReadFileAt(
 	r := cloud.NewResumingReader(ctx,
 		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
-		}, // opener
+		},   // opener
 		nil, //  reader
 		offset,
 		cloud.IsResumableHTTPError,

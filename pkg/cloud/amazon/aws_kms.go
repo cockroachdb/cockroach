@@ -135,31 +135,6 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
 		opts.SharedConfigState = session.SharedConfigEnable
-	case cloud.AuthParamAssume:
-		if kmsURIParams.roleArn == "" {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s must be set",
-				cloud.AuthParam,
-				cloud.AuthParamAssume,
-				AWSRoleArnParam,
-			)
-		}
-		// User can specify the account that is assuming the role, or if left
-		// unspecified, it will be retrieved from the default credentials
-		// chain.
-		if (kmsURIParams.accessKey == "") != (kmsURIParams.secret == "") {
-			return nil, errors.Errorf(
-				"%s is set to '%s', but %s and %s must both be set for a specified user or neither for implicit",
-				cloud.AuthParam,
-				cloud.AuthParamAssume,
-				AWSAccessKeyParam,
-				AWSSecretParam,
-			)
-		} else if kmsURIParams.accessKey != "" {
-			// Account that is doing the AssumeRole is specified by the user,
-			// so pass in the access key and secret when creating the session.
-			opts.Config.MergeIn(awsConfig)
-		}
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
@@ -169,8 +144,18 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		return nil, errors.Wrap(err, "new aws session")
 	}
 
-	if kmsURIParams.auth == cloud.AuthParamAssume {
-		sess.Config.Credentials = stscreds.NewCredentials(sess, kmsURIParams.roleArn)
+	if kmsURIParams.roleArn != "" {
+		roles := strings.Split(kmsURIParams.roleArn, ",")
+
+		for _, role := range roles {
+			intermediateCreds := stscreds.NewCredentials(sess, role)
+			opts.Config.Credentials = intermediateCreds
+
+			sess, err = session.NewSessionWithOptions(opts)
+			if err != nil {
+				return nil, errors.Wrap(err, "session with intermediate credentials")
+			}
+		}
 	}
 
 	if region == "" {
