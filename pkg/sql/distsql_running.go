@@ -1448,7 +1448,13 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	physPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, planCtx, plan)
 	if err != nil {
 		recv.SetError(err)
-		return physPlanCleanup
+		return func() {
+			// Make sure to close the current plan in case of a physical
+			// planning error. Usually, this is done in runCleanup() below, but
+			// we won't get to that point, so we have to do so here.
+			planCtx.planner.curPlan.close(ctx)
+			physPlanCleanup()
+		}
 	}
 	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
