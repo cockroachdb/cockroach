@@ -121,6 +121,7 @@ message NetworkTxStats {
 message KVStats {
   optional util.optional.Uint bytes_read = 1 [(gogoproto.nullable) = false];
   optional util.optional.Uint tuples_read = 2 [(gogoproto.nullable) = false];
+  optional util.optional.Uint batch_requests_issued = 9 [(gogoproto.nullable) = false];
 
   // Cumulated time spent waiting for a KV request. This includes disk IO time
   // and potentially network time (if any of the keys are not local).

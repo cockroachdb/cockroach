@@ -70,6 +70,9 @@ type KVReader interface {
 	// GetRowsRead returns the number of rows read from KV by this operator.
 	// It must be safe for concurrent use.
 	GetRowsRead() int64
+	// GetBatchRequestsIssued returns the number of BatchRequests issued to KV
+	// by this operator. It must be safe for concurrent use.
+	GetBatchRequestsIssued() int64
 	// GetCumulativeContentionTime returns the amount of time KV reads spent
 	// contending. It must be safe for concurrent use.
 	GetCumulativeContentionTime() time.Duration

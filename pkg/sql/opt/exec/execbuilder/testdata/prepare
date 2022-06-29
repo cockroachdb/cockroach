@@ -115,7 +115,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 1 (8 B)
+rows read from KV: 1 (8 B, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -128,6 +128,7 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 1
   KV bytes read: 8 B
+  KV gRPC calls: 1
   estimated max memory allocated: 0 B
   estimated row count: 0
   table: ab@ab_pkey
@@ -152,6 +153,7 @@ regions: <hidden>
   KV contention time: 0µs
   KV rows read: 0
   KV bytes read: 0 B
+  KV gRPC calls: 0
   estimated max memory allocated: 0 B
   estimated row count: 0
   table: ab@ab_pkey

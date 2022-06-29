@@ -324,10 +324,11 @@ type ExecutionStats struct {
 	// operator.
 	VectorizedBatchCount optional.Uint
 
-	KVTime           optional.Duration
-	KVContentionTime optional.Duration
-	KVBytesRead      optional.Uint
-	KVRowsRead       optional.Uint
+	KVTime                optional.Duration
+	KVContentionTime      optional.Duration
+	KVBytesRead           optional.Uint
+	KVRowsRead            optional.Uint
+	KVBatchRequestsIssued optional.Uint
 
 	StepCount         optional.Uint
 	InternalStepCount optional.Uint
