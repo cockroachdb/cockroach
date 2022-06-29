@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -153,17 +153,7 @@ func ingestionPlanHook(
 		}
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-		// Empty start time indicates initial scan is enabled.
-		startTime := hlc.Timestamp{}
-		if ingestionStmt.AsOf.Expr != nil {
-			asOf, err := p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
-			if err != nil {
-				return err
-			}
-			startTime = asOf.Timestamp
-		}
-
-		//TODO(casper): make target to be tenant-only.
+		// TODO(casper): make target to be tenant-only.
 		oldTenantID := roachpb.MakeTenantID(ingestionStmt.Targets.TenantID.ID)
 		newTenantID := oldTenantID
 		if ingestionStmt.AsTenant.Specified {
@@ -179,6 +169,8 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
+		// Create the producer job first for the purpose of observability,
+		// user is able to know the producer job id immediately after executing the RESTORE.
 		streamID, err := client.Create(ctx, oldTenantID)
 		if err != nil {
 			return err
@@ -193,7 +185,6 @@ func ingestionPlanHook(
 			StreamID:      uint64(streamID),
 			TenantID:      oldTenantID,
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
-			StartTime:     startTime,
 			NewTenantID:   newTenantID,
 		}
 
@@ -215,11 +206,14 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID()))}
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())), tree.NewDInt(tree.DInt(streamID))}
 		return nil
 	}
 
-	return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
+	return fn, colinfo.ResultColumns{
+		{Name: "ingestion_job_id", Typ: types.Int},
+		{Name: "producer_job_id", Typ: types.Int},
+	}, nil, false, nil
 }
 
 func init() {
