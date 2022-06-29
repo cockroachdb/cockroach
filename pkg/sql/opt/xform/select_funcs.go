@@ -415,7 +415,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 	sb.Init(c, scanPrivate.Table)
 
-	// Check constraint and computed column filters
+	// Build optional filters from check constraint and computed column filters.
 	optionalFilters, filterColumns :=
 		c.GetOptionalFiltersAndFilterColumns(explicitFilters, scanPrivate)
 
@@ -424,7 +424,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 
-		// A structure describing which index partitions are local to the gateway region
+		// Create a prefix sorter that describes which index partitions are
+		// local to the gateway region.
 		prefixSorter, _ := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx)
 
 		// Build Constraints to scan a subset of the table Spans.
@@ -491,7 +492,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // tryFoldComputedCol tries to reduce the computed column with the given column
 // ID into a constant value, by evaluating it with respect to a set of other
 // columns that are constant. If the computed column is constant, enter it into
-// the constCols map and return false. Otherwise, return false.
+// the constCols map and return true. Otherwise, return false.
 //
 func (c *CustomFuncs) tryFoldComputedCol(
 	tabMeta *opt.TableMeta, computedColID opt.ColumnID, constCols constColsMap,
