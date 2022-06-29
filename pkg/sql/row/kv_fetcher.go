@@ -43,7 +43,8 @@ type KVFetcher struct {
 	// Observability fields.
 	// Note: these need to be read via an atomic op.
 	atomics struct {
-		bytesRead int64
+		bytesRead           int64
+		batchRequestsIssued *int64
 	}
 }
 
@@ -73,9 +74,10 @@ func NewKVFetcher(
 	forceProductionKVBatchSize bool,
 ) *KVFetcher {
 	var sendFn sendFunc
+	var batchRequestsIssued int64
 	// Avoid the heap allocation by allocating sendFn specifically in the if.
 	if bsHeader == nil {
-		sendFn = makeKVBatchFetcherDefaultSendFunc(txn)
+		sendFn = makeKVBatchFetcherDefaultSendFunc(txn, &batchRequestsIssued)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
@@ -94,6 +96,7 @@ func NewKVFetcher(
 			if pErr != nil {
 				return nil, pErr.GoError()
 			}
+			batchRequestsIssued++
 			return br, nil
 		}
 	}
@@ -114,7 +117,7 @@ func NewKVFetcher(
 		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
 		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 	}
-	return newKVFetcher(newKVBatchFetcher(fetcherArgs))
+	return newKVFetcher(newKVBatchFetcher(fetcherArgs), &batchRequestsIssued)
 }
 
 // NewStreamingKVFetcher returns a new KVFetcher that utilizes the provided
@@ -136,6 +139,7 @@ func NewStreamingKVFetcher(
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
 ) *KVFetcher {
+	var batchRequestsIssued int64
 	streamer := kvstreamer.NewStreamer(
 		distSender,
 		stopper,
@@ -144,6 +148,7 @@ func NewStreamingKVFetcher(
 		getWaitPolicy(lockWaitPolicy),
 		streamerBudgetLimit,
 		streamerBudgetAcc,
+		&batchRequestsIssued,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -158,13 +163,15 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc), &batchRequestsIssued)
 }
 
-func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
-	return &KVFetcher{
+func newKVFetcher(batchFetcher KVBatchFetcher, batchRequestsIssued *int64) *KVFetcher {
+	f := &KVFetcher{
 		KVBatchFetcher: batchFetcher,
 	}
+	f.atomics.batchRequestsIssued = batchRequestsIssued
+	return f
 }
 
 // GetBytesRead returns the number of bytes read by this fetcher. It is safe for
@@ -176,14 +183,14 @@ func (f *KVFetcher) GetBytesRead() int64 {
 	return atomic.LoadInt64(&f.atomics.bytesRead)
 }
 
-// ResetBytesRead resets the number of bytes read by this fetcher and returns
-// the number before the reset. It is safe for concurrent use and is able to
+// GetBatchRequestsIssued returns the number of BatchRequests issued by this
+// fetcher throughout its lifetime. It is safe for concurrent use and is able to
 // handle a case of uninitialized fetcher.
-func (f *KVFetcher) ResetBytesRead() int64 {
+func (f *KVFetcher) GetBatchRequestsIssued() int64 {
 	if f == nil {
 		return 0
 	}
-	return atomic.SwapInt64(&f.atomics.bytesRead, 0)
+	return atomic.LoadInt64(f.atomics.batchRequestsIssued)
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
