@@ -76,6 +76,8 @@ import {
   TimeScale,
   toDateRange,
   timeScaleToString,
+  timeScale1hMinOptions,
+  getValidOption,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
@@ -192,6 +194,14 @@ export class StatementsPage extends React.Component<
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(defaultState, stateFromHistory);
     this.activateDiagnosticsRef = React.createRef();
+
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
+    if (ts !== this.props.timeScale) {
+      this.changeTimeScale(ts);
+    }
   }
 
   static defaultProps: Partial<StatementsPageProps> = {
@@ -667,6 +677,7 @@ export class StatementsPage extends React.Component<
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
             <TimeScaleDropdown
+              options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
             />
