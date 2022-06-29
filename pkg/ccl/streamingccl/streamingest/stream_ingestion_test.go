@@ -41,10 +41,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getHighWaterMark(jobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
+func getHighWaterMark(ingestionJobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
-		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
+		`SELECT progress FROM system.jobs WHERE id = $1`, ingestionJobID,
 	).Scan(&progressBytes); err != nil {
 		return nil, err
 	}
@@ -161,8 +161,8 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
 	require.NoError(t, err)
 
-	var jobID int
-	require.NoError(t, conn.QueryRow(query).Scan(&jobID))
+	var ingestionJobID, producerJobID int
+	require.NoError(t, conn.QueryRow(query).Scan(&ingestionJobID, &producerJobID))
 
 	// Start the ingestion stream and wait for at least one AddSSTable to ensure the job is running.
 	allowResponse <- struct{}{}
@@ -176,7 +176,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// Ensure that the job has made some progress.
 	var highwater hlc.Timestamp
 	testutils.SucceedsSoon(t, func() error {
-		hw, err := getHighWaterMark(jobID, conn)
+		hw, err := getHighWaterMark(ingestionJobID, conn)
 		require.NoError(t, err)
 		if hw == nil {
 			return errors.New("highwatermark is unset, no progress has been reported")
@@ -191,7 +191,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// Pick a cutover time just before the latest resolved timestamp.
 	cutoverTime := timeutil.Unix(0, highwater.WallTime).UTC().Add(-1 * time.Microsecond).Round(time.Microsecond)
 	_, err = conn.Exec(`SELECT crdb_internal.complete_stream_ingestion_job ($1, $2)`,
-		jobID, cutoverTime)
+		ingestionJobID, cutoverTime)
 	require.NoError(t, err)
 
 	// Wait for the job to issue a revert request.
@@ -203,7 +203,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// Wait for the ingestion job to have been marked as succeeded.
 	testutils.SucceedsSoon(t, func() error {
 		var status string
-		sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&status)
+		sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, ingestionJobID).Scan(&status)
 		if jobs.Status(status) != jobs.StatusSucceeded {
 			return errors.New("job not in succeeded state")
 		}

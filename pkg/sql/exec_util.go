@@ -1563,7 +1563,7 @@ func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
 type StreamingTestingKnobs struct {
 	// RunAfterReceivingEvent allows blocking the stream ingestion processor after
 	// a single event has been received.
-	RunAfterReceivingEvent func(ctx context.Context)
+	RunAfterReceivingEvent func(ctx context.Context) error
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
