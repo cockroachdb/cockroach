@@ -1684,3 +1684,103 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		return errors.Errorf("Repeat check for correct leaseholder")
 	})
 }
+
+// TestReplicateQueueAcquiresInvalidLeases asserts that following a restart,
+// leases are invalidated and that the replicate queue acquires invalid leases
+// when enabled.
+func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.NumReplicas = proto.Int32(1)
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			// Disable the replication queue initially, to assert on the lease
+			// statuses pre and post enabling the replicate queue.
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				DisableDefaultTestTenant: true,
+				ScanMinIdleTime:          time.Millisecond,
+				ScanMaxIdleTime:          time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry:      stickyEngineRegistry,
+						DefaultZoneConfigOverride: &zcfg,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Conns[0]
+	// Disable consistency checker and sql stats collection that may acquire a
+	// lease by querying a range.
+	_, err := db.Exec("set cluster setting server.consistency_check.interval = '0s'")
+	require.NoError(t, err)
+	_, err = db.Exec("set cluster setting sql.stats.automatic_collection.enabled = false")
+	require.NoError(t, err)
+
+	// Create ranges to assert on their lease status post restart and after
+	// replicate queue processing.
+	ranges := 30
+	scratchRangeKeys := make([]roachpb.Key, ranges)
+	splitKey := tc.ScratchRange(t)
+	for i := range scratchRangeKeys {
+		_, _ = tc.SplitRangeOrFatal(t, splitKey)
+		scratchRangeKeys[i] = splitKey
+		splitKey = splitKey.Next()
+	}
+
+	invalidLeases := func() []kvserverpb.LeaseStatus {
+		invalid := make([]kvserverpb.LeaseStatus, 0, 1)
+		for _, key := range scratchRangeKeys {
+			// Assert that the lease is invalid after restart.
+			repl := tc.GetRaftLeader(t, roachpb.RKey(key))
+			if leaseStatus := repl.CurrentLeaseStatus(ctx); !leaseStatus.IsValid() {
+				invalid = append(invalid, leaseStatus)
+			}
+		}
+		return invalid
+	}
+
+	// Assert that the leases are valid initially.
+	require.Len(t, invalidLeases(), 0)
+
+	// Restart the servers to invalidate the leases.
+	for i := range tc.Servers {
+		tc.StopServer(i)
+		err = tc.RestartServerWithInspect(i, nil)
+		require.NoError(t, err)
+	}
+
+	forceProcess := func() {
+		// Speed up the queue processing.
+		for _, s := range tc.Servers {
+			err := s.Stores().VisitStores(func(store *kvserver.Store) error {
+				return store.ForceReplicationScanAndProcess()
+			})
+			require.NoError(t, err)
+		}
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Assert that at least the scratch range leases are invalid after restart.
+		invalidLeaseList := invalidLeases()
+		require.GreaterOrEqual(t, len(invalidLeaseList), ranges)
+		return nil
+	})
+
+	toggleReplicationQueues(tc, true /* active */)
+	testutils.SucceedsSoon(t, func() error {
+		forceProcess()
+		// Assert that there are now no invalid leases.
+		require.Len(t, invalidLeases(), 0)
+		return nil
+	})
+}
