@@ -81,7 +81,7 @@ func NewClosedSessionCache(
 
 	c.mu.acc = monitor.MakeBoundAccount()
 	c.mon = monitor
-	c.mon.Start(context.Background(), parentMon, mon.BoundAccount{})
+	c.mon.StartNoReserved(context.Background(), parentMon)
 	return c
 }
 

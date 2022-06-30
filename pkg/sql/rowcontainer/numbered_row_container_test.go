@@ -44,7 +44,7 @@ func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor
 }
 
@@ -83,7 +83,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 		fmt.Printf("using smallMemoryBudget to spill to disk\n")
 		memoryBudget = smallMemoryBudget
 	}
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(int64(memoryBudget)))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(int64(memoryBudget)))
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
@@ -169,7 +169,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	// This memory budget allows for some caching, but typically cannot
 	// cache all the rows.
 	const memoryBudget = 12000
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(memoryBudget))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(memoryBudget))
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
@@ -463,7 +463,7 @@ func makeMemMonitorAndStart(
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(budget))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(budget))
 	return memoryMonitor
 }
 

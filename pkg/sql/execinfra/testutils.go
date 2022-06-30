@@ -95,7 +95,7 @@ func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMoni
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	memMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	return memMonitor
 }
 
@@ -111,7 +111,7 @@ func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 		math.MaxInt64,
 		st,
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	return diskMonitor
 }
 

@@ -141,12 +141,12 @@ func MakeServer(
 		workerSem:      workerSem,
 	}
 
-	s.workerMemMonitor.Start(ctx, memoryMonitor, mon.BoundAccount{})
+	s.workerMemMonitor.StartNoReserved(ctx, memoryMonitor)
 	stopper.AddCloser(stop.CloserFn(func() {
 		s.workerMemMonitor.Stop(ctx)
 	}))
 
-	s.resultMemMonitor.Start(ambient.AnnotateCtx(context.Background()), memoryMonitor, mon.BoundAccount{})
+	s.resultMemMonitor.StartNoReserved(ambient.AnnotateCtx(context.Background()), memoryMonitor)
 	stopper.AddCloser(stop.CloserFn(func() {
 		s.resultMemMonitor.Stop(ctx)
 	}))

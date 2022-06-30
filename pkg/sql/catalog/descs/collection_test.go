@@ -632,7 +632,7 @@ func TestKVDescriptorsProperlyUsesMemoryMonitoring(t *testing.T) {
 		nil, nil, -1, 0, cluster.MakeTestingClusterSettings())
 
 	// Start the monitor with unlimited budget.
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	// Create a `Collection` with monitor hooked up.
 	col := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
@@ -650,7 +650,7 @@ func TestKVDescriptorsProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Restart the monitor to a smaller budget (in fact, let's be bold by setting it to be only one byte below
 	// what has been allocated in the previous round).
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(allocatedMemoryInBytes-1))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(allocatedMemoryInBytes-1))
 	require.Equal(t, int64(0), monitor.AllocBytes())
 
 	// Repeat the process again and assert this time memory allocation will err out.

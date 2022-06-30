@@ -155,7 +155,7 @@ func (s *Server) serveConn(
 	ctx context.Context,
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	connStart time.Time,
 	authOpt authOptions,
 ) {
@@ -276,7 +276,7 @@ func (c *conn) serveImpl(
 	ctx context.Context,
 	draining func() bool,
 	sqlServer *sql.Server,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	authOpt authOptions,
 ) {
 	defer func() { _ = c.conn.Close() }()
@@ -632,7 +632,7 @@ func (c *conn) processCommandsAsync(
 	authOpt authOptions,
 	ac AuthConn,
 	sqlServer *sql.Server,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	cancelConn func(),
 	onDefaultIntSizeChange func(newSize int32),
 ) <-chan error {

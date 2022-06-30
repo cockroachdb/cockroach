@@ -251,7 +251,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
 	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
-	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
+	kvFeedMemMon.StartNoReserved(ctx, pool)
 	ca.kvFeedMemMon = kvFeedMemMon
 
 	// The job registry has a set of metrics used to monitor the various jobs it

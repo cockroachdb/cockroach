@@ -108,7 +108,7 @@ func MakeInternalExecutor(
 		math.MaxInt64, /* noteworthy */
 		settings,
 	)
-	monitor.Start(ctx, s.pool, mon.BoundAccount{})
+	monitor.StartNoReserved(ctx, s.pool)
 	return InternalExecutor{
 		s:          s,
 		mon:        monitor,
@@ -203,7 +203,7 @@ func (ie *InternalExecutor) initConnEx(
 
 	wg.Add(1)
 	go func() {
-		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}

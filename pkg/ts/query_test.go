@@ -403,7 +403,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 				math.MaxInt64,
 				cluster.MakeTestingClusterSettings(),
 			)
-			adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+			adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 			defer adjustedMon.Stop(context.Background())
 
 			query := tm.makeQuery("test.metric", resolution1ns, 11, 109)
@@ -419,7 +419,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 			} {
 				// Limit memory in use by model. Reset memory monitor to get new maximum.
 				adjustedMon.Stop(context.Background())
-				adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+				adjustedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 				if adjustedMon.MaximumBytes() != 0 {
 					t.Fatalf("maximum bytes was %d, wanted zero", adjustedMon.MaximumBytes())
 				}
@@ -481,7 +481,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 			100,
 			cluster.MakeTestingClusterSettings(),
 		)
-		limitedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+		limitedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 		defer limitedMon.Stop(context.Background())
 
 		// Assert correctness with no memory pressure.
@@ -503,7 +503,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 
 		// Start/Stop limited monitor to reset maximum allocation.
 		limitedMon.Stop(context.Background())
-		limitedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+		limitedMon.StartNoReserved(context.Background(), tm.workerMemMonitor)
 
 		var (
 			memStatsBefore runtime.MemStats

@@ -118,7 +118,7 @@ func TestSampleReservoir(t *testing.T) {
 						math.MaxInt64,
 						st,
 					)
-					monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+					monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 					memAcc := monitor.MakeBoundAccount()
 					expectedK := k
 					if mem == 1<<8 && n > 1 && k > 1 {

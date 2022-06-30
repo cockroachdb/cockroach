@@ -219,7 +219,7 @@ func DefaultTestTempStorageConfigWithSize(
 		maxSizeBytes/10, /* noteworthy */
 		st,
 	)
-	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
