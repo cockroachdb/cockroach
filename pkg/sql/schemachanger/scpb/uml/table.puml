@@ -255,6 +255,12 @@ object ObjectParent
 ObjectParent :  ObjectID
 ObjectParent :  ParentSchemaID
 
+object EnumTypeValue
+
+EnumTypeValue :  TypeID
+EnumTypeValue : []PhysicalRepresentation
+EnumTypeValue :  LogicalRepresentation
+
 Table <|-- ColumnFamily
 Table <|-- Column
 View <|-- Column
@@ -331,4 +337,5 @@ EnumType <|-- ObjectParent
 Table <|-- ObjectParent
 View <|-- ObjectParent
 Sequence <|-- ObjectParent
+EnumType <|-- EnumTypeValue
 @enduml

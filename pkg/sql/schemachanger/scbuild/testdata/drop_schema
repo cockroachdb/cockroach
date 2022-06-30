@@ -227,7 +227,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
       usesSequenceIds:
       - 106
     tableId: 107
-- [[ColumnFamily:{DescID: 107, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+- [[ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   details:
     name: primary
     tableId: 107
@@ -709,6 +709,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[EnumType:{DescID: 112}, ABSENT], PUBLIC]
   details:
     arrayTypeId: 113
+    typeId: 112
+- [[EnumTypeValue:{DescID: 112, Name: a}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
     typeId: 112
 - [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   details:
