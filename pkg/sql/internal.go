@@ -97,8 +97,20 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 
 // MakeInternalExecutor creates an InternalExecutor.
 func MakeInternalExecutor(
-	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
+	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
 ) InternalExecutor {
+	return InternalExecutor{
+		s:          s,
+		mon:        monitor,
+		memMetrics: memMetrics,
+	}
+}
+
+// MakeInternalExecutorMemMonitor creates and starts memory monitor for an
+// InternalExecutor.
+func MakeInternalExecutorMemMonitor(
+	memMetrics MemoryMetrics, settings *cluster.Settings,
+) *mon.BytesMonitor {
 	monitor := mon.NewMonitor(
 		"internal SQL executor",
 		mon.MemoryResource,
@@ -108,12 +120,8 @@ func MakeInternalExecutor(
 		math.MaxInt64, /* noteworthy */
 		settings,
 	)
-	monitor.StartNoReserved(ctx, s.pool)
-	return InternalExecutor{
-		s:          s,
-		mon:        monitor,
-		memMetrics: memMetrics,
-	}
+
+	return monitor
 }
 
 // SetSessionData binds the session variables that will be used by queries
