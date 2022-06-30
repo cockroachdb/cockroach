@@ -4811,6 +4811,10 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					}
 				}
 			}
+			if err := ExperimentalMVCCDeleteRangeUsingTombstone(ctx, engine, ms, roachpb.Key("r"),
+				roachpb.Key("r-del").Next(), ts2, hlc.ClockTimestamp{}, nil, nil, 0); err != nil {
+				t.Fatal(err)
+			}
 			if log.V(1) {
 				kvsn, err := Scan(engine, localMax, keyMax, 0)
 				if err != nil {
