@@ -318,8 +318,8 @@ type Planner interface {
 		qargs ...interface{}) (tree.Datums, error)
 
 	// QueryIteratorEx executes the query, returning an iterator that can be used
-	// to get the results. If the call is successful, the returned iterator
-	// *must* be closed.
+	// to get the results. If the call is successful, the returned function
+	// ** must ** be called to close the InternalExecutor and InternalRows.
 	//
 	// The fields set in session that are set override the respective fields if they
 	// have previously been set through SetSessionData().
@@ -329,7 +329,7 @@ type Planner interface {
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{},
-	) (InternalRows, error)
+	) (InternalRows, func() error, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -621,6 +622,34 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 		)
 		require.Error(t, err)
 	})
+}
+
+func TestInternalExecutorClearsMonitorMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	mem := sql.MemoryMetrics{
+		BaseMemoryMetrics: sql.BaseMemoryMetrics{
+			CurBytesCount: metric.NewGauge(metric.Metadata{}),
+		}}
+	ie := sql.MakeInternalExecutor(
+		ctx,
+		s.(*server.TestServer).Server.PGServer().SQLServer,
+		mem,
+		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
+	)
+
+	rows, err := ie.QueryIteratorEx(ctx, "test", nil, sessiondata.NodeUserSessionDataOverride, `SELECT 1`)
+	require.NoError(t, err)
+	require.NotEqual(t, mem.CurBytesCount, int64(0))
+	err = rows.Close()
+	require.NoError(t, err)
+	ie.Close(ctx)
+	require.Equal(t, mem.CurBytesCount.Value(), int64(0))
 }
 
 // TODO(andrei): Test that descriptor leases are released by the

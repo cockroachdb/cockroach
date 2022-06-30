@@ -95,6 +95,12 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 	return run()
 }
 
+// Close must be called on the InternalExecutor after it is used, primarily to
+// return memory to the pool.
+func (ie *InternalExecutor) Close(ctx context.Context) {
+	ie.mon.Stop(ctx)
+}
+
 // MakeInternalExecutor creates an InternalExecutor.
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,

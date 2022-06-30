@@ -407,8 +407,8 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
-) (eval.InternalRows, error) {
-	return nil, errors.WithStack(errEvalPlanner)
+) (eval.InternalRows, func() error, error) {
+	return nil, nil, errors.WithStack(errEvalPlanner)
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

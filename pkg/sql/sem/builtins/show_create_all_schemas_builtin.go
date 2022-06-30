@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // getSchemaIDs returns the set of schema ids from
@@ -32,7 +33,7 @@ func getSchemaIDs(
 		FROM %s.crdb_internal.create_schema_statements
 		WHERE database_name = $1
 		`, dbName)
-	it, err := evalPlanner.QueryIteratorEx(
+	it, closeFn, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
 		sessiondata.NoSessionDataOverride,
@@ -42,6 +43,9 @@ func getSchemaIDs(
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		err = errors.CombineErrors(err, closeFn())
+	}()
 
 	var schemaIDs []int64
 

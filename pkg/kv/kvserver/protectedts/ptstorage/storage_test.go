@@ -975,6 +975,9 @@ func (ie *wrappedInternalExecutor) QueryIteratorEx(
 	return ie.wrapped.QueryIteratorEx(ctx, opName, txn, session, stmt, qargs...)
 }
 
+func (ie *wrappedInternalExecutor) Close(ctx context.Context) {
+	panic("not implemented")
+}
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {
 	ie.mu.RLock()
 	defer ie.mu.RUnlock()

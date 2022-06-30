@@ -1958,6 +1958,8 @@ type payloadsForTraceGenerator struct {
 	// Iterator over all internal rows of a query that retrieves all payloads
 	// of a trace.
 	it eval.InternalRows
+
+	closeFn func() error
 }
 
 func makePayloadsForTraceGenerator(
@@ -1983,7 +1985,7 @@ func makePayloadsForTraceGenerator(
 									) SELECT *
 										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
 
-	it, err := ctx.Planner.QueryIteratorEx(
+	it, closeFn, err := ctx.Planner.QueryIteratorEx(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
 		sessiondata.NoSessionDataOverride,
@@ -1994,7 +1996,7 @@ func makePayloadsForTraceGenerator(
 		return nil, err
 	}
 
-	return &payloadsForTraceGenerator{it: it}, nil
+	return &payloadsForTraceGenerator{it: it, closeFn: closeFn}, nil
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
@@ -2019,7 +2021,7 @@ func (p *payloadsForTraceGenerator) Values() (tree.Datums, error) {
 
 // Close implements the tree.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Close(_ context.Context) {
-	err := p.it.Close()
+	err := p.closeFn()
 	if err != nil {
 		// TODO(angelapwen, yuzefovich): The iterator's error should be surfaced here.
 		return

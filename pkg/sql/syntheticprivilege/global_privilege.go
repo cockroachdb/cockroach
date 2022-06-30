@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // GlobalPrivilege represents privileges granted via
@@ -79,13 +80,16 @@ func synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 		catconstants.SystemPrivilegeTableName,
 		systemTablePrivilegeObject.ToString())
 
-	it, err := planner.QueryIteratorEx(ctx, `get-system-privileges`,
+	it, closeFn, err := planner.QueryIteratorEx(ctx, `get-system-privileges`,
 		sessiondata.InternalExecutorOverride{
 			User: username.RootUserName(),
 		}, query)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		err = errors.CombineErrors(err, closeFn())
+	}()
 
 	privileges := catpb.PrivilegeDescriptor{}
 	for {

@@ -158,6 +158,10 @@ type InternalExecutor interface {
 	WithSyntheticDescriptors(
 		descs []catalog.Descriptor, run func() error,
 	) error
+
+	// Close must be called once the InternalExecutor is created using an
+	// InternalExecutorFactory and is done being used.
+	Close(ctx context.Context)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

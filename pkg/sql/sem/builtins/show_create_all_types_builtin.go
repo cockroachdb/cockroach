@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // getTypeIDs returns the set of type ids from
@@ -32,7 +33,7 @@ func getTypeIDs(
 		FROM %s.crdb_internal.create_type_statements
 		WHERE database_name = $1
 		`, dbName)
-	it, err := evalPlanner.QueryIteratorEx(
+	it, closeFn, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_types",
 		sessiondata.NoSessionDataOverride,
@@ -42,7 +43,9 @@ func getTypeIDs(
 	if err != nil {
 		return nil, err
 	}
-
+	defer func() {
+		err = errors.CombineErrors(err, closeFn())
+	}()
 	var typeIDs []int64
 
 	var ok bool

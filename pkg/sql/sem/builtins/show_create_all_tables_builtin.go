@@ -71,7 +71,7 @@ func getTopologicallySortedTableIDs(
 		FROM %s.crdb_internal.backward_dependencies
 		WHERE descriptor_id = $1
 		`, dbName)
-		it, err := evalPlanner.QueryIteratorEx(
+		it, closeFn, err := evalPlanner.QueryIteratorEx(
 			ctx,
 			"crdb_internal.show_create_all_tables",
 			sessiondata.NoSessionDataOverride,
@@ -100,6 +100,9 @@ func getTopologicallySortedTableIDs(
 		}
 
 		dependsOnIDs[tid] = refs
+		if err := closeFn(); err != nil {
+			return nil, err
+		}
 	}
 
 	// First sort by ids to guarantee stable output.
@@ -157,7 +160,7 @@ func getTableIDs(
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
 		`, dbName)
-	it, err := evalPlanner.QueryIteratorEx(
+	it, closeFn, err := evalPlanner.QueryIteratorEx(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		sessiondata.NoSessionDataOverride,
@@ -167,6 +170,9 @@ func getTableIDs(
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		err = errors.CombineErrors(err, closeFn())
+	}()
 
 	var tableIDs []int64
 
