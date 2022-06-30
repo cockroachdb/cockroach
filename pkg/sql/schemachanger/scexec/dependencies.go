@@ -351,6 +351,15 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
+
+	// UpsertZoneConfig sets the zone config for a given descriptor. If necessary,
+	// the subzone spans will be recomputed as part of this call.
+	UpsertZoneConfig(
+		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+	) error
+
+	// DeleteZoneConfig deletes a zone config for a given descriptor.
+	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
 }
 
 // StatsRefreshQueue queues table for stats refreshes.

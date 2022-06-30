@@ -555,6 +555,18 @@ func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64)
 	return nil
 }
 
+// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater
+func (noopMetadataUpdater) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+	return nil
+}
+
+// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater
+func (noopMetadataUpdater) UpsertZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) error {
+	return nil
+}
+
 var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
 var _ scexec.EventLogger = noopEventLogger{}

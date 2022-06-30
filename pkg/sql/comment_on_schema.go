@@ -76,6 +76,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 			ctx,
 			p.ExecCfg().InternalExecutorFactory,
 			p.Descriptors(),
+			p.ExecCfg().Codec,
 			&p.ExecCfg().Settings.SV,
 			p.txn,
 			p.SessionData(),
