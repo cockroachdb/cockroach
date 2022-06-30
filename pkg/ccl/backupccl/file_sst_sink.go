@@ -128,6 +128,12 @@ func (s *fileSSTSink) Close() error {
 	return nil
 }
 
+func (s *fileSSTSink) sortQueue() {
+	sort.Slice(s.queue, func(i, j int) bool {
+		return s.queue[i].metadata.Span.Key.Compare(s.queue[j].metadata.Span.Key) < 0
+	})
+}
+
 // push pushes one returned backup file into the sink. Returned files can arrive
 // out of order, but must be written to an underlying file in-order or else a
 // new underlying file has to be opened. The queue allows buffering up files and
@@ -139,10 +145,7 @@ func (s *fileSSTSink) push(ctx context.Context, resp exportedSpan) error {
 	s.queueSize += len(resp.dataSST)
 
 	if s.queueSize >= int(s.queueCap) {
-		sort.Slice(s.queue, func(i, j int) bool {
-			return s.queue[i].metadata.Span.Key.Compare(s.queue[j].metadata.Span.Key) < 0
-		})
-
+		s.sortQueue()
 		// Drain the first half.
 		drain := len(s.queue) / 2
 		if drain < 1 {
@@ -163,6 +166,7 @@ func (s *fileSSTSink) push(ctx context.Context, resp exportedSpan) error {
 }
 
 func (s *fileSSTSink) flush(ctx context.Context) error {
+	s.sortQueue()
 	for i := range s.queue {
 		if err := s.write(ctx, s.queue[i]); err != nil {
 			return err
