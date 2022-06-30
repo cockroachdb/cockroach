@@ -74,6 +74,7 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
 		defer cleanup()
+		numTestStatementsObserved := 0
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
@@ -93,8 +94,12 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 				return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
 
 			case "test":
-				require.Len(t, stmts, 1)
-				stmt := stmts[0]
+				require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
+				numTestStatementsObserved++
+				stmtSqls := make([]string, 0, len(stmts))
+				for _, stmt := range stmts {
+					stmtSqls = append(stmtSqls, stmt.SQL)
+				}
 				// Keep test cluster in sync.
 				defer execStmts()
 
@@ -123,10 +128,10 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 							return nil
 						},
 					}),
-					sctestdeps.WithStatements(stmt.SQL),
+					sctestdeps.WithStatements(stmtSqls...),
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 				)
-				execStatementWithTestDeps(ctx, t, deps, stmt)
+				execStatementWithTestDeps(ctx, t, deps, stmts...)
 				return replaceNonDeterministicOutput(deps.SideEffectLog())
 
 			default:
@@ -151,18 +156,22 @@ func replaceNonDeterministicOutput(text string) string {
 // execStatementWithTestDeps executes the DDL statement using the declarative
 // schema changer with testing dependencies injected.
 func execStatementWithTestDeps(
-	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmt parser.Statement,
+	ctx context.Context, t *testing.T, deps *sctestdeps.TestState, stmts ...parser.Statement,
 ) {
-	state, err := scbuild.Build(ctx, deps, scpb.CurrentState{}, stmt.AST)
-	require.NoError(t, err, "error in builder")
-
 	var jobID jobspb.JobID
+	var state scpb.CurrentState
+	var err error
+
 	deps.WithTxn(func(s *sctestdeps.TestState) {
 		// Run statement phase.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		state, _, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
-		require.NoError(t, err, "error in %s", s.Phase())
+		for _, stmt := range stmts {
+			state, err = scbuild.Build(ctx, deps, state, stmt.AST)
+			require.NoError(t, err, "error in builder")
+			state, _, err = scrun.RunStatementPhase(ctx, s.TestingKnobs(), s, state)
+			require.NoError(t, err, "error in %s", s.Phase())
+		}
 		deps.LogSideEffectf("# end %s", deps.Phase())
 		// Run pre-commit phase.
 		deps.IncrementPhase()
@@ -171,7 +180,6 @@ func execStatementWithTestDeps(
 		require.NoError(t, err, "error in %s", s.Phase())
 		deps.LogSideEffectf("# end %s", deps.Phase())
 	})
-
 	if job := deps.JobRecord(jobID); job != nil {
 		// Run post-commit phase in mock schema change job.
 		deps.IncrementPhase()

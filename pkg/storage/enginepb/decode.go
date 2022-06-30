@@ -125,3 +125,27 @@ func ScanDecodeKeyValueNoTS(repr []byte) (key []byte, value []byte, orepr []byte
 	}
 	return key, value, ret, err
 }
+
+// ScanDecodeKeyValues decodes all key/value pairs returned in one or more
+// MVCCScan "batches" (this is not the RocksDB batch repr format). The provided
+// function is called for each key/value pair.
+func ScanDecodeKeyValues(
+	repr [][]byte, fn func(key []byte, ts hlc.Timestamp, rawBytes []byte) error,
+) error {
+	var k []byte
+	var ts hlc.Timestamp
+	var rawBytes []byte
+	var err error
+	for _, data := range repr {
+		for len(data) > 0 {
+			k, ts, rawBytes, data, err = ScanDecodeKeyValue(data)
+			if err != nil {
+				return err
+			}
+			if err = fn(k, ts, rawBytes); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

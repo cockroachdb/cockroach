@@ -11,12 +11,12 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 test
 ALTER TABLE db.public.tbl ADD COLUMN j INT
 ----
+begin transaction #1
+# begin StatementPhase
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.new_column_type.int8
-begin transaction #1
-# begin StatementPhase
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
 upsert descriptor #106
   ...

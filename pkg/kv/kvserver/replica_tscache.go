@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
@@ -93,6 +94,31 @@ func (r *Replica) updateTimestampCache(
 		}
 		header := req.Header()
 		start, end := header.Key, header.EndKey
+
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+			// If the request is using a SkipLocked wait policy, it behaves as if run
+			// at a lower isolation level for any keys that it skips over. If the read
+			// request did not return a key, it does not make a claim about whether
+			// that key does or does not exist or what the key's value was at the
+			// read's MVCC timestamp. Instead, it only makes a claim about the set of
+			// keys that are returned. For those keys which were not skipped and were
+			// returned (and often locked, if combined with a locking strength, though
+			// this is not required), serializable isolation is enforced by adding
+			// point reads to the timestamp cache.
+			//
+			// We can view this as equating the effect of a ranged read request like:
+			//  [Scan("a", "e")] -> returning ["a", "c"]
+			// to that of a set of point read requests like:
+			//  [Get("a"), Get("c")]
+			if err := roachpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
+				addToTSCache(key, nil, ts, txnID)
+			}); err != nil {
+				log.Errorf(ctx, "error iterating over response keys while "+
+					"updating timestamp cache for ba=%v, br=%v: %v", ba, br, err)
+			}
+			continue
+		}
+
 		switch t := req.(type) {
 		case *roachpb.EndTxnRequest:
 			// EndTxn requests record a tombstone in the timestamp cache to ensure

@@ -732,6 +732,18 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 	return g.lm.CheckOptimisticNoConflicts(g.lg, g.Req.LatchSpans)
 }
 
+// IsKeyLockedByConflictingTxn returns whether the provided key is locked by a
+// conflicting transaction in the Guard's snapshot of the lock table, given the
+// caller's own desired locking strength. If so, the lock holder is returned. A
+// transaction's own lock does not appear to be locked to itself. The method is
+// used by requests in conjunction with the SkipLocked wait policy to determine
+// which keys they should skip over during evaluation.
+func (g *Guard) IsKeyLockedByConflictingTxn(
+	key roachpb.Key, strength lock.Strength,
+) (bool, *enginepb.TxnMeta) {
+	return g.ltg.IsKeyLockedByConflictingTxn(key, strength)
+}
+
 func (g *Guard) moveLatchGuard() latchGuard {
 	lg := g.lg
 	g.lg = nil

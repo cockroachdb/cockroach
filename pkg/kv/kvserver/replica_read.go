@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -89,7 +90,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// the latches are released.
 
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, &st, ui, g)
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -165,14 +166,16 @@ func (r *Replica) executeReadOnlyBatch(
 	if len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
-		// Intent resolution is async/best-effort for inconsistent requests.
+		// Intent resolution is async/best-effort for inconsistent requests and
+		// for requests using the SkipLocked wait policy.
 		//
 		// An important case where this logic is necessary is for RangeLookup
 		// requests. In their case, synchronous intent resolution can deadlock
 		// if the request originated from the local node which means the local
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
-		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
+		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT &&
+			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
@@ -245,9 +248,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-	g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
@@ -298,7 +301,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		now := timeutil.Now()
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, st, ui, true /* readOnly */)
+		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
@@ -351,18 +354,51 @@ func (r *Replica) collectSpansRead(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
 	baCopy := *ba
-	baCopy.Requests = make([]roachpb.RequestUnion, len(baCopy.Requests))
-	j := 0
-	for i := 0; i < len(baCopy.Requests); i++ {
+	baCopy.Requests = make([]roachpb.RequestUnion, 0, len(ba.Requests))
+	for i := 0; i < len(ba.Requests); i++ {
 		baReq := ba.Requests[i]
 		req := baReq.GetInner()
 		header := req.Header()
-
 		resp := br.Responses[i].GetInner()
+
+		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+			// If the request is using a SkipLocked wait policy, it behaves as if run
+			// at a lower isolation level for any keys that it skips over. If the read
+			// request did not return a key, it does not need to check for conflicts
+			// with latches held on that key. Instead, the request only needs to check
+			// for conflicting latches on the keys that were returned.
+			//
+			// To achieve this, we add a Get request for each of the keys in the
+			// response's result set, even if the original request was a ranged scan.
+			// This will lead to the returned span set (which is used for optimistic
+			// eval validation) containing a set of point latch spans which correspond
+			// to the response keys. Note that the Get requests are constructed with
+			// the same key locking mode as the original read.
+			//
+			// This is similar to how the timestamp cache and refresh spans handle the
+			// SkipLocked wait policy.
+			if err := roachpb.ResponseKeyIterate(req, resp, func(key roachpb.Key) {
+				// TODO(nvanbenschoten): we currently perform a per-response key memory
+				// allocation. If this becomes an issue, we could pre-allocate chunks of
+				// these structs to amortize the cost.
+				getAlloc := new(struct {
+					get   roachpb.GetRequest
+					union roachpb.RequestUnion_Get
+				})
+				getAlloc.get.Key = key
+				getAlloc.get.KeyLocking = req.(roachpb.LockingReadRequest).KeyLockingStrength()
+				getAlloc.union.Get = &getAlloc.get
+				ru := roachpb.RequestUnion{Value: &getAlloc.union}
+				baCopy.Requests = append(baCopy.Requests, ru)
+			}); err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+
 		if resp.Header().ResumeSpan == nil {
 			// Fully evaluated.
-			baCopy.Requests[j] = baReq
-			j++
+			baCopy.Requests = append(baCopy.Requests, baReq)
 			continue
 		}
 
@@ -390,17 +426,16 @@ func (r *Replica) collectSpansRead(
 			header.Key = t.ResumeSpan.EndKey
 		default:
 			// Consider it fully evaluated, which is safe.
-			baCopy.Requests[j] = baReq
-			j++
+			baCopy.Requests = append(baCopy.Requests, baReq)
 			continue
 		}
 		// The ResumeSpan has changed the header.
+		var ru roachpb.RequestUnion
 		req = req.ShallowCopy()
 		req.SetHeader(header)
-		baCopy.Requests[j].MustSetInner(req)
-		j++
+		ru.MustSetInner(req)
+		baCopy.Requests = append(baCopy.Requests, ru)
 	}
-	baCopy.Requests = baCopy.Requests[:j]
 
 	// Collect the batch's declared spans again, this time with the
 	// span bounds constrained to what was read.

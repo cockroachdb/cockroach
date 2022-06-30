@@ -1,0 +1,152 @@
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0
+----
+
+new-txn txn=txn2 ts=9,1 epoch=0
+----
+
+# keyspace:
+#  a: unlocked
+#  b: locked by txn1
+#  c: locked by txn2
+#  d: locked by txn1
+#  e: unlocked
+
+new-request r=req1 txn=txn1 ts=10,1 spans=w@b,d
+----
+
+scan r=req1
+----
+start-waiting: false
+
+should-wait r=req1
+----
+false
+
+acquire r=req1 k=b durability=u
+----
+global: num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+acquire r=req1 k=d durability=u
+----
+global: num=2
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req1
+----
+global: num=2
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+new-request r=req2 txn=txn2 ts=9,1 spans=w@c
+----
+
+scan r=req2
+----
+start-waiting: false
+
+should-wait r=req2
+----
+false
+
+acquire r=req2 k=c durability=u
+----
+global: num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+dequeue r=req2
+----
+global: num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# req3 will scan the lock table with a Skip wait policy. It will not need to wait.
+# Once it begins evaluating, it will probe into the lock table to determine which
+# keys to skip.
+# ---------------------------------------------------------------------------------
+
+new-request r=req3 txn=txn2 ts=9,1 spans=r@a,f skip-locked
+----
+
+scan r=req3
+----
+start-waiting: false
+
+should-wait r=req3
+----
+false
+
+is-key-locked-by-conflicting-txn r=req3 k=a strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=b strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=c strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=d strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=e strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=a strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=b strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req3 k=c strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req3 k=d strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req3 k=e strength=exclusive
+----
+locked: false
+
+dequeue r=req3
+----
+global: num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 9.000000000,1, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+local: num=0

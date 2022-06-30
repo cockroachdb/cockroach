@@ -452,6 +452,9 @@ func (ir *IntentResolver) runAsyncTask(
 // encountered during another command but did not interfere with the
 // execution of that command. This occurs during inconsistent
 // reads.
+// TODO(nvanbenschoten): is this needed if the intents could not have
+// expired yet (i.e. they are not at least 5s old)? Should we filter
+// those out? If we don't, will this be too expensive for SKIP LOCKED?
 func (ir *IntentResolver) CleanupIntentsAsync(
 	ctx context.Context, intents []roachpb.Intent, allowSyncProcessing bool,
 ) error {
