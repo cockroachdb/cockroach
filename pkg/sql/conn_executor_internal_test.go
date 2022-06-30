@@ -358,7 +358,7 @@ func startConnExecutor(
 	// routine, we're going to push commands into the StmtBuf and, from time to
 	// time, collect and check their results.
 	go func() {
-		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
+		finished <- s.ServeConn(ctx, conn, &mon.BoundAccount{}, nil /* cancel */)
 	}()
 	return buf, syncResults, finished, stopper, resultChannel, nil
 }
@@ -402,7 +402,7 @@ CREATE TEMPORARY TABLE foo();
 
 	done := make(chan error)
 	go func() {
-		done <- srv.ServeConn(ctx, connHandler, mon.BoundAccount{}, nil /* cancel */)
+		done <- srv.ServeConn(ctx, connHandler, &mon.BoundAccount{}, nil /* cancel */)
 	}()
 	results := <-flushed
 	require.Len(t, results, 6) // We expect results for 5 statements + sync.

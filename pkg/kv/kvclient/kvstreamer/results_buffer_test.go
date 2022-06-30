@@ -55,7 +55,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
 	budget := newBudget(nil /* acc */, math.MaxInt /* limitBytes */)

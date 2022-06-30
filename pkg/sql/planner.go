@@ -360,7 +360,7 @@ func newInternalPlanner(
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		-1, /* increment */
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
-	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
+	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 
 	smi := &sessionDataMutatorIterator{
 		sds: sds,

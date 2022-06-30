@@ -48,6 +48,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var paramHeader func()
 
 	m := NewMonitor("test", MemoryResource, nil, nil, 0, 1000, st)
+	m.StartNoReserved(ctx, nil /* pool */)
 	accs := make([]BoundAccount, 4)
 	for i := range accs {
 		accs[i] = m.MakeBoundAccount()
@@ -142,7 +143,7 @@ func TestMemoryAllocations(t *testing.T) {
 
 	for _, max := range maxs {
 		pool = NewMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
-		pool.Start(ctx, nil, MakeStandaloneBudget(max))
+		pool.Start(ctx, nil, NewStandaloneBudget(max))
 
 		for _, hf := range hysteresisFactors {
 			maxAllocatedButUnusedBlocks = hf
@@ -156,7 +157,7 @@ func TestMemoryAllocations(t *testing.T) {
 					// We start with a fresh monitor for every set of
 					// parameters.
 					m = NewMonitor("test", MemoryResource, nil, nil, pa, 1000, st)
-					m.Start(ctx, pool, MakeStandaloneBudget(pb))
+					m.Start(ctx, pool, NewStandaloneBudget(pb))
 
 					for i := 0; i < numAccountOps; i++ {
 						if i%linesBetweenHeaderReminders == 0 {
@@ -221,7 +222,7 @@ func TestBoundAccount(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	m := NewMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
-	m.Start(ctx, nil, MakeStandaloneBudget(100))
+	m.Start(ctx, nil, NewStandaloneBudget(100))
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
 
@@ -298,7 +299,7 @@ func TestBytesMonitor(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	m := NewMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
-	m.Start(ctx, nil, MakeStandaloneBudget(100))
+	m.Start(ctx, nil, NewStandaloneBudget(100))
 	maxAllocatedButUnusedBlocks = 1
 
 	if err := m.reserveBytes(ctx, 10); err != nil {
@@ -332,7 +333,7 @@ func TestBytesMonitor(t *testing.T) {
 
 	limitedMonitor := NewMonitorWithLimit(
 		"testlimit", MemoryResource, 10, nil, nil, 1, 1000, cluster.MakeTestingClusterSettings())
-	limitedMonitor.Start(ctx, m, BoundAccount{})
+	limitedMonitor.StartNoReserved(ctx, m)
 
 	if err := limitedMonitor.reserveBytes(ctx, 10); err != nil {
 		t.Fatalf("limited monitor refused small allocation: %v", err)
@@ -353,7 +354,7 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	m := NewMonitor("test", MemoryResource,
 		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */, st)
-	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
+	m.Start(ctx, nil, NewStandaloneBudget(1e9))
 
 	a := m.MakeBoundAccount()
 	if err := a.Grow(ctx, 1); err != nil {
@@ -374,10 +375,10 @@ func TestMultiSharedGauge(t *testing.T) {
 
 	parent := NewMonitor("root", MemoryResource, resourceGauge, nil, minAllocation, 0,
 		cluster.MakeTestingClusterSettings())
-	parent.Start(ctx, nil, MakeStandaloneBudget(100000))
+	parent.Start(ctx, nil, NewStandaloneBudget(100000))
 
 	child := NewMonitorInheritWithLimit("child", 20000, parent)
-	child.Start(ctx, parent, BoundAccount{})
+	child.StartNoReserved(ctx, parent)
 
 	acc := child.MakeBoundAccount()
 	require.NoError(t, acc.Grow(ctx, 100))
@@ -385,12 +386,46 @@ func TestMultiSharedGauge(t *testing.T) {
 	require.Equal(t, minAllocation, resourceGauge.Value(), "Metric")
 }
 
+func TestReservedAccountCleared(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	root := NewMonitor(
+		"root" /* name */, MemoryResource, nil /* curCount */, nil, /* maxHist */
+		1 /* increment */, 1000 /* noteworthy */, st,
+	)
+	root.Start(ctx, nil /* pool */, NewStandaloneBudget(math.MaxInt64))
+	root.RelinquishAllOnReleaseBytes()
+
+	// Pre-reserve a budget of 100 bytes.
+	reserved := root.MakeBoundAccount()
+	require.NoError(t, reserved.Grow(ctx, 100))
+
+	m := NewMonitor(
+		"test" /* name */, MemoryResource, nil /* curCount */, nil, /* maxHist */
+		1 /* increment */, 1000 /* noteworthy */, st,
+	)
+	m.Start(ctx, nil /* pool */, &reserved)
+	acc := m.MakeBoundAccount()
+
+	// Grow the account by 50 bytes, then close the account and stop the
+	// monitor.
+	require.NoError(t, acc.Grow(ctx, 50))
+	acc.Close(ctx)
+	m.Stop(ctx)
+
+	// Stopping the monitor should have clear the reserved account and returned
+	// all pre-reserved memory back to the root monitor.
+	require.Equal(t, int64(0), reserved.used)
+	require.Equal(t, int64(0), root.mu.curBudget.used)
+}
+
 func BenchmarkBoundAccountGrow(b *testing.B) {
 	ctx := context.Background()
 	m := NewMonitor("test", MemoryResource,
 		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9, /* noteworthy */
 		cluster.MakeTestingClusterSettings())
-	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
+	m.Start(ctx, nil, NewStandaloneBudget(1e9))
 
 	a := m.MakeBoundAccount()
 	for i := 0; i < b.N; i++ {

@@ -8027,7 +8027,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	m := mon.NewMonitor("test-monitor", mon.MemoryResource, nil, nil, 0, 0, st)
-	m.Start(ctx, nil, mon.MakeStandaloneBudget(128<<20))
+	m.Start(ctx, nil, mon.NewStandaloneBudget(128<<20))
 	mem := m.MakeBoundAccount()
 	encOpts := &jobspb.BackupEncryptionOptions{
 		Mode: jobspb.EncryptionMode_Passphrase,
@@ -9040,7 +9040,7 @@ func TestBackupMemMonitorSSTSinkQueueSize(t *testing.T) {
 	)
 	ctx := context.Background()
 	byteLimit := 14 << 20 // 14 MiB
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(int64(byteLimit)))
+	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(int64(byteLimit)))
 	defer memoryMonitor.Stop(ctx)
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{

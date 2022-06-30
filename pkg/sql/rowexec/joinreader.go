@@ -423,7 +423,7 @@ func newJoinReader(
 	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
 		"joinreader-mem" /* name */, memoryLimit, flowCtx.EvalCtx.Mon,
 	)
-	jr.MemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+	jr.MemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
 	if err := jr.initJoinReaderStrategy(flowCtx, rightTypes, readerType); err != nil {
@@ -471,7 +471,7 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
 			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
 		)
-		jr.streamerInfo.unlimitedMemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 

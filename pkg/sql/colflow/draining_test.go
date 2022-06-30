@@ -47,7 +47,7 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 		math.MaxInt64,
 		cluster.MakeTestingClusterSettings(),
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(1))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(1))
 
 	// Set up a two node cluster.
 	tempStorageConfig := base.TempStorageConfig{InMemory: true, Mon: diskMonitor}

@@ -28,7 +28,7 @@ func TestFeedBudget(t *testing.T) {
 		*FeedBudget, *mon.BytesMonitor, *mon.BoundAccount,
 	) {
 		m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-		m.Start(context.Background(), nil, mon.MakeStandaloneBudget(poolSize))
+		m.Start(context.Background(), nil, mon.NewStandaloneBudget(poolSize))
 		b := m.MakeBoundAccount()
 
 		s := cluster.MakeTestingClusterSettings()
@@ -190,7 +190,7 @@ func TestBudgetFactory(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
-	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 	bf := NewBudgetFactory(context.Background(),
 		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, budgetLowThresholdFn(10000), &s.SV))
 
@@ -214,7 +214,7 @@ func TestDisableBudget(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, s)
-	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 	bf := NewBudgetFactory(context.Background(),
 		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, func(_ int64) int64 {
 			return 0
@@ -228,7 +228,7 @@ func TestDisableBudgetOnTheFly(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 
 	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(100000))
+	m.Start(context.Background(), nil, mon.NewStandaloneBudget(100000))
 	bf := NewBudgetFactory(context.Background(),
 		CreateBudgetFactoryConfig(
 			m,
@@ -265,7 +265,7 @@ func TestDisableBudgetOnTheFly(t *testing.T) {
 func TestConfigFactory(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 
 	// Check provisionalFeedLimit is computed.
 	config := CreateBudgetFactoryConfig(rootMon, 100000, time.Second*5, budgetLowThresholdFn(10000),
@@ -285,7 +285,7 @@ func TestConfigFactory(t *testing.T) {
 func TestBudgetLimits(t *testing.T) {
 	s := cluster.MakeTestingClusterSettings()
 	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
-	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+	rootMon.Start(context.Background(), nil, mon.NewStandaloneBudget(10000000))
 
 	provisionalSize := int64(10000)
 	adjustedSize := int64(1000)
