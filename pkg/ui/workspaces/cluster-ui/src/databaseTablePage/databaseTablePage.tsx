@@ -108,6 +108,9 @@ export interface DatabaseTablePageDataDetails {
   indexNames: string[];
   grants: Grant[];
   statsLastUpdated?: Moment;
+  totalBytes: number;
+  garbageBytes: number;
+  garbagePercentage: number;
 }
 
 export interface DatabaseTablePageIndexStats {
@@ -374,6 +377,23 @@ export class DatabaseTablePage extends React.Component<
     },
   ];
 
+  formatMVCCInfo = (
+    details: DatabaseTablePageDataDetails,
+  ): React.ReactElement => {
+    return (
+      <>
+        {format.Percentage(details.garbagePercentage, 1, 1)}
+        {" ("}
+        <span className={cx("bold")}>
+          {format.Bytes(details.garbageBytes)}
+        </span>{" "}
+        non-live data /{" "}
+        <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
+        {" total)"}
+      </>
+    );
+  };
+
   render(): React.ReactElement {
     return (
       <div className="root table-area">
@@ -429,6 +449,10 @@ export class DatabaseTablePage extends React.Component<
                     <SummaryCardItem
                       label="Ranges"
                       value={this.props.stats.rangeCount}
+                    />
+                    <SummaryCardItem
+                      label="% of Non-live Data"
+                      value={this.formatMVCCInfo(this.props.details)}
                     />
                     {this.props.details.statsLastUpdated && (
                       <SummaryCardItem

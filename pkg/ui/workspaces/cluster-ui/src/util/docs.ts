@@ -113,6 +113,9 @@ export const lockingStrength = docsURL(
 export const transactionLayerOverview = docsURL(
   "architecture/transaction-layer.html#overview",
 );
+export const mvccGarbage = docsURLNoVersion(
+  "architecture/storage-layer.html#mvcc",
+);
 
 // Not actually a docs URL.
 export const startTrial = "https://www.cockroachlabs.com/pricing/start-trial/";

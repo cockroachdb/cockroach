@@ -1547,18 +1547,6 @@
           "format": "int64",
           "x-go-name": "DescriptorID"
         },
-        "garbage_bytes": {
-          "description": "garbage_bytes is the size in byes of existing MVCC garbage on the table.",
-          "type": "integer",
-          "format": "uint64",
-          "x-go-name": "GarbageBytes"
-        },
-        "garbage_percentage": {
-          "description": "garbage_percentage is the percentage of existing MVCC garbage on the table.",
-          "type": "number",
-          "format": "float",
-          "x-go-name": "GarbagePercentage"
-        },
         "grants": {
           "type": "array",
           "items": {

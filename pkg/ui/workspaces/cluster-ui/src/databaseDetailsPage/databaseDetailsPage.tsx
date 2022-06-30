@@ -27,7 +27,7 @@ import {
   SortedTable,
 } from "src/sortedtable";
 import * as format from "src/util/format";
-import { syncHistory } from "../util";
+import { mvccGarbage, syncHistory } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -38,6 +38,7 @@ import {
 import { Moment } from "moment";
 import { Caution } from "@cockroachlabs/icons";
 import { DATE_FORMAT } from "src/util/format";
+import { Anchor } from "../anchor";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -105,6 +106,9 @@ export interface DatabaseDetailsPageDataTableDetails {
   grants: string[];
   statsLastUpdated?: Moment;
   hasIndexRecommendations: boolean;
+  totalBytes: number;
+  garbageBytes: number;
+  garbagePercentage: number;
 }
 
 export interface DatabaseDetailsPageDataTableStats {
@@ -260,6 +264,26 @@ export class DatabaseDetailsPage extends React.Component<
     }
   }
 
+  formatMVCCInfo = (
+    details: DatabaseDetailsPageDataTableDetails,
+  ): React.ReactElement => {
+    return (
+      <>
+        <p className={cx("multiple-lines-info")}>
+          {format.Percentage(details.garbagePercentage, 1, 1)}
+        </p>
+        <p className={cx("multiple-lines-info")}>
+          <span className={cx("bold")}>
+            {format.Bytes(details.garbageBytes)}
+          </span>{" "}
+          non-live data /{" "}
+          <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
+          {" total"}
+        </p>
+      </>
+    );
+  };
+
   private columnsForTablesViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
     return [
       {
@@ -367,6 +391,29 @@ export class DatabaseDetailsPage extends React.Component<
         name: "regions",
         showByDefault: this.props.showNodeRegionsColumn,
         hideIfTenant: true,
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title={
+              <div className={cx("tooltip__table--title")}>
+                {"% of data ("}
+                <Anchor href={mvccGarbage} target="_blank">
+                  MVCC values
+                </Anchor>
+                {") modified (updated or deleted) but not garbage collected. A high percentage can cause " +
+                  "statements to scan more data than required, which can reduce performance."}
+              </div>
+            }
+          >
+            % of Non-live Data
+          </Tooltip>
+        ),
+        cell: table => this.formatMVCCInfo(table.details),
+        sort: table => table.details.garbagePercentage,
+        className: cx("database-table__col-column-count"),
+        name: "garbagePercentage",
       },
       {
         title: (

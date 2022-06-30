@@ -131,6 +131,11 @@ export const mapStateToProps = createSelector(
         statsLastUpdated: details?.data?.stats_last_created_at
           ? util.TimestampToMoment(details?.data?.stats_last_created_at)
           : null,
+        totalBytes: FixLong(details?.data?.data_total_bytes || 0).toNumber(),
+        garbageBytes: FixLong(
+          details?.data?.data_non_live_bytes || 0,
+        ).toNumber(),
+        garbagePercentage: details?.data?.data_non_live_percentage || 0,
       },
       showNodeRegionsSection,
       automaticStatsCollectionEnabled,
