@@ -227,6 +227,7 @@ type Streamer struct {
 	hints         Hints
 	maxKeysPerRow int32
 	budget        *budget
+	keyLocking    lock.Strength
 
 	streamerStatistics
 
@@ -353,6 +354,7 @@ func NewStreamer(
 	limitBytes int64,
 	acc *mon.BoundAccount,
 	batchRequestsIssued *int64,
+	keyLocking lock.Strength,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -361,6 +363,7 @@ func NewStreamer(
 		distSender: distSender,
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
+		keyLocking: keyLocking,
 	}
 	if batchRequestsIssued == nil {
 		batchRequestsIssued = new(int64)
@@ -1417,9 +1420,9 @@ func processSingleRangeResults(
 			subRequestIdx = req.subRequestIdx[i]
 		}
 		reply := resp.GetInner()
-		switch req.reqs[i].GetInner().(type) {
-		case *roachpb.GetRequest:
-			get := reply.(*roachpb.GetResponse)
+		switch response := reply.(type) {
+		case *roachpb.GetResponse:
+			get := response
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
 				continue
@@ -1443,8 +1446,8 @@ func processSingleRangeResults(
 			}
 			s.results.addLocked(result)
 
-		case *roachpb.ScanRequest:
-			scan := reply.(*roachpb.ScanResponse)
+		case *roachpb.ScanResponse:
+			scan := response
 			if len(scan.BatchResponses) == 0 && scan.ResumeSpan != nil {
 				// Only the first part of the conditional is true whenever we
 				// received an empty response for the Scan request (i.e. there
@@ -1542,9 +1545,9 @@ func buildResumeSingeRangeBatch(
 	for i, resp := range br.Responses {
 		position := req.positions[i]
 		reply := resp.GetInner()
-		switch origRequest := req.reqs[i].GetInner().(type) {
-		case *roachpb.GetRequest:
-			get := reply.(*roachpb.GetResponse)
+		switch response := reply.(type) {
+		case *roachpb.GetResponse:
+			get := response
 			if get.ResumeSpan == nil {
 				emptyResponse = false
 				continue
@@ -1554,7 +1557,7 @@ func buildResumeSingeRangeBatch(
 			newGet := gets[0]
 			gets = gets[1:]
 			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLocking = origRequest.KeyLocking
+			newGet.req.KeyLocking = s.keyLocking
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)
@@ -1566,8 +1569,8 @@ func buildResumeSingeRangeBatch(
 			}
 			resumeReqIdx++
 
-		case *roachpb.ScanRequest:
-			scan := reply.(*roachpb.ScanResponse)
+		case *roachpb.ScanResponse:
+			scan := response
 			if scan.ResumeSpan == nil {
 				emptyResponse = false
 				continue
@@ -1578,7 +1581,7 @@ func buildResumeSingeRangeBatch(
 			scans = scans[1:]
 			newScan.req.SetSpan(*scan.ResumeSpan)
 			newScan.req.ScanFormat = roachpb.BATCH_RESPONSE
-			newScan.req.KeyLocking = origRequest.KeyLocking
+			newScan.req.KeyLocking = s.keyLocking
 			newScan.union.Scan = &newScan.req
 			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			resumeReq.positions = append(resumeReq.positions, position)
