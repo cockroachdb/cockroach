@@ -105,6 +105,8 @@ func TestRecordingString(t *testing.T) {
 
 	require.NoError(t, CheckRecording(rec, `
 		=== operation:root _verbose:1
+		[remote child]
+		[local child]
 		event:root 1
 			=== operation:remote child _verbose:1
 			event:remote child 1
@@ -124,7 +126,7 @@ func TestRecordingString(t *testing.T) {
 		timeSincePrev:       "0.000ms",
 		text:                "=== operation:root _verbose:1",
 	}, l)
-	l, err = parseLine(lines[1])
+	l, err = parseLine(lines[3])
 	require.Equal(t, traceLine{
 		timeSinceTraceStart: "1.000ms",
 		timeSincePrev:       "1.000ms",
@@ -183,6 +185,7 @@ func TestRecordingInRecording(t *testing.T) {
 
 	require.NoError(t, CheckRecording(childRec, `
 		=== operation:child _verbose:1
+		[grandchild]
 			=== operation:grandchild _verbose:1
 		`))
 }
@@ -208,6 +211,7 @@ func TestImportRemoteRecording(t *testing.T) {
 			if verbose {
 				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
 				=== operation:root _verbose:1
+				[child]
 					=== operation:child _verbose:1
 					event:&Int32Value{Value:4,XXX_unrecognized:[],}
 					event:foo
@@ -216,6 +220,7 @@ func TestImportRemoteRecording(t *testing.T) {
 			} else {
 				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(tracingpb.RecordingStructured), `
 				=== operation:root
+				[child]
 				structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))
 			}
@@ -844,6 +849,7 @@ func TestOpenChildIncludedRecording(t *testing.T) {
 	rec := parent.FinishAndGetRecording(tracingpb.RecordingVerbose)
 	require.NoError(t, CheckRecording(rec, `
 		=== operation:parent _verbose:1
+		[child]
 			=== operation:child _unfinished:1 _verbose:1
 	`))
 	child.Finish()

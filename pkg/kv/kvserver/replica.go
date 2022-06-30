@@ -1345,10 +1345,12 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 
 // TODO(nvanbenschoten): move the following 5 methods to replica_send.go.
 
-// checkExecutionCanProceed returns an error if a batch request cannot be
-// executed by the Replica. An error indicates that the Replica is not live and
-// able to serve traffic or that the request is not compatible with the state of
-// the Range due to the range's key bounds, the range's lease, the range's GC
+// checkExecutionCanProceedBeforeStorageSnapshot returns an error if a batch
+// request cannot be executed by the Replica. For read-only requests, the method
+// is called before the state of the storage engine is pinned (via an iterator
+// or a snapshot). An error indicates that the Replica is not live and able to
+// serve traffic or that the request is not compatible with the state of the
+// Range due to the range's key bounds, the range's lease, the range's GC
 // threshold, or due to a pending merge. On success, returns nil and either a
 // zero LeaseStatus (indicating that the request was permitted to skip the lease
 // checks) or a LeaseStatus in LeaseState_VALID (indicating that the Replica is
@@ -1359,7 +1361,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 // will not wait for a pending merge to conclude before proceeding. Callers
 // might be ok with this if they know that they will end up checking for a
 // pending merge at some later time.
-func (r *Replica) checkExecutionCanProceed(
+func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (kvserverpb.LeaseStatus, error) {
 	rSpan, err := keys.Range(ba.Requests)
@@ -1398,7 +1400,7 @@ func (r *Replica) checkExecutionCanProceed(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	st, shouldExtend, err := r.checkGCThresholdAndLeaseRLocked(ctx, ba)
+	st, shouldExtend, err := r.checkLeaseRLocked(ctx, ba)
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
@@ -1432,13 +1434,54 @@ func (r *Replica) checkExecutionCanProceed(
 	return st, nil
 }
 
-// checkGCThresholdAndLeaseRLocked checks the provided batch against the GC
+// checkExecutionCanProceedAfterStorageSnapshot returns an error if a batch
+// request cannot be executed by the Replica. For read-only requests, this
+// method is called after the state of the storage engine is pinned via an
+// iterator. An error indicates that the request's timestamp is below the
+// Replica's GC threshold.
+func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
+	ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus,
+) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	// NB: For read-only requests, the GC threshold check is performed after the
+	// state of the storage engine has been pinned by the iterator. This is
+	// because GC requests don't acquire latches at the timestamp they are garbage
+	// collecting, so read traffic at / around the GC threshold will not be
+	// serialized with GC requests. Thus, we must check the in-memory GC threshold
+	// after we pin the state of the storage engine [1].
+	//
+	// [1]: This relies on the invariant that the in-memory GC threshold is bumped
+	// _before_ the actual garbage collection happens.
+	//
+	// TODO(aayush): The above description intentionally omits some details, as
+	// they are going to be changed as part of
+	// https://github.com/cockroachdb/cockroach/issues/55293.
+	return r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin())
+}
+
+// checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
+// through the RW or admin paths cannot be executed by the Replica.
+func (r *Replica) checkExecutionCanProceedRWOrAdmin(
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
+) (kvserverpb.LeaseStatus, error) {
+	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
+	if err != nil {
+		return kvserverpb.LeaseStatus{}, err
+	}
+	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ba, st); err != nil {
+		return kvserverpb.LeaseStatus{}, err
+	}
+	return st, nil
+}
+
+// checkLeaseRLocked checks the provided batch against the GC
 // threshold and lease. A nil error indicates to go ahead with the batch, and
 // is accompanied either by a valid or zero lease status, the latter case
 // indicating that the request was permitted to bypass the lease check. The
 // returned bool indicates whether the lease should be extended (only on nil
 // error).
-func (r *Replica) checkGCThresholdAndLeaseRLocked(
+func (r *Replica) checkLeaseRLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (kvserverpb.LeaseStatus, bool, error) {
 	now := r.Clock().NowAsClockTimestamp()
@@ -1474,19 +1517,12 @@ func (r *Replica) checkGCThresholdAndLeaseRLocked(
 			}
 			// Otherwise, suppress the error. Also, remember that we're not serving
 			// this under the lease by zeroing out the status. We also intentionally
-			// do not pass the original status to checkTSAboveGCThresholdRLocked as
+			// do not pass the original status to checkTSAboveGCThreshold as
 			// this method assumes that a valid status indicates that this replica
 			// holds the lease (see #73123). `shouldExtend` is already false in this
 			// branch, but for completeness we zero it out as well.
 			st, shouldExtend, err = kvserverpb.LeaseStatus{}, false, nil
 		}
-	}
-
-	// Check if request is below the GC threshold and if so, error out. Note that
-	// this uses the lease status no matter whether it's valid or not, and the
-	// method is set up to handle that.
-	if err := r.checkTSAboveGCThresholdRLocked(ba.EarliestActiveTimestamp(), st, ba.IsAdmin()); err != nil {
-		return kvserverpb.LeaseStatus{}, false, err
 	}
 
 	return st, shouldExtend, nil

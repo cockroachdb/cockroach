@@ -215,7 +215,8 @@ func (r *Replica) evalAndPropose(
 		proposal.command.ProposerLeaseSequence = seq
 	} else if !st.Lease.OwnedBy(r.store.StoreID()) {
 		// Perform a sanity check that the lease is owned by this replica. This must
-		// have been ascertained by the callers in checkExecutionCanProceed.
+		// have been ascertained by the callers in
+		// checkExecutionCanProceedBeforeStorageSnapshot.
 		log.Fatalf(ctx, "cannot propose %s on follower with remotely owned lease %s", ba, st.Lease)
 	} else {
 		proposal.command.ProposerLeaseSequence = st.Lease.Sequence
