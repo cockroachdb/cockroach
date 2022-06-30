@@ -44,12 +44,7 @@ func TestVerifyPassword(t *testing.T) {
 	)
 	defer s.Stopper().Stop(ctx)
 
-	ie := sql.MakeInternalExecutor(
-		context.Background(),
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-	)
+	ie := sql.MakeInternalExecutor(context.Background(), s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, s.ExecutorConfig().(sql.ExecutorConfig).Settings, nil /* monitor */)
 
 	ts := s.(*server.TestServer)
 

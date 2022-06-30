@@ -149,12 +149,7 @@ func TestInternalFullTableScan(t *testing.T) {
 		"pq: query `SELECT * FROM t` contains a full table/index scan which is explicitly disallowed",
 		err.Error())
 
-	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-	)
+	ie := sql.MakeInternalExecutor(ctx, s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, s.ExecutorConfig().(sql.ExecutorConfig).Settings, nil /* monitor */)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
@@ -189,12 +184,7 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	_, err = db.Exec("SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = 0;")
 	require.NoError(t, err)
 
-	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-	)
+	ie := sql.MakeInternalExecutor(ctx, s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, s.ExecutorConfig().(sql.ExecutorConfig).Settings, nil /* monitor */)
 
 	_, err = ie.Exec(ctx, "stmt-exceeds-fingerprint-limit", nil, "SELECT 1")
 	require.NoError(t, err)
@@ -322,12 +312,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 	}
 
 	expDB := "foo"
-	ie := sql.MakeInternalExecutor(
-		ctx,
-		s.(*server.TestServer).Server.PGServer().SQLServer,
-		sql.MemoryMetrics{},
-		s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-	)
+	ie := sql.MakeInternalExecutor(ctx, s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, s.ExecutorConfig().(sql.ExecutorConfig).Settings, nil /* monitor */)
 	ie.SetSessionData(
 		&sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
@@ -390,12 +375,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
-		ie := sql.MakeInternalExecutor(
-			context.Background(),
-			s.(*server.TestServer).Server.PGServer().SQLServer,
-			sql.MemoryMetrics{},
-			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
-		)
+		ie := sql.MakeInternalExecutor(context.Background(), s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, s.ExecutorConfig().(sql.ExecutorConfig).Settings, nil /* monitor */)
 		ie.SetSessionData(
 			&sessiondata.SessionData{
 				SessionData: sessiondatapb.SessionData{

@@ -97,18 +97,24 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 
 // MakeInternalExecutor creates an InternalExecutor.
 func MakeInternalExecutor(
-	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
+	ctx context.Context,
+	s *Server,
+	memMetrics MemoryMetrics,
+	settings *cluster.Settings,
+	monitor *mon.BytesMonitor,
 ) InternalExecutor {
-	monitor := mon.NewMonitor(
-		"internal SQL executor",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount,
-		memMetrics.MaxBytesHist,
-		-1,            /* use default increment */
-		math.MaxInt64, /* noteworthy */
-		settings,
-	)
-	monitor.StartNoReserved(ctx, s.pool)
+	if monitor == nil {
+		monitor = mon.NewMonitor(
+			"internal SQL executor",
+			mon.MemoryResource,
+			memMetrics.CurBytesCount,
+			memMetrics.MaxBytesHist,
+			-1,            /* use default increment */
+			math.MaxInt64, /* noteworthy */
+			settings,
+		)
+		monitor.StartNoReserved(ctx, s.pool)
+	}
 	return InternalExecutor{
 		s:          s,
 		mon:        monitor,
