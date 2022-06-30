@@ -21,7 +21,12 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.TableSubZoneConfig) scop.Op {
-					return &scop.NotImplemented{}
+					return &scop.AddSubZoneConfig{
+						DescriptorID:  this.TableID,
+						IndexID:       this.IndexID,
+						ZoneConfig:    this.ZoneConfig,
+						PartitionName: this.PartitionName,
+					}
 				}),
 			),
 		),
@@ -29,7 +34,12 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.TableSubZoneConfig) scop.Op {
-					return &scop.NotImplemented{}
+					return &scop.RemoveSubZoneConfig{
+						DescriptorID:  this.TableID,
+						IndexID:       this.IndexID,
+						ZoneConfig:    this.ZoneConfig,
+						PartitionName: this.PartitionName,
+					}
 				}),
 			),
 		),

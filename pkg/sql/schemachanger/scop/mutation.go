@@ -11,6 +11,7 @@
 package scop
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -571,4 +572,22 @@ type RemoveColumnFromIndex struct {
 	IndexID  descpb.IndexID
 	Kind     scpb.IndexColumn_Kind
 	Ordinal  uint32
+}
+
+// AddSubZoneConfig adds a sub zone into the zone config.
+type AddSubZoneConfig struct {
+	mutationOp
+	DescriptorID  descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+	ZoneConfig    *zonepb.ZoneConfig
+}
+
+// RemoveSubZoneConfig removes a sub zone from the zone config.
+type RemoveSubZoneConfig struct {
+	mutationOp
+	DescriptorID  descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+	ZoneConfig    *zonepb.ZoneConfig
 }

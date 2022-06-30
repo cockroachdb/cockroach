@@ -1060,6 +1060,14 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 	return nil
 }
 
+// SetZoneConfig implements scexec.DescriptorMetadataUpdater.
+func (s *TestState) SetZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) error {
+	s.zoneConfigs[id] = zone
+	return nil
+}
+
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,
@@ -1106,10 +1114,30 @@ func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 
 // GetZoneConfigRaw implements scdecomp.ZoneConfigReader.
 func (s *TestState) GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig {
-	return nil
+	return s.zoneConfigs[id]
 }
 
 // ZoneConfigReader implement scbuild.Dependencies.
 func (s *TestState) ZoneConfigReader() scdecomp.ZoneConfigReader {
 	return s
+}
+
+// GetZoneConfig implements scmutationexec.ZoneConfigReader.
+func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
+	return s.zoneConfigs[id], nil
+}
+
+// ZoneConfigReaderForExec implement scexec.Dependencies.
+func (s *TestState) ZoneConfigReaderForExec() scmutationexec.ZoneConfigReader {
+	return s
+}
+
+// EnterpriseFeatureChecker implements scexec.Dependencies.
+func (s *TestState) EnterpriseFeatureChecker() scbuild.EnterpriseFeatureChecker {
+	return s
+}
+
+// CheckEnterpriseEnabled implements scbuild.EnterpriseFeatureChecker.
+func (s *TestState) CheckEnterpriseEnabled(feature string) error {
+	return nil
 }

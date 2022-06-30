@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -813,6 +814,16 @@ USE t;
 					3, /* numServers */
 					base.TestingKnobs{
 						SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+							RunBeforeBackfill: func() error {
+								if performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 							RunBeforeBackfill: func() error {
 								if performInterrupt {
 									performInterrupt = false
