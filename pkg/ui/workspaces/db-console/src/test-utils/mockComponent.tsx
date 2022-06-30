@@ -18,7 +18,6 @@ export function stubComponentInModule(
 
     // An `export = …` module should be replaced with a static render function.
     if (exportedNames.length === 0) {
-      console.log("export = (mocked render funtion)");
       return (props: Record<string, unknown>) =>
         (<div data-componentname={orig.name} {...props} />) as any;
     }
@@ -31,9 +30,6 @@ export function stubComponentInModule(
     for (const name of exportedNames) {
       let candidate: unknown;
       if (typeof orig === "object" && name && orig.hasOwnProperty(name)) {
-        console.log(
-          `Found component ${name} in ${path}: ${(orig as any)[name]}`,
-        );
         candidate = (orig as any)[name];
       } else {
         throw new Error(

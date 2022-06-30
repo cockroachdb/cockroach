@@ -142,6 +142,7 @@
     "jest-environment-enzyme": "7.1.2",
     "jest-environment-jsdom": "27.5.1",
     "jest-enzyme": "7.1.2",
+    "jest-silent-reporter": "^0.5.0",
     "jsdoc": "^3.4.2",
     "karma": "^6.3.4",
     "karma-chai": "^0.1.0",

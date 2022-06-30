@@ -10,8 +10,28 @@
 /* global module */
 /* eslint-disable @typescript-eslint/no-var-requires */
 
+const path = require("path");
 const { pathsToModuleNameMapper } = require("ts-jest");
 const { compilerOptions } = require("./tsconfig.json");
+const isBazel = !!process.env.BAZEL_TARGET;
+
+const v8 = require("v8");
+console.log("maxoldspace (MB) = ", v8.getHeapStatistics().total_available_size / 1024 / 1024);
+
+const bazelOnlySettings = {
+  haste: {
+    // Platforms that include a POSIX-compatible `find` binary default to using it for test file
+    // discovery, but jest-haste-map's invocation of `find` doesn't include `-L` when node was
+    // started with `--preserve-symlinks`. This causes Jest to be unable to find test files when run
+    // via Bazel, which uses readonly symlinks for its build sandbox and launches node with
+    // `--presrve-symlinks`. Use jest's pure-node implementation instead, which respects
+    // `--preserve-symlinks`.
+    forceNodeFilesystemAPI: true,
+    enableSymlinks: true,
+  },
+  watchman: false,
+};
+
 /*
  * For a detailed explanation regarding each configuration property, visit:
  * https://jestjs.io/docs/configuration
@@ -78,7 +98,11 @@ module.exports = {
   // globalTeardown: undefined,
 
   // A set of global variables that need to be available in all test environments
-  // globals: {},
+  globals: {
+    'ts-jest': {
+      tsconfig: path.join(__dirname, './tsconfig.linting.json'),
+    },
+  },
 
   // The maximum amount of workers used to run your tests. Can be specified as % or a number. E.g. maxWorkers: 10% will use 10% of your CPU amount + 1 as the maximum worker number. maxWorkers: 2 will use a maximum of 2 workers.
   // maxWorkers: "50%",
@@ -97,12 +121,12 @@ module.exports = {
       "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
         "<rootDir>/src/test-utils/file.mock.js",
       "\\.(css|scss|less|styl)$": "identity-obj-proxy",
-      "^react($|/.+)": "<rootDir>/node_modules/react$1",
+      // "^react($|/.+)": "<rootDir>/node_modules/react$1",
     },
   ),
 
   // An alternative API to setting the NODE_PATH env variable, modulePaths is an array of absolute paths to additional locations to search when resolving modules.
-  modulePaths: ["<rootDir>/"],
+  modulePaths: ["<rootDir>/", ...module.paths],
 
   // An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
   // modulePathIgnorePatterns: [],
@@ -120,7 +144,7 @@ module.exports = {
   // projects: undefined,
 
   // Use this configuration option to add custom reporters to Jest
-  // reporters: undefined,
+  // reporters: [["jest-silent-reporter", { "useDots": true }]],
 
   // Automatically reset mock state before every test
   // resetMocks: false,
@@ -191,13 +215,14 @@ module.exports = {
   // A map from regular expressions to paths to transformers
   transform: {
     "^.+\\.tsx?$": "ts-jest",
-    "^.+\\.js$": "babel-jest",
+    "^.+\\.js?$": ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],
   },
 
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
   transformIgnorePatterns: [
     "/node_module\\/@cockroachlabs\\/crdb-protobuf-client/",
     "/node_module\\/@cockroachlabs\\/cluster-ui/",
+    "/cluster-ui\\/dist\\/js\\/main.js$/",
   ],
 
   // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
@@ -211,4 +236,5 @@ module.exports = {
 
   // Whether to use watchman for file crawling
   // watchman: true,
+  ...( isBazel ? bazelOnlySettings : {} ),
 };

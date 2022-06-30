@@ -10,6 +10,25 @@
 
 import Enzyme from "enzyme";
 import Adapter from "enzyme-adapter-react-16";
+// import * as v8 from "v8";
+// 
+// if (process.env.BAZEL_TARGET) {
+//   // TODO(barag): set Error.stackTraceLimit to be not 100 like it is now. Paths are *horridly* long under Bazel, and 100
+//   // stack frames is a ton of data.
+//   // console.log("stack trace limit = ", Error.stackTraceLimit);
+//   // bisect log:
+//   // 100: bad
+//   // 50:  good
+//   // 75:  bad
+//   // 62:  good
+//   // 68:  good
+//   // 65:  good
+//   // 66:  good
+//   // 67:  bad
+//   Error.stackTraceLimit = 100;
+// }
+
+//TODO(barag): does this need to all be in a beforeAll()/afterAll so we can restore all of these mocks?
 
 Enzyme.configure({ adapter: new Adapter() });
 
@@ -27,7 +46,7 @@ Object.defineProperty(window, "fetch", {
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
-  value: jest.fn().mockImplementation(query => ({
+  value: (query) => ({
     matches: false,
     media: query,
     onchange: null,
@@ -36,7 +55,17 @@ Object.defineProperty(window, "matchMedia", {
     addEventListener: jest.fn(),
     removeEventListener: jest.fn(),
     dispatchEvent: jest.fn(),
-  })),
+  }),
 });
 
-export {};
+afterAll(() => {
+  jest.restoreAllMocks();
+  delete window.matchMedia;
+  delete window.fetch;
+});
+
+// afterAll(() => {
+//   console.log("[setupTests::afterAll] writing v8 heap snapshot…");
+//   const dst = v8.writeHeapSnapshot();
+//   console.log("[setupTests::afterAll] done. see", dst);
+// });
