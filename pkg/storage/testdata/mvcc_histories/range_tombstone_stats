@@ -2,9 +2,9 @@
 #
 # Final state, where x is tombstone, o---o is range tombstone, [] is intent:
 #
-# 6             d6  e6  f6
-# 5                         x   x   x
-# 4     b4  x   o-----------------------o   Two range tombstones: the lowest is the one
+# 6     b6      d6  e6  f6
+# 5         x               x   x   x
+# 4             o-----------------------o   Two range tombstones: the lowest is the one
 # 3     x   c3  o-----------------------o   that matters for point key GCBytesAge.
 # 2     x
 # 1     b1  x       e1  x       h1  x
@@ -16,10 +16,10 @@ put k=a ts=0 v=a0
 put k=b ts=1 v=b1
 del k=b ts=2
 del k=b ts=3
-put k=b ts=4 v=b4
+put k=b ts=6 v=b6
 del k=c ts=1
 put k=c ts=3 v=c3
-del k=c ts=4
+del k=c ts=5
 put k=e ts=1 v=e1
 del k=f ts=1
 put k=h ts=1 v=h1
@@ -42,14 +42,14 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_b
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3234
 >> del k=b ts=3
 stats: key_bytes=+12 val_count=+1 gc_bytes_age=+1162
->> put k=b ts=4 v=b4
+>> put k=b ts=6 v=b6
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
 >> del k=c ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> put k=c ts=3 v=c3
 stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-198
->> del k=c ts=4
-stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> del k=c ts=5
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3135
 >> put k=e ts=1 v=e1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=f ts=1
@@ -79,11 +79,11 @@ stats: key_bytes=+12 val_count=+1 gc_bytes_age=+1132
 >> at end:
 rangekey: {d-j}/[4.000000000,0={localTs=3.000000000,0}/<empty> 3.000000000,0=/<empty>]
 meta: "a"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/a0 mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "b"/4.000000000,0 -> /BYTES/b4
+data: "b"/6.000000000,0 -> /BYTES/b6
 data: "b"/3.000000000,0 -> /<empty>
 data: "b"/2.000000000,0 -> /<empty>
 data: "b"/1.000000000,0 -> /BYTES/b1
-data: "c"/4.000000000,0 -> /<empty>
+data: "c"/5.000000000,0 -> /<empty>
 data: "c"/3.000000000,0 -> /BYTES/c3
 data: "c"/1.000000000,0 -> /<empty>
 data: "d"/6.000000000,0 -> /BYTES/d6
@@ -96,7 +96,7 @@ data: "h"/5.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
 data: "i"/5.000000000,0 -> /<empty>
 data: "i"/1.000000000,0 -> /<empty>
-stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=13 live_count=5 live_bytes=107 gc_bytes_age=21979
+stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=13 live_count=5 live_bytes=107 gc_bytes_age=21946
 
 # Finally, let's delete everything -- first in parts, then all again. We can't
 # delete the inline value at "a" though.
@@ -125,11 +125,11 @@ rangekey: {b-d}/[9.000000000,0=/<empty> 8.000000000,0={localTs=7.000000000,0}/<e
 rangekey: {d-f}/[9.000000000,0=/<empty> 8.000000000,0={localTs=7.000000000,0}/<empty> 4.000000000,0={localTs=3.000000000,0}/<empty> 3.000000000,0=/<empty>]
 rangekey: {f-j}/[9.000000000,0=/<empty> 8.000000000,0=/<empty> 4.000000000,0={localTs=3.000000000,0}/<empty> 3.000000000,0=/<empty>]
 meta: "a"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/a0 mergeTs=<nil> txnDidNotUpdateMeta=false
-data: "b"/4.000000000,0 -> /BYTES/b4
+data: "b"/6.000000000,0 -> /BYTES/b6
 data: "b"/3.000000000,0 -> /<empty>
 data: "b"/2.000000000,0 -> /<empty>
 data: "b"/1.000000000,0 -> /BYTES/b1
-data: "c"/4.000000000,0 -> /<empty>
+data: "c"/5.000000000,0 -> /<empty>
 data: "c"/3.000000000,0 -> /BYTES/c3
 data: "c"/1.000000000,0 -> /<empty>
 data: "d"/6.000000000,0 -> /BYTES/d6
@@ -142,4 +142,4 @@ data: "h"/5.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
 data: "i"/5.000000000,0 -> /<empty>
 data: "i"/1.000000000,0 -> /<empty>
-stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=3 range_key_bytes=102 range_val_count=10 range_val_bytes=52 live_count=1 live_bytes=23 gc_bytes_age=40733
+stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=3 range_key_bytes=102 range_val_count=10 range_val_bytes=52 live_count=1 live_bytes=23 gc_bytes_age=40700
