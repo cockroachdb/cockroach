@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -459,7 +459,7 @@ func NewDatumRowConverter(
 	return c, nil
 }
 
-const rowIDBits = 64 - builtins.NodeIDBits
+const rowIDBits = 64 - builtinconstants.NodeIDBits
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.

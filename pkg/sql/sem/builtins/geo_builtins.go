@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -6200,7 +6201,7 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 
 	"st_estimatedextent": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySpatial,
+			Category: builtinconstants.CategorySpatial,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6261,7 +6262,7 @@ The parent_only boolean is always ignored.`,
 	"addgeometrycolumn": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.SQLClass,
-			Category: categorySpatial,
+			Category: builtinconstants.CategorySpatial,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -7305,7 +7306,7 @@ func initGeoBuiltins() {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)
 		}
-		v.props.Category = categorySpatial
+		v.props.Category = builtinconstants.CategorySpatial
 		v.props.AvailableOnPublicSchema = true
 		builtins[k] = v
 	}

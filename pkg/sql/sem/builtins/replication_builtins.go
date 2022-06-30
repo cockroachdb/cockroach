@@ -14,6 +14,7 @@ import (
 	gojson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -41,7 +42,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	// Stream ingestion functions starts here.
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -79,7 +80,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 	"crdb_internal.stream_ingestion_stats_json": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 
@@ -119,7 +120,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 	"crdb_internal.stream_ingestion_stats_pb": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 
@@ -156,7 +157,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	// Stream production functions starts here.
 	"crdb_internal.start_replication_stream": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -189,7 +190,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 	"crdb_internal.replication_stream_progress": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -229,7 +230,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	),
 	"crdb_internal.stream_partition": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: false,
 			Class:            tree.GeneratorClass,
 		},
@@ -260,7 +261,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 	"crdb_internal.replication_stream_spec": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -294,7 +295,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 
 	"crdb_internal.complete_replication_stream": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categoryStreamIngestion,
+			Category:         builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
