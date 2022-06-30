@@ -368,6 +368,7 @@ func (c *conn) serveImpl(
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
+		defer reserved.Close(ctx)
 		var err error
 		for param, value := range testingStatusReportParams {
 			err = c.sendParamStatus(param, value)
@@ -376,7 +377,6 @@ func (c *conn) serveImpl(
 			}
 		}
 		if err != nil {
-			reserved.Close(ctx)
 			return
 		}
 		var ac AuthConn = authPipe
@@ -387,7 +387,6 @@ func (c *conn) serveImpl(
 		procCh = dummyCh
 
 		if err := c.sendReadyForQuery(0 /* queryCancelKey */); err != nil {
-			reserved.Close(ctx)
 			return
 		}
 	}
@@ -621,7 +620,8 @@ func (c *conn) serveImpl(
 // Args:
 // ac: An interface used by the authentication process to receive password data
 //   and to ultimately declare the authentication successful.
-// reserved: Reserved memory. This method takes ownership.
+// reserved: Reserved memory. This method takes ownership and guarantees that it
+//   will be closed when this function returns.
 // cancelConn: A function to be called when this goroutine exits. Its goal is to
 //   cancel the connection's context, thus stopping the connection's goroutine.
 //   The returned channel is also closed before this goroutine dies, but the
