@@ -357,6 +357,10 @@ func TestMVCCHistories(t *testing.T) {
 				e.results.buf = &buf
 				e.results.traceIntentWrites = trace
 
+				// We reset the stats such that they accumulate for all commands
+				// in a single test.
+				e.ms = &enginepb.MVCCStats{}
+
 				// foundErr remembers which error was last encountered while
 				// executing the script under "run".
 				var foundErr error
@@ -483,13 +487,15 @@ func TestMVCCHistories(t *testing.T) {
 						_ = buf.WriteByte('\n')
 					}
 
-					var msInitial enginepb.MVCCStats
+					// Record the engine and evaluated stats before the command, so
+					// that we can compare the deltas.
+					var msEngineBefore enginepb.MVCCStats
 					if stats {
-						msInitial = computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
+						msEngineBefore = computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
 					}
+					msEvalBefore := *e.ms
 
 					// Run the command.
-					e.ms = &enginepb.MVCCStats{}
 					foundErr = cmd.fn(e)
 
 					if trace {
@@ -502,15 +508,17 @@ func TestMVCCHistories(t *testing.T) {
 					if stats && cmd.typ == typDataUpdate {
 						// If stats are enabled, emit evaluated stats returned by the
 						// command, and compare them with the real computed stats diff.
-						msEval := *e.ms
-						msEval.AgeTo(statsTS)
-						buf.Printf("stats: %s\n", formatStats(msEval, true))
+						msEngineDiff := computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
+						msEngineDiff.Subtract(msEngineBefore)
 
-						msDiff := computeStats(e.t, e.engine, span.Key, span.EndKey, statsTS)
-						msDiff.Subtract(msInitial)
-						if msEval != msDiff {
+						msEvalDiff := *e.ms
+						msEvalDiff.Subtract(msEvalBefore)
+						msEvalDiff.AgeTo(msEngineDiff.LastUpdateNanos)
+						buf.Printf("stats: %s\n", formatStats(msEvalDiff, true))
+
+						if msEvalDiff != msEngineDiff {
 							e.t.Errorf("MVCC stats mismatch for %q at %s\nReturned: %s\nExpected: %s",
-								d.Cmd, d.Pos, formatStats(msEval, true), formatStats(msDiff, true))
+								d.Cmd, d.Pos, formatStats(msEvalDiff, true), formatStats(msEngineDiff, true))
 						}
 					}
 
