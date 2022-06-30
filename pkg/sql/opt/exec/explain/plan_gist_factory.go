@@ -144,7 +144,23 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 }
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
-func DecodePlanGistToRows(gist string, catalog cat.Catalog) ([]string, error) {
+func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having
+			// to add error checks everywhere throughout the code. This is only
+			// possible because the code does not update shared state and does
+			// not manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				retErr = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
 	flags := Flags{HideValues: true, Redact: RedactAll}
 	ob := NewOutputBuilder(flags)
 	explainPlan, err := DecodePlanGistToPlan(gist, catalog)
@@ -172,22 +188,6 @@ func DecodePlanGistToPlan(s string, cat cat.Catalog) (plan *Plan, retErr error) 
 	f.buffer.Reset()
 	f.buffer.Write(bytes)
 	plan = &Plan{}
-
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				retErr = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
 
 	ver := f.decodeInt()
 	if ver != gistVersion {
