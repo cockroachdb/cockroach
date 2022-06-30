@@ -16,6 +16,7 @@ import {
   longToInt,
   StatementSummary,
   StatementStatistics,
+  Count,
 } from "src/util";
 import {
   countBarChart,
@@ -106,7 +107,7 @@ function makeCommonColumns(
       title: statisticsTableTitles.rowsProcessed(statType),
       className: cx("statements-table__col-rows-read"),
       cell: (stmt: AggregateStatistics) =>
-        `${FixLong(Number(stmt.stats.rows_read.mean))} Reads / ${FixLong(
+        `${Count(Number(stmt.stats.rows_read.mean))} Reads / ${Count(
           Number(stmt.stats.rows_written?.mean),
         )} Writes`,
       sort: (stmt: AggregateStatistics) =>
