@@ -28,6 +28,7 @@ go_proto_library(
     proto = ":scpb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/types",
@@ -44,6 +45,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb:zonepb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",

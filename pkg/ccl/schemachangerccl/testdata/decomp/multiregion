@@ -50,7 +50,10 @@ ElementState:
   Status: PUBLIC
 - DatabaseRegionConfig:
     databaseId: 104
+    placement: 0
+    primaryRegion: us-east1
     regionEnumTypeId: 105
+    survivalGoal: 1
   Status: PUBLIC
 - DatabaseRoleSetting:
     databaseId: 104

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -1100,4 +1102,14 @@ func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
 // AddTableForStatsRefresh implements scexec.StatsRefreshQueue
 func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 	s.LogSideEffectf("adding table for stats refresh: %d", id)
+}
+
+// GetZoneConfigRaw implements scdecomp.ZoneConfigReader.
+func (s *TestState) GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig {
+	return nil
+}
+
+// ZoneConfigReader implement scbuild.Dependencies.
+func (s *TestState) ZoneConfigReader() scdecomp.ZoneConfigReader {
+	return s
 }

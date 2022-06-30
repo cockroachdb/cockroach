@@ -13,6 +13,8 @@ package scdeps
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -380,6 +382,28 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 }
 
+// DescriptorCommentCache implements scbuild.Dependencies.
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+}
+
+// GetZoneConfigRaw implements scbuild.ZoneConfigReader.
+func (d *buildDeps) GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig {
+	kv, err := d.txn.Get(ctx, config.MakeZoneKey(d.codec, id))
+	if err != nil {
+		panic(err)
+	}
+	if kv.Value == nil {
+		return nil
+	}
+	var zone zonepb.ZoneConfig
+	if err := kv.ValueProto(&zone); err != nil {
+		panic(err)
+	}
+	return &zone
+}
+
+// ZoneConfigReader implements scbuild.Dependencies.
+func (d *buildDeps) ZoneConfigReader() scbuild.ZoneConfigReader {
+	return d
 }

@@ -72,6 +72,9 @@ type Dependencies interface {
 	// DescriptorCommentCache returns a CommentCache
 	// Implementation.
 	DescriptorCommentCache() CommentCache
+
+	// ZoneConfigReader returns a ZoneConfigReader implementation.
+	ZoneConfigReader() ZoneConfigReader
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
