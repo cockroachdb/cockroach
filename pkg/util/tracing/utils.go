@@ -40,6 +40,7 @@ func normalizeSpan(s tracingpb.RecordedSpan, trace tracingpb.Recording) tracingp
 	n.TagGroups = s.TagGroups
 	n.Logs = s.Logs
 	n.StructuredRecords = s.StructuredRecords
+	n.ChildrenMetadata = s.ChildrenMetadata
 
 	for _, ss := range trace {
 		if ss.ParentSpanID != s.SpanID {

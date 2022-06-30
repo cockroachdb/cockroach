@@ -27,12 +27,10 @@ message LogRecord {
     string key = 1;
     string value = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
   }
-  // Fields with values converted to strings. In 22.1, the `message` field
-  // contains the log message, and this field is only used for compatibility
-  // with 21.2 nodes.
-  repeated Field deprecated_fields = 2 [(gogoproto.nullable) = false];
   // The log message.
   string message = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+
+  reserved 2;
 }
 
 // StructuredRecord is a structured message recorded in a traced span.
@@ -46,6 +44,8 @@ message StructuredRecord {
 // OperationMetadata captures information corresponding to the operation that
 // a span is started with.
 message OperationMetadata {
+  option (gogoproto.goproto_stringer) = false;
+
   // Duration represents the total time spent by spans tracing the operation.
   int64 duration = 1 [(gogoproto.casttype) = "time.Duration"];
   // Count represents the number of spans tracing the operation.
@@ -179,5 +179,6 @@ message NormalizedSpan {
                                         (gogoproto.stdduration) = true];
   repeated LogRecord logs = 5 [(gogoproto.nullable) = false];
   repeated StructuredRecord structured_records = 7 [(gogoproto.nullable) = false];
+  map<string, OperationMetadata> children_metadata = 9 [(gogoproto.nullable) = false];
   repeated NormalizedSpan children = 6 [(gogoproto.nullable) = false];
 }

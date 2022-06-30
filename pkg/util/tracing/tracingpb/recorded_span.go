@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/redact"
 	types "github.com/gogo/protobuf/types"
 )
@@ -82,17 +83,6 @@ func (l LogRecord) Msg() redact.RedactableString {
 	if l.Message != "" {
 		return l.Message
 	}
-
-	// Compatibility with 21.2: look at l.DeprecatedFields.
-	for _, f := range l.DeprecatedFields {
-		key := f.Key
-		if key == LogMessageField {
-			return f.Value
-		}
-		if key == "error" {
-			return redact.Sprintf("error: %s", f.Value)
-		}
-	}
 	return ""
 }
 
@@ -127,4 +117,19 @@ func (m OperationMetadata) Combine(other OperationMetadata) OperationMetadata {
 	m.ContainsUnfinished = m.ContainsUnfinished || other.ContainsUnfinished
 	m.Duration += other.Duration
 	return m
+}
+
+var _ redact.SafeFormatter = OperationMetadata{}
+
+func (m OperationMetadata) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("{count: %d, duration %s", m.Count, humanizeutil.Duration(m.Duration))
+	if m.ContainsUnfinished {
+		s.Printf(", unfinished")
+	}
+	s.Print("}")
 }
