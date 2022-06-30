@@ -118,7 +118,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 	updateCacheFn := func(
 		ctx context.Context, keyVal *roachpb.RangeFeedValue,
 	) {
-		instanceID, addr, sessionID, timestamp, tombstone, err := r.rowcodec.decodeRow(kv.KeyValue{
+		instanceID, addr, sessionID, locality, timestamp, tombstone, err := r.rowcodec.decodeRow(kv.KeyValue{
 			Key:   keyVal.Key,
 			Value: &keyVal.Value,
 		})
@@ -131,6 +131,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 			addr:       addr,
 			sessionID:  sessionID,
 			timestamp:  timestamp,
+			locality:   locality,
 		}
 		r.updateInstanceMap(instance, tombstone)
 	}
@@ -195,6 +196,7 @@ func (r *Reader) GetInstance(
 		InstanceID:   instance.instanceID,
 		InstanceAddr: instance.addr,
 		SessionID:    instance.sessionID,
+		Locality:     instance.locality,
 	}
 	return instanceInfo, nil
 }
@@ -218,6 +220,7 @@ func (r *Reader) GetAllInstances(
 			InstanceID:   liveInstance.instanceID,
 			InstanceAddr: liveInstance.addr,
 			SessionID:    liveInstance.sessionID,
+			Locality:     liveInstance.locality,
 		}
 		sqlInstances = append(sqlInstances, instanceInfo)
 	}
