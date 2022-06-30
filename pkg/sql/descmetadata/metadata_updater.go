@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
@@ -30,17 +33,47 @@ import (
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
 // comments on different schema objects.
 type metadataUpdater struct {
-	txn               *kv.Txn
-	ie                sqlutil.InternalExecutor
-	collectionFactory *descs.CollectionFactory
-	cacheEnabled      bool
+	ctx          context.Context
+	txn          *kv.Txn
+	ieFactory    sqlutil.SessionBoundInternalExecutorFactory
+	sessionData  *sessiondata.SessionData
+	descriptors  *descs.Collection
+	cacheEnabled bool
+}
+
+// NewMetadataUpdater creates a new comment updater, which can be used to
+// create / destroy metadata (i.e. comments) associated with different
+// schema objects.
+func NewMetadataUpdater(
+	ctx context.Context,
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	descriptors *descs.Collection,
+	settings *settings.Values,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+) scexec.DescriptorMetadataUpdater {
+	// Unfortunately, we can't use the session data unmodified, previously the
+	// code modifying this metadata would use a circular executor that would ignore
+	// any settings set later on. We will intentionally, unset problematic settings
+	// here.
+	modifiedSessionData := sessionData.Clone()
+	modifiedSessionData.ExperimentalDistSQLPlanningMode = sessiondatapb.ExperimentalDistSQLPlanningOn
+	return metadataUpdater{
+		ctx:          ctx,
+		txn:          txn,
+		ieFactory:    ieFactory,
+		sessionData:  modifiedSessionData,
+		descriptors:  descriptors,
+		cacheEnabled: sessioninit.CacheEnabled.Get(settings),
+	}
 }
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
-	_, err := mu.ie.ExecEx(context.Background(),
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	_, err := ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
 		mu.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
@@ -57,7 +90,8 @@ func (mu metadataUpdater) UpsertDescriptorComment(
 func (mu metadataUpdater) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
-	_, err := mu.ie.ExecEx(context.Background(),
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	_, err := ie.ExecEx(context.Background(),
 		fmt.Sprintf("delete-%s-comment", commentType),
 		mu.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
@@ -88,7 +122,8 @@ DELETE FROM system.comments
 		_, _ = fmt.Fprintf(&buf, ", %d", id)
 	}
 	buf.WriteString(")")
-	_, err := mu.ie.ExecEx(context.Background(),
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	_, err := ie.ExecEx(context.Background(),
 		"delete-all-comments-for-tables",
 		mu.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
@@ -97,7 +132,7 @@ DELETE FROM system.comments
 	return err
 }
 
-// UpsertConstraintComment implements scexec.CommentUpdater.
+// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) UpsertConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
@@ -113,7 +148,8 @@ func (mu metadataUpdater) DeleteConstraintComment(
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
 func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	rowsDeleted, err := mu.ie.ExecEx(ctx,
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	rowsDeleted, err := ie.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
@@ -132,33 +168,29 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
-	return mu.collectionFactory.Txn(ctx,
-		mu.ie,
-		mu.txn.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			desc, err := descriptors.GetMutableTableByID(
-				ctx,
-				txn,
-				keys.DatabaseRoleSettingsTableID,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:       true,
-						RequireMutable: true,
-					},
-				})
-			if err != nil {
-				return err
-			}
-			desc.MaybeIncrementVersion()
-			return descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, txn)
+	desc, err := mu.descriptors.GetMutableTableByID(
+		ctx,
+		mu.txn,
+		keys.DatabaseRoleSettingsTableID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:       true,
+				RequireMutable: true,
+			},
 		})
+	if err != nil {
+		return err
+	}
+	desc.MaybeIncrementVersion()
+	return mu.descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, mu.txn)
 }
 
 // SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) SwapDescriptorSubComment(
 	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
 ) error {
-	_, err := mu.ie.ExecEx(context.Background(),
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	_, err := ie.ExecEx(context.Background(),
 		fmt.Sprintf("upsert-%s-comment", commentType),
 		mu.txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
@@ -174,7 +206,8 @@ func (mu metadataUpdater) SwapDescriptorSubComment(
 
 // DeleteSchedule implement scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
-	_, err := mu.ie.ExecEx(
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	_, err := ie.ExecEx(
 		ctx,
 		"delete-schedule",
 		mu.txn,

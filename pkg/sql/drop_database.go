@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -180,19 +180,16 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	metadataUpdater := p.ExecCfg().DescMetadaUpdaterFactory.NewMetadataUpdater(
+	metadataUpdater := descmetadata.NewMetadataUpdater(
 		ctx,
+		p.ExecCfg().InternalExecutorFactory,
+		p.Descriptors(),
+		&p.ExecCfg().Settings.SV,
 		p.txn,
-		p.SessionData())
-	err := metadataUpdater.DeleteDescriptorComment(
-		int64(n.dbDesc.GetID()),
-		0,
-		keys.DatabaseCommentType)
-	if err != nil {
-		return err
-	}
+		p.SessionData(),
+	)
 
-	err = metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc.GetID())
+	err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc.GetID())
 	if err != nil {
 		return err
 	}

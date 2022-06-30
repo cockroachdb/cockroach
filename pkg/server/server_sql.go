@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -931,12 +930,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.NewFakeSessionData,
-	)
-
-	execCfg.DescMetadaUpdaterFactory = descmetadata.NewMetadataUpdaterFactory(
-		ieFactory,
-		collectionFactory,
-		&execCfg.Settings.SV,
 	)
 	execCfg.InternalExecutorFactory = ieFactory
 

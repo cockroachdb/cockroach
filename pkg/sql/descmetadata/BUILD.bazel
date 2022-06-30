@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "comment_cache.go",
         "metadata_updater.go",
-        "metadata_updater_factory.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/descmetadata",
     visibility = ["//visibility:public"],
