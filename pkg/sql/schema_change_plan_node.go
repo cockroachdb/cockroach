@@ -249,6 +249,7 @@ func newSchemaChangerTxnRunDependencies(
 		evalContext.Context,
 		execCfg.InternalExecutorFactory,
 		descriptors,
+		execCfg.Codec,
 		&execCfg.Settings.SV,
 		txn,
 		sessionData,
