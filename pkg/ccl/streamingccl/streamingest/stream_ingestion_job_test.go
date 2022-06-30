@@ -129,8 +129,7 @@ SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
 		// is required. Tracked with #76378.
 		// TODO(ajstorm): This may be the right course of action here as the
 		//  replication is now being run inside a tenant.
-		base.TestServerArgs{DisableDefaultTestTenant: true},
-		roachpb.MakeTenantID(20))
+		base.TestServerArgs{DisableDefaultTestTenant: true})
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
@@ -155,6 +154,16 @@ SET enable_experimental_stream_replication = true;
 	destSQL.ExpectErr(t, "pq: either old tenant ID 10 or the new tenant ID 1 cannot be system tenant",
 		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
 		pgURL.String())
+
+	existingTenantID := uint64(10)
+	_, existingTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(existingTenantID)})
+	defer func() {
+		require.NoError(t, existingTenantConn.Close())
+	}()
+	destSQL.ExpectErr(t, fmt.Sprintf("pq: tenant with id %d already exists", existingTenantID),
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT `+fmt.Sprintf("%d", existingTenantID),
+		pgURL.String())
+
 	destSQL.QueryRow(t,
 		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime+` AS TENANT 20`,
 		pgURL.String(),
@@ -200,9 +209,15 @@ INSERT INTO d.t2 VALUES (2);
 	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
 		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
 
+	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), DisableCreateTenant: true})
+	defer func() {
+		require.NoError(t, destTenantConn.Close())
+	}()
+	destTenantSQL := sqlutils.MakeSQLRunner(destTenantConn)
+
 	query := "SELECT * FROM d.t1"
 	sourceData := sourceSQL.QueryStr(t, query)
-	destData := hDest.Tenant.SQL.QueryStr(t, query)
+	destData := destTenantSQL.QueryStr(t, query)
 	require.Equal(t, sourceData, destData)
 }
 

@@ -174,6 +174,14 @@ func ingestionPlanHook(
 				oldTenantID.ToUint64(), newTenantID.ToUint64())
 		}
 
+		// Create a new tenant for the replication stream
+		if _, err := sql.GetTenantRecord(ctx, p.ExecCfg(), nil, newTenantID.ToUint64()); err == nil {
+			return errors.Newf("tenant with id %s already exists", newTenantID)
+		}
+		if err := p.ExtendedEvalContext().Tenant.CreateInactiveTenant(ctx, newTenantID.ToUint64()); err != nil {
+			return err
+		}
+
 		// Create a new stream with stream client.
 		client, err := streamclient.NewStreamClient(streamAddress)
 		if err != nil {

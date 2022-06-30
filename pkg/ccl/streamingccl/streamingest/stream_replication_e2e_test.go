@@ -37,32 +37,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type execFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner)
+type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner)
+type destInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner) // Tenant is created by the replication stream
 
 type tenantStreamingClustersArgs struct {
 	srcTenantID roachpb.TenantID
-	srcInitFunc execFunc
+	srcInitFunc srcInitExecFunc
 	srcNumNodes int
 
 	destTenantID roachpb.TenantID
-	destInitFunc execFunc
+	destInitFunc destInitExecFunc
 	destNumNodes int
 }
 
 type tenantStreamingClusters struct {
 	t            *testing.T
 	args         tenantStreamingClustersArgs
+	srcSysServer serverutils.TestServerInterface
 	srcSysSQL    *sqlutils.SQLRunner
 	srcTenantSQL *sqlutils.SQLRunner
 	srcURL       url.URL
 
+	destSysServer serverutils.TestServerInterface
 	destSysSQL    *sqlutils.SQLRunner
-	destTenantSQL *sqlutils.SQLRunner
+}
+
+// This function will fail the test if ran prior to the Replication stream
+// closing as the tenant will not yet be active
+func (c *tenantStreamingClusters) getDestTenantSQL() *sqlutils.SQLRunner {
+	_, destTenantConn := serverutils.StartTenant(c.t, c.destSysServer, base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	return sqlutils.MakeSQLRunner(destTenantConn)
 }
 
 func (c *tenantStreamingClusters) compareResult(query string) {
 	sourceData := c.srcTenantSQL.QueryStr(c.t, query)
-	destData := c.destTenantSQL.QueryStr(c.t, query)
+	destData := c.getDestTenantSQL().QueryStr(c.t, query)
 	require.Equal(c.t, sourceData, destData)
 }
 
@@ -127,45 +136,47 @@ func createTenantStreamingClusters(
 		ctx context.Context,
 		t *testing.T,
 		serverArgs base.TestServerArgs,
-		tenantID roachpb.TenantID,
 		numNodes int,
-	) (*sqlutils.SQLRunner, *sqlutils.SQLRunner, url.URL, func()) {
+	) (serverutils.TestServerInterface, *sqlutils.SQLRunner, url.URL, func()) {
 		params := base.TestClusterArgs{ServerArgs: serverArgs}
 		c := testcluster.StartTestCluster(t, numNodes, params)
 		// TODO(casper): support adding splits when we have multiple nodes.
-		_, tenantConn := serverutils.StartTenant(t, c.Server(0), base.TestTenantArgs{TenantID: tenantID})
 		pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-		return sqlutils.MakeSQLRunner(c.ServerConn(0)), sqlutils.MakeSQLRunner(tenantConn), pgURL, func() {
-			require.NoError(t, tenantConn.Close())
+		return c.Server(0), sqlutils.MakeSQLRunner(c.ServerConn(0)), pgURL, func() {
 			c.Stopper().Stop(ctx)
 			cleanupSinkCert()
 		}
 	}
 
 	// Start the source cluster.
-	sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
+	srcServer, sourceSysSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcNumNodes)
 	// Start the destination cluster.
-	destSysSQL, destTenantSQL, _, destCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.destTenantID, args.destNumNodes)
+	destServer, destSysSQL, _, destCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.destNumNodes)
+
+	// Start the src tenant
+	_, srcTenantConn := serverutils.StartTenant(t, srcServer, base.TestTenantArgs{TenantID: args.srcTenantID})
+	sourceTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
 
 	args.srcInitFunc(t, sourceSysSQL, sourceTenantSQL)
-	args.destInitFunc(t, destSysSQL, destTenantSQL)
+	args.destInitFunc(t, destSysSQL)
 	// Enable stream replication on dest by default.
 	destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true;`)
 	return &tenantStreamingClusters{
 			t:             t,
 			args:          args,
+			srcSysServer:  srcServer,
 			srcSysSQL:     sourceSysSQL,
 			srcTenantSQL:  sourceTenantSQL,
 			srcURL:        srcURL,
+			destSysServer: destServer,
 			destSysSQL:    destSysSQL,
-			destTenantSQL: destTenantSQL,
 		}, func() {
 			destCleanup()
 			srcCleanup()
 		}
 }
 
-func (c *tenantStreamingClusters) srcExec(exec execFunc) {
+func (c *tenantStreamingClusters) srcExec(exec srcInitExecFunc) {
 	exec(c.t, c.srcSysSQL, c.srcTenantSQL)
 }
 
@@ -234,20 +245,20 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 					sysSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 				}
 				tenantSQL.Exec(t, `
-	CREATE DATABASE d;
-	CREATE TABLE d.t1(i int primary key, a string, b string);
-	CREATE TABLE d.t2(i int primary key);
-	INSERT INTO d.t1 (i) VALUES (42);
-	INSERT INTO d.t2 VALUES (2);
-	UPDATE d.t1 SET b = 'world' WHERE i = 42;
-	`)
+  CREATE DATABASE d;
+  CREATE TABLE d.t1(i int primary key, a string, b string);
+  CREATE TABLE d.t2(i int primary key);
+  INSERT INTO d.t1 (i) VALUES (42);
+  INSERT INTO d.t2 VALUES (2);
+  UPDATE d.t1 SET b = 'world' WHERE i = 42;
+  `)
 				tenantSQL.Exec(t, `
-	ALTER TABLE d.t1 DROP COLUMN b;
-	`)
+  ALTER TABLE d.t1 DROP COLUMN b;
+  `)
 			},
 			srcNumNodes:  1,
 			destTenantID: roachpb.MakeTenantID(20),
-			destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner) {
 				sysSQL.ExecMultiple(t, configureClusterSettings(destClusterSetting)...)
 			},
 			destNumNodes: 1,
@@ -259,6 +270,11 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 			tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
 			tenantSQL.Exec(t, "IMPORT INTO d.x CSV DATA ($1)", dataSrv.URL)
 		})
+
+		// TODO(samiskin): enable this check once #83650 is resolved
+		// // We should not be able to connect to the tenant prior to the cutoff time
+		// _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+		// require.Error(t, err)
 
 		var cutoverTime time.Time
 		c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
@@ -275,9 +291,8 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 		})
 		// Check the dst cluster didn't receive the change after a while.
 		<-time.NewTimer(3 * time.Second).C
-		require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
+		require.Equal(t, [][]string{{"2"}}, c.getDestTenantSQL().QueryStr(t, "SELECT * FROM d.t2"))
 	}
-
 	t.Run("initial-scan", func(t *testing.T) {
 		testTenantStreaming(t, true /* withInitialScan */)
 	})
@@ -308,14 +323,13 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 		},
 		srcNumNodes:  1,
 		destTenantID: roachpb.MakeTenantID(20),
-		destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner) {
 			sysSQL.ExecMultiple(t, configureClusterSettings(destClusterSetting)...)
 		},
 		destNumNodes: 1,
 	})
 	defer cleanup()
 
-	// initial scan
 	producerJobID, ingestionJobID := c.startStreamReplication("" /* startTime */)
 
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
@@ -349,5 +363,5 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	// Check the dst cluster didn't receive the change after a while.
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"0"}},
-		c.destTenantSQL.QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
+		c.getDestTenantSQL().QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
 }

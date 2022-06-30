@@ -176,14 +176,12 @@ type ReplicationHelper struct {
 	SysDB *sqlutils.SQLRunner
 	// PGUrl is the pgurl of this server.
 	PGUrl url.URL
-	// Tenant is a tenant running on this server.
-	Tenant TenantState
 }
 
 // NewReplicationHelper starts test server and configures it to have active
 // tenant.
 func NewReplicationHelper(
-	t *testing.T, serverArgs base.TestServerArgs, tenantID roachpb.TenantID,
+	t *testing.T, serverArgs base.TestServerArgs,
 ) (*ReplicationHelper, func()) {
 	ctx := context.Background()
 
@@ -202,9 +200,6 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 `, `;`)...)
 
-	// Start tenant server
-	_, tenantConn := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
-
 	// Sink to read data from.
 	sink, cleanupSink := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 
@@ -212,17 +207,11 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 		SysServer: s,
 		SysDB:     sqlutils.MakeSQLRunner(db),
 		PGUrl:     sink,
-		Tenant: TenantState{
-			ID:    tenantID,
-			Codec: keys.MakeSQLCodec(tenantID),
-			SQL:   sqlutils.MakeSQLRunner(tenantConn),
-		},
 	}
 
 	return h, func() {
 		cleanupSink()
 		resetFreq()
-		require.NoError(t, tenantConn.Close())
 		s.Stopper().Stop(ctx)
 	}
 }
