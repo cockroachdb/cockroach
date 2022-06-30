@@ -361,17 +361,20 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
-	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	sqlStatsInternalExecutorMonitor.Start(context.Background(), s.GetBytesMonitor(), mon.BoundAccount{})
+	sqlStatsInternalExecutor := MakeInternalExecutor(s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
-		Settings:         s.cfg.Settings,
-		InternalExecutor: &sqlStatsInternalExecutor,
-		KvDB:             cfg.DB,
-		SQLIDContainer:   cfg.NodeID,
-		JobRegistry:      s.cfg.JobRegistry,
-		Knobs:            cfg.SQLStatsTestingKnobs,
-		FlushCounter:     metrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter:   metrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:    metrics.StatsMetrics.SQLStatsFlushDuration,
+		Settings:                s.cfg.Settings,
+		InternalExecutor:        &sqlStatsInternalExecutor,
+		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
+		KvDB:                    cfg.DB,
+		SQLIDContainer:          cfg.NodeID,
+		JobRegistry:             s.cfg.JobRegistry,
+		Knobs:                   cfg.SQLStatsTestingKnobs,
+		FlushCounter:            metrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:          metrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:           metrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -587,6 +590,11 @@ func (s *Server) GetExecutorConfig() *ExecutorConfig {
 	return s.cfg
 }
 
+// GetBytesMonitor returns this server's BytesMonitor.
+func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
+	return s.pool
+}
+
 // SetupConn creates a connExecutor for the client connection.
 //
 // When this method returns there are no resources allocated yet that
@@ -759,6 +767,8 @@ func (s *Server) newConnExecutor(
 	)
 
 	nodeIDOrZero, _ := s.cfg.NodeID.OptionalNodeID()
+	ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.cfg.Settings)
+	ieMon.Start(ctx, sessionMon, mon.BoundAccount{})
 	ex := &connExecutor{
 		server:              s,
 		metrics:             srvMetrics,
@@ -766,6 +776,7 @@ func (s *Server) newConnExecutor(
 		clientComm:          clientComm,
 		mon:                 sessionRootMon,
 		sessionMon:          sessionMon,
+		internalExecutorMon: ieMon,
 		sessionDataStack:    sdMutIterator.sds,
 		dataMutatorIterator: sdMutIterator,
 		state: txnState{
@@ -1003,7 +1014,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon.Start(ctx, ex.server.GetBytesMonitor(), mon.BoundAccount{})
+		defer ieMon.Stop(ctx)
+		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
@@ -1053,10 +1067,12 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
+		ex.internalExecutorMon.Stop(ctx)
 		ex.mon.Stop(ctx)
 	} else {
 		ex.state.mon.EmergencyStop(ctx)
 		ex.sessionMon.EmergencyStop(ctx)
+		ex.internalExecutorMon.EmergencyStop(ctx)
 		ex.mon.EmergencyStop(ctx)
 	}
 }
@@ -1089,8 +1105,9 @@ type connExecutor struct {
 	metrics *Metrics
 
 	// mon tracks memory usage for SQL activity within this session. It
-	// is not directly used, but rather indirectly used via sessionMon
-	// and state.mon. sessionMon tracks session-bound objects like prepared
+	// is not directly used, but rather indirectly used via sessionMon.
+	// state.mon, and internalExecutorMon.
+	// sessionMon tracks session-bound objects like prepared
 	// statements and result sets.
 	//
 	// The reason why state.mon and mon are split is to enable
@@ -1099,8 +1116,9 @@ type connExecutor struct {
 	// is typically caused by transactions, not sessions. The reason why
 	// sessionMon and mon are split is to enable separate reporting of
 	// statistics for result sets (which escape transactions).
-	mon        *mon.BytesMonitor
-	sessionMon *mon.BytesMonitor
+	mon                 *mon.BytesMonitor
+	sessionMon          *mon.BytesMonitor
+	internalExecutorMon *mon.BytesMonitor
 	// memMetrics contains the metrics that statements executed on this connection
 	// will contribute to.
 	memMetrics MemoryMetrics
@@ -2412,10 +2430,9 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	ie := MakeInternalExecutor(
-		ctx,
 		ex.server,
 		ex.memMetrics,
-		ex.server.cfg.Settings,
+		ex.internalExecutorMon,
 	)
 	ie.SetSessionDataStack(ex.sessionDataStack)
 
