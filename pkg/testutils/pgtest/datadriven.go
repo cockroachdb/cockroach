@@ -288,6 +288,8 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.ErrorResponse{}
 	case "Execute":
 		return &pgproto3.Execute{}
+	case "Flush":
+		return &pgproto3.Flush{}
 	case "Parse":
 		return &pgproto3.Parse{}
 	case "PortalSuspended":

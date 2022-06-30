@@ -507,6 +507,13 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			if err := r.conn.Flush(r.pos); err != nil {
 				return err
 			}
+		case sql.Flush:
+			// Flush has no client response, so just advance the position and flush
+			// any  existing results.
+			r.conn.stmtBuf.AdvanceOne()
+			if err := r.conn.Flush(r.pos); err != nil {
+				return err
+			}
 		default:
 			// If the portal is immediately followed by a COMMIT, we can proceed and
 			// let the portal be destroyed at the end of the transaction.

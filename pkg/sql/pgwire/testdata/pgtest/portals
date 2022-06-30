@@ -114,12 +114,14 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Execute a portal with limited rows inside a transaction.
+# This also tests that we can handle Flush during the portal execution.
 
 send
 Query {"String": "BEGIN"}
 Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
 Bind
 Execute {"MaxRows": 1}
+Flush
 Sync
 ----
 
@@ -140,6 +142,7 @@ ReadyForQuery
 
 send
 Execute {"MaxRows": 1}
+Flush
 Sync
 ----
 
@@ -155,6 +158,7 @@ ReadyForQuery
 
 send
 Execute {"MaxRows": 1}
+Flush
 Sync
 ----
 
@@ -354,7 +358,7 @@ Execute {"MaxRows": 2}
 Sync
 ----
 
-until
+until ignore=NoticeResponse
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
