@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -111,4 +112,21 @@ type MutationVisitorStateUpdater interface {
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
+
+	// AddSubZoneConfig updates a zone config to add a new subzone.
+	AddSubZoneConfig(
+		ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+	) error
+
+	// RemoveSubZoneConfig updates a zone config to remove a subzone.
+	RemoveSubZoneConfig(
+		ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+	) error
+}
+
+// ZoneConfigReader supports reading raw zone config information
+// from storage.
+type ZoneConfigReader interface {
+	// GetZoneConfig reads the raw zone config from storage.
+	GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error)
 }

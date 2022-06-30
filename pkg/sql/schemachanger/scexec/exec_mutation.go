@@ -15,13 +15,17 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -36,7 +40,7 @@ import (
 // those side effects using the provided deps.
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 
-	mvs := newMutationVisitorState(deps.Catalog())
+	mvs := newMutationVisitorState(deps.Catalog(), deps.ZoneConfigReaderForExec())
 	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
@@ -354,6 +358,7 @@ func manageJobs(
 
 type mutationVisitorState struct {
 	c                            Catalog
+	zoneConfigReader             scmutationexec.ZoneConfigReader
 	modifiedDescriptors          nstree.Map
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
@@ -366,7 +371,7 @@ type mutationVisitorState struct {
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
 	statsToRefresh               map[descpb.ID]struct{}
-
+	zoneConfigsToUpdate          map[descpb.ID]*zonepb.ZoneConfig
 	gcJobs
 }
 
@@ -415,12 +420,16 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 	return nil
 }
 
-func newMutationVisitorState(c Catalog) *mutationVisitorState {
+func newMutationVisitorState(
+	c Catalog, zoneConfigReader scmutationexec.ZoneConfigReader,
+) *mutationVisitorState {
 	return &mutationVisitorState{
-		c:                 c,
-		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
-		eventsByStatement: make(map[uint32][]eventPayload),
-		statsToRefresh:    make(map[descpb.ID]struct{}),
+		c:                   c,
+		zoneConfigReader:    zoneConfigReader,
+		drainedNames:        make(map[descpb.ID][]descpb.NameInfo),
+		eventsByStatement:   make(map[uint32][]eventPayload),
+		statsToRefresh:      make(map[descpb.ID]struct{}),
+		zoneConfigsToUpdate: make(map[descpb.ID]*zonepb.ZoneConfig),
 	}
 }
 
@@ -601,5 +610,170 @@ func (mvs *mutationVisitorState) EnqueueEvent(
 			details:        details,
 		},
 	)
+	return nil
+}
+
+// getOrAddZoneConfig reads the existing zone config for a given descriptor,
+// ID if one exists, otherwise a nil one is stored.
+func (mvs *mutationVisitorState) getOrAddZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (*zonepb.ZoneConfig, error) {
+	if zc := mvs.zoneConfigsToUpdate[id]; zc != nil {
+		return zc, nil
+	}
+	zoneConfig, err := mvs.zoneConfigReader.GetZoneConfig(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if zoneConfig == nil {
+		zoneConfig = zonepb.NewZoneConfig()
+	}
+	mvs.zoneConfigsToUpdate[id] = zoneConfig
+	return mvs.zoneConfigsToUpdate[id], nil
+}
+
+// synthesizeMultiRegionConfig synthesizes the multi region config for a given
+// database descriptor.
+func (mvs *mutationVisitorState) synthesizeMultiRegionConfig(
+	ctx context.Context, dbID descpb.ID,
+) (multiregion.RegionConfig, error) {
+	regionConfig := multiregion.RegionConfig{}
+	desc, err := mvs.GetDescriptor(ctx, dbID)
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+	dbDesc := desc.(catalog.DatabaseDescriptor)
+	dbRegionConfig := dbDesc.GetRegionConfig()
+	desc, err = mvs.GetDescriptor(ctx, dbRegionConfig.RegionEnumID)
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+	regionEnum := desc.(catalog.TypeDescriptor)
+	regionNames, err := regionEnum.RegionNames()
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+	superRegions, err := regionEnum.SuperRegions()
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+	zoneCfgExtensions, err := regionEnum.ZoneConfigExtensions()
+	if err != nil {
+		return regionConfig, err
+	}
+
+	regionConfig = multiregion.MakeRegionConfig(
+		regionNames,
+		dbRegionConfig.PrimaryRegion,
+		dbRegionConfig.SurvivalGoal,
+		dbRegionConfig.RegionEnumID,
+		dbRegionConfig.Placement,
+		superRegions,
+		zoneCfgExtensions,
+	)
+
+	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+		panic(err)
+	}
+	return regionConfig, nil
+}
+
+// At the table/partition level, the only attributes that are set are
+// `num_voters`, `voter_constraints`, and `lease_preferences`. We expect that
+// the attributes `num_replicas` and `constraints` will be inherited from the
+// database level zone config.
+func zoneConfigForMultiRegionPartition(
+	partitionRegion catpb.RegionName, regionConfig multiregion.RegionConfig,
+) (zonepb.ZoneConfig, error) {
+	zc := *zonepb.NewZoneConfig()
+
+	numVoters, numReplicas := regionutils.GetNumVotersAndNumReplicas(regionConfig)
+	zc.NumVoters = &numVoters
+
+	if regionConfig.IsMemberOfExplicitSuperRegion(partitionRegion) {
+		err := regionutils.AddConstraintsForSuperRegion(&zc, regionConfig, partitionRegion)
+		if err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
+	} else if !regionConfig.RegionalInTablesInheritDatabaseConstraints(partitionRegion) {
+		// If the database constraints can't be inherited to serve as the
+		// constraints for this partition, define the constraints ourselves.
+		zc.NumReplicas = &numReplicas
+
+		constraints, err := regionutils.SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
+		if err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
+		zc.Constraints = constraints
+		zc.InheritedConstraints = false
+	}
+
+	voterConstraints, err := regionutils.SynthesizeVoterConstraints(partitionRegion, regionConfig)
+	if err != nil {
+		return zonepb.ZoneConfig{}, err
+	}
+	zc.VoterConstraints = voterConstraints
+	zc.NullVoterConstraintsIsEmpty = true
+
+	leasePreferences := regionutils.SynthesizeLeasePreferences(partitionRegion)
+	zc.LeasePreferences = leasePreferences
+	zc.InheritedLeasePreferences = false
+
+	zc = regionConfig.ApplyZoneConfigExtensionForRegionalIn(zc, partitionRegion)
+	return zc, err
+}
+
+// AddSubZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+// interface.
+func (mvs *mutationVisitorState) AddSubZoneConfig(
+	ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+) error {
+	zc, err := mvs.getOrAddZoneConfig(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	// Compute the zone config for the multiregion config.
+	multiRegionCfg, err := mvs.synthesizeMultiRegionConfig(ctx, tbl.GetParentID())
+	if err != nil {
+		return err
+	}
+	config.Config, err = zoneConfigForMultiRegionPartition(catpb.RegionName(config.PartitionName), multiRegionCfg)
+	if err != nil {
+		return err
+	}
+	zc.Subzones = append(zc.Subzones, *config)
+	return nil
+}
+
+// RemoveSubZoneConfig implements the scmutationexec.MutationVisitorStateUpdater
+// interface.
+func (mvs *mutationVisitorState) RemoveSubZoneConfig(
+	ctx context.Context, tbl catalog.TableDescriptor, config *zonepb.Subzone,
+) error {
+	zc, err := mvs.getOrAddZoneConfig(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	if zc == nil {
+		return nil
+	}
+	for idx, subZone := range zc.Subzones {
+		if config.IndexID == subZone.IndexID &&
+			config.PartitionName == subZone.PartitionName {
+			newSubZoneSpans := make([]zonepb.SubzoneSpan, 0, len(zc.SubzoneSpans))
+			for _, subZoneSpan := range zc.SubzoneSpans {
+				appendSpan := subZoneSpan.SubzoneIndex != int32(idx)
+				if subZoneSpan.SubzoneIndex > int32(idx) {
+					subZoneSpan.SubzoneIndex = subZoneSpan.SubzoneIndex - 1
+				}
+				if appendSpan {
+					newSubZoneSpans = append(newSubZoneSpans, subZoneSpan)
+				}
+			}
+			zc.SubzoneSpans = newSubZoneSpans
+			zc.Subzones = append(zc.Subzones[:idx], zc.Subzones[idx+1:]...)
+			break
+		}
+	}
 	return nil
 }

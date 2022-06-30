@@ -72,6 +72,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p,                              /* authAccessor */
 		p,                              /* astFormatter */
 		p,                              /* featureChecker */
+		p,                              /* settingsReader*/
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
@@ -195,6 +196,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 			p.Txn(),
 			p.Descriptors(),
 			NewSkippingCacheSchemaResolver,
+			p,
 			p,
 			p,
 			p,

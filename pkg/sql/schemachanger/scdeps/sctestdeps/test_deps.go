@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -1119,4 +1121,34 @@ func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
 // AddTableForStatsRefresh implements scexec.StatsRefreshQueue
 func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 	s.LogSideEffectf("adding table for stats refresh: %d", id)
+}
+
+// GetZoneConfigRaw implements scdecomp.ZoneConfigReader.
+func (s *TestState) GetZoneConfigRaw(ctx context.Context, id descpb.ID) *zonepb.ZoneConfig {
+	return s.zoneConfigs[id]
+}
+
+// ZoneConfigReader implement scbuild.Dependencies.
+func (s *TestState) ZoneConfigReader() scdecomp.ZoneConfigReader {
+	return s
+}
+
+// GetZoneConfig implements scmutationexec.ZoneConfigReader.
+func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
+	return s.zoneConfigs[id], nil
+}
+
+// ZoneConfigReaderForExec implement scexec.Dependencies.
+func (s *TestState) ZoneConfigReaderForExec() scmutationexec.ZoneConfigReader {
+	return s
+}
+
+// EnterpriseFeatureChecker implements scexec.Dependencies.
+func (s *TestState) EnterpriseFeatureChecker() scbuild.EnterpriseFeatureChecker {
+	return s
+}
+
+// CheckEnterpriseEnabled implements scbuild.EnterpriseFeatureChecker.
+func (s *TestState) CheckEnterpriseEnabled(feature string) error {
+	return nil
 }

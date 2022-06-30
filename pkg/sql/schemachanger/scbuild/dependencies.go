@@ -74,6 +74,12 @@ type Dependencies interface {
 	DescriptorCommentCache() CommentCache
 
 	ClientNoticeSender() eval.ClientNoticeSender
+
+	// ZoneConfigReader returns a ZoneConfigReader implementation.
+	ZoneConfigReader() ZoneConfigReader
+
+	// EnterpriseFeatureChecker returns a EnterpriseFeatureChecker implementation.
+	EnterpriseFeatureChecker() EnterpriseFeatureChecker
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
