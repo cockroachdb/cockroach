@@ -276,6 +276,15 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 			"(You can choose any directory as a tmpdir.)")
 	}
 
+	// Make sure `patchelf` is installed if crosslinux config is used.
+	d.log.Println("doctor: running patchelf check")
+	if d.checkLinePresenceInBazelRcUser(workspace, "build --config=crosslinux") {
+		_, err := d.exec.LookPath("patchelf")
+		if err != nil {
+			failures = append(failures, "patchelf not found on PATH. patchelf is required when using crosslinux config")
+		}
+	}
+
 	// We want to make sure there are no other failures before trying to
 	// set up the cache.
 	if !noCache && len(failures) == 0 {
