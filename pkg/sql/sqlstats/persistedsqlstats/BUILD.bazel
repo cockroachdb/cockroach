@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/mon",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

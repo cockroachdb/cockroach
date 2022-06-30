@@ -29,17 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Config is a configuration struct for the persisted SQL stats subsystem.
 type Config struct {
-	Settings         *cluster.Settings
-	InternalExecutor sqlutil.InternalExecutor
-	KvDB             *kv.DB
-	SQLIDContainer   *base.SQLIDContainer
-	JobRegistry      *jobs.Registry
+	Settings                *cluster.Settings
+	InternalExecutor        sqlutil.InternalExecutor
+	InternalExecutorMonitor *mon.BytesMonitor
+	KvDB                    *kv.DB
+	SQLIDContainer          *base.SQLIDContainer
+	JobRegistry             *jobs.Registry
 
 	// Metrics.
 	FlushCounter   *metric.Counter
@@ -99,6 +101,9 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.startSQLStatsFlushLoop(ctx, stopper)
 	s.jobMonitor.start(ctx, stopper)
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.cfg.InternalExecutorMonitor.Stop(ctx)
+	}))
 }
 
 // GetController returns the controller of the PersistedSQLStats.
