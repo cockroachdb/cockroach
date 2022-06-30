@@ -56,7 +56,7 @@ trap upload_stats EXIT
 # Set up the parameters for the roachtest invocation.
 PARALLELISM=16
 CPUQUOTA=1024
-TESTS=""
+TESTS="${TESTS-}"
 case "${CLOUD}" in
   gce)
     ;;
