@@ -404,7 +404,7 @@ func (ep *DummyEvalPlanner) QueryRowEx(
 func (ep *DummyEvalPlanner) QueryIteratorEx(
 	ctx context.Context,
 	opName string,
-	session sessiondata.InternalExecutorOverride,
+	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
