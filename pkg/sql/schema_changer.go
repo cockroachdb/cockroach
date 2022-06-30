@@ -1822,6 +1822,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
 			sc.ieFactory,
 			descsCol,
+			sc.execCfg.Codec,
 			&sc.settings.SV,
 			txn,
 			NewFakeSessionData(&sc.settings.SV))

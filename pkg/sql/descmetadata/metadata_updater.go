@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -22,12 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
@@ -39,6 +43,7 @@ type metadataUpdater struct {
 	sessionData  *sessiondata.SessionData
 	descriptors  *descs.Collection
 	cacheEnabled bool
+	codec        keys.SQLCodec
 }
 
 // NewMetadataUpdater creates a new comment updater, which can be used to
@@ -48,6 +53,7 @@ func NewMetadataUpdater(
 	ctx context.Context,
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 	descriptors *descs.Collection,
+	codec keys.SQLCodec,
 	settings *settings.Values,
 	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
@@ -61,6 +67,7 @@ func NewMetadataUpdater(
 	return metadataUpdater{
 		ctx:          ctx,
 		txn:          txn,
+		codec:        codec,
 		ieFactory:    ieFactory,
 		sessionData:  modifiedSessionData,
 		descriptors:  descriptors,
@@ -216,4 +223,26 @@ func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) 
 		scheduleID,
 	)
 	return err
+}
+
+// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) DeleteZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (numAffected int, err error) {
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	return ie.Exec(ctx, "delete-zone", mu.txn,
+		"DELETE FROM system.zones WHERE id = $1", id)
+}
+
+// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) UpsertZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) (numAffected int, err error) {
+	ie := mu.ieFactory(mu.ctx, mu.sessionData)
+	bytes, err := protoutil.Marshal(zone)
+	if err != nil {
+		return 0, pgerror.Wrap(err, pgcode.CheckViolation, "could not marshal zone config")
+	}
+	return ie.Exec(ctx, "upsert-zone", mu.txn,
+		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", id, bytes)
 }

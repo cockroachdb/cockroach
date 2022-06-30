@@ -639,6 +639,7 @@ func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.
 		ctx,
 		p.ExecCfg().InternalExecutorFactory,
 		p.Descriptors(),
+		p.ExecCfg().Codec,
 		&p.ExecCfg().Settings.SV,
 		p.txn,
 		p.SessionData(),
