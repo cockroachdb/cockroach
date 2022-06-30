@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,8 +53,11 @@ func (p *planner) CommentOnDatabase(
 
 	return &commentOnDatabaseNode{n: n,
 		dbDesc: dbDesc,
-		metadataUpdater: p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
+		metadataUpdater: descmetadata.NewMetadataUpdater(
 			ctx,
+			p.ExecCfg().InternalExecutorFactory,
+			p.Descriptors(),
+			&p.ExecCfg().Settings.SV,
 			p.txn,
 			p.SessionData(),
 		),
