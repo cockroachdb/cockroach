@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
+        "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",

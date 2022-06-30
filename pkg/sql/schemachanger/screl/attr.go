@@ -68,6 +68,11 @@ const (
 	// SourceIndexID is the index ID of the source index for a newly created
 	// index.
 	SourceIndexID
+	// ZoneConfigID uniquely identifies zone configs during the build phase.
+	// Note: These are provisional and never stored.
+	ZoneConfigID
+	// PartitionName region name of a sub zone config.
+	PartitionName
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -109,6 +114,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TypeID"),
 	),
 	rel.EntityMapping(t((*scpb.EnumType)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+	),
+	rel.EntityMapping(t((*scpb.EnumTypeValue)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
 	),
 	rel.EntityMapping(t((*scpb.EnumTypeValue)(nil)),
@@ -290,6 +298,16 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+	),
+	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ZoneConfigID, "ZoneConfigID"),
+	),
+	rel.EntityMapping(t((*scpb.TableSubZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(ZoneConfigID, "ZoneConfigID"),
+		rel.EntityAttr(PartitionName, "PartitionName"),
 	),
 }
 

@@ -100,6 +100,20 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 
+object TableZoneConfig
+
+TableZoneConfig :  TableID
+TableZoneConfig :  ZoneConfigID
+TableZoneConfig :  ZoneConfig
+
+object TableSubZoneConfig
+
+TableSubZoneConfig :  TableID
+TableSubZoneConfig :  IndexID
+TableSubZoneConfig :  ZoneConfigID
+TableSubZoneConfig :  PartitionName
+TableSubZoneConfig :  ZoneConfig
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -229,6 +243,9 @@ object DatabaseRegionConfig
 
 DatabaseRegionConfig :  DatabaseID
 DatabaseRegionConfig :  RegionEnumTypeID
+DatabaseRegionConfig :  PrimaryRegion
+DatabaseRegionConfig :  SurvivalGoal
+DatabaseRegionConfig :  Placement
 
 object DatabaseRoleSetting
 
@@ -277,6 +294,11 @@ Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
 Table <|-- RowLevelTTL
+Table <|-- TableZoneConfig
+View <|-- TableZoneConfig
+Sequence <|-- TableZoneConfig
+Table <|-- TableSubZoneConfig
+Index <|-- TableSubZoneConfig
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion

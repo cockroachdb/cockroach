@@ -13,6 +13,7 @@ package scexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,6 +43,7 @@ type Dependencies interface {
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
 	Telemetry() Telemetry
+	ZoneConfigReaderForExec() scmutationexec.ZoneConfigReader
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
@@ -351,6 +353,12 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteSchedule deletes the given schedule.
 	DeleteSchedule(ctx context.Context, id int64) error
+
+	// SetZoneConfig sets the zone config for a given descriptor. If necessary,
+	// the subzone spans will be recomputed as part of this call.
+	SetZoneConfig(
+		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+	) error
 }
 
 // StatsRefreshQueue queues table for stats refreshes.
