@@ -56,7 +56,9 @@ func TestKvBuf(t *testing.T) {
 	src, totalSize := makeTestData(50000)
 
 	ctx := context.Background()
-	none := mon.NewMonitorWithLimit("none", mon.MemoryResource, 0, nil, nil, 0, 0, nil).MakeBoundAccount()
+	noneMonitor := mon.NewMonitorWithLimit("none", mon.MemoryResource, 0, nil, nil, 0, 0, nil)
+	noneMonitor.StartNoReserved(ctx, nil /* pool */)
+	none := noneMonitor.MakeBoundAccount()
 	lots := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil).MakeBoundAccount()
 
 	// Write everything to our buf.

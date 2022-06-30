@@ -748,7 +748,7 @@ func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
 // If not nil, reserved represents memory reserved for the connection. The
 // connExecutor takes ownership of this memory.
 func (s *Server) ServeConn(
-	ctx context.Context, h ConnectionHandler, reserved mon.BoundAccount, cancel context.CancelFunc,
+	ctx context.Context, h ConnectionHandler, reserved *mon.BoundAccount, cancel context.CancelFunc,
 ) error {
 	defer func() {
 		r := recover()
@@ -989,7 +989,7 @@ func (s *Server) newConnExecutorWithTxn(
 
 	// The new transaction stuff below requires active monitors and traces, so
 	// we need to activate the executor now.
-	ex.activate(ctx, parentMon, mon.BoundAccount{})
+	ex.activate(ctx, parentMon, &mon.BoundAccount{})
 
 	// Perform some surgery on the executor - replace its state machine and
 	// initialize the state.
@@ -1724,7 +1724,7 @@ func (ex *connExecutor) sessionData() *sessiondata.SessionData {
 // reserved: Memory reserved for the connection. The connExecutor takes
 //   ownership of this memory.
 func (ex *connExecutor) activate(
-	ctx context.Context, parentMon *mon.BytesMonitor, reserved mon.BoundAccount,
+	ctx context.Context, parentMon *mon.BytesMonitor, reserved *mon.BoundAccount,
 ) {
 	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
 	// buffer. This is not done for sessionMon nor state.mon: these monitors don't
@@ -1732,7 +1732,7 @@ func (ex *connExecutor) activate(
 	// soon as the first allocation. This is acceptable because the session is
 	// single threaded, and the point of buffering is just to avoid contention.
 	ex.mon.Start(ctx, parentMon, reserved)
-	ex.sessionMon.Start(ctx, ex.mon, mon.BoundAccount{})
+	ex.sessionMon.StartNoReserved(ctx, ex.mon)
 
 	// Enable the trace if configured.
 	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
@@ -1787,7 +1787,7 @@ func (ex *connExecutor) activate(
 func (ex *connExecutor) run(
 	ctx context.Context,
 	parentMon *mon.BytesMonitor,
-	reserved mon.BoundAccount,
+	reserved *mon.BoundAccount,
 	onCancel context.CancelFunc,
 ) (err error) {
 	if !ex.activated {
@@ -2397,7 +2397,7 @@ func (ex *connExecutor) execCopyIn(
 		// HACK: We're reaching inside ex.state and starting the monitor. Normally
 		// that's driven by the state machine, but we're bypassing the state machine
 		// here.
-		ex.state.mon.Start(ctx, ex.sessionMon, mon.BoundAccount{} /* reserved */)
+		ex.state.mon.StartNoReserved(ctx, ex.sessionMon)
 		monToStop = ex.state.mon
 	}
 	txnOpt.resetPlanner = func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {

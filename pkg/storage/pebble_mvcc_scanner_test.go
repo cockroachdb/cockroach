@@ -174,7 +174,7 @@ func scannerWithAccount(
 	ctx context.Context, st *cluster.Settings, scanner *pebbleMVCCScanner, limitBytes int64,
 ) (cleanup func()) {
 	m := mon.NewMonitor("test", mon.MemoryResource, nil, nil, 1, math.MaxInt64, st)
-	m.Start(ctx, nil, mon.MakeStandaloneBudget(limitBytes))
+	m.Start(ctx, nil, mon.NewStandaloneBudget(limitBytes))
 	ba := m.MakeBoundAccount()
 	scanner.memAccount = &ba
 	return func() {

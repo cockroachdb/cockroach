@@ -69,7 +69,7 @@ func NewTxnFingerprintIDCache(
 
 	monitor := mon.NewMonitorInheritWithLimit("txn-fingerprint-id-cache", 0 /* limit */, parentMon)
 	b.mon = monitor
-	b.mon.Start(context.Background(), parentMon, mon.BoundAccount{})
+	b.mon.StartNoReserved(context.Background(), parentMon)
 
 	return b
 }

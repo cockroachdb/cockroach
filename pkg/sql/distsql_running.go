@@ -1269,7 +1269,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	subqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	subqueryMonitor.StartNoReserved(ctx, evalCtx.Mon)
 	defer subqueryMonitor.Stop(ctx)
 
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
@@ -1622,7 +1622,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	postqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	postqueryMonitor.StartNoReserved(ctx, evalCtx.Mon)
 	defer postqueryMonitor.Stop(ctx)
 
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()

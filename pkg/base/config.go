@@ -615,7 +615,7 @@ func TempStorageConfigFromEnv(
 		maxSizeBytes/10, /* noteworthy */
 		st,
 	)
-	monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
 		InMemory: inMem,
 		Mon:      monitor,

@@ -117,7 +117,7 @@ func TestDiskRowContainer(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	t.Run("EncodeDecode", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
@@ -387,7 +387,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(0 /* capacity */))
 
 	d := MakeDiskRowContainer(
 		monitor,
@@ -426,7 +426,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
 	d := MakeDiskRowContainer(diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
@@ -554,7 +554,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 		math.MaxInt64,
 		st,
 	)
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	d := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)

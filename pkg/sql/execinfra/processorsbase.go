@@ -947,7 +947,7 @@ func NewMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, name redact.RedactableString,
 ) *mon.BytesMonitor {
 	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent)
-	monitor.Start(ctx, parent, mon.BoundAccount{})
+	monitor.StartNoReserved(ctx, parent)
 	return monitor
 }
 
@@ -961,7 +961,7 @@ func NewLimitedMonitor(
 	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.RedactableString,
 ) *mon.BytesMonitor {
 	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent)
-	limitedMon.Start(ctx, parent, mon.BoundAccount{})
+	limitedMon.StartNoReserved(ctx, parent)
 	return limitedMon
 }
 

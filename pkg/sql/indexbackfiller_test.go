@@ -375,7 +375,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 	) []tree.Datums {
 		t.Helper()
 
-		mm := mon.MakeStandaloneBudget(1 << 30)
+		mm := mon.NewStandaloneBudget(1 << 30)
 		idx, err := table.FindIndexWithID(indexID)
 		colIDsNeeded := idx.CollectKeyColumnIDs()
 		if idx.Primary() {

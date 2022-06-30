@@ -208,7 +208,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
-	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
+	ts.mon.StartNoReserved(ts.Ctx, tranCtx.connMon)
 	txnID = func() (txnID uuid.UUID) {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()

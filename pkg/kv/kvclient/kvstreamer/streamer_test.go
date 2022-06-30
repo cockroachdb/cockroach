@@ -166,7 +166,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	rootMemMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(rootPoolSize))
+	rootMemMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(rootPoolSize))
 	defer rootMemMonitor.Stop(ctx)
 
 	acc := rootMemMonitor.MakeBoundAccount()
