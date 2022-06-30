@@ -196,6 +196,14 @@ eexpect "sslmode=require"
 eexpect "sslrootcert="
 eexpect "defaultdb>"
 
+end_test
+
+start_test "Check that invalid URL is rejected"
+# Regression test for 83598
+send "\\connect postgresql://foo:123/\r"
+eexpect "using new connection URL"
+eexpect "failed to connect"
+eexpect " ?>"
 send_eof
 eexpect eof
 
