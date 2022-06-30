@@ -386,17 +386,20 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
-	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	sqlStatsInternalExecutorMonitor.Start(context.Background(), s.GetBytesMonitor(), mon.BoundAccount{})
+	sqlStatsInternalExecutor := MakeInternalExecutor(s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
-		Settings:         s.cfg.Settings,
-		InternalExecutor: &sqlStatsInternalExecutor,
-		KvDB:             cfg.DB,
-		SQLIDContainer:   cfg.NodeID,
-		JobRegistry:      s.cfg.JobRegistry,
-		Knobs:            cfg.SQLStatsTestingKnobs,
-		FlushCounter:     serverMetrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter:   serverMetrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:    serverMetrics.StatsMetrics.SQLStatsFlushDuration,
+		Settings:                s.cfg.Settings,
+		InternalExecutor:        &sqlStatsInternalExecutor,
+		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
+		KvDB:                    cfg.DB,
+		SQLIDContainer:          cfg.NodeID,
+		JobRegistry:             s.cfg.JobRegistry,
+		Knobs:                   cfg.SQLStatsTestingKnobs,
+		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
@@ -626,6 +629,11 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 // GetExecutorConfig returns this server's executor config.
 func (s *Server) GetExecutorConfig() *ExecutorConfig {
 	return s.cfg
+}
+
+// GetBytesMonitor returns this server's BytesMonitor.
+func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
+	return s.pool
 }
 
 // SetupConn creates a connExecutor for the client connection.
@@ -1096,7 +1104,10 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon.Start(ctx, ex.server.GetBytesMonitor(), mon.BoundAccount{})
+		defer ieMon.Stop(ctx)
+		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
