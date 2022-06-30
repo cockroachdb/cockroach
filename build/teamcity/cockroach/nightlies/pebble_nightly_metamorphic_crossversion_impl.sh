@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
+source "$dir/teamcity-bazel-support.sh"  # For process_test_json
+
+set -euxo pipefail
+
+ARTIFACTS_DIR=$PWD/artifacts/meta
+mkdir -p "${ARTIFACTS_DIR}"
+chmod o+rwx "${ARTIFACTS_DIR}"
+GO_TEST_JSON_OUTPUT_FILE=$PWD/artifacts/test.json.txt
+
+echo "TC_SERVER_URL is $TC_SERVER_URL"
+
+bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
+
+BAZEL_BIN=$(bazel info bazel-bin --config ci)
+
+# The script accepts the arguments accepted by TestMetaCrossVersion. It should
+# look like:
+#
+#   --version release-21.2,f390aeb3d,f390aeb3d.test --version release-22.1,c5e43d21,c5e43d21.test
+#
+# We need to pass these same arguments to the test invocation. To do that,
+# prefix each argument with `--test_arg `, so that we can instruct bazel
+# to set the arguments appropriately.
+test_args=$(echo $@ | python3 -c "import sys; print(' '.join(['--test_arg=' +word.strip() for word in sys.stdin.read().split(' ')]))")
+
+exit_status=0
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test \
+                                      @com_github_cockroachdb_pebble//internal/metamorphic/crossversion:crossversion_test -- \
+                                      --test_timeout=14400 '--test_filter=TestMetaCrossVersion$' \
+                                      --define gotags=bazel,invariants \
+                                      "--test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE" \
+                                      --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'GO_TEST_JSON_OUTPUT_FILE=cat,XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 3h -maxfails 1 -stderr -p 1" \
+                                      $test_args \
+                                      --test_output streamed \
+    || exit_status=$?
+
+BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS=--formatter=pebble-metamorphic process_test_json \
+    $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
+    $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
+    $PWD/artifacts $GO_TEST_JSON_OUTPUT_FILE $exit_status
+
+exit $exit_status
