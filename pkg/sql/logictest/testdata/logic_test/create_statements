@@ -1040,7 +1040,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    full_scan BOOL NOT NULL,
    sample_plan JSONB NULL,
    database_name STRING NOT NULL,
-   exec_node_ids INT8[] NOT NULL
+   exec_node_ids INT8[] NOT NULL,
+   txn_fingerprint_id STRING NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
@@ -1082,7 +1083,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    full_scan BOOL NOT NULL,
    sample_plan JSONB NULL,
    database_name STRING NOT NULL,
-   exec_node_ids INT8[] NOT NULL
+   exec_node_ids INT8[] NOT NULL,
+   txn_fingerprint_id STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_transaction_statistics (
    node_id INT8 NOT NULL,
