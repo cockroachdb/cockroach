@@ -39,6 +39,7 @@ func DecomposeToElements(t *testing.T, dir string, newCluster NewClusterFunc) {
 	skip.UnderStress(t)
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		t.Parallel()
 		// Create a test cluster.
 		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)

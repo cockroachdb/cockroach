@@ -59,9 +59,11 @@ func TestBackupRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	t.Run("ccl", func(t *testing.T) {
+		t.Parallel()
 		sctest.Backup(t, endToEndPath(t), newCluster)
 	})
 	t.Run("non-ccl", func(t *testing.T) {
+		t.Parallel()
 		sctest.Backup(t, sharedTestdata(t), sctest.SingleNodeCluster)
 	})
 }

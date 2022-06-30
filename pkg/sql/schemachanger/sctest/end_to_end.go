@@ -70,6 +70,7 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		t.Parallel()
 		// Create a test cluster.
 		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)

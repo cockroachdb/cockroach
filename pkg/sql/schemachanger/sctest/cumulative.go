@@ -98,6 +98,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	)
 	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
+		t.Parallel()
 		n := countRevertiblePostCommitStages(t, setup, stmts)
 		if n == 0 {
 			t.Logf("test case has no revertible post-commit stages, skipping...")
@@ -117,6 +118,7 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 	testRollbackCase = func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	) {
+		t.Parallel()
 		var numInjectedFailures uint32
 		beforeStage := func(p scplan.Plan, stageIdx int) error {
 			if atomic.LoadUint32(&numInjectedFailures) > 0 {
@@ -182,22 +184,23 @@ ORDER BY
 // but ignores the expected output.
 func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 	skip.UnderRace(t)
-	var postCommit, nonRevertible int
 	countStages := func(
 		t *testing.T, setup, stmts []parser.Statement,
-	) {
+	) (postCommit int, nonRevertible int) {
 		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase, func(
 			p scplan.Plan,
 		) {
 			postCommit = len(p.StagesForCurrentPhase())
 			nonRevertible = len(p.Stages) - postCommit
 		}, nil)
+		return postCommit, nonRevertible
 	}
 	var testPauseCase func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, setup, stmts []parser.Statement, postCommit int, nonRevertible int, ord int,
 	)
 	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
-		countStages(t, setup, stmts)
+		t.Parallel()
+		postCommit, nonRevertible := countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		if n == 0 {
 			t.Logf("test case has no revertible post-commit stages, skipping...")
@@ -207,23 +210,14 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 		for i := 1; i <= n; i++ {
 			if !t.Run(
 				fmt.Sprintf("pause stage %d of %d", i, n),
-				func(t *testing.T) { testPauseCase(t, setup, stmts, i) },
+				func(t *testing.T) { testPauseCase(t, setup, stmts, postCommit, nonRevertible, i) },
 			) {
 				return
 			}
 		}
-
-		// Need to reset "postCommit" and "nonRevertible" before testFunc being
-		// called for next test. The reason is that if a test did not generate any
-		// post commit phase, the "countStates()" function won't take any effect
-		// since "processPlanInPhase()" only calls the input "processFunc" for the
-		// specified phase. So that such test would inherit "postCommit" and
-		// "nonRevertible" from a previous test which generates post commit phase
-		// stages.
-		postCommit = 0
-		nonRevertible = 0
 	}
-	testPauseCase = func(t *testing.T, setup, stmts []parser.Statement, ord int) {
+	testPauseCase = func(t *testing.T, setup, stmts []parser.Statement, postCommit int, nonRevertible int, ord int) {
+		t.Parallel()
 		var numInjectedFailures uint32
 		// TODO(ajwerner): It'd be nice to assert something about the number of
 		// remaining stages before the pause and then after. It's not totally
@@ -281,11 +275,9 @@ func Pause(t *testing.T, dir string, newCluster NewClusterFunc) {
 func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
-	var after [][]string
-	var dbName string
 	countStages := func(
 		t *testing.T, setup, stmts []parser.Statement,
-	) (postCommit, nonRevertible int) {
+	) (postCommit, nonRevertible int, after [][]string, dbName string) {
 		var pl scplan.Plan
 		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase,
 			func(p scplan.Plan) {
@@ -301,13 +293,14 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 				}
 				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
 			})
-		return postCommit, nonRevertible
+		return postCommit, nonRevertible, after, dbName
 	}
 	var testBackupRestoreCase func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, setup, stmts []parser.Statement, dbName string, after [][]string, ord int,
 	)
 	testFunc := func(t *testing.T, setup, stmts []parser.Statement) {
-		postCommit, nonRevertible := countStages(t, setup, stmts)
+		t.Parallel()
+		postCommit, nonRevertible, after, dbName := countStages(t, setup, stmts)
 		if nonRevertible > 0 {
 			postCommit++
 		}
@@ -316,7 +309,7 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 		for i := 1; i <= n; i++ {
 			if !t.Run(
 				fmt.Sprintf("backup/restore stage %d of %d", i, n),
-				func(t *testing.T) { testBackupRestoreCase(t, setup, stmts, i) },
+				func(t *testing.T) { testBackupRestoreCase(t, setup, stmts, dbName, after, i) },
 			) {
 				return
 			}
@@ -331,8 +324,9 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 		return stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
 	}
 	testBackupRestoreCase = func(
-		t *testing.T, setup, stmts []parser.Statement, ord int,
+		t *testing.T, setup, stmts []parser.Statement, dbName string, after [][]string, ord int,
 	) {
+		t.Parallel()
 		stageChan := make(chan stage)
 		ctx, cancel := context.WithCancel(context.Background())
 		db, cleanup := newCluster(t, &scexec.TestingKnobs{
@@ -423,7 +417,8 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 			// transaction are in the same database.
 			//
 			// TODO(ajwerner): Deal with trying to restore just some of the tables.
-			backupURL := fmt.Sprintf("userfile://backups.public.userfiles_$user/data%d", i)
+			uniqueTestName := strings.Replace(t.Name(), "'", "", -1)
+			backupURL := fmt.Sprintf("userfile://backups.public.userfiles_$user/data%s%d", uniqueTestName, i)
 			tdb.Exec(t, fmt.Sprintf(
 				"BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
 			backups = append(backups, backup{
