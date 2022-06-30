@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rpc
+package rpc_test
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -56,17 +57,14 @@ func TestWrappedServerStream(t *testing.T) {
 	ctx := context.WithValue(context.Background(), struct{}{}, "v")
 
 	var recv int
-	wrapped := &wrappedServerStream{
-		ServerStream: &ss,
-		ctx:          ctx,
-		recv: func(m interface{}) error {
-			if err := ss.RecvMsg(m); err != nil {
-				return err
-			}
-			recv = *(m.(*int))
-			return nil
-		},
-	}
+	wrappedI := rpc.TestingNewWrappedServerStream(ctx, &ss, func(m interface{}) error {
+		if err := ss.RecvMsg(m); err != nil {
+			return err
+		}
+		recv = *(m.(*int))
+		return nil
+	})
+	wrapped := wrappedI.(*rpc.WrappedServerStream)
 
 	// Context() returns the wrapped context.
 	require.Equal(t, ctx, wrapped.Context())
@@ -137,7 +135,7 @@ func TestTenantFromCert(t *testing.T) {
 			p := peer.Peer{AuthInfo: tlsInfo}
 			ctx := peer.NewContext(context.Background(), &p)
 
-			tenID, err := kvAuth{tenant: tenantAuthorizer{tenantID: roachpb.SystemTenantID}}.authenticate(ctx)
+			tenID, err := rpc.TestingAuthenticateTenant(ctx)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
@@ -728,7 +726,7 @@ func TestTenantAuthRequest(t *testing.T) {
 		},
 
 		"/cockroach.rpc.Heartbeat/Ping": {
-			{req: &PingRequest{}, expErr: noError},
+			{req: &rpc.PingRequest{}, expErr: noError},
 		},
 		"/cockroach.rpc.Testing/Foo": {
 			{req: "req", expErr: `unknown method "/cockroach.rpc.Testing/Foo"`},
@@ -737,7 +735,7 @@ func TestTenantAuthRequest(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			for _, tc := range tests {
 				t.Run("", func(t *testing.T) {
-					err := tenantAuthorizer{}.authorize(tenID, method, tc.req)
+					err := rpc.TestingAuthorizeTenantRequest(tenID, method, tc.req)
 					if tc.expErr == noError {
 						require.NoError(t, err)
 					} else {

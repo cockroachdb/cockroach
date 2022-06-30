@@ -25,8 +25,6 @@ import (
 
 // ChangefeedConfig provides a version-agnostic wrapper around jobspb.ChangefeedDetails.
 type ChangefeedConfig struct {
-	// WatchedTables maps table ids to their statement time names.
-	WatchedTables changefeedbase.WatchedTables
 	// SinkURI specifies the destination of changefeed events.
 	SinkURI string
 	// Opts are the WITH options for this changefeed.
@@ -45,12 +43,11 @@ type ChangefeedConfig struct {
 // version of the ChangefeedDetails protobuf.
 func makeChangefeedConfigFromJobDetails(d jobspb.ChangefeedDetails) ChangefeedConfig {
 	return ChangefeedConfig{
-		WatchedTables: makeWatchedTables(d),
-		SinkURI:       d.SinkURI,
-		Opts:          changefeedbase.MakeStatementOptions(d.Opts),
-		ScanTime:      d.StatementTime,
-		EndTime:       d.EndTime,
-		Targets:       AllTargets(d),
+		SinkURI:  d.SinkURI,
+		Opts:     changefeedbase.MakeStatementOptions(d.Opts),
+		ScanTime: d.StatementTime,
+		EndTime:  d.EndTime,
+		Targets:  AllTargets(d),
 	}
 }
 
@@ -65,7 +62,7 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 				if ts.StatementTimeName == "" {
 					ts.StatementTimeName = cd.Tables[ts.TableID].StatementTimeName
 				}
-				targets = append(targets, changefeedbase.Target{
+				targets.Add(changefeedbase.Target{
 					Type:              ts.Type,
 					TableID:           ts.TableID,
 					FamilyName:        ts.FamilyName,
@@ -75,23 +72,14 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 		}
 	} else {
 		for id, t := range cd.Tables {
-			ct := changefeedbase.Target{
+			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
 				TableID:           id,
 				StatementTimeName: changefeedbase.StatementTimeName(t.StatementTimeName),
-			}
-			targets = append(targets, ct)
+			})
 		}
 	}
 	return
-}
-
-func makeWatchedTables(d jobspb.ChangefeedDetails) changefeedbase.WatchedTables {
-	wt := make(changefeedbase.WatchedTables, len(d.Tables))
-	for id, t := range d.Tables {
-		wt[id] = changefeedbase.StatementTimeName(t.StatementTimeName)
-	}
-	return wt
 }
 
 const (
@@ -139,10 +127,11 @@ func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
-	tablesToProtect := make(descpb.IDs, 0, len(targets)+1)
-	for _, t := range targets {
-		tablesToProtect = append(tablesToProtect, t.TableID)
-	}
+	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+1)
+	_ = targets.EachTableID(func(id descpb.ID) error {
+		tablesToProtect = append(tablesToProtect, id)
+		return nil
+	})
 	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
@@ -151,7 +140,7 @@ func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []r
 	// NB: We add 1 because we're also going to protect system.descriptors.
 	// We protect system.descriptors because a changefeed needs all of the history
 	// of table descriptors to version data.
-	spansToProtect := make([]roachpb.Span, 0, len(targets)+1)
+	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+1)
 	addTablePrefix := func(id uint32) {
 		tablePrefix := codec.TablePrefix(id)
 		spansToProtect = append(spansToProtect, roachpb.Span{
@@ -159,9 +148,10 @@ func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []r
 			EndKey: tablePrefix.PrefixEnd(),
 		})
 	}
-	for _, t := range targets {
-		addTablePrefix(uint32(t.TableID))
-	}
+	_ = targets.EachTableID(func(id descpb.ID) error {
+		addTablePrefix(uint32(id))
+		return nil
+	})
 	addTablePrefix(keys.DescriptorTableID)
 	return spansToProtect
 }

@@ -351,18 +351,19 @@ func generateNewTargets(
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	for _, targetSpec := range AllTargets(prevDetails) {
+	prevTargets := AllTargets(prevDetails)
+	err = prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
 		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
 		desc := descResolver.DescByID[targetSpec.TableID].(catalog.TableDescriptor)
 
 		tbName, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.Txn(), desc)
 		if err != nil {
-			return nil, nil, hlc.Timestamp{}, nil, err
+			return err
 		}
 
 		tablePattern, err := tbName.NormalizeTablePattern()
 		if err != nil {
-			return nil, nil, hlc.Timestamp{}, nil, err
+			return err
 		}
 
 		newTarget := tree.ChangefeedTarget{
@@ -378,6 +379,11 @@ func generateNewTargets(
 			FamilyName:        targetSpec.FamilyName,
 			StatementTimeName: string(targetSpec.StatementTimeName),
 		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
 	for _, cmd := range alterCmds {
