@@ -184,6 +184,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		p.ExecCfg().InternalExecutorFactory,
 		p.Descriptors(),
+		p.ExecCfg().Codec,
 		&p.ExecCfg().Settings.SV,
 		p.txn,
 		p.SessionData(),
