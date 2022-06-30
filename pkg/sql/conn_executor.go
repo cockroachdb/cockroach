@@ -395,7 +395,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	telemetryLoggingMetrics.Knobs = cfg.TelemetryLoggingTestingKnobs
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
-	sqlStatsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	// We do not have to explicitly close this monitor since it is
+	// created by server.
+	ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	ieMon.StartNoReserved(context.Background(), s.GetBytesMonitor())
+	sqlStatsInternalExecutor := MakeInternalExecutor(s, MemoryMetrics{}, ieMon)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
 		Settings:         s.cfg.Settings,
 		InternalExecutor: &sqlStatsInternalExecutor,
@@ -642,6 +646,11 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 // GetExecutorConfig returns this server's executor config.
 func (s *Server) GetExecutorConfig() *ExecutorConfig {
 	return s.cfg
+}
+
+// GetBytesMonitor returns this server's BytesMonitor.
+func (s *Server) GetBytesMonitor() *mon.BytesMonitor {
+	return s.pool
 }
 
 // SetupConn creates a connExecutor for the client connection.
@@ -1117,7 +1126,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
-		ie := MakeInternalExecutor(ctx, ex.server, MemoryMetrics{}, ex.server.cfg.Settings)
+		// We do not have to explicitly close this monitor since it is
+		// created by server.
+		ieMon := MakeInternalExecutorMemMonitor(MemoryMetrics{}, ex.server.cfg.Settings)
+		ieMon.StartNoReserved(ctx, ex.server.GetBytesMonitor())
+		ie := MakeInternalExecutor(ex.server, MemoryMetrics{}, ieMon)
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.Settings,
