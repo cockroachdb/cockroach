@@ -3883,9 +3883,50 @@ value if you rely on the HLC for accuracy.`,
 				"charge for each edit operation. Maximum input length is 255 characters.",
 			Volatility: volatility.Immutable,
 		}),
-	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
-	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
-	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"levenshtein_less_equal": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"source", types.String}, {"target", types.String}, {"max_d", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				m := int(tree.MustBeDInt(args[2]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinLessEqual(s, t, m)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings using an accelerated version of the Levenshtein function. " +
+				"If the actual distance is less or equal than the maximum distance allowed (max_d), the function returns the actual distance. " +
+				"Otherwise, it returns the maximum distance allowed plus 1. Maximum input length is 255 characters.",
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{{"source", types.String}, {"target", types.String}, {"ins_cost", types.Int},
+				{"del_cost", types.Int}, {"sub_cost", types.Int}, {"max_d", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
+				ins, del, sub := int(tree.MustBeDInt(args[2])), int(tree.MustBeDInt(args[3])), int(tree.MustBeDInt(args[4]))
+				m := int(tree.MustBeDInt(args[5]))
+				const maxLen = 255
+				if len(s) > maxLen || len(t) > maxLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"levenshtein argument exceeds maximum length of %d characters", maxLen)
+				}
+				ld := fuzzystrmatch.LevenshteinLessEqualWithCost(s, t, ins, del, sub, m)
+				return tree.NewDInt(tree.DInt(ld)), nil
+			},
+			Info: "Calculates the Levenshtein distance between two strings using an accelerated version of the Levenshtein function. " +
+				"If the actual distance is less or equal than the maximum distance allowed (max_d), the function returns the actual distance. " +
+				"Otherwise, it returns the maximum distance allowed plus 1. The cost parameters specify how much to " +
+				"charge for each edit operation. Maximum input length is 255 characters.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+	"metaphone":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
+	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: categoryFuzzyStringMatching}),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
