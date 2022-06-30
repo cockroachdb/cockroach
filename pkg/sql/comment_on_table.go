@@ -57,6 +57,7 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 			ctx,
 			p.ExecCfg().InternalExecutorFactory,
 			p.Descriptors(),
+			p.ExecCfg().Codec,
 			&p.ExecCfg().Settings.SV,
 			p.txn,
 			p.SessionData(),
