@@ -71,22 +71,32 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 // or calculate a range checksum) while processing should have a timeout which
 // is a function of the size of the range and the maximum allowed rate of data
 // transfer that adheres to a minimum timeout specified in a cluster setting.
+// When the queue contains different types of work items, with different rates,
+// the timeout of all items is set according to the minimum rate of the
+// different types, to prevent slower items from causing faster items appearing
+// after them in the queue to time-out.
 //
-// The parameter controls which rate to use.
-func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+// The parameter controls which rate(s) to use.
+func makeRateLimitedTimeoutFunc(rateSettings ...*settings.ByteSizeSetting) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
 		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 		// NB: In production code this will type assertion will always succeed.
 		// Some tests set up a fake implementation of replicaInQueue in which
 		// case we fall back to the configured minimum timeout.
 		repl, ok := r.(interface{ GetMVCCStats() enginepb.MVCCStats })
-		if !ok {
+		if !ok || len(rateSettings) == 0 {
 			return minimumTimeout
 		}
-		snapshotRate := rateSetting.Get(&cs.SV)
+		minSnapshotRate := rateSettings[0].Get(&cs.SV)
+		for i := 1; i < len(rateSettings); i++ {
+			snapshotRate := rateSettings[i].Get(&cs.SV)
+			if snapshotRate < minSnapshotRate {
+				minSnapshotRate = snapshotRate
+			}
+		}
 		stats := repl.GetMVCCStats()
 		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
-		estimatedDuration := time.Duration(totalBytes/snapshotRate) * time.Second
+		estimatedDuration := time.Duration(totalBytes/minSnapshotRate) * time.Second
 		timeout := estimatedDuration * permittedRangeScanSlowdown
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
