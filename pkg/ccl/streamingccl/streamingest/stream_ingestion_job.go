@@ -207,6 +207,12 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 			return err
 		}
 
+		log.Infof(ctx, "activating destination tenant %d", details.NewTenantID)
+		// Activate the tenant as it is now in a usable state.
+		if err = activateTenant(ctx, execCtx, details.NewTenantID); err != nil {
+			return err
+		}
+
 		log.Infof(ctx, "starting to complete the producer job %d", streamID)
 		// Completes the producer job in the source cluster.
 		return client.Complete(ctx, streamID)
@@ -301,6 +307,14 @@ func revertToCutoverTimestamp(
 		}
 	}
 	return j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
+}
+
+func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
+	p := execCtx.(sql.JobExecContext)
+	execCfg := p.ExecCfg()
+	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sql.ActivateTenant(ctx, execCfg, txn, newTenantID.ToUint64())
+	})
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

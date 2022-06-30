@@ -130,17 +130,11 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms'
 		// is required. Tracked with #76378.
 		// TODO(ajstorm): This may be the right course of action here as the
 		//  replication is now being run inside a tenant.
-		base.TestServerArgs{
-			DisableDefaultTestTenant: true,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-		roachpb.MakeTenantID(20))
+		base.TestServerArgs{DisableDefaultTestTenant: true})
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
-	destSQL := hDest.SysDB
+	destSQL := hDest.SysSQL
 	destSQL.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
@@ -155,9 +149,9 @@ SET enable_experimental_stream_replication = true;
 	defer cleanupSink()
 
 	var ingestionJobID, streamProducerJobID int64
-	destSQL.ExpectErr(t, "pq: either old tenant ID 10 or the new tenant ID 1 cannot be system tenant",
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
-		pgURL.String())
+	var startTime string
+	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
+
 	destSQL.QueryRow(t,
 		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT 20`,
 		pgURL.String(),
@@ -198,10 +192,52 @@ INSERT INTO d.t2 VALUES (2);
 	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
 		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
 
+	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), DisableCreateTenant: true})
+	defer func() {
+		require.NoError(t, destTenantConn.Close())
+	}()
+	destTenantSQL := sqlutils.MakeSQLRunner(destTenantConn)
+
 	query := "SELECT * FROM d.t1"
 	sourceData := sourceSQL.QueryStr(t, query)
-	destData := hDest.Tenant.SQL.QueryStr(t, query)
+	destData := destTenantSQL.QueryStr(t, query)
 	require.Equal(t, sourceData, destData)
+}
+
+func TestTenantStreamingCreationErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srcServer, srcDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	defer srcServer.Stopper().Stop(ctx)
+	destServer, destDB, _ := serverutils.StartServer(t, base.TestServerArgs{DisableDefaultTestTenant: true})
+	defer destServer.Stopper().Stop(ctx)
+
+	srcTenantID := serverutils.TestTenantID()
+	_, srcTenantConn := serverutils.StartTenant(t, srcServer, base.TestTenantArgs{TenantID: srcTenantID})
+	defer func() { require.NoError(t, srcTenantConn.Close()) }()
+
+	// Set required cluster settings.
+	srcSysSQL := sqlutils.MakeSQLRunner(srcDB)
+	srcSysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	destSysSQL := sqlutils.MakeSQLRunner(destDB)
+	destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true`)
+
+	// Sink to read data from.
+	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanupSink()
+
+	destSysSQL.ExpectErr(t, "pq: either old tenant ID 10 or the new tenant ID 1 cannot be system tenant",
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
+		srcPgURL.String())
+
+	existingTenantID := uint64(100)
+	destSysSQL.Exec(t, "SELECT crdb_internal.create_tenant($1)", existingTenantID)
+	destSysSQL.ExpectErr(t, fmt.Sprintf("pq: tenant with id %d already exists", existingTenantID),
+		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", existingTenantID),
+		srcPgURL.String())
 }
 
 func TestCutoverBuiltin(t *testing.T) {

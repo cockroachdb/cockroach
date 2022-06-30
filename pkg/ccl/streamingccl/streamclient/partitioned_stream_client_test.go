@@ -70,16 +70,19 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
-		serverutils.TestTenantID(),
 	)
+
 	defer cleanup()
+
+	tenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	defer cleanupTenant()
 
 	ctx := context.Background()
 	// Makes sure source cluster producer job does not time out within test timeout
-	h.SysDB.Exec(t, `
+	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s';
 `)
-	h.Tenant.SQL.Exec(t, `
+	tenant.SQL.Exec(t, `
 CREATE DATABASE d;
 CREATE TABLE d.t1(i int primary key, a string, b string);
 CREATE TABLE d.t2(i int primary key);
@@ -93,14 +96,14 @@ INSERT INTO d.t2 VALUES (2);
 	}()
 	require.NoError(t, err)
 	expectStreamState := func(streamID streaming.StreamID, status jobs.Status) {
-		h.SysDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
+		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{string(status)}})
 	}
 
-	streamID, err := client.Create(ctx, h.Tenant.ID)
+	streamID, err := client.Create(ctx, tenant.ID)
 	require.NoError(t, err)
 	// We can create multiple replication streams for the same tenant.
-	_, err = client.Create(ctx, h.Tenant.ID)
+	_, err = client.Create(ctx, tenant.ID)
 	require.NoError(t, err)
 
 	top, err := client.Plan(ctx, streamID)
@@ -116,14 +119,14 @@ INSERT INTO d.t2 VALUES (2);
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, status.StreamStatus)
 
 	// Pause the underlying producer job of the replication stream
-	h.SysDB.Exec(t, `PAUSE JOB $1`, streamID)
+	h.SysSQL.Exec(t, `PAUSE JOB $1`, streamID)
 	expectStreamState(streamID, jobs.StatusPaused)
 	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
 
 	// Cancel the underlying producer job of the replication stream
-	h.SysDB.Exec(t, `CANCEL JOB $1`, streamID)
+	h.SysSQL.Exec(t, `CANCEL JOB $1`, streamID)
 	expectStreamState(streamID, jobs.StatusCanceled)
 
 	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
@@ -140,8 +143,8 @@ INSERT INTO d.t2 VALUES (2);
 		var spans []roachpb.Span
 		for _, table := range tables {
 			desc := desctestutils.TestingGetPublicTableDescriptor(
-				h.SysServer.DB(), h.Tenant.Codec, "d", table)
-			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
+				h.SysServer.DB(), tenant.Codec, "d", table)
+			spans = append(spans, desc.PrimaryIndexSpan(tenant.Codec))
 		}
 
 		return &streampb.StreamPartitionSpec{
@@ -172,20 +175,20 @@ INSERT INTO d.t2 VALUES (2);
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
-	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), tenant.Codec, "d", "t1")
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
 	cg.GoCtx(sub.Subscribe)
 	// Observe the existing single row in t1.
-	expected := streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42)
+	expected := streamingtest.EncodeKV(t, tenant.Codec, t1Descr, 42)
 	firstObserved := rf.ObserveKey(ctx, expected.Key)
 	require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 	rf.ObserveResolved(ctx, firstObserved.Value.Timestamp)
 
 	// Updates the existing row.
-	h.Tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
-	expected = streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42, nil, "world")
+	tenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)
+	expected = streamingtest.EncodeKV(t, tenant.Codec, t1Descr, 42, nil, "world")
 
 	// Observe its changes.
 	secondObserved := rf.ObserveKey(ctx, expected.Key)
@@ -206,13 +209,13 @@ INSERT INTO d.t2 VALUES (2);
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job %d: not found in system.jobs table", 999)), err)
 
 	// Makes producer job exit quickly.
-	h.SysDB.Exec(t, `
+	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
 `)
-	streamID, err = client.Create(ctx, h.Tenant.ID)
+	streamID, err = client.Create(ctx, tenant.ID)
 	require.NoError(t, err)
 	require.NoError(t, client.Complete(ctx, streamID))
-	h.SysDB.CheckQueryResultsRetry(t,
+	h.SysSQL.CheckQueryResultsRetry(t,
 		fmt.Sprintf("SELECT status FROM [SHOW JOBS] WHERE job_id = %d", streamID), [][]string{{"succeeded"}})
 }
 

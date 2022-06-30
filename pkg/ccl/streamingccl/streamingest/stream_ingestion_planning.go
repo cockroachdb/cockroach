@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -162,6 +163,20 @@ func ingestionPlanHook(
 		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
 			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",
 				oldTenantID.ToUint64(), newTenantID.ToUint64())
+		}
+
+		// Create a new tenant for the replication stream
+		if _, err := sql.GetTenantRecord(ctx, p.ExecCfg(), nil, newTenantID.ToUint64()); err == nil {
+			return errors.Newf("tenant with id %s already exists", newTenantID)
+		}
+		tenantInfo := &descpb.TenantInfoWithUsage{
+			TenantInfo: descpb.TenantInfo{
+				ID:    newTenantID.ToUint64(),
+				State: descpb.TenantInfo_ADD,
+			},
+		}
+		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), nil, tenantInfo); err != nil {
+			return err
 		}
 
 		// Create a new stream with stream client.
