@@ -2488,10 +2488,12 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 		return &roachpb.WriteIntentError{Intents: intents}
 	}
 
-	// Forward the (empty) stats time to the deletion timestamp first, making the
-	// range tombstone's own GCBytesAge contributions 0 at this timestamp.
+	// Track isolated stats delta at timestamp. We'll add it to the given ms at
+	// the end, which will correctly account for GCBytesAge relative to the given
+	// ms.LastUpdateNanos.
+	var msDelta enginepb.MVCCStats
 	if ms != nil {
-		ms.Forward(timestamp.WallTime)
+		msDelta.Forward(timestamp.WallTime)
 	}
 
 	// First, set up an iterator covering only the range key span itself, and scan
@@ -2542,8 +2544,8 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 			}
 
 			if ms != nil && !v.IsTombstone() {
-				ms.LiveCount--
-				ms.LiveBytes -= int64(key.EncodedSize()) + int64(len(vRaw))
+				msDelta.LiveCount--
+				msDelta.LiveBytes -= int64(key.EncodedSize()) + int64(len(vRaw))
 			}
 		}
 
@@ -2563,21 +2565,21 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 					// we'll write a new range key fragment in the gap between them. It
 					// has no GCBytesAge contribution because it's written at now.
 					if !rangeBounds.Key.Equal(prevRangeEnd) {
-						ms.RangeKeyCount++
-						ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp) +
+						msDelta.RangeKeyCount++
+						msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp) +
 							EncodedMVCCKeyPrefixLength(prevRangeEnd) +
 							EncodedMVCCKeyPrefixLength(rangeBounds.Key))
-						ms.RangeValCount++
-						ms.RangeValBytes += int64(len(valueRaw))
+						msDelta.RangeValCount++
+						msDelta.RangeValBytes += int64(len(valueRaw))
 					}
 					// This range key will create a new version in the current fragment
 					// stack. It will also move the GCBytesAge contribution of the key
 					// bounds up from the latest existing range key to this one. It has no
 					// GCBytesAge contribution of its own because it's written at now.
-					ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp))
-					ms.RangeValCount++
-					ms.RangeValBytes += int64(len(valueRaw))
-					ms.GCBytesAge -= (timestamp.WallTime/1e9 - newest.Timestamp.WallTime/1e9) *
+					msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp))
+					msDelta.RangeValCount++
+					msDelta.RangeValBytes += int64(len(valueRaw))
+					msDelta.GCBytesAge -= (timestamp.WallTime/1e9 - newest.Timestamp.WallTime/1e9) *
 						int64(EncodedMVCCKeyPrefixLength(rangeBounds.Key)+
 							EncodedMVCCKeyPrefixLength(rangeBounds.EndKey))
 				}
@@ -2601,11 +2603,11 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 	// key if any. If no existing fragments were found during iteration above,
 	// this will be the entire new range key.
 	if ms != nil && !prevRangeEnd.Equal(endKey) {
-		ms.RangeKeyCount++
-		ms.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp) +
+		msDelta.RangeKeyCount++
+		msDelta.RangeKeyBytes += int64(EncodedMVCCTimestampSuffixLength(timestamp) +
 			EncodedMVCCKeyPrefixLength(prevRangeEnd) + EncodedMVCCKeyPrefixLength(endKey))
-		ms.RangeValCount++
-		ms.RangeValBytes += int64(len(valueRaw))
+		msDelta.RangeValCount++
+		msDelta.RangeValBytes += int64(len(valueRaw))
 	}
 
 	// Check if the range key will merge with or fragment any existing range keys
@@ -2627,13 +2629,13 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 				keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
 				valBytes := int64(len(rkv.Value))
 				if i == 0 {
-					ms.RangeKeyCount++
+					msDelta.RangeKeyCount++
 					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
 				}
-				ms.RangeKeyBytes += keyBytes
-				ms.RangeValCount++
-				ms.RangeValBytes += valBytes
-				ms.GCBytesAge += (keyBytes + valBytes) * (timestamp.WallTime/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
+				msDelta.RangeKeyBytes += keyBytes
+				msDelta.RangeValCount++
+				msDelta.RangeValBytes += valBytes
+				msDelta.GCBytesAge += (keyBytes + valBytes) * (timestamp.WallTime/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
 			}
 		}
 
@@ -2656,13 +2658,13 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 				keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
 				valBytes := int64(len(rkv.Value))
 				if i == 0 {
-					ms.RangeKeyCount--
+					msDelta.RangeKeyCount--
 					keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(mergeKey))
 				}
-				ms.RangeKeyBytes -= keyBytes
-				ms.RangeValCount--
-				ms.RangeValBytes -= valBytes
-				ms.GCBytesAge -= (keyBytes + valBytes) *
+				msDelta.RangeKeyBytes -= keyBytes
+				msDelta.RangeValCount--
+				msDelta.RangeValBytes -= valBytes
+				msDelta.GCBytesAge -= (keyBytes + valBytes) *
 					(timestamp.WallTime/1e9 - rkv.RangeKey.Timestamp.WallTime/1e9)
 			}
 		}
@@ -2737,6 +2739,10 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 
 	if err := rw.ExperimentalPutMVCCRangeKey(rangeKey, value); err != nil {
 		return err
+	}
+
+	if ms != nil {
+		ms.Add(msDelta)
 	}
 
 	// Record the logical operation, for rangefeed emission.
