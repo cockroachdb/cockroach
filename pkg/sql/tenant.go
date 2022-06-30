@@ -221,16 +221,10 @@ func updateTenantRecord(
 	return nil
 }
 
-// CreateTenant implements the tree.TenantOperator interface.
-func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
-	info := &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{
-			ID: tenID,
-			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
-		},
-	}
+func (p *planner) createTenantInternal(
+	ctx context.Context, info *descpb.TenantInfoWithUsage,
+) error {
+	tenID := info.TenantInfo.ID
 	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info); err != nil {
 		return err
 	}
@@ -293,6 +287,29 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 	}
 
 	return nil
+}
+
+// CreateTenant implements the tree.TenantOperator interface.
+func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
+	info := &descpb.TenantInfoWithUsage{
+		TenantInfo: descpb.TenantInfo{
+			ID: tenID,
+			// We synchronously initialize the tenant's keyspace below, so
+			// we can skip the ADD state and go straight to an ACTIVE state.
+			State: descpb.TenantInfo_ACTIVE,
+		},
+	}
+	return p.createTenantInternal(ctx, info)
+}
+
+func (p *planner) CreateInactiveTenant(ctx context.Context, tenID uint64) error {
+	info := &descpb.TenantInfoWithUsage{
+		TenantInfo: descpb.TenantInfo{
+			ID:    tenID,
+			State: descpb.TenantInfo_ADD,
+		},
+	}
+	return p.createTenantInternal(ctx, info)
 }
 
 // generateTenantClusterSettingKV generates the kv to be written to the store

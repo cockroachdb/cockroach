@@ -489,6 +489,10 @@ type TenantOperator interface {
 	// current active version of the cluster performing the create.
 	CreateTenant(ctx context.Context, tenantID uint64) error
 
+	// CreateInactiveTenant performs the same behavior as CreateTenant but leaves
+	// the tenant in an inactive state.
+	CreateInactiveTenant(ctx context.Context, tenantID uint64) error
+
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
 	// It returns an error if the tenant does not exist. If synchronous is true
 	// the gc job will not wait for a GC ttl.

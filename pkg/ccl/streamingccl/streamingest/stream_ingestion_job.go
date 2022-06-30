@@ -166,6 +166,16 @@ func ingest(
 		if err = revertToCutoverTimestamp(ctx, execCtx, ingestionJobID); err != nil {
 			return err
 		}
+
+		// Activate the tenant as it is now in a usable state
+		execCfg := execCtx.ExecCfg()
+		err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return sql.ActivateTenant(ctx, execCfg, txn, newTenantID.ToUint64())
+		})
+		if err != nil {
+			return err
+		}
+
 		// Completes the producer job in the source cluster.
 		return client.Complete(ctx, streamID)
 	}
