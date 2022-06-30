@@ -89,7 +89,7 @@ func newPebbleIteratorByCloning(
 	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
 ) *pebbleIterator {
 	var err error
-	if iter, err = iter.Clone(); err != nil {
+	if iter, err = iter.Clone(pebble.CloneOptions{}); err != nil {
 		panic(err)
 	}
 	p := pebbleIterPool.Get().(*pebbleIterator)
@@ -147,7 +147,7 @@ func (p *pebbleIterator) initReuseOrCreate(
 ) {
 	if clone && iter != nil {
 		var err error
-		if iter, err = iter.Clone(); err != nil {
+		if iter, err = iter.Clone(pebble.CloneOptions{}); err != nil {
 			panic(err)
 		}
 	}
