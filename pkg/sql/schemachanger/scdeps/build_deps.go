@@ -91,7 +91,7 @@ type buildDeps struct {
 	statements         []string
 	astFormatter       scbuild.AstFormatter
 	featureChecker     scbuild.FeatureChecker
-	settingsReader   scbuild.SettingsReader
+	settingsReader     scbuild.SettingsReader
 	internalExecutor   sqlutil.InternalExecutor
 	clientNoticeSender eval.ClientNoticeSender
 }
