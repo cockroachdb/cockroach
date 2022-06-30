@@ -13,6 +13,7 @@ package builtins
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -57,7 +58,7 @@ func initOverlapsBuiltins() {
 var overlapsBuiltins = map[string]builtinDefinition{
 	"overlaps": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     categoryDateAndTime,
+			Category:     builtinconstants.CategoryDateAndTime,
 			NullableArgs: false,
 		},
 		makeOverlapsOverloads()...,

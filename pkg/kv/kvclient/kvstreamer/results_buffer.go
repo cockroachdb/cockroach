@@ -95,6 +95,10 @@ type resultsBuffer interface {
 	// It is assumed that the budget's mutex is already being held.
 	spill(_ context.Context, atLeastBytes int64, spillingPriority int) (bool, error)
 
+	// numSpilledResults returns the number of Results that have been spilled to
+	// disk by the resultsBuffer so far.
+	numSpilledResults() int
+
 	// error returns the first error encountered by the buffer.
 	error() error
 
@@ -269,6 +273,10 @@ func (b *outOfOrderResultsBuffer) spill(context.Context, int64, int) (bool, erro
 	return false, nil
 }
 
+func (b *outOfOrderResultsBuffer) numSpilledResults() int {
+	return 0
+}
+
 func (b *outOfOrderResultsBuffer) close(context.Context) {
 	// Note that only the client's goroutine can be blocked waiting for the
 	// results, and close() is called only by the same goroutine, so signaling
@@ -326,6 +334,9 @@ type inOrderResultsBuffer struct {
 	buffered []inOrderBufferedResult
 
 	diskBuffer ResultDiskBuffer
+
+	// numSpilled tracks how many Results have been spilled to disk so far.
+	numSpilled int
 
 	// addCounter tracks the number of times add() has been called. See
 	// inOrderBufferedResult.addEpoch for why this is needed.
@@ -569,6 +580,7 @@ func (b *inOrderResultsBuffer) spill(
 				return false, err
 			}
 			r.spill(diskResultID)
+			b.numSpilled++
 			b.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 			atLeastBytes -= r.memoryTok.toRelease
 			if atLeastBytes <= 0 {
@@ -580,6 +592,12 @@ func (b *inOrderResultsBuffer) spill(
 		}
 	}
 	return false, nil
+}
+
+func (b *inOrderResultsBuffer) numSpilledResults() int {
+	b.Lock()
+	defer b.Unlock()
+	return b.numSpilled
 }
 
 func (b *inOrderResultsBuffer) close(ctx context.Context) {

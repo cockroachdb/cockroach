@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -42,7 +42,12 @@ func (si *SeqIdentifier) IsByID() bool {
 // takes a sequence identifier as an arg (a sequence identifier can either be
 // a sequence name or an ID), wrapped in the SeqIdentifier type.
 // Returns the identifier of the sequence or nil if no sequence was found.
-func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
+//
+// `getBuiltinProperties` argument is commonly builtins.GetBuiltinProperties.
+func GetSequenceFromFunc(
+	funcExpr *tree.FuncExpr,
+	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+) (*SeqIdentifier, error) {
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
@@ -51,7 +56,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 		return nil, err
 	}
 
-	fnProps, overloads := builtins.GetBuiltinProperties(def.Name)
+	fnProps, overloads := getBuiltinProperties(def.Name)
 	if fnProps != nil && fnProps.HasSequenceArguments {
 		found := false
 		for _, overload := range overloads {
@@ -68,7 +73,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 				for i := 0; i < overload.Types.Length(); i++ {
 					// Find the sequence name arg.
 					argName := argTypes[i].Name
-					if argName == builtins.SequenceNameArg {
+					if argName == builtinconstants.SequenceNameArg {
 						arg := funcExpr.Exprs[i]
 						if seqIdentifier := getSequenceIdentifier(arg); seqIdentifier != nil {
 							return seqIdentifier, nil
@@ -125,14 +130,19 @@ func getSequenceIdentifier(expr tree.Expr) *SeqIdentifier {
 // a call to sequence function in the given expression or nil if no sequence
 // identifiers are found. The identifier is wrapped in a SeqIdentifier.
 // e.g. nextval('foo') => "foo"; nextval(123::regclass) => 123; <some other expression> => nil
-func GetUsedSequences(defaultExpr tree.Expr) ([]SeqIdentifier, error) {
+//
+// `getBuiltinProperties` argument is commonly builtins.GetBuiltinProperties.
+func GetUsedSequences(
+	defaultExpr tree.Expr,
+	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
+) ([]SeqIdentifier, error) {
 	var seqIdentifiers []SeqIdentifier
 	_, err := tree.SimpleVisit(
 		defaultExpr,
 		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 			switch t := expr.(type) {
 			case *tree.FuncExpr:
-				identifier, err := GetSequenceFromFunc(t)
+				identifier, err := GetSequenceFromFunc(t, getBuiltinProperties)
 				if err != nil {
 					return false, nil, err
 				}
@@ -152,13 +162,17 @@ func GetUsedSequences(defaultExpr tree.Expr) ([]SeqIdentifier, error) {
 // ReplaceSequenceNamesWithIDs walks the given expression, and replaces
 // any sequence names in the expression by their IDs instead.
 // e.g. nextval('foo') => nextval(123::regclass)
+//
+// `getBuiltinProperties` argument is commonly builtins.GetBuiltinProperties.
 func ReplaceSequenceNamesWithIDs(
-	defaultExpr tree.Expr, nameToID map[string]int64,
+	defaultExpr tree.Expr,
+	nameToID map[string]int64,
+	getBuiltinProperties func(name string) (*tree.FunctionProperties, []tree.Overload),
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		switch t := expr.(type) {
 		case *tree.FuncExpr:
-			identifier, err := GetSequenceFromFunc(t)
+			identifier, err := GetSequenceFromFunc(t, getBuiltinProperties)
 			if err != nil {
 				return false, nil, err
 			}

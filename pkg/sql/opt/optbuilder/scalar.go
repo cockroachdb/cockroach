@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -555,7 +556,7 @@ func (b *Builder) buildFunction(
 
 	// Add a dependency on sequences that are used as a string argument.
 	if b.trackViewDeps {
-		seqIdentifier, err := seqexpr.GetSequenceFromFunc(f)
+		seqIdentifier, err := seqexpr.GetSequenceFromFunc(f, builtins.GetBuiltinProperties)
 		if err != nil {
 			panic(err)
 		}

@@ -826,7 +826,7 @@ func maybeAddSequenceDependencies(
 	backrefs map[descpb.ID]*tabledesc.Mutable,
 	colExprKind tabledesc.ColExprKind,
 ) ([]*tabledesc.Mutable, error) {
-	seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
+	seqIdentifiers, err := seqexpr.GetUsedSequences(expr, builtins.GetBuiltinProperties)
 	if err != nil {
 		return nil, err
 	}
@@ -901,7 +901,7 @@ func maybeAddSequenceDependencies(
 	// If sequences are present in the expr (and the cluster is the right version),
 	// walk the expr tree and replace any sequences names with their IDs.
 	if len(seqIdentifiers) > 0 {
-		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID, builtins.GetBuiltinProperties)
 		if err != nil {
 			return nil, err
 		}

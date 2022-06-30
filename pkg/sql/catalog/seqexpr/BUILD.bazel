@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "seqexpr",
@@ -8,7 +9,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
     ],
@@ -17,10 +18,18 @@ go_library(
 go_test(
     name = "seqexpr_test",
     srcs = ["sequence_test.go"],
-    embed = [":seqexpr"],
     deps = [
+        ":seqexpr",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+    ],
+)
+
+disallowed_imports_test(
+    "seqexpr",
+    [
+        "//pkg/sql/sem/builtins",
     ],
 )

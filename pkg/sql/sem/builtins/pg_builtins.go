@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -101,7 +102,7 @@ func initPGBuiltins() {
 		if _, exists := builtins[k]; exists {
 			panic("duplicate builtin: " + k)
 		}
-		v.props.Category = categoryCompatibility
+		v.props.Category = builtinconstants.CategoryCompatibility
 		builtins[k] = v
 	}
 
@@ -156,7 +157,7 @@ var errUnimplemented = pgerror.New(pgcode.FeatureNotSupported, "unimplemented")
 func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefinition {
 	return builtinDefinition{
 		props: tree.FunctionProperties{
-			Category: categoryCompatibility,
+			Category: builtinconstants.CategoryCompatibility,
 		},
 		overloads: []tree.Overload{
 			{
@@ -508,7 +509,7 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 }
 
 func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
-	return makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+	return makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"text", types.String},
@@ -573,7 +574,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// Here getdatabaseencoding just returns UTF8 because,
 	// CockroachDB supports just UTF8 for now.
 	"getdatabaseencoding": makeBuiltin(
-		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -734,7 +735,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"pg_get_serial_sequence": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categorySequences,
+			Category: builtinconstants.CategorySequences,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"table_name", types.String}, {"column_name", types.String}},
@@ -842,7 +843,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// https://www.postgresql.org/docs/10/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 	"pg_collation_for": makeBuiltin(
-		tree.FunctionProperties{Category: categoryString},
+		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -1765,7 +1766,7 @@ SELECT description
 	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
 	"current_setting": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -1774,7 +1775,7 @@ SELECT description
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), false /* missingOk */)
 			},
-			Info:       categorySystemInfo,
+			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
@@ -1783,7 +1784,7 @@ SELECT description
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return getSessionVar(ctx, string(tree.MustBeDString(args[0])), bool(tree.MustBeDBool(args[1])))
 			},
-			Info:       categorySystemInfo,
+			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Stable,
 		},
 	),
@@ -1791,7 +1792,7 @@ SELECT description
 	// See https://www.postgresql.org/docs/10/functions-admin.html#FUNCTIONS-ADMIN-SET
 	"set_config": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         categorySystemInfo,
+			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
 		tree.Overload{
@@ -1806,7 +1807,7 @@ SELECT description
 				}
 				return getSessionVar(ctx, varName, false /* missingOk */)
 			},
-			Info:       categorySystemInfo,
+			Info:       builtinconstants.CategorySystemInfo,
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -2006,7 +2007,7 @@ SELECT description
 		},
 	),
 
-	"information_schema._pg_numeric_precision": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+	"information_schema._pg_numeric_precision": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"typid", types.Oid},
@@ -2043,7 +2044,7 @@ SELECT description
 		},
 	),
 
-	"information_schema._pg_numeric_precision_radix": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+	"information_schema._pg_numeric_precision_radix": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"typid", types.Oid},
@@ -2065,7 +2066,7 @@ SELECT description
 		},
 	),
 
-	"information_schema._pg_numeric_scale": makeBuiltin(tree.FunctionProperties{Category: categorySystemInfo},
+	"information_schema._pg_numeric_scale": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"typid", types.Oid},

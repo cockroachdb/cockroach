@@ -478,7 +478,7 @@ func newJoinReader(
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.maintainOrdering {
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
-				jr.Ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+				flowCtx.EvalCtx.Ctx(), jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
 				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,

@@ -23,6 +23,8 @@ go_library(
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
