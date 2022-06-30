@@ -114,24 +114,25 @@ func WithSanitizeFn(fn func(string) string) TopicNameOption {
 // MakeTopicNamer creates a TopicNamer.
 // specs are used to populate DisplayNames and the values iterated over in Each.
 // Add options using WithJoinByte, WithPrefix, WithSingleName, and/or WithSanitizeFn.
-func MakeTopicNamer(specs []changefeedbase.Target, opts ...TopicNameOption) (*TopicNamer, error) {
+func MakeTopicNamer(targets changefeedbase.Targets, opts ...TopicNameOption) (*TopicNamer, error) {
 	tn := &TopicNamer{
 		join:         '.',
-		DisplayNames: make(map[changefeedbase.Target]string, len(specs)),
+		DisplayNames: make(map[changefeedbase.Target]string, targets.Size),
 		FullNames:    make(map[TopicIdentifier]string),
 	}
 	for _, opt := range opts {
 		opt.set(tn)
 	}
-	for _, s := range specs {
-		name, err := tn.makeDisplayName(s)
+	err := targets.EachTarget(func(t changefeedbase.Target) error {
+		name, err := tn.makeDisplayName(t)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		tn.DisplayNames[s] = name
-	}
+		tn.DisplayNames[t] = name
+		return nil
+	})
 
-	return tn, nil
+	return tn, err
 
 }
 

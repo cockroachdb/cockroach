@@ -104,15 +104,14 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 			return topic, nil
 		}
 	}
-	for _, s := range c.details.Targets {
-		if s.TableID == eventMeta.TableID && (s.FamilyName == "" || s.FamilyName == eventMeta.FamilyName) {
-			topic, err := makeTopicDescriptorFromSpec(s, eventMeta)
-			if err != nil {
-				return noTopic{}, err
-			}
-			c.topicDescriptorCache[topic.GetTopicIdentifier()] = topic
-			return topic, nil
+	t, found := c.details.Targets.FindByTableIDAndFamilyName(eventMeta.TableID, eventMeta.FamilyName)
+	if found {
+		topic, err := makeTopicDescriptorFromSpec(t, eventMeta)
+		if err != nil {
+			return noTopic{}, err
 		}
+		c.topicDescriptorCache[topic.GetTopicIdentifier()] = topic
+		return topic, nil
 	}
 	return noTopic{}, errors.AssertionFailedf("no TargetSpecification for row %s", eventMeta)
 }

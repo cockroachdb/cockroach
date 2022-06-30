@@ -21,32 +21,29 @@ func ValidateTable(
 	tableDesc catalog.TableDescriptor,
 	canHandle changefeedbase.CanHandle,
 ) error {
-	var found bool
-	for _, cts := range targets {
-		var t changefeedbase.Target
-		if cts.TableID == tableDesc.GetID() {
-			t = cts
-			found = true
-		} else {
-			continue
-		}
-
-		// Technically, the only non-user table known not to work is system.jobs
-		// (which creates a cycle since the resolved timestamp high-water mark is
-		// saved in it), but there are subtle differences in the way many of them
-		// work and this will be under-tested, so disallow them all until demand
-		// dictates.
-		if catalog.IsSystemDescriptor(tableDesc) {
-			return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
-		}
-		if tableDesc.IsView() {
-			return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
-		}
-		if tableDesc.IsVirtualTable() {
-			return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
-		}
-		if tableDesc.IsSequence() {
-			return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
+	// Technically, the only non-user table known not to work is system.jobs
+	// (which creates a cycle since the resolved timestamp high-water mark is
+	// saved in it), but our philosophy currently is that any use case for
+	// changefeeds on system tables would be better served by e.g. better
+	// logging and monitoring features.
+	if catalog.IsSystemDescriptor(tableDesc) {
+		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+	}
+	if tableDesc.IsView() {
+		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
+	}
+	if tableDesc.IsVirtualTable() {
+		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
+	}
+	if tableDesc.IsSequence() {
+		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
+	}
+	if tableDesc.Offline() {
+		return errors.Errorf("CHANGEFEED cannot target offline table: %s (offline reason: %q)", tableDesc.GetName(), tableDesc.GetOfflineReason())
+	}
+	found, err := targets.EachHavingTableID(tableDesc.GetID(), func(t changefeedbase.Target) error {
+		if tableDesc.Dropped() {
+			return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
 		}
 		switch t.Type {
 		case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
@@ -73,20 +70,13 @@ func ValidateTable(
 				return errors.Errorf("CHANGEFEED targeting nonexistent or removed column family %s of table %s", t.FamilyName, tableDesc.GetName())
 			}
 		}
-
-		if tableDesc.Dropped() {
-			return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
-		}
-
-		if tableDesc.Offline() {
-			return errors.Errorf("CHANGEFEED cannot target offline table: %s (offline reason: %q)", tableDesc.GetName(), tableDesc.GetOfflineReason())
-		}
-	}
+		return nil
+	})
 	if !found {
 		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
 
-	return nil
+	return err
 }
 
 // WarningsForTable returns any known nonfatal issues with running a changefeed on this kind of table.

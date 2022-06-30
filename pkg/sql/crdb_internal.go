@@ -1056,8 +1056,9 @@ func getSQLStats(
 }
 
 var crdbInternalNodeStmtStatsTable = virtualSchemaTable{
-	comment: `statement statistics (in-memory, not durable; local node only). ` +
-		`This table is wiped periodically (by default, at least every two hours)`,
+	comment: `statement statistics. ` +
+		`The contents of this table are flushed to the system.statement_statistics table at the interval set by the ` +
+		`cluster setting sql.stats.flush.interval (by default, 10m).`,
 	schema: `
 CREATE TABLE crdb_internal.node_statement_statistics (
   node_id             INT NOT NULL,
@@ -1208,8 +1209,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 // statement_ids be INT[] now that we've moved to having uint64 as the type of
 // StmtFingerprintID and TxnKey. Issue #55284
 var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
-	comment: `finer-grained transaction statistics (in-memory, not durable; local node only). ` +
-		`This table is wiped periodically (by default, at least every two hours)`,
+	comment: `finer-grained transaction statistics. ` +
+		`The contents of this table are flushed to the system.transaction_statistics table at the interval set by the ` +
+		`cluster setting sql.stats.flush.interval (by default, 10m).`,
 	schema: `
 CREATE TABLE crdb_internal.node_transaction_statistics (
   node_id             INT NOT NULL,

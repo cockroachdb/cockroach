@@ -352,7 +352,7 @@ func makeCloudStorageSink(
 	// Using + rather than . here because some consumers may be relying on there being exactly
 	// one '.' in the filepath, and '+' shares with '-' the useful property of being
 	// lexicographically earlier than '.'.
-	tn, err := MakeTopicNamer([]changefeedbase.Target{}, WithJoinByte('+'))
+	tn, err := MakeTopicNamer(changefeedbase.Targets{}, WithJoinByte('+'))
 	if err != nil {
 		return nil, err
 	}

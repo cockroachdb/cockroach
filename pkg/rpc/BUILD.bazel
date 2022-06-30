@@ -82,6 +82,7 @@ go_test(
         "codec_test.go",
         "context_test.go",
         "heartbeat_test.go",
+        "helpers_test.go",
         "main_test.go",
         "tls_test.go",
     ],

@@ -78,14 +78,18 @@ func newRowFetcherCache(
 	leaseMgr *lease.Manager,
 	cf *descs.CollectionFactory,
 	db *kv.DB,
-	specs changefeedbase.Targets,
+	targets changefeedbase.Targets,
 ) (*rowFetcherCache, error) {
-	if len(specs) == 0 {
-		return nil, errors.AssertionFailedf("Expected at least one spec, found 0")
+	if targets.Size == 0 {
+		return nil, errors.AssertionFailedf("Expected at least one target, found 0")
 	}
-	watchedFamilies := make(map[watchedFamily]struct{}, len(specs))
-	for _, s := range specs {
-		watchedFamilies[watchedFamily{tableID: s.TableID, familyName: s.FamilyName}] = struct{}{}
+	watchedFamilies := make(map[watchedFamily]struct{}, targets.Size)
+	err := targets.EachTarget(func(t changefeedbase.Target) error {
+		watchedFamilies[watchedFamily{tableID: t.TableID, familyName: t.FamilyName}] = struct{}{}
+		return nil
+	})
+	if len(watchedFamilies) == 0 {
+		return nil, errors.AssertionFailedf("No watched families resulted from %+v", targets)
 	}
 	return &rowFetcherCache{
 		codec:           codec,
@@ -94,7 +98,7 @@ func newRowFetcherCache(
 		db:              db,
 		fetchers:        cache.NewUnorderedCache(defaultCacheConfig),
 		watchedFamilies: watchedFamilies,
-	}, nil
+	}, err
 }
 
 func refreshUDT(
