@@ -43,7 +43,7 @@ import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
 import { performanceTuningRecipes } from "src/util/docs";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
+import { DATE_FORMAT_24_UTC, DATE_FORMAT } from "src/util/format";
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
@@ -108,6 +108,9 @@ export interface DatabaseTablePageDataDetails {
   indexNames: string[];
   grants: Grant[];
   statsLastUpdated?: Moment;
+  totalBytes: number;
+  liveBytes: number;
+  livePercentage: number;
 }
 
 export interface DatabaseTablePageIndexStats {
@@ -252,9 +255,9 @@ export class DatabaseTablePage extends React.Component<
     if (indexStat.lastUsed.isSame(this.minDate)) {
       return "Never";
     }
-    return indexStat.lastUsed.format(
-      `[Last ${indexStat.lastUsedType}:] MMM DD, YYYY [at] H:mm`,
-    );
+    return `Last ${indexStat.lastUsedType}: ${indexStat.lastUsed.format(
+      DATE_FORMAT,
+    )}`;
   }
 
   private renderIndexRecommendations = (
@@ -374,6 +377,23 @@ export class DatabaseTablePage extends React.Component<
     },
   ];
 
+  formatMVCCInfo = (
+    details: DatabaseTablePageDataDetails,
+  ): React.ReactElement => {
+    return (
+      <>
+        {format.Percentage(details.livePercentage, 1, 1)}
+        {" ("}
+        <span className={cx("bold")}>
+          {format.Bytes(details.liveBytes)}
+        </span>{" "}
+        live data /{" "}
+        <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
+        {" total)"}
+      </>
+    );
+  };
+
   render(): React.ReactElement {
     return (
       <div className="root table-area">
@@ -430,11 +450,15 @@ export class DatabaseTablePage extends React.Component<
                       label="Ranges"
                       value={this.props.stats.rangeCount}
                     />
+                    <SummaryCardItem
+                      label="% of Live Data"
+                      value={this.formatMVCCInfo(this.props.details)}
+                    />
                     {this.props.details.statsLastUpdated && (
                       <SummaryCardItem
                         label="Table Stats Last Updated"
                         value={this.props.details.statsLastUpdated.format(
-                          "MMM DD, YYYY [at] H:mm [(UTC)]",
+                          DATE_FORMAT_24_UTC,
                         )}
                       />
                     )}
