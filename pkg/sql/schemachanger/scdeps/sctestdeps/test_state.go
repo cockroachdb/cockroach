@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -55,6 +56,7 @@ type TestState struct {
 	committed, uncommitted nstree.MutableCatalog
 
 	comments                map[descmetadata.CommentKey]string
+	zoneConfigs             map[catid.DescID]*zonepb.ZoneConfig
 	currentDatabase         string
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
