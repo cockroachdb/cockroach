@@ -114,6 +114,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Execute a portal with limited rows inside a transaction.
+# This also tests that we can handle Flush during the portal execution.
 
 send
 Query {"String": "BEGIN"}
@@ -155,6 +156,71 @@ ReadyForQuery
 
 send
 Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute a portal with limited rows inside a transaction, and verify that we
+# allow the Flush message.
+
+send
+Query {"String": "BEGIN"}
+Parse {"Query": "SELECT * FROM generate_series(1, 2)"}
+Bind
+Execute {"MaxRows": 1}
+Flush
+Sync
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# This is the second of 2 rows, but we don't expect a command complete
+# yet.
+
+send
+Execute {"MaxRows": 1}
+Flush
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# There were only 2 rows, so this third execute should return a command
+# complete.
+
+send
+Execute {"MaxRows": 1}
+Flush
 Sync
 ----
 
@@ -354,7 +420,7 @@ Execute {"MaxRows": 2}
 Sync
 ----
 
-until
+until ignore=NoticeResponse
 ReadyForQuery
 ReadyForQuery
 ReadyForQuery
