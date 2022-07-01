@@ -62,7 +62,7 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-        "@com_github_prometheus_client_model//io/prometheus/client:client_proto",
+        "@com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto",
     ],
 )
 
