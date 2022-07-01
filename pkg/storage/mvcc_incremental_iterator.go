@@ -599,14 +599,11 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
 
-// NextIgnoringTime returns the next key/value that would be encountered in a
-// non-incremental iteration by moving the underlying non-TBI iterator forward.
-// Intents in the time range (startTime,EndTime] are handled according to the
-// iterator policy.
-func (i *MVCCIncrementalIterator) NextIgnoringTime() {
+// ignoreTimeHelper updates the iterator's metadata and handles intents depending on the iterator's
+// intent policy.
+func (i *MVCCIncrementalIterator) ignoreTimeHelper() {
 	i.ignoringTime = true
 	for {
-		i.iter.Next()
 		if !i.updateValid() {
 			return
 		}
@@ -630,14 +627,36 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 
 		// We have encountered an intent but it does not lie in the timestamp span
 		// (startTime, endTime] so we do not throw an error, and attempt to move to
-		// the next valid KV.
+		// the intent's corresponding provisional value.
+		//
+		// TODO(msbulter): investigate if it's clearer for the caller to emit the intent rather than the
+		// provisional value
 		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
+			i.iter.Next()
 			continue
 		}
 
 		// We have a valid KV or an intent to emit.
 		return
 	}
+}
+
+// NextIgnoringTime returns the next key/value that would be encountered in a
+// non-incremental iteration by moving the underlying non-TBI iterator forward.
+// Intents in the time range (startTime,EndTime] are handled according to the
+// iterator policy.
+func (i *MVCCIncrementalIterator) NextIgnoringTime() {
+	i.iter.Next()
+	i.ignoreTimeHelper()
+}
+
+// NextKeyIgnoringTime returns the next distinct key that would be encountered
+// in a non-incremental iteration by moving the underlying non-TBI iterator
+// forward. Intents in the time range (startTime,EndTime] are handled according
+// to the iterator policy.
+func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
+	i.iter.NextKey()
+	i.ignoreTimeHelper()
 }
 
 // NumCollectedIntents returns number of intents encountered during iteration.
