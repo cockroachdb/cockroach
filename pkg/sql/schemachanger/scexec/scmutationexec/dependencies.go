@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -96,7 +97,12 @@ type MutationVisitorStateUpdater interface {
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool, runningStatus string) error
+	UpdateSchemaChangerJob(
+		jobID jobspb.JobID,
+		isNonCancelable bool,
+		runningStatus string,
+		descriptorIDsToRemove []catid.DescID,
+	) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(

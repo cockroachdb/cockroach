@@ -413,6 +413,10 @@ type UpdateSchemaChangerJob struct {
 	IsNonCancelable bool
 	JobID           jobspb.JobID
 	RunningStatus   string
+
+	// DescriptorIDsToRemove are references to descriptor IDs which should
+	// be removed from the job itself.
+	DescriptorIDsToRemove []descpb.ID
 }
 
 // CreateSchemaChangerJob constructs the job for the

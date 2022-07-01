@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -465,7 +466,7 @@ func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
 		if next != nil {
 			const initialize = true
 			runningStatus := fmt.Sprintf("%s pending", next)
-			return append(bc.setJobStateOnDescriptorOps(initialize, revertible, s.After),
+			return append(bc.setJobStateOnDescriptorOps(initialize, revertible, s.After, catalog.DescriptorIDSet{}),
 				bc.createSchemaChangeJobOp(revertible, runningStatus))
 		}
 		return nil
@@ -474,13 +475,27 @@ func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
 			return nil
 		}
 		var ops []scop.Op
+		var newlyUnreferenced []catid.DescID
+		allSet, newlyUnreferencedSet, unreferenced := computeUnreferencedDescriptors(
+			bc.targetState.Targets, s,
+		)
+		if !unreferenced.Empty() && revertible {
+			panic(errors.AssertionFailedf("cannot remove references to descriptors " +
+				"while change is revertible"))
+		}
 		if next == nil {
 			// The terminal mutation stage needs to remove references to the schema
 			// changer job in the affected descriptors.
-			ops = bc.removeJobReferenceOps()
+			ops = bc.removeJobReferenceOps(allSet.Union(newlyUnreferencedSet))
 		} else {
+			// We only need to set newlyUnreferenced if this is not the last stage of
+			// job.
+			newlyUnreferenced = newlyUnreferencedSet.Ordered()
 			const initialize = false
-			ops = bc.setJobStateOnDescriptorOps(initialize, revertible, s.After)
+			ops = append(ops,
+				bc.setJobStateOnDescriptorOps(initialize, revertible, s.After, unreferenced)...)
+			ops = append(ops,
+				bc.removeJobReferenceOps(newlyUnreferencedSet)...)
 		}
 		// If we just moved to a non-cancelable phase, we need to tell the job
 		// that it cannot be canceled. Ideally we'd do this just once.
@@ -488,11 +503,44 @@ func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
 		if next != nil {
 			runningStatus = fmt.Sprintf("%s pending", next)
 		}
-		ops = append(ops, bc.updateJobProgressOp(revertible, runningStatus))
+		ops = append(ops, bc.updateJobProgressOp(revertible, runningStatus, newlyUnreferenced))
 		return ops
 	default:
 		return nil
 	}
+}
+
+// computeUnreferencedDescriptors looks at the elements and determines which
+// descriptors at this point in the schema change are no longer referenced
+// because all the elements which referenced them are terminally absent.
+// Additionally, it returns the set which became unreferenced in this stage.
+func computeUnreferencedDescriptors(
+	targets []scpb.Target, s *Stage,
+) (all, unreferenced, newlyUnreferenced catalog.DescriptorIDSet) {
+	// If there are descriptors which are now only referenced by absent
+	// or transient targets which are in their terminal state, and that
+	// was not the case before this stage, then we are done with that
+	// descriptor in this job. That situation should only arise in a
+	// non-revertible stage. In that case, we'll want to issue an
+	// update to remove the reference to the descriptor from the job.
+	var allSet, referencedBefore, referencedAfter catalog.DescriptorIDSet
+	for i, ts := range targets {
+		goingAway := ts.TargetStatus == scpb.Status_ABSENT ||
+			ts.TargetStatus == scpb.Status_TRANSIENT_ABSENT
+		goneBefore := goingAway && s.Before[i] == ts.TargetStatus
+		goneAfter := goingAway && s.After[i] == ts.TargetStatus
+		screl.WalkReferencedDescIDs(ts.Element(), func(id catid.DescID) {
+			allSet.Add(id)
+			if !goneBefore {
+				referencedBefore.Add(id)
+			}
+			if !goneBefore && !goneAfter {
+				referencedAfter.Add(id)
+			}
+		})
+	}
+	return allSet, allSet.Difference(referencedAfter),
+		referencedBefore.Difference(referencedAfter)
 }
 
 func (bc buildContext) createSchemaChangeJobOp(revertible bool, runningStatus string) scop.Op {
@@ -506,17 +554,20 @@ func (bc buildContext) createSchemaChangeJobOp(revertible bool, runningStatus st
 	}
 }
 
-func (bc buildContext) updateJobProgressOp(revertible bool, runningStatus string) scop.Op {
+func (bc buildContext) updateJobProgressOp(
+	revertible bool, runningStatus string, descriptorIDsToRemove []catid.DescID,
+) scop.Op {
 	return &scop.UpdateSchemaChangerJob{
-		JobID:           bc.scJobIDSupplier(),
-		IsNonCancelable: !revertible,
-		RunningStatus:   runningStatus,
+		JobID:                 bc.scJobIDSupplier(),
+		IsNonCancelable:       !revertible,
+		RunningStatus:         runningStatus,
+		DescriptorIDsToRemove: descriptorIDsToRemove,
 	}
 }
 
-func (bc buildContext) removeJobReferenceOps() (ops []scop.Op) {
+func (bc buildContext) removeJobReferenceOps(toRemove catalog.DescriptorIDSet) (ops []scop.Op) {
 	jobID := bc.scJobIDSupplier()
-	screl.AllTargetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
+	toRemove.ForEach(func(descID descpb.ID) {
 		ops = append(ops, &scop.RemoveJobStateFromDescriptor{
 			DescriptorID: descID,
 			JobID:        jobID,
@@ -540,13 +591,14 @@ func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
 }
 
 func (bc buildContext) setJobStateOnDescriptorOps(
-	initialize, revertible bool, after []scpb.Status,
+	initialize, revertible bool, after []scpb.Status, toExclude catalog.DescriptorIDSet,
 ) []scop.Op {
 	descIDs, states := makeDescriptorStates(
 		bc.scJobIDSupplier(), bc.rollback, revertible, bc.targetState, after,
 	)
-	ops := make([]scop.Op, 0, descIDs.Len())
-	descIDs.ForEach(func(descID descpb.ID) {
+	toInclude := descIDs.Difference(toExclude)
+	ops := make([]scop.Op, 0, toInclude.Len())
+	toInclude.ForEach(func(descID descpb.ID) {
 		ops = append(ops, &scop.SetJobStateOnDescriptor{
 			DescriptorID: descID,
 			Initialize:   initialize,

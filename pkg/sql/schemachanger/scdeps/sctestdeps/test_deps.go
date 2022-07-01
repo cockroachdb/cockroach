@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -881,6 +882,26 @@ func (s *TestState) UpdateSchemaChangeJob(
 		scJob.NonCancelable = true
 		s.LogSideEffectf("set schema change job #%d to non-cancellable", scJob.JobID)
 	}
+	removeDescriptorIDs := func(descIDsToRemove []catid.DescID) error {
+		if len(descIDsToRemove) == 0 {
+			return nil
+		}
+		toRemove := catalog.MakeDescriptorIDSet(descIDsToRemove...)
+		var filtered []catid.DescID
+		for _, id := range payload.DescriptorIDs {
+			if toRemove.Contains(id) {
+				toRemove.Remove(id)
+			} else {
+				filtered = append(filtered, id)
+			}
+		}
+		if !toRemove.Empty() {
+			return errors.AssertionFailedf("schema change job not found")
+		}
+		s.LogSideEffectf("job #%d: removed references to descriptors %v, remaining references are %v", scJob.JobID,
+			descIDsToRemove, filtered)
+		return nil
+	}
 	md := jobs.JobMetadata{
 		ID:       scJob.JobID,
 		Status:   jobs.StatusRunning,
@@ -888,7 +909,7 @@ func (s *TestState) UpdateSchemaChangeJob(
 		Progress: &progress,
 		RunStats: nil,
 	}
-	return fn(md, updateProgress, setNonCancelable)
+	return fn(md, updateProgress, setNonCancelable, removeDescriptorIDs)
 }
 
 // MakeJobID implements the scexec.TransactionalJobRegistry interface.

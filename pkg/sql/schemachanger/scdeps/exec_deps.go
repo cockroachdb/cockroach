@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -117,14 +118,42 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
-		setNonCancelable := func() {
-			payload := *md.Payload
-			if !payload.Noncancelable {
-				payload.Noncancelable = true
-				ju.UpdatePayload(&payload)
+		var pl *jobspb.Payload
+		maybeSetPayload := func() {
+			if pl == nil {
+				clone := *md.Payload
+				pl = &clone
 			}
 		}
-		return callback(md, ju.UpdateProgress, setNonCancelable)
+		setNonCancelable := func() {
+			maybeSetPayload()
+			if !pl.Noncancelable {
+				pl.Noncancelable = true
+				ju.UpdatePayload(pl)
+			}
+		}
+		removeDescriptorIDs := func(descIDsToRemove []catid.DescID) error {
+			if len(descIDsToRemove) == 0 {
+				return nil
+			}
+			maybeSetPayload()
+			toRemove := catalog.MakeDescriptorIDSet(descIDsToRemove...)
+			var filtered []catid.DescID
+			for _, id := range pl.DescriptorIDs {
+				if toRemove.Contains(id) {
+					toRemove.Remove(id)
+				} else {
+					filtered = append(filtered, id)
+				}
+			}
+			if !toRemove.Empty() {
+				return errors.AssertionFailedf("schema change job not found")
+			}
+			pl.DescriptorIDs = filtered
+			ju.UpdatePayload(pl)
+			return nil
+		}
+		return callback(md, ju.UpdateProgress, setNonCancelable, removeDescriptorIDs)
 	})
 }
 

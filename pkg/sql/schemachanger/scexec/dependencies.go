@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -147,6 +148,7 @@ type JobUpdateCallback = func(
 	md jobs.JobMetadata,
 	updateProgress func(*jobspb.Progress),
 	setNonCancelable func(),
+	removeDescriptorIDs func([]catid.DescID) error,
 ) error
 
 // Backfiller is an abstract index backfiller that performs index backfills

@@ -36,26 +36,28 @@ func GetDescID(e scpb.Element) catid.DescID {
 // affected by the schema change.
 func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 	for i := range s.Targets {
-		e := s.Targets[i].Element()
-		// Handle special cases to tighten this superset a bit.
-		switch te := e.(type) {
-		case *scpb.Namespace:
-			// Ignore the parent database and schema in the namespace element:
-			// - the parent schema of an object has no back-references to it,
-			// - the parent database has back-references to a schema, but these
-			//   will be captured by the scpb.SchemaParent target.
-			ids.Add(te.DescriptorID)
-		case *scpb.ObjectParent:
-			// Ignore the parent schema, it won't have back-references.
-			ids.Add(te.ObjectID)
-		default:
-			_ = WalkDescIDs(e, func(id *catid.DescID) error {
-				ids.Add(*id)
-				return nil
-			})
-		}
+		WalkReferencedDescIDs(s.Targets[i].Element(), ids.Add)
 	}
 	return ids
+}
+
+// WalkReferencedDescIDs walks the descriptors IDs in the element which indicate
+// a reference to another descriptor.
+func WalkReferencedDescIDs(e scpb.Element, f func(id catid.DescID)) {
+	// Handle special cases to tighten this superset a bit.
+	switch te := e.(type) {
+	case *scpb.Namespace:
+		// Ignore the parent database and schema in the namespace element:
+		// - the parent schema of an object has no back-references to it,
+		// - the parent database has back-references to a schema, but these
+		//   will be captured by the scpb.SchemaParent target.
+		f(te.DescriptorID)
+	case *scpb.ObjectParent:
+		// Ignore the parent schema, it won't have back-references.
+		f(te.ObjectID)
+	default:
+		_ = WalkDescIDs(e, func(id *catid.DescID) error { f(*id); return nil })
+	}
 }
 
 // AllDescIDs returns all the IDs referenced by an element.
