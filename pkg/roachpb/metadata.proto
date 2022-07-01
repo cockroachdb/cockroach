@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "util/unresolved_addr.proto";
 import "util/hlc/timestamp.proto";
+import "util/admission/admissionpb/io_threshold.proto";
 import "gogoproto/gogo.proto";
 
 // Attributes specifies a list of arbitrary strings describing
@@ -335,6 +336,7 @@ message StoreCapacity {
   // instances where overlapping node-binary versions within a cluster result
   // in this this field missing.
   optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
+  optional cockroach.util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
