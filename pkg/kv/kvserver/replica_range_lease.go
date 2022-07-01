@@ -650,6 +650,7 @@ func (r *Replica) leaseStatus(
 	lease roachpb.Lease,
 	now hlc.ClockTimestamp,
 	minProposedTS hlc.ClockTimestamp,
+	minValidObservedTS hlc.ClockTimestamp,
 	reqTS hlc.Timestamp,
 ) kvserverpb.LeaseStatus {
 	status := kvserverpb.LeaseStatus{
@@ -661,8 +662,9 @@ func (r *Replica) leaseStatus(
 		// present time. We need the current time to distinguish between an
 		// EXPIRED lease and an UNUSABLE lease. Only an EXPIRED lease can change
 		// hands through a lease acquisition.
-		Now:         now,
-		RequestTime: reqTS,
+		Now:                       now,
+		RequestTime:               reqTS,
+		MinValidObservedTimestamp: minValidObservedTS,
 	}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
@@ -749,7 +751,8 @@ func (r *Replica) leaseStatusForRequestRLocked(
 		// would be given to a request with a timestamp of now.
 		reqTS = now.ToTimestamp()
 	}
-	return r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS, reqTS)
+	return r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, reqTS)
 }
 
 // OwnsValidLease returns whether this replica is the current valid
