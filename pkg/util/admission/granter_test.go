@@ -22,11 +22,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -142,8 +140,6 @@ func TestGranterBasic(t *testing.T) {
 			opts.SQLSQLResponseBurstTokens = int64(burstTokens)
 			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
-			var bc broadcastCatcher
-			opts.Broadcast = bc.catch
 			opts.makeRequesterFunc = func(
 				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
 				opts workQueueOptions) requester {
@@ -300,24 +296,6 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 	}
 }
 
-type testBroadcast struct {
-	storeID   roachpb.StoreID
-	threshold *admissionpb.IOThreshold
-	ttl       time.Duration
-}
-
-type broadcastCatcher []testBroadcast
-
-func (bc *broadcastCatcher) catch(
-	_ context.Context, storeID roachpb.StoreID, threshold *admissionpb.IOThreshold, ttl time.Duration,
-) {
-	*bc = append(*bc, testBroadcast{
-		storeID:   storeID,
-		threshold: threshold,
-		ttl:       ttl,
-	})
-}
-
 // TestStoreCoordinators tests only the setup of GrantCoordinators per store.
 // Testing of IO load functionality happens in TestIOLoadListener.
 func TestStoreCoordinators(t *testing.T) {
@@ -344,10 +322,8 @@ func TestStoreCoordinators(t *testing.T) {
 		}
 		return req
 	}
-	var bc broadcastCatcher
 	opts := Options{
 		Settings:          settings,
-		Broadcast:         bc.catch,
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
 			ctx log.AmbientContext, granter granter, settings *cluster.Settings,

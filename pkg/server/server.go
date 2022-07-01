@@ -73,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,7 +86,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
@@ -375,13 +373,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admissionOptions.Override(opts)
 	}
 	admissionOptions.Settings = st
-	admissionOptions.Broadcast = func(ctx context.Context, id roachpb.StoreID, threshold *admissionpb.IOThreshold, ttl time.Duration) {
-		ctx = logtags.AddTag(ctx, "s", id)
-		k := gossip.MakeStoreIOThresholdKey(id)
-		if err := g.AddInfoProto(k, threshold, ttl); err != nil {
-			log.Warningf(ctx, "unable to gossip IOThreshold: %s", err)
-		}
-	}
 	gcoords, metrics := admission.NewGrantCoordinators(cfg.AmbientCtx, admissionOptions)
 	for i := range metrics {
 		registry.AddMetricStruct(metrics[i])
@@ -1457,7 +1448,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// existing stores shouldn’t be able to acquire leases yet. Although, below
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
-	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node, s.node)
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.

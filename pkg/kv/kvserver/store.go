@@ -938,6 +938,10 @@ type Store struct {
 		syncutil.Mutex
 		roachpb.StoreCapacity
 	}
+	ioThreshold struct {
+		syncutil.Mutex
+		t *admissionpb.IOThreshold
+	}
 
 	counts struct {
 		// Number of placeholders removed due to error. Not a good fit for meaningful
@@ -2509,6 +2513,13 @@ func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached b
 	}
 }
 
+// UpdateIOThreshold updates the IOThreshold reported in the StoreDescriptor.
+func (s *Store) UpdateIOThreshold(ioThreshold *admissionpb.IOThreshold) {
+	s.ioThreshold.Lock()
+	defer s.ioThreshold.Unlock()
+	s.ioThreshold.t = ioThreshold
+}
+
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// Temporarily indicate that we're gossiping the store capacity to avoid
@@ -2993,6 +3004,11 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
 	capacity.L0Sublevels = l0SublevelsMax
+	{
+		s.ioThreshold.Lock()
+		capacity.IOThreshold = *s.ioThreshold.t
+		s.ioThreshold.Unlock()
+	}
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)

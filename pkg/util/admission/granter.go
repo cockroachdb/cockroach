@@ -643,7 +643,6 @@ type Options struct {
 	SQLStatementRootStartWorkSlots int
 	TestingDisableSkipEnforcement  bool
 	Settings                       *cluster.Settings
-	Broadcast                      func(ctx context.Context, id roachpb.StoreID, threshold *admissionpb.IOThreshold, ttl time.Duration)
 	// Only non-nil for tests.
 	makeRequesterFunc      makeRequesterFunc
 	makeStoreRequesterFunc makeStoreRequesterFunc
@@ -811,7 +810,6 @@ func NewGrantCoordinators(
 		makeStoreRequesterFunc:      makeStoreRequester,
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
-		broadcast:                   opts.Broadcast,
 	}
 
 	return GrantCoordinators{Stores: storeCoordinators, Regular: coord}, metricStructs
@@ -1254,7 +1252,6 @@ type StoreGrantCoordinators struct {
 	kvIOTokensExhaustedDuration *metric.Counter
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics WorkQueueMetrics
-	broadcast        func(context.Context, roachpb.StoreID, *admissionpb.IOThreshold, time.Duration)
 
 	gcMap syncutil.IntMap // map[int64(StoreID)]*GrantCoordinator
 	// numStores is used to track the number of stores which have been added
@@ -1270,7 +1267,7 @@ type StoreGrantCoordinators struct {
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
-	startupCtx context.Context, pmp PebbleMetricsProvider,
+	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
 ) {
 	if sgc.pebbleMetricsProvider != nil {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
@@ -1314,7 +1311,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
 							ioThreshold := gc.pebbleMetricsTick(ctx, m.Metrics)
-							sgc.broadcast(ctx, roachpb.StoreID(m.StoreID), ioThreshold, 2*adjustmentInterval*time.Second)
+							iotc.UpdateIOThreshold(roachpb.StoreID(m.StoreID), ioThreshold)
 						} else {
 							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
@@ -1528,6 +1525,11 @@ type sqlNodeCPUOverloadIndicator struct {
 // PebbleMetricsProvider provides the pebble.Metrics for all stores.
 type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
+}
+
+// IOThresholdConsumer is informed about updated IOThresholds.
+type IOThresholdConsumer interface {
+	UpdateIOThreshold(roachpb.StoreID, *admissionpb.IOThreshold)
 }
 
 // StoreMetrics are the metrics for a store.
