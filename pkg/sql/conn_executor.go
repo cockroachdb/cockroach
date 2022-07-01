@@ -2717,6 +2717,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			CatalogBuiltins:                &p.evalCatalogBuiltins,
 			QueryCancelKey:                 ex.queryCancelKey,
 			DescIDGenerator:                ex.getDescIDGenerator(),
+			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,

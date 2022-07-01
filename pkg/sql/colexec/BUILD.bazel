@@ -23,6 +23,7 @@ go_library(
         "ordered_aggregator.go",
         "parallel_unordered_synchronizer.go",
         "partially_ordered_distinct.go",
+        "range_stats.go",
         "serial_unordered_synchronizer.go",
         "sort.go",
         "sort_chunks.go",
@@ -41,6 +42,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
+        "//pkg/roachpb",
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",  # keep

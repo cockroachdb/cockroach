@@ -1310,6 +1310,9 @@ type ExecutorConfig struct {
 
 	// DescIDGenerator generates unique descriptor IDs.
 	DescIDGenerator eval.DescIDGenerator
+
+	// RangeStatsFetcher is used to fetch RangeStats.
+	RangeStatsFetcher eval.RangeStatsFetcher
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

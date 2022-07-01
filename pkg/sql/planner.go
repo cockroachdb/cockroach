@@ -476,6 +476,7 @@ func internalExtendedEvalCtx(
 			SQLStatsController:             sqlStatsController,
 			IndexUsageStatsController:      indexUsageStatsController,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
+			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,

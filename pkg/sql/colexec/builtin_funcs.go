@@ -124,6 +124,10 @@ func NewBuiltinFunctionOperator(
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
+	case tree.CrdbInternalRangeStats:
+		return newRangeStatsOperator(
+			evalCtx.RangeStatsFetcher, allocator, columnTypes, argumentCols, outputIdx, input,
+		)
 	default:
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),
