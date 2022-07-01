@@ -37,10 +37,18 @@ func PointKey(key string, ts int) storage.MVCCKey {
 // PointKV creates an MVCCKeyValue for the given string key/value and timestamp
 // (walltime seconds). An empty string is a tombstone.
 func PointKV(key string, ts int, value string) storage.MVCCKeyValue {
+	return PointKVWithLocalTS(key, ts, 0, value)
+}
+
+// PointKVWithLocalTS creates an MVCCKeyValue for the given string key/value,
+// timestamp, and local timestamp (walltime seconds). An empty string is a
+// tombstone.
+func PointKVWithLocalTS(key string, ts int, localTS int, value string) storage.MVCCKeyValue {
 	var mvccValue storage.MVCCValue
 	if value != "" {
 		mvccValue = StringValue(value)
 	}
+	mvccValue = WithLocalTS(mvccValue, localTS)
 	v, err := storage.EncodeMVCCValue(mvccValue)
 	if err != nil {
 		panic(err)
@@ -63,17 +71,27 @@ func RangeKey(start, end string, ts int) storage.MVCCRangeKey {
 
 // RangeKV creates an MVCCRangeKeyValue for the given string keys, value, and
 // timestamp (in walltime seconds).
-func RangeKV(start, end string, ts int, value storage.MVCCValue) storage.MVCCRangeKeyValue {
-	valueBytes, err := storage.EncodeMVCCValue(value)
+func RangeKV(start, end string, ts int, value string) storage.MVCCRangeKeyValue {
+	return RangeKVWithLocalTS(start, end, ts, 0, value)
+}
+
+// RangeKVWithLocalTS creates an MVCCRangeKeyValue for the given string keys,
+// value, and timestamp (in walltime seconds).
+func RangeKVWithLocalTS(
+	start, end string, ts, localTS int, value string,
+) storage.MVCCRangeKeyValue {
+	var mvccValue storage.MVCCValue
+	if value != "" {
+		mvccValue = StringValue(value)
+	}
+	mvccValue = WithLocalTS(mvccValue, localTS)
+	v, err := storage.EncodeMVCCValue(mvccValue)
 	if err != nil {
 		panic(err)
 	}
-	if valueBytes == nil {
-		valueBytes = []byte{}
-	}
 	return storage.MVCCRangeKeyValue{
 		RangeKey: RangeKey(start, end, ts),
-		Value:    valueBytes,
+		Value:    v,
 	}
 }
 
@@ -82,7 +100,7 @@ func WallTS(ts int) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: int64(ts)}
 }
 
-// StringValue creates an MVCCValue for a string
+// StringValue creates an MVCCValue for a string.
 func StringValue(s string) storage.MVCCValue {
 	return storage.MVCCValue{Value: roachpb.MakeValueFromString(s)}
 }

@@ -107,7 +107,18 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         kvs{pointKV("a", 1, "")},
 			expectStatsEst: true,
 		},
-		"blind writes SST inline values unless race": { // unfortunately, for performance
+		"blind writes range tombstones": {
+			sst:            kvs{rangeKV("a", "d", 1, "")},
+			expect:         kvs{rangeKV("a", "d", 1, "")},
+			expectStatsEst: true,
+		},
+		"blind replaces range tombstone": {
+			data:           kvs{rangeKV("b", "c", 1, "")},
+			sst:            kvs{rangeKV("a", "d", 1, "")},
+			expect:         kvs{rangeKV("a", "d", 1, "")},
+			expectStatsEst: true,
+		},
+		"blind rejects SST inline values under race only": { // unfortunately, for performance
 			sst:            kvs{pointKV("a", 0, "inline")},
 			expect:         kvs{pointKV("a", 0, "inline")},
 			expectStatsEst: true,
@@ -119,13 +130,25 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         kvs{pointKV("a", 0, "inline"), pointKV("a", 2, "sst")},
 			expectStatsEst: true,
 		},
+		"blind rejects local timestamp under race only": { // unfortunately, for performance
+			sst:            kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
+			expect:         kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
+			expectStatsEst: true,
+			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/0.000000002,0`,
+		},
+		"blind rejects local timestamp on range key under race only": { // unfortunately, for performance
+			sst:            kvs{rangeKVWithLocalTS("a", "d", 2, 1, "")},
+			expect:         kvs{rangeKVWithLocalTS("a", "d", 2, 1, "")},
+			expectStatsEst: true,
+			expectErrRace:  `SST contains non-empty MVCC value header for range key {a-d}/0.000000002,0`,
+		},
 
 		// SSTTimestampToRequestTimestamp
 		"SSTTimestampToRequestTimestamp rewrites timestamp": {
 			reqTS:          10,
 			toReqTS:        1,
-			sst:            kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1")},
-			expect:         kvs{pointKV("a", 10, "a1"), pointKV("b", 10, "b1")},
+			sst:            kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1"), rangeKV("d", "f", 1, "")},
+			expect:         kvs{pointKV("a", 10, "a1"), pointKV("b", 10, "b1"), rangeKV("d", "f", 10, "")},
 			expectStatsEst: true,
 		},
 		"SSTTimestampToRequestTimestamp succeeds on AddSSTableRequireAtRequestTimestamp": {
@@ -149,6 +172,15 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:     kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1"), pointKV("c", 2, "c2")},
 			expectErr: []string{
 				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for key "c"`,
+				`key has suffix "\x00\x00\x00\x00\x00\x00\x00\x02\t", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
+			},
+		},
+		"SSTTimestampToRequestTimestamp rejects incorrect SST timestamp for range keys": {
+			reqTS:   10,
+			toReqTS: 1,
+			sst:     kvs{pointKV("a", 1, "a1"), rangeKV("c", "d", 2, "")},
+			expectErr: []string{
+				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for range key {c-d}/0.000000002,0`,
 				`key has suffix "\x00\x00\x00\x00\x00\x00\x00\x02\t", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
 			},
 		},
@@ -249,6 +281,14 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           kvs{pointKV("a", 10, "a6")},
 			expect:        kvs{pointKV("a", 7, "a6"), pointKV("a", 6, "a6")},
 		},
+		"SSTTimestampToRequestTimestamp ignores local timestamp unless under race": { // unfortunately, for performance
+			reqTS:          10,
+			toReqTS:        2,
+			sst:            kvs{pointKVWithLocalTS("a", 2, 1, "a2")},
+			expect:         kvs{pointKVWithLocalTS("a", 10, 1, "a2")},
+			expectStatsEst: true,
+			expectErrRace:  `SST contains non-empty MVCC value header for key "a"/0.000000002,0`,
+		},
 
 		// DisallowConflicts
 		"DisallowConflicts allows above and beside": {
@@ -305,6 +345,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			data:       kvs{pointKV("a", 2, "a2")},
 			sst:        kvs{pointKV("a", 3, "")},
 			expect:     kvs{pointKV("a", 3, ""), pointKV("a", 2, "a2")},
+		},
+		"DisallowConflicts errors on SST range tombstones": { // for now
+			noConflict: true,
+			sst:        kvs{rangeKV("a", "d", 3, "")},
+			expectErr:  `MVCC range tombstone conflict checks are not yet supported, found {a-d}`,
 		},
 		"DisallowConflicts allows new SST inline values": { // unfortunately, for performance
 			noConflict:    true,
@@ -391,6 +436,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			data:      kvs{pointKV("a", 2, "a2")},
 			sst:       kvs{pointKV("a", 3, "")},
 			expectErr: `ingested key collides with an existing one: "a"`,
+		},
+		"DisallowShadowing errors on SST range tombstones": { // for now
+			noShadow:  true,
+			sst:       kvs{rangeKV("a", "d", 3, "")},
+			expectErr: `MVCC range tombstone conflict checks are not yet supported, found {a-d}`,
 		},
 		"DisallowShadowing allows new SST inline values": { // unfortunately, for performance
 			noShadow:      true,
@@ -514,6 +564,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			data:          kvs{pointKV("a", 2, "a2")},
 			sst:           kvs{pointKV("a", 3, "")},
 			expectErr:     `ingested key collides with an existing one: "a"`,
+		},
+		"DisallowShadowingBelow errors on SST range tombstones": { // for now
+			noShadowBelow: 3,
+			sst:           kvs{rangeKV("a", "d", 3, "")},
+			expectErr:     `MVCC range tombstone conflict checks are not yet supported, found {a-d}`,
 		},
 		"DisallowShadowingBelow allows new SST inline values": { // unfortunately, for performance
 			noShadowBelow: 5,
@@ -704,6 +759,12 @@ func TestEvalAddSSTable(t *testing.T) {
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
 								require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v.Value, txn))
+							case storage.MVCCRangeKeyValue:
+								v, err := storage.DecodeMVCCValue(kv.Value)
+								require.NoError(t, err)
+								require.True(t, v.IsTombstone(), "MVCC range keys must be tombstones")
+								require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(
+									ctx, b, nil, kv.RangeKey.StartKey, kv.RangeKey.EndKey, kv.RangeKey.Timestamp, v.MVCCValueHeader.LocalTimestamp, nil, nil, 0))
 							default:
 								t.Fatalf("unknown KV type %T", kv)
 							}
@@ -816,24 +877,24 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 		expectLogicalOps      []enginepb.MVCCLogicalOp
 	}{
 		"Default": {
-			sst:                   kvs{pointKV("a", 1, "a1")},
+			sst:                   kvs{pointKV("a", 1, "a1"), rangeKV("d", "f", 1, "")},
 			expectHistoryMutation: true,
 			expectLogicalOps:      nil,
 		},
 		"SSTTimestampToRequestTimestamp alone": {
-			sst:                   kvs{pointKV("a", 1, "a1")},
+			sst:                   kvs{pointKV("a", 1, "a1"), rangeKV("d", "f", 1, "")},
 			toReqTS:               1,
 			expectHistoryMutation: false,
 			expectLogicalOps:      nil,
 		},
 		"IngestAsWrites alone": {
-			sst:                   kvs{pointKV("a", 1, "a1")},
+			sst:                   kvs{pointKV("a", 1, "a1"), rangeKV("d", "f", 1, "")},
 			asWrites:              true,
 			expectHistoryMutation: true,
 			expectLogicalOps:      nil,
 		},
 		"IngestAsWrites and SSTTimestampToRequestTimestamp": {
-			sst:                   kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1")},
+			sst:                   kvs{pointKV("a", 1, "a1"), pointKV("b", 1, "b1"), rangeKV("d", "f", 1, "")},
 			asWrites:              true,
 			toReqTS:               1,
 			expectHistoryMutation: false,
@@ -842,6 +903,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 				// won't show up here.
 				{WriteValue: &enginepb.MVCCWriteValueOp{Key: roachpb.Key("a"), Timestamp: reqTS}},
 				{WriteValue: &enginepb.MVCCWriteValueOp{Key: roachpb.Key("b"), Timestamp: reqTS}},
+				{DeleteRange: &enginepb.MVCCDeleteRangeOp{StartKey: roachpb.Key("d"), EndKey: roachpb.Key("f"), Timestamp: reqTS}},
 			},
 		},
 	}

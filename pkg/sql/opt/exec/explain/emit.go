@@ -891,10 +891,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 }
 
 func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Index) {
-	if table == nil || index == nil {
-		e.ob.Attr(field, "?@?")
-		return
-	}
 	partial := ""
 	if _, isPartial := index.Predicate(); isPartial {
 		partial = " (partial index)"
