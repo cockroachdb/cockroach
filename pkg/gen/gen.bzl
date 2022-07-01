@@ -27,6 +27,7 @@ load(":misc.bzl", "MISC_SRCS")
 load(":optgen.bzl", "OPTGEN_SRCS")
 load(":protobuf.bzl", "PROTOBUF_SRCS")
 load(":stringer.bzl", "STRINGER_SRCS")
+load(":parser.bzl", "PARSER_SRCS")
 
 # GeneratedFileInfo provides two pieces of information to the _hoist_files
 # rule. It provides the set of files to be hoisted via the generated_files
@@ -279,6 +280,12 @@ def bindata():
   _hoist_no_prefix(
     name = "bindata",
     srcs = BINDATA_SRCS,
+  )
+
+def parser():
+  _hoist_no_prefix(
+    name = "parser",
+    srcs = PARSER_SRCS,
   )
 
 def gen(name, srcs):
