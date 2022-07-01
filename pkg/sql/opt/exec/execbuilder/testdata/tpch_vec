@@ -20579,12 +20579,14 @@ EXPLAIN (VEC) SELECT l_orderkey, sum(l_extendedprice * (1 - l_discount)) AS reve
 └ Node 1
   └ *colexec.topKSorter
     └ *colexec.hashAggregator
-      └ *rowexec.joinReader
-        └ *colexecjoin.hashJoiner
-          ├ *colexecsel.selLTInt64Int64ConstOp
-          │ └ *colfetcher.ColBatchScan
-          └ *colexecsel.selEQBytesBytesConstOp
-            └ *colfetcher.ColBatchScan
+      └ *colexecproj.projMultFloat64Float64Op
+        └ *colexecprojconst.projMinusFloat64ConstFloat64Op
+          └ *rowexec.joinReader
+            └ *colexecjoin.hashJoiner
+              ├ *colexecsel.selLTInt64Int64ConstOp
+              │ └ *colfetcher.ColBatchScan
+              └ *colexecsel.selEQBytesBytesConstOp
+                └ *colfetcher.ColBatchScan
 
 # Query 4
 query T
@@ -20759,11 +20761,13 @@ EXPLAIN (VEC) SELECT ps_partkey, sum(ps_supplycost * ps_availqty::float) AS valu
       └ *colexecbase.castOpNullAny
         └ *colexecbase.constNullOp
           └ *colexec.hashAggregator
-            └ *rowexec.joinReader
-              └ *rowexec.joinReader
+            └ *colexecproj.projMultFloat64Float64Op
+              └ *colexecbase.castIntFloatOp
                 └ *rowexec.joinReader
-                  └ *colexecsel.selEQBytesBytesConstOp
-                    └ *colfetcher.ColBatchScan
+                  └ *rowexec.joinReader
+                    └ *rowexec.joinReader
+                      └ *colexecsel.selEQBytesBytesConstOp
+                        └ *colfetcher.ColBatchScan
 
 # Query 12
 query T
@@ -20773,12 +20777,30 @@ EXPLAIN (VEC) SELECT l_shipmode, sum(CASE WHEN o_orderpriority = '1-URGENT' or o
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashAggregator
-      └ *rowexec.joinReader
-        └ *colexecsel.selLTInt64Int64Op
-          └ *colexecsel.selLTInt64Int64Op
-            └ *colexec.selectInOpBytes
-              └ *colfetcher.ColIndexJoin
-                └ *colfetcher.ColBatchScan
+      └ *colexec.caseOp
+        ├ *colexec.bufferOp
+        │ └ *colexec.caseOp
+        │   ├ *colexec.bufferOp
+        │   │ └ *rowexec.joinReader
+        │   │   └ *colexecsel.selLTInt64Int64Op
+        │   │     └ *colexecsel.selLTInt64Int64Op
+        │   │       └ *colexec.selectInOpBytes
+        │   │         └ *colfetcher.ColIndexJoin
+        │   │           └ *colfetcher.ColBatchScan
+        │   ├ *colexecbase.constInt64Op
+        │   │ └ *colexec.orProjOp
+        │   │   ├ *colexec.bufferOp
+        │   │   ├ *colexecprojconst.projEQBytesBytesConstOp
+        │   │   └ *colexecprojconst.projEQBytesBytesConstOp
+        │   └ *colexecbase.constInt64Op
+        │     └ *colexec.bufferOp
+        ├ *colexecbase.constInt64Op
+        │ └ *colexec.andProjOp
+        │   ├ *colexec.bufferOp
+        │   ├ *colexecprojconst.projNEBytesBytesConstOp
+        │   └ *colexecprojconst.projNEBytesBytesConstOp
+        └ *colexecbase.constInt64Op
+          └ *colexec.bufferOp
 
 # Query 13
 query T
@@ -20993,12 +21015,15 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashAggregator
-      └ *rowexec.joinReader
-        └ *colexecsel.selGTFloat64Float64Op
-          └ *colexecbase.castOpNullAny
-            └ *colexecbase.constNullOp
-              └ *colexec.selectInOpBytes
-                └ *colexec.substringInt64Int64Operator
-                  └ *colexecbase.constInt64Op
-                    └ *colexecbase.constInt64Op
-                      └ *colfetcher.ColBatchScan
+      └ *colexec.substringInt64Int64Operator
+        └ *colexecbase.constInt64Op
+          └ *colexecbase.constInt64Op
+            └ *rowexec.joinReader
+              └ *colexecsel.selGTFloat64Float64Op
+                └ *colexecbase.castOpNullAny
+                  └ *colexecbase.constNullOp
+                    └ *colexec.selectInOpBytes
+                      └ *colexec.substringInt64Int64Operator
+                        └ *colexecbase.constInt64Op
+                          └ *colexecbase.constInt64Op
+                            └ *colfetcher.ColBatchScan
