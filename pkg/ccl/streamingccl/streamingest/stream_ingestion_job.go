@@ -111,6 +111,42 @@ type streamIngestionResumer struct {
 	job *jobs.Job
 }
 
+// Ping the producer job and waits until it is active/running, returns nil when
+// the job is active.
+func waitUntilProducerActive(
+	ctx context.Context,
+	client streamclient.Client,
+	streamID streaming.StreamID,
+	heartbeatTimestamp hlc.Timestamp,
+	ingestionJobID jobspb.JobID,
+) error {
+	ro := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     5 * time.Second,
+		MaxRetries:     4,
+	}
+	// Make sure the producer job is active before start the stream replication.
+	var status streampb.StreamReplicationStatus
+	for r := retry.Start(ro); r.Next(); {
+		status, err := client.Heartbeat(ctx, streamID, heartbeatTimestamp)
+		if err != nil {
+			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job error",
+				ingestionJobID)
+		}
+		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+			break
+		}
+		log.Warningf(ctx,
+			"producer job %d is in unknown status, retrying another heartbeat", streamID)
+	}
+	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
+		return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
+			"and in status %s", ingestionJobID, status.StreamStatus)
+	}
+	return nil
+}
+
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
@@ -130,29 +166,8 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		return err
 	}
 	ingestWithClient := func() error {
-		ro := retry.Options{
-			InitialBackoff: 1 * time.Second,
-			Multiplier:     2,
-			MaxBackoff:     10 * time.Second,
-			MaxRetries:     5,
-		}
-		// Make sure the producer job is active before start the stream replication.
-		var status streampb.StreamReplicationStatus
-		for r := retry.Start(ro); r.Next(); {
-			status, err = client.Heartbeat(ctx, streamID, startTime)
-			if err != nil {
-				return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job error",
-					ingestionJob.ID())
-			}
-			if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
-				break
-			}
-			log.Warningf(ctx,
-				"producer job %d is in unknown status, retrying another heartbeat", streamID)
-		}
-		if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-			return errors.Errorf("failed to resume ingestion job %d as the producer job is not active "+
-				"and in status %s", ingestionJob.ID(), status.StreamStatus)
+		if err := waitUntilProducerActive(ctx, client, streamID, startTime, ingestionJob.ID()); err != nil {
+			return err
 		}
 
 		log.Infof(ctx,
@@ -300,6 +315,22 @@ func revertToCutoverTimestamp(
 	return j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
 }
 
+func cancelProducerJob(
+	ctx context.Context, streamID streaming.StreamID, addr streamingccl.StreamAddress,
+) {
+	client, err := streamclient.NewStreamClient(addr)
+	if err != nil {
+		log.Warningf(ctx, "encountered error when createing the stream client: %v", err)
+		return
+	}
+	if err = client.Complete(ctx, streamID, false /* ingestionCutover*/); err != nil {
+		log.Warningf(ctx, "encountered error when canceling the producer job: %v", err)
+	}
+	if err = client.Close(); err != nil {
+		log.Warningf(ctx, "encountered error when closing the stream client: %v", err)
+	}
+}
+
 // OnFailOrCancel is part of the jobs.Resumer interface.
 // There is a know race between the ingestion processors shutting down, and
 // OnFailOrCancel being invoked. As a result of which we might see some keys
@@ -309,8 +340,28 @@ func revertToCutoverTimestamp(
 // TODO(adityamaru): Add ClearRange logic once we have introduced
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
-	return nil
+func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	db := jobExecCtx.ExecCfg().DB
+	p := s.job.Payload()
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+
+	// Cancel the producer job on best effort. The source job's protected timestamp is no
+	// longer needed as this ingestion job is in 'reverting' status and we won't resume
+	// ingestion anymore.
+	cancelProducerJob(ctx,
+		streaming.StreamID(details.StreamID), streamingccl.StreamAddress(details.StreamAddress))
+
+	// TODO(casper): deal with very large tenant.
+	// TODO(casper): ensure the tenant is offline while we revert it.
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    p.GetStreamIngestion().Span.Key,
+			EndKey: p.GetStreamIngestion().Span.EndKey,
+		},
+	})
+	return db.Run(ctx, &b)
 }
 
 func (s *streamIngestionResumer) ForceRealSpan() bool { return true }
