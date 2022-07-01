@@ -89,11 +89,6 @@ type Result struct {
 	ScanResp *roachpb.ScanResponse
 	// Position tracks the ordinal among all originally enqueued requests that
 	// this result satisfies. See singleRangeBatch.positions for more details.
-	//
-	// If Streamer.Enqueue() was called with nil enqueueKeys argument, then
-	// EnqueueKeysSatisfied will exactly contain Position; if non-nil
-	// enqueueKeys argument was passed, then Position is used as an ordinal to
-	// lookup into enqueueKeys to populate EnqueueKeysSatisfied.
 	// TODO(yuzefovich): this might need to be []int when non-unique requests
 	// are supported.
 	Position int
@@ -622,9 +617,11 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 
 // GetResults blocks until at least one result is available. If the operation
 // mode is OutOfOrder, any result will do, and the caller is expected to examine
-// Result.EnqueueKeysSatisfied to understand which request the result
-// corresponds to. For InOrder, only head-of-line results will do. Zero-length
-// result slice is returned once all enqueued requests have been responded to.
+// Result.Position to understand which request the result corresponds to. For
+// InOrder, only head-of-line results will do. Zero-length result slice is
+// returned once all enqueued requests have been responded to.
+//
+// Calling GetResults() invalidates the results returned on the previous call.
 func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 	for {
 		results, allComplete, err := s.results.get(ctx)
@@ -743,11 +740,11 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		if !w.s.requestsToServe.emptyLocked() {
 			// If we already have minTargetBytes set on the first request to be
 			// issued, then use that.
-			atLeastBytes = w.s.requestsToServe.firstLocked().minTargetBytes
+			atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
 			// The first request has the highest urgency among all current
 			// requests to serve, so we use its priority to spill everything
 			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.firstLocked().priority()
+			spillingPriority = w.s.requestsToServe.nextLocked().priority()
 		}
 		w.s.requestsToServe.Unlock()
 
@@ -943,7 +940,7 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
-		singleRangeReqs := w.s.requestsToServe.firstLocked()
+		singleRangeReqs := w.s.requestsToServe.nextLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minAcceptableBudget is the minimum TargetBytes limit with which it
 		// makes sense to issue this request (if we issue the request with
@@ -1035,7 +1032,7 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			)
 		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
-		w.s.requestsToServe.removeFirstLocked()
+		w.s.requestsToServe.removeNextLocked()
 		maxNumRequestsToIssue--
 		headOfLine = false
 	}
