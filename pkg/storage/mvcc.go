@@ -4921,9 +4921,14 @@ func MVCCExportToSST(
 			reachedTargetSize := curSizeWithRangeKeys > 0 &&
 				uint64(curSizeWithRangeKeys) >= opts.TargetSize
 			kvSize := int64(len(unsafeKey.Key) + len(unsafeValue))
+			if curSize == 0 && opts.MaxSize > 0 && kvSize > int64(opts.MaxSize) {
+				// This single key exceeds the MaxSize. Even if we paginate below, this will still fail.
+				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: kvSize, maxSize: opts.MaxSize}
+			}
 			newSize := curSize + kvSize
 			newSizeWithRangeKeys := curSizeWithRangeKeys + kvSize
 			reachedMaxSize := opts.MaxSize > 0 && newSizeWithRangeKeys > int64(opts.MaxSize)
+
 			// When paginating we stop writing in two cases:
 			// - target size is reached and we wrote all versions of a key
 			// - maximum size reached and we are allowed to stop mid key
