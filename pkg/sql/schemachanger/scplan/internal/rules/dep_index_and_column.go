@@ -96,27 +96,6 @@ func init() {
 	// IndexDescriptor in the same mutation stage which adds that index
 	// to the TableDescriptor.
 	registerDepRule(
-		"index exists right before columns, partitioning, and partial",
-		scgraph.SameStagePrecedence,
-		"index", "index-column",
-		func(from, to nodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.el.Type(
-					(*scpb.PrimaryIndex)(nil),
-					(*scpb.SecondaryIndex)(nil),
-				),
-				to.el.Type(
-					(*scpb.IndexColumn)(nil),
-					(*scpb.IndexPartitioning)(nil),
-					(*scpb.SecondaryIndexPartial)(nil),
-				),
-				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
-				targetStatusEq(from.target, to.target, scpb.ToPublic),
-				currentStatus(from.node, scpb.Status_BACKFILL_ONLY),
-				currentStatus(to.node, scpb.Status_PUBLIC),
-			}
-		})
-	registerDepRule(
 		"temp index exists right before columns, partitioning, and partial",
 		scgraph.SameStagePrecedence,
 		"temp-index", "index-partitioning",
@@ -658,7 +637,7 @@ func init() {
 	)
 
 	registerDepRule("index-column added to index after index exists",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"index", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -670,8 +649,24 @@ func init() {
 				currentStatus(to.node, scpb.Status_PUBLIC),
 			}
 		})
+	// We need to make sure that no columns are added to the index after it
+	// receives any data due to a backfill.
+	registerDepRule("index-column added to index before index is backfilled",
+		scgraph.Precedence,
+		"index-column", "index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.IndexColumn)(nil)),
+				to.el.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
+
+				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
+				targetStatusEq(from.target, to.target, scpb.ToPublic),
+				currentStatus(from.node, scpb.Status_PUBLIC),
+				currentStatus(to.node, scpb.Status_BACKFILLED),
+			}
+		})
 	registerDepRule("index-column added to index after temp index exists",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"index", "index-column",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -682,6 +677,22 @@ func init() {
 				targetStatus(to.target, scpb.ToPublic),
 				currentStatus(from.node, scpb.Status_DELETE_ONLY),
 				currentStatus(to.node, scpb.Status_PUBLIC),
+			}
+		})
+	// We need to make sure that no columns are added to the temp index after it
+	// receives any writes.
+	registerDepRule("index-column added to index before temp index receives writes",
+		scgraph.Precedence,
+		"index-column", "index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.el.Type((*scpb.IndexColumn)(nil)),
+				to.el.Type((*scpb.TemporaryIndex)(nil)),
+				joinOnIndexID(from.el, to.el, "table-id", "index-id"),
+				targetStatus(from.target, scpb.ToPublic),
+				targetStatus(to.target, scpb.Transient),
+				currentStatus(from.node, scpb.Status_PUBLIC),
+				currentStatus(to.node, scpb.Status_WRITE_ONLY),
 			}
 		})
 }
