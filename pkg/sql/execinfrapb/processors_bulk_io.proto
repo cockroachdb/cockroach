@@ -60,6 +60,10 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
+  // The column backfiller will run an update batch immediately
+  // once its estimated byte size reaches UpdateChunkSizeThresholdBytes, if nonzero.
+  optional uint64 update_chunk_size_threshold_bytes = 14 [(gogoproto.nullable) = false];
+
   // WriteAsOf is the time that the backfill entries should be written.
   // Note: Older nodes may also use this as the read time instead of readAsOf.
   optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
@@ -84,7 +88,7 @@ message BackfillerSpec {
   // check MVCCAddSSTable before setting this option.
   optional bool write_at_batch_timestamp = 12 [(gogoproto.nullable) = false];
 
-  // NEXTID: 14.
+  // NEXTID: 15.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
