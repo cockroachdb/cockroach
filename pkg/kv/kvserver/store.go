@@ -2533,7 +2533,7 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
 
 	// Unique gossip key per store.
-	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
+	gossipStoreKey := gossip.MakeStoreDescKey(storeDesc.StoreID)
 	// Gossip store descriptor.
 	return s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, gossip.StoreTTL)
 }

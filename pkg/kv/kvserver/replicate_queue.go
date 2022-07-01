@@ -406,14 +406,14 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	// Register gossip and node liveness callbacks to signal that
 	// replicas in purgatory might be retried.
 	if g := store.cfg.Gossip; g != nil { // gossip is nil for some unittests
-		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
+		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix), func(key string, _ roachpb.Value) {
 			if !rq.store.IsStarted() {
 				return
 			}
 			// Because updates to our store's own descriptor won't affect
 			// replicas in purgatory, skip updating the purgatory channel
 			// in this case.
-			if storeID, err := gossip.StoreIDFromKey(key); err == nil && storeID == rq.store.StoreID() {
+			if storeID, err := gossip.DecodeStoreDescKey(key); err == nil && storeID == rq.store.StoreID() {
 				return
 			}
 			updateFn()

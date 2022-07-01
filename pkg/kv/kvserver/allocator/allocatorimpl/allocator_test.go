@@ -7597,7 +7597,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	}, nil)
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, _ roachpb.Value) { wg.Done() },
 		// Redundant callbacks are required by this test.
 		gossip.Redundant)
@@ -7640,7 +7640,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 				mockNodeLiveness.SetNodeStatus(roachpb.NodeID(j), livenesspb.NodeLivenessStatus_DEAD)
 			}
 			wg.Add(1)
-			if err := g.AddInfoProto(gossip.MakeStoreKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
+			if err := g.AddInfoProto(gossip.MakeStoreDescKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -7676,7 +7676,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 				// Gossip occasionally, as real Stores do when replicas move around.
 				if j%3 == 2 {
 					wg.Add(1)
-					if err := g.AddInfoProto(gossip.MakeStoreKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
+					if err := g.AddInfoProto(gossip.MakeStoreDescKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -8043,7 +8043,7 @@ func exampleRebalancing(
 	}, nil)
 
 	var wg sync.WaitGroup
-	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, _ roachpb.Value) { wg.Done() },
 		// Redundant callbacks are required by this test.
 		gossip.Redundant)
@@ -8076,7 +8076,7 @@ func exampleRebalancing(
 				testStores[j].add(alloc.randGen.Int63n(1<<20), 0)
 			}
 			if err := g.AddInfoProto(
-				gossip.MakeStoreKey(roachpb.StoreID(j)),
+				gossip.MakeStoreDescKey(roachpb.StoreID(j)),
 				&testStores[j].StoreDescriptor,
 				0,
 			); err != nil {

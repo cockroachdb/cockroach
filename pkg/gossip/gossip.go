@@ -331,8 +331,8 @@ func New(
 	// Add ourselves as a SystemConfig watcher.
 	g.mu.is.registerCallback(KeyDeprecatedSystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
-	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
-	g.mu.is.registerCallback(MakePrefixPattern(KeyStorePrefix), g.updateStoreMap)
+	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
+	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
 	// Log gossip connectivity whenever we receive an update.
 	g.mu.Unlock()
 
@@ -741,7 +741,7 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 
 	var desc roachpb.NodeDescriptor
 	if err := g.mu.is.visitInfos(func(key string, i *Info) error {
-		if strings.HasPrefix(key, KeyNodeIDPrefix) {
+		if strings.HasPrefix(key, KeyNodeDescPrefix) {
 			if err := i.Value.GetProto(&desc); err != nil {
 				return err
 			}
@@ -817,7 +817,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// We can't directly compare the node against the empty descriptor because
 	// the proto has a repeated field and thus isn't comparable.
 	if desc.NodeID == 0 || desc.Address.IsEmpty() {
-		nodeID, err := NodeIDFromKey(key, KeyNodeIDPrefix)
+		nodeID, err := DecodeNodeDescKey(key, KeyNodeDescPrefix)
 		if err != nil {
 			log.Health.Errorf(ctx, "unable to update node address for removed node: %s", err)
 			return
