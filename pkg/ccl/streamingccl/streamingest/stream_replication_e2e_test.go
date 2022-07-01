@@ -210,8 +210,7 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "slow under race")
-	skip.UnderStress(t, "slow under stress")
+	skip.UnderStressRace(t, "slow under stressrace")
 
 	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {

@@ -58,7 +58,7 @@ func (f *subscriptionFeedSource) Close(ctx context.Context) {}
 
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderRaceWithIssue(t, 77916, "flaky test")
+	skip.UnderRaceWithIssue(t, 83694)
 	defer log.Scope(t).Close(t)
 
 	h, cleanup := streamingtest.NewReplicationHelper(t,
