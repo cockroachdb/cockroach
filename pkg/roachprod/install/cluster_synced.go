@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -1182,17 +1181,8 @@ func (c *SyncedCluster) createTenantCertBundle(
 		}
 		defer sess.Close()
 
-		// NB: We compare against the alpha version here because in semver v22.2.0 > v22.2.0-alpha.
-		tenantScopedCertsVersion := version.MustParse("v22.2.0-alpha.00000000-746-gc030b8b6dc")
-		var useTenantScopedCerts bool
-		if v, err := getCockroachVersion(ctx, c, node); err != nil {
-			l.Printf("unknown cockroach binary version on host cluster, using tenant scoped certs by default")
-			useTenantScopedCerts = true
-		} else {
-			useTenantScopedCerts = v.AtLeast(tenantScopedCertsVersion)
-		}
 		var tenantScopeArg string
-		if useTenantScopedCerts {
+		if c.cockroachBinSupportsTenantScope(ctx, node) {
 			tenantScopeArg = fmt.Sprintf("--tenant-scope %d", tenantID)
 		}
 
@@ -1226,6 +1216,24 @@ tar cvf %[5]s $CERT_DIR
 		}
 		return nil, nil
 	})
+}
+
+// cockroachBinSupportsTenantScope is a hack to figure out if the version of
+// cockroach on the node supports tenant scoped certificates. We can't use a
+// version comparison here because we need to compare alpha build versions which
+// are compared lexicographically. This is a problem because our alpha versions
+// contain an integer count of commits, which does not sort correctly.  Once
+// this feature ships in a release, it will be easier to do a version comparison
+// on whether this command line flag is supported.
+func (c *SyncedCluster) cockroachBinSupportsTenantScope(ctx context.Context, node Node) bool {
+	sess, err := c.newSession(node)
+	if err != nil {
+		return false
+	}
+	defer sess.Close()
+
+	cmd := fmt.Sprintf("%s cert create-client --help | grep '\\--tenant-scope'", cockroachNodeBinary(c, node))
+	return sess.Run(ctx, cmd) == nil
 }
 
 // getFile retrieves the given file from the first node in the cluster. The
@@ -1373,25 +1381,6 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 		}
 		return nil, nil
 	})
-}
-
-func getCockroachVersion(
-	ctx context.Context, c *SyncedCluster, node Node,
-) (*version.Version, error) {
-	sess, err := c.newSession(node)
-	if err != nil {
-		return nil, err
-	}
-	defer sess.Close()
-
-	cmd := fmt.Sprintf("%s version --build-tag", cockroachNodeBinary(c, node))
-	out, err := sess.CombinedOutput(ctx, cmd)
-	if err != nil {
-		return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
-	}
-
-	verString := strings.TrimSpace(string(out))
-	return version.Parse(verString)
 }
 
 const progressDone = "=======================================>"
