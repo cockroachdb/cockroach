@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
@@ -150,7 +151,7 @@ type proposer interface {
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
-	leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo
+	leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
 	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	// rejectProposalWithRedirectLocked rejects a proposal and redirects the
 	// proposer to try it on another node. This is used to sometimes reject lease
@@ -713,7 +714,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 // leaderStatusRLocked returns the rangeLeaderInfo for the provided raft group,
 // or an empty rangeLeaderInfo if the raftGroup is nil.
 func (b *propBuf) leaderStatusRLocked(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo {
-	leaderInfo := b.p.leaderStatusRLocked(raftGroup)
+	leaderInfo := b.p.leaderStatusRLocked(ctx, raftGroup)
 	// Sanity check.
 	if leaderInfo.leaderKnown && leaderInfo.leader == b.p.getReplicaID() &&
 		!leaderInfo.iAmTheLeader {
@@ -1185,7 +1186,9 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	rp.mu.proposals[p.idKey] = p
 }
 
-func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo {
+func (rp *replicaProposer) leaderStatusRLocked(
+	ctx context.Context, raftGroup proposerRaft,
+) rangeLeaderInfo {
 	r := (*Replica)(rp)
 
 	status := raftGroup.Status()
@@ -1205,7 +1208,9 @@ func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLead
 			// lease again, and by then hopefully we will have caught up.
 			leaderEligibleForLease = true
 		} else {
-			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc.Replicas())
+			lhRemovalAllowed := r.store.cfg.Settings.Version.IsActive(
+				ctx, clusterversion.EnableLeaseHolderRemoval)
+			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc.Replicas(), lhRemovalAllowed)
 			leaderEligibleForLease = err == nil
 		}
 	}
