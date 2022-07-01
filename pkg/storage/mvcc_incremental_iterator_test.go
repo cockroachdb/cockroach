@@ -263,20 +263,27 @@ func assertExportedKVs(
 	require.False(t, ok)
 }
 
-func nextIgnoreTimeExpectErr(
+func ignoreTimeExpectErr(
 	t *testing.T,
 	e Engine,
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	errString string,
+	nextKey bool,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
 	})
+	var next func()
+	if nextKey {
+		next = iter.NextKeyIgnoringTime
+	} else {
+		next = iter.NextIgnoringTime
+	}
 	defer iter.Close()
-	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; next() {
 		if ok, _ := iter.Valid(); !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
@@ -287,12 +294,13 @@ func nextIgnoreTimeExpectErr(
 	}
 }
 
-func assertNextIgnoreTimeIteratedKVs(
+func assertIgnoreTimeIteratedKVs(
 	t *testing.T,
 	e Engine,
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	expected []MVCCKeyValue,
+	nextKey bool,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
 		EndKey:    endKey,
@@ -300,8 +308,15 @@ func assertNextIgnoreTimeIteratedKVs(
 		EndTime:   endTime,
 	})
 	defer iter.Close()
+	next := func() {
+		if nextKey {
+			iter.NextKeyIgnoringTime()
+		} else {
+			iter.NextIgnoringTime()
+		}
+	}
 	var kvs []MVCCKeyValue
-	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
+	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; next() {
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatalf("unexpected error: %+v", err)
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
@@ -432,7 +447,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 			defer e.Close()
 
 			t.Run("empty", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts3, nil)
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts3, nil, false)
 			})
 
 			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
@@ -444,34 +459,35 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 
 			// Exercise time ranges.
 			t.Run("ts (0-0]", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, tsMin, nil)
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, tsMin, nil, false)
 			})
 			// Returns the kv_2_2_2 even though it is outside (startTime, endTime].
 			t.Run("ts (0-1]", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts1, kvs(kv1_1_1, kv2_2_2))
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts1, kvs(kv1_1_1, kv2_2_2), false)
 			})
 			t.Run("ts (0-∞]", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1,
-					kv2_2_2))
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1,
+					kv2_2_2), false)
 			})
 			t.Run("ts (1-1]", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, ts1, nil)
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, ts1, nil, false)
 			})
 			// Returns the kv_1_1_1 even though it is outside (startTime, endTime].
 			t.Run("ts (1-2]", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, ts2, kvs(kv1_2_2, kv1_1_1,
-					kv2_2_2))
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, ts2, kvs(kv1_2_2, kv1_1_1,
+					kv2_2_2), false)
 			})
 			t.Run("ts (2-2]", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts2, ts2, nil)
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts2, ts2, nil, false)
 			})
 
 			// Exercise key ranges.
 			t.Run("kv [1-1)", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, testKey1, testKey1, tsMin, tsMax, nil)
+				assertIgnoreTimeIteratedKVs(t, e, testKey1, testKey1, tsMin, tsMax, nil, false)
 			})
 			t.Run("kv [1-2)", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2, kv1_1_1))
+				assertIgnoreTimeIteratedKVs(t, e, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2,
+					kv1_1_1), false)
 			})
 
 			// Exercise deletion.
@@ -480,8 +496,8 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 			}
 			// Returns the kv_1_1_1 even though it is outside (startTime, endTime].
 			t.Run("del", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, tsMax, kvs(kv1_3Deleted,
-					kv1_2_2, kv1_1_1, kv2_2_2))
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, tsMax, kvs(kv1_3Deleted,
+					kv1_2_2, kv1_1_1, kv2_2_2), false)
 			})
 
 			// Insert an intent of testKey2.
@@ -503,10 +519,11 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 			// NextIgnoreTime() rather than the first SeekGE(). We do this by
 			// ensuring that the SeekGE() doesn't encounter an intent.
 			t.Run("intents", func(t *testing.T) {
-				nextIgnoreTimeExpectErr(t, e, testKey1, testKey2.PrefixEnd(), tsMin, tsMax, "conflicting intents")
+				ignoreTimeExpectErr(t, e, testKey1, testKey2.PrefixEnd(), tsMin, tsMax,
+					"conflicting intents", false)
 			})
 			t.Run("intents", func(t *testing.T) {
-				nextIgnoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting intents")
+				ignoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting intents", false)
 			})
 			// Intents above the upper time bound or beneath the lower time bound must
 			// be ignored. Note that the lower time bound is exclusive while the upper
@@ -514,16 +531,153 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 			//
 			// The intent at ts=4 for kv2 lies outside the timespan
 			// (startTime, endTime] so we do not raise an error and just move on to
-			// its versioned KV.
+			// its versioned KV, a provisional value.
 			t.Run("intents", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts3, kvs(kv1_3Deleted,
-					kv1_2_2, kv1_1_1, kv2_4_4, kv2_2_2))
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts3, kvs(kv1_3Deleted,
+					kv1_2_2, kv1_1_1, kv2_4_4, kv2_2_2), false)
 			})
 			t.Run("intents", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts4, tsMax, kvs())
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts4, tsMax, kvs(), false)
 			})
 			t.Run("intents", func(t *testing.T) {
-				assertNextIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts4.Next(), tsMax, kvs())
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts4.Next(), tsMax, kvs(), false)
+			})
+		})
+	}
+}
+
+// TestMVCCIncrementalIteratorNextKeyIgnoringTime tests the iteration semantics
+// of the method NextKeyIgnoreTime(). This method is supposed to return all new
+// keys that would be encountered in a non-incremental iteration.
+func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	DisableMetamorphicSimpleValueEncoding(t)
+	ctx := context.Background()
+
+	var (
+		keyMax   = roachpb.KeyMax
+		testKey1 = roachpb.Key("/db1")
+		testKey2 = roachpb.Key("/db2")
+
+		testValue1 = roachpb.MakeValueFromString("val1")
+		testValue2 = roachpb.MakeValueFromString("val2")
+		testValue3 = roachpb.MakeValueFromString("val3")
+		testValue4 = roachpb.MakeValueFromString("val4")
+
+		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
+		// as upper/lower-bound during iterator initialization.
+		tsMin = hlc.Timestamp{WallTime: 0, Logical: 1}
+		ts1   = hlc.Timestamp{WallTime: 1, Logical: 0}
+		ts2   = hlc.Timestamp{WallTime: 2, Logical: 0}
+		ts3   = hlc.Timestamp{WallTime: 3, Logical: 0}
+		ts4   = hlc.Timestamp{WallTime: 4, Logical: 0}
+		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
+	)
+
+	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
+	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
+	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
+	kv2_4_4 := makeKVT(testKey2, testValue4, ts4)
+	kv1_3Deleted := makeKVT(testKey1, roachpb.Value{}, ts3)
+
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			e := engineImpl.create()
+			defer e.Close()
+
+			t.Run("empty", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts3, nil, true)
+			})
+
+			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
+				v := roachpb.Value{RawBytes: kv.Value}
+				if err := MVCCPut(ctx, e, nil, kv.Key.Key, kv.Key.Timestamp, hlc.ClockTimestamp{}, v, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Exercise time ranges.
+			t.Run("ts (0-0]", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, tsMin, nil, true)
+			})
+			// Returns the kv_2_2_2 even though it is outside (startTime, endTime].
+			t.Run("ts (0-1]", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts1, kvs(kv1_1_1, kv2_2_2), true)
+			})
+			t.Run("ts (0-∞]", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, tsMax, kvs(kv1_2_2, kv2_2_2),
+					true)
+			})
+			t.Run("ts (1-1]", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, ts1, nil, true)
+			})
+			t.Run("ts (1-2]", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, ts2, kvs(kv1_2_2, kv2_2_2), true)
+			})
+			t.Run("ts (2-2]", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts2, ts2, nil, true)
+			})
+
+			// Exercise key ranges.
+			t.Run("kv [1-1)", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, testKey1, testKey1, tsMin, tsMax, nil, true)
+			})
+			t.Run("kv [1-2)", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, testKey1, testKey2, tsMin, tsMax, kvs(kv1_2_2), true)
+			})
+
+			// Exercise deletion.
+			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, hlc.ClockTimestamp{}, nil); err != nil {
+				t.Fatal(err)
+			}
+			// Returns the kv_1_1_1 even though it is outside (startTime, endTime].
+			t.Run("del", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts1, tsMax, kvs(kv1_3Deleted,
+					kv2_2_2), true)
+			})
+
+			// Insert an intent of testKey2.
+			txn1ID := uuid.MakeV4()
+			txn1 := roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					Key:            testKey2,
+					ID:             txn1ID,
+					Epoch:          1,
+					WriteTimestamp: ts4,
+				},
+				ReadTimestamp: ts4,
+			}
+			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, hlc.ClockTimestamp{}, testValue4, &txn1); err != nil {
+				t.Fatal(err)
+			}
+
+			// We have to be careful that we are testing the intent handling logic of
+			// NextIgnoreTime() rather than the first SeekGE(). We do this by
+			// ensuring that the SeekGE() doesn't encounter an intent.
+			t.Run("intents", func(t *testing.T) {
+				ignoreTimeExpectErr(t, e, testKey1, testKey2.PrefixEnd(), tsMin, tsMax,
+					"conflicting intents", true)
+			})
+			t.Run("intents", func(t *testing.T) {
+				ignoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting intents", true)
+			})
+			// Intents above the upper time bound or beneath the lower time bound must
+			// be ignored. Note that the lower time bound is exclusive while the upper
+			// time bound is inclusive.
+			//
+			// The intent at ts=4 for kv2 lies outside the timespan
+			// (startTime, endTime] so we do not raise an error and just move on to
+			// its versioned KV, a provisional value.
+			t.Run("intents", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, tsMin, ts3, kvs(kv1_3Deleted,
+					kv2_4_4), true)
+			})
+			t.Run("intents", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts4, tsMax, kvs(), true)
+			})
+			t.Run("intents", func(t *testing.T) {
+				assertIgnoreTimeIteratedKVs(t, e, localMax, keyMax, ts4.Next(), tsMax, kvs(), true)
 			})
 		})
 	}
