@@ -38,22 +38,12 @@ message PostProcessSpec {
   // Can only be set if projection is true. Cannot be set at the same time with
   // render expressions.
   repeated uint32 output_columns = 3 [packed = true];
-  // OriginalOutputColumns will be set if OutputColumns are destructively
-  // modified during the vectorized flow setup. This field is only used for
-  // population of the DistSQL diagrams, and if set, it takes precedence over
-  // OutputColumns.
-  repeated uint32 original_output_columns = 7 [packed = true];
 
   // If set, the output is the result of rendering these expressions. The
   // expressions reference the internal columns of the processor.
   //
   // Cannot be set at the same time with output columns.
   repeated Expression render_exprs = 4 [(gogoproto.nullable) = false];
-  // OriginalRenderExprs will be set if RenderExprs are destructively
-  // modified during the vectorized flow setup. This field is only used for
-  // population of the DistSQL diagrams, and if set, it takes precedence over
-  // RenderExprs.
-  repeated Expression original_render_exprs = 8 [(gogoproto.nullable) = false];
 
   // If nonzero, the first <offset> rows will be suppressed.
   optional uint64 offset = 5 [(gogoproto.nullable) = false];
@@ -62,7 +52,7 @@ message PostProcessSpec {
   // suppressed by <offset>, if any, do not count towards this limit.
   optional uint64 limit = 6 [(gogoproto.nullable) = false];
 
-  reserved 1;
+  reserved 1, 7, 8;
 }
 
 message Columns {
