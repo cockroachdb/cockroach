@@ -266,12 +266,12 @@ func TestGRPCInterceptors(t *testing.T) {
 				// it's not worth having to have a separate expectation for each.
 				// Note that we check that we're not leaking spans at the end of
 				// the test.
-				anonymousTagGroup := rec.FindTagGroup("")
+				anonymousTagGroup := rec.FindTagGroup(tracingpb.AnonymousTagGroupName)
 				if anonymousTagGroup == nil {
 					continue
 				}
 
-				filteredAnonymousTags := make([]tracingpb.Tag, 0)
+				filteredAnonymousTagGroup := make([]tracingpb.Tag, 0)
 				for _, tag := range anonymousTagGroup.Tags {
 					if tag.Key == "_unfinished" {
 						continue
@@ -279,9 +279,9 @@ func TestGRPCInterceptors(t *testing.T) {
 					if tag.Key == "_verbose" {
 						continue
 					}
-					filteredAnonymousTags = append(filteredAnonymousTags, tag)
+					filteredAnonymousTagGroup = append(filteredAnonymousTagGroup, tag)
 				}
-				anonymousTagGroup.Tags = filteredAnonymousTags
+				anonymousTagGroup.Tags = filteredAnonymousTagGroup
 			}
 			require.Equal(t, 1, n)
 
