@@ -477,7 +477,7 @@ func (e *evaluator) evalFuncArgs(
 		if err != nil {
 			return false, nil, err
 		}
-		if arg == tree.DNull && !expr.CanHandleNulls() {
+		if arg == tree.DNull && !expr.ResolvedOverload().NullableArgs {
 			return true, nil, nil
 		}
 		args[i] = arg

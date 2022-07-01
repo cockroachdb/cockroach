@@ -1425,9 +1425,6 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 var jsonPopulateProps = tree.FunctionProperties{
 	Class:    tree.GeneratorClass,
 	Category: builtinconstants.CategoryGenerator,
-	// The typical way to call json_populate_record is to send NULL::atype as the
-	// first argument, so we have to accept nullable args.
-	NullableArgs: true,
 }
 
 func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree.Overload {
@@ -1452,6 +1449,9 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 		GeneratorWithExprs: gen,
 		Info:               info,
 		Volatility:         volatility.Stable,
+		// The typical way to call json_populate_record is to send NULL::atype as the
+		// first argument, so we have to accept nullable args.
+		NullableArgs: true,
 	}
 }
 

@@ -1273,12 +1273,6 @@ func (node *FuncExpr) IsDistSQLBlocklist() bool {
 	return (node.fn != nil && node.fn.DistsqlBlocklist) || (node.fnProps != nil && node.fnProps.DistsqlBlocklist)
 }
 
-// CanHandleNulls returns whether or not the function can handle null
-// arguments.
-func (node *FuncExpr) CanHandleNulls() bool {
-	return node.fnProps != nil && node.fnProps.NullableArgs
-}
-
 type funcType int
 
 // FuncExpr.Type

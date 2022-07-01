@@ -829,15 +829,16 @@ var pgBuiltins = map[string]builtinDefinition{
 	),
 
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
-	"pg_typeof": makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	"pg_typeof": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
 			},
-			Info:       notUsableInfo,
-			Volatility: volatility.Stable,
+			Info:         notUsableInfo,
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
@@ -924,7 +925,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"format_type": makeBuiltin(tree.FunctionProperties{NullableArgs: true, DistsqlBlocklist: true},
+	"format_type": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -966,7 +967,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
 				"Currently, the type modifier is ignored.",
-			Volatility: volatility.Stable,
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
