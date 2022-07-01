@@ -364,25 +364,28 @@ func (r *Replica) propose(
 		// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
 		// lease to v4 (VOTER_INCOMING) directly.
 		// See also https://github.com/cockroachdb/cockroach/issues/67740.
-		replID := r.ReplicaID()
-		rDesc, ok := p.command.ReplicatedEvalResult.State.Desc.GetReplicaDescriptorByID(replID)
-		hasVoterIncoming := p.command.ReplicatedEvalResult.State.Desc.ContainsVoterIncoming()
-		lhRemovalAllowed := hasVoterIncoming && r.store.cfg.Settings.Version.IsActive(ctx,
-			clusterversion.EnableLeaseHolderRemoval)
-		// Previously, we were not allowed to enter a joint config where the
-		// leaseholder is being removed (i.e., not a full voter). In the new version
-		// we're allowed to enter such a joint config (if it has a VOTER_INCOMING),
-		// but not to exit it in this state, i.e., the leaseholder must be some
-		// kind of voter in the next new config (potentially VOTER_DEMOTING).
-		if !ok ||
-			(lhRemovalAllowed && !rDesc.IsAnyVoter()) ||
-			(!lhRemovalAllowed && !rDesc.IsVoterNewConfig()) {
-			err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove "+
-				"self (leaseholder); hasVoterIncoming: %v, lhRemovalAllowed: %v; proposed descriptor: %v",
-				crt, hasVoterIncoming, lhRemovalAllowed, p.command.ReplicatedEvalResult.State.Desc),
-				errMarkInvalidReplicationChange)
-			log.Errorf(p.ctx, "%v", err)
+		lhRemovalAllowed := r.store.cfg.Settings.Version.IsActive(
+			ctx, clusterversion.EnableLeaseHolderRemoval)
+		lhDescriptor, err := r.GetReplicaDescriptor()
+		if err != nil {
 			return roachpb.NewError(err)
+		}
+		proposedDesc := p.command.ReplicatedEvalResult.State.Desc
+		// This is a reconfiguration command, we make sure the proposed
+		// config is legal w.r.t. the current leaseholder: we now allow the
+		// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
+		// Otherwise, the leaseholder must be a full voter in the target config.
+		// When the leaseholder is being removed, this check won't allow exiting
+		// the joint config before the lease is transferred away since the previous
+		// leaseholder is a LEARNER in the target config.
+		if err := roachpb.CheckCanReceiveLease(
+			lhDescriptor, proposedDesc.Replicas(), lhRemovalAllowed,
+		); err != nil {
+			e := errors.Mark(errors.Wrapf(err, "received invalid ChangeReplicasTrigger %s to "+
+				"remove self (leaseholder); lhRemovalAllowed: %v; proposed descriptor: %v", crt,
+				lhRemovalAllowed, proposedDesc), errMarkInvalidReplicationChange)
+			log.Errorf(p.ctx, "%v", e)
+			return roachpb.NewError(e)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
