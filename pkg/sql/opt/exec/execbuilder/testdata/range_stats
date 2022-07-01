@@ -1,0 +1,13 @@
+# LogicTest: local
+#
+# This file tests that we build a specialized vectorized operator for the
+# crdb_internal.range_stats function.
+
+query T
+EXPLAIN (VEC) SELECT crdb_internal.range_stats(start_key)
+                FROM crdb_internal.ranges_no_leases;
+----
+│
+└ Node 1
+  └ *colexec.rangeStatsOperator
+    └ *sql.planNodeToRowSource
