@@ -562,7 +562,7 @@ func (c *CustomFuncs) FoldColumnAccess(
 //
 // See FoldFunctionWithNullArg for more details.
 func (c *CustomFuncs) CanFoldFunctionWithNullArg(private *memo.FunctionPrivate) bool {
-	return !private.Properties.NullableArgs &&
+	return !private.Overload.NullableArgs &&
 		private.Properties.Class == tree.NormalClass
 }
 
