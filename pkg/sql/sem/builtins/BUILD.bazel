@@ -133,6 +133,7 @@ go_test(
         "generator_builtins_test.go",
         "geo_builtins_test.go",
         "help_test.go",
+        "helpers_test.go",
         "main_test.go",
         "math_builtins_test.go",
         "show_create_all_tables_builtin_test.go",
