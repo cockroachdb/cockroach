@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -76,9 +77,12 @@ func TransferLease(
 	newLease := args.Lease
 	args.Lease = roachpb.Lease{} // prevent accidental use below
 
+	lhRemovalAllowed := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
+		clusterversion.EnableLeaseHolderRemoval)
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc().Replicas()); err != nil {
+	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc().Replicas(),
+		lhRemovalAllowed); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
 	}
 

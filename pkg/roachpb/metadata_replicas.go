@@ -114,6 +114,15 @@ func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 	return false
 }
 
+func predVoterIncoming(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_INCOMING:
+		return true
+	default:
+	}
+	return false
+}
+
 func predLearner(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == LEARNER
 }
@@ -150,6 +159,10 @@ func (d ReplicaSet) Voters() ReplicaSet {
 // in the set.
 func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterFullOrIncoming)
+}
+
+func (d ReplicaSet) containsVoterIncoming() bool {
+	return len(d.FilterToDescriptors(predVoterIncoming)) > 0
 }
 
 // LearnerDescriptors returns a slice of ReplicaDescriptors corresponding to
@@ -524,15 +537,22 @@ func (c ReplicaChangeType) IsRemoval() bool {
 var errReplicaNotFound = errors.Errorf(`replica not found in RangeDescriptor`)
 var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 
+
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
 //
 // An error is also returned is the replica is not part of `replDescs`.
-func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet) error {
+func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet,
+	leaseHolderRemovalAllowed bool) error {
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
-	} else if !repDesc.IsVoterNewConfig() {
+	}
+	if !(repDesc.IsVoterNewConfig() ||
+		(leaseHolderRemovalAllowed && repDesc.IsAnyVoter() && replDescs.containsVoterIncoming())) {
+		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
+		// In this case, when exiting the joint config, we will transfer the lease to the incoming
+		// voter. See further info in replica_raft Propose().
 		return errReplicaCannotHoldLease
 	}
 	return nil
