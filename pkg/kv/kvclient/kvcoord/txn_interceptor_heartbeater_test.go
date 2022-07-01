@@ -16,7 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -209,6 +211,108 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		th.mu.Unlock()
 		waitForHeartbeatLoopToStop(t, &th)
 		require.True(t, th.mu.loopStarted) // still set
+	})
+}
+
+// TestTxnHeartbeaterLoopStartsBeforeExpiry tests that the txnHeartbeater
+// only starts its heartbeat loop immediately (upon observing a request that
+// will acquire locks) when the transaction would otherwise be considered
+// expired. Otherwise, the loop starts after a delay of one heartbeat interval.
+func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "late", func(t *testing.T, delayed bool) {
+		ctx := context.Background()
+		txn := makeTxnProto()
+
+		manualTime := timeutil.NewManualTime(timeutil.Unix(0, 123))
+		clock := hlc.NewClock(manualTime, time.Nanosecond)
+		heartbeatInterval := base.DefaultTxnHeartbeatInterval
+		txn.MinTimestamp, txn.WriteTimestamp = clock.Now(), clock.Now()
+
+		var th txnHeartbeater
+		mockSender, mockGatekeeper := &mockLockedSender{}, &mockLockedSender{}
+		th.init(
+			log.MakeTestingAmbientCtxWithNewTracer(),
+			stop.NewStopper(),
+			clock,
+			new(TxnMetrics),
+			heartbeatInterval,
+			mockGatekeeper,
+			new(syncutil.Mutex),
+			&txn,
+		)
+		th.setWrapped(mockSender)
+		defer th.stopper.Stop(ctx)
+
+		th.mu.Lock()
+		require.False(t, th.mu.loopStarted)
+		require.False(t, th.heartbeatLoopRunningLocked())
+		th.mu.Unlock()
+
+		if delayed {
+			manualTime.Advance(time.Duration(10) * heartbeatInterval)
+		}
+
+		count := 0
+		mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+
+			hbReq := ba.Requests[0].GetInner().(*roachpb.HeartbeatTxnRequest)
+			require.Equal(t, &txn, ba.Txn)
+			require.Equal(t, roachpb.Key(txn.Key), hbReq.Key)
+
+			count++
+
+			// Check that this transaction isn't already considered expired.
+			if txnwait.IsExpired(clock.Now(), ba.Txn) {
+				return nil, roachpb.NewError(errors.New("transaction expired before heartbeat!"))
+			}
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		// Validate that, if delayed, this transaction would be considered expired by now.
+		require.Equal(t, delayed, txnwait.IsExpired(clock.Now(), &txn))
+
+		// The heartbeat loop is started on the first locking request.
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: txn.Clone()}
+		keyA := roachpb.Key("a")
+		keyAHeader := roachpb.RequestHeader{Key: keyA}
+		ba.Add(&roachpb.PutRequest{RequestHeader: keyAHeader})
+
+		br, pErr := th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		th.mu.Lock()
+		require.True(t, th.mu.loopStarted)
+		require.True(t, th.heartbeatLoopRunningLocked())
+		th.mu.Unlock()
+
+		// Ensure that we get a heartbeat before we are considered expired,
+		// even if starting the loop later.
+		expiration := txnwait.TxnLivenessThreshold
+		if delayed {
+			// In the case where we'd already be considered expired, we want to
+			// ensure the transaction heartbeats before there are locks for some other
+			// transaction to push, after the 50ms liveness push delay.
+			expiration = 50 * time.Millisecond
+		}
+		testutils.SucceedsWithin(t, func() error {
+			th.mu.Lock()
+			defer th.mu.Unlock()
+			require.True(t, th.mu.loopStarted)
+			require.True(t, th.heartbeatLoopRunningLocked())
+			if count < 1 {
+				return errors.Errorf("waiting for more heartbeat requests, found %d", count)
+			}
+			return nil
+		}, expiration)
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -291,21 +292,36 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	// caller's cancelation or span.
 	hbCtx, hbCancel := context.WithCancel(h.AnnotateCtx(context.Background()))
 
-	// Delay spawning the loop goroutine until the first loopInterval passes, to
-	// avoid the associated cost for small write transactions. In benchmarks,
-	// this gave a 3% throughput increase for point writes at high concurrency.
-	timer := time.AfterFunc(h.loopInterval, func() {
+	// If possible, delay spawning the loop goroutine until the first
+	// loopInterval passes, to avoid the associated cost for small write
+	// transactions. In benchmarks, this gave a 3% throughput increase for point
+	// writes at high concurrency. If, by the time the first interval has passed,
+	// this transaction would be considered expired, then heartbeat immediately.
+	var timer *time.Timer
+	runTask := h.stopper.RunTask
+	startHeartbeatLoop := func() {
 		const taskName = "kv.TxnCoordSender: heartbeat loop"
 		var span *tracing.Span
 		hbCtx, span = h.AmbientContext.Tracer.StartSpanCtx(hbCtx, taskName)
 		defer span.Finish()
 
 		// Only errors on quiesce, which is safe to ignore.
-		_ = h.stopper.RunTask(hbCtx, taskName, h.heartbeatLoop)
-	})
+		_ = runTask(hbCtx, taskName, h.heartbeatLoop)
+	}
+	if txnwait.IsExpired(
+		h.clock.Now().Add(h.loopInterval.Nanoseconds(), 0 /* logical */),
+		h.mu.txn,
+	) {
+		runTask = h.stopper.RunAsyncTask
+		startHeartbeatLoop()
+	} else {
+		timer = time.AfterFunc(h.loopInterval, startHeartbeatLoop)
+	}
 
 	h.mu.loopCancel = func() {
-		timer.Stop()
+		if timer != nil {
+			timer.Stop()
+		}
 		hbCancel()
 	}
 }
