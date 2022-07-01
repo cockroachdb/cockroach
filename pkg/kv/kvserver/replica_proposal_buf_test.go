@@ -177,7 +177,9 @@ func (t *testProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockT
 	return t.ownsValidLease
 }
 
-func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo {
+func (t *testProposer) leaderStatusRLocked(
+	ctx context.Context, raftGroup proposerRaft,
+) rangeLeaderInfo {
 	lead := raftGroup.Status().Lead
 	leaderKnown := lead != raft.None
 	var leaderRep roachpb.ReplicaID
@@ -196,7 +198,7 @@ func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderIn
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := roachpb.CheckCanReceiveLease(repDesc, rngDesc.Replicas())
+			err := roachpb.CheckCanReceiveLease(repDesc, rngDesc.Replicas(), true)
 			leaderEligibleForLease = err == nil
 		} else {
 			// This matches replicaProposed.leaderStatusRLocked().
