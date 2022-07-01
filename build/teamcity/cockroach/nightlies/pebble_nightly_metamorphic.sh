@@ -17,13 +17,15 @@ mkdir -p artifacts
 # latest version of the module, and then running `mirror` to update `DEPS.bzl`
 # accordingly.
 bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@latest
+# Just dump the diff to see what, if anything, has changed.
+git diff
 NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 
-# Use the Pebble SHA from the version in the modified DEPS.bzl file.
+# Use the Pebble SHA from the version in the modified go.mod file.
 # Note that we need to pluck the Git SHA from the go.sum-style version, i.e.
 # v0.0.0-20220214174839-6af77d5598c9SUM => 6af77d5598c9
-PEBBLE_SHA=$(grep 'version =' DEPS.bzl | cut -d'"' -f2 | cut -d'-' -f3)
+PEBBLE_SHA=$(grep 'github\.com/cockroachdb/pebble' go.mod | cut -d'-' -f3)
 echo "Pebble module Git SHA: $PEBBLE_SHA"
 
 BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e BUILD_VCS_NUMBER=$PEBBLE_SHA -e GITHUB_API_TOKEN -e GITHUB_REPO -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH -e TC_BUILD_ID -e TC_SERVER_URL" \
