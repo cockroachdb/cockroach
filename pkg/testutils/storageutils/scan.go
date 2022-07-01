@@ -52,6 +52,9 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
 				for _, rkv := range iter.RangeKeys() {
+					if len(rkv.Value) == 0 {
+						rkv.Value = nil
+					}
 					kvs = append(kvs, rkv.Clone())
 				}
 				prevRangeStart = bounds.Key.Clone()
@@ -87,7 +90,11 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 func ScanSST(t *testing.T, sst []byte) KVs {
 	t.Helper()
 
-	iter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */)
+	iter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
 	require.NoError(t, err)
 	defer iter.Close()
 	return ScanIter(t, iter)
