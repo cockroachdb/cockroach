@@ -692,7 +692,7 @@ func (e EncodingOptions) Validate() error {
 			OptEnvelope, OptEnvelopeRow, OptFormat, OptFormatAvro,
 		)
 	}
-	if e.Envelope != OptEnvelopeWrapped {
+	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON {
 		requiresWrap := []struct {
 			k string
 			b bool
@@ -702,12 +702,6 @@ func (e EncodingOptions) Validate() error {
 			{OptUpdatedTimestamps, e.UpdatedTimestamps},
 			{OptMVCCTimestamps, e.MVCCTimestamps},
 			{OptDiff, e.Diff},
-		}
-		if e.Format == OptFormatJSON {
-			requiresWrap = []struct {
-				k string
-				b bool
-			}{{OptDiff, e.Diff}}
 		}
 		for _, v := range requiresWrap {
 			if v.b {
@@ -841,6 +835,20 @@ func (s StatementOptions) ForceTopicInValue() error {
 	s.cache.EncodingOptions = EncodingOptions{}
 	_, err := s.GetEncodingOptions()
 	return err
+}
+
+// ForceDiff sets diff to true regardess of its previous value.
+func (s StatementOptions) ForceDiff() {
+	s.m[OptDiff] = ``
+	s.cache.EncodingOptions = EncodingOptions{}
+}
+
+// SetDefaultEnvelope sets the envelope if not already set.
+func (s StatementOptions) SetDefaultEnvelope(t EnvelopeType) {
+	if _, ok := s.m[OptEnvelope]; !ok {
+		s.m[OptEnvelope] = string(t)
+		s.cache.EncodingOptions = EncodingOptions{}
+	}
 }
 
 // GetOnError validates and returns the desired behavior when a non-retriable error is encountered.

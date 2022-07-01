@@ -132,7 +132,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 				StatementTimeName: tc.desc.GetName(),
 			}
 
-			err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
+			_, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err)
 				return
@@ -147,6 +147,100 @@ func TestNormalizeAndValidate(t *testing.T) {
 			// Make sure we can deserialize back.
 			_, err = ParseChangefeedExpression(serialized)
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestSelectClauseRequiresPrev(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE table foo (id int primary key, s string)`)
+	sqlDB.Exec(t, `CREATE table cdc_prev (id int primary key, s string)`)
+	sqlDB.Exec(t, `CREATE table misleading_column_name (id int primary key, cdc_prev string)`)
+
+	descs := make(map[string]catalog.TableDescriptor)
+	for _, name := range []string{`foo`, `cdc_prev`, `misleading_column_name`} {
+		descs[name] = cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name(name))
+	}
+
+	ctx := context.Background()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	p, cleanup := sql.NewInternalPlanner("test",
+		kvDB.NewTxn(ctx, "test-planner"),
+		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		sessiondatapb.SessionData{
+			Database:   "defaultdb",
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		})
+	defer cleanup()
+	execCtx := p.(sql.JobExecContext)
+
+	for _, tc := range []struct {
+		name   string
+		desc   catalog.TableDescriptor
+		stmt   string
+		expect bool
+	}{
+		{
+			name:   "top level call to cdc_prev",
+			desc:   descs[`foo`],
+			stmt:   "SELECT cdc_prev() from foo",
+			expect: true,
+		},
+		{
+			name:   "nested call to cdc_prev",
+			desc:   descs[`foo`],
+			stmt:   "SELECT jsonb_build_object('op',IF(cdc_is_delete(),'u',IF(cdc_prev()::string='null','c','u'))) from foo",
+			expect: true,
+		},
+		{
+			name:   "cdc_prev in the predicate",
+			desc:   descs[`foo`],
+			stmt:   "SELECT * from foo WHERE (cdc_prev()->'s')::string != s",
+			expect: true,
+		},
+		{
+			name:   "case insensitive",
+			desc:   descs[`foo`],
+			stmt:   "SELECT CDC_PREV() from foo",
+			expect: true,
+		},
+		{
+			name:   "contains misleading substring",
+			desc:   descs[`foo`],
+			stmt:   "SELECT 'cdc_prev()', s FROM foo",
+			expect: false,
+		},
+		{
+			name:   "misleading table name",
+			desc:   descs[`cdc_prev`],
+			stmt:   "SELECT * FROM cdc_prev",
+			expect: false,
+		},
+		{
+			name:   "misleading column name",
+			desc:   descs[`misleading_column_name`],
+			stmt:   "SELECT cdc_prev FROM misleading_column_name",
+			expect: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, err := ParseChangefeedExpression(tc.stmt)
+			require.NoError(t, err)
+			target := jobspb.ChangefeedTargetSpecification{
+				TableID:           tc.desc.GetID(),
+				StatementTimeName: tc.desc.GetName(),
+			}
+			normalized, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false)
+			require.NoError(t, err)
+			actual, err := SelectClauseRequiresPrev(*execCtx.SemaCtx(), normalized)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, actual)
 		})
 	}
 }
