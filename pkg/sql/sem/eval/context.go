@@ -223,11 +223,21 @@ type Context struct {
 	QueryCancelKey pgwirecancel.BackendKeyData
 
 	DescIDGenerator DescIDGenerator
+
+	// RangeStatsFetcher is used to fetch RangeStats.
+	RangeStatsFetcher RangeStatsFetcher
 }
 
 // DescIDGenerator generates unique descriptor IDs.
 type DescIDGenerator interface {
 	GenerateUniqueDescID(ctx context.Context) (catid.DescID, error)
+}
+
+// RangeStatsFetcher is used to fetch RangeStats.
+type RangeStatsFetcher interface {
+
+	// RangeStats fetches the stats for the ranges which contain the passed keys.
+	RangeStats(ctx context.Context, keys ...roachpb.Key) ([]*roachpb.RangeStatsResponse, error)
 }
 
 var _ tree.ParseTimeContext = &Context{}

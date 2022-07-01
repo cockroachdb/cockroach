@@ -97,6 +97,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvclient/rangestats",
         "//pkg/kv/kvprober",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/storepool",

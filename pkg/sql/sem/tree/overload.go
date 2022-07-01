@@ -40,6 +40,7 @@ type SpecializedVectorizedBuiltin int
 const (
 	_ SpecializedVectorizedBuiltin = iota
 	SubstringStringIntInt
+	CrdbInternalRangeStats
 )
 
 // AggregateOverload is an opaque type which is used to box an eval.AggregateOverload.

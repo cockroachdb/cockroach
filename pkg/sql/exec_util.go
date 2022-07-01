@@ -1337,6 +1337,9 @@ type ExecutorConfig struct {
 
 	// SyntheticPrivilegeCache
 	SyntheticPrivilegeCache *cacheutil.Cache
+
+	// RangeStatsFetcher is used to fetch RangeStats.
+	RangeStatsFetcher eval.RangeStatsFetcher
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
