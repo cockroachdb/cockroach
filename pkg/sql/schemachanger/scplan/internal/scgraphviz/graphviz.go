@@ -262,6 +262,15 @@ func ToMap(v interface{}) (interface{}, error) {
 	if v == nil {
 		return nil, nil
 	}
+
+	// The SetJobStateOnDescriptor is very large and graphviz fails to render it.
+	// Clear the DescriptorState field so that the relevant information (the
+	// existence of the Op and the descriptor ID) make it into the graph.
+	if sjs, ok := v.(*scop.SetJobStateOnDescriptor); ok {
+		clone := *sjs
+		clone.State = scpb.DescriptorState{}
+		v = &clone
+	}
 	if msg, ok := v.(protoutil.Message); ok {
 		var buf bytes.Buffer
 		jsonEncoder := jsonpb.Marshaler{EmitDefaults: false}

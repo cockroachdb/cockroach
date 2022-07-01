@@ -244,16 +244,50 @@ func dumpPatchArgsForRepo(repoName string) error {
 }
 
 func buildFileProtoModeForRepo(repoName string) string {
-	if repoName == "com_github_prometheus_client_model" {
-		return "package"
+	// Only generate code for protos in these three directories.
+	if repoName == "com_github_cockroachdb_errors" ||
+		repoName == "com_github_prometheus_client_model" ||
+		repoName == "io_etcd_go_etcd_raft_v3" {
+		return "default"
 	}
 	return "disable_global"
 }
 
 func dumpBuildDirectivesForRepo(repoName string) {
+	var directives []string
+	// Common directives for proto resolution, including generating with our
+	// internal compiler.
+	protoDirectives := []string{
+		"gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
+		"gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
+		"gazelle:go_proto_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
+		"gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+	}
+
 	if repoName == "com_github_cockroachdb_pebble" {
-		fmt.Printf(`        build_directives = ["gazelle:build_tags invariants"],
-`)
+		directives = append(directives, "gazelle:build_tags invariants")
+	} else if repoName == "com_github_cockroachdb_errors" {
+		directives = append(directives, protoDirectives...)
+	} else if repoName == "com_github_prometheus_client_model" {
+		directives = append(directives,
+			"gazelle:resolve go go github.com/golang/protobuf/ptypes/timestamp @com_github_golang_protobuf//ptypes/timestamp:go_default_library")
+	} else if repoName == "io_etcd_go_etcd_raft_v3" {
+		directives = append(directives, protoDirectives...)
+		directives = append(directives,
+			"gazelle:proto_import_prefix etcd/raft/v3")
+
+	} else if repoName == "io_opentelemetry_go_proto_otlp" {
+		directives = append(directives,
+			"gazelle:resolve go go github.com/golang/protobuf/descriptor @com_github_golang_protobuf//descriptor:go_default_library_gen")
+	}
+
+	if len(directives) > 0 {
+		fmt.Println("        build_directives = [")
+		for _, directive := range directives {
+			fmt.Printf(`            "%s",
+`, directive)
+		}
+		fmt.Println("        ],")
 	}
 }
 
