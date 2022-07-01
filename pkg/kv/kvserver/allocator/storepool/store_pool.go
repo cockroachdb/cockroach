@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -181,7 +182,8 @@ func LivenessStatus(
 
 // StoreDetail groups together store-relevant details.
 type StoreDetail struct {
-	Desc *roachpb.StoreDescriptor
+	Desc        *roachpb.StoreDescriptor
+	IOThreshold *admissionpb.IOThreshold
 	// ThrottledUntil is when a throttled store can be considered available again
 	// due to a failed or declined snapshot.
 	ThrottledUntil time.Time
@@ -398,12 +400,40 @@ func NewStorePool(
 	sp.DetailsMu.StoreDetails = make(map[roachpb.StoreID]*StoreDetail)
 	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
 
-	// Enable redundant callbacks for the store keys because we use these
-	// callbacks as a clock to determine when a store was last updated even if it
-	// hasn't otherwise changed.
-	storeRegex := gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
-	g.RegisterCallback(storeRegex, sp.storeGossipUpdate, gossip.Redundant)
-
+	{
+		storeRegex := gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
+		callback := func(_ string, content roachpb.Value) {
+			var storeDesc roachpb.StoreDescriptor
+			if err := content.GetProto(&storeDesc); err != nil {
+				ctx := sp.AnnotateCtx(context.TODO())
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			sp.storeGossipDescUpdate(&storeDesc)
+		}
+		// Enable redundant callbacks for the store keys because we use these
+		// callbacks as a clock to determine when a store was last updated even if it
+		// hasn't otherwise changed.
+		g.RegisterCallback(storeRegex, callback, gossip.Redundant)
+	}
+	{
+		ioOverloadRegex := gossip.MakePrefixPattern(gossip.KeyStoreIOThresholdPrefix)
+		callback := func(k string, content roachpb.Value) {
+			ctx := sp.AnnotateCtx(context.TODO())
+			storeID, err := gossip.DecodeStoreIOThresholdKey(k)
+			if err != nil {
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			var ioThreshold admissionpb.IOThreshold
+			if err := content.GetProto(&ioThreshold); err != nil {
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			sp.storeGossipIOThresholdUpdate(storeID, &ioThreshold)
+		}
+		g.RegisterCallback(ioOverloadRegex, callback)
+	}
 	return sp
 }
 
@@ -442,18 +472,11 @@ func (sp *StorePool) String() string {
 	return buf.String()
 }
 
-// storeGossipUpdate is the Gossip callback used to keep the StorePool up to date.
-func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
-	var storeDesc roachpb.StoreDescriptor
-	if err := content.GetProto(&storeDesc); err != nil {
-		ctx := sp.AnnotateCtx(context.TODO())
-		log.Errorf(ctx, "%v", err)
-		return
-	}
-
+// storeGossipDescUpdate is the Gossip callback used to keep the StorePool up to date.
+func (sp *StorePool) storeGossipDescUpdate(storeDesc *roachpb.StoreDescriptor) {
 	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(storeDesc.StoreID)
-	detail.Desc = &storeDesc
+	detail.Desc = storeDesc
 	detail.LastUpdatedTime = sp.Clock.PhysicalTime()
 	sp.DetailsMu.Unlock()
 
@@ -461,6 +484,15 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
 		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
 	sp.localitiesMu.Unlock()
+}
+
+func (sp *StorePool) storeGossipIOThresholdUpdate(
+	storeID roachpb.StoreID, ioThreshold *admissionpb.IOThreshold,
+) {
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
+	detail := sp.GetStoreDetailLocked(storeID)
+	detail.IOThreshold = ioThreshold
 }
 
 // UpdateLocalStoreAfterRebalance is used to update the local copy of the
@@ -578,6 +610,18 @@ func (sp *StorePool) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreD
 		return *detail.Desc, true
 	}
 	return roachpb.StoreDescriptor{}, false
+}
+
+// GetStoreIOThreshold returns the most recent IOThreshold received via gossip
+// for the given Store.
+func (sp *StorePool) GetStoreIOThreshold(storeID roachpb.StoreID) (*admissionpb.IOThreshold, bool) {
+	sp.DetailsMu.RLock()
+	defer sp.DetailsMu.RUnlock()
+
+	if detail, ok := sp.DetailsMu.StoreDetails[storeID]; ok && detail.Desc != nil {
+		return detail.IOThreshold, true
+	}
+	return nil, false
 }
 
 // DecommissioningReplicas filters out replicas on decommissioning node/store
