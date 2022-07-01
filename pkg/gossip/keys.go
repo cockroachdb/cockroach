@@ -39,6 +39,11 @@ const (
 	// The suffix is a store ID and the value is a roachpb.StoreDescriptor.
 	KeyStoreDescPrefix = "store"
 
+	// KeyStoreIOThresholdPrefix is the key prefix for gossiping the per-Store
+	// IOThreshold. The suffix is a store ID and the value is an
+	// admissionpb.IOThreshold.
+	KeyStoreIOThresholdPrefix = "io-admission"
+
 	// KeyNodeDescPrefix is the key prefix for gossiping node id addresses.
 	// The actual key is suffixed with the decimal representation of the
 	// node id (e.g. 'node:1') and the value is a roachpb.NodeDescriptor.
@@ -165,11 +170,30 @@ func MakeStoreDescKey(storeID roachpb.StoreID) string {
 	return MakeKey(KeyStoreDescPrefix, storeID.String())
 }
 
+// MakeStoreIOThresholdKey returns the gossip key for the given store under
+// which to gossip the IOThreshold.
+func MakeStoreIOThresholdKey(storeID roachpb.StoreID) string {
+	return MakeKey(KeyStoreIOThresholdPrefix, storeID.String())
+}
+
 // DecodeStoreDescKey attempts to extract a StoreID from the provided key after
 // stripping the provided prefix. Returns an error if the key is not of the
 // correct type or is not parsable.
 func DecodeStoreDescKey(storeKey string) (roachpb.StoreID, error) {
 	trimmedKey, err := removePrefixFromKey(storeKey, KeyStoreDescPrefix)
+	if err != nil {
+		return 0, err
+	}
+	storeID, err := strconv.ParseInt(trimmedKey, 10 /* base */, 64 /* bitSize */)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed parsing StoreID from key %q", storeKey)
+	}
+	return roachpb.StoreID(storeID), nil
+}
+
+// DecodeStoreIOThresholdKey attempts to parse the key as a StoreIOThresholdKey.
+func DecodeStoreIOThresholdKey(storeKey string) (roachpb.StoreID, error) {
+	trimmedKey, err := removePrefixFromKey(storeKey, KeyStoreIOThresholdPrefix)
 	if err != nil {
 		return 0, err
 	}

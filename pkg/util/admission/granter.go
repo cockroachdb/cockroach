@@ -17,8 +17,10 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -641,6 +643,7 @@ type Options struct {
 	SQLStatementRootStartWorkSlots int
 	TestingDisableSkipEnforcement  bool
 	Settings                       *cluster.Settings
+	Broadcast                      func(ctx context.Context, id roachpb.StoreID, threshold *admissionpb.IOThreshold, ttl time.Duration)
 	// Only non-nil for tests.
 	makeRequesterFunc      makeRequesterFunc
 	makeStoreRequesterFunc makeStoreRequesterFunc
@@ -808,6 +811,7 @@ func NewGrantCoordinators(
 		makeStoreRequesterFunc:      makeStoreRequester,
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
+		broadcast:                   opts.Broadcast,
 	}
 
 	return GrantCoordinators{Stores: storeCoordinators, Regular: coord}, metricStructs
@@ -904,8 +908,10 @@ func appendMetricStructsForQueues(ms []metric.Struct, coord *GrantCoordinator) [
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
-	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
+func (coord *GrantCoordinator) pebbleMetricsTick(
+	ctx context.Context, m *pebble.Metrics,
+) *admissionpb.IOThreshold {
+	return coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
 // allocateIOTokensTick tells the ioLoadListener to allocate tokens.
@@ -1248,6 +1254,7 @@ type StoreGrantCoordinators struct {
 	kvIOTokensExhaustedDuration *metric.Counter
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics WorkQueueMetrics
+	broadcast        func(context.Context, roachpb.StoreID, *admissionpb.IOThreshold, time.Duration)
 
 	gcMap syncutil.IntMap // map[int64(StoreID)]*GrantCoordinator
 	// numStores is used to track the number of stores which have been added
@@ -1306,7 +1313,8 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					for _, m := range metrics {
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
-							gc.pebbleMetricsTick(ctx, m.Metrics)
+							ioThreshold := gc.pebbleMetricsTick(ctx, m.Metrics)
+							sgc.broadcast(ctx, roachpb.StoreID(m.StoreID), ioThreshold, 2*adjustmentInterval*time.Second)
 						} else {
 							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
@@ -1683,7 +1691,9 @@ const adjustmentInterval = 15
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call.
-func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
+func (io *ioLoadListener) pebbleMetricsTick(
+	ctx context.Context, m *pebble.Metrics,
+) *admissionpb.IOThreshold {
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		io.ioLoadListenerState = ioLoadListenerState{
@@ -1695,9 +1705,9 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metri
 			// No initial limit, i.e, the first interval is unlimited.
 			totalNumByteTokens: unlimitedTokens,
 		}
-		return
+		return nil // don't broadcast IOThreshold on first call
 	}
-	io.adjustTokens(ctx, m)
+	return io.adjustTokens(ctx, m)
 }
 
 // allocateTokensTick gives out 1/adjustmentInterval of the totalNumByteTokens every
@@ -1734,7 +1744,9 @@ func (io *ioLoadListener) allocateTokensTick() {
 // many bytes are being moved out of L0 via compactions with the average
 // number of bytes being added to L0 per KV work. We want the former to be
 // (significantly) larger so that L0 returns to a healthy state.
-func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
+func (io *ioLoadListener) adjustTokens(
+	ctx context.Context, m *pebble.Metrics,
+) *admissionpb.IOThreshold {
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState, io.kvRequester.getStoreAdmissionStats(), m.Levels[0],
 		L0FileCountOverloadThreshold.Get(&io.settings.SV), L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 	)
@@ -1743,6 +1755,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
 	if res.aux.shouldLog {
 		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
 	}
+	return res.ioThreshold
 }
 
 type adjustTokensAuxComputations struct {
@@ -1943,6 +1956,12 @@ func (*ioLoadListener) adjustTokensInner(
 			intPerWorkUnaccountedL0Bytes: intPerWorkUnaccountedL0Bytes,
 			l0BytesIngestFraction:        intIngestedAccountedL0BytesFraction,
 		},
+		ioThreshold: &admissionpb.IOThreshold{
+			L0NumFiles:              l0Metrics.NumFiles,
+			L0NumFilesThreshold:     threshNumFiles,
+			L0NumSubLevels:          int64(l0Metrics.Sublevels),
+			L0NumSubLevelsThreshold: threshNumSublevels,
+		},
 	}
 }
 
@@ -1950,6 +1969,7 @@ type adjustTokensResult struct {
 	ioLoadListenerState
 	requestEstimates storeRequestEstimates
 	aux              adjustTokensAuxComputations
+	ioThreshold      *admissionpb.IOThreshold // never nil
 }
 
 func max(i, j int64) int64 {

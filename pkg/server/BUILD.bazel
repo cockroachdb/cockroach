@@ -217,6 +217,7 @@ go_library(
         "//pkg/upgrade/upgrademanager",
         "//pkg/util",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
