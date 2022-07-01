@@ -164,8 +164,9 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 }
 
 // TestCannotTransferLeaseToVoterOutgoing ensures that the evaluation of lease
-// requests for nodes which are already in the VOTER_OUTGOING state will fail.
-func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
+// requests for nodes which are already in the VOTER_DEMOTING_LEARNER state will fail
+// (in this test, there is no VOTER_INCOMING node).
+func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -173,16 +174,15 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	knobs, ltk := makeReplicationTestKnobs()
 	// Add a testing knob to allow us to block the change replicas command
 	// while it is being proposed. When we detect that the change replicas
-	// command to move n3 to VOTER_OUTGOING has been evaluated, we'll send
-	// the request to transfer the lease to n3. The hope is that it will
-	// get past the sanity above latch acquisition prior to change replicas
-	// command committing.
-	var scratchRangeID atomic.Value
-	scratchRangeID.Store(roachpb.RangeID(0))
+	// command to move n3 to VOTER_DEMOTING_LEARNER has been evaluated, we'll
+	// send the request to transfer the lease to n3. The hope is that it will
+	// get past the sanity check above latch acquisition prior to the change
+	// replicas command committing.
+	var scratchRangeID int64
 	changeReplicasChan := make(chan chan struct{}, 1)
 	shouldBlock := func(args kvserverbase.ProposalFilterArgs) bool {
 		// Block if a ChangeReplicas command is removing a node from our range.
-		return args.Req.RangeID == scratchRangeID.Load().(roachpb.RangeID) &&
+		return args.Req.RangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) &&
 			args.Cmd.ReplicatedEvalResult.ChangeReplicas != nil &&
 			len(args.Cmd.ReplicatedEvalResult.ChangeReplicas.Removed()) > 0
 	}
@@ -205,7 +205,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 
 	scratchStartKey := tc.ScratchRange(t)
 	desc := tc.AddVotersOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
-	scratchRangeID.Store(desc.RangeID)
+	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
 	// Make sure n1 has the lease to start with.
 	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
 		scratchStartKey, tc.Target(0).StoreID)
@@ -214,7 +214,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	// The test proceeds as follows:
 	//
 	//  - Send an AdminChangeReplicasRequest to remove n3 and add n4
-	//  - Block the step that moves n3 to VOTER_OUTGOING on changeReplicasChan
+	//  - Block the step that moves n3 to VOTER_DEMOTING_LEARNER on changeReplicasChan
 	//  - Send an AdminLeaseTransfer to make n3 the leaseholder
 	//  - Try really hard to make sure that the lease transfer at least gets to
 	//    latch acquisition before unblocking the ChangeReplicas.
@@ -229,7 +229,6 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
 				scratchStartKey, desc, []roachpb.ReplicationChange{
 					{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
-					{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 				})
 			require.NoError(t, err)
 		}()
@@ -262,7 +261,191 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 		close(ch)
 		wg.Wait()
 	})
+}
 
+// TestTransferLeaseToVoterOutgoingWithIncoming ensures that the evaluation of lease
+// requests for nodes which are already in the VOTER_DEMOTING_LEARNER state succeeds
+// when there is a VOTER_INCOMING node.
+func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	knobs, ltk := makeReplicationTestKnobs()
+	// Add a testing knob to allow us to block the change replicas command
+	// while it is being proposed. When we detect that the change replicas
+	// command to move n3 to VOTER_DEMOTING_LEARNER has been evaluated, we'll
+	// send the request to transfer the lease to n3. The hope is that it will
+	// get past the sanity check above latch acquisition prior to the change
+	// replicas command committing.
+	var scratchRangeID int64
+	changeReplicasChan := make(chan chan struct{}, 1)
+	shouldBlock := func(args kvserverbase.ProposalFilterArgs) bool {
+		// Block if a ChangeReplicas command is removing a node from our range.
+		return args.Req.RangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) &&
+			args.Cmd.ReplicatedEvalResult.ChangeReplicas != nil &&
+			len(args.Cmd.ReplicatedEvalResult.ChangeReplicas.Removed()) > 0
+	}
+	blockIfShould := func(args kvserverbase.ProposalFilterArgs) {
+		if shouldBlock(args) {
+			ch := make(chan struct{})
+			changeReplicasChan <- ch
+			<-ch
+		}
+	}
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+		blockIfShould(args)
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
+	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
+	// Make sure n1 has the lease to start with.
+	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
+		scratchStartKey, tc.Target(0).StoreID)
+	require.NoError(t, err)
+
+	// The test proceeds as follows:
+	//
+	//  - Send an AdminChangeReplicasRequest to remove n3 and add n4
+	//  - Block the step that moves n3 to VOTER_DEMOTING_LEARNER on changeReplicasChan
+	//  - Send an AdminLeaseTransfer to make n3 the leaseholder
+	//  - Try really hard to make sure that the lease transfer at least gets to
+	//    latch acquisition before unblocking the ChangeReplicas.
+	//  - Unblock the ChangeReplicas.
+	//  - Make sure the lease transfer succeeds.
+
+	ltk.withStopAfterJointConfig(func() {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
+				scratchStartKey, desc, []roachpb.ReplicationChange{
+					{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(2)},
+					{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
+				})
+			require.NoError(t, err)
+		}()
+		ch := <-changeReplicasChan
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Make sure the lease is currently on n1.
+			desc, err := tc.LookupRange(scratchStartKey)
+			require.NoError(t, err)
+			leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
+			require.NoError(t, err)
+			require.Equal(t, tc.Target(0), leaseHolder,
+				errors.Errorf("Leaseholder supposed to be on n1."))
+			// Move the lease to n3, the VOTER_DEMOTING_LEARNER.
+			err = tc.Server(0).DB().AdminTransferLease(context.Background(),
+				scratchStartKey, tc.Target(2).StoreID)
+			require.NoError(t, err)
+			// Make sure the lease moved to n3.
+			leaseHolder, err = tc.FindRangeLeaseHolder(desc, nil)
+			require.NoError(t, err)
+			require.Equal(t, tc.Target(2), leaseHolder,
+				errors.Errorf("Leaseholder supposed to be on n3."))
+		}()
+		// Try really hard to make sure that our request makes it past the
+		// sanity check error to the evaluation error.
+		for i := 0; i < 100; i++ {
+			runtime.Gosched()
+			time.Sleep(time.Microsecond)
+		}
+		close(ch)
+		wg.Wait()
+	})
+}
+
+// TestTransferLeaseFailureDuringJointConfig reproduces
+// https://github.com/cockroachdb/cockroach/issues/83687
+// and makes sure that if lease transfer fails during a joint configuration
+// the previous leaseholder will successfully re-aquire the lease.
+// The test proceeds as follows:
+// - Creates a range with 3 replicas n1, n2, n3, and makes sure the lease is on n1
+// - Makes sure lease transfers on this range fail from now on
+// - Invokes AdminChangeReplicas to remove n1 and add n4
+// - This causes the range to go into a joint configuration. A lease transfer
+//   is attempted to move the lease from n1 to n4 before exiting the joint config,
+//   but that fails, causing us to remain in the joint configuration with the original
+//   leaseholder having revoked its lease, but everyone else thinking it's still
+//   the leaseholder. In this situation, only n1 can re-aquire the lease as long as it is live.
+// - We re-enable lease transfers on this range.
+// - n1 is able to re-aquire the lease, due to the fix in #83686 which enables a
+//   VOTER_DEMOTING_LEARNER (n1) replica to get the lease if there's also a VOTER_INCOMING
+//   which is the case here (n4).
+// - n1 transfers the lease away and the range leaves the joint configuration.
+func TestTransferLeaseFailureDuringJointConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{}}
+	// Add a testing knob to allow us to fail all lease transfer commands on this
+	// range when they are being proposed.
+	var scratchRangeID int64
+	shouldFailProposal := func(args kvserverbase.ProposalFilterArgs) bool {
+		// Block if a ChangeReplicas command is removing a node from our range.
+		return args.Req.RangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) &&
+			args.Req.IsSingleTransferLeaseRequest()
+	}
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+		if shouldFailProposal(args) {
+			return roachpb.NewErrorf("Injecting lease transfer failure")
+		}
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
+	// Make sure n1 has the lease to start with.
+	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
+		scratchStartKey, tc.Target(0).StoreID)
+	require.NoError(t, err)
+
+	// The next lease transfer should fail.
+	atomic.StoreInt64(&scratchRangeID, int64(desc.RangeID))
+
+	_, err = tc.Server(0).DB().AdminChangeReplicas(ctx,
+		scratchStartKey, desc, []roachpb.ReplicationChange{
+			{ChangeType: roachpb.REMOVE_VOTER, Target: tc.Target(0)},
+			{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
+		})
+	require.Error(t, err)
+	require.Regexp(t, "Injecting lease transfer failure", err)
+
+	// We're now in a joint configuration, n1 already revoked its lease but all
+	// other replicas think n1 is the leaseholder. As long as n1 is alive, it is
+	// the only one that can get the lease. It will retry and be able to do that
+	// thanks to the fix in #83686.
+	desc, err = tc.LookupRange(scratchStartKey)
+	require.NoError(t, err)
+	require.True(t, desc.Replicas().InAtomicReplicationChange())
+
+	// Further lease transfers should succeed, allowing the atomic replication change to complete.
+	atomic.StoreInt64(&scratchRangeID, 0)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl := store.LookupReplica(roachpb.RKey(scratchStartKey))
+	_, _, err = store.Enqueue(
+		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	require.NoError(t, err)
+	desc, err = tc.LookupRange(scratchStartKey)
+	require.NoError(t, err)
+	require.False(t, desc.Replicas().InAtomicReplicationChange())
 }
 
 // TestStoreLeaseTransferTimestampCacheRead verifies that the timestamp cache on
