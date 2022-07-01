@@ -447,9 +447,13 @@ EXPLAIN (VEC)
 ----
 │
 └ Node 1
-  └ *sql.planNodeToRowSource
-    └ *colfetcher.ColIndexJoin
-      └ *colfetcher.ColBatchScan
+  └ *colexec.caseOp
+    ├ *colexec.bufferOp
+    │ └ *sql.planNodeToRowSource
+    │   └ *colfetcher.ColIndexJoin
+    │     └ *colfetcher.ColBatchScan
+    ├ *colexec.bufferOp
+    └ *colexec.bufferOp
 
 # Regression test for releasing operators before closing them with EXPLAIN (VEC)
 # (#70438).
