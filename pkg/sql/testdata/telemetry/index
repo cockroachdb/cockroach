@@ -7,6 +7,7 @@ sql.schema.inverted_index
 sql.schema.multi_column_inverted_index
 sql.schema.geography_inverted_index
 sql.schema.geometry_inverted_index
+sql.schema.trigram_inverted_index
 sql.schema.partial_index
 sql.schema.partial_inverted_index
 sql.schema.partitioned_inverted_index
@@ -137,6 +138,24 @@ feature-usage
 CREATE INDEX i4 ON d ((i + 10))
 ----
 sql.schema.expression_index
+
+feature-usage
+CREATE TABLE trigrams (t TEXT, u TEXT, INVERTED INDEX(t gin_trgm_ops))
+----
+sql.schema.trigram_inverted_index
+sql.schema.inverted_index
+
+exec
+CREATE INDEX ON trigrams USING GIN(u gin_trgm_ops)
+----
+sql.schema.trigram_inverted_index
+sql.schema.inverted_index
+
+exec
+CREATE INVERTED INDEX ON trigrams USING GIN(u gin_trgm_ops)
+----
+sql.schema.trigram_inverted_index
+sql.schema.inverted_index
 
 #### ALTER TABLE tests.
 

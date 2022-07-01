@@ -69,6 +69,11 @@ var (
 	// indexes counted in InvertedIndexCounter.
 	GeometryInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.geometry_inverted_index")
 
+	// TrigramInvertedIndexCounter is to be incremented every time a
+	// trigram inverted index is created. These are a subset of the
+	// indexes counted in InvertedIndexCounter.
+	TrigramInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.trigram_inverted_index")
+
 	// PartialIndexCounter is to be incremented every time a partial index is
 	// created. This includes both regular and inverted partial indexes.
 	PartialIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_index")

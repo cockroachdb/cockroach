@@ -2240,6 +2240,9 @@ func NewTableDesc(
 					telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 				}
 			}
+			if idx.InvertedColumnKind() == catpb.InvertedIndexColumnKind_TRIGRAM {
+				telemetry.Inc(sqltelemetry.TrigramInvertedIndexCounter)
+			}
 			if idx.IsPartial() {
 				telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
 			}
