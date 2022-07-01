@@ -165,9 +165,10 @@ func (im *Implicator) ClearCache() {
 func (im *Implicator) FiltersImplyPredicate(
 	filters memo.FiltersExpr, pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
-	// True is only implied by true.
+	// A true predicate means that the partial index indexes all rows.
+	// Therefore, any query filter implies a true predicate.
 	if pred.IsTrue() {
-		return filters, filters.IsTrue()
+		return filters, true
 	}
 
 	// Check for exact matches for all FiltersItems in pred. This check is not
