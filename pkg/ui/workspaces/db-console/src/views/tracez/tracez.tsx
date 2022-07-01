@@ -157,12 +157,12 @@ const TagBadge = ({
   let badgeStatus: BadgeStatus;
   if (status) {
     badgeStatus = status;
+  } else if (t.hidden) {
+    badgeStatus = "default";
   } else if (isExpandable) {
     badgeStatus = "warning";
-  } else if (!t.hidden) {
-    badgeStatus = "info";
   } else {
-    badgeStatus = "default";
+    badgeStatus = "info";
   }
   return (
     <Button
@@ -216,7 +216,6 @@ const TagCell = (props: {
 }) => {
   const [expandedTagIndex, setExpandedTagIndex] = useState<number>(-1);
   const processedTags = props.sr.span.processed_tags;
-  const orderedTags = _.sortBy(processedTags, t => t.hidden);
 
   // Pad 8px on top and bottom.
   //
@@ -230,7 +229,7 @@ const TagCell = (props: {
   return (
     <div className={"outer-row"}>
       <div className={"inner-row"}>
-        {orderedTags.map((t, i) => (
+        {processedTags.map((t, i) => (
           <TagBadge
             t={t}
             setSearch={props.setSearch}
@@ -248,11 +247,13 @@ const TagCell = (props: {
       </div>
       {expandedTagIndex != -1 && (
         <div className={"inner-row"}>
-          {orderedTags[expandedTagIndex].children.map((t, i) => (
+          {processedTags[expandedTagIndex].children.map((t, i) => (
             <TagBadge
               t={t}
               key={i}
-              status="warning"
+              status={
+                processedTags[expandedTagIndex].hidden ? "default" : "warning"
+              }
               setSearch={props.setSearch}
               isExpanded={false}
             />
@@ -454,7 +455,6 @@ export const Tracez = () => {
       });
     });
   };
-
   return (
     <div>
       {showTrace && currentTrace ? (
