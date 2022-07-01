@@ -22,9 +22,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -182,7 +184,7 @@ func TestGranterBasic(t *testing.T) {
 			}
 			var testMetricsProvider testMetricsProvider
 			testMetricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
-			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &testMetricsProvider)
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &testMetricsProvider, &testMetricsProvider)
 			unsafeGranter, ok := storeCoordinators.gcMap.Load(int64(1))
 			require.True(t, ok)
 			coord = (*GrantCoordinator)(unsafeGranter)
@@ -286,6 +288,11 @@ func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
 }
 
+func (m *testMetricsProvider) UpdateIOThreshold(
+	id roachpb.StoreID, threshold *admissionpb.IOThreshold,
+) {
+}
+
 func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble.Metrics) {
 	m.metrics = m.metrics[:0]
 	for _, s := range stores {
@@ -342,7 +349,7 @@ func TestStoreCoordinators(t *testing.T) {
 	mp.setMetricsForStores([]int32{10, 20}, metrics)
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
-	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp)
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, &mp)
 	// Now we have 1+2 = 3 KVWork requesters.
 	require.Equal(t, 3, len(requesters))
 	// Confirm that the store IDs are as expected.
@@ -477,11 +484,13 @@ func TestIOLoadListener(t *testing.T) {
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
+				var buf strings.Builder
 				ioll.pebbleMetricsTick(ctx, &metrics)
 				// Do the ticks until just before next adjustment.
-				var buf strings.Builder
-				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&ioll.adjustTokensResult))
-				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(ioll.adjustTokensResult))
+				res := ioll.adjustTokensResult
+				fmt.Fprintln(&buf, redact.StringWithoutMarkers(&res))
+				res.ioThreshold = nil // avoid nondeterminism
+				fmt.Fprintf(&buf, "%+v\n", (rawTokenResult)(res))
 				if req.buf.Len() > 0 {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()

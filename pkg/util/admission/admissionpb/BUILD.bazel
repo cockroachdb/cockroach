@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -5,7 +7,30 @@ go_library(
     srcs = [
         "admissionpb.go",
         "doc.go",
+        "io_threshold.go",
     ],
+    embed = [":admissionpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
     visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+    ],
+)
+
+proto_library(
+    name = "admissionpb_proto",
+    srcs = ["io_threshold.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "admissionpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
+    proto = ":admissionpb_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )

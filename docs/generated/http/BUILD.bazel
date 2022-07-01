@@ -32,6 +32,7 @@ genrule(
         "//pkg/ts/tspb:tspb_proto",
         "//pkg/util/duration:duration_proto",
         "//pkg/util/hlc:hlc_proto",
+        "//pkg/util/admission/admissionpb:admissionpb_proto",
         "//pkg/util/log/logpb:logpb_proto",
         "//pkg/util/metric:metric_proto",
         "//pkg/util/timeutil/pgdate:pgdate_proto",
