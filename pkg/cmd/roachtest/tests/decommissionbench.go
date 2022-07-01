@@ -44,6 +44,9 @@ type decommissionBenchSpec struct {
 	// When true, the test will attempt to stop the node prior to decommission.
 	whileDown bool
 
+	// An override for the default timeout, if needed.
+	timeout time.Duration
+
 	skip string
 }
 
@@ -86,7 +89,9 @@ func registerDecommissionBench(r registry.Registry) {
 			warehouses:       3000,
 			load:             true,
 			admissionControl: true,
-			skip:             "https://github.com/cockroachdb/cockroach/issues/82870",
+			// This test can take nearly an hour to import and achieve balance, so
+			// we extend the timeout to let it complete.
+			timeout: 3 * time.Hour,
 		},
 	} {
 		registerDecommissionBenchSpec(r, benchSpec)
@@ -96,6 +101,9 @@ func registerDecommissionBench(r registry.Registry) {
 // registerDecommissionBenchSpec adds a test using the specified configuration to the registry.
 func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBenchSpec) {
 	timeout := defaultTimeout
+	if benchSpec.timeout != time.Duration(0) {
+		timeout = benchSpec.timeout
+	}
 	extraNameParts := []string{""}
 
 	if benchSpec.snapshotRate != 0 {
@@ -166,12 +174,13 @@ func runDecommissionBench(
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
 
+	maxRate := tpccMaxRate(benchSpec.warehouses)
 	rampDuration := 3 * time.Minute
 	rampStarted := make(chan struct{}, 1)
 	importCmd := fmt.Sprintf(`./cockroach workload fixtures import tpcc --warehouses=%d`,
 		benchSpec.warehouses)
-	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --duration=%s "+
-		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", benchSpec.warehouses,
+	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
+		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
 		testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
 	t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
 	c.Run(ctx, c.Node(pinnedNode), importCmd)
@@ -230,7 +239,7 @@ func runDecommissionBench(
 	// per-second "tick", we will simply tick at the start of the decommission
 	// and again at the completion. Roachperf will use the elapsed time between
 	// these ticks to plot the duration of the decommission.
-	tick, perfBuf := initBulkJobPerfArtifacts("decommission", defaultTimeout)
+	tick, perfBuf := initBulkJobPerfArtifacts("decommission", testTimeout)
 	recorder := &decommBenchTicker{pre: tick, post: tick}
 
 	m.Go(func(ctx context.Context) error {
