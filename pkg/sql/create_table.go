@@ -1798,6 +1798,9 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing); err != nil {
+				return nil, err
+			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
