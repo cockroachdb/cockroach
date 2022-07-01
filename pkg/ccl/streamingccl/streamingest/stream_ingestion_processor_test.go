@@ -129,7 +129,9 @@ func (m *mockStreamClient) Close() error {
 }
 
 // Complete implements the streamclient.Client interface.
-func (m *mockStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+func (m *mockStreamClient) Complete(
+	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+) error {
 	return nil
 }
 
@@ -149,7 +151,9 @@ func (m *errorStreamClient) Subscribe(
 }
 
 // Complete implements the streamclient.Client interface.
-func (m *errorStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+func (m *errorStreamClient) Complete(
+	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+) error {
 	return nil
 }
 
