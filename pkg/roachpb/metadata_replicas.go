@@ -114,6 +114,15 @@ func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 	return false
 }
 
+func predVoterIncoming(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_INCOMING:
+		return true
+	default:
+	}
+	return false
+}
+
 func predLearner(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == LEARNER
 }
@@ -150,6 +159,10 @@ func (d ReplicaSet) Voters() ReplicaSet {
 // in the set.
 func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterFullOrIncoming)
+}
+
+func (d ReplicaSet) containsVoterIncoming() bool {
+	return len(d.FilterToDescriptors(predVoterIncoming)) > 0
 }
 
 // LearnerDescriptors returns a slice of ReplicaDescriptors corresponding to
@@ -527,12 +540,28 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
 //
+// Previously, we were not allowed to enter a joint config where the
+// leaseholder is being removed (i.e., not a full voter). In the new version
+// we're allowed to enter such a joint config (if it has a VOTER_INCOMING),
+// but not to exit it in this state, i.e., the leaseholder must be some
+// kind of voter in the next new config (potentially VOTER_DEMOTING).
+//
 // An error is also returned is the replica is not part of `replDescs`.
-func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet) error {
+// leaseHolderRemovalAllowed is intended to check if the cluster version is
+// EnableLeaseHolderRemoval or higher.
+// TODO(shralex): remove this flag in 23.1
+func CheckCanReceiveLease(
+	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
+) error {
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
-	} else if !repDesc.IsVoterNewConfig() {
+	}
+	if !(repDesc.IsVoterNewConfig() ||
+		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseHolderRemovalAllowed)) {
+		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
+		// In this case, when exiting the joint config, we will transfer the lease to the incoming
+		// voter.
 		return errReplicaCannotHoldLease
 	}
 	return nil
