@@ -1011,6 +1011,23 @@ iter_seek_ge: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 iter_next_ignoring_time: err=conflicting intents on "d"
 error: (*roachpb.WriteIntentError:) conflicting intents on "d"
 
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=error
+iter_seek_ge k=c
+iter_next_key_ignoring_time
+----
+iter_seek_ge: {c-d}/[3.000000000,0=/<empty>]
+iter_next_key_ignoring_time: "d"/8.000000000,0=/BYTES/d8 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run error
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=10 intents=error
+iter_seek_ge k=c
+iter_next_key_ignoring_time
+----
+iter_seek_ge: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+iter_next_key_ignoring_time: err=conflicting intents on "d"
+error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+
 # rangesOnly doesn't care about intents.
 run ok
 iter_new_incremental types=rangesOnly k=a end=z intents=error
@@ -1123,6 +1140,46 @@ iter_next_ignoring_time
 ----
 iter_seek_ge: {f-g}/[5.000000000,0=/<empty>]
 iter_next_ignoring_time: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+# Test NextKeyIgnoringTime().
+run ok
+iter_new_incremental types=pointsAndRanges k=a end=z startTs=2 endTs=4 intents=emit
+iter_seek_ge k=a
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+iter_next_key_ignoring_time
+----
+iter_seek_ge: "a"/4.000000000,0=/<empty>
+iter_next_key_ignoring_time: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: {h-k}/[1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
+iter_next_key_ignoring_time: "k"/5.000000000,0=/BYTES/k5
+iter_next_key_ignoring_time: "l"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next_key_ignoring_time: "m"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} ts=8.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+iter_next_key_ignoring_time: "o"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+# NextKeyIgnoringTime with only range keys.
+run ok
+iter_new_incremental types=rangesOnly k=a end=z startTs=4 endTs=5 intents=emit
+iter_seek_ge k=f
+iter_next_key_ignoring_time
+----
+iter_seek_ge: {f-g}/[5.000000000,0=/<empty>]
+iter_next_key_ignoring_time: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 
 # Try some scans, bounded and unbounded, with only point keys.
 run ok
