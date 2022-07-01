@@ -114,6 +114,15 @@ func predVoterFullOrIncoming(rDesc ReplicaDescriptor) bool {
 	return false
 }
 
+func predVoterIncoming(rDesc ReplicaDescriptor) bool {
+	switch rDesc.GetType() {
+	case VOTER_INCOMING:
+		return true
+	default:
+	}
+	return false
+}
+
 func predLearner(rDesc ReplicaDescriptor) bool {
 	return rDesc.GetType() == LEARNER
 }
@@ -150,6 +159,10 @@ func (d ReplicaSet) Voters() ReplicaSet {
 // in the set.
 func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterFullOrIncoming)
+}
+
+func (d ReplicaSet) containsVoterIncoming() bool {
+	return len(d.FilterToDescriptors(predVoterIncoming)) > 0
 }
 
 // LearnerDescriptors returns a slice of ReplicaDescriptors corresponding to
@@ -532,7 +545,11 @@ func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, replDescs Replic
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
-	} else if !repDesc.IsVoterNewConfig() {
+	} else if !(repDesc.IsVoterNewConfig() || (repDesc.IsAnyVoter() && replDescs.
+		containsVoterIncoming())) {
+		// We allow an outgoing / demoting voter to receive the lease if there's an
+		// incoming voter. In this case, when exiting the joint config, we will
+		// transfer the lease to the incoming voter.
 		return errReplicaCannotHoldLease
 	}
 	return nil

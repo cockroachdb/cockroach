@@ -265,17 +265,36 @@ func TestCheckCanReceiveLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	const none = roachpb.ReplicaType(-1)
+
 	for _, tc := range []struct {
-		leaseholderType roachpb.ReplicaType
-		eligible        bool
+		leaseholderType    roachpb.ReplicaType
+		anotherReplicaType roachpb.ReplicaType
+		eligible           bool
 	}{
-		{leaseholderType: roachpb.VOTER_FULL, eligible: true},
-		{leaseholderType: roachpb.VOTER_INCOMING, eligible: true},
-		{leaseholderType: roachpb.VOTER_OUTGOING, eligible: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, eligible: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, eligible: false},
-		{leaseholderType: roachpb.LEARNER, eligible: false},
-		{leaseholderType: roachpb.NON_VOTER, eligible: false},
+		{leaseholderType: roachpb.VOTER_FULL, anotherReplicaType: none, eligible: true},
+		{leaseholderType: roachpb.VOTER_INCOMING, anotherReplicaType: none, eligible: true},
+
+		// A VOTER_OUTGOING should only be able to get the lease if there's a VOTER_INCOMING
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: none, eligible: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_INCOMING, eligible: true},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_OUTGOING, eligible: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_FULL, eligible: false},
+
+		// A VOTER_DEMOTING_LEARNER should only be able to get the lease if there's a VOTER_INCOMING
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: none, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_INCOMING, eligible: true},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_FULL, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_OUTGOING, eligible: false},
+
+		// A VOTER_DEMOTING_NON_VOTER should only be able to get the lease if there's a VOTER_INCOMING
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: none, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_INCOMING, eligible: true},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_FULL, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_OUTGOING, eligible: false},
+
+		{leaseholderType: roachpb.LEARNER, anotherReplicaType: none, eligible: false},
+		{leaseholderType: roachpb.NON_VOTER, anotherReplicaType: none, eligible: false},
 	} {
 		t.Run(tc.leaseholderType.String(), func(t *testing.T) {
 			repDesc := roachpb.ReplicaDescriptor{
@@ -284,6 +303,13 @@ func TestCheckCanReceiveLease(t *testing.T) {
 			}
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
+			}
+			if tc.anotherReplicaType != none {
+				anotherDesc := roachpb.ReplicaDescriptor{
+					ReplicaID: 2,
+					Type:      &tc.anotherReplicaType,
+				}
+				rngDesc.InternalReplicas = append(rngDesc.InternalReplicas, anotherDesc)
 			}
 			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas())
 			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
