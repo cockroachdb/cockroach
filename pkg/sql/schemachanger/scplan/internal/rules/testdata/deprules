@@ -158,20 +158,6 @@ deprules
     - $index-dependent-node[CurrentStatus] = PUBLIC
     - joinTargetNode($index, $index-target, $index-node)
     - joinTargetNode($index-dependent, $index-dependent-target, $index-dependent-node)
-- name: index exists right before columns, partitioning, and partial
-  from: index-node
-  kind: SameStagePrecedence
-  to: index-column-node
-  query:
-    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - $index-column[Type] IN ['*scpb.IndexColumn', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial']
-    - joinOnIndexID($index, $index-column, $table-id, $index-id)
-    - $index-target[TargetStatus] = PUBLIC
-    - $index-column-target[TargetStatus] = PUBLIC
-    - $index-node[CurrentStatus] = BACKFILL_ONLY
-    - $index-column-node[CurrentStatus] = PUBLIC
-    - joinTargetNode($index, $index-target, $index-node)
-    - joinTargetNode($index-column, $index-column-target, $index-column-node)
 - name: temp index exists right before columns, partitioning, and partial
   from: temp-index-node
   kind: SameStagePrecedence
@@ -513,7 +499,7 @@ deprules
     - joinTargetNode($column-name, $column-name-target, $column-name-node)
 - name: index-column added to index after index exists
   from: index-node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: index-column-node
   query:
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
@@ -525,9 +511,23 @@ deprules
     - $index-column-node[CurrentStatus] = PUBLIC
     - joinTargetNode($index, $index-target, $index-node)
     - joinTargetNode($index-column, $index-column-target, $index-column-node)
+- name: index-column added to index before index is backfilled
+  from: index-column-node
+  kind: Precedence
+  to: index-node
+  query:
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - joinOnIndexID($index-column, $index, $table-id, $index-id)
+    - $index-column-target[TargetStatus] = PUBLIC
+    - $index-target[TargetStatus] = PUBLIC
+    - $index-column-node[CurrentStatus] = PUBLIC
+    - $index-node[CurrentStatus] = BACKFILLED
+    - joinTargetNode($index-column, $index-column-target, $index-column-node)
+    - joinTargetNode($index, $index-target, $index-node)
 - name: index-column added to index after temp index exists
   from: index-node
-  kind: SameStagePrecedence
+  kind: Precedence
   to: index-column-node
   query:
     - $index[Type] = '*scpb.TemporaryIndex'
@@ -539,6 +539,20 @@ deprules
     - $index-column-node[CurrentStatus] = PUBLIC
     - joinTargetNode($index, $index-target, $index-node)
     - joinTargetNode($index-column, $index-column-target, $index-column-node)
+- name: index-column added to index before temp index receives writes
+  from: index-column-node
+  kind: Precedence
+  to: index-node
+  query:
+    - $index-column[Type] = '*scpb.IndexColumn'
+    - $index[Type] = '*scpb.TemporaryIndex'
+    - joinOnIndexID($index-column, $index, $table-id, $index-id)
+    - $index-column-target[TargetStatus] = PUBLIC
+    - $index-target[TargetStatus] = TRANSIENT_ABSENT
+    - $index-column-node[CurrentStatus] = PUBLIC
+    - $index-node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($index-column, $index-column-target, $index-column-node)
+    - joinTargetNode($index, $index-target, $index-node)
 - name: ensure columns are in increasing order
   from: later-column-node
   kind: SameStagePrecedence
