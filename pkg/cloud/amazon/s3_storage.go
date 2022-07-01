@@ -70,9 +70,8 @@ const (
 	// KMSRegionParam is the query parameter for the 'region' in every KMS URI.
 	KMSRegionParam = "REGION"
 
-	// AWSRoleArnParam is the query parameter for the 'role ARN' in an AWS
-	// URI, use if credentials are being verified with Assume Role.
-	AWSRoleArnParam = "AWS_ROLE_ARN"
+	// AssumeRoleParam is the ARN of the role to assume.
+	AssumeRoleParam = "ASSUME_ROLE"
 )
 
 type s3Storage struct {
@@ -157,7 +156,7 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
-	setIf(AWSRoleArnParam, conf.RoleArn)
+	setIf(AssumeRoleParam, conf.RoleArn)
 
 	s3URL := url.URL{
 		Scheme:   "s3",
@@ -184,7 +183,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
 		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
 		StorageClass:  uri.Query().Get(S3StorageClassParam),
-		RoleArn:       uri.Query().Get(AWSRoleArnParam),
+		RoleArn:       uri.Query().Get(AssumeRoleParam),
 		/* NB: additions here should also update s3QueryParams() serializer */
 	}
 	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")

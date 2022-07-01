@@ -212,7 +212,8 @@ func createImpersonateCredentials(
 	cfg := impersonate.CredentialsConfig{
 		TargetPrincipal: impersonateTarget,
 		Scopes:          scopes,
-		Delegates:       []string{"rui-limited-access@cockroach-ephemeral.iam.gserviceaccount.com"},
+		// TODO: fill this
+		Delegates: []string{},
 	}
 
 	source, err := impersonate.CredentialsTokenSource(ctx, cfg, authOpts...)
@@ -256,7 +257,7 @@ func (g *gcsStorage) ReadFileAt(
 	r := cloud.NewResumingReader(ctx,
 		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
-		},   // opener
+		}, // opener
 		nil, //  reader
 		offset,
 		cloud.IsResumableHTTPError,

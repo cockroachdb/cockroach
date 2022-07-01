@@ -140,7 +140,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 	expect := map[string]string{
 		"AWS_ACCESS_KEY_ID":     AWSAccessKeyParam,
 		"AWS_SECRET_ACCESS_KEY": AWSSecretParam,
-		"AWS_ROLE_ARN":          AWSRoleArnParam,
+		"AWS_ROLE_ARN":          AssumeRoleParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -155,7 +155,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_KMS_REGION_A env var must be set")
 	}
 	q.Add(KMSRegionParam, kmsRegion)
-	q.Set(cloud.AuthParam, cloud.AuthParamAssume)
+	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 
 	for _, id := range []string{"AWS_KMS_KEY_ARN_A", "AWS_KEY_ID", "AWS_KEY_ALIAS"} {
 		// Get AWS Key identifier from env variable.
@@ -177,8 +177,8 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 
 			// Create params for implicit user.
 			params := make(url.Values)
-			params.Add(cloud.AuthParam, cloud.AuthParamAssume)
-			params.Add(AWSRoleArnParam, q.Get(AWSRoleArnParam))
+			params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+			params.Add(AssumeRoleParam, q.Get(AssumeRoleParam))
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())

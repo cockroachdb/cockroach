@@ -55,7 +55,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 		endpoint:  kmsURI.Query().Get(AWSEndpointParam),
 		region:    kmsURI.Query().Get(KMSRegionParam),
 		auth:      kmsURI.Query().Get(cloud.AuthParam),
-		roleArn:   kmsURI.Query().Get(AWSRoleArnParam),
+		roleArn:   kmsURI.Query().Get(AssumeRoleParam),
 	}
 
 	// AWS secrets often contain + characters, which must be escaped when

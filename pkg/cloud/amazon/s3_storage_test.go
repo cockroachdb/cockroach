@@ -183,10 +183,12 @@ func TestPutS3AssumeRole(t *testing.T) {
 	// it is not used in auth-implicit.
 	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
+		fmt.Println("@@@ skipping cred")
 		skip.IgnoreLint(t, "No AWS credentials")
 	}
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
+		fmt.Println("@@@ skipping bucket")
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
@@ -194,9 +196,10 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 	user := username.RootUserName()
 
-	roleArn := os.Getenv(AWSRoleArnParam)
+	roleArn := os.Getenv("AWS_ASSUME_ROLE")
 	if roleArn == "" {
-		skip.IgnoreLintf(t, "%s env var must be set", AWSRoleArnParam)
+		fmt.Println("@@@ skipping role")
+		skip.IgnoreLintf(t, "%s env var must be set", "AWS_ASSUME_ROLE")
 	}
 	t.Run("auth-implicit", func(t *testing.T) {
 		credentialsProvider := credentials.SharedCredentialsProvider{}
@@ -206,7 +209,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 		uri := S3URI(bucket, "backup-test",
-			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamAssume, RoleArn: roleArn, Region: "us-east-1"},
+			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleArn: roleArn, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
@@ -214,10 +217,43 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := S3URI(bucket, "backup-test",
-			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamAssume, RoleArn: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleArn: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+	})
+
+	t.Run("role-chaining", func(t *testing.T) {
+		intermediateRole := os.Getenv("AWS_INTERMEDIATE_ROLE_ARN")
+		if intermediateRole == "" {
+			skip.IgnoreLint(t, "AWS_INTERMEDIATE_ROLE_ARN env var must be set")
+		}
+
+		fmt.Println("@@@ actually testing")
+		invalidURI := S3URI(bucket, "backup-test",
+			&roachpb.ExternalStorage_S3{
+				Auth:      cloud.AuthParamSpecified,
+				RoleArn:   intermediateRole,
+				AccessKey: creds.AccessKeyID,
+				Secret:    creds.SecretAccessKey,
+				Region:    "us-east-1",
+			},
+		)
+
+		cloudtestutils.CheckNoPermission(t, invalidURI, user, nil, nil, testSettings)
+
+		fmt.Println("@@@ actually testing")
+		uri := S3URI(bucket, "backup-test",
+			&roachpb.ExternalStorage_S3{
+				Auth:      cloud.AuthParamSpecified,
+				RoleArn:   fmt.Sprintf("%s,%s", intermediateRole, roleArn),
+				AccessKey: creds.AccessKeyID,
+				Secret:    creds.SecretAccessKey,
+				Region:    "us-east-1",
+			},
+		)
+
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 	})
 }
 
