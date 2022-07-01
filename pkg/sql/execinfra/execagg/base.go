@@ -38,7 +38,7 @@ func GetAggregateInfo(
 		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
 	}
 
-	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
 		typs := b.Types.Types()
 		if len(typs) != len(inputTypes) {
@@ -47,7 +47,7 @@ func GetAggregateInfo(
 		match := true
 		for i, t := range typs {
 			if !inputTypes[i].Equivalent(t) {
-				if props.NullableArgs && inputTypes[i].IsAmbiguous() {
+				if b.NullableArgs && inputTypes[i].IsAmbiguous() {
 					continue
 				}
 				match = false
@@ -131,7 +131,7 @@ func GetWindowFunctionInfo(
 			"function is neither an aggregate nor a window function",
 		)
 	}
-	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
+	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
 		typs := b.Types.Types()
 		if len(typs) != len(inputTypes) {
@@ -140,7 +140,7 @@ func GetWindowFunctionInfo(
 		match := true
 		for i, t := range typs {
 			if !inputTypes[i].Equivalent(t) {
-				if props.NullableArgs && inputTypes[i].IsAmbiguous() {
+				if b.NullableArgs && inputTypes[i].IsAmbiguous() {
 					continue
 				}
 				match = false

@@ -167,13 +167,6 @@ func arrayProps() tree.FunctionProperties {
 	return tree.FunctionProperties{Category: builtinconstants.CategoryArray}
 }
 
-// arrayPropsNullableArgs is used below for array functions that accept NULLs as arguments.
-func arrayPropsNullableArgs() tree.FunctionProperties {
-	p := arrayProps()
-	p.NullableArgs = true
-	return p
-}
-
 func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) builtinDefinition {
 	return builtinDefinition{
 		props:     props,
@@ -351,9 +344,7 @@ var builtins = map[string]builtinDefinition{
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
 	"concat": makeBuiltin(
-		tree.FunctionProperties{
-			NullableArgs: true,
-		},
+		defProps(),
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -372,8 +363,9 @@ var builtins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(buffer.String()), nil
 			},
-			Info:       "Concatenates a comma-separated list of strings.",
-			Volatility: volatility.Immutable,
+			Info:         "Concatenates a comma-separated list of strings.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 			// In Postgres concat can take any arguments, converting them to
 			// their text representation. Since the text representation can
 			// depend on the context (e.g. timezone), the function is Stable. In
@@ -383,9 +375,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"concat_ws": makeBuiltin(
-		tree.FunctionProperties{
-			NullableArgs: true,
-		},
+		defProps(),
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -419,7 +409,8 @@ var builtins = map[string]builtinDefinition{
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
 				"returns `wow!great`.",
-			Volatility: volatility.Immutable,
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 			// In Postgres concat_ws can take any arguments, converting them to
 			// their text representation. Since the text representation can
 			// depend on the context (e.g. timezone), the function is Stable. In
@@ -1884,15 +1875,13 @@ var builtins = map[string]builtinDefinition{
 		)),
 
 	"similar_escape": makeBuiltin(
-		tree.FunctionProperties{
-			NullableArgs: true,
-		},
-		similarOverloads...),
+		defProps(),
+		similarOverloads(true)...),
 
 	"similar_to_escape": makeBuiltin(
 		defProps(),
 		append(
-			similarOverloads,
+			similarOverloads(false),
 			stringOverload3(
 				"unescaped", "pattern", "escape",
 				func(evalCtx *eval.Context, unescaped, pattern, escape string) (tree.Datum, error) {
@@ -1976,8 +1965,7 @@ var builtins = map[string]builtinDefinition{
 	// quote_nullable is the same as quote_literal but accepts NULL arguments.
 	"quote_nullable": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryString,
-			NullableArgs: true,
+			Category: builtinconstants.CategoryString,
 		},
 		tree.Overload{
 			Types:             tree.ArgTypes{{"val", types.String}},
@@ -1990,8 +1978,9 @@ var builtins = map[string]builtinDefinition{
 				s := tree.MustBeDString(args[0])
 				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
 			},
-			Info:       "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
-			Volatility: volatility.Immutable,
+			Info:         "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Any}},
@@ -2009,8 +1998,9 @@ var builtins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(strD.String()), nil
 			},
-			Info:       "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
-			Volatility: volatility.Stable,
+			Info:         "Coerce `val` to a string and then quote it as a literal. If `val` is NULL, returns 'NULL'.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
@@ -2097,7 +2087,7 @@ var builtins = map[string]builtinDefinition{
 	),
 
 	"random": makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Float),
@@ -2345,8 +2335,7 @@ var builtins = map[string]builtinDefinition{
 
 	"greatest": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryComparison,
-			NullableArgs: true,
+			Category: builtinconstants.CategoryComparison,
 		},
 		tree.Overload{
 			Types:      tree.HomogeneousType{},
@@ -2354,15 +2343,15 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return eval.PickFromTuple(ctx, true /* greatest */, args)
 			},
-			Info:       "Returns the element with the greatest value.",
-			Volatility: volatility.Immutable,
+			Info:         "Returns the element with the greatest value.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 
 	"least": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryComparison,
-			NullableArgs: true,
+			Category: builtinconstants.CategoryComparison,
 		},
 		tree.Overload{
 			Types:      tree.HomogeneousType{},
@@ -2370,8 +2359,9 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return eval.PickFromTuple(ctx, false /* greatest */, args)
 			},
-			Info:       "Returns the element with the lowest value.",
-			Volatility: volatility.Immutable,
+			Info:         "Returns the element with the lowest value.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 
@@ -2634,7 +2624,7 @@ var builtins = map[string]builtinDefinition{
 
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html
 	"age": makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: tree.FixedReturnType(types.Interval),
@@ -2674,7 +2664,7 @@ months and years, use the timestamptz subtraction operator.`,
 	),
 
 	"current_date": makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Date),
@@ -2693,7 +2683,7 @@ months and years, use the timestamptz subtraction operator.`,
 	"localtime":      txnTimeWithPrecisionBuiltin(false),
 
 	"statement_timestamp": makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
@@ -2716,7 +2706,7 @@ months and years, use the timestamptz subtraction operator.`,
 	),
 
 	asof.FollowerReadTimestampFunctionName: makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
@@ -2738,7 +2728,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 	),
 
 	asof.FollowerReadTimestampExperimentalFunctionName: makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
@@ -2749,7 +2739,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 	),
 
 	asof.WithMinTimestampFunctionName: makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"min_timestamp", types.TimestampTZ},
@@ -2776,7 +2766,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 	),
 
 	asof.WithMaxStalenessFunctionName: makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"max_staleness", types.Interval},
@@ -2822,7 +2812,7 @@ may increase either contention or retry errors, or both.`,
 	),
 
 	"hlc_to_timestamp": makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"hlc", types.Decimal}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
@@ -2840,7 +2830,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 
 	"clock_timestamp": makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
@@ -3446,7 +3436,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Array functions.
 
-	"string_to_array": makeBuiltin(arrayPropsNullableArgs(),
+	"string_to_array": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}},
 			ReturnType: tree.FixedReturnType(types.StringArray),
@@ -3458,8 +3448,9 @@ value if you rely on the HLC for accuracy.`,
 				delimOrNil := stringOrNil(args[1])
 				return stringToArray(str, delimOrNil, nil)
 			},
-			Info:       "Split a string into components on a delimiter.",
-			Volatility: volatility.Immutable,
+			Info:         "Split a string into components on a delimiter.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}, {"null", types.String}},
@@ -3473,12 +3464,13 @@ value if you rely on the HLC for accuracy.`,
 				nullStr := stringOrNil(args[2])
 				return stringToArray(str, delimOrNil, nullStr)
 			},
-			Info:       "Split a string into components on a delimiter with a specified string to consider NULL.",
-			Volatility: volatility.Immutable,
+			Info:         "Split a string into components on a delimiter with a specified string to consider NULL.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 
-	"array_to_string": makeBuiltin(arrayPropsNullableArgs(),
+	"array_to_string": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -3490,8 +3482,9 @@ value if you rely on the HLC for accuracy.`,
 				delim := string(tree.MustBeDString(args[1]))
 				return arrayToString(evalCtx, arr, delim, nil)
 			},
-			Info:       "Join an array into a string with a delimiter.",
-			Volatility: volatility.Stable,
+			Info:         "Join an array into a string with a delimiter.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
@@ -3505,8 +3498,9 @@ value if you rely on the HLC for accuracy.`,
 				nullStr := stringOrNil(args[2])
 				return arrayToString(evalCtx, arr, delim, nullStr)
 			},
-			Info:       "Join an array into a string with a delimiter, replacing NULLs with a null string.",
-			Volatility: volatility.Stable,
+			Info:         "Join an array into a string with a delimiter, replacing NULLs with a null string.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
@@ -3571,7 +3565,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	"array_append": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_append": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types: tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
 			ReturnType: func(args []tree.TypedExpr) *types.T {
@@ -3585,12 +3579,13 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
-			Info:       "Appends `elem` to `array`, returning the result.",
-			Volatility: volatility.Immutable,
+			Info:         "Appends `elem` to `array`, returning the result.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
-	"array_prepend": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_prepend": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types: tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
 			ReturnType: func(args []tree.TypedExpr) *types.T {
@@ -3604,12 +3599,13 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
-			Info:       "Prepends `elem` to `array`, returning the result.",
-			Volatility: volatility.Immutable,
+			Info:         "Prepends `elem` to `array`, returning the result.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
-	"array_cat": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_cat": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types: tree.ArgTypes{{"left", types.MakeArray(typ)}, {"right", types.MakeArray(typ)}},
 			ReturnType: func(args []tree.TypedExpr) *types.T {
@@ -3628,12 +3624,13 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.ConcatArrays(typ, args[0], args[1])
 			},
-			Info:       "Appends two arrays.",
-			Volatility: volatility.Immutable,
+			Info:         "Appends two arrays.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
-	"array_remove": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_remove": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
 			ReturnType: tree.IdentityReturnType(0),
@@ -3655,12 +3652,13 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return result, nil
 			},
-			Info:       "Remove from `array` all elements equal to `elem`.",
-			Volatility: volatility.Immutable,
+			Info:         "Remove from `array` all elements equal to `elem`.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
-	"array_replace": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_replace": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"toreplace", typ}, {"replacewith", typ}},
 			ReturnType: tree.IdentityReturnType(0),
@@ -3686,12 +3684,13 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return result, nil
 			},
-			Info:       "Replace all occurrences of `toreplace` in `array` with `replacewith`.",
-			Volatility: volatility.Immutable,
+			Info:         "Replace all occurrences of `toreplace` in `array` with `replacewith`.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
-	"array_position": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_position": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -3710,12 +3709,13 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.DNull, nil
 			},
-			Info:       "Return the index of the first occurrence of `elem` in `array`.",
-			Volatility: volatility.Immutable,
+			Info:         "Return the index of the first occurrence of `elem` in `array`.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
-	"array_positions": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
+	"array_positions": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
 			ReturnType: tree.FixedReturnType(types.IntArray),
@@ -3737,8 +3737,9 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return result, nil
 			},
-			Info:       "Returns and array of indexes of all occurrences of `elem` in `array`.",
-			Volatility: volatility.Immutable,
+			Info:         "Returns and array of indexes of all occurrences of `elem` in `array`.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		}
 	})),
 
@@ -3921,13 +3922,13 @@ value if you rely on the HLC for accuracy.`,
 
 	"to_jsonb": makeBuiltin(jsonProps(), toJSONImpl),
 
-	"json_build_array": makeBuiltin(jsonPropsNullableArgs(), jsonBuildArrayImpl),
+	"json_build_array": makeBuiltin(jsonProps(), jsonBuildArrayImpl),
 
-	"jsonb_build_array": makeBuiltin(jsonPropsNullableArgs(), jsonBuildArrayImpl),
+	"jsonb_build_array": makeBuiltin(jsonProps(), jsonBuildArrayImpl),
 
-	"json_build_object": makeBuiltin(jsonPropsNullableArgs(), jsonBuildObjectImpl),
+	"json_build_object": makeBuiltin(jsonProps(), jsonBuildObjectImpl),
 
-	"jsonb_build_object": makeBuiltin(jsonPropsNullableArgs(), jsonBuildObjectImpl),
+	"jsonb_build_object": makeBuiltin(jsonProps(), jsonBuildObjectImpl),
 
 	"json_object": jsonObjectImpls,
 
@@ -4113,7 +4114,6 @@ value if you rely on the HLC for accuracy.`,
 	"crdb_internal.datums_to_bytes": makeBuiltin(
 		tree.FunctionProperties{
 			Category:             builtinconstants.CategorySystemInfo,
-			NullableArgs:         true,
 			Undocumented:         true,
 			CompositeInsensitive: true,
 		},
@@ -4138,7 +4138,8 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDBytes(tree.DBytes(out)), nil
 			},
-			Volatility: volatility.Immutable,
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
@@ -4259,7 +4260,7 @@ value if you rely on the HLC for accuracy.`,
 
 	// Enum functions.
 	"enum_first": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: builtinconstants.CategoryEnum},
+		tree.FunctionProperties{Category: builtinconstants.CategoryEnum},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.IdentityReturnType(0),
@@ -4274,13 +4275,14 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return min, nil
 			},
-			Info:       "Returns the first value of the input enum type.",
-			Volatility: volatility.Stable,
+			Info:         "Returns the first value of the input enum type.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
 	"enum_last": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: builtinconstants.CategoryEnum},
+		tree.FunctionProperties{Category: builtinconstants.CategoryEnum},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.IdentityReturnType(0),
@@ -4295,13 +4297,14 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return max, nil
 			},
-			Info:       "Returns the last value of the input enum type.",
-			Volatility: volatility.Stable,
+			Info:         "Returns the last value of the input enum type.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
 	"enum_range": makeBuiltin(
-		tree.FunctionProperties{NullableArgs: true, Category: builtinconstants.CategoryEnum},
+		tree.FunctionProperties{Category: builtinconstants.CategoryEnum},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.ArrayOfFirstNonNullReturnType(),
@@ -4328,8 +4331,9 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return arr, nil
 			},
-			Info:       "Returns all values of the input enum in an ordered array.",
-			Volatility: volatility.Stable,
+			Info:         "Returns all values of the input enum in an ordered array.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"lower", types.AnyEnum}, {"upper", types.AnyEnum}},
@@ -4395,8 +4399,9 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return arr, nil
 			},
-			Info:       "Returns all values of the input enum in an ordered array between the two arguments (inclusive).",
-			Volatility: volatility.Stable,
+			Info:         "Returns all values of the input enum in an ordered array between the two arguments (inclusive).",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
@@ -4854,7 +4859,6 @@ value if you rely on the HLC for accuracy.`,
 	"crdb_internal.create_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
-			NullableArgs: true,
 			Undocumented: true,
 		},
 		tree.Overload{
@@ -4875,8 +4879,9 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return args[0], nil
 			},
-			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
-			Volatility: volatility.Volatile,
+			Info:         "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility:   volatility.Volatile,
+			NullableArgs: true,
 		},
 	),
 
@@ -5481,8 +5486,7 @@ value if you rely on the HLC for accuracy.`,
 	// generated for a value.
 	"crdb_internal.num_geo_inverted_index_entries": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategorySystemInfo,
-			NullableArgs: true,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5504,8 +5508,9 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(tree.DInt(n)), nil
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5527,15 +5532,15 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(tree.DInt(n)), nil
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		}),
 	// Returns the number of distinct inverted index entries that would be
 	// generated for a value.
 	"crdb_internal.num_inverted_index_entries": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategorySystemInfo,
-			NullableArgs: true,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.Jsonb}},
@@ -5543,8 +5548,9 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return jsonNumInvertedIndexEntries(ctx, args[0])
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyArray}},
@@ -5552,8 +5558,9 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return arrayNumInvertedIndexEntries(ctx, args[0], tree.DNull)
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5569,8 +5576,9 @@ value if you rely on the HLC for accuracy.`,
 				// arrays.)
 				return jsonNumInvertedIndexEntries(ctx, args[0])
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5589,8 +5597,9 @@ value if you rely on the HLC for accuracy.`,
 				s := string(tree.MustBeDString(args[0]))
 				return tree.NewDInt(tree.DInt(len(trigram.MakeTrigrams(s, true /* pad */)))), nil
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5601,8 +5610,9 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return arrayNumInvertedIndexEntries(ctx, args[0], args[1])
 			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Stable,
+			Info:         "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:   volatility.Stable,
+			NullableArgs: true,
 		},
 	),
 
@@ -5668,9 +5678,6 @@ value if you rely on the HLC for accuracy.`,
 	"crdb_internal.assignment_cast": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
-			// The idiomatic usage of this function is to "pass" a target type T
-			// by passing NULL::T, so we must allow NULL arguments.
-			NullableArgs: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5692,6 +5699,9 @@ value if you rely on the HLC for accuracy.`,
 			// The volatility of an assignment cast depends on the argument
 			// types, so we set it to the maximum volatility of all casts.
 			Volatility: volatility.Stable,
+			// The idiomatic usage of this function is to "pass" a target type T
+			// by passing NULL::T, so we must allow NULL arguments.
+			NullableArgs: true,
 		},
 	),
 
@@ -6135,8 +6145,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"num_nulls": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryComparison,
-			NullableArgs: true,
+			Category: builtinconstants.CategoryComparison,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
@@ -6152,14 +6161,14 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(tree.DInt(numNulls)), nil
 			},
-			Info:       "Returns the number of null arguments.",
-			Volatility: volatility.Immutable,
+			Info:         "Returns the number of null arguments.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 	"num_nonnulls": makeBuiltin(
 		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryComparison,
-			NullableArgs: true,
+			Category: builtinconstants.CategoryComparison,
 		},
 		tree.Overload{
 			Types: tree.VariadicType{
@@ -6175,8 +6184,9 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.NewDInt(tree.DInt(numNonNulls)), nil
 			},
-			Info:       "Returns the number of nonnull arguments.",
-			Volatility: volatility.Immutable,
+			Info:         "Returns the number of nonnull arguments.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: true,
 		},
 	),
 
@@ -7452,7 +7462,7 @@ func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
 func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return makeBuiltin(
-		tree.FunctionProperties{},
+		defProps(),
 		tree.Overload{
 			Types:             tree.ArgTypes{},
 			ReturnType:        tree.FixedReturnType(types.TimeTZ),
@@ -7742,12 +7752,6 @@ func jsonProps() tree.FunctionProperties {
 	}
 }
 
-func jsonPropsNullableArgs() tree.FunctionProperties {
-	d := jsonProps()
-	d.NullableArgs = true
-	return d
-}
-
 var jsonBuildObjectImpl = tree.Overload{
 	Types:      tree.VariadicType{VarType: types.Any},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -7787,8 +7791,9 @@ var jsonBuildObjectImpl = tree.Overload{
 
 		return tree.NewDJSON(builder.Build()), nil
 	},
-	Info:       "Builds a JSON object out of a variadic argument list.",
-	Volatility: volatility.Stable,
+	Info:         "Builds a JSON object out of a variadic argument list.",
+	Volatility:   volatility.Stable,
+	NullableArgs: true,
 }
 
 var toJSONImpl = tree.Overload{
@@ -7844,8 +7849,9 @@ var jsonBuildArrayImpl = tree.Overload{
 		}
 		return tree.NewDJSON(builder.Build()), nil
 	},
-	Info:       "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
-	Volatility: volatility.Stable,
+	Info:         "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
+	Volatility:   volatility.Stable,
+	NullableArgs: true,
 }
 
 var jsonObjectImpls = makeBuiltin(jsonProps(),
@@ -7952,37 +7958,41 @@ var jsonArrayLengthImpl = tree.Overload{
 	Volatility: volatility.Immutable,
 }
 
-var similarOverloads = []tree.Overload{
-	{
-		Types:      tree.ArgTypes{{"pattern", types.String}},
-		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			if args[0] == tree.DNull {
-				return tree.DNull, nil
-			}
-			pattern := string(tree.MustBeDString(args[0]))
-			return eval.SimilarPattern(pattern, "")
-		},
-		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern`.",
-		Volatility: volatility.Immutable,
-	},
-	{
-		Types:      tree.ArgTypes{{"pattern", types.String}, {"escape", types.String}},
-		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			if args[0] == tree.DNull {
-				return tree.DNull, nil
-			}
-			pattern := string(tree.MustBeDString(args[0]))
-			if args[1] == tree.DNull {
+func similarOverloads(nullableArgs bool) []tree.Overload {
+	return []tree.Overload{
+		{
+			Types:      tree.ArgTypes{{"pattern", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				pattern := string(tree.MustBeDString(args[0]))
 				return eval.SimilarPattern(pattern, "")
-			}
-			escape := string(tree.MustBeDString(args[1]))
-			return eval.SimilarPattern(pattern, escape)
+			},
+			Info:         "Converts a SQL regexp `pattern` to a POSIX regexp `pattern`.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: nullableArgs,
 		},
-		Info:       "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using `escape` as an escape token.",
-		Volatility: volatility.Immutable,
-	},
+		{
+			Types:      tree.ArgTypes{{"pattern", types.String}, {"escape", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				pattern := string(tree.MustBeDString(args[0]))
+				if args[1] == tree.DNull {
+					return eval.SimilarPattern(pattern, "")
+				}
+				escape := string(tree.MustBeDString(args[1]))
+				return eval.SimilarPattern(pattern, escape)
+			},
+			Info:         "Converts a SQL regexp `pattern` to a POSIX regexp `pattern` using `escape` as an escape token.",
+			Volatility:   volatility.Immutable,
+			NullableArgs: nullableArgs,
+		},
+	}
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
@@ -8172,7 +8182,7 @@ func feedHash(h hash.Hash, args tree.Datums) (bool, error) {
 }
 
 func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
-	return makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -8183,8 +8193,9 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 				}
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
-			Info:       info,
-			Volatility: volatility.Leakproof,
+			Info:         info,
+			Volatility:   volatility.Leakproof,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8196,14 +8207,15 @@ func hashBuiltin(newHash func() hash.Hash, info string) builtinDefinition {
 				}
 				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
-			Info:       info,
-			Volatility: volatility.Leakproof,
+			Info:         info,
+			Volatility:   volatility.Leakproof,
+			NullableArgs: true,
 		},
 	)
 }
 
 func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
-	return makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -8214,8 +8226,9 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 				}
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
-			Info:       info,
-			Volatility: volatility.Leakproof,
+			Info:         info,
+			Volatility:   volatility.Leakproof,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8227,14 +8240,15 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 				}
 				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
-			Info:       info,
-			Volatility: volatility.Leakproof,
+			Info:         info,
+			Volatility:   volatility.Leakproof,
+			NullableArgs: true,
 		},
 	)
 }
 
 func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
-	return makeBuiltin(tree.FunctionProperties{NullableArgs: true},
+	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -8245,8 +8259,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 				}
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
-			Info:       info,
-			Volatility: volatility.Leakproof,
+			Info:         info,
+			Volatility:   volatility.Leakproof,
+			NullableArgs: true,
 		},
 		tree.Overload{
 			Types:      tree.VariadicType{VarType: types.Bytes},
@@ -8258,8 +8273,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 				}
 				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
-			Info:       info,
-			Volatility: volatility.Leakproof,
+			Info:         info,
+			Volatility:   volatility.Leakproof,
+			NullableArgs: true,
 		},
 	)
 }
