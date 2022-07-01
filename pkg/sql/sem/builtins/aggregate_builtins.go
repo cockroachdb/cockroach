@@ -67,12 +67,6 @@ func aggProps() tree.FunctionProperties {
 	return tree.FunctionProperties{Class: tree.AggregateClass}
 }
 
-func aggPropsNullableArgs() tree.FunctionProperties {
-	f := aggProps()
-	f.NullableArgs = true
-	return f
-}
-
 // allMaxMinAggregateTypes contains extra types that aren't in
 // types.Scalar that the max/min aggregate functions are defined on.
 var allMaxMinAggregateTypes = append(
@@ -106,7 +100,7 @@ var allMaxMinAggregateTypes = append(
 // These functions are also identified with Class == tree.AggregateClass.
 // The properties are reachable via tree.FunctionDefinition.
 var aggregates = map[string]builtinDefinition{
-	"array_agg": setProps(aggPropsNullableArgs(),
+	"array_agg": setProps(aggProps(),
 		arrayBuiltin(func(t *types.T) tree.Overload {
 			return makeAggOverloadWithReturnType(
 				[]*types.T{t},
@@ -121,49 +115,51 @@ var aggregates = map[string]builtinDefinition{
 				newArrayAggregate,
 				"Aggregates the selected values into an array.",
 				volatility.Immutable,
+				true, /* nullableArgs */
 			)
-		})),
+		}),
+	),
 
 	"avg": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntAvgAggregate,
-			"Calculates the average of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatAvgAggregate,
-			"Calculates the average of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
-			"Calculates the average of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalAvgAggregate,
-			"Calculates the average of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntAvgAggregate,
+			"Calculates the average of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatAvgAggregate,
+			"Calculates the average of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
+			"Calculates the average of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalAvgAggregate,
+			"Calculates the average of the selected values."),
 	),
 
 	"bit_and": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Int, newIntBitAndAggregate,
-			"Calculates the bitwise AND of all non-null input values, or null if none.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitAndAggregate,
-			"Calculates the bitwise AND of all non-null input values, or null if none.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Int, newIntBitAndAggregate,
+			"Calculates the bitwise AND of all non-null input values, or null if none."),
+		makeImmutableAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitAndAggregate,
+			"Calculates the bitwise AND of all non-null input values, or null if none."),
 	),
 
 	"bit_or": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Int, newIntBitOrAggregate,
-			"Calculates the bitwise OR of all non-null input values, or null if none.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitOrAggregate,
-			"Calculates the bitwise OR of all non-null input values, or null if none.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Int, newIntBitOrAggregate,
+			"Calculates the bitwise OR of all non-null input values, or null if none."),
+		makeImmutableAggOverload([]*types.T{types.VarBit}, types.VarBit, newBitBitOrAggregate,
+			"Calculates the bitwise OR of all non-null input values, or null if none."),
 	),
 
 	"bool_and": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
-			"Calculates the boolean value of `AND`ing all selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
+			"Calculates the boolean value of `AND`ing all selected values."),
 	),
 
 	"bool_or": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolOrAggregate,
-			"Calculates the boolean value of `OR`ing all selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Bool}, types.Bool, newBoolOrAggregate,
+			"Calculates the boolean value of `OR`ing all selected values."),
 	),
 
 	"concat_agg": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.String}, types.String, newStringConcatAggregate,
+			"Concatenates all selected values."),
+		makeImmutableAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesConcatAggregate,
+			"Concatenates all selected values."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	),
@@ -179,97 +175,73 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"final_covar_pop": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCovarPopAggregate,
-			"Calculates the population covariance of the selected values in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCovarPopAggregate,
+			"Calculates the population covariance of the selected values in final stage."),
 	)),
 
 	"final_regr_sxx": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSXXAggregate,
-			"Calculates sum of squares of the independent variable in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSXXAggregate,
+			"Calculates sum of squares of the independent variable in final stage."),
 	)),
 
 	"final_regr_sxy": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSXYAggregate,
-			"Calculates sum of products of independent times dependent variable in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSXYAggregate,
+			"Calculates sum of products of independent times dependent variable in final stage."),
 	)),
 
 	"final_regr_syy": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSYYAggregate,
-			"Calculates sum of squares of the dependent variable in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegrSYYAggregate,
+			"Calculates sum of squares of the dependent variable in final stage."),
 	)),
 
 	"final_regr_avgx": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgXAggregate,
-			"Calculates the average of the independent variable (sum(X)/N) in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgXAggregate,
+			"Calculates the average of the independent variable (sum(X)/N) in final stage."),
 	)),
 
 	"final_regr_avgy": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgYAggregate,
-			"Calculates the average of the dependent variable (sum(Y)/N) in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgYAggregate,
+			"Calculates the average of the dependent variable (sum(Y)/N) in final stage."),
 	)),
 
 	"final_regr_intercept": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionInterceptAggregate,
-			"Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs in final stage.",
-			volatility.Immutable,
-		)),
-	),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionInterceptAggregate,
+			"Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs in final stage."),
+	)),
 
 	"final_regr_r2": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionR2Aggregate,
-			"Calculates square of the correlation coefficient in final stage.",
-			volatility.Immutable,
-		)),
-	),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionR2Aggregate,
+			"Calculates square of the correlation coefficient in final stage."),
+	)),
 
 	"final_regr_slope": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionSlopeAggregate,
-			"Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs in final stage.",
-			volatility.Immutable,
-		)),
-	),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionSlopeAggregate,
+			"Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs in final stage."),
+	)),
 
 	"final_corr": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCorrAggregate,
-			"Calculates the correlation coefficient of the selected values in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCorrAggregate,
+			"Calculates the correlation coefficient of the selected values in final stage."),
 	)),
 
 	"final_covar_samp": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCovarSampAggregate,
-			"Calculates the sample covariance of the selected values in final stage.",
-			volatility.Immutable,
-		),
+		makeImmutableAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCovarSampAggregate,
+			"Calculates the sample covariance of the selected values in final stage."),
 	)),
 
 	// The input signature is: SQRDIFF, SUM, COUNT
 	"final_sqrdiff": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalSqrdiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
-			volatility.Immutable,
 		),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalSqrdiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
-			volatility.Immutable,
 		),
 	)),
 
@@ -313,29 +285,29 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"regr_count": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Float, types.Float}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int, types.Int}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Decimal}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float, types.Int}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float, types.Decimal}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int, types.Float}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int, types.Decimal}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Float}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Int}, types.Int, newRegressionCountAggregate,
-			"Calculates number of input rows in which both expressions are nonnull.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Float, types.Float}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Int, types.Int}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Decimal, types.Decimal}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Float, types.Int}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Float, types.Decimal}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Int, types.Float}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Int, types.Decimal}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Decimal, types.Float}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
+		makeImmutableAggOverload([]*types.T{types.Decimal, types.Int}, types.Int, newRegressionCountAggregate,
+			"Calculates number of input rows in which both expressions are nonnull."),
 	),
 
-	"count": makeBuiltin(aggPropsNullableArgs(),
+	"count": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
-			"Calculates the number of selected elements.", volatility.Immutable),
+			"Calculates the number of selected elements.", volatility.Immutable, true /* nullableArgs */),
 	),
 
 	"count_rows": makeBuiltin(aggProps(),
@@ -357,58 +329,56 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"every": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
-			"Calculates the boolean value of `AND`ing all selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
+			"Calculates the boolean value of `AND`ing all selected values."),
 	),
 
 	"max": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
 			info := "Identifies the maximum selected value."
-			vol := volatility.Immutable
-			return makeAggOverloadWithReturnType(
-				[]*types.T{t}, tree.IdentityReturnType(0), newMaxAggregate, info, vol,
+			return makeImmutableAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMaxAggregate, info,
 			)
 		}),
 
 	"min": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
 			info := "Identifies the minimum selected value."
-			vol := volatility.Immutable
-			return makeAggOverloadWithReturnType(
-				[]*types.T{t}, tree.IdentityReturnType(0), newMinAggregate, info, vol,
+			return makeImmutableAggOverloadWithReturnType(
+				[]*types.T{t}, tree.IdentityReturnType(0), newMinAggregate, info,
 			)
 		}),
 
-	"string_agg": makeBuiltin(aggPropsNullableArgs(),
+	"string_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String, types.String}, types.String, newStringConcatAggregate,
-			"Concatenates all selected values using the provided delimiter.", volatility.Immutable),
+			"Concatenates all selected values using the provided delimiter.", volatility.Immutable, true /* nullableArgs */),
 		makeAggOverload([]*types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
-			"Concatenates all selected values using the provided delimiter.", volatility.Immutable),
+			"Concatenates all selected values using the provided delimiter.", volatility.Immutable, true /* nullableArgs */),
 	),
 
 	"sum_int": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Int, newSmallIntSumAggregate,
-			"Calculates the sum of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Int, newSmallIntSumAggregate,
+			"Calculates the sum of the selected values."),
 	),
 
 	"sum": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntSumAggregate,
-			"Calculates the sum of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatSumAggregate,
-			"Calculates the sum of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSumAggregate,
-			"Calculates the sum of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalSumAggregate,
-			"Calculates the sum of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntSumAggregate,
+			"Calculates the sum of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatSumAggregate,
+			"Calculates the sum of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSumAggregate,
+			"Calculates the sum of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalSumAggregate,
+			"Calculates the sum of the selected values."),
 	),
 
 	"sqrdiff": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntSqrDiffAggregate,
-			"Calculates the sum of squared differences from the mean of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSqrDiffAggregate,
-			"Calculates the sum of squared differences from the mean of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatSqrDiffAggregate,
-			"Calculates the sum of squared differences from the mean of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntSqrDiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSqrDiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatSqrDiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values."),
 	),
 
 	// final_(variance|stddev) computes the global (variance|standard deviation)
@@ -423,70 +393,62 @@ var aggregates = map[string]builtinDefinition{
 
 	// The input signature is: SQDIFF, SUM, COUNT
 	"final_variance": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
 	)),
 
 	"final_var_pop": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalVarPopAggregate,
 			"Calculates the population variance from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalVarPopAggregate,
 			"Calculates the population variance from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
 	)),
 
 	"final_stddev": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
 	)),
 
 	"final_stddev_pop": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalStdDevPopAggregate,
 			"Calculates the population standard deviation from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalStdDevPopAggregate,
 			"Calculates the population standard deviation from the selected locally-computed squared difference values.",
-			volatility.Immutable,
 		),
 	)),
 
@@ -494,56 +456,55 @@ var aggregates = map[string]builtinDefinition{
 	"variance": makeVarianceBuiltin(),
 	"var_samp": makeVarianceBuiltin(),
 	"var_pop": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarPopAggregate,
-			"Calculates the population variance of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarPopAggregate,
-			"Calculates the population variance of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarPopAggregate,
-			"Calculates the population variance of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarPopAggregate,
+			"Calculates the population variance of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarPopAggregate,
+			"Calculates the population variance of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatVarPopAggregate,
+			"Calculates the population variance of the selected values."),
 	),
 
 	// stddev is a historical alias for stddev_samp.
 	"stddev":      makeStdDevBuiltin(),
 	"stddev_samp": makeStdDevBuiltin(),
 	"stddev_pop": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevPopAggregate,
-			"Calculates the population standard deviation of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevPopAggregate,
-			"Calculates the population standard deviation of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevPopAggregate,
-			"Calculates the population standard deviation of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevPopAggregate,
+			"Calculates the population standard deviation of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevPopAggregate,
+			"Calculates the population standard deviation of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevPopAggregate,
+			"Calculates the population standard deviation of the selected values."),
 	),
 
 	"xor_agg": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
-			"Calculates the bitwise XOR of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int}, types.Int, newIntXorAggregate,
-			"Calculates the bitwise XOR of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
+			"Calculates the bitwise XOR of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Int, newIntXorAggregate,
+			"Calculates the bitwise XOR of the selected values."),
 	),
 
-	"json_agg": makeBuiltin(aggPropsNullableArgs(),
+	"json_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array.", volatility.Stable),
+			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* nullableArgs */),
 	),
 
-	"jsonb_agg": makeBuiltin(aggPropsNullableArgs(),
+	"jsonb_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
-			"Aggregates values as a JSON or JSONB array.", volatility.Stable),
+			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* nullableArgs */),
 	),
 
-	"json_object_agg": makeBuiltin(aggPropsNullableArgs(),
+	"json_object_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
-			"Aggregates values as a JSON or JSONB object.", volatility.Stable),
+			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* nullableArgs */),
 	),
-	"jsonb_object_agg": makeBuiltin(aggPropsNullableArgs(),
+	"jsonb_object_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
-			"Aggregates values as a JSON or JSONB object.", volatility.Stable),
+			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* nullableArgs */),
 	),
 
 	"st_makeline": makeBuiltin(
 		tree.FunctionProperties{
 			Class:                   tree.AggregateClass,
-			NullableArgs:            true,
 			AvailableOnPublicSchema: true,
 		},
 		makeAggOverload(
@@ -560,12 +521,12 @@ var aggregates = map[string]builtinDefinition{
 				info: "Forms a LineString from Point, MultiPoint or LineStrings. Other shapes will be ignored.",
 			}.String(),
 			volatility.Immutable,
+			true, /* nullableArgs */
 		),
 	),
 	"st_extent": makeBuiltin(
 		tree.FunctionProperties{
 			Class:                   tree.AggregateClass,
-			NullableArgs:            true,
 			AvailableOnPublicSchema: true,
 		},
 		makeAggOverload(
@@ -580,6 +541,7 @@ var aggregates = map[string]builtinDefinition{
 				info: "Forms a Box2D that encapsulates all provided geometries.",
 			}.String(),
 			volatility.Immutable,
+			true, /* nullableArgs */
 		),
 	),
 	"st_union":      makeSTUnionBuiltin(),
@@ -588,98 +550,97 @@ var aggregates = map[string]builtinDefinition{
 	"st_memcollect": makeSTCollectBuiltin(),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
-		makeAggOverloadWithReturnType(
+		makeImmutableAggOverloadWithReturnType(
 			[]*types.T{types.Any},
 			tree.IdentityReturnType(0),
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
-			volatility.Immutable,
 		))),
 
 	// Ordered-set aggregations.
 	"percentile_disc": makeBuiltin(aggProps(),
-		makeAggOverloadWithReturnType(
+		makeImmutableAggOverloadWithReturnType(
 			[]*types.T{types.Float},
 			func(args []tree.TypedExpr) *types.T { return tree.UnknownReturnType },
 			builtinMustNotRun,
 			"Discrete percentile: returns the first input value whose position in the ordering equals or "+
 				"exceeds the specified fraction.",
-			volatility.Immutable),
-		makeAggOverloadWithReturnType(
+		),
+		makeImmutableAggOverloadWithReturnType(
 			[]*types.T{types.FloatArray},
 			func(args []tree.TypedExpr) *types.T { return tree.UnknownReturnType },
 			builtinMustNotRun,
 			"Discrete percentile: returns input values whose position in the ordering equals or "+
 				"exceeds the specified fractions.",
-			volatility.Immutable),
+		),
 	),
 	"percentile_disc_impl": makePrivate(collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
-			return makeAggOverload([]*types.T{types.Float, t}, t, newPercentileDiscAggregate,
+			return makeImmutableAggOverload([]*types.T{types.Float, t}, t, newPercentileDiscAggregate,
 				"Implementation of percentile_disc.",
-				volatility.Immutable)
+			)
 		},
 		func(t *types.T) tree.Overload {
-			return makeAggOverload([]*types.T{types.FloatArray, t}, types.MakeArray(t), newPercentileDiscAggregate,
+			return makeImmutableAggOverload([]*types.T{types.FloatArray, t}, types.MakeArray(t), newPercentileDiscAggregate,
 				"Implementation of percentile_disc.",
-				volatility.Immutable)
+			)
 		},
 	)),
 	"percentile_cont": makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float},
 			types.Float,
 			builtinMustNotRun,
 			"Continuous percentile: returns a float corresponding to the specified fraction in the ordering, "+
 				"interpolating between adjacent input floats if needed.",
-			volatility.Immutable),
-		makeAggOverload(
+		),
+		makeImmutableAggOverload(
 			[]*types.T{types.Float},
 			types.Interval,
 			builtinMustNotRun,
 			"Continuous percentile: returns an interval corresponding to the specified fraction in the ordering, "+
 				"interpolating between adjacent input intervals if needed.",
-			volatility.Immutable),
-		makeAggOverload(
+		),
+		makeImmutableAggOverload(
 			[]*types.T{types.FloatArray},
 			types.MakeArray(types.Float),
 			builtinMustNotRun,
 			"Continuous percentile: returns floats corresponding to the specified fractions in the ordering, "+
 				"interpolating between adjacent input floats if needed.",
-			volatility.Immutable),
-		makeAggOverload(
+		),
+		makeImmutableAggOverload(
 			[]*types.T{types.FloatArray},
 			types.MakeArray(types.Interval),
 			builtinMustNotRun,
 			"Continuous percentile: returns intervals corresponding to the specified fractions in the ordering, "+
 				"interpolating between adjacent input intervals if needed.",
-			volatility.Immutable),
+		),
 	),
 	"percentile_cont_impl": makePrivate(makeBuiltin(aggProps(),
-		makeAggOverload(
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Float},
 			types.Float,
 			newPercentileContAggregate,
 			"Implementation of percentile_cont.",
-			volatility.Immutable),
-		makeAggOverload(
+		),
+		makeImmutableAggOverload(
 			[]*types.T{types.Float, types.Interval},
 			types.Interval,
 			newPercentileContAggregate,
 			"Implementation of percentile_cont.",
-			volatility.Immutable),
-		makeAggOverload(
+		),
+		makeImmutableAggOverload(
 			[]*types.T{types.FloatArray, types.Float},
 			types.MakeArray(types.Float),
 			newPercentileContAggregate,
 			"Implementation of percentile_cont.",
-			volatility.Immutable),
-		makeAggOverload(
+		),
+		makeImmutableAggOverload(
 			[]*types.T{types.FloatArray, types.Interval},
 			types.MakeArray(types.Interval),
 			newPercentileContAggregate,
 			"Implementation of percentile_cont.",
-			volatility.Immutable),
+		),
 	)),
 }
 
@@ -690,6 +651,14 @@ func makePrivate(b builtinDefinition) builtinDefinition {
 	b.props.Private = true
 	return b
 }
+func makeImmutableAggOverload(
+	in []*types.T,
+	ret *types.T,
+	f func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
+	info string,
+) tree.Overload {
+	return makeAggOverload(in, ret, f, info, volatility.Immutable, false /* nullableArgs */)
+}
 
 func makeAggOverload(
 	in []*types.T,
@@ -697,6 +666,7 @@ func makeAggOverload(
 	f func([]*types.T, *eval.Context, tree.Datums) eval.AggregateFunc,
 	info string,
 	volatility volatility.V,
+	nullableArgs bool,
 ) tree.Overload {
 	return makeAggOverloadWithReturnType(
 		in,
@@ -704,7 +674,14 @@ func makeAggOverload(
 		f,
 		info,
 		volatility,
+		nullableArgs,
 	)
+}
+
+func makeImmutableAggOverloadWithReturnType(
+	in []*types.T, retType tree.ReturnTyper, f eval.AggregateOverload, info string,
+) tree.Overload {
+	return makeAggOverloadWithReturnType(in, retType, f, info, volatility.Immutable, false)
 }
 
 func makeAggOverloadWithReturnType(
@@ -713,6 +690,7 @@ func makeAggOverloadWithReturnType(
 	f eval.AggregateOverload,
 	info string,
 	volatility volatility.V,
+	nullableArgs bool,
 ) tree.Overload {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
@@ -761,19 +739,20 @@ func makeAggOverloadWithReturnType(
 				},
 			)
 		}),
-		Info:       info,
-		Volatility: volatility,
+		Info:         info,
+		Volatility:   volatility,
+		NullableArgs: nullableArgs,
 	}
 }
 
 func makeStdDevBuiltin() builtinDefinition {
 	return makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
-			"Calculates the standard deviation of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
-			"Calculates the standard deviation of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
-			"Calculates the standard deviation of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
+			"Calculates the standard deviation of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
+			"Calculates the standard deviation of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
+			"Calculates the standard deviation of the selected values."),
 	)
 }
 
@@ -781,7 +760,6 @@ func makeSTCollectBuiltin() builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
 			Class:                   tree.AggregateClass,
-			NullableArgs:            true,
 			AvailableOnPublicSchema: true,
 		},
 		makeAggOverload(
@@ -792,6 +770,7 @@ func makeSTCollectBuiltin() builtinDefinition {
 				info: "Collects geometries into a GeometryCollection or multi-type as appropriate.",
 			}.String(),
 			volatility.Immutable,
+			true, /* nullableArgs */
 		),
 	)
 }
@@ -800,7 +779,6 @@ func makeSTUnionBuiltin() builtinDefinition {
 	return makeBuiltin(
 		tree.FunctionProperties{
 			Class:                   tree.AggregateClass,
-			NullableArgs:            true,
 			AvailableOnPublicSchema: true,
 		},
 		makeAggOverload(
@@ -817,6 +795,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				info: "Applies a spatial union to the geometries provided.",
 			}.String(),
 			volatility.Immutable,
+			true, /* nullableArgs */
 		),
 	)
 }
@@ -841,24 +820,15 @@ func makeRegressionAggregate(
 	ret *types.T,
 ) builtinDefinition {
 	return makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Float, types.Float}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int, types.Int}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Decimal}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float, types.Int}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float, types.Decimal}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int, types.Float}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Int, types.Decimal}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Float}, ret, aggregateFunc,
-			info, volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal, types.Int}, ret, aggregateFunc,
-			info, volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Float, types.Float}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Int, types.Int}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Decimal, types.Decimal}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Float, types.Int}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Float, types.Decimal}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Int, types.Float}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Int, types.Decimal}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Decimal, types.Float}, ret, aggregateFunc, info),
+		makeImmutableAggOverload([]*types.T{types.Decimal, types.Int}, ret, aggregateFunc, info),
 	)
 }
 
@@ -1182,12 +1152,12 @@ func (agg *stExtentAgg) Size() int64 {
 
 func makeVarianceBuiltin() builtinDefinition {
 	return makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
-			"Calculates the variance of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
-			"Calculates the variance of the selected values.", volatility.Immutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
-			"Calculates the variance of the selected values.", volatility.Immutable),
+		makeImmutableAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
+			"Calculates the variance of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
+			"Calculates the variance of the selected values."),
+		makeImmutableAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
+			"Calculates the variance of the selected values."),
 	)
 }
 
