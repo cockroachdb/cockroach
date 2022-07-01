@@ -460,23 +460,15 @@ func (post *PostProcessSpec) summary() []string {
 	var res []string
 	if post.Projection {
 		outputColumns := "None"
-		outputCols := post.OutputColumns
-		if post.OriginalOutputColumns != nil {
-			outputCols = post.OriginalOutputColumns
-		}
-		if len(outputCols) > 0 {
-			outputColumns = colListStr(outputCols)
+		if len(post.OutputColumns) > 0 {
+			outputColumns = colListStr(post.OutputColumns)
 		}
 		res = append(res, fmt.Sprintf("Out: %s", outputColumns))
 	}
-	renderExprs := post.RenderExprs
-	if post.OriginalRenderExprs != nil {
-		renderExprs = post.OriginalRenderExprs
-	}
-	if len(renderExprs) > 0 {
+	if len(post.RenderExprs) > 0 {
 		var buf bytes.Buffer
 		buf.WriteString("Render: ")
-		for i, expr := range renderExprs {
+		for i, expr := range post.RenderExprs {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
