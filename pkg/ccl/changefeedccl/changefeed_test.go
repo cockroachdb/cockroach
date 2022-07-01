@@ -3779,16 +3779,6 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, envelope='row'`, `kafka://nope`,
 	)
 
-	// WITH diff requires envelope=wrapped
-	sqlDB.ExpectErr(
-		t, `diff is only usable with envelope=wrapped`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, envelope='key_only'`, `kafka://nope`,
-	)
-	sqlDB.ExpectErr(
-		t, `diff is only usable with envelope=wrapped`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, envelope='row'`, `kafka://nope`,
-	)
-
 	// WITH initial_scan and no_initial_scan disallowed
 	sqlDB.ExpectErr(
 		t, `cannot specify both initial_scan and no_initial_scan`,
@@ -4279,6 +4269,41 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+func TestCDCPrev(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row' AS SELECT cdc_prev()->'b' AS old FROM foo`)
+		defer closeFeed(t, foo)
+
+		// cdc_prev() values are null during initial scan
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"old": null}`,
+		})
+
+		// cdc_prev() values are null for an insert event
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'original')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"old": null}`,
+		})
+
+		// cdc_prev() returns the previous value on an update
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'updated')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"old": "original"}`,
+		})
+	}
+
+	// envelope=wrapped is required for some sinks, but
+	// envelope=wrapped output with cdc_prev looks silly.
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedProtectedTimestamps(t *testing.T) {
@@ -6177,9 +6202,10 @@ func normalizeCDCExpression(t *testing.T, execCfgI interface{}, exprStr string) 
 	defer cleanup()
 
 	execCtx := p.(sql.JobExecContext)
-	require.NoError(t, cdceval.NormalizeAndValidateSelectForTarget(
+	_, err = cdceval.NormalizeAndValidateSelectForTarget(
 		context.Background(), execCtx, desc, target, sc, false,
-	))
+	)
+	require.NoError(t, err)
 	log.Infof(context.Background(), "PostNorm: %s", tree.StmtDebugString(sc))
 	return cdceval.AsStringUnredacted(sc)
 }
@@ -6419,7 +6445,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		},
 		{
 			name:           "alter enum use correct enum version",
-			createFeedStmt: "CREATE CHANGEFEED WITH diff AS SELECT e, cdc_prev()->'e' AS prev_e FROM foo",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, cdc_prev()->'e' AS prev_e FROM foo",
 			initialPayload: []string{
 				`foo: [1, "one"]->{"after": {"e": "inactive", "prev_e": null}, "before": null}`,
 				`foo: [2, "two"]->{"after": {"e": "open", "prev_e": null}, "before": null}`,
