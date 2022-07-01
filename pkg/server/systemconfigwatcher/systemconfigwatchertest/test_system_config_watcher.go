@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
@@ -102,14 +103,15 @@ func runTest(
 		if rs == nil {
 			return errors.New("nil config")
 		}
+		entries := protoutil.Clone(&rs.SystemConfigEntries).(*config.SystemConfigEntries)
 		sc := getSystemDescriptorAndZonesSpans(ctx, t, execCfg.Codec, kvDB)
 		if extraRows != nil {
 			sc = append(sc, extraRows(t)...)
 			sort.Sort(roachpb.KeyValueByKey(sc))
 		}
-		sort.Sort(roachpb.KeyValueByKey(rs.Values))
-		if !assert.Equal(noopT{}, sc, rs.Values) {
-			return errors.Errorf("mismatch: %v", pretty.Diff(sc, rs.Values))
+		sort.Sort(roachpb.KeyValueByKey(entries.Values))
+		if !assert.Equal(noopT{}, sc, entries.Values) {
+			return errors.Errorf("mismatch: %v", pretty.Diff(sc, entries.Values))
 		}
 		return nil
 	}
