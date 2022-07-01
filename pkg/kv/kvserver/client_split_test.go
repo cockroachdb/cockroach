@@ -2260,7 +2260,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	storeKey := gossip.MakeStoreKey(store.StoreID())
+	storeKey := gossip.MakeStoreDescKey(store.StoreID())
 
 	// Avoid excessive logging on under-replicated ranges due to our many splits.
 	config.TestingSetupZoneConfigHook(s.Stopper())

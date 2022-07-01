@@ -427,7 +427,7 @@ func TestGossipMostDistant(t *testing.T) {
 				g.mu.Lock()
 				var buf bytes.Buffer
 				_ = g.mu.is.visitInfos(func(key string, i *Info) error {
-					if i.NodeID != 1 && IsNodeIDKey(key) {
+					if i.NodeID != 1 && IsNodeDescKey(key) {
 						fmt.Fprintf(&buf, "n%d: hops=%d\n", i.NodeID, i.Hops)
 					}
 					return nil

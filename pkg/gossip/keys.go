@@ -35,14 +35,14 @@ const (
 	// Gossip.Connected channel is closed when we see this key.
 	KeyClusterID = "cluster-id"
 
-	// KeyStorePrefix is the key prefix for gossiping stores in the network.
+	// KeyStoreDescPrefix is the key prefix for gossiping stores in the network.
 	// The suffix is a store ID and the value is a roachpb.StoreDescriptor.
-	KeyStorePrefix = "store"
+	KeyStoreDescPrefix = "store"
 
-	// KeyNodeIDPrefix is the key prefix for gossiping node id addresses.
+	// KeyNodeDescPrefix is the key prefix for gossiping node id addresses.
 	// The actual key is suffixed with the decimal representation of the
 	// node id (e.g. 'node:1') and the value is a roachpb.NodeDescriptor.
-	KeyNodeIDPrefix = "node"
+	KeyNodeDescPrefix = "node"
 
 	// KeyHealthAlertPrefix is the key prefix for gossiping health alerts.
 	// The value is a proto of type HealthCheckResult.
@@ -121,18 +121,18 @@ func MakePrefixPattern(prefix string) string {
 
 // MakeNodeIDKey returns the gossip key for node ID info.
 func MakeNodeIDKey(nodeID roachpb.NodeID) string {
-	return MakeKey(KeyNodeIDPrefix, nodeID.String())
+	return MakeKey(KeyNodeDescPrefix, nodeID.String())
 }
 
-// IsNodeIDKey returns true iff the provided key is a valid node ID key.
-func IsNodeIDKey(key string) bool {
-	return strings.HasPrefix(key, KeyNodeIDPrefix+separator)
+// IsNodeDescKey returns true iff the provided key is a valid node ID key.
+func IsNodeDescKey(key string) bool {
+	return strings.HasPrefix(key, KeyNodeDescPrefix+separator)
 }
 
-// NodeIDFromKey attempts to extract a NodeID from the provided key after
+// DecodeNodeDescKey attempts to extract a NodeID from the provided key after
 // stripping the provided prefix. Returns an error if the key is not of the
 // correct type or is not parsable.
-func NodeIDFromKey(key string, prefix string) (roachpb.NodeID, error) {
+func DecodeNodeDescKey(key string, prefix string) (roachpb.NodeID, error) {
 	trimmedKey, err := removePrefixFromKey(key, prefix)
 	if err != nil {
 		return 0, err
@@ -160,16 +160,16 @@ func MakeNodeLivenessKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeLivenessPrefix, nodeID.String())
 }
 
-// MakeStoreKey returns the gossip key for the given store.
-func MakeStoreKey(storeID roachpb.StoreID) string {
-	return MakeKey(KeyStorePrefix, storeID.String())
+// MakeStoreDescKey returns the gossip key for the given store.
+func MakeStoreDescKey(storeID roachpb.StoreID) string {
+	return MakeKey(KeyStoreDescPrefix, storeID.String())
 }
 
-// StoreIDFromKey attempts to extract a StoreID from the provided key after
+// DecodeStoreDescKey attempts to extract a StoreID from the provided key after
 // stripping the provided prefix. Returns an error if the key is not of the
 // correct type or is not parsable.
-func StoreIDFromKey(storeKey string) (roachpb.StoreID, error) {
-	trimmedKey, err := removePrefixFromKey(storeKey, KeyStorePrefix)
+func DecodeStoreDescKey(storeKey string) (roachpb.StoreID, error) {
+	trimmedKey, err := removePrefixFromKey(storeKey, KeyStoreDescPrefix)
 	if err != nil {
 		return 0, err
 	}

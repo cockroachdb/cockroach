@@ -401,7 +401,7 @@ func NewStorePool(
 	// Enable redundant callbacks for the store keys because we use these
 	// callbacks as a clock to determine when a store was last updated even if it
 	// hasn't otherwise changed.
-	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
+	storeRegex := gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
 	g.RegisterCallback(storeRegex, sp.storeGossipUpdate, gossip.Redundant)
 
 	return sp
