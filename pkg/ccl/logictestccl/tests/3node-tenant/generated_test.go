@@ -2177,3 +2177,10 @@ func TestTenantExecBuild_distsql_tenant(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant")
 }
+
+func TestTenantExecBuild_range_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "range_stats")
+}

@@ -486,6 +486,7 @@ func internalExtendedEvalCtx(
 			SchemaTelemetryController:      schemaTelemetryController,
 			IndexUsageStatsController:      indexUsageStatsController,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
+			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
