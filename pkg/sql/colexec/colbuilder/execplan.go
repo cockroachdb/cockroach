@@ -153,9 +153,9 @@ func needHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
 // vectorized engine (neither natively nor by wrapping the corresponding row
 // execution processor).
 func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
-	err := supportedNatively(spec)
+	err := supportedNatively(&spec.Core)
 	if err != nil {
-		if wrapErr := canWrap(mode, spec); wrapErr == nil {
+		if wrapErr := canWrap(mode, &spec.Core); wrapErr == nil {
 			// We don't support this spec natively, but we can wrap the row
 			// execution processor.
 			return nil
@@ -165,59 +165,59 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.Process
 }
 
 // supportedNatively checks whether we have a columnar operator equivalent to a
-// processor described by spec. Note that it doesn't perform any other checks
+// processor described by core. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
-func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
+func supportedNatively(core *execinfrapb.ProcessorCoreUnion) error {
 	switch {
-	case spec.Core.Noop != nil:
+	case core.Noop != nil:
 		return nil
 
-	case spec.Core.Values != nil:
+	case core.Values != nil:
 		return nil
 
-	case spec.Core.TableReader != nil:
+	case core.TableReader != nil:
 		return nil
 
-	case spec.Core.JoinReader != nil:
-		if !spec.Core.JoinReader.IsIndexJoin() {
+	case core.JoinReader != nil:
+		if !core.JoinReader.IsIndexJoin() {
 			return errLookupJoinUnsupported
 		}
 		return nil
 
-	case spec.Core.Filterer != nil:
+	case core.Filterer != nil:
 		return nil
 
-	case spec.Core.Aggregator != nil:
-		for _, agg := range spec.Core.Aggregator.Aggregations {
+	case core.Aggregator != nil:
+		for _, agg := range core.Aggregator.Aggregations {
 			if agg.FilterColIdx != nil {
 				return errors.Newf("filtering aggregation not supported")
 			}
 		}
 		return nil
 
-	case spec.Core.Distinct != nil:
+	case core.Distinct != nil:
 		return nil
 
-	case spec.Core.Ordinality != nil:
+	case core.Ordinality != nil:
 		return nil
 
-	case spec.Core.HashJoiner != nil:
-		if !spec.Core.HashJoiner.OnExpr.Empty() && spec.Core.HashJoiner.Type != descpb.InnerJoin {
+	case core.HashJoiner != nil:
+		if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
 		return nil
 
-	case spec.Core.MergeJoiner != nil:
-		if !spec.Core.MergeJoiner.OnExpr.Empty() && spec.Core.MergeJoiner.Type != descpb.InnerJoin {
+	case core.MergeJoiner != nil:
+		if !core.MergeJoiner.OnExpr.Empty() && core.MergeJoiner.Type != descpb.InnerJoin {
 			return errors.Errorf("can't plan non-inner merge join with ON expressions")
 		}
 		return nil
 
-	case spec.Core.Sorter != nil:
+	case core.Sorter != nil:
 		return nil
 
-	case spec.Core.Windower != nil:
-		for _, wf := range spec.Core.Windower.WindowFns {
+	case core.Windower != nil:
+		for _, wf := range core.Windower.WindowFns {
 			if wf.FilterColIdx != tree.NoColumnIdx {
 				return errors.Newf("window functions with FILTER clause are not supported")
 			}
@@ -229,7 +229,7 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		}
 		return nil
 
-	case spec.Core.LocalPlanNode != nil:
+	case core.LocalPlanNode != nil:
 		// LocalPlanNode core is special (we don't have any plans on vectorizing
 		// it at the moment), so we want to return a custom error for it to
 		// distinguish from other unsupported cores.
@@ -256,55 +256,55 @@ var (
 	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
 )
 
-func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
-	if mode == sessiondatapb.VectorizeExperimentalAlways && spec.Core.JoinReader == nil && spec.Core.LocalPlanNode == nil {
+func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCoreUnion) error {
+	if mode == sessiondatapb.VectorizeExperimentalAlways && core.JoinReader == nil && core.LocalPlanNode == nil {
 		return errExperimentalWrappingProhibited
 	}
 	switch {
-	case spec.Core.Noop != nil:
-	case spec.Core.TableReader != nil:
-	case spec.Core.JoinReader != nil:
-	case spec.Core.Sorter != nil:
-	case spec.Core.Aggregator != nil:
-	case spec.Core.Distinct != nil:
-	case spec.Core.MergeJoiner != nil:
-	case spec.Core.HashJoiner != nil:
-	case spec.Core.Values != nil:
-	case spec.Core.Backfiller != nil:
+	case core.Noop != nil:
+	case core.TableReader != nil:
+	case core.JoinReader != nil:
+	case core.Sorter != nil:
+	case core.Aggregator != nil:
+	case core.Distinct != nil:
+	case core.MergeJoiner != nil:
+	case core.HashJoiner != nil:
+	case core.Values != nil:
+	case core.Backfiller != nil:
 		return errBackfillerWrap
-	case spec.Core.ReadImport != nil:
+	case core.ReadImport != nil:
 		return errReadImportWrap
-	case spec.Core.Exporter != nil:
+	case core.Exporter != nil:
 		return errExporterWrap
-	case spec.Core.Sampler != nil:
+	case core.Sampler != nil:
 		return errSamplerWrap
-	case spec.Core.SampleAggregator != nil:
+	case core.SampleAggregator != nil:
 		return errSampleAggregatorWrap
-	case spec.Core.ZigzagJoiner != nil:
-	case spec.Core.ProjectSet != nil:
-	case spec.Core.Windower != nil:
-	case spec.Core.LocalPlanNode != nil:
-	case spec.Core.ChangeAggregator != nil:
+	case core.ZigzagJoiner != nil:
+	case core.ProjectSet != nil:
+	case core.Windower != nil:
+	case core.LocalPlanNode != nil:
+	case core.ChangeAggregator != nil:
 		// Currently, there is an issue with cleaning up the changefeed flows
 		// (#55408), so we fallback to the row-by-row engine.
 		return errChangeAggregatorWrap
-	case spec.Core.ChangeFrontier != nil:
+	case core.ChangeFrontier != nil:
 		// Currently, there is an issue with cleaning up the changefeed flows
 		// (#55408), so we fallback to the row-by-row engine.
 		return errChangeFrontierWrap
-	case spec.Core.Ordinality != nil:
-	case spec.Core.BulkRowWriter != nil:
-	case spec.Core.InvertedFilterer != nil:
-	case spec.Core.InvertedJoiner != nil:
-	case spec.Core.BackupData != nil:
+	case core.Ordinality != nil:
+	case core.BulkRowWriter != nil:
+	case core.InvertedFilterer != nil:
+	case core.InvertedJoiner != nil:
+	case core.BackupData != nil:
 		return errBackupDataWrap
-	case spec.Core.SplitAndScatter != nil:
-	case spec.Core.RestoreData != nil:
-	case spec.Core.Filterer != nil:
-	case spec.Core.StreamIngestionData != nil:
-	case spec.Core.StreamIngestionFrontier != nil:
+	case core.SplitAndScatter != nil:
+	case core.RestoreData != nil:
+	case core.Filterer != nil:
+	case core.StreamIngestionData != nil:
+	case core.StreamIngestionFrontier != nil:
 	default:
-		return errors.AssertionFailedf("unexpected processor core %q", spec.Core)
+		return errors.AssertionFailedf("unexpected processor core %q", core)
 	}
 	return nil
 }
@@ -516,7 +516,7 @@ func (r opResult) createAndWrapRowSource(
 		return errors.New("processorConstructor is nil")
 	}
 	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow: %v", causeToWrap)
-	if err := canWrap(flowCtx.EvalCtx.SessionData().VectorizeMode, spec); err != nil {
+	if err := canWrap(flowCtx.EvalCtx.SessionData().VectorizeMode, &spec.Core); err != nil {
 		log.VEventf(ctx, 1, "planning a wrapped processor failed: %v", err)
 		// Return the original error for why we don't support this spec
 		// natively since it is more interesting.
@@ -665,7 +665,7 @@ func NewColOperator(
 	core := &spec.Core
 	post := &spec.Post
 
-	if err = supportedNatively(spec); err != nil {
+	if err = supportedNatively(core); err != nil {
 		inputTypes := make([][]*types.T, len(spec.Input))
 		for inputIdx, input := range spec.Input {
 			inputTypes[inputIdx] = make([]*types.T, len(input.ColumnTypes))
