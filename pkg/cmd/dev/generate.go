@@ -40,6 +40,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate go        # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
         dev generate go_nocgo  # generates go code (execgen, stringer, protobufs, etc.)
         dev generate protobuf  # *.pb.go files (subset of 'dev generate go')
+        dev generate parser    # sql.go and parser dependencies (subset of 'dev generate go')
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -65,6 +66,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"go":       d.generateGo,
 		"go_nocgo": d.generateGoNoCgo,
 		"protobuf": d.generateProtobuf,
+		"parser":   d.generateParser,
 	}
 
 	if len(targets) == 0 {
@@ -173,6 +175,10 @@ func (d *dev) generateGoNoCgo(cmd *cobra.Command) error {
 
 func (d *dev) generateProtobuf(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:go_proto")
+}
+
+func (d *dev) generateParser(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:parser")
 }
 
 func (d *dev) generateTarget(ctx context.Context, target string) error {
