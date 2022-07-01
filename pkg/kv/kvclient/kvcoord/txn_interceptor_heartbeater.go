@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -291,6 +292,16 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	// caller's cancelation or span.
 	hbCtx, hbCancel := context.WithCancel(h.AnnotateCtx(context.Background()))
 
+	// If, by the time the first loopInterval has passed, this transaction would
+	// be considered expired, then synchronously attempt to heartbeat immediately
+	// before spawning the loop.
+	if txnwait.IsExpired(
+		h.clock.Now().Add(h.loopInterval.Nanoseconds(), 0 /* logical */),
+		h.mu.txn,
+	) {
+		log.VEventf(ctx, 2, "heartbeating immediately to avoid expiration")
+		h.heartbeatLocked(ctx)
+	}
 	// Delay spawning the loop goroutine until the first loopInterval passes, to
 	// avoid the associated cost for small write transactions. In benchmarks,
 	// this gave a 3% throughput increase for point writes at high concurrency.
@@ -362,22 +373,29 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-// heartbeat sends a HeartbeatTxnRequest to the txn record.
-// Returns true if heartbeating should continue, false if the transaction is no
-// longer Pending and so there's no point in heartbeating further.
+// heartbeat is a convenience method to be called by the heartbeat loop, acquiring
+// the mutex and issuing a request using heartbeatLocked before releasing it.
+// See comment on heartbeatLocked for more explanation.
 func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	// Like with the TxnCoordSender, the locking here is peculiar. The lock is not
-	// held continuously throughout this method: we acquire the lock here and
-	// then, inside the wrapped.Send() call, the interceptor at the bottom of the
-	// stack will unlock until it receives a response.
+	// held continuously throughout the heartbeatLocked method: we acquire the
+	// lock here and then, inside the wrapped.Send() call, the interceptor at the
+	// bottom of the stack will unlock until it receives a response.
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// The heartbeat loop might have raced with the cancelation of the heartbeat.
+	// The heartbeat loop might have raced with the cancellation of the heartbeat.
 	if ctx.Err() != nil {
 		return false
 	}
 
+	return h.heartbeatLocked(ctx)
+}
+
+// heartbeatLocked sends a HeartbeatTxnRequest to the txn record.
+// Returns true if heartbeating should continue, false if the transaction is no
+// longer Pending and so there's no point in heartbeating further.
+func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 	if h.mu.txn.Status != roachpb.PENDING {
 		if h.mu.txn.Status == roachpb.COMMITTED {
 			log.Fatalf(ctx, "txn committed but heartbeat loop hasn't been signaled to stop: %s", h.mu.txn)
