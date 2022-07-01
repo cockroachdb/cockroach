@@ -638,9 +638,9 @@ func TestTraceDistSQL(t *testing.T) {
 	require.True(t, ok, "table reader span not found")
 	require.Empty(t, rec.OrphanSpans())
 	// Check that the table reader indeed came from a remote note.
-	anonTagGroup := sp.FindTagGroup("")
-	require.NotNil(t, anonTagGroup)
-	val, ok := anonTagGroup.FindTag("node")
+	hiddenTagGroup := sp.FindTagGroup(tracingpb.HiddenTagGroupName)
+	require.NotNil(t, hiddenTagGroup)
+	val, ok := hiddenTagGroup.FindTag("node")
 	require.True(t, ok)
 	require.Equal(t, "2", val)
 }

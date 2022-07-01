@@ -870,16 +870,14 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		}
 		rs.Tags[k] = v
 
-		var tagGroup *tracingpb.TagGroup
-		for i, tg := range rs.TagGroups {
-			if tg.Name == "" {
-				tagGroup = &rs.TagGroups[i]
-				break
-			}
+		tagGroupName := tracingpb.AnonymousTagGroupName
+		if _, hidden := tracingpb.HiddenTags[k]; hidden {
+			tagGroupName = tracingpb.HiddenTagGroupName
 		}
+		tagGroup := rs.FindTagGroup(tagGroupName)
 
 		if tagGroup == nil {
-			tagGroup = addTagGroup("")
+			tagGroup = addTagGroup(tagGroupName)
 		}
 		tagGroup.Tags = append(tagGroup.Tags, tracingpb.Tag{
 			Key:   k,
@@ -950,6 +948,17 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 				addTag(kv.Key, v.String())
 			default:
 				addTag(kv.Key, fmt.Sprintf("<can't render %T>", kv.Value))
+			}
+		}
+
+		// Sort tag groups
+		for i := range rs.TagGroups {
+			if rs.TagGroups[i].Name == tracingpb.AnonymousTagGroupName {
+				rs.TagGroups[0], rs.TagGroups[i] = rs.TagGroups[i], rs.TagGroups[0]
+			}
+			if rs.TagGroups[i].Name == tracingpb.HiddenTagGroupName {
+				endIndex := len(rs.TagGroups) - 1
+				rs.TagGroups[endIndex], rs.TagGroups[i] = rs.TagGroups[i], rs.TagGroups[endIndex]
 			}
 		}
 	}

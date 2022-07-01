@@ -98,14 +98,6 @@ type ProcessedSnapshot struct {
 	Stacks map[int]string // GoroutineID to stack trace
 }
 
-var hiddenTags = map[string]struct{}{
-	"_unfinished": {},
-	"_verbose":    {},
-	"_dropped":    {},
-	"node":        {},
-	"store":       {},
-}
-
 type processedSpan struct {
 	Operation                     string
 	TraceID, SpanID, ParentSpanID uint64
@@ -148,6 +140,15 @@ type ProcessedChildTag struct {
 	Key, Val string
 }
 
+func appendRespectingHiddenGroup(tags []ProcessedTag, tag ProcessedTag) []ProcessedTag {
+	tags = append(tags, tag)
+	endIndex := len(tags) - 1
+	if tags[endIndex-1].Key == tracingpb.HiddenTagGroupName {
+		tags[endIndex], tags[endIndex-1] = tags[endIndex-1], tags[endIndex]
+	}
+	return tags
+}
+
 // propagateTagUpwards copies tag from sp to all of sp's ancestors.
 func propagateTagUpwards(tag ProcessedTag, sp *processedSpan, spans map[uint64]*processedSpan) {
 	tag.CopiedFromChild = true
@@ -158,7 +159,7 @@ func propagateTagUpwards(tag ProcessedTag, sp *processedSpan, spans map[uint64]*
 		if !ok {
 			return
 		}
-		p.Tags = append(p.Tags, tag)
+		p.Tags = appendRespectingHiddenGroup(p.Tags, tag)
 		parentID = p.ParentSpanID
 	}
 }
@@ -170,7 +171,7 @@ func propagateInheritTagDownwards(
 	tag.Inherited = true
 	tag.Hidden = true
 	for _, child := range children[sp.SpanID] {
-		child.Tags = append(child.Tags, tag)
+		child.Tags = appendRespectingHiddenGroup(child.Tags, tag)
 		propagateInheritTagDownwards(tag, child, children)
 	}
 }
@@ -191,7 +192,7 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 	for _, tagGroup := range s.TagGroups {
 		key := tagGroup.Name
 
-		if key == "" {
+		if key == tracingpb.AnonymousTagGroupName {
 			// The anonymous tag group. Each tag should be treated as top-level.
 			for _, tagKV := range tagGroup.Tags {
 				p.Tags = append(p.Tags, processTag(tagKV.Key, tagKV.Value, snap))
@@ -201,8 +202,9 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 			processedParentTag := ProcessedTag{
 				// Don't actually need to call processTag() here, none of the checks
 				// will apply to a tag group.
-				Key: key,
-				Val: "",
+				Key:    key,
+				Val:    "",
+				Hidden: key == tracingpb.HiddenTagGroupName,
 			}
 			processedParentTag.Children = make([]ProcessedChildTag, len(tagGroup.Tags))
 			for i, tag := range tagGroup.Tags {
@@ -219,16 +221,14 @@ func processSpan(s tracingpb.RecordedSpan, snap tracing.SpansSnapshot) processed
 	return p
 }
 
-// processTag massages span tags for presentation in the UI. It marks some tags
-// as hidden, it marks some tags to be inherited by child spans, and it expands
-// lock contention tags with information about the lock holder txn.
+// processTag massages span tags for presentation in the UI. It marks some
+// tags to be inherited by child spans, and it expands lock contention tags
+// with information about the lock holder txn.
 func processTag(k, v string, snap tracing.SpansSnapshot) ProcessedTag {
 	p := ProcessedTag{
 		Key: k,
 		Val: v,
 	}
-	_, hidden := hiddenTags[k]
-	p.Hidden = hidden
 
 	switch k {
 	case "lock_holder_txn":

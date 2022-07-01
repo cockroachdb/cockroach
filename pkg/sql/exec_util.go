@@ -2627,7 +2627,7 @@ func getMessagesForSubtrace(
 
 	for _, tg := range span.TagGroups {
 		var prefix string
-		if tg.Name != "" {
+		if _, ok := tracingpb.CustomTagGroupNames[tg.Name]; !ok {
 			prefix = fmt.Sprintf("%s-", tg.Name)
 		}
 		for _, tag := range tg.Tags {

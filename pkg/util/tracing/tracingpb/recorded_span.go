@@ -20,6 +20,30 @@ import (
 	types "github.com/gogo/protobuf/types"
 )
 
+const (
+	// AnonymousTagGroupName is the name of the anonymous tag group.
+	AnonymousTagGroupName = ""
+
+	// HiddenTagGroupName is the name of the hidden tag group.
+	HiddenTagGroupName = "..."
+)
+
+// CustomTagGroupNames lists the custom tag groups.
+var CustomTagGroupNames = map[string]struct{}{
+	AnonymousTagGroupName: {},
+	HiddenTagGroupName:    {},
+}
+
+// HiddenTags defines lower-priority tags that should be available but not
+// prominent.
+var HiddenTags = map[string]struct{}{
+	"_unfinished": {},
+	"_verbose":    {},
+	"_dropped":    {},
+	"node":        {},
+	"store":       {},
+}
+
 // TraceID is a probabilistically-unique id, shared by all spans in a trace.
 type TraceID uint64
 

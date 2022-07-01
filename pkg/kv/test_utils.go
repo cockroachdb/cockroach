@@ -27,7 +27,7 @@ func OnlyFollowerReads(rec tracingpb.Recording) bool {
 		if sp.Operation != "/cockroach.roachpb.Internal/Batch" {
 			continue
 		}
-		anonTagGroup := sp.FindTagGroup("")
+		anonTagGroup := sp.FindTagGroup(tracingpb.AnonymousTagGroupName)
 		if anonTagGroup == nil {
 			continue
 		}
