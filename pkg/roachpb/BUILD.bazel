@@ -172,7 +172,6 @@ proto_library(
     ],
 )
 
-# keep
 go_proto_library(
     name = "roachpb_go_proto",
     compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
