@@ -434,6 +434,7 @@ ALL_TESTS = [
     "//pkg/storage/enginepb:enginepb_test",
     "//pkg/storage/fs:fs_test",
     "//pkg/storage/metamorphic:metamorphic_test",
+    "//pkg/storage:storage_disallowed_imports_test",
     "//pkg/storage:storage_test",
     "//pkg/testutils/floatcmp:floatcmp_test",
     "//pkg/testutils/keysutils:keysutils_test",

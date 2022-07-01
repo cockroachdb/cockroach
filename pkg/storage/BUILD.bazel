@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "storage",
@@ -104,6 +105,7 @@ go_test(
         "disk_map_test.go",
         "engine_key_test.go",
         "engine_test.go",
+        "helpers_test.go",
         "intent_interleaving_iter_test.go",
         "intent_reader_writer_test.go",
         "main_test.go",
@@ -181,4 +183,11 @@ stringer(
     name = "gen-resourcelimitreached-stringer",
     src = "resource_limiter.go",
     typ = "ResourceLimitReached",
+)
+
+disallowed_imports_test(
+    src = "storage",
+    disallowed_list = [
+        "//pkg/sql/catalog/bootstrap",
+    ],
 )
