@@ -25,6 +25,7 @@ import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "util/tracing/tracingpb/tracing.proto";
+import "util/admission/admissionpb/io_threshold.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 
@@ -669,6 +670,7 @@ message RecomputeStatsResponse {
 
   // added_delta is the adjustment made to the range's stats, i.e. `new_stats = old_stats + added_delta`.
   storage.enginepb.MVCCStatsDelta added_delta = 2 [(gogoproto.nullable) = false];
+  util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
 }
 
 // An EndTxnRequest is the argument to the EndTxn() method. It specifies
