@@ -43,6 +43,7 @@ go_library(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
