@@ -1448,7 +1448,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// existing stores shouldn’t be able to acquire leases yet. Although, below
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
-	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node)
+	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, s.node, s.node)
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.

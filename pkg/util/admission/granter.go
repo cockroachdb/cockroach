@@ -17,8 +17,10 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -1263,7 +1265,7 @@ type StoreGrantCoordinators struct {
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
-	startupCtx context.Context, pmp PebbleMetricsProvider,
+	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
 ) {
 	if sgc.pebbleMetricsProvider != nil {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
@@ -1307,6 +1309,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
 							gc.pebbleMetricsTick(ctx, m.Metrics)
+							iotc.UpdateIOThreshold(roachpb.StoreID(m.StoreID), gc.ioLoadListener.ioThreshold)
 						} else {
 							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
@@ -1522,6 +1525,11 @@ type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
 }
 
+// IOThresholdConsumer is informed about updated IOThresholds.
+type IOThresholdConsumer interface {
+	UpdateIOThreshold(roachpb.StoreID, *admissionpb.IOThreshold)
+}
+
 // StoreMetrics are the metrics for a store.
 type StoreMetrics struct {
 	StoreID int32
@@ -1686,14 +1694,24 @@ const adjustmentInterval = 15
 func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, m *pebble.Metrics) {
 	if !io.statsInitialized {
 		io.statsInitialized = true
-		io.ioLoadListenerState = ioLoadListenerState{
-			cumAdmissionStats: io.kvRequester.getStoreAdmissionStats(),
-			cumL0AddedBytes:   m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
-			curL0Bytes:        m.Levels[0].Size,
-			// Reasonable starting fraction until we see some ingests.
-			smoothedIntIngestedAccountedL0BytesFraction: 0.5,
-			// No initial limit, i.e, the first interval is unlimited.
-			totalNumByteTokens: unlimitedTokens,
+		io.adjustTokensResult = adjustTokensResult{
+			ioLoadListenerState: ioLoadListenerState{
+				cumAdmissionStats: io.kvRequester.getStoreAdmissionStats(),
+				cumL0AddedBytes:   m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
+				curL0Bytes:        m.Levels[0].Size,
+				// Reasonable starting fraction until we see some ingests.
+				smoothedIntIngestedAccountedL0BytesFraction: 0.5,
+				// No initial limit, i.e, the first interval is unlimited.
+				totalNumByteTokens: unlimitedTokens,
+			},
+			requestEstimates: storeRequestEstimates{},
+			aux:              adjustTokensAuxComputations{},
+			ioThreshold: &admissionpb.IOThreshold{
+				L0NumSubLevels:          int64(m.Levels[0].Sublevels),
+				L0NumSubLevelsThreshold: math.MaxInt64,
+				L0NumFiles:              m.Levels[0].NumFiles,
+				L0NumFilesThreshold:     math.MaxInt64,
+			},
 		}
 		return
 	}
@@ -1740,15 +1758,12 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, m *pebble.Metrics) {
 	)
 	io.adjustTokensResult = res
 	io.kvRequester.setStoreRequestEstimates(res.requestEstimates)
-	if res.aux.shouldLog {
+	if _, overloaded := res.ioThreshold.Score(); overloaded {
 		log.Infof(logtags.AddTag(ctx, "s", io.storeID), "IO overload: %s", res)
 	}
 }
 
 type adjustTokensAuxComputations struct {
-	shouldLog                        bool
-	curL0NumFiles, curL0NumSublevels int64
-
 	intL0AddedBytes     int64
 	intL0CompactedBytes int64
 
@@ -1770,6 +1785,13 @@ func (*ioLoadListener) adjustTokensInner(
 	l0Metrics pebble.LevelMetrics,
 	threshNumFiles, threshNumSublevels int64,
 ) adjustTokensResult {
+	ioThreshold := &admissionpb.IOThreshold{
+		L0NumFiles:              l0Metrics.NumFiles,
+		L0NumFilesThreshold:     threshNumFiles,
+		L0NumSubLevels:          int64(l0Metrics.Sublevels),
+		L0NumSubLevelsThreshold: threshNumSublevels,
+	}
+
 	curL0Bytes := l0Metrics.Size
 	cumL0AddedBytes := l0Metrics.BytesFlushed + l0Metrics.BytesIngested
 	// L0 growth over the last interval.
@@ -1795,13 +1817,8 @@ func (*ioLoadListener) adjustTokensInner(
 
 	// intAdmittedCount is the number of requests admitted since the last token adjustment.
 	intAdmittedCount := cumAdmissionStats.admittedCount - prev.cumAdmissionStats.admittedCount
-	doLog := true
 	if intAdmittedCount <= 0 {
 		intAdmittedCount = 1
-		// Admission control is likely disabled, given there was no KVWork
-		// admitted for 15s. And even if it is enabled, this is not an interesting
-		// situation.
-		doLog = false
 	}
 
 	// intAdmittedBytes are the bytes admitted since the last token adjustment. This
@@ -1881,9 +1898,9 @@ func (*ioLoadListener) adjustTokensInner(
 	// We constrain admission if the store is over the threshold.
 	var totalNumByteTokens int64
 	var smoothedTotalNumByteTokens float64
-	curL0NumFiles := l0Metrics.NumFiles
-	curL0NumSublevels := int64(l0Metrics.Sublevels)
-	if curL0NumFiles > threshNumFiles || curL0NumSublevels > threshNumSublevels {
+
+	_, overloaded := ioThreshold.Score()
+	if overloaded {
 		// Don't admit more byte work than we can remove via compactions. totalNumByteTokens
 		// tracks our goal for admission.
 		// Scale down since we want to get under the thresholds over time. This
@@ -1909,7 +1926,6 @@ func (*ioLoadListener) adjustTokensInner(
 		numTokens := intL0CompactedBytes
 		smoothedTotalNumByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedTotalNumByteTokens
 		totalNumByteTokens = unlimitedTokens
-		doLog = false
 	}
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
@@ -1929,9 +1945,6 @@ func (*ioLoadListener) adjustTokensInner(
 			fractionOfIngestIntoL0: smoothedIntIngestedAccountedL0BytesFraction,
 		},
 		aux: adjustTokensAuxComputations{
-			shouldLog:                    doLog,
-			curL0NumFiles:                curL0NumFiles,
-			curL0NumSublevels:            curL0NumSublevels,
 			intL0AddedBytes:              intL0AddedBytes,
 			intL0CompactedBytes:          intL0CompactedBytes,
 			intAdmittedCount:             intAdmittedCount,
@@ -1943,6 +1956,7 @@ func (*ioLoadListener) adjustTokensInner(
 			intPerWorkUnaccountedL0Bytes: intPerWorkUnaccountedL0Bytes,
 			l0BytesIngestFraction:        intIngestedAccountedL0BytesFraction,
 		},
+		ioThreshold: ioThreshold,
 	}
 }
 
@@ -1950,6 +1964,7 @@ type adjustTokensResult struct {
 	ioLoadListenerState
 	requestEstimates storeRequestEstimates
 	aux              adjustTokensAuxComputations
+	ioThreshold      *admissionpb.IOThreshold // never nil
 }
 
 func max(i, j int64) int64 {
@@ -1962,7 +1977,7 @@ func max(i, j int64) int64 {
 func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	// NB: "≈" indicates smoothed quantities.
-	p.Printf("%d ssts, %d sub-levels, ", res.aux.curL0NumFiles, res.aux.curL0NumSublevels)
+	p.Printf("score %v (%d ssts, %d sub-levels), ", res.ioThreshold, res.ioThreshold.L0NumFiles, res.ioThreshold.L0NumSubLevels)
 	p.Printf("L0 growth %s: ", ib(res.aux.intL0AddedBytes))
 	// Writes to L0 that we expected because requests asked admission control for them.
 	// This is the "happy path".
