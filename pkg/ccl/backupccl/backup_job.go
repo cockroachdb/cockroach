@@ -96,7 +96,7 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	}
 	var nodes int
 	err = g.IterateInfos(
-		gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		gossip.KeyNodeDescPrefix, func(_ string, _ gossip.Info) error {
 			nodes++
 			return nil
 		},

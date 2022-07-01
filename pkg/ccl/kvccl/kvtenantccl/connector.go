@@ -258,7 +258,7 @@ var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, ro
 	// Subscribe to the ClusterID update.
 	gossip.KeyClusterID: (*Connector).updateClusterID,
 	// Subscribe to all *NodeDescriptor updates.
-	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Connector).updateNodeAddress,
+	gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix): (*Connector).updateNodeAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
 	gossip.KeyDeprecatedSystemConfig: (*Connector).updateSystemConfig,
 }
