@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -41,9 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -5694,5 +5697,211 @@ func TestElectionAfterRestart(t *testing.T) {
 
 	for rangeID, n := range rangeIDs {
 		assert.Zero(t, n, "unexpected election after timeout on r%d", rangeID)
+	}
+}
+
+// TestRaftSnapshotsWithMVCCRangeKeys tests that snapshots carry MVCC range keys
+// (i.e. MVCC range tombstones).
+func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+	sender := ts.DB().NonTransactionalSender()
+
+	// Split off a range at "a".
+	keyA := roachpb.Key("a")
+	tc.SplitRangeOrFatal(t, keyA)
+
+	// Write a couple of overlapping MVCC range tombstones across [a-d) and [b-e), and
+	// record their timestamps.
+	ts1 := ts.Clock().Now()
+	_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{
+		Timestamp: ts1,
+	}, &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("d"),
+		},
+		UseExperimentalRangeTombstone: true,
+	})
+	require.NoError(t, pErr.GoError())
+
+	ts2 := ts.Clock().Now()
+	_, pErr = kv.SendWrappedWith(ctx, sender, roachpb.Header{
+		Timestamp: ts2,
+	}, &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("b"),
+			EndKey: roachpb.Key("e"),
+		},
+		UseExperimentalRangeTombstone: true,
+	})
+	require.NoError(t, pErr.GoError())
+
+	// Split off a range at "c", in the middle of the range keys.
+	keyC := roachpb.Key("c")
+	descA, descC := tc.SplitRangeOrFatal(t, keyC)
+
+	// Upreplicate both ranges.
+	tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, keyC, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(keyA, tc.Targets(1, 2)...))
+	require.NoError(t, tc.WaitForVoters(keyC, tc.Targets(1, 2)...))
+
+	// Read them back from all stores.
+	for _, srv := range tc.Servers {
+		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+		require.Equal(t, kvs{
+			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),
+			rangeKVWithTS("b", "c", ts2, storage.MVCCValue{}),
+			rangeKVWithTS("b", "c", ts1, storage.MVCCValue{}),
+		}, storageutils.ScanRange(t, store.Engine(), descA))
+		require.Equal(t, kvs{
+			rangeKVWithTS("c", "d", ts2, storage.MVCCValue{}),
+			rangeKVWithTS("c", "d", ts1, storage.MVCCValue{}),
+			rangeKVWithTS("d", "e", ts2, storage.MVCCValue{}),
+		}, storageutils.ScanRange(t, store.Engine(), descC))
+	}
+
+	// Quick check of MVCC stats.
+	_, replA := getFirstStoreReplica(t, ts, keyA)
+	ms := replA.GetMVCCStats()
+	require.EqualValues(t, 2, ms.RangeKeyCount)
+	require.EqualValues(t, 3, ms.RangeValCount)
+
+	_, replL := getFirstStoreReplica(t, ts, keyC)
+	ms = replL.GetMVCCStats()
+	require.EqualValues(t, 2, ms.RangeKeyCount)
+	require.EqualValues(t, 3, ms.RangeValCount)
+
+	// Run a consistency check.
+	checkConsistency := func(desc roachpb.RangeDescriptor) {
+		resp, pErr := kv.SendWrapped(ctx, sender, checkConsistencyArgs(&desc))
+		require.NoError(t, pErr.GoError())
+		ccResp := resp.(*roachpb.CheckConsistencyResponse)
+		require.Len(t, ccResp.Result, 1)
+		result := ccResp.Result[0]
+		require.Equal(t, desc.RangeID, result.RangeID)
+		require.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+	}
+
+	checkConsistency(descA)
+	checkConsistency(descC)
+}
+
+// TestRaftSnapshotsWithMVCCRangeKeysEverywhere tests that snapshots carry MVCC
+// range keys in every key range (even though we normally only expect to see
+// them in the user key range).
+func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	engine := store.Engine()
+	sender := srv.DB().NonTransactionalSender()
+
+	// Split off ranges at "a" and "b".
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	tc.SplitRangeOrFatal(t, keyA)
+	descA, descB := tc.SplitRangeOrFatal(t, keyB)
+	descs := []roachpb.RangeDescriptor{descA, descB}
+
+	// Write MVCC range keys [a-z) in each replicated key range of each range.
+	// Throw in a local timestamp, to make sure the value is replicated too.
+	now := srv.Clock().Now()
+	valueLocalTS := storage.MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: now.WallPrev().UnsafeToClockTimestamp(),
+		},
+	}
+	valueLocalTSRaw, err := storage.EncodeMVCCValue(valueLocalTS)
+	require.NoError(t, err)
+
+	for _, desc := range descs {
+		for _, keyRange := range rditer.MakeReplicatedKeyRanges(&desc) {
+			prefix := append(keyRange.Start.Clone(), ':')
+			require.NoError(t, engine.ExperimentalPutMVCCRangeKey(storage.MVCCRangeKey{
+				StartKey:  append(prefix.Clone(), 'a'),
+				EndKey:    append(prefix.Clone(), 'z'),
+				Timestamp: now,
+			}, valueLocalTS))
+		}
+	}
+
+	// Recompute stats, since the above writes didn't update stats. We just do
+	// this so that we can run a consistency check, since the stats may or may not
+	// pick up the range keys in different key ranges.
+	for _, desc := range descs {
+		_, pErr := kv.SendWrapped(ctx, sender, &roachpb.RecomputeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: desc.StartKey.AsRawKey(),
+			},
+		})
+		require.NoError(t, pErr.GoError())
+	}
+
+	// Upreplicate both ranges.
+	for _, desc := range descs {
+		tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+		require.NoError(t, tc.WaitForVoters(desc.StartKey.AsRawKey(), tc.Targets(1, 2)...))
+	}
+
+	// Look for the range keys on the other servers.
+	for _, srvIdx := range []int{1, 2} {
+		e := tc.GetFirstStoreFromServer(t, srvIdx).Engine()
+		for _, desc := range descs {
+			for _, keyRange := range rditer.MakeReplicatedKeyRanges(&desc) {
+				prefix := append(keyRange.Start.Clone(), ':')
+
+				iter := e.NewEngineIterator(storage.IterOptions{
+					KeyTypes:   storage.IterKeyTypeRangesOnly,
+					LowerBound: keyRange.Start,
+					UpperBound: keyRange.End,
+				})
+				defer iter.Close()
+
+				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: keyRange.Start})
+				require.NoError(t, err)
+				require.True(t, ok)
+				bounds, err := iter.EngineRangeBounds()
+				require.NoError(t, err)
+				require.Equal(t, roachpb.Span{
+					Key:    append(prefix.Clone(), 'a'),
+					EndKey: append(prefix.Clone(), 'z'),
+				}, bounds)
+				require.Equal(t, []storage.EngineRangeKeyValue{{
+					Version: storage.EncodeMVCCTimestampSuffix(now),
+					Value:   valueLocalTSRaw,
+				}}, iter.EngineRangeKeys())
+
+				ok, err = iter.NextEngineKey()
+				require.NoError(t, err)
+				require.False(t, ok)
+			}
+		}
+	}
+
+	// Run consistency checks.
+	for _, desc := range descs {
+		resp, pErr := kv.SendWrapped(ctx, sender, checkConsistencyArgs(&desc))
+		require.NoError(t, pErr.GoError())
+		ccResp := resp.(*roachpb.CheckConsistencyResponse)
+		require.Len(t, ccResp.Result, 1)
+		result := ccResp.Result[0]
+		require.Equal(t, desc.RangeID, result.RangeID)
+		require.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
 	}
 }

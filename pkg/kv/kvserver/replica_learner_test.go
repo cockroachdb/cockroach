@@ -1720,14 +1720,27 @@ func getExpectedSnapshotSizeBytes(
 	iter := snap.Iter
 	var ok bool
 	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		var unsafeKey storage.EngineKey
-		if unsafeKey, err = iter.UnsafeKey(); err != nil {
-			return 0, err
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			var unsafeKey storage.EngineKey
+			if unsafeKey, err = iter.UnsafeKey(); err != nil {
+				return 0, err
+			}
+			if err := b.PutEngineKey(unsafeKey, iter.UnsafeValue()); err != nil {
+				return 0, err
+			}
 		}
-		unsafeValue := iter.UnsafeValue()
-
-		if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
-			return 0, err
+		if hasRange {
+			bounds, err := iter.RangeBounds()
+			if err != nil {
+				return 0, err
+			}
+			for _, rkv := range iter.RangeKeys() {
+				err := b.ExperimentalPutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+				if err != nil {
+					return 0, err
+				}
+			}
 		}
 	}
 	if err != nil {
