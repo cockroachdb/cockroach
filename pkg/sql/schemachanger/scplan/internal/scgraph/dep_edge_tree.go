@@ -85,10 +85,7 @@ func (et *depEdgeTree) iterateSourceNode(n *screl.Node, it DepEdgeIterator) (err
 		err = it(e.edge)
 		return err == nil
 	})
-	if iterutil.Done(err) {
-		err = nil
-	}
-	return err
+	return iterutil.Map(err)
 }
 
 // Less implements btree.Item.

@@ -210,11 +210,7 @@ func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr 
 		return iterErr == nil
 	})
 
-	if iterutil.Done(iterErr) {
-		iterErr = nil // Early termination is fine.
-	}
-
-	return
+	return iterutil.Map(iterErr)
 }
 
 // activeRangeFeed is a thread safe PartialRangeFeed.

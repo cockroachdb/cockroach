@@ -36,7 +36,7 @@ func marshalKey(k interface{}) (roachpb.Key, error) {
 	case string:
 		return roachpb.Key(t), nil
 	case []byte:
-		return roachpb.Key(t), nil
+		return t, nil
 	}
 	return nil, fmt.Errorf("unable to marshal key: %T %q", k, k)
 }
@@ -74,7 +74,7 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		return r, err
 
 	case roachpb.Key:
-		r.SetBytes([]byte(t))
+		r.SetBytes(t)
 		return r, nil
 
 	case time.Time:
