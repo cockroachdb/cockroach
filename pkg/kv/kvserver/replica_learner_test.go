@@ -1717,18 +1717,21 @@ func getExpectedSnapshotSizeBytes(
 		b.Close()
 	}()
 	b = originStore.Engine().NewUnindexedBatch(true)
-	for iter := snap.Iter; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
+	iter := snap.Iter
+	var ok bool
+	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
+		var unsafeKey storage.EngineKey
+		if unsafeKey, err = iter.UnsafeKey(); err != nil {
 			return 0, err
-		} else if !ok {
-			break
 		}
-		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
 
 		if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
 			return 0, err
 		}
+	}
+	if err != nil {
+		return 0, err
 	}
 	totalBytes += int64(b.Len())
 

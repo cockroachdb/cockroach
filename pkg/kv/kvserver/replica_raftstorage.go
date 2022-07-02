@@ -603,7 +603,8 @@ func snapshot(
 
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaEngineDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaEngineDataIterator(
+		&desc, snap, storage.IterKeyTypePointsOnly, true /* replicatedOnly */)
 
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,

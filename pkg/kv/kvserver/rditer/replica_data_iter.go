@@ -50,11 +50,11 @@ type ReplicaMVCCDataIterator struct {
 // using the general EngineKeys. It provides a subset of the engine.EngineIterator
 // interface.
 type ReplicaEngineDataIterator struct {
+	reader   storage.Reader
+	keyTypes storage.IterKeyType
 	curIndex int
 	ranges   []KeyRange
 	it       storage.EngineIterator
-	valid    bool
-	err      error
 }
 
 // MakeAllKeyRanges returns all key ranges for the given Range, in
@@ -335,93 +335,110 @@ func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 
 // NewReplicaEngineDataIterator creates a ReplicaEngineDataIterator for the given replica.
 func NewReplicaEngineDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, replicatedOnly bool,
+	desc *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	keyTypes storage.IterKeyType,
+	replicatedOnly bool,
 ) *ReplicaEngineDataIterator {
-	it := reader.NewEngineIterator(storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
+	if !reader.ConsistentIterators() {
+		panic("ReplicaEngineDataIterator requires consistent iterators")
+	}
 
-	rangeFunc := MakeAllKeyRanges
+	var ranges []KeyRange
 	if replicatedOnly {
-		rangeFunc = MakeReplicatedKeyRanges
+		ranges = MakeReplicatedKeyRanges(desc)
+	} else {
+		ranges = MakeAllKeyRanges(desc)
 	}
-	ri := &ReplicaEngineDataIterator{
-		ranges: rangeFunc(d),
-		it:     it,
+
+	return &ReplicaEngineDataIterator{
+		reader:   reader,
+		keyTypes: keyTypes,
+		ranges:   ranges,
 	}
-	ri.seekStart()
-	return ri
 }
 
-// seekStart seeks the iterator to the start of its data range.
-func (ri *ReplicaEngineDataIterator) seekStart() {
-	ri.curIndex = 0
-	ri.valid, ri.err = ri.it.SeekEngineKeyGE(storage.EngineKey{Key: ri.ranges[ri.curIndex].Start})
-	ri.advance()
+// nextIter creates an iterator for the next non-empty key range and seeks it,
+// closing the existing iterator if any. Returns false if all key ranges have
+// been exhausted.
+//
+// TODO(erikgrinaker): Rather than creating a new iterator for each key range,
+// we could expose an API to reconfigure the iterator with new bounds. However,
+// the caller could also use e.g. a pebbleReadOnly which reuses the iterator
+// internally. This should be benchmarked.
+func (ri *ReplicaEngineDataIterator) nextIter() (bool, error) {
+	if ri.it == nil {
+		// If there is no existing iterator, start off at range 0.
+		ri.curIndex = -1
+	}
+	for ri.curIndex++; ri.curIndex < len(ri.ranges); ri.curIndex++ {
+		if ri.it != nil {
+			ri.it.Close()
+		}
+		keyRange := ri.ranges[ri.curIndex]
+		ri.it = ri.reader.NewEngineIterator(storage.IterOptions{
+			KeyTypes:   ri.keyTypes,
+			LowerBound: keyRange.Start,
+			UpperBound: keyRange.End,
+		})
+		if ok, err := ri.it.SeekEngineKeyGE(storage.EngineKey{Key: keyRange.Start}); ok || err != nil {
+			return ok, err
+		}
+	}
+	return false, nil
 }
 
 // Close the underlying iterator.
 func (ri *ReplicaEngineDataIterator) Close() {
-	ri.valid = false
-	ri.it.Close()
-}
-
-// Next advances to the next key in the iteration.
-func (ri *ReplicaEngineDataIterator) Next() {
-	ri.valid, ri.err = ri.it.NextEngineKey()
-	ri.advance()
-}
-
-// advance moves the iterator forward through the ranges until a valid
-// key is found or the iteration is done and the iterator becomes
-// invalid.
-func (ri *ReplicaEngineDataIterator) advance() {
-	for ri.valid {
-		var k storage.EngineKey
-		k, ri.err = ri.it.UnsafeEngineKey()
-		if ri.err != nil {
-			ri.valid = false
-			return
-		}
-		if k.Key.Compare(ri.ranges[ri.curIndex].End) < 0 {
-			return
-		}
-		ri.curIndex++
-		if ri.curIndex < len(ri.ranges) {
-			ri.valid, ri.err = ri.it.SeekEngineKeyGE(
-				storage.EngineKey{Key: ri.ranges[ri.curIndex].Start})
-		} else {
-			ri.valid = false
-			return
-		}
+	if ri.it != nil {
+		ri.it.Close()
 	}
 }
 
-// Valid returns true if the iterator currently points to a valid value.
-func (ri *ReplicaEngineDataIterator) Valid() (bool, error) {
-	return ri.valid, ri.err
+// SeekStart seeks the iterator to the start of the key ranges.
+// It returns false if the iterator did not find any data.
+func (ri *ReplicaEngineDataIterator) SeekStart() (bool, error) {
+	if ri.it != nil {
+		ri.it.Close()
+		ri.it = nil
+	}
+	return ri.nextIter()
+}
+
+// Next advances to the next key in the iteration.
+func (ri *ReplicaEngineDataIterator) Next() (bool, error) {
+	ok, err := ri.it.NextEngineKey()
+	if !ok && err == nil {
+		ok, err = ri.nextIter()
+	}
+	return ok, err
 }
 
 // Value returns the current value. Only used in tests.
 func (ri *ReplicaEngineDataIterator) Value() []byte {
-	value := ri.it.UnsafeValue()
-	valueCopy := make([]byte, len(value))
-	copy(valueCopy, value)
-	return valueCopy
+	return append([]byte(nil), ri.it.UnsafeValue()...)
 }
 
 // UnsafeKey returns the current key, but the memory is invalidated on the
 // next call to {Next,Close}.
-func (ri *ReplicaEngineDataIterator) UnsafeKey() storage.EngineKey {
-	key, err := ri.it.UnsafeEngineKey()
-	if err != nil {
-		// If Valid(), we've already extracted an EngineKey earlier,
-		// when doing the key comparison, so this will not happen.
-		panic("method called on an invalid iter")
-	}
-	return key
+func (ri *ReplicaEngineDataIterator) UnsafeKey() (storage.EngineKey, error) {
+	return ri.it.UnsafeEngineKey()
 }
 
 // UnsafeValue returns the same value as Value, but the memory is invalidated on
 // the next call to {Next,Close}.
 func (ri *ReplicaEngineDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
+}
+
+// RangeBounds returns the current range key bounds, but the memory is
+// invalidated on the next call to {Next,Close}.
+func (ri *ReplicaEngineDataIterator) RangeBounds() (roachpb.Span, error) {
+	return ri.it.EngineRangeBounds()
+}
+
+// RangeKeys returns the current range keys, but the memory is invalidated on the
+// next call to {Next,Close}.
+func (ri *ReplicaEngineDataIterator) RangeKeys() []storage.EngineRangeKeyValue {
+	return ri.it.EngineRangeKeys()
 }

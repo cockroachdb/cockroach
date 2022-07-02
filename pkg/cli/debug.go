@@ -439,22 +439,26 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := rditer.NewReplicaEngineDataIterator(&desc, db, debugCtx.replicated)
+	snapshot := db.NewSnapshot()
+	defer snapshot.Close()
+
+	iter := rditer.NewReplicaEngineDataIterator(
+		&desc, snapshot, storage.IterKeyTypePointsOnly, debugCtx.replicated)
 	defer iter.Close()
 	results := 0
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return err
-		} else if !ok {
+	var ok bool
+	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
+		var key storage.EngineKey
+		if key, err = iter.UnsafeKey(); err != nil {
 			break
 		}
-		kvserver.PrintEngineKeyValue(iter.UnsafeKey(), iter.UnsafeValue())
+		kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
 		results++
 		if results == debugCtx.maxResults {
 			break
 		}
 	}
-	return nil
+	return err
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
