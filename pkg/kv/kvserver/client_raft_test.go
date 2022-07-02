@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -5695,4 +5696,100 @@ func TestElectionAfterRestart(t *testing.T) {
 	for rangeID, n := range rangeIDs {
 		assert.Zero(t, n, "unexpected election after timeout on r%d", rangeID)
 	}
+}
+
+// TestRaftSnapshotsWithMVCCRangeKeys tests that snapshots carry MVCC range keys
+// (i.e. MVCC range tombstones).
+func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Server(0)
+	sender := ts.DB().NonTransactionalSender()
+
+	// Split off a range at "a".
+	keyA := roachpb.Key("a")
+	_, descA := tc.SplitRangeOrFatal(t, keyA)
+
+	// Write a couple of overlapping MVCC range tombstones across [a-d) and [b-e), and
+	// record their timestamps.
+	ts1 := ts.Clock().Now()
+	_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{
+		Timestamp: ts1,
+	}, &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("d"),
+		},
+		UseExperimentalRangeTombstone: true,
+	})
+	require.NoError(t, pErr.GoError())
+
+	ts2 := ts.Clock().Now()
+	_, pErr = kv.SendWrappedWith(ctx, sender, roachpb.Header{
+		Timestamp: ts2,
+	}, &roachpb.DeleteRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("b"),
+			EndKey: roachpb.Key("e"),
+		},
+		UseExperimentalRangeTombstone: true,
+	})
+	require.NoError(t, pErr.GoError())
+
+	// Split off a range at "c", in the middle of the range keys.
+	keyC := roachpb.Key("c")
+	descA, descC := tc.SplitRangeOrFatal(t, keyC)
+
+	// Upreplicate both ranges.
+	tc.AddVotersOrFatal(t, keyA, tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, keyC, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(keyA, tc.Targets(1, 2)...))
+	require.NoError(t, tc.WaitForVoters(keyC, tc.Targets(1, 2)...))
+
+	// Read them back from all stores.
+	for _, srv := range tc.Servers {
+		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+		require.Equal(t, kvs{
+			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),
+			rangeKVWithTS("b", "c", ts2, storage.MVCCValue{}),
+			rangeKVWithTS("b", "c", ts1, storage.MVCCValue{}),
+		}, storageutils.ScanRange(t, store.Engine(), descA))
+		require.Equal(t, kvs{
+			rangeKVWithTS("c", "d", ts2, storage.MVCCValue{}),
+			rangeKVWithTS("c", "d", ts1, storage.MVCCValue{}),
+			rangeKVWithTS("d", "e", ts2, storage.MVCCValue{}),
+		}, storageutils.ScanRange(t, store.Engine(), descC))
+	}
+
+	// Quick check of MVCC stats.
+	_, replA := getFirstStoreReplica(t, ts, keyA)
+	ms := replA.GetMVCCStats()
+	require.EqualValues(t, 2, ms.RangeKeyCount)
+	require.EqualValues(t, 3, ms.RangeValCount)
+
+	_, replL := getFirstStoreReplica(t, ts, keyC)
+	ms = replL.GetMVCCStats()
+	require.EqualValues(t, 2, ms.RangeKeyCount)
+	require.EqualValues(t, 3, ms.RangeValCount)
+
+	// Run a consistency check.
+	checkConsistency := func(desc roachpb.RangeDescriptor) {
+		resp, pErr := kv.SendWrapped(ctx, sender, checkConsistencyArgs(&desc))
+		require.NoError(t, pErr.GoError())
+		ccResp := resp.(*roachpb.CheckConsistencyResponse)
+		require.Len(t, ccResp.Result, 1)
+		result := ccResp.Result[0]
+		require.Equal(t, desc.RangeID, result.RangeID)
+		require.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, result.Status, "%+v", result)
+	}
+
+	checkConsistency(descA)
+	checkConsistency(descC)
 }

@@ -502,8 +502,9 @@ type OutgoingSnapshot struct {
 	RaftSnap raftpb.Snapshot
 	// The RocksDB snapshot that will be streamed from.
 	EngineSnap storage.Reader
-	// The complete range iterator for the snapshot to stream.
-	Iter *rditer.ReplicaEngineDataIterator
+	// Iterators for the complete range snapshot to stream.
+	PointKeyIter *rditer.ReplicaEngineDataIterator
+	RangeKeyIter *rditer.ReplicaEngineDataIterator
 	// The replica state within the snapshot.
 	State kvserverpb.ReplicaState
 	// Allows access the original Replica's sideloaded storage. Note that
@@ -528,7 +529,8 @@ func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
-	s.Iter.Close()
+	s.PointKeyIter.Close()
+	s.RangeKeyIter.Close()
 	s.EngineSnap.Close()
 	if s.onClose != nil {
 		s.onClose()
@@ -603,14 +605,17 @@ func snapshot(
 
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaEngineDataIterator(
+	pointKeyIter := rditer.NewReplicaEngineDataIterator(
 		&desc, snap, storage.IterKeyTypePointsOnly, true /* replicatedOnly */)
+	rangeKeyIter := rditer.NewReplicaEngineDataIterator(
+		&desc, snap, storage.IterKeyTypeRangesOnly, true /* replicatedOnly */)
 
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
 		EngineSnap:     snap,
-		Iter:           iter,
+		PointKeyIter:   pointKeyIter,
+		RangeKeyIter:   rangeKeyIter,
 		State:          state,
 		SnapUUID:       snapUUID,
 		RaftSnap: raftpb.Snapshot{

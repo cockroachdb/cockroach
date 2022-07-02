@@ -1717,7 +1717,7 @@ func getExpectedSnapshotSizeBytes(
 		b.Close()
 	}()
 	b = originStore.Engine().NewUnindexedBatch(true)
-	iter := snap.Iter
+	iter := snap.PointKeyIter
 	var ok bool
 	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
 		var unsafeKey storage.EngineKey
