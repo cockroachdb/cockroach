@@ -299,10 +299,7 @@ func (s *SearchPath) IterateSearchPath(f func(schema string) error) error {
 	iter := s.Iter()
 	for schema, ok := iter.Next(); ok; schema, ok = iter.Next() {
 		if err := f(schema); err != nil {
-			if iterutil.Done(err) {
-				err = nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

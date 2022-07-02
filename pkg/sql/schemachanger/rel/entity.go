@@ -93,10 +93,7 @@ func (sc *Schema) IterateAttributes(
 		}
 		seen = seen.add(field.attr)
 		if err := f(attr, v); err != nil {
-			if iterutil.Done(err) {
-				err = nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

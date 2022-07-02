@@ -115,10 +115,7 @@ func (ms *MetadataSchema) AddDescriptorForNonSystemTenant(desc catalog.Descripto
 func (ms MetadataSchema) ForEachCatalogDescriptor(fn func(desc catalog.Descriptor) error) error {
 	for _, desc := range ms.descs {
 		if err := fn(desc); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
