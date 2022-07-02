@@ -118,20 +118,6 @@ func assertStrategy(
 	}
 }
 
-// Separated locks and snapshots send/receive:
-// When running in a mixed version cluster with 21.1 and 20.2, snapshots sent
-// by 21.1 nodes will attempt to read the lock table key space and send any
-// keys in it. But there will be none, so 20.2 nodes receiving such snapshots
-// are fine. A 21.1 node receiving a snapshot will construct SSTs for the lock
-// table key range which will only contain ClearRange for those ranges.
-//
-// When the cluster transitions to clusterversion.SeparatedLocks, the nodes
-// that see that transition can immediately start writing separated
-// intents/locks. Since the 21.1 nodes that have not seen that transition are
-// always ready to handle separated intents, including receiving them in
-// snapshots, the cluster will behave correctly despite nodes seeing this
-// state transition at different times.
-
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
@@ -153,9 +139,8 @@ type kvBatchSnapshotStrategy struct {
 	st      *cluster.Settings
 }
 
-// multiSSTWriter is a wrapper around RocksDBSstFileWriter and
-// SSTSnapshotStorageScratch that handles chunking SSTs and persisting them to
-// disk.
+// multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
+// that handles chunking SSTs and persisting them to disk.
 type multiSSTWriter struct {
 	st        *cluster.Settings
 	scratch   *SSTSnapshotStorageScratch
@@ -234,6 +219,33 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 	return nil
 }
 
+func (msstw *multiSSTWriter) PutRangeKey(
+	ctx context.Context, start, end roachpb.Key, suffix []byte, value []byte,
+) error {
+	if start.Compare(end) >= 0 {
+		return errors.AssertionFailedf("start key %s must be before end key %s", end, start)
+	}
+	for msstw.keyRanges[msstw.currRange].End.Compare(start) <= 0 {
+		// Finish the current SST, write to the file, and move to the next key
+		// range.
+		if err := msstw.finalizeSST(ctx); err != nil {
+			return err
+		}
+		if err := msstw.initSST(ctx); err != nil {
+			return err
+		}
+	}
+	if msstw.keyRanges[msstw.currRange].Start.Compare(start) > 0 ||
+		msstw.keyRanges[msstw.currRange].End.Compare(end) < 0 {
+		return errors.AssertionFailedf("client error: expected %s to fall in one of %s",
+			roachpb.Span{Key: start, EndKey: end}, msstw.keyRanges)
+	}
+	if err := msstw.currSST.ExperimentalPutEngineRangeKey(start, end, suffix, value); err != nil {
+		return errors.Wrap(err, "failed to put range key in sst")
+	}
+	return nil
+}
+
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
 	if msstw.currRange < len(msstw.keyRanges) {
 		for {
@@ -257,13 +269,21 @@ func (msstw *multiSSTWriter) Close() {
 
 // Receive implements the snapshotStrategy interface.
 //
-// NOTE: This function assumes that the key-value pairs are sent in sorted
-// order. The key-value pairs are sent in the following sorted order:
+// NOTE: This function assumes that the point and range (e.g. MVCC range
+// tombstone) KV pairs are sent grouped by the following key ranges in order:
 //
 // 1. Replicated range-id local key range
 // 2. Range-local key range
 // 3. Two lock-table key ranges (optional)
 // 4. User key range
+//
+// For each key range above, all point keys are sent first (in sorted order) and
+// then all range keys (in sorted order), possibly mixed in the same batch.
+// However, we currently only expect to see range keys in the user key range.
+//
+// This allows building individual SSTs per key range containing all point/range
+// KVs for that key range, without the SSTs spanning across wide swaths of the
+// key space across to the next key range.
 func (kvSS *kvBatchSnapshotStrategy) Receive(
 	ctx context.Context,
 	stream incomingSnapshotStream,
@@ -297,17 +317,40 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
 			}
-			// All operations in the batch are guaranteed to be puts.
+			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
-				if batchReader.BatchType() != storage.BatchTypeValue {
-					return noSnap, errors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
-				}
-				key, err := batchReader.EngineKey()
-				if err != nil {
-					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
-				}
-				if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
-					return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
+				switch batchReader.BatchType() {
+				case storage.BatchTypeValue:
+					key, err := batchReader.EngineKey()
+					if err != nil {
+						return noSnap, err
+					}
+					if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
+						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
+					}
+
+				case storage.BatchTypeRangeKeySet:
+					start, err := batchReader.EngineKey()
+					if err != nil {
+						return noSnap, err
+					}
+					end, err := batchReader.EngineEndKey()
+					if err != nil {
+						return noSnap, err
+					}
+					rangeKeys, err := batchReader.EngineRangeKeys()
+					if err != nil {
+						return noSnap, err
+					}
+					for _, rkv := range rangeKeys {
+						err := msstw.PutRangeKey(ctx, start.Key, end.Key, rkv.Version, rkv.Value)
+						if err != nil {
+							return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
+						}
+					}
+
+				default:
+					return noSnap, errors.AssertionFailedf("unexpected batch entry type %d", batchReader.BatchType())
 				}
 			}
 		}
@@ -362,9 +405,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// CRDB, as of VersionUnreplicatedTruncatedState).
 	bytesSent := int64(0)
 
-	// Iterate over all keys using the provided iterator and stream out batches
-	// of key-values.
-	kvs := 0
+	// Iterate over all keys (point keys and range keys) using the provided
+	// iterator and stream out batches of key-values.
+	var kvs, rangeKVs int
 	var b storage.Batch
 	defer func() {
 		if b != nil {
@@ -372,45 +415,76 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 	}()
 
+	flushBatch := func() error {
+		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
+			return err
+		}
+		bLen := int64(b.Len())
+		bytesSent += bLen
+		recordBytesSent(bLen)
+		b.Close()
+		b = nil
+		return nil
+	}
+
 	iter := snap.Iter
 	var ok bool
 	var err error
 	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		kvs++
-		var unsafeKey storage.EngineKey
-		if unsafeKey, err = iter.UnsafeKey(); err != nil {
-			return 0, err
-		}
-		unsafeValue := iter.UnsafeValue()
-		if b == nil {
-			b = kvSS.newBatch()
-		}
-		if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
-			return 0, err
-		}
+		// NB: EngineReplicaDataIterator will never expose point/range keys
+		// together: it first iterates over all point keys in a key range, then over
+		// all range keys in a key range, then moves onto the next key range.
+		hasPoint, hasRange := iter.HasPointAndRange()
 
-		if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
-			if err := kvSS.sendBatch(ctx, stream, b); err != nil {
+		if hasPoint {
+			kvs++
+			var unsafeKey storage.EngineKey
+			if unsafeKey, err = iter.UnsafeKey(); err != nil {
 				return 0, err
 			}
-			bytesSent += bLen
-			recordBytesSent(bLen)
-			b.Close()
-			b = nil
+			unsafeValue := iter.UnsafeValue()
+			if b == nil {
+				b = kvSS.newBatch()
+			}
+			if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
+				return 0, err
+			}
+			if int64(b.Len()) >= kvSS.batchSize {
+				if err = flushBatch(); err != nil {
+					return 0, err
+				}
+			}
+		}
+
+		if hasRange {
+			bounds, err := iter.RangeBounds()
+			if err != nil {
+				return 0, err
+			}
+			for _, rkv := range iter.RangeKeys() {
+				rangeKVs++
+				err := b.ExperimentalPutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+				if err != nil {
+					return 0, err
+				}
+				if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
+					if err = flushBatch(); err != nil {
+						return 0, err
+					}
+				}
+			}
 		}
 	}
 	if err != nil {
 		return 0, err
 	}
 	if b != nil {
-		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
+		if err = flushBatch(); err != nil {
 			return 0, err
 		}
-		bytesSent += int64(b.Len())
-		recordBytesSent(int64(b.Len()))
 	}
 
-	kvSS.status = redact.Sprintf("kv pairs: %d", kvs)
+	kvSS.status = redact.Sprintf("kvs=%d rangeKVs=%d", kvs, rangeKVs)
 	return bytesSent, nil
 }
 
