@@ -611,3 +611,7 @@ func rangeKV(start, end string, ts int, v MVCCValue) MVCCRangeKeyValue {
 func wallTS(ts int) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: int64(ts)}
 }
+
+func wallTSRaw(ts int) []byte {
+	return EncodeMVCCTimestampSuffix(wallTS(ts))
+}
