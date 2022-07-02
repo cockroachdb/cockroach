@@ -450,10 +450,7 @@ func (r *SpanRegistry) VisitRoots(visitor func(span RegistrySpan) error) error {
 
 	for _, sp := range spans {
 		if err := visitor(sp.Span.i.crdb); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

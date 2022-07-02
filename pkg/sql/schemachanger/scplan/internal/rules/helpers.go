@@ -139,10 +139,7 @@ func forEachElement(fn func(element scpb.Element) error) error {
 	for i := 0; i < vep.NumField(); i++ {
 		e := vep.Field(i).Interface().(scpb.Element)
 		if err := fn(e); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

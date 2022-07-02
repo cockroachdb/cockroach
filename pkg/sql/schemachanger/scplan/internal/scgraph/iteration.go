@@ -26,10 +26,7 @@ func (g *Graph) ForEachNode(it NodeIterator) error {
 		for i := 0; i < scpb.NumStatus; i++ {
 			if ts, ok := m[scpb.Status(i)]; ok {
 				if err := it(ts); err != nil {
-					if iterutil.Done(err) {
-						err = nil
-					}
-					return err
+					return iterutil.Map(err)
 				}
 			}
 		}
@@ -45,10 +42,7 @@ type EdgeIterator func(e Edge) error
 func (g *Graph) ForEachEdge(it EdgeIterator) error {
 	for _, e := range g.edges {
 		if err := it(e); err != nil {
-			if iterutil.Done(err) {
-				err = nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

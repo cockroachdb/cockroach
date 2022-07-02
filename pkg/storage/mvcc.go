@@ -3194,10 +3194,8 @@ func MVCCIterate(
 
 		for i := range res.KVs {
 			if err := f(res.KVs[i]); err != nil {
-				if iterutil.Done(err) {
-					return intents, nil
-				}
-				return nil, err
+				err = iterutil.Map(err)
+				return intents, err
 			}
 		}
 
