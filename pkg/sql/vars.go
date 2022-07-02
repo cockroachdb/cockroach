@@ -2033,6 +2033,23 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(0, 10)
 		},
 	},
+
+	// CockroachDB extension.
+	`unconstrained_non_covering_index_scan_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`unconstrained_non_covering_index_scan_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("unconstrained_non_covering_index_scan_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetUnconstrainedNonCoveringIndexScanEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
