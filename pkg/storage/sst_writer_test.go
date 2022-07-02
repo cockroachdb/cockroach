@@ -147,14 +147,24 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	DisableMetamorphicSimpleValueEncoding(t)
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
 	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 
-	require.NoError(t, sst.ExperimentalPutMVCCRangeKey(rangeKey("a", "e", 1), MVCCValue{}))
-	require.NoError(t, sst.Put(pointKey("a", 2), stringValueRaw("foo")))
+	require.NoError(t, sst.Put(pointKey("a", 1), stringValueRaw("foo")))
+	require.EqualValues(t, 9, sst.DataSize)
+
+	require.NoError(t, sst.ExperimentalPutMVCCRangeKey(rangeKey("a", "e", 2), tombstoneLocalTS(1)))
+	require.EqualValues(t, 20, sst.DataSize)
+
+	require.NoError(t, sst.ExperimentalPutEngineRangeKey(roachpb.Key("f"), roachpb.Key("g"),
+		wallTSRaw(2), tombstoneLocalTSRaw(1)))
+	require.EqualValues(t, 31, sst.DataSize)
+
 	require.NoError(t, sst.Finish())
 
 	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
@@ -165,8 +175,9 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 	defer iter.Close()
 
 	require.Equal(t, []interface{}{
-		rangeKV("a", "e", 1, MVCCValue{}),
-		pointKV("a", 2, "foo"),
+		rangeKV("a", "e", 2, tombstoneLocalTS(1)),
+		pointKV("a", 1, "foo"),
+		rangeKV("f", "g", 2, tombstoneLocalTS(1)),
 	}, scanIter(t, iter))
 }
 
