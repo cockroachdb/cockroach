@@ -371,14 +371,16 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			b.Close()
 		}
 	}()
-	for iter := snap.Iter; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return 0, err
-		} else if !ok {
-			break
-		}
+
+	iter := snap.Iter
+	var ok bool
+	var err error
+	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
 		kvs++
-		unsafeKey := iter.UnsafeKey()
+		var unsafeKey storage.EngineKey
+		if unsafeKey, err = iter.UnsafeKey(); err != nil {
+			return 0, err
+		}
 		unsafeValue := iter.UnsafeValue()
 		if b == nil {
 			b = kvSS.newBatch()
@@ -396,6 +398,9 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			b.Close()
 			b = nil
 		}
+	}
+	if err != nil {
+		return 0, err
 	}
 	if b != nil {
 		if err := kvSS.sendBatch(ctx, stream, b); err != nil {
@@ -1089,6 +1094,11 @@ func SendEmptySnapshot(
 		return err
 	}
 
+	// The snapshot must use a Pebble snapshot, since it requires consistent
+	// iterators.
+	engSnapshot := eng.NewSnapshot()
+	defer engSnapshot.Close()
+
 	// Create an OutgoingSnapshot to send.
 	outgoingSnap, err := snapshot(
 		ctx,
@@ -1100,7 +1110,7 @@ func SendEmptySnapshot(
 		// up behind a long running snapshot. We want this to go through
 		// quickly.
 		kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE,
-		eng,
+		eng.NewSnapshot(), // needs consistent iterators
 		desc.RangeID,
 		raftentry.NewCache(1), // cache is not used
 		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs

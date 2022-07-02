@@ -62,10 +62,15 @@ func PointKVWithLocalTS(key string, ts int, localTS int, value string) storage.M
 // RangeKey creates an MVCCRangeKey for the given string key and timestamp
 // (in walltime seconds).
 func RangeKey(start, end string, ts int) storage.MVCCRangeKey {
+	return RangeKeyWithTS(start, end, WallTS(ts))
+}
+
+// RangeKeyWithTS creates an MVCCRangeKey for the given string key and timestamp.
+func RangeKeyWithTS(start, end string, ts hlc.Timestamp) storage.MVCCRangeKey {
 	return storage.MVCCRangeKey{
 		StartKey:  roachpb.Key(start),
 		EndKey:    roachpb.Key(end),
-		Timestamp: WallTS(ts),
+		Timestamp: ts,
 	}
 }
 
@@ -86,12 +91,28 @@ func RangeKVWithLocalTS(
 	}
 	mvccValue = WithLocalTS(mvccValue, localTS)
 	v, err := storage.EncodeMVCCValue(mvccValue)
+
 	if err != nil {
 		panic(err)
 	}
 	return storage.MVCCRangeKeyValue{
 		RangeKey: RangeKey(start, end, ts),
 		Value:    v,
+	}
+}
+
+// RangeKVWithTS creates an MVCCRangeKeyValue for the given string keys, value, and
+// timestamp.
+func RangeKVWithTS(
+	start, end string, ts hlc.Timestamp, value storage.MVCCValue,
+) storage.MVCCRangeKeyValue {
+	valueBytes, err := storage.EncodeMVCCValue(value)
+	if err != nil {
+		panic(err)
+	}
+	return storage.MVCCRangeKeyValue{
+		RangeKey: RangeKeyWithTS(start, end, ts),
+		Value:    valueBytes,
 	}
 }
 
