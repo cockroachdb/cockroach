@@ -2060,9 +2060,9 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 
 		// Writing a range key [a-f)@2 which abuts [f-g)@2 should not merge if it
 		// has a different value (local timestamp).
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 2), withLocalTS(MVCCValue{}, 7)))
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 2), tombstoneLocalTS(7)))
 		require.Equal(t, []MVCCRangeKeyValue{
-			rangeKV("a", "f", 2, withLocalTS(MVCCValue{}, 7)),
+			rangeKV("a", "f", 2, tombstoneLocalTS(7)),
 			rangeKV("a", "f", 1, MVCCValue{}),
 			rangeKV("f", "g", 2, MVCCValue{}),
 			rangeKV("f", "g", 1, MVCCValue{}),
@@ -2075,7 +2075,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 			require.Empty(t, scanRangeKeys(t, eng))
 			require.NoError(t, rw.(Batch).Commit(true))
 			require.Equal(t, []MVCCRangeKeyValue{
-				rangeKV("a", "f", 2, withLocalTS(MVCCValue{}, 7)),
+				rangeKV("a", "f", 2, tombstoneLocalTS(7)),
 				rangeKV("a", "f", 1, MVCCValue{}),
 				rangeKV("f", "g", 2, MVCCValue{}),
 				rangeKV("f", "g", 1, MVCCValue{}),
