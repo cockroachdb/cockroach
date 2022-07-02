@@ -13,7 +13,6 @@ package bulk_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,13 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddBatched(t *testing.T) {
@@ -41,6 +44,170 @@ func TestAddBatched(t *testing.T) {
 	t.Run("batch=1", func(t *testing.T) {
 		runTestImport(t, 1)
 	})
+}
+
+func TestDuplicateHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	mem := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)
+	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int) {
+		req := &roachpb.ExportRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+			MVCCFilter: roachpb.MVCCFilter_All,
+			StartTime:  hlc.Timestamp{},
+			ReturnSST:  true,
+		}
+		header := roachpb.Header{Timestamp: s.Clock().Now()}
+		resp, err := kv.SendWrappedWith(ctx,
+			kvDB.NonTransactionalSender(), header, req)
+		require.NoError(t, err.GoError())
+		keyCount := 0
+		for _, file := range resp.(*roachpb.ExportResponse).Files {
+			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
+			require.NoError(t, err)
+			defer it.Close()
+			for it.SeekGE(storage.NilKey); ; it.Next() {
+				ok, err := it.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
+				}
+				keyCount++
+			}
+		}
+		require.Equal(t, count, keyCount)
+	}
+
+	tsStart := 1000
+	keyCount := 10
+	value := storageutils.StringValueRaw("value")
+
+	type keyBuilder func(i int, ts int) storage.MVCCKey
+
+	type testCase struct {
+		name           string
+		skipDuplicates bool
+		ingestAll      bool
+		addKeys        func(*testing.T, *bulk.SSTBatcher, keyBuilder) storage.MVCCKey
+		expectedCount  int
+	}
+	testCases := []testCase{
+		{
+			name:      "ingestAll does not add key-timestamp-value matches to SST",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					key := k(i+1, tsStart)
+					require.NoError(t, b.AddMVCCKey(ctx, key, value))
+					require.NoError(t, b.AddMVCCKey(ctx, key, value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount,
+		},
+		{
+			name:      "ingestAll does not error on key-value matches at different timestamps",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount * 2,
+		},
+		{
+			name:      "ingestAll does not error on key matches at different timestamps",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), storageutils.StringValueRaw("value2")))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount * 2,
+		},
+		{
+			name:      "ingestAll returns error one key-timestamp matches where value differs",
+			ingestAll: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				key := k(1, tsStart)
+				require.NoError(t, b.AddMVCCKey(ctx, key, value))
+				require.Error(t, b.AddMVCCKey(ctx, key, storageutils.StringValueRaw("clobber")))
+				return key
+			},
+		},
+		{
+			name:           "skip duplicates does not add keys with key-value matches at different timestamps",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount,
+		},
+		{
+			name:           "skip duplicates does not add keys with key-value matches at the same timestamps",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				for i := 0; i < keyCount; i++ {
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart), value))
+				}
+				return k(keyCount+1, tsStart)
+			},
+			expectedCount: keyCount,
+		},
+		{
+			name:           "skip duplicates errors if keys match but values do not",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				require.NoError(t, b.AddMVCCKey(ctx, k(1, tsStart+1), value))
+				require.Error(t, b.AddMVCCKey(ctx, k(1, tsStart), storageutils.StringValueRaw("value2")))
+				return k(1, tsStart+1)
+			},
+		},
+		{
+			name:           "skip duplicates errors if keys and timestamps match but values do not",
+			skipDuplicates: true,
+			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
+				require.NoError(t, b.AddMVCCKey(ctx, k(1, tsStart), value))
+				require.Error(t, b.AddMVCCKey(ctx, k(1, tsStart), storageutils.StringValueRaw("value2")))
+				return k(1, tsStart+1)
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
+				tc.skipDuplicates, tc.ingestAll, mem.MakeBoundAccount(), reqs)
+			require.NoError(t, err)
+			defer b.Close(ctx)
+			k := func(i int, ts int) storage.MVCCKey {
+				return storageutils.PointKey(fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), ts)
+			}
+			endKey := tc.addKeys(t, b, k)
+			if tc.expectedCount > 0 {
+				require.NoError(t, b.Flush(ctx))
+				expectRevisionCount(k(0, tsStart).Key, endKey.Key, tc.expectedCount)
+			}
+		})
+	}
+
 }
 
 func runTestImport(t *testing.T, batchSizeValue int64) {
@@ -106,12 +273,8 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			}
 
 			t.Logf("splitting at %s and %s", key(split1), key(split2))
-			if err := kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
-				t.Fatal(err)
-			}
-			if err := kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */))
+			require.NoError(t, kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */))
 
 			// We want to make sure our range-aware batching knows about one of our
 			// splits to exercise that codepath, but we also want to make sure we
@@ -120,14 +283,12 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			mockCache := rangecache.NewRangeCache(s.ClusterSettings(), nil,
 				func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer))
 			addr, err := keys.Addr(key(0))
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			tok, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupWithEvictionToken(
 				ctx, addr, rangecache.EvictionToken{}, false)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			r := roachpb.RangeInfo{
 				Desc: *tok.Desc(),
 			}
@@ -139,9 +300,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			b, err := bulk.MakeBulkAdder(
 				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MaxBufferSize: batchSize}, mem, reqs,
 			)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			defer b.Close(ctx)
 
@@ -170,10 +329,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 					v.Timestamp = ts
 					v.InitChecksum(k)
 					t.Logf("adding: %v", k)
-
-					if err := b.Add(addCtx, k, v.RawBytes); err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, b.Add(addCtx, k, v.RawBytes))
 					expected = append(expected, kv.KeyValue{Key: k, Value: &v})
 				}
 				if err := b.Flush(addCtx); err != nil {
@@ -185,29 +341,13 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				t.Log(sp.String())
 				splitRetries += tracing.CountLogMessages(sp, "SSTable cannot be added spanning range bounds")
 			}
-			if splitRetries != expectedSplitRetries {
-				t.Fatalf("expected %d split-caused retries, got %d", expectedSplitRetries, splitRetries)
-			}
+			require.Equal(t, expectedSplitRetries, splitRetries, "split-caused retries")
 
-			added := b.GetSummary()
-			t.Logf("Wrote %d total", added.DataSize)
+			t.Logf("Wrote %d total", b.GetSummary().DataSize)
 
 			got, err := kvDB.Scan(ctx, key(0), key(8), 0)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-
-			if !reflect.DeepEqual(got, expected) {
-				for i := 0; i < len(got) || i < len(expected); i++ {
-					if i < len(expected) {
-						t.Logf("expected %d\t%v\t%v", i, expected[i].Key, expected[i].Value)
-					}
-					if i < len(got) {
-						t.Logf("got      %d\t%v\t%v", i, got[i].Key, got[i].Value)
-					}
-				}
-				t.Fatalf("got      %+v\nexpected %+v", got, expected)
-			}
+			require.NoError(t, err)
+			require.Equal(t, expected, got)
 		})
 	}
 }
