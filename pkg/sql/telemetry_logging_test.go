@@ -93,7 +93,7 @@ func TestTelemetryLogging(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-
+	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, "CREATE TABLE t();")
 
@@ -106,13 +106,14 @@ func TestTelemetryLogging(t *testing.T) {
 	//		- statement type DML, enough time has elapsed
 
 	testData := []struct {
-		name                   string
-		query                  string
-		execTimestampsSeconds  []float64 // Execute the query with the following timestamps.
-		expectedLogStatement   string
-		stubMaxEventFrequency  int64
-		expectedSkipped        []int // Expected skipped query count per expected log line.
-		expectedUnredactedTags []string
+		name                    string
+		query                   string
+		execTimestampsSeconds   []float64 // Execute the query with the following timestamps.
+		expectedLogStatement    string
+		stubMaxEventFrequency   int64
+		expectedSkipped         []int // Expected skipped query count per expected log line.
+		expectedUnredactedTags  []string
+		expectedApplicationName string
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -126,6 +127,7 @@ func TestTelemetryLogging(t *testing.T) {
 			1,
 			[]int{0, 0, 0, 0},
 			[]string{"client"},
+			"telemetry-logging-test",
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -137,6 +139,7 @@ func TestTelemetryLogging(t *testing.T) {
 			1,
 			[]int{0},
 			[]string{"client"},
+			"telemetry-logging-test",
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -149,6 +152,7 @@ func TestTelemetryLogging(t *testing.T) {
 			1,
 			[]int{0, 2},
 			[]string{"client"},
+			"telemetry-logging-test",
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -160,6 +164,7 @@ func TestTelemetryLogging(t *testing.T) {
 			10,
 			[]int{0, 3, 0},
 			[]string{"client"},
+			"telemetry-logging-test",
 		},
 	}
 
@@ -233,6 +238,9 @@ func TestTelemetryLogging(t *testing.T) {
 							t.Errorf("expected tag %s to be redacted within tags: %s", tag, e.Tags)
 						}
 					}
+				}
+				if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
+					t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
 				}
 			}
 		}
