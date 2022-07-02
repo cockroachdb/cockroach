@@ -103,3 +103,12 @@ type DuplicateKeyError struct {
 func (d *DuplicateKeyError) Error() string {
 	return fmt.Sprintf("duplicate key: %s", d.Key)
 }
+
+// NewDuplicateKeyError constructs a DuplicateKeyError, copying its input.
+func NewDuplicateKeyError(key roachpb.Key, value []byte) error {
+	ret := &DuplicateKeyError{
+		Key: key.Clone(),
+	}
+	ret.Value = append(ret.Value, value...)
+	return ret
+}
