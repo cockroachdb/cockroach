@@ -13,17 +13,22 @@ package rditer
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func fakePrevKey(k []byte) roachpb.Key {
@@ -333,4 +338,90 @@ func TestReplicaKeyRanges(t *testing.T) {
 	checkOrdering(t, MakeReplicatedKeyRanges(&desc))
 	checkOrdering(t, MakeReplicatedKeyRangesExceptLockTable(&desc))
 	checkOrdering(t, MakeReplicatedKeyRangesExceptRangeID(&desc))
+}
+
+func BenchmarkReplicaEngineDataIterator(b *testing.B) {
+	skip.UnderShort(b)
+	for _, numRanges := range []int{1, 10, 100} {
+		b.Run(fmt.Sprintf("ranges=%d", numRanges), func(b *testing.B) {
+			for _, numKeysPerRange := range []int{1, 100, 10000} {
+				b.Run(fmt.Sprintf("keysPerRange=%d", numKeysPerRange), func(b *testing.B) {
+					for _, valueSize := range []int{32} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							benchReplicaEngineDataIterator(b, numRanges, numKeysPerRange, valueSize)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, valueSize int) {
+	ctx := context.Background()
+
+	// Set up ranges.
+	var descs []roachpb.RangeDescriptor
+	for i := 1; i <= numRanges; i++ {
+		desc := roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(i),
+			StartKey: append([]byte{'k'}, 0, 0, 0, 0),
+			EndKey:   append([]byte{'k'}, 0, 0, 0, 0),
+		}
+		binary.BigEndian.PutUint32(desc.StartKey[1:], uint32(i))
+		binary.BigEndian.PutUint32(desc.EndKey[1:], uint32(i+1))
+		descs = append(descs, desc)
+	}
+
+	// Write data for ranges.
+	eng, err := storage.Open(ctx,
+		storage.Filesystem(b.TempDir()),
+		storage.CacheSize(1e9),
+		storage.Settings(cluster.MakeTestingClusterSettings()))
+	require.NoError(b, err)
+	defer eng.Close()
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+
+	rng, _ := randutil.NewTestRand()
+	value := randutil.RandBytes(rng, valueSize)
+
+	for _, desc := range descs {
+		var keyBuf roachpb.Key
+		keyRanges := MakeAllKeyRanges(&desc)
+		for i := 0; i < numKeysPerRange; i++ {
+			keyBuf = append(keyBuf[:0], keyRanges[i%len(keyRanges)].Start...)
+			keyBuf = append(keyBuf, 0, 0, 0, 0)
+			binary.BigEndian.PutUint32(keyBuf[len(keyBuf)-4:], uint32(i))
+			if err := batch.PutEngineKey(storage.EngineKey{Key: keyBuf}, value); err != nil {
+				require.NoError(b, err) // slow, so check err != nil first
+			}
+		}
+	}
+	require.NoError(b, batch.Commit(true /* sync */))
+	require.NoError(b, eng.Flush())
+	require.NoError(b, eng.Compact())
+
+	snapshot := eng.NewSnapshot()
+	defer snapshot.Close()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, desc := range descs {
+			iter := NewReplicaEngineDataIterator(&desc, snapshot, false /* replicatedOnly */)
+			defer iter.Close()
+			for {
+				if ok, err := iter.Valid(); err != nil {
+					require.NoError(b, err)
+				} else if !ok {
+					break
+				}
+				_ = iter.UnsafeKey()
+				_ = iter.UnsafeValue()
+				iter.Next()
+			}
+		}
+	}
 }
