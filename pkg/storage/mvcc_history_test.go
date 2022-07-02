@@ -291,7 +291,7 @@ func TestMVCCHistories(t *testing.T) {
 						buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
 						if k.Suffix != nil {
-							ts, err := decodeMVCCTimestampSuffix(k.Suffix)
+							ts, err := DecodeMVCCTimestampSuffix(k.Suffix)
 							if err != nil {
 								return err
 							}
