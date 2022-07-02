@@ -96,10 +96,7 @@ func (s *spanConfigStore) forEachOverlapping(
 	for iter.FirstOverlap(query); iter.Valid(); iter.NextOverlap(query) {
 		interned := iter.Cur().spanConfigPairInterned
 		if err := f(interned.span, interned.conf()); err != nil {
-			if iterutil.Done(err) {
-				err = nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

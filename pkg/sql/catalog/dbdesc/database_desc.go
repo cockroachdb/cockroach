@@ -194,10 +194,7 @@ func (desc *immutable) ForEachSchemaInfo(
 ) error {
 	for name, info := range desc.Schemas {
 		if err := f(info.ID, name, info.Dropped); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
@@ -210,10 +207,7 @@ func (desc *immutable) ForEachNonDroppedSchema(f func(id descpb.ID, name string)
 			continue
 		}
 		if err := f(info.ID, name); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

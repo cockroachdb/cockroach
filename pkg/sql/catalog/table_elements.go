@@ -423,14 +423,14 @@ type PrimaryKeySwap interface {
 	NumOldIndexes() int
 
 	// ForEachOldIndexIDs iterates through each of the old index IDs.
-	// iterutil.Done is supported.
+	// iterutil.StopIteration is supported.
 	ForEachOldIndexIDs(fn func(id descpb.IndexID) error) error
 
 	// NumNewIndexes returns the number of new active indexes to swap in.
 	NumNewIndexes() int
 
 	// ForEachNewIndexIDs iterates through each of the new index IDs.
-	// iterutil.Done is supported.
+	// iterutil.StopIteration is supported.
 	ForEachNewIndexIDs(fn func(id descpb.IndexID) error) error
 
 	// HasLocalityConfig returns true iff the locality config is swapped also.
@@ -464,7 +464,7 @@ type MaterializedViewRefresh interface {
 	AsOf() hlc.Timestamp
 
 	// ForEachIndexID iterates through each of the index IDs.
-	// iterutil.Done is supported.
+	// iterutil.StopIteration is supported.
 	ForEachIndexID(func(id descpb.IndexID) error) error
 
 	// TableWithNewIndexes returns a new TableDescriptor based on the old one
@@ -495,15 +495,15 @@ type Partitioning interface {
 
 	// ForEachPartitionName applies fn on each of the partition names in this
 	// partition and recursively in its subpartitions.
-	// Supports iterutil.Done.
+	// Supports iterutil.StopIteration.
 	ForEachPartitionName(fn func(name string) error) error
 
 	// ForEachList applies fn on each list element of the wrapped partitioning.
-	// Supports iterutil.Done.
+	// Supports iterutil.StopIteration.
 	ForEachList(fn func(name string, values [][]byte, subPartitioning Partitioning) error) error
 
 	// ForEachRange applies fn on each range element of the wrapped partitioning.
-	// Supports iterutil.Done.
+	// Supports iterutil.StopIteration.
 	ForEachRange(fn func(name string, from, to []byte) error) error
 
 	// NumColumns is how large of a prefix of the columns in an index are used in
@@ -551,10 +551,7 @@ func ForEachIndex(desc TableDescriptor, opts IndexOpts, f func(idx Index) error)
 			continue
 		}
 		if err := f(idx); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
@@ -563,10 +560,7 @@ func ForEachIndex(desc TableDescriptor, opts IndexOpts, f func(idx Index) error)
 func forEachIndex(slice []Index, f func(idx Index) error) error {
 	for _, idx := range slice {
 		if err := f(idx); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
