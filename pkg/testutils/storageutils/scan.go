@@ -22,21 +22,15 @@ import (
 )
 
 // ScanEngine scans all point/range keys from the replicated user keyspace of
-// the engine, returning a combined slice of eyValue and MVCCKeyValue in order.
+// the engine, returning a combined slice of MVCCKeyValue and MVCCRangeKeyValue
+// in order.
 func ScanEngine(t *testing.T, engine storage.Reader) KVs {
 	t.Helper()
-
-	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: keys.LocalMax,
-		UpperBound: keys.MaxKey,
-	})
-	defer iter.Close()
-	return ScanIter(t, iter)
+	return ScanKeySpan(t, engine, keys.LocalMax, keys.MaxKey)
 }
 
-// ScanIter scans all point/range keys from the iterator, and returns a combined
-// slice of MVCCRangeKeyValue and MVCCKeyValue in order.
+// ScanIter scans all point/range keys from the iterator, returning a combined
+// slice of MVCCKeyValue and MVCCRangeKeyValue in order.
 func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 	t.Helper()
 
@@ -85,8 +79,30 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 	return kvs
 }
 
+// ScanKeySpan scans all point/range keys in the given key span, returning a
+// combined slice of MVCCKeyValue and MVCCRangeKeyValue in order.
+func ScanKeySpan(t *testing.T, r storage.Reader, start, end roachpb.Key) KVs {
+	t.Helper()
+
+	iter := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: start,
+		UpperBound: end,
+	})
+	defer iter.Close()
+	return ScanIter(t, iter)
+}
+
+// ScanRange scans all user point/range keys owned by the given range
+// descriptor, returning a combined slice of MVCCKeyValue and MVCCRangeKeyValue
+// in order.
+func ScanRange(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) KVs {
+	t.Helper()
+	return ScanKeySpan(t, r, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+}
+
 // ScanSST scans all point/range keys from the given binary SST, returning a
-// combined slice of eyValue and MVCCKeyValue in order.
+// combined slice of MVCCKeyValue and MVCCRangeKeyValue in order.
 func ScanSST(t *testing.T, sst []byte) KVs {
 	t.Helper()
 
