@@ -70,7 +70,6 @@ import (
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -99,10 +98,6 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.TenantsRangesID,
 	}))
 }
-
-// apiServerMessage is the standard body for all HTTP 500 responses.
-var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "+
-	"has occurred. Please check your CockroachDB logs for more details.")
 
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
@@ -183,27 +178,6 @@ func (s *adminServer) RegisterGateway(
 	return serverpb.RegisterAdminHandler(ctx, mux, conn)
 }
 
-// serverError logs the provided error and returns an error that should be returned by
-// the RPC endpoint method.
-func serverError(ctx context.Context, err error) error {
-	log.ErrorfDepth(ctx, 1, "%+s", err)
-	return errAdminAPIError
-}
-
-// serverErrorf logs the provided error and returns an error that should be returned by
-// the RPC endpoint method.
-func serverErrorf(ctx context.Context, format string, args ...interface{}) error {
-	log.ErrorfDepth(ctx, 1, format, args...)
-	return errAdminAPIError
-}
-
-// isNotFoundError returns true if err is a table/database not found error.
-func isNotFoundError(err error) bool {
-	// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
-	// more structured errors.
-	return err != nil && strings.HasSuffix(err.Error(), "does not exist")
-}
-
 // AllMetricMetadata returns all metrics' metadata.
 func (s *adminServer) AllMetricMetadata(
 	ctx context.Context, req *serverpb.MetricMetadataRequest,
@@ -224,7 +198,7 @@ func (s *adminServer) ChartCatalog(
 
 	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata, false /* strict */)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	resp := &serverpb.ChartCatalogResponse{
@@ -242,15 +216,15 @@ func (s *adminServer) Databases(
 
 	sessionUser, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	r, err := s.databasesHelper(ctx, req, sessionUser, 0, 0)
-	return r, maybeHandleNotFoundError(ctx, err)
+	return r, handleAPIError(ctx, err)
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) databasesHelper(
 	ctx context.Context,
 	req *serverpb.DatabasesRequest,
@@ -287,19 +261,6 @@ func (s *adminServer) databasesHelper(
 	return &resp, nil
 }
 
-// maybeHandleNotFoundError checks the provided error and
-// conditionally returns a gRPC NotFound code.
-// It returns a gRPC error in any case.
-func maybeHandleNotFoundError(ctx context.Context, err error) error {
-	if err == nil {
-		return nil
-	}
-	if isNotFoundError(err) {
-		return status.Errorf(codes.NotFound, "%s", err)
-	}
-	return serverError(ctx, err)
-}
-
 // DatabaseDetails is an endpoint that returns grants and a list of table names
 // for the specified database.
 func (s *adminServer) DatabaseDetails(
@@ -308,15 +269,15 @@ func (s *adminServer) DatabaseDetails(
 	ctx = s.server.AnnotateCtx(ctx)
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	r, err := s.databaseDetailsHelper(ctx, req, userName)
-	return r, maybeHandleNotFoundError(ctx, err)
+	return r, newAPIError(ctx, err)
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getDatabaseGrants(
 	ctx context.Context,
 	req *serverpb.DatabaseDetailsRequest,
@@ -379,8 +340,8 @@ func (s *adminServer) getDatabaseGrants(
 				grant.Privileges = strings.Split(privileges, ",")
 				resp = append(resp, grant)
 			}
-			if err = maybeHandleNotFoundError(ctx, err); err != nil {
-				return nil, err
+			if err != nil {
+				return nil, newAPIError(ctx, err)
 			}
 		}
 	}
@@ -388,7 +349,7 @@ func (s *adminServer) getDatabaseGrants(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getDatabaseTables(
 	ctx context.Context,
 	req *serverpb.DatabaseDetailsRequest,
@@ -446,7 +407,7 @@ WHERE table_catalog = $ AND table_type != 'SYSTEM VIEW'`, req.Database)
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getMiscDatabaseDetails(
 	ctx context.Context,
 	req *serverpb.DatabaseDetailsRequest,
@@ -483,7 +444,7 @@ func (s *adminServer) getMiscDatabaseDetails(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) databaseDetailsHelper(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest, userName username.SQLUsername,
 ) (_ *serverpb.DatabaseDetailsResponse, retErr error) {
@@ -523,7 +484,7 @@ func (s *adminServer) databaseDetailsHelper(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getDatabaseTableSpans(
 	ctx context.Context, userName username.SQLUsername, dbName string, tableNames []string,
 ) (map[string]roachpb.Span, error) {
@@ -544,7 +505,7 @@ func (s *adminServer) getDatabaseTableSpans(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getDatabaseStats(
 	ctx context.Context, tableSpans map[string]roachpb.Span,
 ) (*serverpb.DatabaseDetailsResponse_Stats, error) {
@@ -614,6 +575,8 @@ func (s *adminServer) getDatabaseStats(
 	return &stats, nil
 }
 
+// Note that the function returns plain errors, and it is the caller's
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getNumDatabaseIndexRecommendations(
 	ctx context.Context, databaseName string, tableNames []string,
 ) (int32, error) {
@@ -639,7 +602,7 @@ func (s *adminServer) getNumDatabaseIndexRecommendations(
 // or database.schema.table if it was.
 //
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func getFullyQualifiedTableName(dbName string, tableName string) (string, error) {
 	name, err := parser.ParseQualifiedTableName(tableName)
 	if err != nil {
@@ -672,15 +635,15 @@ func (s *adminServer) TableDetails(
 	ctx = s.server.AnnotateCtx(ctx)
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	r, err := s.tableDetailsHelper(ctx, req, userName)
-	return r, maybeHandleNotFoundError(ctx, err)
+	return r, handleAPIError(ctx, err)
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) tableDetailsHelper(
 	ctx context.Context, req *serverpb.TableDetailsRequest, userName username.SQLUsername,
 ) (_ *serverpb.TableDetailsResponse, retErr error) {
@@ -1017,24 +980,24 @@ func (s *adminServer) TableStats(
 	ctx = s.server.AnnotateCtx(ctx)
 	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
 	if err != nil {
-		return nil, maybeHandleNotFoundError(ctx, err)
+		return nil, handleAPIError(ctx, err)
 	}
 
 	tableID, err := s.queryTableID(ctx, userName, req.Database, escQualTable)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	tableSpan := generateTableSpan(tableID)
 
 	r, err := s.statsForSpan(ctx, tableSpan)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
@@ -1046,7 +1009,7 @@ func (s *adminServer) NonTableStats(
 ) (*serverpb.NonTableStatsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 	if _, err := s.requireAdminUser(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
@@ -1056,7 +1019,7 @@ func (s *adminServer) NonTableStats(
 		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
 	})
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	response := serverpb.NonTableStatsResponse{
 		TimeSeriesStats: timeSeriesStats,
@@ -1079,7 +1042,7 @@ func (s *adminServer) NonTableStats(
 	for _, span := range spansForInternalUse {
 		nonTableStats, err := s.statsForSpan(ctx, span)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		if response.InternalUseStats == nil {
 			response.InternalUseStats = nonTableStats
@@ -1101,7 +1064,7 @@ func (s *adminServer) NonTableStats(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) statsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
@@ -1247,17 +1210,17 @@ func (s *adminServer) Users(
 	ctx = s.server.AnnotateCtx(ctx)
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	r, err := s.usersHelper(ctx, req, userName)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) usersHelper(
 	ctx context.Context, req *serverpb.UsersRequest, userName username.SQLUsername,
 ) (_ *serverpb.UsersResponse, retErr error) {
@@ -1308,7 +1271,7 @@ func (s *adminServer) Events(
 
 	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
@@ -1321,13 +1284,13 @@ func (s *adminServer) Events(
 
 	r, err := s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) eventsHelper(
 	ctx context.Context,
 	req *serverpb.EventsRequest,
@@ -1457,14 +1420,14 @@ func (s *adminServer) RangeLog(
 	// Range keys, even when pretty-printed, contain PII.
 	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
 	r, err := s.rangeLogHelper(ctx, req, userName)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
@@ -1595,7 +1558,7 @@ func (s *adminServer) rangeLogHelper(
 // that are not found will not be returned.
 //
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) getUIData(
 	ctx context.Context, userName username.SQLUsername, keys []string,
 ) (_ *serverpb.GetUIDataResponse, retErr error) {
@@ -1688,11 +1651,11 @@ func (s *adminServer) SetUIData(
 
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	if len(req.KeyValues) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
 	for key, val := range req.KeyValues {
@@ -1706,10 +1669,10 @@ func (s *adminServer) SetUIData(
 			},
 			query, makeUIKey(userName, key), val)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		if rowsAffected != 1 {
-			return nil, serverErrorf(ctx, "rows affected %d != expected %d", rowsAffected, 1)
+			return nil, newAPIErrorf(ctx, codes.Internal, "rows affected %d != expected %d", rowsAffected, 1)
 		}
 	}
 
@@ -1729,16 +1692,16 @@ func (s *adminServer) GetUIData(
 
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	if len(req.Keys) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "keys cannot be empty")
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "keys cannot be empty")
 	}
 
 	resp, err := s.getUIData(ctx, userName, req.Keys)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return resp, nil
@@ -1757,7 +1720,7 @@ func (s *adminServer) Settings(
 
 	user, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	var lookupPurpose settings.LookupPurpose
@@ -1775,16 +1738,16 @@ func (s *adminServer) Settings(
 
 		hasView, err := s.hasRoleOption(ctx, user, roleoption.VIEWCLUSTERSETTING)
 		if err != nil {
-			return nil, err
+			return nil, newAPIError(ctx, err)
 		}
 
 		hasModify, err := s.hasRoleOption(ctx, user, roleoption.MODIFYCLUSTERSETTING)
 		if err != nil {
-			return nil, err
+			return nil, newAPIError(ctx, err)
 		}
 
 		if !hasModify && !hasView {
-			return nil, status.Errorf(
+			return nil, newAPIErrorf(ctx,
 				codes.PermissionDenied, "this operation requires either %s or %s role options",
 				roleoption.VIEWCLUSTERSETTING, roleoption.MODIFYCLUSTERSETTING)
 		}
@@ -1839,11 +1802,11 @@ func (s *adminServer) Settings(
 
 // Cluster returns cluster metadata.
 func (s *adminServer) Cluster(
-	_ context.Context, req *serverpb.ClusterRequest,
+	ctx context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
 	storageClusterID := s.server.StorageClusterID()
 	if storageClusterID == (uuid.UUID{}) {
-		return nil, status.Errorf(codes.Unavailable, "cluster ID not yet available")
+		return nil, newAPIErrorf(ctx, codes.Unavailable, "cluster ID not yet available")
 	}
 
 	// Check if enterprise features are enabled.  We currently test for the
@@ -1884,7 +1847,7 @@ func (s *adminServer) Health(
 	}
 
 	if err := s.checkReadinessForHealthCheck(ctx); err != nil {
-		return nil, err
+		return nil, newAPIError(ctx, err)
 	}
 	return resp, nil
 }
@@ -1894,25 +1857,25 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 	serveMode := s.server.grpc.mode.get()
 	switch serveMode {
 	case modeInitializing:
-		return status.Error(codes.Unavailable, "node is waiting for cluster initialization")
+		return newAPIErrorf(ctx, codes.Unavailable, "node is waiting for cluster initialization")
 	case modeDraining:
 		// grpc.mode is set to modeDraining when the Drain(DrainMode_CLIENT) has
 		// been called (client connections are to be drained).
-		return status.Errorf(codes.Unavailable, "node is shutting down")
+		return newAPIErrorf(ctx, codes.Unavailable, "node is shutting down")
 	case modeOperational:
 		break
 	default:
-		return serverError(ctx, errors.Newf("unknown mode: %v", serveMode))
+		return newAPIError(ctx, errors.Newf("unknown mode: %v", serveMode))
 	}
 
 	// TODO(knz): update this code when progress is made on
 	// https://github.com/cockroachdb/cockroach/issues/45123
 	l, ok := s.server.nodeLiveness.GetLiveness(s.server.NodeID())
 	if !ok {
-		return status.Error(codes.Unavailable, "liveness record not found")
+		return newAPIErrorf(ctx, codes.Unavailable, "liveness record not found")
 	}
 	if !l.IsLive(s.server.clock.Now().GoTime()) {
-		return status.Errorf(codes.Unavailable, "node is not healthy")
+		return newAPIErrorf(ctx, codes.Unavailable, "node is not healthy")
 	}
 	if l.Draining {
 		// l.Draining indicates that the node is draining leases.
@@ -1920,11 +1883,11 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		// It's possible that l.Draining is set without
 		// grpc.mode being modeDraining, if a RPC client
 		// has requested DrainMode_LEASES but not DrainMode_CLIENT.
-		return status.Errorf(codes.Unavailable, "node is shutting down")
+		return newAPIErrorf(ctx, codes.Unavailable, "node is shutting down")
 	}
 
 	if !s.server.sqlServer.isReady.Get() {
-		return status.Errorf(codes.Unavailable, "node is not accepting SQL clients")
+		return newAPIErrorf(ctx, codes.Unavailable, "node is not accepting SQL clients")
 	}
 
 	return nil
@@ -1976,18 +1939,18 @@ func (s *adminServer) Jobs(
 
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	j, err := s.jobsHelper(ctx, req, userName)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return j, nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) jobsHelper(
 	ctx context.Context, req *serverpb.JobsRequest, userName username.SQLUsername,
 ) (_ *serverpb.JobsResponse, retErr error) {
@@ -2160,17 +2123,17 @@ func (s *adminServer) Job(
 
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	r, err := s.jobHelper(ctx, request, userName)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) jobHelper(
 	ctx context.Context, request *serverpb.JobRequest, userName username.SQLUsername,
 ) (_ *serverpb.JobResponse, retErr error) {
@@ -2218,12 +2181,12 @@ func (s *adminServer) Locations(
 	// Require authentication.
 	_, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	r, err := s.locationsHelper(ctx, req)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
@@ -2288,17 +2251,17 @@ func (s *adminServer) QueryPlan(
 
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	// As long as there's only one query provided it's safe to construct the
 	// explain query.
 	stmts, err := parser.Parse(req.Query)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIErrorWithCode(ctx, err, codes.InvalidArgument)
 	}
 	if len(stmts) > 1 {
-		return nil, serverErrorf(ctx, "more than one query provided")
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "more than one query provided")
 	}
 
 	explain := fmt.Sprintf(
@@ -2310,15 +2273,15 @@ func (s *adminServer) QueryPlan(
 		explain,
 	)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	if row == nil {
-		return nil, serverErrorf(ctx, "failed to query the physical plan")
+		return nil, newAPIErrorf(ctx, codes.Internal, "failed to query the physical plan")
 	}
 
 	dbDatum, ok := tree.AsDString(row[0])
 	if !ok {
-		return nil, serverErrorf(ctx, "type assertion failed on json: %T", row)
+		return nil, newAPIErrorf(ctx, codes.Internal, "type assertion failed on json: %T", row)
 	}
 
 	return &serverpb.QueryPlanResponse{
@@ -2331,6 +2294,9 @@ func (s *adminServer) QueryPlan(
 func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
 	sessionUser, err := userFromContext(ctx)
 	if err != nil {
+		// TODO(knz): Also include the API path into the logging output, e.g.
+		// by extracting it from the context.
+		log.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2341,6 +2307,9 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 		id,
 	)
 	if err != nil {
+		// TODO(knz): Also include the API path into the logging output, e.g.
+		// by extracting it from the context.
+		log.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2360,6 +2329,9 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 			chunkID,
 		)
 		if err != nil {
+			// TODO(knz): Also include the API path into the logging output, e.g.
+			// by extracting it from the context.
+			log.Errorf(ctx, "%v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -2385,13 +2357,13 @@ func (s *adminServer) DecommissionStatus(
 ) (*serverpb.DecommissionStatusResponse, error) {
 	r, err := s.decommissionStatusHelper(ctx, req)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) decommissionStatusHelper(
 	ctx context.Context, req *serverpb.DecommissionStatusRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
@@ -2530,13 +2502,13 @@ func (s *adminServer) Decommission(
 	nodeIDs := req.NodeIDs
 
 	if len(nodeIDs) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "no node ID specified")
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "no node ID specified")
 	}
 
 	// Mark the target nodes with their new membership status. They'll find out
 	// as they heartbeat their liveness.
 	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs); err != nil {
-		// NB: not using serverError() here since Decommission
+		// NB: not using newAPIError() here since Decommission
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
@@ -2556,25 +2528,25 @@ func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
 ) (_ *serverpb.DataDistributionResponse, retErr error) {
 	if _, err := s.requireAdminUser(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
 	userName, err := userFromContext(ctx)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	r, err := s.dataDistributionHelper(ctx, req, userName)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	return r, nil
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) dataDistributionHelper(
 	ctx context.Context, req *serverpb.DataDistributionRequest, userName username.SQLUsername,
 ) (resp *serverpb.DataDistributionResponse, retErr error) {
@@ -2770,19 +2742,19 @@ func (s *adminServer) EnqueueRange(
 	ctx = s.server.AnnotateCtx(ctx)
 
 	if _, err := s.requireAdminUser(ctx); err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
 	if req.NodeID < 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)
 	}
 	if req.Queue == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "queue name must be non-empty")
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "queue name must be non-empty")
 	}
 	if req.RangeID <= 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "range_id must be positive; got %d", req.RangeID)
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "range_id must be positive; got %d", req.RangeID)
 	}
 
 	// If the request is targeted at this node, serve it directly. Otherwise,
@@ -2793,7 +2765,7 @@ func (s *adminServer) EnqueueRange(
 	} else if req.NodeID != 0 {
 		admin, err := s.dialNode(ctx, req.NodeID)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		return admin.EnqueueRange(ctx, req)
 	}
@@ -2829,7 +2801,7 @@ func (s *adminServer) EnqueueRange(
 		)
 	}); err != nil {
 		if len(response.Details) == 0 {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		response.Details = append(response.Details, &serverpb.EnqueueRangeResponse_Details{
 			Error: err.Error(),
@@ -2845,7 +2817,7 @@ func (s *adminServer) EnqueueRange(
 // response.
 //
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) enqueueRangeLocal(
 	ctx context.Context, req *serverpb.EnqueueRangeRequest,
 ) (*serverpb.EnqueueRangeResponse, error) {
@@ -2918,19 +2890,19 @@ func (s *adminServer) SendKVBatch(
 	// a cluster outage.
 	user, err := s.requireAdminUser(ctx)
 	if err != nil {
-		// NB: not using serverError() here since the priv checker
+		// NB: not using newAPIError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	if ba == nil {
-		return nil, status.Errorf(codes.InvalidArgument, "BatchRequest cannot be nil")
+		return nil, newAPIErrorf(ctx, codes.InvalidArgument, "BatchRequest cannot be nil")
 	}
 
 	// Emit a structured log event for the call.
 	jsonpb := protoutil.JSONPb{}
 	baJSON, err := jsonpb.Marshal(ba)
 	if err != nil {
-		return nil, serverError(ctx, errors.Wrap(err, "failed to encode BatchRequest as JSON"))
+		return nil, newAPIError(ctx, errors.Wrap(err, "failed to encode BatchRequest as JSON"))
 	}
 	event := &eventpb.DebugSendKvBatch{
 		CommonEventDetails: eventpb.CommonEventDetails{
@@ -3220,7 +3192,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // if it exists.
 //
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) queryZone(
 	ctx context.Context, userName username.SQLUsername, id descpb.ID,
 ) (zonepb.ZoneConfig, bool, error) {
@@ -3266,7 +3238,7 @@ func (s *adminServer) queryZone(
 // ZoneConfig specified for the object IDs in the path.
 //
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) queryZonePath(
 	ctx context.Context, userName username.SQLUsername, path []descpb.ID,
 ) (descpb.ID, zonepb.ZoneConfig, bool, error) {
@@ -3281,7 +3253,7 @@ func (s *adminServer) queryZonePath(
 
 // queryDatabaseID queries for the ID of the database with the given name.
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) queryDatabaseID(
 	ctx context.Context, userName username.SQLUsername, name string,
 ) (descpb.ID, error) {
@@ -3318,7 +3290,7 @@ func (s *adminServer) queryDatabaseID(
 // queryTableID queries for the ID of the table with the given name in the
 // database with the given name. The table name may contain a schema qualifier.
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) queryTableID(
 	ctx context.Context, username username.SQLUsername, database string, tableName string,
 ) (descpb.ID, error) {
@@ -3337,7 +3309,7 @@ func (s *adminServer) queryTableID(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.AdminClient, error) {
@@ -3365,10 +3337,10 @@ func (c *adminPrivilegeChecker) requireAdminUser(
 ) (userName username.SQLUsername, err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return userName, serverError(ctx, err)
+		return userName, newAPIError(ctx, err)
 	}
 	if !isAdmin {
-		return userName, errRequiresAdmin
+		return userName, errRequiresAdmin(ctx)
 	}
 	return userName, nil
 }
@@ -3377,16 +3349,16 @@ func (c *adminPrivilegeChecker) requireAdminUser(
 func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Context) (err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return serverError(ctx, err)
+		return newAPIError(ctx, err)
 	}
 	if !isAdmin {
 		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 		if err != nil {
-			return serverError(ctx, err)
+			return newAPIError(ctx, err)
 		}
 
 		if !hasViewActivity {
-			return status.Errorf(
+			return newAPIErrorf(ctx,
 				codes.PermissionDenied, "this operation requires the %s role option",
 				roleoption.VIEWACTIVITY)
 		}
@@ -3400,22 +3372,22 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 ) (err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return serverError(ctx, err)
+		return newAPIError(ctx, err)
 	}
 	if !isAdmin {
 		hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
 		if err != nil {
-			return serverError(ctx, err)
+			return newAPIError(ctx, err)
 		}
 
 		if !hasViewActivity {
 			hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
 			if err != nil {
-				return serverError(ctx, err)
+				return newAPIError(ctx, err)
 			}
 
 			if !hasViewActivityRedacted {
-				return status.Errorf(
+				return newAPIErrorf(ctx,
 					codes.PermissionDenied, "this operation requires the %s or %s role options",
 					roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 			}
@@ -3432,16 +3404,16 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 ) (err error) {
 	userName, isAdmin, err := c.getUserAndRole(ctx)
 	if err != nil {
-		return serverError(ctx, err)
+		return newAPIError(ctx, err)
 	}
 
 	if !isAdmin {
 		hasViewActivityRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
 		if err != nil {
-			return serverError(ctx, err)
+			return newAPIError(ctx, err)
 		}
 		if hasViewActivityRedacted {
-			return status.Errorf(
+			return newAPIErrorf(ctx,
 				codes.PermissionDenied, "this operation requires %s role option and is not allowed for %s role option",
 				roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
 		}
@@ -3451,7 +3423,7 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (c *adminPrivilegeChecker) getUserAndRole(
 	ctx context.Context,
 ) (userName username.SQLUsername, isAdmin bool, err error) {
@@ -3464,7 +3436,7 @@ func (c *adminPrivilegeChecker) getUserAndRole(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (c *adminPrivilegeChecker) hasAdminRole(
 	ctx context.Context, user username.SQLUsername,
 ) (bool, error) {
@@ -3493,7 +3465,7 @@ func (c *adminPrivilegeChecker) hasAdminRole(
 }
 
 // Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
+// responsibility to convert them via newAPIError().
 func (c *adminPrivilegeChecker) hasRoleOption(
 	ctx context.Context, user username.SQLUsername, roleOption roleoption.Option,
 ) (bool, error) {
@@ -3519,13 +3491,6 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", row[0])
 	}
 	return bool(dbDatum), nil
-}
-
-var errRequiresAdmin = status.Error(codes.PermissionDenied, "this operation requires admin privilege")
-
-func errRequiresRoleOption(option roleoption.Option) error {
-	return status.Errorf(
-		codes.PermissionDenied, "this operation requires %s privilege", option)
 }
 
 func (s *adminServer) ListTracingSnapshots(

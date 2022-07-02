@@ -108,7 +108,7 @@ func (a *apiV2Server) listNodes(w http.ResponseWriter, r *http.Request) {
 
 	nodes, next, err := a.status.nodesHelper(ctx, limit, offset)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	var resp nodesResponse
@@ -231,7 +231,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 	if err := a.status.iterateNodes(
 		ctx, fmt.Sprintf("details about range %d", rangeID), dialFn, nodeFn, responseFn, errorFn,
 	); err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	writeJSONResponse(ctx, w, 200, response)
@@ -390,7 +390,7 @@ func (a *apiV2Server) listNodeRanges(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getSimplePaginationValues(r)
 	statusResp, next, err := a.status.rangesHelper(ctx, req, limit, offset)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	resp := nodeRangesResponse{
@@ -535,7 +535,7 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		nodeFn, responseFn, errorFn)
 
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	var nextBytes []byte

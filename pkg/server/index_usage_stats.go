@@ -204,6 +204,8 @@ func (s *statusServer) TableIndexStats(
 // getTableIndexUsageStats is a helper function that reads the indexes
 // and their usage stats for a given database and table. This is meant
 // for external usages e.g. front-end.
+//
+// The caller is responsible for converting the error via newAPIError().
 func getTableIndexUsageStats(
 	ctx context.Context,
 	req *serverpb.TableIndexStatsRequest,

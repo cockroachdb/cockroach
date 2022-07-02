@@ -29,7 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	grpcStatus "google.golang.org/grpc/status"
 )
 
 type httpServer struct {
@@ -186,12 +189,14 @@ func makeAdminAuthzCheckHandler(
 		authCtx := metadata.NewIncomingContext(req.Context(), md)
 		// Check the privileges of the requester.
 		_, err := adminAuthzCheck.requireAdminUser(authCtx)
-		if errors.Is(err, errRequiresAdmin) {
-			http.Error(w, "admin privilege required", http.StatusUnauthorized)
-			return
-		} else if err != nil {
-			log.Ops.Infof(authCtx, "web session error: %s", err)
-			http.Error(w, "error checking authentication", http.StatusInternalServerError)
+		if err != nil {
+			code := grpcStatus.Code(err)
+			if code != codes.Unknown && code != codes.Internal {
+				http.Error(w, err.Error(), runtime.HTTPStatusFromCode(code))
+			} else {
+				log.Ops.Infof(authCtx, "web session error: %v", err)
+				http.Error(w, "error checking authentication", http.StatusInternalServerError)
+			}
 			return
 		}
 		// Forward the request to the inner handler.
@@ -327,8 +332,9 @@ func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 		if p := recover(); p != nil && p != http.ErrAbortHandler {
 			// Note: use of a background context here so we can log even with the absence of a client.
 			// Assumes appropriate timeouts are used.
-			logcrash.ReportPanic(context.Background(), &s.cfg.Settings.SV, p, 1 /* depth */)
-			http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
+			logcrash.ReportPanic(r.Context(), &s.cfg.Settings.SV, p, 1 /* depth */)
+			err := errors.Newf("panic: %v", p)
+			httpSendError(r.Context(), err, w)
 		}
 	}()
 

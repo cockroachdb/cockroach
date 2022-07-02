@@ -62,7 +62,7 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 
 	res, err := json.Marshal(payload)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	_, _ = w.Write(res)
@@ -263,7 +263,7 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 
 	responseProto, pagState, err := a.status.listSessionsHelper(outgoingCtx, req, limit, start)
 	if err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	var nextBytes []byte
@@ -323,7 +323,7 @@ func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.admin.checkReadinessForHealthCheck(ctx); err != nil {
-		apiV2InternalError(ctx, err, w)
+		httpSendError(ctx, err, w)
 		return
 	}
 	writeJSONResponse(ctx, w, 200, resp)
@@ -352,7 +352,7 @@ func (a *apiV2Server) listRules(w http.ResponseWriter, r *http.Request) {
 	a.promRuleExporter.ScrapeRegistry(r.Context())
 	response, err := a.promRuleExporter.PrintAsYAML()
 	if err != nil {
-		apiV2InternalError(r.Context(), err, w)
+		httpSendError(r.Context(), err, w)
 		return
 	}
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)

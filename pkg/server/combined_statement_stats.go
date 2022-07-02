@@ -73,12 +73,12 @@ func getCombinedStatementStats(
 	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(startTime, endTime, limit, testingKnobs)
 	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	transactions, err := collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	response := &serverpb.StatementsResponse{
@@ -156,7 +156,7 @@ func collectCombinedStatements(
 		}, query, args...)
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	defer func() {
@@ -180,12 +180,12 @@ func collectCombinedStatements(
 
 		var statementFingerprintID uint64
 		if statementFingerprintID, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		var transactionFingerprintID uint64
 		if transactionFingerprintID, err = sqlstatsutil.DatumToUint64(row[1]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		app := string(tree.MustBeDString(row[2]))
@@ -194,7 +194,7 @@ func collectCombinedStatements(
 		var metadata roachpb.CollectedStatementStatistics
 		metadataJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		metadata.Key.App = app
@@ -203,13 +203,13 @@ func collectCombinedStatements(
 
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		planJSON := tree.MustBeDJSON(row[6]).JSON
 		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
@@ -230,7 +230,7 @@ func collectCombinedStatements(
 	}
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return statements, nil
@@ -268,7 +268,7 @@ func collectCombinedTransactions(
 		}, query, args...)
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	defer func() {
@@ -294,18 +294,18 @@ func collectCombinedTransactions(
 		aggregatedTs := tree.MustBeDTimestampTZ(row[1]).Time
 		fingerprintID, err := sqlstatsutil.DatumToUint64(row[2])
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		var metadata roachpb.CollectedTransactionStatistics
 		metadataJSON := tree.MustBeDJSON(row[3]).JSON
 		if err = sqlstatsutil.DecodeTxnStatsMetadataJSON(metadataJSON, &metadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		statsJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
@@ -325,7 +325,7 @@ func collectCombinedTransactions(
 	}
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return transactions, nil
@@ -359,20 +359,20 @@ func getStatementDetails(
 	limit := SQLStatsResponseMax.Get(&settings.SV)
 	whereClause, args, err := getStatementDetailsQueryClausesAndArgs(req, testingKnobs)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	statementStatisticsPerAggregatedTs, err := getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit)
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	// At this point the counts on statementTotal.metadata have the count for how many times we saw that value
@@ -483,13 +483,13 @@ func getTotalStatementDetails(
 		}, query, args...)
 
 	if err != nil {
-		return statement, serverError(ctx, err)
+		return statement, newAPIError(ctx, err)
 	}
 	if len(row) == 0 {
 		return statement, nil
 	}
 	if row.Len() != expectedNumDatums {
-		return statement, serverError(ctx, errors.Newf("expected %d columns, received %d", expectedNumDatums))
+		return statement, newAPIError(ctx, errors.Newf("expected %d columns, received %d", expectedNumDatums))
 	}
 
 	var statistics roachpb.CollectedStatementStatistics
@@ -497,7 +497,7 @@ func getTotalStatementDetails(
 	metadataJSON := tree.MustBeDJSON(row[0]).JSON
 
 	if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-		return statement, serverError(ctx, err)
+		return statement, newAPIError(ctx, err)
 	}
 
 	aggInterval := tree.MustBeDInterval(row[1]).Duration
@@ -511,13 +511,13 @@ func getTotalStatementDetails(
 
 	statsJSON := tree.MustBeDJSON(row[3]).JSON
 	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics.Stats); err != nil {
-		return statement, serverError(ctx, err)
+		return statement, newAPIError(ctx, err)
 	}
 
 	planJSON := tree.MustBeDJSON(row[4]).JSON
 	plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 	if err != nil {
-		return statement, serverError(ctx, err)
+		return statement, newAPIError(ctx, err)
 	}
 	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
@@ -532,7 +532,7 @@ func getTotalStatementDetails(
 		}, query, args...)
 
 	if err != nil {
-		return statement, serverError(ctx, err)
+		return statement, newAPIError(ctx, err)
 	}
 	aggregatedMetadata.FormattedQuery = string(tree.MustBeDString(row[0]))
 
@@ -578,7 +578,7 @@ func getStatementDetailsPerAggregatedTs(
 		}, query, args...)
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	defer func() {
@@ -606,18 +606,18 @@ func getStatementDetailsPerAggregatedTs(
 		var aggregatedMetadata roachpb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[1]).JSON
 		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		statsJSON := tree.MustBeDJSON(row[2]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		planJSON := tree.MustBeDJSON(row[3]).JSON
 		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
@@ -633,7 +633,7 @@ func getStatementDetailsPerAggregatedTs(
 		statements = append(statements, stmt)
 	}
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return statements, nil
@@ -707,7 +707,7 @@ func getStatementDetailsPerPlanHash(
 		}, query, args...)
 
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	defer func() {
@@ -731,7 +731,7 @@ func getStatementDetailsPerPlanHash(
 
 		var planHash uint64
 		if planHash, err = sqlstatsutil.DatumToUint64(row[0]); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		planGist := string(tree.MustBeDStringOrDNull(row[1]))
 		var explainPlan string
@@ -743,18 +743,18 @@ func getStatementDetailsPerPlanHash(
 		var aggregatedMetadata roachpb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[2]).JSON
 		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		statsJSON := tree.MustBeDJSON(row[3]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 
 		planJSON := tree.MustBeDJSON(row[4]).JSON
 		plan, err := sqlstatsutil.JSONToExplainTreePlanNode(planJSON)
 		if err != nil {
-			return nil, serverError(ctx, err)
+			return nil, newAPIError(ctx, err)
 		}
 		metadata.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
@@ -787,7 +787,7 @@ func getStatementDetailsPerPlanHash(
 		statements = append(statements, stmt)
 	}
 	if err != nil {
-		return nil, serverError(ctx, err)
+		return nil, newAPIError(ctx, err)
 	}
 
 	return statements, nil
