@@ -958,7 +958,9 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	descsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	ex.extraTxnState.descCollection = descsCollection
+	ex.extraTxnState.schemaChangerState = &SchemaChangerState{}
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
@@ -1263,7 +1265,15 @@ type connExecutor struct {
 	// added to txnState behind the mutex.
 	extraTxnState struct {
 		// descCollection collects descriptors used by the current transaction.
-		descCollection descs.Collection
+		descCollection *descs.Collection
+
+		// If the descriptor collection is passed from the internal executor's
+		// caller, we leave the caller to release the lease.
+		skipDescsCollectionRelease bool
+
+		// If the schema change job records are passed from the internal executor's
+		// caller, we leave the caller to release the lease.
+		skipSchemaChangeRecordRelease bool
 
 		// jobs accumulates jobs staged for execution inside the transaction.
 		// Staging happens when executing statements that are implemented with a
@@ -1386,7 +1396,7 @@ type connExecutor struct {
 		// statements.
 		transactionStatementsHash util.FNV64
 
-		schemaChangerState SchemaChangerState
+		schemaChangerState *SchemaChangerState
 
 		// shouldCollectTxnExecutionStats specifies whether the statements in
 		// this transaction should collect execution stats.
@@ -1676,15 +1686,21 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	ex.extraTxnState.schemaChangerState = SchemaChangerState{
+	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 		mode: ex.sessionData().NewSchemaChangerMode,
 	}
 
-	for k := range ex.extraTxnState.schemaChangeJobRecords {
-		delete(ex.extraTxnState.schemaChangeJobRecords, k)
+	if ex.extraTxnState.skipDescsCollectionRelease {
+		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
+	} else {
+		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 	}
 
-	ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	if !ex.extraTxnState.skipSchemaChangeRecordRelease {
+		for k := range ex.extraTxnState.schemaChangeJobRecords {
+			delete(ex.extraTxnState.schemaChangeJobRecords, k)
+		}
+	}
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
@@ -2720,7 +2736,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
-		Descs:                  &ex.extraTxnState.descCollection,
+		Descs:                  ex.extraTxnState.descCollection,
 		TxnModesSetter:         ex,
 		Jobs:                   &ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
@@ -2759,7 +2775,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
-	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
+	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp
@@ -3010,7 +3026,7 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	ctx context.Context, descID descpb.ID,
 ) error {
 	if err := ex.planner.waitForDescriptorSchemaChanges(
-		ctx, descID, ex.extraTxnState.schemaChangerState,
+		ctx, descID, *ex.extraTxnState.schemaChangerState,
 	); err != nil {
 		return err
 	}
@@ -3246,13 +3262,13 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	scs := &ex.extraTxnState.schemaChangerState
+	scs := ex.extraTxnState.schemaChangerState
 	deps := newSchemaChangerTxnRunDependencies(
 		ex.planner.SessionData(),
 		ex.planner.User(),
 		ex.server.cfg,
 		ex.planner.txn,
-		&ex.extraTxnState.descCollection,
+		ex.extraTxnState.descCollection,
 		ex.planner.EvalContext(),
 		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,
