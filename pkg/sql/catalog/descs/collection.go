@@ -50,8 +50,8 @@ func makeCollection(
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
 	monitor *mon.BytesMonitor,
-) Collection {
-	return Collection{
+) *Collection {
+	return &Collection{
 		settings:  settings,
 		version:   settings.Version.ActiveVersion(ctx),
 		hydrated:  hydrated,
@@ -178,9 +178,14 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.stored.reset(ctx)
-	tc.synthetic.reset()
+	tc.ResetSyntheticDescriptors()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
+}
+
+// ResetSyntheticDescriptors clear all syntheticDescriptors.
+func (tc *Collection) ResetSyntheticDescriptors() {
+	tc.synthetic.reset()
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
