@@ -156,6 +156,7 @@ func (p *partitionedStreamClient) Plan(
 			SrcInstanceID:     int(sp.NodeID),
 			SrcAddr:           streamingccl.PartitionAddress(pgURL.String()),
 			SrcLocality:       sp.Locality,
+			Spans:             sp.PartitionSpec.Spans,
 		})
 	}
 	return topology, nil
@@ -246,10 +247,11 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 	}
 
 	if streamEvent.Checkpoint != nil {
-		event := streamingccl.MakeCheckpointEvent(streamEvent.Checkpoint.Spans[0].Timestamp)
+		event := streamingccl.MakeCheckpointEvent(streamEvent.Checkpoint.ResolvedSpans)
 		streamEvent.Checkpoint = nil
 		return event
 	}
+
 	var event streamingccl.Event
 	if streamEvent.Batch != nil {
 		if len(streamEvent.Batch.Ssts) > 0 {

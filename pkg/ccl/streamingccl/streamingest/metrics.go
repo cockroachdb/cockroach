@@ -74,18 +74,53 @@ var (
 		Measurement: "Replication Streams",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaEarliestDataCheckpointSpan = metric.Metadata{
+		Name:        "streaming.earliest_data_checkpoint_span",
+		Help:        "The earliest timestamp of the last checkpoint forwarded by an ingestion data processor",
+		Measurement: "Timestamp",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaLatestDataCheckpointSpan = metric.Metadata{
+		Name:        "streaming.latest_data_checkpoint_span",
+		Help:        "The latest timestamp of the last checkpoint forwarded by an ingestion data processor",
+		Measurement: "Timestamp",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaDataCheckpointSpanCount = metric.Metadata{
+		Name:        "streaming.data_checkpoint_span_count",
+		Help:        "The number of resolved spans in the last checkpoint forwarded by an ingestion data processor",
+		Measurement: "Resolved Spans",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaFrontierCheckpointSpanCount = metric.Metadata{
+		Name:        "streaming.frontier_checkpoint_span_count",
+		Help:        "The number of resolved spans last persisted to the ingestion job's checkpoint record",
+		Measurement: "Resolved Spans",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaJobProgressUpdates = metric.Metadata{
+		Name:        "streaming.job_progress_updates",
+		Help:        "Total number of updates to the ingestion job progress",
+		Measurement: "Job Updates",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
 type Metrics struct {
-	IngestedEvents *metric.Counter
-	IngestedBytes  *metric.Counter
-	Flushes        *metric.Counter
-	ResolvedEvents *metric.Counter
-	FlushHistNanos *metric.Histogram
-	CommitLatency  *metric.Histogram
-	AdmitLatency   *metric.Histogram
-	RunningCount   *metric.Gauge
+	IngestedEvents              *metric.Counter
+	IngestedBytes               *metric.Counter
+	Flushes                     *metric.Counter
+	JobProgressUpdates          *metric.Counter
+	ResolvedEvents              *metric.Counter
+	FlushHistNanos              *metric.Histogram
+	CommitLatency               *metric.Histogram
+	AdmitLatency                *metric.Histogram
+	RunningCount                *metric.Gauge
+	EarliestDataCheckpointSpan  *metric.Gauge
+	LatestDataCheckpointSpan    *metric.Gauge
+	DataCheckpointSpanCount     *metric.Gauge
+	FrontierCheckpointSpanCount *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -94,17 +129,22 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for stream ingestion job monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		IngestedEvents: metric.NewCounter(metaStreamingEventsIngested),
-		IngestedBytes:  metric.NewCounter(metaStreamingIngestedBytes),
-		Flushes:        metric.NewCounter(metaStreamingFlushes),
-		ResolvedEvents: metric.NewCounter(metaStreamingResolvedEventsIngested),
+		IngestedEvents:     metric.NewCounter(metaStreamingEventsIngested),
+		IngestedBytes:      metric.NewCounter(metaStreamingIngestedBytes),
+		Flushes:            metric.NewCounter(metaStreamingFlushes),
+		ResolvedEvents:     metric.NewCounter(metaStreamingResolvedEventsIngested),
+		JobProgressUpdates: metric.NewCounter(metaJobProgressUpdates),
 		FlushHistNanos: metric.NewHistogram(metaStreamingFlushHistNanos,
 			histogramWindow, streamingFlushHistMaxLatency.Nanoseconds(), 1),
 		CommitLatency: metric.NewHistogram(metaStreamingCommitLatency,
 			histogramWindow, streamingCommitLatencyMaxValue.Nanoseconds(), 1),
 		AdmitLatency: metric.NewHistogram(metaStreamingAdmitLatency,
 			histogramWindow, streamingAdmitLatencyMaxValue.Nanoseconds(), 1),
-		RunningCount: metric.NewGauge(metaStreamsRunning),
+		RunningCount:                metric.NewGauge(metaStreamsRunning),
+		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
+		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),
+		DataCheckpointSpanCount:     metric.NewGauge(metaDataCheckpointSpanCount),
+		FrontierCheckpointSpanCount: metric.NewGauge(metaFrontierCheckpointSpanCount),
 	}
 	return m
 }

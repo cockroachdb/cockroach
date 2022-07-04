@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -101,9 +102,9 @@ type streamIngestionProcessor struct {
 	// cutoverProvider indicates when the cutover time has been reached.
 	cutoverProvider cutoverProvider
 
-	// Checkpoint events may need to be buffered if they arrive within the same
-	// minimumFlushInterval.
-	bufferedCheckpoints map[string]hlc.Timestamp
+	// frontier keeps track of the progress for the spans tracked by this processor
+	// and is used forward resolved spans
+	frontier *span.Frontier
 	// lastFlushTime keeps track of the last time that we flushed due to a
 	// checkpoint timestamp event.
 	lastFlushTime time.Time
@@ -178,13 +179,28 @@ func newStreamIngestionDataProcessor(
 	if err != nil {
 		return nil, err
 	}
+	trackedSpans := make([]roachpb.Span, 0)
+	for _, partitionSpec := range spec.PartitionSpecs {
+		trackedSpans = append(trackedSpans, partitionSpec.Spans...)
+	}
+
+	frontier, err := span.MakeFrontierAt(spec.StartTime, trackedSpans...)
+	if err != nil {
+		return nil, err
+	}
+	for _, resolvedSpan := range spec.Checkpoint.ResolvedSpans {
+		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+			return nil, err
+		}
+	}
+
 	sip := &streamIngestionProcessor{
-		flowCtx:             flowCtx,
-		spec:                spec,
-		output:              output,
-		curBatch:            make([]storage.MVCCKeyValue, 0),
-		bufferedCheckpoints: make(map[string]hlc.Timestamp),
-		maxFlushRateTimer:   timeutil.NewTimer(),
+		flowCtx:           flowCtx,
+		spec:              spec,
+		output:            output,
+		curBatch:          make([]storage.MVCCKeyValue, 0),
+		frontier:          frontier,
+		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID:    jobspb.JobID(spec.JobID),
 			registry: flowCtx.Cfg.JobRegistry,
@@ -240,16 +256,16 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 	}()
 
-	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionIds))
+	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
 	sip.streamPartitionClients = make([]streamclient.Client, 0)
-	for i := range sip.spec.PartitionIds {
-		id := sip.spec.PartitionIds[i]
-		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
-		addr := sip.spec.PartitionAddresses[i]
+	for _, partitionSpec := range sip.spec.PartitionSpecs {
+		id := partitionSpec.PartitionID
+		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
+		addr := partitionSpec.Address
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
@@ -257,13 +273,22 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		} else {
 			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
+				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
 				return
 			}
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
+		startTime := frontierForSpans(sip.frontier, partitionSpec.Spans...)
+
+		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
+				streamingKnobs.BeforeClientSubscribe(string(token), startTime)
+			}
+		}
+
+		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
+
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
@@ -591,17 +616,29 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
-	log.VInfof(sip.Ctx, 3, "got checkpoint %v", event.GetResolved())
-	resolvedTimePtr := event.GetResolved()
-	if resolvedTimePtr == nil {
-		return errors.New("checkpoint event expected to have a resolved timestamp")
+	resolvedSpans := *event.GetResolvedSpans()
+	if resolvedSpans == nil {
+		return errors.New("checkpoint event expected to have resolved spans")
 	}
-	resolvedTime := *resolvedTimePtr
 
-	// Buffer the checkpoint.
-	if lastTimestamp, ok := sip.bufferedCheckpoints[event.partition]; !ok || lastTimestamp.Less(resolvedTime) {
-		sip.bufferedCheckpoints[event.partition] = resolvedTime
+	lowestTimestamp := hlc.MaxTimestamp
+	highestTimestamp := hlc.MinTimestamp
+	for _, resolvedSpan := range resolvedSpans {
+		if resolvedSpan.Timestamp.Less(lowestTimestamp) {
+			lowestTimestamp = resolvedSpan.Timestamp
+		}
+		if highestTimestamp.Less(resolvedSpan.Timestamp) {
+			highestTimestamp = resolvedSpan.Timestamp
+		}
+		_, err := sip.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
+		if err != nil {
+			return errors.Wrap(err, "unable to forward checkpoint frontier")
+		}
 	}
+
+	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
+	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
+	sip.metrics.DataCheckpointSpanCount.Update(int64(len(resolvedSpans)))
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }
@@ -642,21 +679,14 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.
-	for partition, timestamp := range sip.bufferedCheckpoints {
-		// Each partition is represented by a span defined by the
-		// partition address.
-		spanStartKey := roachpb.Key(partition)
-		resolvedSpan := jobspb.ResolvedSpan{
-			Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
-			Timestamp: timestamp,
-		}
-		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, resolvedSpan)
-	}
+	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
+	})
 
 	// Reset the current batch.
 	sip.curBatch = nil
 	sip.lastFlushTime = timeutil.Now()
-	sip.bufferedCheckpoints = make(map[string]hlc.Timestamp)
 
 	return &flushedCheckpoints, sip.batcher.Reset(ctx)
 }
@@ -693,6 +723,22 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 	}
 
 	return false, nil
+}
+
+// frontierForSpan returns the lowest timestamp in the frontier within the given
+// subspans.  If the subspans are entirely outside the Frontier's tracked span
+// an empty timestamp is returned.
+func frontierForSpans(f *span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
+	minTimestamp := hlc.Timestamp{}
+	for _, spanToCheck := range spans {
+		f.SpanEntries(spanToCheck, func(frontierSpan roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			if minTimestamp.IsEmpty() || ts.Less(minTimestamp) {
+				minTimestamp = ts
+			}
+			return span.ContinueMatch
+		})
+	}
+	return minTimestamp
 }
 
 func init() {
