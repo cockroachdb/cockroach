@@ -175,19 +175,23 @@ message ReadImportDataSpec {
   // NEXTID: 20.
 }
 
+// StreamIngestionPartitionSpec contains information about a partition and how
+// to connect to it.
+message StreamIngestionPartitionSpec {
+  optional string partition_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PartitionID"];
+  optional string subscription_token = 2 [(gogoproto.nullable) = false];
+  optional string address = 3 [(gogoproto.nullable) = false];
+  repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
+}
+
 message StreamIngestionDataSpec {
   reserved 1;
 
   // StreamID is the ID of the stream (which is shared across the producer and consumer).
   optional uint64 stream_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
 
-  // PartitionSpecs specify how to subscribe to the i'th partition.
-  repeated string partition_ids = 6;
-  // PartitionSpecs specify how to subscribe to the i'th partition.
-  repeated string partition_specs = 7;
-  // PartitionAddresses locate the partitions that produce events to be
-  // ingested. We don't set the casttype to avoid depending on ccl packages.
-  repeated string partition_addresses = 8;
+  // PartitionSpecs maps partition IDs to their specifications.
+  map<string, StreamIngestionPartitionSpec> partition_specs = 6 [(gogoproto.nullable) = false];
 
   // The processor will ingest events from StartTime onwards.
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
@@ -198,6 +202,9 @@ message StreamIngestionDataSpec {
 
   // The processor will rekey the tenant's keyspace to a new tenant based on 'tenant_rekey'.
   optional TenantRekey tenant_rekey = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantRekey"];
+
+  // Checkpoint stores a set of resolved spans denoting completed progress.
+  optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 10 [(gogoproto.nullable) = false];
 }
 
 message StreamIngestionFrontierSpec {
@@ -225,6 +232,9 @@ message StreamIngestionFrontierSpec {
   optional uint64 stream_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
   // StreamAddress locate the stream so that a stream client can be initialized.
   optional string stream_address = 5 [(gogoproto.nullable) = false];
+
+  // Checkpoint stores a set of resolved spans denoting completed progress
+  optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {

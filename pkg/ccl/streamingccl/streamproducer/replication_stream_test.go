@@ -81,8 +81,8 @@ func (d *partitionStreamDecoder) pop() streamingccl.Event {
 	if d.e.Checkpoint != nil {
 		// TODO(yevgeniy): Fix checkpoint handling and support backfill checkpoints.
 		// For now, check that we only have one span in the checkpoint, and use that timestamp.
-		require.Equal(d.t, 1, len(d.e.Checkpoint.Spans))
-		event := streamingccl.MakeCheckpointEvent(d.e.Checkpoint.Spans[0].Timestamp)
+		require.Equal(d.t, 1, len(d.e.Checkpoint.ResolvedSpans))
+		event := streamingccl.MakeCheckpointEvent(d.e.Checkpoint.ResolvedSpans)
 		d.e.Checkpoint = nil
 		return event
 	}
