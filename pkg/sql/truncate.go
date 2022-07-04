@@ -288,7 +288,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		NewPrimaryIndexId: newIndexIDs[0],
 		NewIndexes:        newIndexIDs[1:],
 	}
-	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), tableDesc, swapInfo); err != nil {
+	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), p.Descriptors(), tableDesc, swapInfo); err != nil {
 		return err
 	}
 

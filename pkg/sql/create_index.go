@@ -913,6 +913,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
+			p.Descriptors(),
 			regionConfig,
 			tableDesc,
 			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),

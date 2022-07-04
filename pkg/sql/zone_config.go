@@ -523,6 +523,7 @@ func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
+	descriptors *descs.Collection,
 	indexID descpb.IndexID,
 	oldPart catalog.Partitioning,
 	newPart catalog.Partitioning,
@@ -534,6 +535,6 @@ func deleteRemovedPartitionZoneConfigs(
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, update)
+	_, err = writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
 	return err
 }

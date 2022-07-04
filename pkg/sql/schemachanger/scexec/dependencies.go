@@ -356,11 +356,11 @@ type DescriptorMetadataUpdater interface {
 	// UpsertZoneConfig sets the zone config for a given descriptor. If necessary,
 	// the subzone spans will be recomputed as part of this call.
 	UpsertZoneConfig(
-		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
-	) error
+		ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig, regenerateSpans bool,
+	) (numAffected int, err error)
 
 	// DeleteZoneConfig deletes a zone config for a given descriptor.
-	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
+	DeleteZoneConfig(ctx context.Context, id descpb.ID) (numAffected int, err error)
 }
 
 // StatsRefreshQueue queues table for stats refreshes.

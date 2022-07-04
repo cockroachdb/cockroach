@@ -530,6 +530,7 @@ func removeLocalityConfigFromAllTablesInDB(
 					ctx,
 					p.txn,
 					p.ExecCfg(),
+					p.Descriptors(),
 					multiregion.RegionConfig{}, // pass dummy config as it is not used.
 					tbDesc,
 					applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
@@ -600,6 +601,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 			n.desc.ID,
 			params.p.txn,
 			params.p.execCfg,
+			params.p.Descriptors(),
 		); err != nil {
 			return err
 		}
@@ -756,6 +758,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		updatedRegionConfig,
 		params.p.txn,
 		params.p.execCfg,
+		params.p.Descriptors(),
 	); err != nil {
 		return err
 	}
@@ -1129,6 +1132,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		regionConfig,
 		params.p.txn,
 		params.p.execCfg,
+		params.p.Descriptors(),
 	); err != nil {
 		return err
 	}
@@ -1258,6 +1262,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		regionConfig,
 		params.p.txn,
 		params.p.execCfg,
+		params.p.Descriptors(),
 	); err != nil {
 		return err
 	}
