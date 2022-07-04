@@ -2105,7 +2105,7 @@ func planDatabaseModifiersForRestore(
 			defaultPrimaryRegion,
 			sg,
 			regionEnumID,
-			descpb.DataPlacement_DEFAULT,
+			catpb.DataPlacement_DEFAULT_DP,
 			nil,
 			descpb.ZoneConfigExtensions{},
 		)

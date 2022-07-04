@@ -13,7 +13,6 @@ package regionutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/errors"
 )
@@ -43,18 +42,18 @@ func GetNumVotersAndNumReplicas(
 	switch regionConfig.SurvivalGoal() {
 	// NB: See mega-comment inside `synthesizeVoterConstraints()` for why these
 	// are set the way they are.
-	case descpb.SurvivalGoal_ZONE_FAILURE:
+	case catpb.SurvivalGoal_ZONE_FAILURE:
 		numVoters = numVotersForZoneSurvival
 		switch regionConfig.Placement() {
-		case descpb.DataPlacement_DEFAULT:
+		case catpb.DataPlacement_DEFAULT_DP:
 			// <numVoters in the home region> + <1 replica for every other region>
 			numReplicas = (numVotersForZoneSurvival) + (numRegions - 1)
-		case descpb.DataPlacement_RESTRICTED:
+		case catpb.DataPlacement_RESTRICTED:
 			numReplicas = numVoters
 		default:
 			panic(errors.AssertionFailedf("unknown data placement: %v", regionConfig.Placement()))
 		}
-	case descpb.SurvivalGoal_REGION_FAILURE:
+	case catpb.SurvivalGoal_REGION_FAILURE:
 		// <(quorum - 1) voters in the home region> + <1 replica for every other
 		// region>
 		numVoters = numVotersForRegionSurvival
@@ -100,7 +99,7 @@ func SynthesizeVoterConstraints(
 	region catpb.RegionName, regionConfig multiregion.RegionConfig,
 ) ([]zonepb.ConstraintsConjunction, error) {
 	switch regionConfig.SurvivalGoal() {
-	case descpb.SurvivalGoal_ZONE_FAILURE:
+	case catpb.SurvivalGoal_ZONE_FAILURE:
 		return []zonepb.ConstraintsConjunction{
 			{
 				// We don't specify `NumReplicas` here to indicate that we want _all_
@@ -139,7 +138,7 @@ func SynthesizeVoterConstraints(
 				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			},
 		}, nil
-	case descpb.SurvivalGoal_REGION_FAILURE:
+	case catpb.SurvivalGoal_REGION_FAILURE:
 		numVoters, _ := GetNumVotersAndNumReplicas(regionConfig)
 		return []zonepb.ConstraintsConjunction{
 			{
@@ -187,10 +186,10 @@ func SynthesizeVoterConstraints(
 // SynthesizeReplicaConstraints generates a ConstraintsConjunction clause
 // representing the `constraints` field to be set for a multi-region database.
 func SynthesizeReplicaConstraints(
-	regions catpb.RegionNames, placement descpb.DataPlacement,
+	regions catpb.RegionNames, placement catpb.DataPlacement,
 ) ([]zonepb.ConstraintsConjunction, error) {
 	switch placement {
-	case descpb.DataPlacement_DEFAULT:
+	case catpb.DataPlacement_DEFAULT_DP:
 		constraints := make([]zonepb.ConstraintsConjunction, len(regions))
 		for i, region := range regions {
 			// Constrain at least 1 (voting or non-voting) replica per region.
@@ -200,7 +199,7 @@ func SynthesizeReplicaConstraints(
 			}
 		}
 		return constraints, nil
-	case descpb.DataPlacement_RESTRICTED:
+	case catpb.DataPlacement_RESTRICTED:
 		// In a RESTRICTED placement policy, the database zone config has no
 		// non-voters so that REGIONAL BY [TABLE | ROW] can inherit the RESTRICTED
 		// placement. Voter placement will be set at the table/partition level to
@@ -246,7 +245,7 @@ func AddConstraintsForSuperRegion(
 	zc.InheritedConstraints = false
 
 	switch regionConfig.SurvivalGoal() {
-	case descpb.SurvivalGoal_ZONE_FAILURE:
+	case catpb.SurvivalGoal_ZONE_FAILURE:
 		for _, region := range regions {
 			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
 				NumReplicas: 1,
@@ -254,7 +253,7 @@ func AddConstraintsForSuperRegion(
 			})
 		}
 		return nil
-	case descpb.SurvivalGoal_REGION_FAILURE:
+	case catpb.SurvivalGoal_REGION_FAILURE:
 		// There is a special case where we have 3 regions under survival goal
 		// region failure where we have to constrain an extra replica to any
 		// region within the super region to guarantee that all replicas are

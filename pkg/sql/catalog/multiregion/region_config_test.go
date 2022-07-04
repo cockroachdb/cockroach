@@ -40,9 +40,9 @@ func TestValidateRegionConfig(t *testing.T) {
 					"region_b",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				nil,
 				descpb.ZoneConfigExtensions{},
 			),
@@ -55,9 +55,9 @@ func TestValidateRegionConfig(t *testing.T) {
 					"region_b",
 				},
 				"region_b",
-				descpb.SurvivalGoal_REGION_FAILURE,
+				catpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				nil,
 				descpb.ZoneConfigExtensions{},
 			),
@@ -67,9 +67,9 @@ func TestValidateRegionConfig(t *testing.T) {
 			regionConfig: multiregion.MakeRegionConfig(
 				catpb.RegionNames{},
 				"region_b",
-				descpb.SurvivalGoal_REGION_FAILURE,
+				catpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				nil,
 				descpb.ZoneConfigExtensions{},
 			),
@@ -79,9 +79,9 @@ func TestValidateRegionConfig(t *testing.T) {
 			regionConfig: multiregion.MakeRegionConfig(
 				catpb.RegionNames{"region_a", "region_b", "region_c"},
 				"region_b",
-				descpb.SurvivalGoal_REGION_FAILURE,
+				catpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_RESTRICTED,
+				catpb.DataPlacement_RESTRICTED,
 				nil,
 				descpb.ZoneConfigExtensions{},
 			),
@@ -91,9 +91,9 @@ func TestValidateRegionConfig(t *testing.T) {
 			regionConfig: multiregion.MakeRegionConfig(
 				catpb.RegionNames{"region_a", "region_b", "region_c"},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				nil,
 				descpb.ZoneConfigExtensions{
 					RegionalIn: map[catpb.RegionName]zonepb.ZoneConfig{
@@ -139,9 +139,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",
@@ -161,9 +161,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",
@@ -183,9 +183,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",
@@ -205,9 +205,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr2",
@@ -231,9 +231,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",
@@ -257,9 +257,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",
@@ -283,9 +283,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_ZONE_FAILURE,
+				catpb.SurvivalGoal_ZONE_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",
@@ -305,9 +305,9 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 					"region_c",
 				},
 				"region_b",
-				descpb.SurvivalGoal_REGION_FAILURE,
+				catpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				catpb.DataPlacement_DEFAULT_DP,
 				[]descpb.SuperRegion{
 					{
 						SuperRegionName: "sr1",

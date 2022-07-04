@@ -33,18 +33,18 @@ const minNumRegionsForSurviveRegionGoal = 3
 // inform be a RegionConfig must be made directly on those structs and a new
 // RegionConfig must be synthesized to pick up those changes.
 type RegionConfig struct {
-	survivalGoal         descpb.SurvivalGoal
+	survivalGoal         catpb.SurvivalGoal
 	regions              catpb.RegionNames
 	transitioningRegions catpb.RegionNames
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
-	placement            descpb.DataPlacement
+	placement            catpb.DataPlacement
 	superRegions         []descpb.SuperRegion
 	zoneCfgExtensions    descpb.ZoneConfigExtensions
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
-func (r *RegionConfig) SurvivalGoal() descpb.SurvivalGoal {
+func (r *RegionConfig) SurvivalGoal() catpb.SurvivalGoal {
 	return r.survivalGoal
 }
 
@@ -123,21 +123,21 @@ func (r *RegionConfig) RegionEnumID() descpb.ID {
 }
 
 // Placement returns the data placement strategy for the region config.
-func (r *RegionConfig) Placement() descpb.DataPlacement {
+func (r *RegionConfig) Placement() catpb.DataPlacement {
 	return r.placement
 }
 
 // IsPlacementRestricted returns true if the database is in restricted
 // placement, false otherwise.
 func (r *RegionConfig) IsPlacementRestricted() bool {
-	return r.placement == descpb.DataPlacement_RESTRICTED
+	return r.placement == catpb.DataPlacement_RESTRICTED
 }
 
 // WithPlacementDefault returns a copy of the RegionConfig with the data
 // placement strategy configured as placement default.
 func (r *RegionConfig) WithPlacementDefault() RegionConfig {
 	cpy := *r
-	cpy.placement = descpb.DataPlacement_DEFAULT
+	cpy.placement = catpb.DataPlacement_DEFAULT_DP
 	return cpy
 }
 
@@ -187,7 +187,7 @@ func extendZoneCfg(zc, ext zonepb.ZoneConfig) zonepb.ZoneConfig {
 // inherit replica constraints from their database zone configuration, or
 // whether they must set these constraints themselves.
 func (r *RegionConfig) GlobalTablesInheritDatabaseConstraints() bool {
-	if r.placement == descpb.DataPlacement_RESTRICTED {
+	if r.placement == catpb.DataPlacement_RESTRICTED {
 		// Placement restricted does not apply to GLOBAL tables.
 		return false
 	}
@@ -239,9 +239,9 @@ func WithTransitioningRegions(transitioningRegions catpb.RegionNames) MakeRegion
 func MakeRegionConfig(
 	regions catpb.RegionNames,
 	primaryRegion catpb.RegionName,
-	survivalGoal descpb.SurvivalGoal,
+	survivalGoal catpb.SurvivalGoal,
 	regionEnumID descpb.ID,
-	placement descpb.DataPlacement,
+	placement catpb.DataPlacement,
 	superRegions []descpb.SuperRegion,
 	zoneCfgExtensions descpb.ZoneConfigExtensions,
 	opts ...MakeRegionConfigOption,
@@ -263,8 +263,8 @@ func MakeRegionConfig(
 
 // CanSatisfySurvivalGoal returns true if the survival goal is satisfiable by
 // the given region config.
-func CanSatisfySurvivalGoal(survivalGoal descpb.SurvivalGoal, numRegions int) error {
-	if survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+func CanSatisfySurvivalGoal(survivalGoal catpb.SurvivalGoal, numRegions int) error {
+	if survivalGoal == catpb.SurvivalGoal_REGION_FAILURE {
 		if numRegions < minNumRegionsForSurviveRegionGoal {
 			return errors.WithHintf(
 				pgerror.Newf(
@@ -288,8 +288,8 @@ func ValidateRegionConfig(config RegionConfig) error {
 	if len(config.regions) == 0 {
 		return errors.AssertionFailedf("expected > 0 number of regions in the region config")
 	}
-	if config.placement == descpb.DataPlacement_RESTRICTED &&
-		config.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+	if config.placement == catpb.DataPlacement_RESTRICTED &&
+		config.survivalGoal == catpb.SurvivalGoal_REGION_FAILURE {
 		return errors.AssertionFailedf(
 			"cannot have a database with restricted placement that is also region survivable")
 	}
@@ -323,7 +323,7 @@ func ValidateRegionConfig(config RegionConfig) error {
 //   4. Each region can only belong to one super region.
 func ValidateSuperRegions(
 	superRegions []descpb.SuperRegion,
-	survivalGoal descpb.SurvivalGoal,
+	survivalGoal catpb.SurvivalGoal,
 	regionNames catpb.RegionNames,
 	errorHandler func(error),
 ) {

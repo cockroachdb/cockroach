@@ -1183,22 +1183,6 @@ message TableDescriptor {
   // Next ID: 53
 }
 
-// SurvivalGoal is the survival goal for a database.
-enum SurvivalGoal {
-  // Survive a zone failure. This is the default.
-  ZONE_FAILURE = 0;
-  // Survive a region failure.
-  REGION_FAILURE = 1;
-}
-
-// DataPlacement is the data placement strategy for a database.
-enum DataPlacement {
-  // Default placement - use non-voters.
-  DEFAULT = 0;
-  // Restricted placement - contain data strictly inside assigned region.
-  RESTRICTED = 1;
-}
-
 // DatabaseDescriptor represents a namespace (aka database) and is stored
 // in a structured metadata key. The DatabaseDescriptor has a globally-unique ID
 // shared with other Descriptors.
@@ -1247,7 +1231,7 @@ message DatabaseDescriptor {
     option (gogoproto.equal) = true;
 
     reserved 1;
-    optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
+    optional cockroach.sql.catalog.catpb.SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
     optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
 
     // RegionEnumID represents ID of the type descriptor corresponding to the
@@ -1257,7 +1241,7 @@ message DatabaseDescriptor {
 
     // DataPlacement dictates whether or not to use a restricted data placement
     // policy.
-    optional DataPlacement placement = 5 [(gogoproto.nullable) = false];
+    optional cockroach.sql.catalog.catpb.DataPlacement placement = 5 [(gogoproto.nullable) = false];
   }
   // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;

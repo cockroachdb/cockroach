@@ -297,30 +297,30 @@ func (p *planner) createDescriptorWithID(
 }
 
 // TranslateSurvivalGoal translates a tree.SurvivalGoal into a
-// descpb.SurvivalGoal.
-func TranslateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
+// catpb.SurvivalGoal.
+func TranslateSurvivalGoal(g tree.SurvivalGoal) (catpb.SurvivalGoal, error) {
 	switch g {
 	case tree.SurvivalGoalDefault:
-		return descpb.SurvivalGoal_ZONE_FAILURE, nil
+		return catpb.SurvivalGoal_ZONE_FAILURE, nil
 	case tree.SurvivalGoalZoneFailure:
-		return descpb.SurvivalGoal_ZONE_FAILURE, nil
+		return catpb.SurvivalGoal_ZONE_FAILURE, nil
 	case tree.SurvivalGoalRegionFailure:
-		return descpb.SurvivalGoal_REGION_FAILURE, nil
+		return catpb.SurvivalGoal_REGION_FAILURE, nil
 	default:
 		return 0, errors.Newf("unknown survival goal: %d", g)
 	}
 }
 
 // TranslateDataPlacement translates a tree.DataPlacement into a
-// descpb.DataPlacement.
-func TranslateDataPlacement(g tree.DataPlacement) (descpb.DataPlacement, error) {
+// catpb.DataPlacement.
+func TranslateDataPlacement(g tree.DataPlacement) (catpb.DataPlacement, error) {
 	switch g {
 	case tree.DataPlacementUnspecified:
-		return descpb.DataPlacement_DEFAULT, nil
+		return catpb.DataPlacement_DEFAULT_DP, nil
 	case tree.DataPlacementDefault:
-		return descpb.DataPlacement_DEFAULT, nil
+		return catpb.DataPlacement_DEFAULT_DP, nil
 	case tree.DataPlacementRestricted:
-		return descpb.DataPlacement_RESTRICTED, nil
+		return catpb.DataPlacement_RESTRICTED, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown data placement: %d", g)
 	}
