@@ -111,7 +111,7 @@ func createRangeData(
 				replicatedKeys = append(replicatedKeys, key)
 			}
 		case storage.MVCCRangeKey:
-			require.NoError(t, eng.ExperimentalPutMVCCRangeKey(key, storage.MVCCValue{}))
+			require.NoError(t, eng.PutMVCCRangeKey(key, storage.MVCCValue{}))
 			if !bytes.HasPrefix(key.StartKey, unreplicatedPrefix) {
 				replicatedKeys = append(replicatedKeys, key)
 			}
@@ -316,7 +316,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	require.NoError(t, eng.ExperimentalPutEngineRangeKey(keys.MinKey.Next(), keys.MaxKey, []byte{1}, []byte{}))
+	require.NoError(t, eng.PutEngineRangeKey(keys.MinKey.Next(), keys.MaxKey, []byte{1}, []byte{}))
 
 	// Use a snapshot for the iteration, because we need consistent
 	// iterators.

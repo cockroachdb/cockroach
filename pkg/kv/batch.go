@@ -649,14 +649,10 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-// ExperimentalDelRangeUsingTombstone deletes the rows between begin (inclusive)
-// and end (exclusive) using an MVCC range tombstone. Callers must check the
+// DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
+// (exclusive) using an MVCC range tombstone. Callers must check the
 // MVCCRangeTombstones version gate before using this.
-//
-// This method is EXPERIMENTAL: range tombstones are under active development,
-// and have severe limitations including being ignored by all KV and MVCC APIs
-// and only being stored in memory.
-func (b *Batch) ExperimentalDelRangeUsingTombstone(s, e interface{}) {
+func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
 	start, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -672,7 +668,7 @@ func (b *Batch) ExperimentalDelRangeUsingTombstone(s, e interface{}) {
 			Key:    start,
 			EndKey: end,
 		},
-		UseExperimentalRangeTombstone: true,
+		UseRangeTombstone: true,
 	})
 	b.initResult(1, 0, notRaw, nil)
 }

@@ -632,14 +632,14 @@ func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 share a block in a single SST.
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
 	require.NoError(t, eng.Flush())
 
 	// Overlapping range keys [x-z)@5, [x-z)@7 share a block in a single SST.
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("x", "z", 5), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("x", "z", 7), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("x", "z", 5), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("x", "z", 7), MVCCValue{}))
 	require.NoError(t, eng.Flush())
 
 	testcases := map[string]struct {
@@ -752,14 +752,14 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 in a single block in a single SST.
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
 	require.NoError(t, eng.Flush())
 
 	// Clear a@5 and [c-d)@7 in a separate SST.
 	require.NoError(t, eng.ClearMVCC(pointKey("a", 5)))
-	require.NoError(t, eng.ExperimentalClearMVCCRangeKey(rangeKey("c", "d", 7)))
+	require.NoError(t, eng.ClearMVCCRangeKey(rangeKey("c", "d", 7)))
 	require.NoError(t, eng.Flush())
 
 	testcases := map[string]struct {
@@ -868,9 +868,9 @@ func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Separate range keys [b-c)@5, [c-d)@7, [d-e)@9 in a single block in a single SST.
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("b", "c", 5), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("c", "d", 7), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("d", "e", 9), MVCCValue{}))
 	require.NoError(t, eng.Flush())
 
 	// Clear [a-z) in a separate SST.

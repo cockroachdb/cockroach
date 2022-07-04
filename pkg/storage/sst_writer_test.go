@@ -134,11 +134,11 @@ func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
 			rangeKey := rangeKey("a", "b", 2)
 
 			// Put should error, but clears are noops.
-			err := w.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{})
+			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
-			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ExperimentalClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
+			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
 		})
 	}
 }
@@ -158,10 +158,10 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 	require.NoError(t, sst.Put(pointKey("a", 1), stringValueRaw("foo")))
 	require.EqualValues(t, 9, sst.DataSize)
 
-	require.NoError(t, sst.ExperimentalPutMVCCRangeKey(rangeKey("a", "e", 2), tombstoneLocalTS(1)))
+	require.NoError(t, sst.PutMVCCRangeKey(rangeKey("a", "e", 2), tombstoneLocalTS(1)))
 	require.EqualValues(t, 20, sst.DataSize)
 
-	require.NoError(t, sst.ExperimentalPutEngineRangeKey(roachpb.Key("f"), roachpb.Key("g"),
+	require.NoError(t, sst.PutEngineRangeKey(roachpb.Key("f"), roachpb.Key("g"),
 		wallTSRaw(2), tombstoneLocalTSRaw(1)))
 	require.EqualValues(t, 31, sst.DataSize)
 

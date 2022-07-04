@@ -240,7 +240,7 @@ func (msstw *multiSSTWriter) PutRangeKey(
 		return errors.AssertionFailedf("client error: expected %s to fall in one of %s",
 			roachpb.Span{Key: start, EndKey: end}, msstw.keyRanges)
 	}
-	if err := msstw.currSST.ExperimentalPutEngineRangeKey(start, end, suffix, value); err != nil {
+	if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
 		return errors.Wrap(err, "failed to put range key in sst")
 	}
 	return nil
@@ -463,7 +463,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 			for _, rkv := range iter.RangeKeys() {
 				rangeKVs++
-				err := b.ExperimentalPutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 				if err != nil {
 					return 0, err
 				}
