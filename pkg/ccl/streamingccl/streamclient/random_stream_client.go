@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -378,7 +379,7 @@ func (m *randomStreamClient) Subscribe(
 				// Emit a CheckpointEvent.
 				resolvedTime := timeutil.Now()
 				hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
-				event = streamingccl.MakeCheckpointEvent(hlcResolvedTime)
+				event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{{Timestamp: hlcResolvedTime}})
 				numKVEventsSinceLastResolved = 0
 			} else {
 				// If there are system KVs to emit, prioritize those.

@@ -439,3 +439,19 @@ func (f *Frontier) String() string {
 	})
 	return buf.String()
 }
+
+// FrontierForSpan returns the lowest timestamp in the frontier within the given
+// subspans.  If the subspans are entirely outside the Frontier's tracked span
+// an empty timestamp is returned.
+func (f *Frontier) FrontierForSpans(spans ...roachpb.Span) hlc.Timestamp {
+	minTimestamp := hlc.Timestamp{}
+	for _, span := range spans {
+		f.SpanEntries(span, func(frontierSpan roachpb.Span, ts hlc.Timestamp) OpResult {
+			if minTimestamp.IsEmpty() || ts.Less(minTimestamp) {
+				minTimestamp = ts
+			}
+			return ContinueMatch
+		})
+	}
+	return minTimestamp
+}

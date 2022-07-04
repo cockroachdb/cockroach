@@ -68,22 +68,19 @@ func getStreamIngestionStats(
 		lagInfo := &streampb.StreamIngestionStats_ReplicationLagInfo{
 			MinIngestedTimestamp: *highwater,
 		}
-		lagInfo.SlowestSourcePartitionTimestamp = hlc.MaxTimestamp
-		lagInfo.FastestSourcePartitionTimestamp = hlc.MinTimestamp
-		for partition, pp := range progress.GetStreamIngest().PartitionProgress {
-			if pp.IngestedTimestamp.Less(lagInfo.SlowestSourcePartitionTimestamp) {
-				lagInfo.SlowestSourcePartitionTimestamp = pp.IngestedTimestamp
-				lagInfo.SlowestSourcePartition = partition
-
+		lagInfo.EarliestCheckpointedTimestamp = hlc.MaxTimestamp
+		lagInfo.LatestCheckpointedTimestamp = hlc.MinTimestamp
+		for _, resolvedSpan := range progress.GetStreamIngest().Checkpoint {
+			if resolvedSpan.Timestamp.Less(lagInfo.EarliestCheckpointedTimestamp) {
+				lagInfo.EarliestCheckpointedTimestamp = resolvedSpan.Timestamp
 			}
 
-			if lagInfo.FastestSourcePartitionTimestamp.Less(pp.IngestedTimestamp) {
-				lagInfo.FastestSourcePartitionTimestamp = pp.IngestedTimestamp
-				lagInfo.FastestSourcePartition = partition
+			if lagInfo.LatestCheckpointedTimestamp.Less(resolvedSpan.Timestamp) {
+				lagInfo.LatestCheckpointedTimestamp = resolvedSpan.Timestamp
 			}
 		}
-		lagInfo.SlowestFastestPartitionIngestionLag = lagInfo.FastestSourcePartitionTimestamp.GoTime().
-			Sub(lagInfo.SlowestSourcePartitionTimestamp.GoTime())
+		lagInfo.SlowestFastestIngestionLag = lagInfo.LatestCheckpointedTimestamp.GoTime().
+			Sub(lagInfo.EarliestCheckpointedTimestamp.GoTime())
 		lagInfo.ReplicationLag = timeutil.Since(highwater.GoTime())
 		stats.ReplicationLagInfo = lagInfo
 	}
@@ -138,6 +135,12 @@ func ingest(
 			initialHighWater = *h
 		}
 
+		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		checkpoint := make([]jobspb.ResolvedSpan, 0)
+		if ingestProgress.Checkpoint != nil {
+			checkpoint = ingestProgress.Checkpoint
+		}
+
 		evalCtx := execCtx.ExtendedEvalContext()
 		dsp := execCtx.DistSQLPlanner()
 
@@ -148,7 +151,7 @@ func ingest(
 
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-			streamAddress, topology, sqlInstanceIDs, initialHighWater, ingestionJobID, streamID, oldTenantID, newTenantID)
+			streamAddress, topology, sqlInstanceIDs, initialHighWater, checkpoint, ingestionJobID, streamID, oldTenantID, newTenantID)
 		if err != nil {
 			return err
 		}
@@ -175,6 +178,7 @@ func ingest(
 // Resume is part of the jobs.Resumer interface.
 func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
+
 	p := execCtx.(sql.JobExecContext)
 
 	// Start ingesting KVs from the replication stream.

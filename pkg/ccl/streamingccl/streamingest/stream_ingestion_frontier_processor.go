@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -73,7 +72,7 @@ type streamIngestionFrontier struct {
 	heartbeatSender *heartbeatSender
 
 	lastPartitionUpdate time.Time
-	partitionProgress   map[string]*jobspb.StreamIngestionProgress_PartitionProgress
+	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -91,17 +90,23 @@ func newStreamIngestionFrontierProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	frontier, err := span.MakeFrontier(spec.TrackedSpans...)
+	frontier, err := span.MakeFrontierAt(spec.HighWaterAtStart, spec.TrackedSpans...)
 	if err != nil {
 		return nil, err
 	}
+	for _, resolvedSpan := range spec.Checkpoint {
+		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+			return nil, err
+		}
+	}
+
 	heartbeatSender, err := newHeartbeatSender(flowCtx, spec)
 	if err != nil {
 		return nil, err
 	}
-	partitionProgress := make(map[string]*jobspb.StreamIngestionProgress_PartitionProgress)
+	partitionProgress := make(map[string]jobspb.StreamIngestionProgress_PartitionProgress)
 	for srcPartitionID, destSQLInstanceID := range spec.SubscribingSQLInstances {
-		partitionProgress[srcPartitionID] = &jobspb.StreamIngestionProgress_PartitionProgress{
+		partitionProgress[srcPartitionID] = jobspb.StreamIngestionProgress_PartitionProgress{
 			DestSQLInstanceID: base.SQLInstanceID(destSQLInstanceID),
 		}
 	}
@@ -386,43 +391,27 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	registry := sf.flowCtx.Cfg.JobRegistry
 	jobID := jobspb.JobID(sf.spec.JobID)
 	f := sf.frontier
-	allSpans := roachpb.Span{
-		Key:    keys.MinKey,
-		EndKey: keys.MaxKey,
-	}
-	partitionFrontiers := sf.partitionProgress
 	job, err := registry.LoadJob(ctx, jobID)
 	if err != nil {
 		return err
 	}
 
-	f.SpanEntries(allSpans, func(span roachpb.Span, timestamp hlc.Timestamp) (done span.OpResult) {
-		partitionKey := span.Key
-		partition := string(partitionKey)
-		curFrontier, ok := partitionFrontiers[partition]
-		if !ok {
-			err = errors.Errorf("received progress update from unrecognized partition %s", partition)
-			return true
-		}
-		if curFrontier.IngestedTimestamp.Less(timestamp) {
-			curFrontier.IngestedTimestamp = timestamp
-		}
-		return true
+	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+		frontierResolvedSpans = append(frontierResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
 	})
 
-	if err != nil {
-		return err
-	}
+	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
 	// TODO(pbardea): Only update partitions that have changed.
 	return job.FractionProgressed(ctx, nil, /* txn */
 		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			prog := details.(*jobspb.Progress_StreamIngest).StreamIngest
-			prog.PartitionProgress = make(map[string]jobspb.StreamIngestionProgress_PartitionProgress)
-			for partition, progress := range partitionFrontiers {
-				prog.PartitionProgress[partition] = *progress
-			}
+
+			prog.PartitionProgress = partitionProgress
+			prog.Checkpoint = frontierResolvedSpans
 			// "FractionProgressed" isn't relevant on jobs that are streaming in changes.
 			return 0.0
 		},
