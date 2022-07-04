@@ -1895,7 +1895,7 @@ func maybeUpdateZoneConfigsForPKChange(
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, table.ID)
+	zone, err := getZoneConfigRaw(ctx, execCfg.InternalExecutor, txn, table.ID)
 	if err != nil {
 		return err
 	}
