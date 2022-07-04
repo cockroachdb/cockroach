@@ -97,6 +97,14 @@ CREATE TABLE generated_as_identity (
 )
 ----
 
+exec-ddl
+CREATE TABLE jsonb_table (
+  j JSONB,
+  k JSONB,
+  ref TEXT
+)
+----
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -612,6 +620,24 @@ build
 UPDATE abcde SET b=1 ORDER BY c
 ----
 error (42601): UPDATE statement requires LIMIT when ORDER BY is used
+
+# JSONB single clause update.
+build
+UPDATE jsonb_table SET j['a'] = '1', k[ref]['b'][0] = '2'
+----
+update jsonb_table
+ ├── columns: <none>
+ ├── fetch columns: j:7 k:8 ref:9 rowid:10
+ ├── update-mapping:
+ │    ├── j_new:13 => j:1
+ │    └── k_new:14 => k:2
+ └── project
+      ├── columns: j_new:13 k_new:14 j:7 k:8 ref:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      ├── scan jsonb_table
+      │    └── columns: j:7 k:8 ref:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      └── projections
+           ├── json_set(j:7, ARRAY['a'], '1', true) [as=j_new:13]
+           └── json_set(k:8, ARRAY[ref:9, 'b', 0::STRING], '2', true) [as=k_new:14]
 
 # ------------------------------------------------------------------------------
 # Test RETURNING.

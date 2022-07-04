@@ -272,7 +272,34 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 				}
 			}
 		} else {
-			addCol(set.Expr, mb.targetColList[n])
+			expr := set.Expr
+			if len(set.ColumnRefs) > 1 {
+				panic(errors.AssertionFailedf("expected <= 1 column ref, found %d", len(set.ColumnRefs)))
+			}
+			for _, ref := range set.ColumnRefs {
+				// For JSONB subscripts, replace with json_set.
+				if len(ref.Subscripts) > 0 {
+					arr := &tree.Array{}
+					for _, t := range ref.Subscripts {
+						if t.Slice {
+							panic(pgerror.Newf(pgcode.DatatypeMismatch, "cannot reference a slice in UPDATE"))
+						}
+						// Cast all expressions to strings to support mixing strings and ints.
+						// JSONB automatically knows how to evaluate strings to int indexes and vice versa.
+						arr.Exprs = append(arr.Exprs, &tree.CastExpr{Expr: t.Begin, Type: types.String})
+					}
+					expr = &tree.FuncExpr{
+						Func: tree.WrapFunction("json_set"),
+						Exprs: tree.Exprs{
+							&tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{string(ref.Name)}},
+							arr,
+							expr,
+							tree.DBoolTrue,
+						},
+					}
+				}
+			}
+			addCol(expr, mb.targetColList[n])
 			n++
 		}
 	}
