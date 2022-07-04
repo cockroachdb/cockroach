@@ -5228,6 +5228,147 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.trim_tenant_prefix": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"key", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				key := tree.MustBeDBytes(args[0])
+				remainder, _, err := keys.DecodeTenantPrefix([]byte(key))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(remainder)), nil
+			},
+			Info:       "This function assumes the given bytes are a CockroachDB key and trims any tenant prefix from the key.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"keys", types.BytesArray},
+			},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				result := tree.NewDArray(types.Bytes)
+				for _, datum := range arr.Array {
+					key := tree.MustBeDBytes(datum)
+					remainder, _, err := keys.DecodeTenantPrefix([]byte(key))
+					if err != nil {
+						return nil, err
+					}
+					if err := result.Append(tree.NewDBytes(tree.DBytes(remainder))); err != nil {
+						return nil, err
+					}
+
+				}
+				return result, nil
+			},
+			Info:       "This function assumes the given bytes are a CockroachDB key and trims any tenant prefix from the key.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"crdb_internal.tenant_span": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"tenant_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
+				}
+				start := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(sTenID)))
+				end := start.PrefixEnd()
+
+				result := tree.NewDArray(types.Bytes)
+				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
+					return nil, err
+				}
+
+				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
+					return nil, err
+				}
+
+				return result, nil
+			},
+			Info:       "This function returns the span that contains the keys for the given tenant.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"crdb_internal.table_span": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tabID := uint32(tree.MustBeDInt(args[0]))
+
+				start := evalCtx.Codec.TablePrefix(tabID)
+				end := start.PrefixEnd()
+
+				result := tree.NewDArray(types.Bytes)
+				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
+					return nil, err
+				}
+
+				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
+					return nil, err
+				}
+
+				return result, nil
+			},
+			Info:       "This function returns the span that contains the keys for the given table.",
+			Volatility: volatility.Leakproof,
+		},
+	),
+	"crdb_internal.index_span": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_id", types.Int},
+				{"index_id", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.BytesArray),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tabID := uint32(tree.MustBeDInt(args[0]))
+				indexID := uint32(tree.MustBeDInt(args[1]))
+
+				start := roachpb.Key(rowenc.MakeIndexKeyPrefix(evalCtx.Codec,
+					catid.DescID(tabID),
+					catid.IndexID(indexID)))
+				end := start.PrefixEnd()
+
+				result := tree.NewDArray(types.Bytes)
+				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
+					return nil, err
+				}
+
+				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
+					return nil, err
+				}
+
+				return result, nil
+			},
+			Info:       "This function returns the span that contains the keys for the given index.",
+			Volatility: volatility.Leakproof,
+		},
+	),
 	// Return a pretty key for a given raw key, skipping the specified number of
 	// fields.
 	"crdb_internal.pretty_key": makeBuiltin(
