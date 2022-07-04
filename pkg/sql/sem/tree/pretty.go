@@ -1217,7 +1217,7 @@ func (node *Order) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *UpdateExpr) doc(p *PrettyCfg) pretty.Doc {
-	d := p.Doc(&node.Names)
+	d := p.Doc(&node.ColumnRefs)
 	if node.Tuple {
 		d = p.bracket("(", d, ")")
 	}

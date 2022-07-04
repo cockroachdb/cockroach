@@ -200,11 +200,35 @@ UPDATE a SET b = (3) -- fully parenthesized
 UPDATE a SET b = _ -- literals removed
 UPDATE _ SET _ = 3 -- identifiers removed
 
-error
+parse
 UPDATE kv SET k[0] = 9
+----
+UPDATE kv SET k[0] = 9
+UPDATE kv SET k[(0)] = (9) -- fully parenthesized
+UPDATE kv SET k[_] = _ -- literals removed
+UPDATE _ SET _[0] = 9 -- identifiers removed
+
+parse
+UPDATE a SET k['a'] = 1
+----
+UPDATE a SET k['a'] = 1
+UPDATE a SET k[('a')] = (1) -- fully parenthesized
+UPDATE a SET k['_'] = _ -- literals removed
+UPDATE _ SET _['a'] = 1 -- identifiers removed
+
+parse
+UPDATE a SET k['a'][0][column_ref] = 1
+----
+UPDATE a SET k['a'][0][column_ref] = 1
+UPDATE a SET k[('a')][(0)][(column_ref)] = (1) -- fully parenthesized
+UPDATE a SET k['_'][_][column_ref] = _ -- literals removed
+UPDATE _ SET _['a'][0][_] = 1 -- identifiers removed
+
+error
+UPDATE a SET (k['a'], k['b']) = ('1', '2')
 ----
 at or near "[": syntax error
 DETAIL: source SQL:
-UPDATE kv SET k[0] = 9
+UPDATE a SET (k['a'], k['b']) = ('1', '2')
                ^
 HINT: try \h UPDATE

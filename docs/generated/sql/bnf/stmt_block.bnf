@@ -2394,7 +2394,7 @@ partition ::=
 	'PARTITION' partition_name
 
 single_set_clause ::=
-	column_name '=' a_expr
+	column_ref '=' a_expr
 
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr
@@ -2861,6 +2861,10 @@ var_list ::=
 
 schema_wildcard ::=
 	wildcard_pattern
+
+column_ref ::=
+	column_name
+	| column_name array_subscripts
 
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'

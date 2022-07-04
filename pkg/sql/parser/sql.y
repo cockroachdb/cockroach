@@ -326,6 +326,9 @@ func (u *sqlSymUnion) tableNames() tree.TableNames {
 func (u *sqlSymUnion) indexFlags() *tree.IndexFlags {
     return u.val.(*tree.IndexFlags)
 }
+func (u *sqlSymUnion) columnRef() tree.ColumnRef {
+    return u.val.(tree.ColumnRef)
+}
 func (u *sqlSymUnion) arraySubscript() *tree.ArraySubscript {
     return u.val.(*tree.ArraySubscript)
 }
@@ -1302,6 +1305,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.UpdateExprs> set_clause_list
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
 %type <tree.ArraySubscripts> array_subscripts
+%type <tree.ColumnRef> column_ref
 %type <tree.GroupBy> group_clause
 %type <tree.Exprs> group_by_list
 %type <tree.Expr> group_by_item
@@ -9944,17 +9948,33 @@ set_clause:
   single_set_clause
 | multiple_set_clause
 
-single_set_clause:
-  column_name '=' a_expr
+column_ref:
+  column_name
   {
-    $$.val = &tree.UpdateExpr{Names: tree.NameList{tree.Name($1)}, Expr: $3.expr()}
+    $$.val = tree.ColumnRef{Name: tree.Name($1)}
+  }
+| column_name array_subscripts
+  {
+    $$.val = tree.ColumnRef{Name: tree.Name($1), Subscripts: $2.arraySubscripts()}
   }
 | column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
+
+single_set_clause:
+  column_ref '=' a_expr
+  {
+    $$.val = &tree.UpdateExpr{ColumnRefs: tree.ColumnRefList{$1.columnRef()}, Expr: $3.expr()}
+  }
 
 multiple_set_clause:
   '(' insert_column_list ')' '=' in_expr
   {
-    $$.val = &tree.UpdateExpr{Tuple: true, Names: $2.nameList(), Expr: $5.expr()}
+    // TODO(#77434): make this work for the multiple_set_clause case.
+    names := $2.nameList()
+    refs := make([]tree.ColumnRef, len(names))
+    for idx, name := range names {
+      refs[idx] = tree.ColumnRef{Name: name}
+    }
+    $$.val = &tree.UpdateExpr{Tuple: true, ColumnRefs: refs, Expr: $5.expr()}
   }
 
 // %Help: REASSIGN OWNED BY - change ownership of all objects

@@ -452,6 +452,25 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 	}
 }
 
+// addTargetColsByRefs adds one target column for each of the names in the given
+// list.
+func (mb *mutationBuilder) addTargetColsByRefs(refs tree.ColumnRefList) {
+	for _, ref := range refs {
+		name := ref.Name
+		// Determine the ordinal position of the named column in the table and
+		// add it as a target column.
+		if ord := findPublicTableColumnByName(mb.tab, name); ord != -1 {
+			// System columns are invalid target columns.
+			if mb.tab.Column(ord).Kind() == cat.System {
+				panic(pgerror.Newf(pgcode.InvalidColumnReference, "cannot modify system column %q", name))
+			}
+			mb.addTargetCol(ord)
+			continue
+		}
+		panic(colinfo.NewUndefinedColumnError(string(name)))
+	}
+}
+
 // addTargetCol adds a target column by its ordinal position in the target
 // table. It raises an error if a mutation or computed column is targeted, or if
 // the same column is targeted multiple times.

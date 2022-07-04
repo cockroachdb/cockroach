@@ -937,8 +937,8 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 			}
 		}
 		update.Exprs = append(update.Exprs, &tree.UpdateExpr{
-			Names: tree.NameList{ref.item.ColumnName},
-			Expr:  expr,
+			ColumnRefs: tree.ColumnRefList{{Name: ref.item.ColumnName}},
+			Expr:       expr,
 		})
 	}
 	if len(update.Exprs) == 0 {
