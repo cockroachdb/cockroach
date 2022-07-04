@@ -137,6 +137,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedStatsAvailable  bool
 		expectedRead            bool
 		expectedWrite           bool
+		expectedErr             string // Empty string means no error is expected.
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -243,6 +244,23 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           true,
 		},
+		// Not of type DML so not sampled
+		{
+			name:                    "sql-error",
+			query:                   "CREATE USER root;",
+			queryNoConstants:        "CREATE USER root",
+			execTimestampsSeconds:   []float64{9},
+			expectedLogStatement:    `CREATE USER root`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  false,
+			expectedRead:            false,
+			expectedWrite:           false,
+			expectedErr:             "a role/user named ‹root› already exists",
+		},
 	}
 
 	for _, tc := range testData {
@@ -250,7 +268,10 @@ func TestTelemetryLogging(t *testing.T) {
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.setTime(stubTime)
-			db.Exec(t, tc.query)
+			_, err := db.DB.ExecContext(context.Background(), tc.query)
+			if err != nil && tc.expectedErr == "" {
+				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
+			}
 		}
 	}
 
@@ -279,142 +300,150 @@ func TestTelemetryLogging(t *testing.T) {
 	}
 
 	for _, tc := range testData {
-		logCount := 0
-		expectedLogCount := len(tc.expectedSkipped)
-		// NB: FetchEntriesFromFiles delivers entries in reverse order.
-		for i := len(entries) - 1; i >= 0; i-- {
-			e := entries[i]
-			if strings.Contains(e.Message, tc.expectedLogStatement) {
-				if logCount == expectedLogCount {
-					t.Errorf("%s: found more than %d expected log entries", tc.name, expectedLogCount)
-					break
-				}
-				expectedSkipped := tc.expectedSkipped[logCount]
-				logCount++
-				if expectedSkipped == 0 {
-					if strings.Contains(e.Message, "SkippedQueries") {
-						t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
+		t.Run(tc.name, func(t *testing.T) {
+			logCount := 0
+			expectedLogCount := len(tc.expectedSkipped)
+			// NB: FetchEntriesFromFiles delivers entries in reverse order.
+			for i := len(entries) - 1; i >= 0; i-- {
+				e := entries[i]
+				if strings.Contains(e.Message, tc.expectedLogStatement) {
+					if logCount == expectedLogCount {
+						t.Errorf("%s: found more than %d expected log entries", tc.name, expectedLogCount)
+						break
 					}
-				} else {
-					if expected := fmt.Sprintf(`"SkippedQueries":%d`, expectedSkipped); !strings.Contains(e.Message, expected) {
-						t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
+					expectedSkipped := tc.expectedSkipped[logCount]
+					logCount++
+					if expectedSkipped == 0 {
+						if strings.Contains(e.Message, "SkippedQueries") {
+							t.Errorf("%s: expected no skipped queries, found:\n%s", tc.name, e.Message)
+						}
+					} else {
+						if expected := fmt.Sprintf(`"SkippedQueries":%d`, expectedSkipped); !strings.Contains(e.Message, expected) {
+							t.Errorf("%s: expected %s found:\n%s", tc.name, expected, e.Message)
+						}
 					}
-				}
-				costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
-				if !costRe.MatchString(e.Message) {
-					t.Errorf("expected to find CostEstimate but none was found")
-				}
-				distRe := regexp.MustCompile("\"Distribution\":(\"full\"|\"local\")")
-				if !distRe.MatchString(e.Message) {
-					t.Errorf("expected to find Distribution but none was found")
-				}
-				// Match plan gist on any non-empty string value.
-				planGist := regexp.MustCompile("\"PlanGist\":(\"\\S+\")")
-				if !planGist.MatchString(e.Message) {
-					t.Errorf("expected to find PlanGist but none was found in: %s", e.Message)
-				}
-				// Match StatementID on any non-empty string value.
-				stmtID := regexp.MustCompile("\"StatementID\":(\"\\S+\")")
-				if !stmtID.MatchString(e.Message) {
-					t.Errorf("expected to find StatementID but none was found in: %s", e.Message)
-				}
-				// Match TransactionID on any non-empty string value.
-				txnID := regexp.MustCompile("\"TransactionID\":(\"\\S+\")")
-				if !txnID.MatchString(e.Message) {
-					t.Errorf("expected to find TransactionID but none was found in: %s", e.Message)
-				}
-				for _, eTag := range tc.expectedUnredactedTags {
-					for _, tag := range strings.Split(e.Tags, ",") {
-						kv := strings.Split(tag, "=")
-						if kv[0] == eTag && strings.ContainsAny(kv[0], fmt.Sprintf("%s%s", redact.StartMarker(), redact.EndMarker())) {
-							t.Errorf("expected tag %s to be redacted within tags: %s", tag, e.Tags)
+					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
+					if !costRe.MatchString(e.Message) {
+						t.Errorf("expected to find CostEstimate but none was found")
+					}
+					distRe := regexp.MustCompile("\"Distribution\":(\"full\"|\"local\")")
+					if !distRe.MatchString(e.Message) {
+						t.Errorf("expected to find Distribution but none was found")
+					}
+					// Match plan gist on any non-empty string value.
+					planGist := regexp.MustCompile("\"PlanGist\":(\"\\S+\")")
+					if !planGist.MatchString(e.Message) {
+						t.Errorf("expected to find PlanGist but none was found in: %s", e.Message)
+					}
+					// Match StatementID on any non-empty string value.
+					stmtID := regexp.MustCompile("\"StatementID\":(\"\\S+\")")
+					if !stmtID.MatchString(e.Message) {
+						t.Errorf("expected to find StatementID but none was found in: %s", e.Message)
+					}
+					// Match TransactionID on any non-empty string value.
+					txnID := regexp.MustCompile("\"TransactionID\":(\"\\S+\")")
+					if !txnID.MatchString(e.Message) {
+						t.Errorf("expected to find TransactionID but none was found in: %s", e.Message)
+					}
+					for _, eTag := range tc.expectedUnredactedTags {
+						for _, tag := range strings.Split(e.Tags, ",") {
+							kv := strings.Split(tag, "=")
+							if kv[0] == eTag && strings.ContainsAny(kv[0], fmt.Sprintf("%s%s", redact.StartMarker(), redact.EndMarker())) {
+								t.Errorf("expected tag %s to be redacted within tags: %s", tag, e.Tags)
+							}
+						}
+					}
+					if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
+						t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
+					}
+					if !strings.Contains(e.Message, "\"SessionID\":\""+sessionID+"\"") {
+						t.Errorf("expected to find sessionID: %s", sessionID)
+					}
+					if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
+						t.Errorf("expected to find Database: %s", databaseName)
+					}
+					stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
+					if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
+						t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
+					}
+					maxFullScanRowsRe := regexp.MustCompile("\"MaxFullScanRowsEstimate\":[0-9]*")
+					foundFullScan := maxFullScanRowsRe.MatchString(e.Message)
+					if tc.expectedFullScan && !foundFullScan {
+						t.Errorf("expected to find MaxFullScanRowsEstimate but none was found in: %s", e.Message)
+					} else if !tc.expectedFullScan && foundFullScan {
+						t.Errorf("expected not to find MaxFullScanRowsEstimate but it was found in: %s", e.Message)
+					}
+					totalScanRowsRe := regexp.MustCompile("\"TotalScanRowsEstimate\":[0-9]*")
+					outputRowsRe := regexp.MustCompile("\"OutputRowsEstimate\":[0-9]*")
+					statsAvailableRe := regexp.MustCompile("\"StatsAvailable\":(true|false)")
+					nanosSinceStatsCollectedRe := regexp.MustCompile("\"NanosSinceStatsCollected\":[0-9]*")
+					if tc.expectedStatsAvailable {
+						if !totalScanRowsRe.MatchString(e.Message) {
+							t.Errorf("expected to find TotalScanRowsEstimate but none was found in: %s", e.Message)
+						}
+						if !outputRowsRe.MatchString(e.Message) {
+							t.Errorf("expected to find OutputRowsEstimate but none was found in: %s", e.Message)
+						}
+						if !statsAvailableRe.MatchString(e.Message) {
+							t.Errorf("expected to find StatsAvailable but none was found in: %s", e.Message)
+						}
+						if !nanosSinceStatsCollectedRe.MatchString(e.Message) {
+							t.Errorf("expected to find NanosSinceStatsCollected but none was found in: %s", e.Message)
+						}
+					} else {
+						if totalScanRowsRe.MatchString(e.Message) {
+							t.Errorf("expected not to find TotalScanRowsEstimate but it was found in: %s", e.Message)
+						}
+						if outputRowsRe.MatchString(e.Message) {
+							t.Errorf("expected not to find OutputRowsEstimate but it was found in: %s", e.Message)
+						}
+						if statsAvailableRe.MatchString(e.Message) {
+							t.Errorf("expected not to find StatsAvailable but it was found in: %s", e.Message)
+						}
+						if nanosSinceStatsCollectedRe.MatchString(e.Message) {
+							t.Errorf("expected not to find NanosSinceStatsCollected but it was found in: %s", e.Message)
+						}
+					}
+					BytesReadRe := regexp.MustCompile("\"BytesRead\":[0-9]*")
+					RowsReadRe := regexp.MustCompile("\"RowsRead\":[0-9]*")
+					if tc.expectedRead {
+						if !BytesReadRe.MatchString(e.Message) {
+							t.Errorf("expected to find BytesRead but none was found in: %s", e.Message)
+						}
+						if !RowsReadRe.MatchString(e.Message) {
+							t.Errorf("expected to find RowsRead but none was found in: %s", e.Message)
+						}
+					} else {
+						if BytesReadRe.MatchString(e.Message) {
+							t.Errorf("expected not to find BytesRead but it was found in: %s", e.Message)
+						}
+						if RowsReadRe.MatchString(e.Message) {
+							t.Errorf("expected not to find RowsRead but it was found in: %s", e.Message)
+						}
+
+					}
+					RowsWrittenRe := regexp.MustCompile("\"RowsWritten\":[0-9]*")
+					if tc.expectedWrite {
+						if !RowsWrittenRe.MatchString(e.Message) {
+							t.Errorf("expected to find RowsWritten but none was found in: %s", e.Message)
+						}
+					} else {
+						if RowsWrittenRe.MatchString(e.Message) {
+							t.Errorf("expected not to find RowsWritten but it was found in: %s", e.Message)
+						}
+					}
+					if tc.expectedErr != "" {
+						if !strings.Contains(e.Message, tc.expectedErr) {
+							t.Errorf("%s: missing error %s in message %s", tc.name, tc.expectedErr, e.Message)
+							break
 						}
 					}
 				}
-				if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
-					t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
-				}
-				if !strings.Contains(e.Message, "\"SessionID\":\""+sessionID+"\"") {
-					t.Errorf("expected to find sessionID: %s", sessionID)
-				}
-				if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
-					t.Errorf("expected to find Database: %s", databaseName)
-				}
-				stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, false, true, databaseName)
-				if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
-					t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
-				}
-				maxFullScanRowsRe := regexp.MustCompile("\"MaxFullScanRowsEstimate\":[0-9]*")
-				foundFullScan := maxFullScanRowsRe.MatchString(e.Message)
-				if tc.expectedFullScan && !foundFullScan {
-					t.Errorf("expected to find MaxFullScanRowsEstimate but none was found in: %s", e.Message)
-				} else if !tc.expectedFullScan && foundFullScan {
-					t.Errorf("expected not to find MaxFullScanRowsEstimate but it was found in: %s", e.Message)
-				}
-				totalScanRowsRe := regexp.MustCompile("\"TotalScanRowsEstimate\":[0-9]*")
-				outputRowsRe := regexp.MustCompile("\"OutputRowsEstimate\":[0-9]*")
-				statsAvailableRe := regexp.MustCompile("\"StatsAvailable\":(true|false)")
-				nanosSinceStatsCollectedRe := regexp.MustCompile("\"NanosSinceStatsCollected\":[0-9]*")
-				if tc.expectedStatsAvailable {
-					if !totalScanRowsRe.MatchString(e.Message) {
-						t.Errorf("expected to find TotalScanRowsEstimate but none was found in: %s", e.Message)
-					}
-					if !outputRowsRe.MatchString(e.Message) {
-						t.Errorf("expected to find OutputRowsEstimate but none was found in: %s", e.Message)
-					}
-					if !statsAvailableRe.MatchString(e.Message) {
-						t.Errorf("expected to find StatsAvailable but none was found in: %s", e.Message)
-					}
-					if !nanosSinceStatsCollectedRe.MatchString(e.Message) {
-						t.Errorf("expected to find NanosSinceStatsCollected but none was found in: %s", e.Message)
-					}
-				} else {
-					if totalScanRowsRe.MatchString(e.Message) {
-						t.Errorf("expected not to find TotalScanRowsEstimate but it was found in: %s", e.Message)
-					}
-					if outputRowsRe.MatchString(e.Message) {
-						t.Errorf("expected not to find OutputRowsEstimate but it was found in: %s", e.Message)
-					}
-					if statsAvailableRe.MatchString(e.Message) {
-						t.Errorf("expected not to find StatsAvailable but it was found in: %s", e.Message)
-					}
-					if nanosSinceStatsCollectedRe.MatchString(e.Message) {
-						t.Errorf("expected not to find NanosSinceStatsCollected but it was found in: %s", e.Message)
-					}
-				}
-				BytesReadRe := regexp.MustCompile("\"BytesRead\":[0-9]*")
-				RowsReadRe := regexp.MustCompile("\"RowsRead\":[0-9]*")
-				if tc.expectedRead {
-					if !BytesReadRe.MatchString(e.Message) {
-						t.Errorf("expected to find BytesRead but none was found in: %s", e.Message)
-					}
-					if !RowsReadRe.MatchString(e.Message) {
-						t.Errorf("expected to find RowsRead but none was found in: %s", e.Message)
-					}
-				} else {
-					if BytesReadRe.MatchString(e.Message) {
-						t.Errorf("expected not to find BytesRead but it was found in: %s", e.Message)
-					}
-					if RowsReadRe.MatchString(e.Message) {
-						t.Errorf("expected not to find RowsRead but it was found in: %s", e.Message)
-					}
-
-				}
-				RowsWrittenRe := regexp.MustCompile("\"RowsWritten\":[0-9]*")
-				if tc.expectedWrite {
-					if !RowsWrittenRe.MatchString(e.Message) {
-						t.Errorf("expected to find RowsWritten but none was found in: %s", e.Message)
-					}
-				} else {
-					if RowsWrittenRe.MatchString(e.Message) {
-						t.Errorf("expected not to find RowsWritten but it was found in: %s", e.Message)
-					}
-				}
 			}
-		}
-		if logCount != expectedLogCount {
-			t.Errorf("%s: expected %d log entries, found %d", tc.name, expectedLogCount, logCount)
-		}
+			if logCount != expectedLogCount {
+				t.Errorf("%s: expected %d log entries, found %d", tc.name, expectedLogCount, logCount)
+			}
+		})
 	}
 }
 
