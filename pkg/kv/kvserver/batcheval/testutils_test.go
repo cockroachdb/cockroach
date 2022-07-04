@@ -10,13 +10,36 @@
 
 package batcheval_test
 
-import "github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+)
 
 type kvs = storageutils.KVs
 
 var (
 	pointKV            = storageutils.PointKV
 	pointKVWithLocalTS = storageutils.PointKVWithLocalTS
+	rangeKey           = storageutils.RangeKey
 	rangeKV            = storageutils.RangeKV
 	rangeKVWithLocalTS = storageutils.RangeKVWithLocalTS
+	wallTS             = storageutils.WallTS
+	scanEngine         = storageutils.ScanEngine
 )
+
+type wrappedBatch struct {
+	storage.Batch
+	clearIterCount  int
+	clearRangeCount int
+}
+
+func (wb *wrappedBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
+	wb.clearIterCount++
+	return wb.Batch.ClearMVCCIteratorRange(start, end)
+}
+
+func (wb *wrappedBatch) ClearMVCCRange(start, end roachpb.Key) error {
+	wb.clearRangeCount++
+	return wb.Batch.ClearMVCCRange(start, end)
+}

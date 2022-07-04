@@ -2178,23 +2178,29 @@ func MVCCMerge(
 	return err
 }
 
-// MVCCClearTimeRange clears all MVCC versions within the span [key, endKey)
-// which have timestamps in the span (startTime, endTime]. This can have the
-// apparent effect of "reverting" the range to startTime if all of the older
-// revisions of cleared keys are still available (i.e. have not been GC'ed).
+// MVCCClearTimeRange clears all MVCC versions (point keys and range keys)
+// within the span [key, endKey) which have timestamps in the span
+// (startTime, endTime]. This can have the apparent effect of "reverting" the
+// range to startTime if all of the older revisions of cleared keys are still
+// available (i.e. have not been GC'ed).
 //
-// Long runs of keys that all qualify for clearing will be cleared via a single
-// clear-range operation, as specified by clearRangeThreshold. Once maxBatchSize
-// Clear and ClearRange operations are hit during iteration, the next matching
-// key is instead returned in the resumeSpan. It is possible to exceed
-// maxBatchSize by up to the size of the buffer of keys selected for deletion
-// but not yet flushed (as done to detect long runs for cleaning in a single
-// ClearRange).
+// Long runs of point keys that all qualify for clearing will be cleared via a
+// single clear-range operation, as specified by clearRangeThreshold. Once
+// maxBatchSize Clear and ClearRange operations are hit during iteration, the
+// next matching key is instead returned in the resumeSpan. It is possible to
+// exceed maxBatchSize by up to the size of the buffer of keys selected for
+// deletion but not yet flushed (as done to detect long runs for cleaning in a
+// single ClearRange).
 //
 // Limiting the number of keys or ranges of keys processed can still cause a
 // batch that is too large -- in number of bytes -- for raft to replicate if the
 // keys are very large. So if the total length of the keys or key spans cleared
 // exceeds maxBatchByteSize it will also stop and return a resume span.
+//
+// leftPeekBound and rightPeekBound are bounds that will be used to peek for
+// surrounding MVCC range keys that may be merged or fragmented by our range key
+// clears. They should correspond to the latches held by the command, and not
+// exceed the Raft range boundaries.
 //
 // This function handles the stats computations to determine the correct
 // incremental deltas of clearing these keys (and correctly determining if it
@@ -2203,13 +2209,17 @@ func MVCCMerge(
 // If the underlying iterator encounters an intent with a timestamp in the span
 // (startTime, endTime], or any inline meta, this method will return an error.
 //
-// TODO(erikgrinaker): This needs to handle MVCC range tombstones (stats too).
+// TODO(erikgrinaker): endTime does not actually work here -- if there are keys
+// above endTime then the stats do not properly account for them. We probably
+// don't need those semantics, so consider renaming this to MVCCRevertRange and
+// removing the endTime parameter.
 func MVCCClearTimeRange(
 	_ context.Context,
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
+	leftPeekBound, rightPeekBound roachpb.Key,
 	clearRangeThreshold int,
 	maxBatchSize, maxBatchByteSize int64,
 ) (roachpb.Key, error) {
@@ -2224,6 +2234,14 @@ func MVCCClearTimeRange(
 	}
 	if maxBatchByteSize == 0 {
 		maxBatchByteSize = math.MaxInt64
+	}
+	if rightPeekBound == nil {
+		rightPeekBound = keys.MaxKey
+	}
+
+	// Since we're setting up multiple iterators, we require consistent iterators.
+	if !rw.ConsistentIterators() {
+		return nil, errors.AssertionFailedf("requires consistent iterators")
 	}
 
 	// When iterating, instead of immediately clearing a matching key we can
@@ -2300,6 +2318,181 @@ func MVCCClearTimeRange(
 		return nil
 	}
 
+	// We also keep track of the most recent cleared range key stack, and flush it
+	// when we hit a new stack.
+	//
+	// TODO(erikgrinaker): For now, we remove individual range keys. We could do
+	// something similar to point keys and keep track of long runs to remove, but
+	// we expect them to be rare so this should be fine for now.
+	//
+	// TODO(erikgrinaker): The MVCC stats calculations here are a bit convoluted.
+	// We should consolidate the range key stats calculations across the different
+	// MVCC functions.
+	var clearedRangeKeys []MVCCRangeKeyValue
+
+	fragmentRangeKeys := func(rks []MVCCRangeKeyValue, splitKey roachpb.Key) enginepb.MVCCStats {
+		var msDelta enginepb.MVCCStats
+		for i, rkv := range rks {
+			msDelta.AgeTo(rkv.RangeKey.Timestamp.WallTime)
+			keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
+			valBytes := int64(len(rkv.Value))
+			if i == 0 {
+				msDelta.RangeKeyCount++
+				keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(splitKey))
+			}
+			msDelta.RangeKeyBytes += keyBytes
+			msDelta.RangeValCount++
+			msDelta.RangeValBytes += valBytes
+		}
+		return msDelta
+	}
+
+	maybeMergeRangeKeys := func(lhs, rhs []MVCCRangeKeyValue) enginepb.MVCCStats {
+		if len(lhs) != len(rhs) || len(lhs) == 0 {
+			return enginepb.MVCCStats{}
+		}
+		for i, l := range lhs {
+			if !l.RangeKey.Timestamp.Equal(rhs[i].RangeKey.Timestamp) {
+				return enginepb.MVCCStats{}
+			} else if !bytes.Equal(l.Value, rhs[i].Value) {
+				return enginepb.MVCCStats{}
+			}
+		}
+		mergeKey := rhs[0].RangeKey.StartKey
+		var msDelta enginepb.MVCCStats
+		for i, rkv := range lhs {
+			msDelta.AgeTo(rkv.RangeKey.Timestamp.WallTime)
+			keyBytes := int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
+			valBytes := int64(len(rkv.Value))
+			if i == 0 {
+				msDelta.RangeKeyCount--
+				keyBytes += 2 * int64(EncodedMVCCKeyPrefixLength(mergeKey))
+			}
+			msDelta.RangeKeyBytes -= keyBytes
+			msDelta.RangeValCount--
+			msDelta.RangeValBytes -= valBytes
+		}
+		return msDelta
+	}
+
+	clearRangeKey := func(rkv MVCCRangeKeyValue) {
+		clearedRangeKeys = append(clearedRangeKeys, rkv.Clone())
+	}
+
+	flushRangeKeys := func(resumeKey roachpb.Key) error {
+		if len(clearedRangeKeys) == 0 {
+			return nil
+		}
+		bounds := roachpb.Span{
+			Key:    clearedRangeKeys[0].RangeKey.StartKey,
+			EndKey: clearedRangeKeys[0].RangeKey.EndKey,
+		}
+		if len(resumeKey) > 0 {
+			if resumeKey.Compare(bounds.Key) <= 0 {
+				return nil
+			} else if resumeKey.Compare(bounds.EndKey) <= 0 {
+				bounds.EndKey = resumeKey
+				for i := range clearedRangeKeys {
+					clearedRangeKeys[i].RangeKey.EndKey = resumeKey
+				}
+			}
+		}
+
+		var msDelta enginepb.MVCCStats
+
+		// Fetch the remaining range keys (if any) after the clear. We set up a new
+		// iterator for every batch, which both sees our own writes as well as any
+		// range keys outside of the time bounds.
+		rkIter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			KeyTypes:   IterKeyTypeRangesOnly,
+			LowerBound: leftPeekBound,
+			UpperBound: rightPeekBound,
+		})
+		defer rkIter.Close()
+
+		rkIter.SeekGE(MVCCKey{Key: bounds.Key})
+		if ok, err := rkIter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			return errors.Errorf("did not find any range keys at %s", bounds)
+		} else if b := rkIter.RangeBounds(); !b.Contains(bounds) {
+			return errors.Errorf("range keys %s do not cover cleared span %s", b, bounds)
+		}
+		remaining := make([]MVCCRangeKeyValue, 0)
+		for _, rkv := range rkIter.RangeKeys() {
+			remaining = append(remaining, rkv.Clone())
+		}
+		// TODO(erikgrinaker): Optimize this and move out into helper.
+		for _, rkv := range clearedRangeKeys {
+			var found bool
+			for i, r := range remaining {
+				if rkv.RangeKey.Timestamp == r.RangeKey.Timestamp {
+					remaining = append(remaining[:i], remaining[i+1:]...)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return errors.Errorf("did not find range key %s to clear", rkv.RangeKey)
+			}
+		}
+
+		// Check if the clears will merge or fragment any remaining range keys.
+		rkIter.SeekLT(MVCCKey{Key: bounds.Key})
+		if ok, err := rkIter.Valid(); err != nil {
+			return err
+		} else if ok && rkIter.RangeBounds().EndKey.Equal(bounds.Key) {
+			msDelta.Add(maybeMergeRangeKeys(rkIter.RangeKeys(), remaining))
+		} else if ok && rkIter.RangeBounds().EndKey.Compare(bounds.Key) > 0 {
+			msDelta.Add(fragmentRangeKeys(rkIter.RangeKeys(), bounds.Key))
+		}
+
+		rkIter.SeekGE(MVCCKey{Key: bounds.EndKey})
+		if ok, err := rkIter.Valid(); err != nil {
+			return err
+		} else if ok && rkIter.RangeBounds().Key.Equal(bounds.EndKey) {
+			msDelta.Add(maybeMergeRangeKeys(remaining, rkIter.RangeKeys()))
+		} else if ok && rkIter.RangeBounds().Key.Compare(bounds.EndKey) < 0 {
+			msDelta.Add(fragmentRangeKeys(rkIter.RangeKeys(), bounds.EndKey))
+		}
+
+		// Adjust for the key contribution, which is either removed entirely,
+		// or moved to the latest remaining range key.
+		if len(remaining) == 0 {
+			msDelta.AgeTo(clearedRangeKeys[0].RangeKey.Timestamp.WallTime)
+			msDelta.RangeKeyCount--
+			msDelta.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(bounds.Key) +
+				EncodedMVCCKeyPrefixLength(bounds.EndKey))
+		} else if r, c := remaining[0].RangeKey.Timestamp, clearedRangeKeys[0].RangeKey.Timestamp; r.Less(c) {
+			keyBytes := int64(EncodedMVCCKeyPrefixLength(bounds.Key) +
+				EncodedMVCCKeyPrefixLength(bounds.EndKey))
+			msDelta.AgeTo(c.WallTime)
+			msDelta.RangeKeyBytes -= keyBytes
+			msDelta.AgeTo(r.WallTime)
+			msDelta.RangeKeyBytes += keyBytes
+		}
+
+		// Clear the range keys.
+		for _, rkv := range clearedRangeKeys {
+			if err := rw.ClearMVCCRangeKey(rkv.RangeKey); err != nil {
+				return err
+			}
+			batchSize++
+			batchByteSize += int64(rkv.RangeKey.EncodedSize())
+
+			msDelta.AgeTo(rkv.RangeKey.Timestamp.WallTime)
+			msDelta.RangeValCount--
+			msDelta.RangeKeyBytes -= int64(EncodedMVCCTimestampSuffixLength(rkv.RangeKey.Timestamp))
+			msDelta.RangeValBytes -= int64(len(rkv.Value))
+		}
+		clearedRangeKeys = clearedRangeKeys[:0]
+
+		if ms != nil {
+			ms.Add(msDelta)
+		}
+		return nil
+	}
+
 	// Using the IncrementalIterator with the time-bound iter optimization could
 	// potentially be a big win here -- the expected use-case for this is to run
 	// over an entire table's span with a very recent timestamp, rolling back just
@@ -2318,6 +2511,8 @@ func MVCCClearTimeRange(
 	// _expect_ to hit this since the RevertRange is only intended for non-live
 	// key spans, but there could be an intent leftover.
 	iter := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
+		KeyTypes:  IterKeyTypePointsAndRanges,
+		StartKey:  key,
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
@@ -2326,6 +2521,7 @@ func MVCCClearTimeRange(
 
 	var clearedMetaKey MVCCKey
 	var clearedMeta, restoredMeta enginepb.MVCCMetadata
+	var rangeKeyStart roachpb.Key
 	iter.SeekGE(MVCCKey{Key: key})
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -2335,15 +2531,50 @@ func MVCCClearTimeRange(
 		}
 
 		k := iter.UnsafeKey()
+
+		// If we encounter a new range key stack, flush the previous range keys (if
+		// any) and buffer these for clearing.
+		if bounds := iter.RangeBounds(); !bounds.Key.Equal(rangeKeyStart) {
+			rangeKeyStart = append(rangeKeyStart[:0], bounds.Key...)
+
+			if err := flushRangeKeys(nil); err != nil {
+				return nil, err
+			}
+			if batchSize >= maxBatchSize || batchByteSize >= maxBatchByteSize {
+				resumeKey = k.Key.Clone()
+				break
+			}
+
+			for _, rkv := range iter.RangeKeys() {
+				// Because we're using NextIgnoringTime() to look for older keys, it's
+				// possible that the iterator will surface range keys outside of the
+				// time bounds, so we need to do additional filtering here.
+				if endTime.Less(rkv.RangeKey.Timestamp) {
+					continue
+				} else if rkv.RangeKey.Timestamp.LessEq(startTime) {
+					break
+				}
+				clearRangeKey(rkv)
+			}
+		}
+
+		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
+			// If we landed on a bare range tombstone, we need to check if it revealed
+			// anything below the time bounds as well.
+			iter.NextIgnoringTime()
+			continue
+		}
+
 		vRaw := iter.UnsafeValue()
 		v, err := DecodeMVCCValue(vRaw)
 		if err != nil {
 			return nil, err
 		}
 
+		// First, account for the point key that we cleared previously.
 		if len(clearedMetaKey.Key) > 0 {
 			metaKeySize := int64(clearedMetaKey.EncodedSize())
-			if bytes.Equal(clearedMetaKey.Key, k.Key) {
+			if clearedMetaKey.Key.Equal(k.Key) {
 				// Since the key matches, our previous clear "restored" this revision of
 				// the this key, so update the stats with this as the "restored" key.
 				restoredMeta.KeyBytes = MVCCVersionTimestampSize
@@ -2351,24 +2582,69 @@ func MVCCClearTimeRange(
 				restoredMeta.Deleted = v.IsTombstone()
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
+				// If there was an MVCC range tombstone between this version and the
+				// cleared key, then we didn't restore it after all, but we must still
+				// adjust the stats for the range tombstone.
+				if !restoredMeta.Deleted {
+					if rkv, ok := FirstRangeKeyAbove(iter.RangeKeys(), k.Timestamp); ok {
+						if rkv.RangeKey.Timestamp.LessEq(clearedMeta.Timestamp.ToTimestamp()) {
+							restoredMeta.Deleted = true
+							restoredMeta.KeyBytes = 0
+							restoredMeta.ValBytes = 0
+							restoredMeta.Timestamp = rkv.RangeKey.Timestamp.ToLegacyTimestamp()
+						}
+					}
+				}
+
 				if ms != nil {
 					ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0,
-						&clearedMeta, &restoredMeta, k.Timestamp.WallTime))
+						&clearedMeta, &restoredMeta, restoredMeta.Timestamp.WallTime))
 				}
 			} else {
-				// We cleared a revision of a different key, so nothing was "restored".
 				if ms != nil {
 					ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 				}
 			}
-			clearedMetaKey.Key = clearedMetaKey.Key[:0]
 		}
 
-		if startTime.Less(k.Timestamp) && k.Timestamp.LessEq(endTime) {
-			if batchSize >= maxBatchSize || batchByteSize >= maxBatchByteSize {
-				resumeKey = k.Key.Clone()
-				break
+		// Eagerly check whether we've exceeded the batch size. If we return a
+		// resumeKey we may truncate the buffered MVCC range tombstone clears
+		// at the current key, in which case we can't record the current point
+		// key as restored by the range tombstone clear below.
+		if batchSize >= maxBatchSize || batchByteSize >= maxBatchByteSize {
+			resumeKey = k.Key.Clone()
+			clearedMetaKey.Key = clearedMetaKey.Key[:0]
+			break
+		}
+
+		// Check if the current key was restored by a range tombstone clear, and
+		// adjust stats accordingly. We've already accounted for the clear of the
+		// previous point key above. We must also check that the clear actually
+		// revealed the key, since it may have been covered by the point key that
+		// we cleared or a different range tombstone below the one we cleared.
+		if !v.IsTombstone() {
+			if rkv, ok := FirstRangeKeyAbove(clearedRangeKeys, k.Timestamp); ok {
+				// TODO(erikgrinaker): We have to fetch the complete set of range keys
+				// as seen by this key -- these may or may not be filtered by timestamp
+				// depending on whether we did a NextIgnoringTime(), so we have to fetch
+				// the entire set rather than using clearedRangeKeys. We should optimize
+				// this somehow.
+				if !clearedMetaKey.Key.Equal(k.Key) ||
+					!clearedMeta.Timestamp.ToTimestamp().LessEq(rkv.RangeKey.Timestamp) {
+					if !HasRangeKeyBetween(iter.RangeKeys(), rkv.RangeKey.Timestamp.Prev(), k.Timestamp) {
+						ms.Add(enginepb.MVCCStats{
+							LastUpdateNanos: rkv.RangeKey.Timestamp.WallTime,
+							LiveCount:       1,
+							LiveBytes:       int64(k.EncodedSize()) + int64(len(vRaw)),
+						})
+					}
+				}
 			}
+		}
+
+		clearedMetaKey.Key = clearedMetaKey.Key[:0]
+
+		if startTime.Less(k.Timestamp) && k.Timestamp.LessEq(endTime) {
 			clearMatchingKey(k)
 			clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
 			clearedMeta.KeyBytes = MVCCVersionTimestampSize
@@ -2396,8 +2672,14 @@ func MVCCClearTimeRange(
 			// Move the incremental iterator to the next valid key that can be rolled
 			// back. If TBI was enabled when initializing the incremental iterator,
 			// this step could jump over large swaths of keys that do not qualify for
-			// clearing.
-			iter.Next()
+			// clearing. However, if we've cleared any range keys, then we need to
+			// skip to the next key ignoring time, because it may not have been
+			// revealed.
+			if len(clearedRangeKeys) > 0 {
+				iter.NextKeyIgnoringTime()
+			} else {
+				iter.Next()
+			}
 		}
 	}
 
@@ -2408,7 +2690,15 @@ func MVCCClearTimeRange(
 		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 	}
 
-	return resumeKey, flushClearedKeys(MVCCKey{Key: endKey})
+	if err := flushRangeKeys(resumeKey); err != nil {
+		return nil, err
+	}
+
+	flushKey := endKey
+	if len(resumeKey) > 0 {
+		flushKey = resumeKey
+	}
+	return resumeKey, flushClearedKeys(MVCCKey{Key: flushKey})
 }
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
