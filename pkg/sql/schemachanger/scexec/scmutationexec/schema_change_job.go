@@ -75,24 +75,6 @@ func (m *visitor) SetJobStateOnDescriptor(
 func (m *visitor) RemoveJobStateFromDescriptor(
 	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
-	{
-		_, err := m.s.GetDescriptor(ctx, op.DescriptorID)
-
-		// If we're clearing the status, we might have already deleted the
-		// descriptor. Permit that by detecting the prior deletion and
-		// short-circuiting.
-		//
-		// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
-		// an operation which has to happen before deleting the descriptor. If that
-		// were the case, this error would become unexpected.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-
 	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
