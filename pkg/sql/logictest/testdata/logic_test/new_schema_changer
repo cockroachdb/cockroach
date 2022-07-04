@@ -173,7 +173,6 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   JobID: 1
                   RunningStatus: all stages completed
 
-
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
 
@@ -1909,7 +1908,7 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
       │    │    ├── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 1}
       │    │    ├── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 4294967295}
       │    │    └── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 4294967294}
-      │    └── 9 Mutation operations
+      │    └── 8 Mutation operations
       │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":265}
       │         ├── LogEvent {"TargetStatus":1}
       │         ├── DeleteDescriptor {"DescriptorID":266}
@@ -1917,17 +1916,15 @@ Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCA
       │         ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":266}
       │         ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":266}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":265}
-      │         ├── SetJobStateOnDescriptor {"DescriptorID":266}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
            │    └── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
-           └── 6 Mutation operations
+           └── 5 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
                 ├── CreateGcJobForIndex {"IndexID":2,"TableID":265}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":265}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":265}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":266}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
 
 statement ok
