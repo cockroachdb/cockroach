@@ -241,14 +241,14 @@ func (b *catalogChangeBatcher) DeleteName(
 	if b.kvTrace {
 		log.VEventf(ctx, 2, "Del %s", marshalledKey)
 	}
-	b.batch.Del(marshalledKey)
+	b.batch.Delete(marshalledKey)
 	return nil
 }
 
 // DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	marshalledKey := catalogkeys.MakeDescMetadataKey(b.codec, id)
-	b.batch.Del(marshalledKey)
+	b.batch.Delete(marshalledKey)
 	if b.kvTrace {
 		log.VEventf(ctx, 2, "Del %s", marshalledKey)
 	}
@@ -263,7 +263,7 @@ func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.I
 	if b.kvTrace {
 		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 	}
-	b.batch.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+	b.batch.DeleteRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	return nil
 }
 

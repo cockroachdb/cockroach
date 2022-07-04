@@ -498,7 +498,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	if typeDesc.Dropped() {
 		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			b := txn.NewBatch()
-			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.GetID()))
+			b.Delete(catalogkeys.MakeDescMetadataKey(codec, typeDesc.GetID()))
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return err

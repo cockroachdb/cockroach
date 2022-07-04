@@ -970,8 +970,8 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	// any active requests.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "b", false /* returnKeys */)
-		b.DelRange("e", "f", false /* returnKeys */)
+		b.DeleteRange("a", "b", false /* returnKeys */)
+		b.DeleteRange("e", "f", false /* returnKeys */)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -1037,7 +1037,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	// resolved via ResolveIntentRange upon completion.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		b.DelRange("a", "d", false /* returnKeys */)
+		b.DeleteRange("a", "d", false /* returnKeys */)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatalf("unexpected error on transactional DeleteRange: %s", err)
@@ -1709,7 +1709,7 @@ func TestBadRequest(t *testing.T) {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if _, err := db.DelRange(ctx, "x", "a", false); !testutils.IsError(err, "must be greater than start") {
+	if _, err := db.DeleteRange(ctx, "x", "a", false); !testutils.IsError(err, "must be greater than start") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
@@ -1718,7 +1718,7 @@ func TestBadRequest(t *testing.T) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	repl := store.LookupReplica(roachpb.RKeyMin)
-	if _, err := db.DelRange(ctx, "", repl.Desc().EndKey, false); !testutils.IsError(err, "must be greater than LocalMax") {
+	if _, err := db.DeleteRange(ctx, "", repl.Desc().EndKey, false); !testutils.IsError(err, "must be greater than LocalMax") {
 		t.Fatalf("unexpected error on deletion on [KeyMin, %s): %v", repl.Desc().EndKey, err)
 	}
 }
@@ -2105,7 +2105,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				_, err := txn.DeleteRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			// No retry, preemptive refresh before commit.
@@ -2315,7 +2315,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				// Advance timestamp. This also creates a refresh span which
 				// will prevent the txn from committing without a refresh.
-				if _, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */); err != nil {
+				if _, err := txn.DeleteRange(ctx, "a", "b", false /* returnKeys */); err != nil {
 					return err
 				}
 				// Make the final batch large enough such that if we accounted
@@ -2597,7 +2597,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		{
 			name: "write too old with initput failing on tombstone before",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Del(ctx, "iput")
+				return db.Delete(ctx, "iput")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "iput", "put2")
@@ -2613,7 +2613,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Del(ctx, "iput")
+				return db.Delete(ctx, "iput")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", true)
@@ -2684,14 +2684,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.DelRange(ctx, "a", "b", false /* returnKeys */)
+				_, err := db.DeleteRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "c"); err != nil {
 					return err
 				}
-				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				_, err := txn.DeleteRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			txnCoordRetry: true, // can refresh
@@ -2702,14 +2702,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.DelRange(ctx, "a", "b", false /* returnKeys */)
+				_, err := db.DeleteRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				if _, err := txn.Get(ctx, "a"); err != nil {
 					return err
 				}
-				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				_, err := txn.DeleteRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			clientRetry: true, // can't refresh
@@ -2851,7 +2851,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.DelRange("a", "b", false /* returnKeys */)
+				b.DeleteRange("a", "b", false /* returnKeys */)
 				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
@@ -3075,7 +3075,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		{
 			name: "multi-range delete range with uncertainty interval error",
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.DelRange(ctx, "a", "d", false /* returnKeys */)
+				_, err := txn.DeleteRange(ctx, "a", "d", false /* returnKeys */)
 				return err
 			},
 			filter: newUncertaintyFilter(roachpb.Key("c")),

@@ -439,7 +439,7 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 		memUsedInMerge += entryBytes
 		if deleted {
 			deletedCount++
-			wb.Del(mergedEntry.Key)
+			wb.Delete(mergedEntry.Key)
 		} else {
 			wb.Put(mergedEntry.Key, mergedEntry.Value)
 		}

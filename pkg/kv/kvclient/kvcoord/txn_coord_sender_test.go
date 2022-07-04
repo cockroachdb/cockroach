@@ -130,7 +130,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	for _, rng := range ranges {
 		if rng.end != nil {
-			if _, err := txn.DelRange(ctx, rng.start, rng.end, false /* returnKeys */); err != nil {
+			if _, err := txn.DeleteRange(ctx, rng.start, rng.end, false /* returnKeys */); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -1034,7 +1034,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"), false /* returnKeys */)
+	_, pErr = txn.DeleteRange(ctx, roachpb.Key("u"), roachpb.Key("w"), false /* returnKeys */)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1911,13 +1911,13 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			pointWrite: true,
 		},
 		{
-			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.Del(ctx, "a") },
+			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.Delete(ctx, "a") },
 			expMethod:  roachpb.Delete,
 			pointWrite: true,
 		},
 		{
 			f: func(ctx context.Context, txn *kv.Txn) error {
-				_, err := txn.DelRange(ctx, "a", "b", false /* returnKeys */)
+				_, err := txn.DeleteRange(ctx, "a", "b", false /* returnKeys */)
 				return err
 			},
 			expMethod:  roachpb.DeleteRange,

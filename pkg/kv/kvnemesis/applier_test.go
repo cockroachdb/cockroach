@@ -85,19 +85,19 @@ func TestApplier(t *testing.T) {
 	check(t, step(reverseScan(`a`, `c`)), `db0.ReverseScan(ctx, "a", "c", 0) // (["b":"2", "a":"1"], nil)`)
 	check(t, step(reverseScanForUpdate(`a`, `b`)), `db1.ReverseScanForUpdate(ctx, "a", "b", 0) // (["a":"1"], nil)`)
 
-	check(t, step(del(`b`)), `db0.Del(ctx, "b") // nil`)
+	check(t, step(del(`b`)), `db0.Delete(ctx, "b") // nil`)
 	check(t, step(get(`b`)), `db1.Get(ctx, "b") // (nil, nil)`)
 
 	check(t, step(put(`c`, `3`)), `db0.Put(ctx, "c", 3) // nil`)
 	check(t, step(put(`d`, `4`)), `db1.Put(ctx, "d", 4) // nil`)
 
-	check(t, step(del(`c`)), `db0.Del(ctx, "c") // nil`)
+	check(t, step(del(`c`)), `db0.Delete(ctx, "c") // nil`)
 	check(t, step(scan(`a`, `e`)), `db1.Scan(ctx, "a", "e", 0) // (["a":"1", "d":"4"], nil)`)
 
 	check(t, step(put(`c`, `5`)), `db0.Put(ctx, "c", 5) // nil`)
 	check(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
 db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-  txn.DelRange(ctx, "b", "d", true) // (["c"], nil)
+  txn.DeleteRange(ctx, "b", "d", true) // (["c"], nil)
   return nil
 }) // nil txnpb:(...)
 		`)
@@ -109,11 +109,11 @@ db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 	checkErr(t, step(reverseScan(`a`, `c`)), `db1.ReverseScan(ctx, "a", "c", 0) // (nil, context canceled)`)
 
 	checkErr(t, step(reverseScanForUpdate(`a`, `c`)), `db0.ReverseScanForUpdate(ctx, "a", "c", 0) // (nil, context canceled)`)
-	checkErr(t, step(del(`b`)), `db1.Del(ctx, "b") // context canceled`)
+	checkErr(t, step(del(`b`)), `db1.Delete(ctx, "b") // context canceled`)
 
 	checkErr(t, step(closureTxn(ClosureTxnType_Commit, delRange(`b`, `d`))), `
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-  txn.DelRange(ctx, "b", "d", true)
+  txn.DeleteRange(ctx, "b", "d", true)
   return nil
 }) // context canceled
 		`)
@@ -127,8 +127,8 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   b := &Batch{}
   b.Put(ctx, "b", 2) // nil
   b.Get(ctx, "a") // ("1", nil)
-  b.Del(ctx, "b") // nil
-  b.Del(ctx, "c") // nil
+  b.Delete(ctx, "b") // nil
+  b.Delete(ctx, "c") // nil
   b.Scan(ctx, "a", "c") // (["a":"1"], nil)
   b.ReverseScanForUpdate(ctx, "a", "e") // (["d":"4", "a":"1"], nil)
   db1.Run(ctx, b) // nil
@@ -152,7 +152,7 @@ db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   {
     b := &Batch{}
     b.Put(ctx, "f", 6) // nil
-    b.DelRange(ctx, "c", "e", true) // (["d"], nil)
+    b.DeleteRange(ctx, "c", "e", true) // (["d"], nil)
     txn.Run(ctx, b) // nil
   }
   return nil

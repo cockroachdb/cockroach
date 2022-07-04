@@ -607,13 +607,13 @@ func (b *Batch) ReverseScanForUpdate(s, e interface{}) {
 	b.scan(s, e, true /* isReverse */, true /* forUpdate */)
 }
 
-// Del deletes one or more keys.
+// Delete deletes one or more keys.
 //
 // A new result will be appended to the batch and each key will have a
 // corresponding row in the returned Result.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) Del(keys ...interface{}) {
+func (b *Batch) Delete(keys ...interface{}) {
 	reqs := make([]roachpb.Request, 0, len(keys))
 	for _, key := range keys {
 		k, err := marshalKey(key)
@@ -628,13 +628,13 @@ func (b *Batch) Del(keys ...interface{}) {
 	b.initResult(len(reqs), len(reqs), notRaw, nil)
 }
 
-// DelRange deletes the rows between begin (inclusive) and end (exclusive).
+// DeleteRange deletes the rows between begin (inclusive) and end (exclusive).
 //
 // A new result will be appended to the batch which will contain 0 rows and
 // Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
+func (b *Batch) DeleteRange(s, e interface{}, returnKeys bool) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -649,10 +649,10 @@ func (b *Batch) DelRange(s, e interface{}, returnKeys bool) {
 	b.initResult(1, 0, notRaw, nil)
 }
 
-// DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
+// DeleteRangeUsingTombstone deletes the rows between begin (inclusive) and end
 // (exclusive) using an MVCC range tombstone. Callers must check the
 // MVCCRangeTombstones version gate before using this.
-func (b *Batch) DelRangeUsingTombstone(s, e interface{}) {
+func (b *Batch) DeleteRangeUsingTombstone(s, e interface{}) {
 	start, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)

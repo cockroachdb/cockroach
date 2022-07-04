@@ -247,7 +247,7 @@ func (s *Storage) isAlive(
 		if live {
 			s.mu.liveSessions.Add(sid, expiration)
 		} else {
-			s.mu.deadSessions.Del(sid)
+			s.mu.deadSessions.Delete(sid)
 			s.mu.deadSessions.Add(sid, nil)
 		}
 		return live, nil
@@ -306,7 +306,7 @@ func (s *Storage) deleteOrFetchSession(
 		// The session is expired and needs to be deleted.
 		deleted = true
 		expiration = hlc.Timestamp{}
-		return txn.Del(ctx, k)
+		return txn.Delete(ctx, k)
 	}); err != nil {
 		return false, hlc.Timestamp{}, errors.Wrapf(err,
 			"could not query session id: %s", sid)
@@ -370,7 +370,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 					deleted++
 				}
 			}
-			if err := txn.Del(ctx, toDel...); err != nil {
+			if err := txn.Delete(ctx, toDel...); err != nil {
 				return err
 			}
 			start = rows[len(rows)-1].Key.Next()

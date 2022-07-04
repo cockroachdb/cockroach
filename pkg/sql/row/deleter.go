@@ -157,7 +157,7 @@ func (rd *Deleter) DeleteRow(
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
 		}
-		b.Del(&rd.key)
+		b.Delete(&rd.key)
 		rd.key = nil
 		return nil
 	})

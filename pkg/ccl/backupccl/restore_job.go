@@ -2097,7 +2097,7 @@ func (r *restoreResumer) dropDescriptors(
 		// possible. This is safe since the table data was never visible to users,
 		// and so we don't need to preserve MVCC semantics.
 		tableToDrop.DropTime = dropTime
-		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
+		b.Delete(catalogkeys.EncodeNameKey(codec, tableToDrop))
 		descsCol.AddDeletedDescriptor(tableToDrop.GetID())
 	}
 
@@ -2116,10 +2116,10 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 
-		b.Del(catalogkeys.EncodeNameKey(codec, typDesc))
+		b.Delete(catalogkeys.EncodeNameKey(codec, typDesc))
 		mutType.SetDropped()
 		// Remove the system.descriptor entry.
-		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
+		b.Delete(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
 		descsCol.AddDeletedDescriptor(mutType.GetID())
 	}
 
@@ -2190,8 +2190,8 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 
-		b.Del(catalogkeys.EncodeNameKey(codec, mutSchema))
-		b.Del(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
+		b.Delete(catalogkeys.EncodeNameKey(codec, mutSchema))
+		b.Delete(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
 		descsCol.AddDeletedDescriptor(mutSchema.GetID())
 		dbsWithDeletedSchemas[mutSchema.GetParentID()] = append(dbsWithDeletedSchemas[mutSchema.GetParentID()], mutSchema)
 	}
@@ -2261,16 +2261,16 @@ func (r *restoreResumer) dropDescriptors(
 		}
 
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
-		b.Del(descKey)
+		b.Delete(descKey)
 
 		// We have explicitly to delete the system.namespace entry for the public schema
 		// if the database does not have a public schema backed by a descriptor.
 		if !db.(catalog.DatabaseDescriptor).HasPublicSchemaWithDescriptor() {
-			b.Del(catalogkeys.MakeSchemaNameKey(codec, db.GetID(), tree.PublicSchema))
+			b.Delete(catalogkeys.MakeSchemaNameKey(codec, db.GetID(), tree.PublicSchema))
 		}
 
 		nameKey := catalogkeys.MakeDatabaseNameKey(codec, db.GetName())
-		b.Del(nameKey)
+		b.Delete(nameKey)
 		descsCol.AddDeletedDescriptor(db.GetID())
 		deletedDBs[db.GetID()] = struct{}{}
 	}

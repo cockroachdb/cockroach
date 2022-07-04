@@ -74,7 +74,7 @@ func (td *tableDeleter) deleteIndex(
 	if traceKV {
 		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
+	td.b.DeleteRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
 	if err := td.finalize(ctx); err != nil {
 		return resume, err

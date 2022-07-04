@@ -80,7 +80,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		return filtered
 	}
 	copySettingsFromSystemToFakeTenant := func() int {
-		_, err := db.DelRange(
+		_, err := db.DeleteRange(
 			ctx,
 			fakeTenantPrefix,
 			fakeTenantPrefix.PrefixEnd(),

@@ -37,7 +37,7 @@ func deleteDatabaseZoneConfig(
 		// Delete the zone config entry for the dropped database associated with the
 		// job, if it exists.
 		dbZoneKeyPrefix := config.MakeZoneKeyPrefix(codec, databaseID)
-		b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		b.DeleteRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		return txn.Run(ctx, b)
 	})
 }

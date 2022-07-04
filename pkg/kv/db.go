@@ -524,36 +524,36 @@ func (db *DB) ReverseScanForUpdate(
 	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, true /* forUpdate */, roachpb.CONSISTENT)
 }
 
-// Del deletes one or more keys.
+// Delete deletes one or more keys.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
+func (db *DB) Delete(ctx context.Context, keys ...interface{}) error {
 	b := &Batch{}
-	b.Del(keys...)
+	b.Delete(keys...)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// DelRange deletes the rows between begin (inclusive) and end (exclusive).
+// DeleteRange deletes the rows between begin (inclusive) and end (exclusive).
 //
 // The returned []roachpb.Key will contain the keys deleted if the returnKeys
 // parameter is true, or will be nil if the parameter is false.
 //
 // key can be either a byte slice or a string.
-func (db *DB) DelRange(
+func (db *DB) DeleteRange(
 	ctx context.Context, begin, end interface{}, returnKeys bool,
 ) ([]roachpb.Key, error) {
 	b := &Batch{}
-	b.DelRange(begin, end, returnKeys)
+	b.DeleteRange(begin, end, returnKeys)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Keys, err
 }
 
-// DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
+// DeleteRangeUsingTombstone deletes the rows between begin (inclusive) and end
 // (exclusive) using an MVCC range tombstone. Callers must check the
 // MVCCRangeTombstones version gate before using this.
-func (db *DB) DelRangeUsingTombstone(ctx context.Context, begin, end interface{}) error {
+func (db *DB) DeleteRangeUsingTombstone(ctx context.Context, begin, end interface{}) error {
 	b := &Batch{}
-	b.DelRangeUsingTombstone(begin, end)
+	b.DeleteRangeUsingTombstone(begin, end)
 	_, err := getOneResult(db.Run(ctx, b), b)
 	return err
 }

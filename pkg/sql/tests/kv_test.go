@@ -102,7 +102,7 @@ func (kv *kvNative) Delete(rows, run int) error {
 	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
 		b := txn.NewBatch()
 		for i := firstRow; i < lastRow; i++ {
-			b.Del(fmt.Sprintf("%s%08d", kv.prefix, i))
+			b.Delete(fmt.Sprintf("%s%08d", kv.prefix, i))
 		}
 		return txn.CommitInBatch(ctx, b)
 	})

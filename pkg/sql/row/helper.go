@@ -338,7 +338,7 @@ func (rh *rowHelper) deleteIndexEntry(
 			}
 		}
 
-		batch.Del(entry.Key)
+		batch.Delete(entry.Key)
 	}
 	return nil
 }

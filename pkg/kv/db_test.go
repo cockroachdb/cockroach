@@ -254,7 +254,7 @@ func TestDB_InitPut(t *testing.T) {
 	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
 		t.Fatal("expected error from init put")
 	}
-	if err := db.Del(ctx, "aa"); err != nil {
+	if err := db.Delete(ctx, "aa"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
@@ -466,7 +466,7 @@ func TestDB_TxnIterate(t *testing.T) {
 	}
 }
 
-func TestDB_Del(t *testing.T) {
+func TestDB_Delete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
@@ -479,7 +479,7 @@ func TestDB_Del(t *testing.T) {
 	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Del(context.Background(), "ab"); err != nil {
+	if err := db.Delete(context.Background(), "ab"); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := db.Scan(context.Background(), "a", "b", 100)
@@ -494,7 +494,7 @@ func TestDB_Del(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
-func TestDB_DelRange(t *testing.T) {
+func TestDB_DeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db := setup(t)
@@ -508,7 +508,7 @@ func TestDB_DelRange(t *testing.T) {
 	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	deletedKeys, err := db.DelRange(context.Background(), "aa", "ac", true)
+	deletedKeys, err := db.DeleteRange(context.Background(), "aa", "ac", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +528,7 @@ func TestDB_DelRange(t *testing.T) {
 	checkRows(t, expected, rows)
 	checkLen(t, len(expected), len(rows))
 
-	deletedKeys, err = db.DelRange(context.Background(), "aa", "ad", false)
+	deletedKeys, err = db.DeleteRange(context.Background(), "aa", "ad", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -651,11 +651,11 @@ func TestDBDecommissionedOperations(t *testing.T) {
 		name string
 		op   func() error
 	}{
-		{"Del", func() error {
-			return db.Del(ctx, key)
+		{"Delete", func() error {
+			return db.Delete(ctx, key)
 		}},
-		{"DelRange", func() error {
-			_, err := db.DelRange(ctx, key, keyEnd, false)
+		{"DeleteRange", func() error {
+			_, err := db.DeleteRange(ctx, key, keyEnd, false)
 			return err
 		}},
 		{"Get", func() error {

@@ -99,7 +99,7 @@ func insertDelFn(ctx context.Context, b putter, key *roachpb.Key, traceKV bool) 
 	if traceKV {
 		log.VEventfDepth(ctx, 1, 2, "Del %s", *key)
 	}
-	b.Del(key)
+	b.Delete(key)
 }
 
 // insertPutFn is used by insertRow when conflicts should be ignored.
@@ -116,7 +116,7 @@ type putter interface {
 	CPut(key, value interface{}, expValue []byte)
 	Put(key, value interface{})
 	InitPut(key, value interface{}, failOnTombstones bool)
-	Del(key ...interface{})
+	Delete(key ...interface{})
 }
 
 // InsertRow adds to the batch the kv operations necessary to insert a table row

@@ -122,7 +122,7 @@ func createPublicSchemaDescriptor(
 	newKey := catalogkeys.MakeSchemaNameKey(d.Codec, dbID, publicSchemaDesc.GetName())
 	oldKey := catalogkeys.EncodeNameKey(d.Codec, catalogkeys.NewNameKeyComponents(dbID, keys.RootNamespaceID, tree.PublicSchema))
 	// Remove namespace entry for old public schema.
-	b.Del(oldKey)
+	b.Delete(oldKey)
 	b.CPut(newKey, publicSchemaID, nil)
 	if err := descriptors.Direct().WriteNewDescToBatch(
 		ctx,
@@ -181,7 +181,7 @@ func migrateObjectsInDatabase(
 		b := desc.NewBuilder()
 		updateDesc := func(mut catalog.MutableDescriptor, newPublicSchemaID descpb.ID) {
 			oldKey := catalogkeys.MakeObjectNameKey(d.Codec, mut.GetParentID(), mut.GetParentSchemaID(), mut.GetName())
-			batch.Del(oldKey)
+			batch.Delete(oldKey)
 			newKey := catalogkeys.MakeObjectNameKey(d.Codec, mut.GetParentID(), newPublicSchemaID, mut.GetName())
 			batch.Put(newKey, mut.GetID())
 			modifiedDescs = append(modifiedDescs, mut)

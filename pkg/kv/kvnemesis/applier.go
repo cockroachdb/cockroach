@@ -159,8 +159,8 @@ type clientI interface {
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
-	Del(context.Context, ...interface{}) error
-	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
+	Delete(context.Context, ...interface{}) error
+	DeleteRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 	Run(context.Context, *kv.Batch) error
 }
 
@@ -208,13 +208,13 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			}
 		}
 	case *DeleteOperation:
-		err := db.Del(ctx, o.Key)
+		err := db.Delete(ctx, o.Key)
 		o.Result = resultError(ctx, err)
 	case *DeleteRangeOperation:
 		if !inTxn {
 			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
 		}
-		deletedKeys, err := db.DelRange(ctx, o.Key, o.EndKey, true /* returnKeys */)
+		deletedKeys, err := db.DeleteRange(ctx, o.Key, o.EndKey, true /* returnKeys */)
 		if err != nil {
 			o.Result = resultError(ctx, err)
 		} else {
@@ -260,12 +260,12 @@ func applyBatchOp(
 				b.Scan(subO.Key, subO.EndKey)
 			}
 		case *DeleteOperation:
-			b.Del(subO.Key)
+			b.Delete(subO.Key)
 		case *DeleteRangeOperation:
 			if !inTxn {
 				panic(errors.AssertionFailedf(`non-transactional batch DelRange operations currently unsupported`))
 			}
-			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
+			b.DeleteRange(subO.Key, subO.EndKey, true /* returnKeys */)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

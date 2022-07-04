@@ -1536,7 +1536,7 @@ func (r *importResumer) dropTables(
 			// possible. This is safe since the table data was never visible to users,
 			// and so we don't need to preserve MVCC semantics.
 			newTableDesc.DropTime = dropTime
-			b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc))
+			b.Delete(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc))
 			tablesToGC = append(tablesToGC, newTableDesc.ID)
 			descsCol.AddDeletedDescriptor(newTableDesc.GetID())
 		} else {
@@ -1630,7 +1630,7 @@ func (r *importResumer) dropSchemas(
 			if dbDesc.Schemas != nil {
 				delete(dbDesc.Schemas, schemaDesc.GetName())
 			}
-			b.Del(catalogkeys.EncodeNameKey(p.ExecCfg().Codec, schemaDesc))
+			b.Delete(catalogkeys.EncodeNameKey(p.ExecCfg().Codec, schemaDesc))
 		} else {
 			//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
 			schemaDesc.AddDrainingName(descpb.NameInfo{

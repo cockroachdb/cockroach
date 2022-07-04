@@ -264,7 +264,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 
 	// Delete the public schema namespace entry for this database. Per our check
 	// during initialization, this is the only schema present under n.db.
-	b.Del(catalogkeys.MakeSchemaNameKey(codec, n.db.ID, tree.PublicSchema))
+	b.Delete(catalogkeys.MakeSchemaNameKey(codec, n.db.ID, tree.PublicSchema))
 
 	// This command can only be run when database leasing is supported, so we don't
 	// have to handle the case where it isn't.

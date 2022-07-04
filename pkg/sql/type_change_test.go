@@ -107,7 +107,7 @@ CREATE TYPE d.t AS ENUM();
 	desc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
 	delTypeDesc = func() {
 		// Delete the descriptor.
-		if err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID())); err != nil {
+		if err := kvDB.Delete(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID())); err != nil {
 			t.Error(err)
 		}
 	}

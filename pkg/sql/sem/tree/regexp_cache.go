@@ -92,7 +92,7 @@ func (rc *RegexpCache) lookup(key RegexpCacheKey) *regexp.Regexp {
 func (rc *RegexpCache) update(key RegexpCacheKey, re *regexp.Regexp) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
-	rc.cache.Del(key)
+	rc.cache.Delete(key)
 	if re != nil {
 		rc.cache.Add(key, re)
 	}

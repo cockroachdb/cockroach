@@ -108,10 +108,10 @@ func TestCache(t *testing.T) {
 		require.NoError(t, txn.Put(ctx, mkKey("d"), 1))
 	})
 	writeAndCheck(t, func(t *testing.T, txn *kv.Txn) {
-		require.NoError(t, txn.Del(ctx, mkKey("a")))
+		require.NoError(t, txn.Delete(ctx, mkKey("a")))
 	})
 	writeAndCheck(t, func(t *testing.T, txn *kv.Txn) {
-		_, err := txn.DelRange(ctx, mkKey("a"), mkKey("c"), false)
+		_, err := txn.DeleteRange(ctx, mkKey("a"), mkKey("c"), false)
 		require.NoError(t, err)
 	})
 }

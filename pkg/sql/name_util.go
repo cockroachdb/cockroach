@@ -61,5 +61,5 @@ func deleteNamespaceEntryAndMaybeAddDrainingName(
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", marshalledKey)
 	}
-	b.Del(marshalledKey)
+	b.Delete(marshalledKey)
 }

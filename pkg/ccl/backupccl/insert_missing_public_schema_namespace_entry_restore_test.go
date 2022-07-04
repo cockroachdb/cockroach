@@ -75,8 +75,8 @@ func TestInsertMissingPublicSchemaNamespaceEntry(t *testing.T) {
 	err := tc.Servers[0].DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		codec := keys.SystemSQLCodec
 		b := txn.NewBatch()
-		b.Del(catalogkeys.MakeSchemaNameKey(codec, db1ID, `public`))
-		b.Del(catalogkeys.MakeSchemaNameKey(codec, db2ID, `public`))
+		b.Delete(catalogkeys.MakeSchemaNameKey(codec, db1ID, `public`))
+		b.Delete(catalogkeys.MakeSchemaNameKey(codec, db2ID, `public`))
 		return txn.Run(ctx, b)
 	})
 	require.NoError(t, err)

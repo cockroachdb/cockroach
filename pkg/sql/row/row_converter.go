@@ -40,8 +40,8 @@ func (i KVInserter) CPut(key, value interface{}, expValue []byte) {
 	panic("unimplemented")
 }
 
-// Del is not implemented.
-func (i KVInserter) Del(key ...interface{}) {
+// Delete is not implemented.
+func (i KVInserter) Delete(key ...interface{}) {
 	// This is called when there are multiple column families to ensure that
 	// existing data is cleared. With the exception of IMPORT INTO, the entire
 	// existing keyspace in any IMPORT is guaranteed to be empty, so we don't have

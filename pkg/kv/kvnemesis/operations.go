@@ -235,12 +235,12 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Del(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.Delete(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
 	op.Result.format(w)
 }
 
 func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
+	fmt.Fprintf(w, `%s.DeleteRange(ctx, %s, %s, true)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
 	switch op.Result.Type {
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *op.Result.Err)

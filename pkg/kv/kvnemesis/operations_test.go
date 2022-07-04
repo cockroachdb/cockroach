@@ -28,7 +28,7 @@ func TestOperationsFormat(t *testing.T) {
 		expected string
 	}{
 		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
-		{step: step(del(`a`)), expected: `db0.Del(ctx, "a")`},
+		{step: step(del(`a`)), expected: `db0.Delete(ctx, "a")`},
 		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`))), expected: `
 			{
 			  b := &Batch{}
@@ -51,10 +51,10 @@ func TestOperationsFormat(t *testing.T) {
 			    b := &Batch{}
 			    b.Get(ctx, "g")
 			    b.Get(ctx, "h")
-			    b.Del(ctx, "i")
+			    b.Delete(ctx, "i")
 			    txn.Run(ctx, b)
 			  }
-			  txn.DelRange(ctx, "j", "k", true)
+			  txn.DeleteRange(ctx, "j", "k", true)
 			  txn.Put(ctx, "k", l)
 			  return nil
 			})

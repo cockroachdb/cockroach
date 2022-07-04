@@ -307,16 +307,16 @@ func parseWorkloadConfig(fileName string) (workloadConfig, error) {
 		return c, errors.New(`parameter version is required`)
 	}
 	c.Version = q.Get(`version`)
-	q.Del(`version`)
+	q.Delete(`version`)
 	if s := q.Get(`row-start`); len(s) > 0 {
-		q.Del(`row-start`)
+		q.Delete(`row-start`)
 		var err error
 		if c.BatchBegin, err = strconv.ParseInt(s, 10, 64); err != nil {
 			return c, err
 		}
 	}
 	if e := q.Get(`row-end`); len(e) > 0 {
-		q.Del(`row-end`)
+		q.Delete(`row-end`)
 		var err error
 		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
 			return c, err

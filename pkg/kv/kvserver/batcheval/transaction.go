@@ -101,7 +101,7 @@ func UpdateAbortSpan(
 		if !exists {
 			return nil
 		}
-		return rec.AbortSpan().Del(ctx, readWriter, ms, txn.ID)
+		return rec.AbortSpan().Delete(ctx, readWriter, ms, txn.ID)
 	}
 
 	entry := roachpb.AbortSpanEntry{

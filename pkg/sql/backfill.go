@@ -2233,7 +2233,7 @@ func runSchemaChangesInTxn(
 		//lint:ignore SA1019 removal of deprecated method call scheduled for 22.2
 		for _, drain := range tableDesc.GetDrainingNames() {
 			key := catalogkeys.EncodeNameKey(planner.ExecCfg().Codec, drain)
-			if err := planner.Txn().Del(ctx, key); err != nil {
+			if err := planner.Txn().Delete(ctx, key); err != nil {
 				return err
 			}
 		}

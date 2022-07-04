@@ -184,7 +184,7 @@ func (p *ProberOps) Write(key interface{}) func(context.Context, *kv.Txn) error 
 		// so we avoid depending on a subtlety of the implementation.
 		b := txn.NewBatch()
 		b.Put(key, putValue)
-		b.Del(key)
+		b.Delete(key)
 		return txn.CommitInBatch(ctx, b)
 	}
 }

@@ -380,7 +380,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 
 	if err != nil {
 		// Don't keep the cache entry around, so that we retry the query.
-		sc.mu.cache.Del(tableID)
+		sc.mu.cache.Delete(tableID)
 	}
 
 	return stats, err
@@ -448,7 +448,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 	if err != nil {
 		// Don't keep the cache entry around, so that we retry the query.
-		sc.mu.cache.Del(tableID)
+		sc.mu.cache.Delete(tableID)
 	}
 }
 
@@ -471,7 +471,7 @@ func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableI
 	log.VEventf(ctx, 1, "evicting statistics for table %d", tableID)
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	sc.mu.cache.Del(tableID)
+	sc.mu.cache.Delete(tableID)
 }
 
 const (

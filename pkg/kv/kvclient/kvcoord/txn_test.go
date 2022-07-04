@@ -906,7 +906,7 @@ func TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange(t *testing.T) {
 
 	// The first transaction deletes the value using a delete range operation.
 	b := txn1.NewBatch()
-	b.DelRange("a", "b", true /* returnKeys */)
+	b.DeleteRange("a", "b", true /* returnKeys */)
 	require.NoError(t, txn1.Run(ctx, b))
 	require.Len(t, b.Results[0].Keys, 1)
 	require.Equal(t, roachpb.Key("a"), b.Results[0].Keys[0])
@@ -918,7 +918,7 @@ func TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange(t *testing.T) {
 	// operation. This should immediately fail with a WriteTooOld error. It
 	// would be incorrect for this to be delayed and for 0 keys to be returned.
 	b = txn2.NewBatch()
-	b.DelRange("a", "b", true /* returnKeys */)
+	b.DeleteRange("a", "b", true /* returnKeys */)
 	err = txn2.Run(ctx, b)
 	require.NotNil(t, err)
 	require.Regexp(t, "TransactionRetryWithProtoRefreshError: WriteTooOldError", err)

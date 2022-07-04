@@ -1319,7 +1319,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				// we don't end up on the wrong side of the split.
 				delRes <- store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					b := txn.NewBatch()
-					b.Del(splitKey)
+					b.Delete(splitKey)
 					return txn.CommitInBatch(ctx, b)
 				})
 			}()

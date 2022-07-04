@@ -167,7 +167,7 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 		if traceKV {
 			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 		}
-		b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
+		b.DeleteRange(span.Key, span.EndKey, true /* returnKeys */)
 	}
 }
 

@@ -26,7 +26,7 @@ func putMeta(b *kv.Batch, key roachpb.Key, desc *roachpb.RangeDescriptor) {
 }
 
 func delMeta(b *kv.Batch, key roachpb.Key, desc *roachpb.RangeDescriptor) {
-	b.Del(key)
+	b.Delete(key)
 }
 
 // splitRangeAddressing creates (or overwrites if necessary) the meta1

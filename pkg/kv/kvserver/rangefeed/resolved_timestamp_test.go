@@ -69,7 +69,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 
 	// Delete a non-existent txn.
 	txn4 := uuid.MakeV4()
-	adv = uiq.Del(txn4)
+	adv = uiq.Delete(txn4)
 	require.False(t, adv)
 	require.Equal(t, 2, uiq.Len())
 
@@ -136,7 +136,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.False(t, adv)
 	require.Equal(t, 3, uiq.Len())
 	require.Equal(t, txn2, uiq.Oldest().txnID)
-	adv = uiq.Del(txn5)
+	adv = uiq.Delete(txn5)
 	require.False(t, adv)
 	require.Equal(t, 2, uiq.Len())
 

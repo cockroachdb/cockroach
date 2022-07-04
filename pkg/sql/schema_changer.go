@@ -537,7 +537,7 @@ func drainNamesForDescriptor(
 
 		// Reclaim all old names.
 		for _, drain := range namesToReclaim {
-			b.Del(catalogkeys.EncodeNameKey(codec, drain))
+			b.Delete(catalogkeys.EncodeNameKey(codec, drain))
 		}
 
 		// If the descriptor to drain is a schema, then we need to delete the
@@ -768,7 +768,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		switch desc.(type) {
 		case catalog.SchemaDescriptor, catalog.DatabaseDescriptor:
 			if desc.Dropped() {
-				if err := sc.execCfg.DB.Del(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
+				if err := sc.execCfg.DB.Delete(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
 					return err
 				}
 			}
@@ -1122,7 +1122,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
 			return err
 		}
-		b.Del(catalogkeys.EncodeNameKey(sc.execCfg.Codec, scTable))
+		b.Delete(catalogkeys.EncodeNameKey(sc.execCfg.Codec, scTable))
 
 		// Queue a GC job.
 		jobRecord := CreateGCJobRecord(
@@ -2756,7 +2756,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
 				// Delete the zone config entry for this database.
-				if _, err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */); err != nil {
+				if _, err := p.ExecCfg().DB.DeleteRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */); err != nil {
 					return err
 				}
 			}
@@ -3062,11 +3062,11 @@ func DeleteTableDescAndZoneConfig(
 
 		// Delete the descriptor.
 		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID())
-		b.Del(descKey)
+		b.Delete(descKey)
 		// Delete the zone config entry for this table, if necessary.
 		if codec.ForSystemTenant() {
 			zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
-			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+			b.DeleteRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		}
 		return txn.Run(ctx, b)
 	})
