@@ -34,6 +34,7 @@ func distStreamIngestionPlanSpecs(
 	topology streamclient.Topology,
 	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
+	checkpoint []jobspb.ResolvedSpan,
 	jobID jobspb.JobID,
 	streamID streaming.StreamID,
 	oldTenantID roachpb.TenantID,
@@ -53,6 +54,7 @@ func distStreamIngestionPlanSpecs(
 				StreamID:       uint64(streamID),
 				JobID:          int64(jobID),
 				StartTime:      initialHighWater,
+				Checkpoint:     checkpoint, // TODO: Only forward relevant checkpoint info
 				StreamAddress:  string(streamAddress),
 				PartitionSpecs: make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 				TenantRekey: execinfrapb.TenantRekey{
@@ -72,13 +74,7 @@ func distStreamIngestionPlanSpecs(
 			Spans:             partition.Spans,
 		}
 
-		// We create "fake" spans to uniquely identify the partition. This is used
-		// to keep track of the resolved ts received for a particular partition in
-		// the frontier processor.
-		trackedSpans = append(trackedSpans, roachpb.Span{
-			Key:    roachpb.Key(partition.ID),
-			EndKey: roachpb.Key(partition.ID).Next(),
-		})
+		trackedSpans = append(trackedSpans, partition.Spans...)
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
@@ -90,6 +86,7 @@ func distStreamIngestionPlanSpecs(
 		StreamID:                uint64(streamID),
 		StreamAddress:           string(streamAddress),
 		SubscribingSQLInstances: subscribingSQLInstances,
+		Checkpoint:              checkpoint,
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil

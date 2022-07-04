@@ -200,6 +200,8 @@ message StreamIngestionDataSpec {
 
   // The processor will rekey the tenant's keyspace to a new tenant based on 'tenant_rekey'.
   optional TenantRekey tenant_rekey = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantRekey"];
+
+  repeated jobs.jobspb.ResolvedSpan checkpoint = 10 [(gogoproto.nullable) = false];
 }
 
 message StreamIngestionFrontierSpec {
@@ -227,6 +229,9 @@ message StreamIngestionFrontierSpec {
   optional uint64 stream_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
   // StreamAddress locate the stream so that a stream client can be initialized.
   optional string stream_address = 5 [(gogoproto.nullable) = false];
+
+  // Checkpoint stores a set of resolved spans denoting completed progress
+  repeated jobs.jobspb.ResolvedSpan checkpoint = 7 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {

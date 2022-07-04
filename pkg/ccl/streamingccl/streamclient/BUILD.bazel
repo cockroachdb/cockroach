@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/streampb",
+	      "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/username",
