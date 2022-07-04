@@ -117,14 +117,7 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
-		setNonCancelable := func() {
-			payload := *md.Payload
-			if !payload.Noncancelable {
-				payload.Noncancelable = true
-				ju.UpdatePayload(&payload)
-			}
-		}
-		return callback(md, ju.UpdateProgress, setNonCancelable)
+		return callback(md, ju.UpdateProgress, ju.UpdatePayload)
 	})
 }
 
