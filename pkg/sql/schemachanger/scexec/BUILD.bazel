@@ -76,6 +76,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdecomp",  # keep
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",

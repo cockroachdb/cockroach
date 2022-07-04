@@ -395,7 +395,7 @@ func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
 }
 
-// ZoneConfigReader implements the scbuild.Dependencies interface.
+// ZoneConfigReader implements scbuild.Dependencies.
 func (d *buildDeps) ZoneConfigReader() scbuild.ZoneConfigReader {
 	return d.zoneConfigReader
 }

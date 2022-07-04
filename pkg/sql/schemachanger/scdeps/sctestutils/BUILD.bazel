@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/faketreeeval",
         "//pkg/sql/parser",
         "//pkg/sql/protoreflect",
+        "//pkg/sql/regionutils",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scop",
