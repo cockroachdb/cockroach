@@ -44,7 +44,7 @@ func declareKeysDeleteRange(
 	// When writing range tombstones, we must look for adjacent range tombstones
 	// that we merge with or fragment, to update MVCC stats accordingly. But we
 	// make sure to stay within the range bounds.
-	if args.UseExperimentalRangeTombstone {
+	if args.UseRangeTombstone {
 		// NB: The range end key is not available, so this will pessimistically
 		// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
 		// span will be tightened during evaluation.
@@ -68,7 +68,7 @@ func DeleteRange(
 	reply := resp.(*roachpb.DeleteRangeResponse)
 
 	// Use experimental MVCC range tombstone if requested.
-	if args.UseExperimentalRangeTombstone {
+	if args.UseRangeTombstone {
 		if cArgs.Header.Txn != nil {
 			return result.Result{}, ErrTransactionUnsupported
 		}
@@ -85,7 +85,7 @@ func DeleteRange(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
-		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
+		err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound, maxIntents)
 		return result.Result{}, err
 	}

@@ -134,11 +134,11 @@ func TestSSTWriterRangeKeysUnsupported(t *testing.T) {
 			rangeKey := rangeKey("a", "b", 2)
 
 			// Put should error, but clears are noops.
-			err := w.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{})
+			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
-			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ExperimentalClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
+			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
 		})
 	}
 }
@@ -153,7 +153,7 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 
-	require.NoError(t, sst.ExperimentalPutMVCCRangeKey(rangeKey("a", "e", 1), MVCCValue{}))
+	require.NoError(t, sst.PutMVCCRangeKey(rangeKey("a", "e", 1), MVCCValue{}))
 	require.NoError(t, sst.Put(pointKey("a", 2), stringValueRaw("foo")))
 	require.NoError(t, sst.Finish())
 

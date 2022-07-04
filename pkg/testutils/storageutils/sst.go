@@ -52,7 +52,7 @@ func MakeSST(
 		case storage.MVCCRangeKeyValue:
 			v, err := storage.DecodeMVCCValue(kv.Value)
 			require.NoError(t, err)
-			require.NoError(t, writer.ExperimentalPutMVCCRangeKey(kv.RangeKey, v))
+			require.NoError(t, writer.PutMVCCRangeKey(kv.RangeKey, v))
 			s, e = kv.RangeKey.StartKey, kv.RangeKey.EndKey
 
 		default:

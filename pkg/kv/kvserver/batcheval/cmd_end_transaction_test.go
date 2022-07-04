@@ -1281,7 +1281,7 @@ func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
 			for _, rkv := range tc.rangeKVs {
 				value, err := storage.DecodeMVCCValue(rkv.Value)
 				require.NoError(t, err)
-				require.NoError(t, engine.ExperimentalPutMVCCRangeKey(rkv.RangeKey, value))
+				require.NoError(t, engine.PutMVCCRangeKey(rkv.RangeKey, value))
 			}
 
 			tc.expect.LastUpdateNanos = nowNanos

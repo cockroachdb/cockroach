@@ -140,7 +140,7 @@ func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
 	if err := fw.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end}); err != nil {
 		return err
 	}
-	return fw.ExperimentalClearAllRangeKeys(start, end)
+	return fw.ClearAllRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Writer interface.
@@ -153,8 +153,8 @@ func (fw *SSTWriter) ClearMVCCVersions(start, end MVCCKey) error {
 	return fw.clearRange(start, end)
 }
 
-// ExperimentalPutMVCCRangeKey implements the Writer interface.
-func (fw *SSTWriter) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+// PutMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 	if !fw.supportsRangeKeys {
 		return errors.New("range keys not supported by SST writer")
 	}
@@ -177,8 +177,8 @@ func (fw *SSTWriter) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value MV
 		valueRaw)
 }
 
-// ExperimentalClearMVCCRangeKey implements the Writer interface.
-func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+// ClearMVCCRangeKey implements the Writer interface.
+func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if !fw.supportsRangeKeys {
 		return nil // noop
 	}
@@ -192,8 +192,8 @@ func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error 
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
-// ExperimentalClearAllRangeKeys implements the Writer interface.
-func (fw *SSTWriter) ExperimentalClearAllRangeKeys(start roachpb.Key, end roachpb.Key) error {
+// ClearAllRangeKeys implements the Writer interface.
+func (fw *SSTWriter) ClearAllRangeKeys(start roachpb.Key, end roachpb.Key) error {
 	if !fw.supportsRangeKeys {
 		return nil // noop
 	}
@@ -209,10 +209,8 @@ func (fw *SSTWriter) ExperimentalClearAllRangeKeys(start roachpb.Key, end roachp
 	return fw.fw.RangeKeyDelete(EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end))
 }
 
-// ExperimentalPutEngineRangeKey implements the Writer interface.
-func (fw *SSTWriter) ExperimentalPutEngineRangeKey(
-	start, end roachpb.Key, suffix, value []byte,
-) error {
+// PutEngineRangeKey implements the Writer interface.
+func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
 	panic("not implemented")
 }
 

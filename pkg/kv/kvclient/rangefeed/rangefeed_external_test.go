@@ -666,11 +666,11 @@ func TestWithOnDeleteRange(t *testing.T) {
 	// catchup point, and the previous values should respect the range tombstones.
 	require.NoError(t, db.Put(ctx, "covered", "covered"))
 	require.NoError(t, db.Put(ctx, "foo", "covered"))
-	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "z"))
 	require.NoError(t, db.Put(ctx, "foo", "initial"))
 	rangeFeedTS := db.Clock().Now()
 	require.NoError(t, db.Put(ctx, "covered", "catchup"))
-	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "z"))
 	require.NoError(t, db.Put(ctx, "foo", "catchup"))
 
 	// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
@@ -767,7 +767,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 	// Send another DeleteRange, and wait for the rangefeed event. This should
 	// be truncated to the rangefeed bounds (c-g).
-	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "z"))
 	select {
 	case e := <-deleteRangeC:
 		require.Equal(t, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}, e.Span)
