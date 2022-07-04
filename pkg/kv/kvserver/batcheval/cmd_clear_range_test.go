@@ -148,7 +148,7 @@ func TestCmdClearRange(t *testing.T) {
 				}
 				for _, rk := range rangeTombstones {
 					localTS := hlc.ClockTimestamp{WallTime: rk.Timestamp.WallTime - 1e9} // give range key a value if > 0
-					require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(
+					require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
 						ctx, eng, nil, rk.StartKey, rk.EndKey, rk.Timestamp, localTS, nil, nil, 0))
 				}
 

@@ -41,7 +41,7 @@ func TestRefreshRange(t *testing.T) {
 		ctx, eng, nil, roachpb.Key("b"), hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("value"), nil))
 	require.NoError(t, storage.MVCCPut(
 		ctx, eng, nil, roachpb.Key("c"), hlc.Timestamp{WallTime: 5}, hlc.ClockTimestamp{}, roachpb.Value{}, nil))
-	require.NoError(t, storage.ExperimentalMVCCDeleteRangeUsingTombstone(
+	require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
 		ctx, eng, nil, roachpb.Key("d"), roachpb.Key("f"), hlc.Timestamp{WallTime: 7}, hlc.ClockTimestamp{}, nil, nil, 0))
 
 	testcases := map[string]struct {

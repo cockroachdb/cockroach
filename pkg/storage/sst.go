@@ -422,7 +422,7 @@ func UpdateSSTTimestamps(
 			if err != nil {
 				return nil, err
 			}
-			if err = writer.ExperimentalPutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+			if err = writer.PutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
 				return nil, err
 			}
 		}
