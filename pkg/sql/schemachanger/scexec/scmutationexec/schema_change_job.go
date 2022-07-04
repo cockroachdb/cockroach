@@ -35,7 +35,12 @@ func (m *visitor) CreateSchemaChangerJob(
 func (m *visitor) UpdateSchemaChangerJob(
 	ctx context.Context, op scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(op.JobID, op.IsNonCancelable, op.RunningStatus)
+	return m.s.UpdateSchemaChangerJob(
+		op.JobID,
+		op.IsNonCancelable,
+		op.RunningStatus,
+		catalog.MakeDescriptorIDSet(op.DescriptorIDsToRemove...),
+	)
 }
 
 func (m *visitor) SetJobStateOnDescriptor(

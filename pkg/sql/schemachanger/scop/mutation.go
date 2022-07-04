@@ -410,9 +410,10 @@ type SetJobStateOnDescriptor struct {
 // UpdateSchemaChangerJob may update the job's cancelable status.
 type UpdateSchemaChangerJob struct {
 	mutationOp
-	IsNonCancelable bool
-	JobID           jobspb.JobID
-	RunningStatus   string
+	IsNonCancelable       bool
+	JobID                 jobspb.JobID
+	RunningStatus         string
+	DescriptorIDsToRemove []descpb.ID
 }
 
 // CreateSchemaChangerJob constructs the job for the

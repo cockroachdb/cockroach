@@ -12,6 +12,7 @@ package sctestdeps
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -888,6 +889,10 @@ func (s *TestState) UpdateSchemaChangeJob(
 		if newPayload.Noncancelable {
 			scJob.NonCancelable = true
 			s.LogSideEffectf("set schema change job #%d to non-cancellable", scJob.JobID)
+		}
+		newIDs := fmt.Sprintf("%v", newPayload.DescriptorIDs)
+		if oldIDs := fmt.Sprintf("%v", oldPayload.DescriptorIDs); oldIDs != newIDs {
+			s.LogSideEffectf("updated schema change job #%d descriptor IDs to %s", scJob.JobID, newIDs)
 		}
 	}
 	return fn(oldJobMetadata, updateProgress, updatePayload)
