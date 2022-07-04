@@ -28,7 +28,7 @@ import {
 import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
-import { FixLong, longToInt, TimestampToString } from "src/util";
+import { Count, FixLong, longToInt, TimestampToString } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
   getStatementsByFingerprintId,
@@ -156,9 +156,7 @@ export function makeTransactionsColumns(
       name: "rowsProcessed",
       title: statisticsTableTitles.rowsProcessed(statType),
       cell: (item: TransactionInfo) =>
-        `${FixLong(
-          Number(item.stats_data.stats.rows_read.mean),
-        )} Reads / ${FixLong(
+        `${Count(Number(item.stats_data.stats.rows_read.mean))} Reads / ${Count(
           Number(item.stats_data.stats.rows_written?.mean),
         )} Writes`,
       className: cx("statements-table__col-rows-read"),
