@@ -580,13 +580,13 @@ func getStreamIngestionProcessor(
 	var spec execinfrapb.StreamIngestionDataSpec
 	spec.StreamAddress = "http://unused"
 	spec.TenantRekey = tenantRekey
-	spec.PartitionIds = make([]string, len(partitions))
-	spec.PartitionAddresses = make([]string, len(partitions))
-	spec.PartitionSpecs = make([]string, len(partitions))
-	for i, pa := range partitions {
-		spec.PartitionIds[i] = pa.ID
-		spec.PartitionAddresses[i] = string(pa.SrcAddr)
-		spec.PartitionSpecs[i] = string(pa.SubscriptionToken)
+	spec.PartitionSpecs = make(map[string]execinfrapb.StreamIngestionPartitionSpec)
+	for _, pa := range partitions {
+		spec.PartitionSpecs[pa.ID] = execinfrapb.StreamIngestionPartitionSpec{
+			PartitionID:       pa.ID,
+			Address:           string(pa.SrcAddr),
+			SubscriptionToken: string(pa.SubscriptionToken),
+		}
 	}
 	spec.StartTime = startTime
 	processorID := int32(0)

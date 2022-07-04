@@ -50,11 +50,11 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				StreamID:           uint64(streamID),
-				JobID:              int64(jobID),
-				StartTime:          initialHighWater,
-				StreamAddress:      string(streamAddress),
-				PartitionAddresses: make([]string, 0),
+				StreamID:       uint64(streamID),
+				JobID:          int64(jobID),
+				StartTime:      initialHighWater,
+				StreamAddress:  string(streamAddress),
+				PartitionSpecs: make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 				TenantRekey: execinfrapb.TenantRekey{
 					OldID: oldTenantID,
 					NewID: newTenantID,
@@ -65,11 +65,13 @@ func distStreamIngestionPlanSpecs(
 		n := i % len(sqlInstanceIDs)
 
 		subscribingSQLInstances[partition.ID] = uint32(sqlInstanceIDs[n])
-		streamIngestionSpecs[n].PartitionIds = append(streamIngestionSpecs[n].PartitionIds, partition.ID)
-		streamIngestionSpecs[n].PartitionSpecs = append(streamIngestionSpecs[n].PartitionSpecs,
-			string(partition.SubscriptionToken))
-		streamIngestionSpecs[n].PartitionAddresses = append(streamIngestionSpecs[n].PartitionAddresses,
-			string(partition.SrcAddr))
+		streamIngestionSpecs[n].PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
+			PartitionID:       partition.ID,
+			SubscriptionToken: string(partition.SubscriptionToken),
+			Address:           string(partition.SrcAddr),
+			Spans:             partition.Spans,
+		}
+
 		// We create "fake" spans to uniquely identify the partition. This is used
 		// to keep track of the resolved ts received for a particular partition in
 		// the frontier processor.

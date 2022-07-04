@@ -240,16 +240,16 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 	}()
 
-	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionIds))
+	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
 	sip.streamPartitionClients = make([]streamclient.Client, 0)
-	for i := range sip.spec.PartitionIds {
-		id := sip.spec.PartitionIds[i]
-		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
-		addr := sip.spec.PartitionAddresses[i]
+	for _, partitionSpec := range sip.spec.PartitionSpecs {
+		id := partitionSpec.PartitionID
+		spec := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
+		addr := partitionSpec.Address
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests

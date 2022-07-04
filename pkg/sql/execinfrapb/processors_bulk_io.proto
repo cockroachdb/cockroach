@@ -175,19 +175,21 @@ message ReadImportDataSpec {
   // NEXTID: 20.
 }
 
+message StreamIngestionPartitionSpec {
+  optional string partition_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PartitionID"];
+  optional string subscription_token = 2 [(gogoproto.nullable) = false];
+  optional string address = 3 [(gogoproto.nullable) = false];
+  repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
+}
+
 message StreamIngestionDataSpec {
   reserved 1;
 
   // StreamID is the ID of the stream (which is shared across the producer and consumer).
   optional uint64 stream_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
 
-  // PartitionSpecs specify how to subscribe to the i'th partition.
-  repeated string partition_ids = 6;
-  // PartitionSpecs specify how to subscribe to the i'th partition.
-  repeated string partition_specs = 7;
-  // PartitionAddresses locate the partitions that produce events to be
-  // ingested. We don't set the casttype to avoid depending on ccl packages.
-  repeated string partition_addresses = 8;
+  // PartitionSpecs contain information about each partition and how to connect to them
+  map<string, StreamIngestionPartitionSpec> partition_specs = 6 [(gogoproto.nullable) = false];
 
   // The processor will ingest events from StartTime onwards.
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];

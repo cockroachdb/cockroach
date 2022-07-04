@@ -156,6 +156,7 @@ func (p *partitionedStreamClient) Plan(
 			SrcInstanceID:     int(sp.NodeID),
 			SrcAddr:           streamingccl.PartitionAddress(pgURL.String()),
 			SrcLocality:       sp.Locality,
+			Spans:             sp.PartitionSpec.Spans,
 		})
 	}
 	return topology, nil
