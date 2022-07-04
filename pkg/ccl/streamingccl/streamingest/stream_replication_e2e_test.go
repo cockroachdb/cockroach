@@ -24,12 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -47,6 +50,8 @@ type tenantStreamingClustersArgs struct {
 	destTenantID roachpb.TenantID
 	destInitFunc execFunc
 	destNumNodes int
+
+	streamingKnobs sql.StreamingTestingKnobs
 }
 
 type tenantStreamingClusters struct {
@@ -56,6 +61,7 @@ type tenantStreamingClusters struct {
 	srcTenantSQL *sqlutils.SQLRunner
 	srcURL       url.URL
 
+	destSysServer serverutils.TestServerInterface
 	destSysSQL    *sqlutils.SQLRunner
 	destTenantSQL *sqlutils.SQLRunner
 }
@@ -82,6 +88,28 @@ func (c *tenantStreamingClusters) waitUntilHighWatermark(
 				highwater.String(), highWatermark.String())
 		}
 		return nil
+	})
+}
+
+func waitForStatus(
+	sql *sqlutils.SQLRunner, jobID jobspb.JobID, statusPred func(status jobs.Status) bool,
+) error {
+	if jobID == jobspb.InvalidJobID {
+		// Job may not have been started.
+		return nil
+	}
+
+	return testutils.SucceedsSoonError(func() error {
+		var status string
+		if err := sql.DB.QueryRowContext(context.Background(),
+			`SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&status); err != nil {
+			return err
+		}
+		if statusPred(jobs.Status(status)) {
+			return nil
+
+		}
+		return errors.Newf("still waiting for job status; current %s", status)
 	})
 }
 
@@ -120,7 +148,9 @@ func createTenantStreamingClusters(
 		// to system tenants. Tracked with #76378.
 		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL:          &execinfra.TestingKnobs{StreamingTestingKnobs: &args.streamingKnobs},
+		},
 	}
 
 	startTestClusterWithTenant := func(
@@ -129,13 +159,14 @@ func createTenantStreamingClusters(
 		serverArgs base.TestServerArgs,
 		tenantID roachpb.TenantID,
 		numNodes int,
-	) (*sqlutils.SQLRunner, *sqlutils.SQLRunner, url.URL, func()) {
+	) (serverutils.TestServerInterface, *sqlutils.SQLRunner, *sqlutils.SQLRunner, url.URL, func()) {
 		params := base.TestClusterArgs{ServerArgs: serverArgs}
 		c := testcluster.StartTestCluster(t, numNodes, params)
+		sysServer := c.Servers[0]
 		// TODO(casper): support adding splits when we have multiple nodes.
 		_, tenantConn := serverutils.StartTenant(t, c.Server(0), base.TestTenantArgs{TenantID: tenantID})
 		pgURL, cleanupSinkCert := sqlutils.PGUrl(t, c.Server(0).ServingSQLAddr(), t.Name(), url.User(username.RootUser))
-		return sqlutils.MakeSQLRunner(c.ServerConn(0)), sqlutils.MakeSQLRunner(tenantConn), pgURL, func() {
+		return sysServer, sqlutils.MakeSQLRunner(c.ServerConn(0)), sqlutils.MakeSQLRunner(tenantConn), pgURL, func() {
 			require.NoError(t, tenantConn.Close())
 			c.Stopper().Stop(ctx)
 			cleanupSinkCert()
@@ -143,12 +174,16 @@ func createTenantStreamingClusters(
 	}
 
 	// Start the source cluster.
-	sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
+	_, sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
 	// Start the destination cluster.
-	destSysSQL, destTenantSQL, _, destCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.destTenantID, args.destNumNodes)
+	destSysServer, destSysSQL, destTenantSQL, _, destCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.destTenantID, args.destNumNodes)
 
-	args.srcInitFunc(t, sourceSysSQL, sourceTenantSQL)
-	args.destInitFunc(t, destSysSQL, destTenantSQL)
+	if args.srcInitFunc != nil {
+		args.srcInitFunc(t, sourceSysSQL, sourceTenantSQL)
+	}
+	if args.destInitFunc != nil {
+		args.destInitFunc(t, destSysSQL, destTenantSQL)
+	}
 	// Enable stream replication on dest by default.
 	destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true;`)
 	return &tenantStreamingClusters{
@@ -157,6 +192,7 @@ func createTenantStreamingClusters(
 			srcSysSQL:     sourceSysSQL,
 			srcTenantSQL:  sourceTenantSQL,
 			srcURL:        srcURL,
+			destSysServer: destSysServer,
 			destSysSQL:    destSysSQL,
 			destTenantSQL: destTenantSQL,
 		}, func() {
@@ -350,4 +386,105 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	<-time.NewTimer(3 * time.Second).C
 	require.Equal(t, [][]string{{"0"}},
 		c.destTenantSQL.QueryStr(t, "SELECT count(*) FROM d.t2 WHERE i = 3"))
+}
+
+func TestTenantStreamingCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "slow under stressrace")
+
+	ctx := context.Background()
+	// 'startTime' is a timestamp before we insert any data into the source cluster.
+	var startTime string
+	lastClientStart := make(map[string]hlc.Timestamp)
+	c, cleanup := createTenantStreamingClusters(ctx, t, tenantStreamingClustersArgs{
+		srcTenantID: roachpb.MakeTenantID(10),
+		srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			sysSQL.ExecMultiple(t, configureClusterSettings(srcClusterSetting)...)
+			tenantSQL.Exec(t, `
+	CREATE DATABASE d;
+	CREATE TABLE d.t1(i int primary key, a string, b string);
+	CREATE TABLE d.t2(i int primary key);
+	INSERT INTO d.t1 (i) VALUES (42);
+	INSERT INTO d.t2 VALUES (2);
+	UPDATE d.t1 SET b = 'world' WHERE i = 42;
+	`)
+			tenantSQL.Exec(t, `
+	ALTER TABLE d.t1 DROP COLUMN b;
+	`)
+		},
+		srcNumNodes:  1,
+		destTenantID: roachpb.MakeTenantID(20),
+		destNumNodes: 1,
+		destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+			sysSQL.ExecMultiple(t, configureClusterSettings(destClusterSetting)...)
+		},
+		streamingKnobs: sql.StreamingTestingKnobs{
+			BeforeClientSubscribe: func(token string, clientStartTime hlc.Timestamp) {
+				lastClientStart[token] = clientStartTime
+			},
+		},
+	})
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication(startTime)
+
+	// Helper to read job progress
+	jobRegistry := c.destSysServer.JobRegistry().(*jobs.Registry)
+	loadIngestProgress := func() *jobspb.StreamIngestionProgress {
+		job, err := jobRegistry.LoadJob(context.Background(), jobspb.JobID(ingestionJobID))
+		require.NoError(t, err)
+
+		progress := job.Progress()
+		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		return ingestProgress
+	}
+
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		tenantSQL.Exec(t, "CREATE TABLE d.x (id INT PRIMARY KEY, n INT)")
+		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
+	})
+
+	var checkpointMinTime time.Time
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&checkpointMinTime)
+	})
+	testutils.SucceedsSoon(t, func() error {
+		prog := loadIngestProgress()
+		if len(prog.Checkpoint) == 0 {
+			return errors.New("waiting for checkpoint")
+		}
+		for _, resolvedSpan := range prog.Checkpoint {
+			if checkpointMinTime.After(resolvedSpan.Timestamp.GoTime()) {
+				return errors.New("checkpoint not yet advanced")
+			}
+		}
+		return nil
+	})
+
+	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
+	require.NoError(t, waitForStatus(c.destSysSQL, jobspb.JobID(ingestionJobID), func(s jobs.Status) bool { return s == jobs.StatusPaused }))
+	c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
+
+	var cutoverTime time.Time
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+	})
+	c.cutover(producerJobID, ingestionJobID, cutoverTime)
+
+	// Clients should never be started prior to a checkpointed timestamp
+	for _, clientStartTime := range lastClientStart {
+		require.True(t, !checkpointMinTime.After(clientStartTime.GoTime()))
+	}
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+	c.compareResult("SELECT * FROM d.x")
+	// After cutover, changes to source won't be streamed into destination cluster.
+	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
+		tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
+	})
+	// Check the dst cluster didn't receive the change after a while.
+	<-time.NewTimer(3 * time.Second).C
+	require.Equal(t, [][]string{{"2"}}, c.destTenantSQL.QueryStr(t, "SELECT * FROM d.t2"))
 }

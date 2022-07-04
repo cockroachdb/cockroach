@@ -179,10 +179,11 @@ func newStreamIngestionDataProcessor(
 	if err != nil {
 		return nil, err
 	}
-	trackedSpans := make([]roachpb.Span, len(spec.PartitionSpecs))
+	trackedSpans := make([]roachpb.Span, 0)
 	for _, partitionSpec := range spec.PartitionSpecs {
 		trackedSpans = append(trackedSpans, partitionSpec.Spans...)
 	}
+
 	frontier, err := span.MakeFrontierAt(spec.StartTime, trackedSpans...)
 	if err != nil {
 		return nil, err
@@ -279,7 +280,15 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 
 		startTime := sip.frontier.FrontierForSpans(partitionSpec.Spans...)
+
+		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
+				streamingKnobs.BeforeClientSubscribe(string(token), startTime)
+			}
+		}
+
 		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
+
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
 			return
@@ -626,7 +635,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-	log.Infof(sip.Ctx, "got checkpoint with %v spans and timestamps within [%v, %v]", lowestTimestamp, highestTimestamp)
+	log.Infof(sip.Ctx, "got checkpoint with %v spans and timestamps within [%v, %v]", len(resolvedSpans), lowestTimestamp, highestTimestamp)
 
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
@@ -668,7 +677,6 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.
-	// TODO: Make this read in the spans themselves -> make bufferdChecpoints a frontier?
 	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
 		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
 		return span.ContinueMatch
