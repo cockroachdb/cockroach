@@ -333,6 +333,18 @@ func manageJobs(
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				s.updatedPayload().Noncancelable = true
 			}
+			if !update.descriptorIDsToRemove.Empty() {
+				var filtered catalog.DescriptorIDSet
+				for _, descID := range md.Payload.DescriptorIDs {
+					if update.descriptorIDsToRemove.Contains(descID) {
+						continue
+					}
+					filtered.Add(descID)
+				}
+				if filtered.Len() < len(md.Payload.DescriptorIDs) {
+					s.updatedPayload().DescriptorIDs = filtered.Ordered()
+				}
+			}
 			return nil
 		}); err != nil {
 			return err
@@ -421,12 +433,16 @@ type eventPayload struct {
 }
 
 type schemaChangerJobUpdate struct {
-	isNonCancelable bool
-	runningStatus   string
+	isNonCancelable       bool
+	runningStatus         string
+	descriptorIDsToRemove catalog.DescriptorIDSet
 }
 
 func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
-	jobID jobspb.JobID, isNonCancelable bool, runningStatus string,
+	jobID jobspb.JobID,
+	isNonCancelable bool,
+	runningStatus string,
+	descriptorIDsToRemove catalog.DescriptorIDSet,
 ) error {
 	if mvs.schemaChangerJobUpdates == nil {
 		mvs.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
@@ -434,8 +450,9 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 		return errors.AssertionFailedf("cannot update job %d more than once", jobID)
 	}
 	mvs.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
-		isNonCancelable: isNonCancelable,
-		runningStatus:   runningStatus,
+		isNonCancelable:       isNonCancelable,
+		runningStatus:         runningStatus,
+		descriptorIDsToRemove: descriptorIDsToRemove,
 	}
 	return nil
 }
