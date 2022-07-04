@@ -46,6 +46,18 @@ message SampledQuery {
 
   // The query's plan gist bytes as a base64 encoded string.
   string plan_gist = 7 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // SessionID is the ID of the session that initiated the query.
+  string session_id = 8 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Name of the database that initiated the query.
+  string database = 9 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Statement ID of the query.
+  string statement_id = 10 [(gogoproto.customname) = "StatementID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Transaction ID of the query.
+  string transaction_id = 11 [(gogoproto.customname) = "TransactionID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CapturedIndexUsageStats
