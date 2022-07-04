@@ -41,11 +41,21 @@ func declareKeysRevertRange(
 	latchSpans, lockSpans *spanset.SpanSet,
 	maxOffset time.Duration,
 ) {
+	args := req.(*roachpb.RevertRangeRequest)
 	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
+	// When clearing MVCC range tombstones, we must look for adjacent MVCC range
+	// tombstones that we may merge with or fragment, to update MVCC stats
+	// accordingly. But we make sure to stay within the range bounds.
+	//
+	// NB: The range end key is not available, so this will pessimistically
+	// latch up to args.EndKey.Next(). If EndKey falls on the range end key, the
+	// span will be tightened during evaluation.
+	l, r := rangeTombstonePeekBounds(args.Key, args.EndKey, rs.GetStartKey().AsRawKey(), nil)
+	latchSpans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{Key: l, EndKey: r}, header.Timestamp)
 }
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
@@ -57,8 +67,11 @@ func isEmptyKeyTimeRange(
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
 	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: from, UpperBound: to,
-		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
+		KeyTypes:         storage.IterKeyTypePointsAndRanges,
+		LowerBound:       from,
+		UpperBound:       to,
+		MinTimestampHint: since.Next(), // make exclusive
+		MaxTimestampHint: until,
 	})
 	defer iter.Close()
 	iter.SeekGE(storage.MVCCKey{Key: from})
@@ -84,6 +97,7 @@ func RevertRange(
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
 	reply := resp.(*roachpb.RevertRangeResponse)
+	desc := cArgs.EvalCtx.Desc()
 	pd := result.Result{
 		Replicated: kvserverpb.ReplicatedEvalResult{
 			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
@@ -101,11 +115,14 @@ func RevertRange(
 		return result.Result{}, nil
 	}
 
+	leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+		args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
 	resumeKey, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		args.TargetTime, cArgs.Header.Timestamp, clearRangeThreshold, cArgs.Header.MaxSpanRequestKeys,
-		maxRevertRangeBatchBytes)
+		args.TargetTime, cArgs.Header.Timestamp, leftPeekBound, rightPeekBound,
+		clearRangeThreshold, cArgs.Header.MaxSpanRequestKeys, maxRevertRangeBatchBytes)
 	if err != nil {
 		return result.Result{}, err
 	}
