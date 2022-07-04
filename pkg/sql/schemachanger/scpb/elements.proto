@@ -460,6 +460,9 @@ message ConstraintComment {
 message DatabaseRegionConfig {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 region_enum_type_id = 2 [(gogoproto.customname) = "RegionEnumTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string primary_region = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  uint32 survival_goal = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.SurvivalGoal"];
+  uint32 placement = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.DataPlacement"];
 }
 
 message DatabaseRoleSetting {

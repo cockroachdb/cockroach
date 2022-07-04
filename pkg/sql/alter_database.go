@@ -1072,7 +1072,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 	}
 
 	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure &&
-		n.desc.RegionConfig.Placement == descpb.DataPlacement_RESTRICTED {
+		n.desc.RegionConfig.Placement == catpb.DataPlacement_RESTRICTED {
 		return errors.WithDetailf(
 			pgerror.New(pgcode.InvalidParameterValue,
 				"a region-survivable database cannot also have a restricted placement policy"),
@@ -1086,7 +1086,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 			return err
 		}
 		for _, sr := range superRegions {
-			if err := multiregion.CanSatisfySurvivalGoal(descpb.SurvivalGoal_REGION_FAILURE, len(sr.Regions)); err != nil {
+			if err := multiregion.CanSatisfySurvivalGoal(catpb.SurvivalGoal_REGION_FAILURE, len(sr.Regions)); err != nil {
 				return errors.Wrapf(err, "super region %s only has %d region(s)", sr.SuperRegionName, len(sr.Regions))
 			}
 		}
@@ -1214,7 +1214,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 	}
 
 	if n.n.Placement == tree.DataPlacementRestricted &&
-		n.desc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		n.desc.RegionConfig.SurvivalGoal == catpb.SurvivalGoal_REGION_FAILURE {
 		return errors.WithDetailf(
 			pgerror.New(pgcode.InvalidParameterValue,
 				"a region-survivable database cannot also have a restricted placement policy"),

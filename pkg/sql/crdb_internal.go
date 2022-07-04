@@ -309,7 +309,7 @@ CREATE TABLE crdb_internal.databases (
 						createNode.Regions[i] = tree.Name(region)
 					}
 
-					if db.GetRegionConfig().Placement == descpb.DataPlacement_RESTRICTED {
+					if db.GetRegionConfig().Placement == catpb.DataPlacement_RESTRICTED {
 						placement = tree.NewDString("restricted")
 						createNode.Placement = tree.DataPlacementRestricted
 					} else {
@@ -324,10 +324,10 @@ CREATE TABLE crdb_internal.databases (
 
 					createNode.SurvivalGoal = tree.SurvivalGoalDefault
 					switch db.GetRegionConfig().SurvivalGoal {
-					case descpb.SurvivalGoal_ZONE_FAILURE:
+					case catpb.SurvivalGoal_ZONE_FAILURE:
 						survivalGoal = tree.NewDString("zone")
 						createNode.SurvivalGoal = tree.SurvivalGoalZoneFailure
-					case descpb.SurvivalGoal_REGION_FAILURE:
+					case catpb.SurvivalGoal_REGION_FAILURE:
 						survivalGoal = tree.NewDString("region")
 						createNode.SurvivalGoal = tree.SurvivalGoalRegionFailure
 					default:

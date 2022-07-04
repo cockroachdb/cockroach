@@ -126,6 +126,9 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseRegionConfig{
 			DatabaseID:       db.GetID(),
 			RegionEnumTypeID: db.GetRegionConfig().RegionEnumID,
+			PrimaryRegion:    db.GetRegionConfig().PrimaryRegion,
+			SurvivalGoal:     db.GetRegionConfig().SurvivalGoal,
+			Placement:        db.GetRegionConfig().Placement,
 		})
 	}
 	_ = db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {

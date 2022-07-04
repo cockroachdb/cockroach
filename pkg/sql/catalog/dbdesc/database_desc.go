@@ -469,7 +469,7 @@ func (desc *Mutable) SetRegionConfig(cfg *descpb.DatabaseDescriptor_RegionConfig
 
 // SetPlacement sets the placement on the region config for a database
 // descriptor.
-func (desc *Mutable) SetPlacement(placement descpb.DataPlacement) {
+func (desc *Mutable) SetPlacement(placement catpb.DataPlacement) {
 	desc.RegionConfig.Placement = placement
 }
 

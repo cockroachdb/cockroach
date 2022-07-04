@@ -20,9 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// GenerateSubzoneSpans see regionutils.GenerateSubzoneSpans for details.
-// This wrapper enforces licensing restrictions which are enforced else,
-// where in the declarative schema changer.
+// GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
+// zone config spans to subzones for use in the SubzoneSpans field of
+// zonepb.ZoneConfig. Unlike regionutils.GenerateSubzoneSpans this one enforces
+// any enterprise licenses.
 // TODO(benesch): remove the hasNewSubzones parameter when a statement to clear
 // all subzones at once is introduced.
 func GenerateSubzoneSpans(

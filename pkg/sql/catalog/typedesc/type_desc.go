@@ -732,7 +732,7 @@ func (desc *immutable) validateMultiRegion(
 	if err != nil {
 		vea.Report(err)
 	}
-	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+	if dbDesc.GetRegionConfig().SurvivalGoal == catpb.SurvivalGoal_REGION_FAILURE {
 		if len(regionNames) < 3 {
 			vea.Report(
 				errors.AssertionFailedf(
