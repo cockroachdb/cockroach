@@ -24,6 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// clearRangeThreshold specifies the number of consecutive keys to clear where
+// RevertRange will switch for issuing point key clear to clearing a range using
+// a Pebble range tombstone. This constant hasn't been tuned here at all, but
+// was just borrowed from `clearRangeData` where where this strategy originated.
+const clearRangeThreshold = 64
+
 func init() {
 	RegisterReadWriteCommand(roachpb.RevertRange, declareKeysRevertRange, RevertRange)
 }
@@ -97,16 +103,16 @@ func RevertRange(
 
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
-	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
+	resumeKey, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
+		args.TargetTime, cArgs.Header.Timestamp, clearRangeThreshold, cArgs.Header.MaxSpanRequestKeys,
 		maxRevertRangeBatchBytes)
 	if err != nil {
 		return result.Result{}, err
 	}
 
-	if resume != nil {
-		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span [%v, %v)", resume.Key, resume.EndKey)
-		reply.ResumeSpan = resume
+	if len(resumeKey) > 0 {
+		reply.ResumeSpan = &roachpb.Span{Key: resumeKey, EndKey: args.EndKey.Clone()}
+		log.VEventf(ctx, 2, "hit limit while clearing keys, resume span %s", reply.ResumeSpan)
 
 		// If, and only if, we're returning a resume span do we want to return >0
 		// NumKeys. Distsender will reduce the limit for subsequent requests by the
