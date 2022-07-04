@@ -90,7 +90,7 @@ type MutationVisitorStateUpdater interface {
 		stmts []scpb.Statement,
 		isNonCancelable bool,
 		auth scpb.Authorization,
-		descriptors descpb.IDs,
+		descriptorIDs catalog.DescriptorIDSet,
 		runningStatus string,
 	) error
 

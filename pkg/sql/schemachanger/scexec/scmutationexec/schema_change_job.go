@@ -23,7 +23,12 @@ func (m *visitor) CreateSchemaChangerJob(
 	ctx context.Context, job scop.CreateSchemaChangerJob,
 ) error {
 	return m.s.AddNewSchemaChangerJob(
-		job.JobID, job.Statements, job.NonCancelable, job.Authorization, job.DescriptorIDs, job.RunningStatus,
+		job.JobID,
+		job.Statements,
+		job.NonCancelable,
+		job.Authorization,
+		catalog.MakeDescriptorIDSet(job.DescriptorIDs...),
+		job.RunningStatus,
 	)
 }
 
