@@ -2184,11 +2184,12 @@ func MVCCMerge(
 // revisions of cleared keys are still available (i.e. have not been GC'ed).
 //
 // Long runs of keys that all qualify for clearing will be cleared via a single
-// clear-range operation. Once maxBatchSize Clear and ClearRange operations are
-// hit during iteration, the next matching key is instead returned in the
-// resumeSpan. It is possible to exceed maxBatchSize by up to the size of the
-// buffer of keys selected for deletion but not yet flushed (as done to detect
-// long runs for cleaning in a single ClearRange).
+// clear-range operation, as specified by clearRangeThreshold. Once maxBatchSize
+// Clear and ClearRange operations are hit during iteration, the next matching
+// key is instead returned in the resumeSpan. It is possible to exceed
+// maxBatchSize by up to the size of the buffer of keys selected for deletion
+// but not yet flushed (as done to detect long runs for cleaning in a single
+// ClearRange).
 //
 // Limiting the number of keys or ranges of keys processed can still cause a
 // batch that is too large -- in number of bytes -- for raft to replicate if the
@@ -2209,37 +2210,39 @@ func MVCCClearTimeRange(
 	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
+	clearRangeThreshold int,
 	maxBatchSize, maxBatchByteSize int64,
-) (*roachpb.Span, error) {
-	var batchSize int64
-	var batchByteSize int64
-	var resume *roachpb.Span
+) (roachpb.Key, error) {
+	var batchSize, batchByteSize int64
+	var resumeKey roachpb.Key
+
+	if clearRangeThreshold == 0 {
+		clearRangeThreshold = 2
+	}
+	if maxBatchSize == 0 {
+		maxBatchSize = math.MaxInt64
+	}
+	if maxBatchByteSize == 0 {
+		maxBatchByteSize = math.MaxInt64
+	}
 
 	// When iterating, instead of immediately clearing a matching key we can
-	// accumulate it in buf until either a) useRangeClearThreshold is reached and
+	// accumulate it in buf until either a) clearRangeThreshold is reached and
 	// we discard the buffer, instead just keeping track of where the span of keys
 	// matching started or b) a non-matching key is seen and we flush the buffer
 	// keys one by one as Clears. Once we switch to just tracking where the run
 	// started, on seeing a non-matching key we flush the run via one ClearRange.
 	// This can be a big win for reverting bulk-ingestion of clustered data as the
 	// entire span may likely match and thus could be cleared in one ClearRange
-	// instead of hundreds of thousands of individual Clears. This constant hasn't
-	// been tuned here at all, but was just borrowed from `clearRangeData` where
-	// where this strategy originated.
-	const useClearRangeThreshold = 64
-	var buf [useClearRangeThreshold]MVCCKey
+	// instead of hundreds of thousands of individual Clears.
+	buf := make([]MVCCKey, clearRangeThreshold)
 	var bufSize int
 	var clearRangeStart MVCCKey
 
-	if ms == nil {
-		return nil, errors.AssertionFailedf(
-			"MVCCStats passed in to MVCCClearTimeRange must be non-nil to ensure proper stats" +
-				" computation during Clear operations")
-	}
 	clearMatchingKey := func(k MVCCKey) {
 		if len(clearRangeStart.Key) == 0 {
 			// Currently buffering keys to clear one-by-one.
-			if bufSize < useClearRangeThreshold {
+			if bufSize < clearRangeThreshold {
 				buf[bufSize].Key = append(buf[bufSize].Key[:0], k.Key...)
 				buf[bufSize].Timestamp = k.Timestamp
 				bufSize++
@@ -2348,23 +2351,22 @@ func MVCCClearTimeRange(
 				restoredMeta.Deleted = v.IsTombstone()
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
-				ms.Add(updateStatsOnClear(
-					clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0, &clearedMeta, &restoredMeta, k.Timestamp.WallTime,
-				))
+				if ms != nil {
+					ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, metaKeySize, 0,
+						&clearedMeta, &restoredMeta, k.Timestamp.WallTime))
+				}
 			} else {
 				// We cleared a revision of a different key, so nothing was "restored".
-				ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
+				if ms != nil {
+					ms.Add(updateStatsOnClear(clearedMetaKey.Key, metaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
+				}
 			}
 			clearedMetaKey.Key = clearedMetaKey.Key[:0]
 		}
 
 		if startTime.Less(k.Timestamp) && k.Timestamp.LessEq(endTime) {
-			if batchSize >= maxBatchSize {
-				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
-				break
-			}
-			if batchByteSize > maxBatchByteSize {
-				resume = &roachpb.Span{Key: append([]byte{}, k.Key...), EndKey: endKey}
+			if batchSize >= maxBatchSize || batchByteSize >= maxBatchByteSize {
+				resumeKey = k.Key.Clone()
 				break
 			}
 			clearMatchingKey(k)
@@ -2399,14 +2401,14 @@ func MVCCClearTimeRange(
 		}
 	}
 
-	if len(clearedMetaKey.Key) > 0 {
+	if len(clearedMetaKey.Key) > 0 && ms != nil {
 		// If we cleared on the last iteration, no older revision of that key was
 		// "restored", since otherwise we would have iterated over it.
 		origMetaKeySize := int64(clearedMetaKey.EncodedSize())
 		ms.Add(updateStatsOnClear(clearedMetaKey.Key, origMetaKeySize, 0, 0, 0, &clearedMeta, nil, 0))
 	}
 
-	return resume, flushClearedKeys(MVCCKey{Key: endKey})
+	return resumeKey, flushClearedKeys(MVCCKey{Key: endKey})
 }
 
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
