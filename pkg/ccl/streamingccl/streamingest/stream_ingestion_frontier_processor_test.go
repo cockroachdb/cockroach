@@ -166,9 +166,18 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			spec.PartitionAddresses = []string{pa1, pa2}
-			spec.PartitionIds = []string{pa1, pa2}
-			spec.PartitionSpecs = []string{pa1, pa2}
+			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
+				pa1: {
+					PartitionID:       pa1,
+					SubscriptionToken: pa1,
+					Address:           pa1,
+				},
+				pa2: {
+					PartitionID:       pa2,
+					SubscriptionToken: pa2,
+					Address:           pa2,
+				},
+			}
 			spec.TenantRekey = execinfrapb.TenantRekey{
 				OldID: roachpb.MakeTenantID(tenantID),
 				NewID: roachpb.MakeTenantID(tenantID + 10),
