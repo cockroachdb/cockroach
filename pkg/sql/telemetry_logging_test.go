@@ -122,61 +122,75 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedSkipped         []int // Expected skipped query count per expected log line.
 		expectedUnredactedTags  []string
 		expectedApplicationName string
+		expectedErr             string
 	}{
 		{
 			// Test case with statement that is not of type DML.
 			// Even though the queries are executed within the required
 			// elapsed interval, we should still see that they were all
 			// logged since  we log all statements that are not of type DML.
-			"truncate-table-query",
-			"TRUNCATE t;",
-			"TRUNCATE TABLE t",
-			[]float64{1, 1.1, 1.2, 2},
-			`TRUNCATE TABLE`,
-			1,
-			[]int{0, 0, 0, 0},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "truncate-table-query",
+			query:                   "TRUNCATE t;",
+			queryNoConstants:        "TRUNCATE TABLE t",
+			execTimestampsSeconds:   []float64{1, 1.1, 1.2, 2},
+			expectedLogStatement:    `TRUNCATE TABLE`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0, 0, 0, 0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
 		},
 		{
 			// Test case with statement that is of type DML.
 			// The first statement should be logged.
-			"select-*-limit-1-query",
-			"SELECT * FROM t LIMIT 1;",
-			"SELECT * FROM t LIMIT _",
-			[]float64{3},
-			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
-			1,
-			[]int{0},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "select-*-limit-1-query",
+			query:                   "SELECT * FROM t LIMIT 1;",
+			queryNoConstants:        "SELECT * FROM t LIMIT _",
+			execTimestampsSeconds:   []float64{3},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
 		},
 		{
 			// Test case with statement that is of type DML.
 			// Two timestamps are within the required elapsed interval,
 			// thus 2 log statements are expected, with 2 skipped queries.
-			"select-*-limit-2-query",
-			"SELECT * FROM t LIMIT 2;",
-			"SELECT * FROM t LIMIT _",
-			[]float64{4, 4.1, 4.2, 5},
-			`SELECT * FROM \"\".\"\".t LIMIT ‹2›`,
-			1,
-			[]int{0, 2},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "select-*-limit-2-query",
+			query:                   "SELECT * FROM t LIMIT 2;",
+			queryNoConstants:        "SELECT * FROM t LIMIT _",
+			execTimestampsSeconds:   []float64{4, 4.1, 4.2, 5},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".t LIMIT ‹2›`,
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0, 2},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
 		},
 		{
 			// Test case with statement that is of type DML.
 			// Once required time has elapsed, the next statement should be logged.
-			"select-*-limit-3-query",
-			"SELECT * FROM t LIMIT 3;",
-			"SELECT * FROM t LIMIT _",
-			[]float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
-			`SELECT * FROM \"\".\"\".t LIMIT ‹3›`,
-			10,
-			[]int{0, 3, 0},
-			[]string{"client"},
-			"telemetry-logging-test",
+			name:                    "select-*-limit-3-query",
+			query:                   "SELECT * FROM t LIMIT 3;",
+			queryNoConstants:        "SELECT * FROM t LIMIT _",
+			execTimestampsSeconds:   []float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".t LIMIT ‹3›`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0, 3, 0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+		},
+		// Not of type DML so not sampled
+		{
+			name:                    "sql-error",
+			query:                   "CREATE USER root;",
+			queryNoConstants:        "CREATE USER '_'",
+			execTimestampsSeconds:   []float64{7},
+			expectedLogStatement:    "CREATE USER ‹'root'›",
+			stubMaxEventFrequency:   1,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedErr:             "a role/user named ‹root› already exists",
 		},
 	}
 
@@ -185,7 +199,10 @@ func TestTelemetryLogging(t *testing.T) {
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.setTime(stubTime)
-			db.Exec(t, tc.query)
+			_, err := db.DB.ExecContext(context.Background(), tc.query)
+			if err != nil && tc.expectedErr == "" {
+				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
+			}
 		}
 	}
 
@@ -270,9 +287,15 @@ func TestTelemetryLogging(t *testing.T) {
 				if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
 					t.Errorf("expected to find Database: %s", databaseName)
 				}
-				stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, false, true, databaseName)
+				stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
 				if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
 					t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
+				}
+				if tc.expectedErr != "" {
+					if !strings.Contains(e.Message, tc.expectedErr) {
+						t.Errorf("%s: missing error %s in message %s", tc.name, tc.expectedErr, e.Message)
+						break
+					}
 				}
 			}
 		}

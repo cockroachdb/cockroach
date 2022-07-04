@@ -309,7 +309,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | yes |
+| `ErrorText` | The text of the error if any. | partially |
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
@@ -343,7 +343,7 @@ a table marked as audited.
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | yes |
+| `ErrorText` | The text of the error if any. | partially |
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
@@ -384,7 +384,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | yes |
+| `ErrorText` | The text of the error if any. | partially |
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
@@ -1933,7 +1933,7 @@ set to a non-zero value, AND
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | yes |
+| `ErrorText` | The text of the error if any. | partially |
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
@@ -2052,7 +2052,7 @@ the "slow query" condition.
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | yes |
+| `ErrorText` | The text of the error if any. | partially |
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
@@ -2262,7 +2262,7 @@ contains common SQL event/execution details.
 | `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
 | `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
 | `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
-| `ErrorText` | The text of the error if any. | yes |
+| `ErrorText` | The text of the error if any. | partially |
 | `Age` | Age of the query in milliseconds. | no |
 | `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
 | `FullTableScan` | Whether the query contains a full table scan. | no |
