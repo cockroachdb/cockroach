@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +66,7 @@ func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
 ) {
 	t.Helper()
-	if err := retry.ForDuration(time.Minute*2, func() error {
+	testutils.SucceedsWithin(t, func() error {
 		var status string
 		var payloadBytes []byte
 		db.QueryRow(
@@ -86,9 +86,7 @@ func waitForJobToHaveStatus(
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}, 2*time.Minute)
 }
 
 // RunJob runs the provided job control statement, initializing, notifying and

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -228,6 +229,25 @@ func (m *randomStreamClient) getNextTableID() int {
 	return ret
 }
 
+func (m *randomStreamClient) tableDescForID(tableID int) (*tabledesc.Mutable, error) {
+	partitionURI := m.config.URL(tableID)
+	partitionURL, err := url.Parse(partitionURI)
+	if err != nil {
+		return nil, err
+	}
+	config, err := parseRandomStreamConfig(partitionURL)
+	if err != nil {
+		return nil, err
+	}
+	var partitionTableID int
+	partitionTableID, err = strconv.Atoi(partitionURL.Host)
+	if err != nil {
+		return nil, err
+	}
+	tableDesc, _, err := m.getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
+	return tableDesc, err
+}
+
 // Plan implements the Client interface.
 func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
 	topology := make(Topology, 0, m.config.numPartitions)
@@ -235,7 +255,13 @@ func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (T
 
 	// Allocate table IDs and return one per partition address in the topology.
 	for i := 0; i < m.config.numPartitions; i++ {
-		partitionURI := m.config.URL(m.getNextTableID())
+		tableID := m.getNextTableID()
+		tableDesc, err := m.tableDescForID(tableID)
+		if err != nil {
+			return nil, err
+		}
+
+		partitionURI := m.config.URL(tableID)
 		log.Infof(ctx, "planning random stream partition %d for tenant %d: %q", i, m.config.tenantID, partitionURI)
 
 		topology = append(topology,
@@ -243,6 +269,7 @@ func (m *randomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (T
 				ID:                strconv.Itoa(i),
 				SrcAddr:           streamingccl.PartitionAddress(partitionURI),
 				SubscriptionToken: []byte(partitionURI),
+				Spans:             []roachpb.Span{tableDesc.TableSpan(keys.SystemSQLCodec)},
 			})
 	}
 
@@ -342,6 +369,7 @@ func (m *randomStreamClient) Subscribe(
 		return nil, err
 	}
 	log.Infof(ctx, "producing kvs for metadata for table %d for tenant %d based on %q", partitionTableID, config.tenantID, spec)
+
 	tableDesc, systemKVs, err := m.getDescriptorAndNamespaceKVForTableID(config, descpb.ID(partitionTableID))
 	if err != nil {
 		return nil, err
@@ -378,7 +406,8 @@ func (m *randomStreamClient) Subscribe(
 				// Emit a CheckpointEvent.
 				resolvedTime := timeutil.Now()
 				hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
-				event = streamingccl.MakeCheckpointEvent(hlcResolvedTime)
+				resolvedSpan := jobspb.ResolvedSpan{Span: tableDesc.TableSpan(keys.SystemSQLCodec), Timestamp: hlcResolvedTime}
+				event = streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan})
 				numKVEventsSinceLastResolved = 0
 			} else {
 				// If there are system KVs to emit, prioritize those.

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -260,7 +261,7 @@ func (s *eventStream) onSSTable(ctx context.Context, sst *roachpb.RangeFeedSSTab
 // makeCheckpoint generates checkpoint based on the frontier.
 func makeCheckpoint(f *span.Frontier) (checkpoint streampb.StreamEvent_StreamCheckpoint) {
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-		checkpoint.Spans = append(checkpoint.Spans, streampb.StreamEvent_SpanCheckpoint{
+		checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{
 			Span:      sp,
 			Timestamp: ts,
 		})

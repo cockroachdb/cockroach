@@ -96,6 +96,7 @@ type PartitionInfo struct {
 	SrcInstanceID int
 	SrcAddr       streamingccl.PartitionAddress
 	SrcLocality   roachpb.Locality
+	Spans         []roachpb.Span
 }
 
 // Subscription represents subscription to a replication stream partition.

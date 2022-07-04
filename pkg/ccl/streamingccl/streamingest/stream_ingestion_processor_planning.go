@@ -34,6 +34,7 @@ func distStreamIngestionPlanSpecs(
 	topology streamclient.Topology,
 	sqlInstanceIDs []base.SQLInstanceID,
 	initialHighWater hlc.Timestamp,
+	checkpoint jobspb.StreamIngestionCheckpoint,
 	jobID jobspb.JobID,
 	streamID streaming.StreamID,
 	oldTenantID roachpb.TenantID,
@@ -50,11 +51,12 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(sqlInstanceIDs) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				StreamID:           uint64(streamID),
-				JobID:              int64(jobID),
-				StartTime:          initialHighWater,
-				StreamAddress:      string(streamAddress),
-				PartitionAddresses: make([]string, 0),
+				StreamID:       uint64(streamID),
+				JobID:          int64(jobID),
+				StartTime:      initialHighWater,
+				Checkpoint:     checkpoint, // TODO: Only forward relevant checkpoint info
+				StreamAddress:  string(streamAddress),
+				PartitionSpecs: make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 				TenantRekey: execinfrapb.TenantRekey{
 					OldID: oldTenantID,
 					NewID: newTenantID,
@@ -65,18 +67,14 @@ func distStreamIngestionPlanSpecs(
 		n := i % len(sqlInstanceIDs)
 
 		subscribingSQLInstances[partition.ID] = uint32(sqlInstanceIDs[n])
-		streamIngestionSpecs[n].PartitionIds = append(streamIngestionSpecs[n].PartitionIds, partition.ID)
-		streamIngestionSpecs[n].PartitionSpecs = append(streamIngestionSpecs[n].PartitionSpecs,
-			string(partition.SubscriptionToken))
-		streamIngestionSpecs[n].PartitionAddresses = append(streamIngestionSpecs[n].PartitionAddresses,
-			string(partition.SrcAddr))
-		// We create "fake" spans to uniquely identify the partition. This is used
-		// to keep track of the resolved ts received for a particular partition in
-		// the frontier processor.
-		trackedSpans = append(trackedSpans, roachpb.Span{
-			Key:    roachpb.Key(partition.ID),
-			EndKey: roachpb.Key(partition.ID).Next(),
-		})
+		streamIngestionSpecs[n].PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
+			PartitionID:       partition.ID,
+			SubscriptionToken: string(partition.SubscriptionToken),
+			Address:           string(partition.SrcAddr),
+			Spans:             partition.Spans,
+		}
+
+		trackedSpans = append(trackedSpans, partition.Spans...)
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
@@ -88,6 +86,7 @@ func distStreamIngestionPlanSpecs(
 		StreamID:                uint64(streamID),
 		StreamAddress:           string(streamAddress),
 		SubscribingSQLInstances: subscribingSQLInstances,
+		Checkpoint:              checkpoint,
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil

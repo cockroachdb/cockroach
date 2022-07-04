@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -65,9 +66,14 @@ func (sc testStreamClient) Subscribe(
 		},
 	}
 
+	sampleResolvedSpan := jobspb.ResolvedSpan{
+		Span:      roachpb.Span{Key: sampleKV.Key, EndKey: sampleKV.Key.Next()},
+		Timestamp: hlc.Timestamp{WallTime: 100},
+	}
+
 	events := make(chan streamingccl.Event, 2)
 	events <- streamingccl.MakeKVEvent(sampleKV)
-	events <- streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 100})
+	events <- streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{sampleResolvedSpan})
 	close(events)
 
 	return &testStreamSubscription{
@@ -169,9 +175,15 @@ func ExampleClient() {
 					fmt.Printf("sst: %s->%s@%d\n", sst.Span.String(), string(sst.Data), sst.WriteTS.WallTime)
 				case streamingccl.CheckpointEvent:
 					ingested.Lock()
-					ingested.ts.Forward(*event.GetResolved())
+					minTS := hlc.MaxTimestamp
+					for _, rs := range *event.GetResolvedSpans() {
+						if rs.Timestamp.Less(minTS) {
+							minTS = rs.Timestamp
+						}
+					}
+					ingested.ts.Forward(minTS)
 					ingested.Unlock()
-					fmt.Printf("resolved %d\n", event.GetResolved().WallTime)
+					fmt.Printf("resolved %d\n", minTS.WallTime)
 				case streamingccl.GenerationEvent:
 					fmt.Printf("received generation event")
 				default:
