@@ -109,6 +109,7 @@ var (
 // clear				  k=<key> [ts=<int>[,<int>]]
 // clear_range    k=<key> end=<key>
 // clear_rangekey k=<key> end=<key> ts=<int>[,<int>]
+// clear_time_range k=<key> end=<key> ts=<int>[,<int>] targetTs=<int>[,<int>] [clearRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchByteSize=<int>]
 //
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
 // sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
@@ -653,22 +654,23 @@ var commands = map[string]cmd{
 	"check_intent":         {typReadOnly, cmdCheckIntent},
 	"add_lock":             {typLocksUpdate, cmdAddLock},
 
-	"clear":          {typDataUpdate, cmdClear},
-	"clear_range":    {typDataUpdate, cmdClearRange},
-	"clear_rangekey": {typDataUpdate, cmdClearRangeKey},
-	"cput":           {typDataUpdate, cmdCPut},
-	"del":            {typDataUpdate, cmdDelete},
-	"del_range":      {typDataUpdate, cmdDeleteRange},
-	"del_range_ts":   {typDataUpdate, cmdDeleteRangeTombstone},
-	"del_range_pred": {typDataUpdate, cmdDeleteRangePredicate},
-	"export":         {typReadOnly, cmdExport},
-	"get":            {typReadOnly, cmdGet},
-	"increment":      {typDataUpdate, cmdIncrement},
-	"initput":        {typDataUpdate, cmdInitPut},
-	"merge":          {typDataUpdate, cmdMerge},
-	"put":            {typDataUpdate, cmdPut},
-	"put_rangekey":   {typDataUpdate, cmdPutRangeKey},
-	"scan":           {typReadOnly, cmdScan},
+	"clear":            {typDataUpdate, cmdClear},
+	"clear_range":      {typDataUpdate, cmdClearRange},
+	"clear_rangekey":   {typDataUpdate, cmdClearRangeKey},
+	"clear_time_range": {typDataUpdate, cmdClearTimeRange},
+	"cput":             {typDataUpdate, cmdCPut},
+	"del":              {typDataUpdate, cmdDelete},
+	"del_range":        {typDataUpdate, cmdDeleteRange},
+	"del_range_ts":     {typDataUpdate, cmdDeleteRangeTombstone},
+	"del_range_pred":   {typDataUpdate, cmdDeleteRangePredicate},
+	"export":           {typReadOnly, cmdExport},
+	"get":              {typReadOnly, cmdGet},
+	"increment":        {typDataUpdate, cmdIncrement},
+	"initput":          {typDataUpdate, cmdInitPut},
+	"merge":            {typDataUpdate, cmdMerge},
+	"put":              {typDataUpdate, cmdPut},
+	"put_rangekey":     {typDataUpdate, cmdPutRangeKey},
+	"scan":             {typReadOnly, cmdScan},
 
 	"iter_new":                    {typReadOnly, cmdIterNew},
 	"iter_new_incremental":        {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
@@ -908,6 +910,38 @@ func cmdClearRangeKey(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
 	return e.engine.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+}
+
+func cmdClearTimeRange(e *evalCtx) error {
+	var clearRangeThreshold, maxBatchSize, maxBatchByteSize int
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+	targetTs := e.getTsWithName("targetTs")
+	if e.hasArg("clearRangeThreshold") {
+		e.scanArg("clearRangeThreshold", &clearRangeThreshold)
+	}
+	if e.hasArg("maxBatchSize") {
+		e.scanArg("maxBatchSize", &maxBatchSize)
+	}
+	if e.hasArg("maxBatchByteSize") {
+		e.scanArg("maxBatchByteSize", &maxBatchByteSize)
+	}
+
+	batch := e.engine.NewBatch()
+	defer batch.Close()
+
+	resume, err := MVCCClearTimeRange(e.ctx, batch, e.ms, key, endKey, targetTs, ts,
+		nil, nil, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
+	if err != nil {
+		return err
+	}
+	if err := batch.Commit(false); err != nil {
+		return err
+	}
+	if resume != nil {
+		e.results.buf.Printf("clear_time_range: resume=%s\n", resume)
+	}
+	return nil
 }
 
 func cmdCPut(e *evalCtx) error {
