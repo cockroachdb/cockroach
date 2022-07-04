@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/descmetadata",
+        "//pkg/sql/faketreeeval",
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps",

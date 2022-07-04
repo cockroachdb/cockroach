@@ -11,6 +11,9 @@
 package scbuildstmt
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -162,4 +165,69 @@ func descIDs(input ElementResultSet) (ids catalog.DescriptorIDSet) {
 		ids.Add(screl.GetDescID(e))
 	})
 	return ids
+}
+
+func columnElements(b BuildCtx, relationID catid.DescID, columnID catid.ColumnID) ElementResultSet {
+	return b.QueryByID(relationID).Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
+		return idI != nil && idI.(catid.ColumnID) == columnID
+	})
+}
+
+func constraintElements(
+	b BuildCtx, relationID catid.DescID, constraintID catid.ConstraintID,
+) ElementResultSet {
+	return b.QueryByID(relationID).Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		return idI != nil && idI.(catid.ConstraintID) == constraintID
+	})
+}
+
+// indexColumnIDs return an index's key column IDs, key suffix column IDs,
+// and storing column IDs, in sorted order.
+func getSortedColumnIDsInIndex(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) (
+	keyColumnIDs []catid.ColumnID,
+	keySuffixColumnIDs []catid.ColumnID,
+	storingColumnIDs []catid.ColumnID,
+) {
+	// Retrieve all columns of this index
+	allColumns := make([]*scpb.IndexColumn, 0)
+	scpb.ForEachIndexColumn(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, ice *scpb.IndexColumn,
+	) {
+		if ice.TableID != tableID || ice.IndexID != indexID {
+			return
+		}
+		allColumns = append(allColumns, ice)
+	})
+
+	// Sort all columns by their (Kind, OrdinalInKind).
+	sort.Slice(allColumns, func(i, j int) bool {
+		return (allColumns[i].Kind < allColumns[j].Kind) ||
+			(allColumns[i].Kind == allColumns[j].Kind && allColumns[i].OrdinalInKind < allColumns[j].OrdinalInKind)
+	})
+
+	// Populate results.
+	keyColumnIDs = make([]catid.ColumnID, 0)
+	keySuffixColumnIDs = make([]catid.ColumnID, 0)
+	storingColumnIDs = make([]catid.ColumnID, 0)
+	for _, ice := range allColumns {
+		switch ice.Kind {
+		case scpb.IndexColumn_KEY:
+			keyColumnIDs = append(keyColumnIDs, ice.ColumnID)
+		case scpb.IndexColumn_KEY_SUFFIX:
+			keySuffixColumnIDs = append(keySuffixColumnIDs, ice.ColumnID)
+		case scpb.IndexColumn_STORED:
+			storingColumnIDs = append(storingColumnIDs, ice.ColumnID)
+		default:
+			panic(fmt.Sprintf("Unknown index column element kind %v", ice.Kind))
+		}
+	}
+	return keyColumnIDs, keySuffixColumnIDs, storingColumnIDs
 }
