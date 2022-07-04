@@ -294,11 +294,11 @@ func updateDescriptorMetadata(
 	}
 	for id, zoneCfg := range mvs.zoneConfigsToUpdate {
 		if zoneCfg != nil {
-			if err := m.UpsertZoneConfig(ctx, id, zoneCfg); err != nil {
+			if _, err := m.UpsertZoneConfig(ctx, id, zoneCfg, true /*regenrateSpans*/); err != nil {
 				return err
 			}
 		} else {
-			if err := m.DeleteZoneConfig(ctx, id); err != nil {
+			if _, err := m.DeleteZoneConfig(ctx, id); err != nil {
 				return err
 			}
 		}

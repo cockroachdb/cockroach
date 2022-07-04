@@ -1059,17 +1059,22 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
 }
 
 // DeleteZoneConfig implements scexec.DescriptorMetadataUpdater.
-func (s *TestState) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+func (s *TestState) DeleteZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (numAffectedRows int, err error) {
+	if _, ok := s.zoneConfigs[id]; !ok {
+		return 0, nil
+	}
 	delete(s.zoneConfigs, id)
-	return nil
+	return 1, nil
 }
 
 // UpsertZoneConfig implements scexec.DescriptorMetadataUpdater.
 func (s *TestState) UpsertZoneConfig(
-	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
-) error {
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig, regenerateSpans bool,
+) (numAffectedRows int, err error) {
 	s.zoneConfigs[id] = zone
-	return nil
+	return 1, nil
 }
 
 // DescriptorMetadataUpdater implement scexec.Dependencies.

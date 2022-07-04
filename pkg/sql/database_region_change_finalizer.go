@@ -134,7 +134,7 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 	}
 	for _, update := range zoneConfigUpdates {
 		if _, err := writeZoneConfigUpdate(
-			ctx, txn, r.localPlanner.ExecCfg(), update,
+			ctx, txn, r.localPlanner.ExecCfg(), r.localPlanner.Descriptors(), update,
 		); err != nil {
 			return err
 		}
@@ -210,6 +210,7 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 		regionConfig,
 		txn,
 		r.localPlanner.ExecCfg(),
+		r.localPlanner.Descriptors(),
 	)
 }
 
