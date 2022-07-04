@@ -1628,8 +1628,8 @@ func (s *randomTest) step(t *testing.T) {
 	}
 }
 
-// TODO(erikgrinaker): Add ExperimentalMVCCDeleteRangeUsingTombstone operations
-// once they are fully integrated with other MVCC operations.
+// TODO(erikgrinaker): Add MVCCDeleteRangeUsingTombstone operations once they
+// are fully integrated with other MVCC operations.
 func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -1298,7 +1298,7 @@ func (*DeleteRequest) flags() flag {
 
 func (drr *DeleteRangeRequest) flags() flag {
 	// DeleteRangeRequest using MVCC range tombstones cannot be transactional.
-	if drr.UseExperimentalRangeTombstone {
+	if drr.UseRangeTombstone {
 		return isWrite | isRange | isAlone | appliesTSCache
 	}
 	// DeleteRangeRequest has different properties if the "inline" flag is set.

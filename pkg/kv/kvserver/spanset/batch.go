@@ -616,42 +616,40 @@ func (s spanSetWriter) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	return s.w.ClearMVCCIteratorRange(start, end)
 }
 
-func (s spanSetWriter) ExperimentalPutMVCCRangeKey(
+func (s spanSetWriter) PutMVCCRangeKey(
 	rangeKey storage.MVCCRangeKey, value storage.MVCCValue,
 ) error {
 	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
 		return err
 	}
-	return s.w.ExperimentalPutMVCCRangeKey(rangeKey, value)
+	return s.w.PutMVCCRangeKey(rangeKey, value)
 }
 
-func (s spanSetWriter) ExperimentalPutEngineRangeKey(
-	start, end roachpb.Key, suffix, value []byte,
-) error {
+func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
 	if !s.spansOnly {
-		panic("cannot do timestamp checking for ExperimentalPutEngineRangeKey")
+		panic("cannot do timestamp checking for PutEngineRangeKey")
 	}
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ExperimentalPutEngineRangeKey(start, end, suffix, value)
+	return s.w.PutEngineRangeKey(start, end, suffix, value)
 }
 
-func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
+func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
 		return err
 	}
-	return s.w.ExperimentalClearMVCCRangeKey(rangeKey)
+	return s.w.ClearMVCCRangeKey(rangeKey)
 }
 
-func (s spanSetWriter) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
+func (s spanSetWriter) ClearAllRangeKeys(start, end roachpb.Key) error {
 	if !s.spansOnly {
-		panic("cannot do timestamp checking for ExperimentalClearAllRangeKeys")
+		panic("cannot do timestamp checking for ClearAllRangeKeys")
 	}
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
-	return s.w.ExperimentalClearAllRangeKeys(start, end)
+	return s.w.ClearAllRangeKeys(start, end)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
