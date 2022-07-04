@@ -120,6 +120,7 @@ object TableSubZoneConfigOption
 
 TableSubZoneConfigOption :  TableID
 TableSubZoneConfigOption :  IndexID
+TableSubZoneConfigOption :  PartitionName
 TableSubZoneConfigOption :  ZoneConfigOption
 
 object DatabaseZoneConfig

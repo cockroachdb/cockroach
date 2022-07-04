@@ -505,7 +505,7 @@ func prepareRemovedPartitionZoneConfigs(
 	if len(removedNames) == 0 {
 		return nil, nil
 	}
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableDesc.GetID())
+	zone, err := getZoneConfigRaw(ctx, execCfg.InternalExecutor, txn, tableDesc.GetID())
 	if err != nil {
 		return nil, err
 	} else if zone == nil {
