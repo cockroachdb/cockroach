@@ -92,7 +92,12 @@ func TestTelemetryLogging(t *testing.T) {
 
 	defer s.Stopper().Stop(context.Background())
 
+	var sessionID string
+	var databaseName string
+
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.QueryRow(t, `SHOW session_id`).Scan(&sessionID)
+	db.QueryRow(t, `SHOW database`).Scan(&databaseName)
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	db.Exec(t, "CREATE TABLE t();")
@@ -231,6 +236,16 @@ func TestTelemetryLogging(t *testing.T) {
 				if !distRe.MatchString(e.Message) {
 					t.Errorf("expected to find Distribution but none was found")
 				}
+				// Match StatementID on any non-empty string value.
+				stmtID := regexp.MustCompile("\"StatementID\":(\"\\S+\")")
+				if !stmtID.MatchString(e.Message) {
+					t.Errorf("expected to find StatementID but none was found in: %s", e.Message)
+				}
+				// Match TransactionID on any non-empty string value.
+				txnID := regexp.MustCompile("\"TransactionID\":(\"\\S+\")")
+				if !txnID.MatchString(e.Message) {
+					t.Errorf("expected to find TransactionID but none was found in: %s", e.Message)
+				}
 				for _, eTag := range tc.expectedUnredactedTags {
 					for _, tag := range strings.Split(e.Tags, ",") {
 						kv := strings.Split(tag, "=")
@@ -241,6 +256,12 @@ func TestTelemetryLogging(t *testing.T) {
 				}
 				if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
 					t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
+				}
+				if !strings.Contains(e.Message, "\"SessionID\":\""+sessionID+"\"") {
+					t.Errorf("expected to find sessionID: %s", sessionID)
+				}
+				if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
+					t.Errorf("expected to find Database: %s", databaseName)
 				}
 			}
 		}
