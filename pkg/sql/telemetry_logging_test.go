@@ -114,6 +114,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedSkipped         []int // Expected skipped query count per expected log line.
 		expectedUnredactedTags  []string
 		expectedApplicationName string
+		expectedErr             string
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -128,6 +129,7 @@ func TestTelemetryLogging(t *testing.T) {
 			[]int{0, 0, 0, 0},
 			[]string{"client"},
 			"telemetry-logging-test",
+			"",
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -140,6 +142,7 @@ func TestTelemetryLogging(t *testing.T) {
 			[]int{0},
 			[]string{"client"},
 			"telemetry-logging-test",
+			"",
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -153,6 +156,7 @@ func TestTelemetryLogging(t *testing.T) {
 			[]int{0, 2},
 			[]string{"client"},
 			"telemetry-logging-test",
+			"",
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -165,6 +169,19 @@ func TestTelemetryLogging(t *testing.T) {
 			[]int{0, 3, 0},
 			[]string{"client"},
 			"telemetry-logging-test",
+			"",
+		},
+		// Not of type DML so not sampled
+		{
+			"sql-error",
+			"CREATE USER root;",
+			[]float64{7},
+			`CREATE USER root`,
+			1,
+			[]int{0},
+			[]string{"client"},
+			"telemetry-logging-test",
+			"a role/user named ‹root› already exists",
 		},
 	}
 
@@ -173,7 +190,7 @@ func TestTelemetryLogging(t *testing.T) {
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.setTime(stubTime)
-			db.Exec(t, tc.query)
+			_, _ = db.DB.ExecContext(context.Background(), tc.query)
 		}
 	}
 
@@ -246,6 +263,12 @@ func TestTelemetryLogging(t *testing.T) {
 				}
 				if !strings.Contains(e.Message, "\"ApplicationName\":\""+tc.expectedApplicationName+"\"") {
 					t.Errorf("expected to find unredacted Application Name: %s", tc.expectedApplicationName)
+				}
+				if tc.expectedErr != "" {
+					if !strings.Contains(e.Message, tc.expectedErr) {
+						t.Errorf("%s: missing error %s in message %s", tc.name, tc.expectedErr, e.Message)
+						break
+					}
 				}
 			}
 		}
