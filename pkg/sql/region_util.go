@@ -756,7 +756,7 @@ func prepareZoneConfigForMultiRegionTable(
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) (*zoneConfigUpdate, error) {
 	tableID := table.GetID()
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableID)
+	currentZoneConfig, err := getZoneConfigRaw(ctx, execCfg.InternalExecutor, txn, tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -882,7 +882,7 @@ func applyZoneConfigForMultiRegionDatabase(
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 ) error {
-	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, execConfig.Settings, dbID)
+	currentZoneConfig, err := getZoneConfigRaw(ctx, execConfig.InternalExecutor, txn, dbID)
 	if err != nil {
 		return err
 	}
@@ -1738,7 +1738,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionDatabaseZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, dbDesc.GetID())
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.ExecCfg().InternalExecutor, p.txn, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -1812,7 +1812,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
 		return nil
 	}
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, p.ExecCfg().Settings, desc.GetID())
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.ExecCfg().InternalExecutor, p.txn, desc.GetID())
 	if err != nil {
 		return err
 	}

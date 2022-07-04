@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -411,7 +412,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		// Retrieve the partial zone configuration
 		partialZone, err := getZoneConfigRaw(
-			params.ctx, params.p.txn, params.ExecCfg().Codec, params.ExecCfg().Settings, targetID,
+			params.ctx, params.ExecCfg().InternalExecutor, params.p.txn, targetID,
 		)
 		if err != nil {
 			return err
@@ -626,7 +627,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
 				// And if it is a placeholder, we use getZoneConfigRaw to create one.
 				completeZone, err = getZoneConfigRaw(
-					params.ctx, params.p.txn, params.ExecCfg().Codec, params.ExecCfg().Settings, targetID,
+					params.ctx, params.ExecCfg().InternalExecutor, params.p.txn, targetID,
 				)
 				if err != nil {
 					return err
@@ -1025,20 +1026,10 @@ func writeZoneConfigUpdate(
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
 // zone config exists for the given ID, it returns nil.
 func getZoneConfigRaw(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, settings *cluster.Settings, id descpb.ID,
+	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	kv, err := txn.Get(ctx, config.MakeZoneKey(codec, id))
-	if err != nil {
-		return nil, err
-	}
-	if kv.Value == nil {
-		return nil, nil
-	}
-	var zone zonepb.ZoneConfig
-	if err := kv.ValueProto(&zone); err != nil {
-		return nil, err
-	}
-	return &zone, nil
+	zcReader := zoneconfig.NewZoneConfigReader(ie, txn)
+	return zcReader.GetZoneConfig(ctx, id)
 }
 
 // getZoneConfigRawBatch looks up the zone config with the given IDs.
@@ -1090,7 +1081,7 @@ func RemoveIndexZoneConfigs(
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableDesc.GetID())
+	zone, err := getZoneConfigRaw(ctx, execCfg.InternalExecutor, txn, tableDesc.GetID())
 	if err != nil {
 		return err
 	}
