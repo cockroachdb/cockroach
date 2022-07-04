@@ -1559,6 +1559,8 @@ type StreamingTestingKnobs struct {
 	// RunAfterReceivingEvent allows blocking the stream ingestion processor after
 	// a single event has been received.
 	RunAfterReceivingEvent func(ctx context.Context)
+
+	BeforeClientSubscribe func(token string, startTime hlc.Timestamp)
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
