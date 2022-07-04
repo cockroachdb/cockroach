@@ -549,7 +549,7 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 	stmts []scpb.Statement,
 	isNonCancelable bool,
 	auth scpb.Authorization,
-	descriptorIDs descpb.IDs,
+	descriptorIDs catalog.DescriptorIDSet,
 	runningStatus string,
 ) error {
 	if mvs.schemaChangerJob != nil {
@@ -580,7 +580,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 	stmts []scpb.Statement,
 	isNonCancelable bool,
 	auth scpb.Authorization,
-	descriptorIDs descpb.IDs,
+	descriptorIDs catalog.DescriptorIDSet,
 	runningStatus string,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
@@ -600,7 +600,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		Description:   description,
 		Statements:    stmtStrs,
 		Username:      username.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
-		DescriptorIDs: descriptorIDs,
+		DescriptorIDs: descriptorIDs.Ordered(),
 		Details:       jobspb.NewSchemaChangeDetails{},
 		Progress:      jobspb.NewSchemaChangeProgress{},
 		RunningStatus: jobs.RunningStatus(runningStatus),
