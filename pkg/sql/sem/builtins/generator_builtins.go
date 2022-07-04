@@ -110,6 +110,63 @@ var generators = map[string]builtinDefinition{
 			volatility.Stable,
 		),
 	),
+	"crdb_internal.scan": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"start_key", types.Bytes},
+				{"end_key", types.Bytes},
+			},
+			spanKeyIteratorType,
+			func(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errors.New("crdb_internal.scan() requires admin privilege")
+				}
+				startKey := []byte(tree.MustBeDBytes(args[0]))
+				endKey := []byte(tree.MustBeDBytes(args[1]))
+				return &spanKeyIterator{
+					span: roachpb.Span{
+						Key:    startKey,
+						EndKey: endKey,
+					},
+				}, nil
+			},
+			"Returns the raw keys and values from the specified span",
+			volatility.Volatile,
+		),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"span", types.BytesArray},
+			},
+			spanKeyIteratorType,
+			func(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errors.New("crdb_internal.scan() requires admin privilege")
+				}
+				arr := tree.MustBeDArray(args[0])
+				if arr.Len() != 2 {
+					return nil, errors.New("expected an array of two elements")
+				}
+				startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
+				endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
+				return &spanKeyIterator{
+					span: roachpb.Span{
+						Key:    startKey,
+						EndKey: endKey,
+					},
+				}, nil
+			},
+			"Returns the raw keys and values from the specified span",
+			volatility.Volatile,
+		),
+	),
 	"generate_series": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-srf.html#FUNCTIONS-SRF-SERIES
 		makeGeneratorOverload(
@@ -1715,13 +1772,12 @@ func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
 // Close is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Close(_ context.Context) {}
 
-// rangeKeyIteratorChunkSize is the number of K/V pairs that the
-// rangeKeyIterator requests at a time. If this changes, make sure
+// keyIteratorChunkSize is the number of K/V pairs that the
+// keyIterator requests at a time. If this changes, make sure
 // to update the test in sql_keys.
-// TODO(kv): The current KV API only supports a maxRows limitation
-//  on the amount of data returned from Scan. In the future, there will
-//  be a maxBytes limitation which should be used instead here.
 const rangeKeyIteratorChunkSize = 256
+
+// const rangeKeyIteratorChunkSizeMB = 16 << 20 // 16MB
 
 var rangeKeyIteratorType = types.MakeLabeledTuple(
 	// TODO(rohany): These could be bytes if we don't want to display the
@@ -1730,18 +1786,22 @@ var rangeKeyIteratorType = types.MakeLabeledTuple(
 	[]string{"key", "value"},
 )
 
-// rangeKeyIterator is a ValueGenerator that iterates over all
-// SQL keys in a target range.
-type rangeKeyIterator struct {
-	// rangeID is the ID of the range to iterate over. rangeID is set
-	// by the constructor of the rangeKeyIterator.
-	rangeID roachpb.RangeID
+var spanKeyIteratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Bytes, types.Bytes},
+	[]string{"key", "value"},
+)
+
+// spanKeyIterator is a ValueGenerator that iterates over all
+// SQL keys in a target span.
+type spanKeyIterator struct {
+	// The span to iterate
+	span roachpb.Span
 
 	// The transaction to use.
 	txn *kv.Txn
 	// kvs is a set of K/V pairs currently accessed by the iterator.
-	// It is not all of the K/V pairs in the target range. Instead,
-	// the iterator maintains a small set of K/V pairs in the range,
+	// It is not all of the K/V pairs in the target span. Instead,
+	// the iterator maintains a small set of K/V pairs in the span,
 	// and accesses more in a streaming fashion.
 	kvs []kv.KeyValue
 	// index maintains the current position of the iterator in kvs.
@@ -1752,7 +1812,71 @@ type rangeKeyIterator struct {
 	endKey roachpb.RKey
 }
 
+// Start implements the tree.ValueGenerator interface.
+func (sp *spanKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+	sp.txn = txn
+	kvs, err := txn.Scan(ctx, sp.span.Key, sp.span.EndKey, rangeKeyIteratorChunkSize)
+	if err != nil {
+		return err
+	}
+	sp.kvs = kvs
+	// The user of the generator first calls Next(), then Values(), so the index
+	// managing the iterator's position needs to start at -1 instead of 0.
+	sp.index = -1
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (sp *spanKeyIterator) Next(ctx context.Context) (bool, error) {
+	sp.index++
+	// If index is within rk.kvs, then we have buffered K/V pairs to return.
+	// Otherwise, we might have to request another chunk of K/V pairs.
+	if sp.index < len(sp.kvs) {
+		return true, nil
+	}
+
+	// If we don't have any K/V pairs at all, then we're out of results.
+	if len(sp.kvs) == 0 {
+		return false, nil
+	}
+
+	// If we had some K/V pairs already, use the last key to constrain
+	// the result of the next scan.
+	startKey := sp.kvs[len(sp.kvs)-1].Key.Next()
+	kvs, err := sp.txn.Scan(ctx, startKey, sp.span.EndKey, rangeKeyIteratorChunkSize)
+	if err != nil {
+		return false, err
+	}
+	sp.kvs = kvs
+	sp.index = -1
+	return sp.Next(ctx)
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (sp *spanKeyIterator) Values() (tree.Datums, error) {
+	kv := sp.kvs[sp.index]
+	sp.buf[0] = tree.NewDBytes(tree.DBytes(kv.Key))
+	sp.buf[1] = tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))
+	return sp.buf[:], nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (sp *spanKeyIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (sp *spanKeyIterator) ResolvedType() *types.T {
+	return spanKeyIteratorType
+}
+
+type rangeKeyIterator struct {
+	// rangeID is the ID of the range to iterate over. rangeID is set
+	// by the constructor of the rangeKeyIterator.
+	rangeID roachpb.RangeID
+	spanKeyIterator
+}
+
 var _ eval.ValueGenerator = &rangeKeyIterator{}
+var _ eval.ValueGenerator = &spanKeyIterator{}
 
 func makeRangeKeyIterator(ctx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
@@ -1776,7 +1900,6 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 
 // Start implements the tree.ValueGenerator interface.
 func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
-	rk.txn = txn
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
 	rangeDesc, err := kvclient.GetRangeWithID(ctx, txn, rk.rangeID)
@@ -1786,44 +1909,10 @@ func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
 	if rangeDesc == nil {
 		return errors.Newf("range with ID %d not found", rk.rangeID)
 	}
-
-	rk.endKey = rangeDesc.EndKey
-	// Scan the first chunk of K/V pairs.
-	kvs, err := txn.Scan(ctx, rangeDesc.StartKey, rk.endKey, rangeKeyIteratorChunkSize)
-	if err != nil {
-		return err
+	rk.spanKeyIterator = spanKeyIterator{
+		span: roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()},
 	}
-	rk.kvs = kvs
-	// The user of the generator first calls Next(), then Values(), so the index
-	// managing the iterator's position needs to start at -1 instead of 0.
-	rk.index = -1
-	return nil
-}
-
-// Next implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Next(ctx context.Context) (bool, error) {
-	rk.index++
-	// If index is within rk.kvs, then we have buffered K/V pairs to return.
-	// Otherwise, we might have to request another chunk of K/V pairs.
-	if rk.index < len(rk.kvs) {
-		return true, nil
-	}
-
-	// If we don't have any K/V pairs at all, then we're out of results.
-	if len(rk.kvs) == 0 {
-		return false, nil
-	}
-
-	// If we had some K/V pairs already, use the last key to constrain
-	// the result of the next scan.
-	startKey := rk.kvs[len(rk.kvs)-1].Key.Next()
-	kvs, err := rk.txn.Scan(ctx, startKey, rk.endKey, rangeKeyIteratorChunkSize)
-	if err != nil {
-		return false, err
-	}
-	rk.kvs = kvs
-	rk.index = -1
-	return rk.Next(ctx)
+	return rk.spanKeyIterator.Start(ctx, txn)
 }
 
 // Values implements the tree.ValueGenerator interface.
@@ -1833,9 +1922,6 @@ func (rk *rangeKeyIterator) Values() (tree.Datums, error) {
 	rk.buf[1] = tree.NewDString(kv.PrettyValue())
 	return rk.buf[:], nil
 }
-
-// Close implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Close(_ context.Context) {}
 
 var payloadsForSpanGeneratorLabels = []string{"payload_type", "payload_jsonb"}
 
