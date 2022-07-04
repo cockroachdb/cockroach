@@ -325,13 +325,13 @@ func manageJobs(
 	}
 	for id, update := range scJobUpdates {
 		if err := jr.UpdateSchemaChangeJob(ctx, id, func(
-			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
+			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), updatePayload func(*jobspb.Payload),
 		) error {
-			progress := *md.Progress
-			progress.RunningStatus = update.runningStatus
-			updateProgress(&progress)
+			s := schemaChangeJobUpdateState{md: md}
+			defer s.doUpdate(updateProgress, updatePayload)
+			s.updatedProgress().RunningStatus = update.runningStatus
 			if !md.Payload.Noncancelable && update.isNonCancelable {
-				setNonCancelable()
+				s.updatedPayload().Noncancelable = true
 			}
 			return nil
 		}); err != nil {
@@ -339,6 +339,42 @@ func manageJobs(
 		}
 	}
 	return nil
+}
+
+// schemaChangeJobUpdateState is a helper struct for managing the state in the
+// callback passed to TransactionalJobRegistry.UpdateSchemaChangeJob in
+// manageJobs.
+type schemaChangeJobUpdateState struct {
+	md                   jobs.JobMetadata
+	maybeUpdatedPayload  *jobspb.Payload
+	maybeUpdatedProgress *jobspb.Progress
+}
+
+func (s *schemaChangeJobUpdateState) updatedProgress() *jobspb.Progress {
+	if s.maybeUpdatedProgress == nil {
+		clone := *s.md.Progress
+		s.maybeUpdatedProgress = &clone
+	}
+	return s.maybeUpdatedProgress
+}
+
+func (s *schemaChangeJobUpdateState) updatedPayload() *jobspb.Payload {
+	if s.maybeUpdatedPayload == nil {
+		clone := *s.md.Payload
+		s.maybeUpdatedPayload = &clone
+	}
+	return s.maybeUpdatedPayload
+}
+
+func (s *schemaChangeJobUpdateState) doUpdate(
+	updateProgress func(*jobspb.Progress), updatePayload func(*jobspb.Payload),
+) {
+	if s.maybeUpdatedProgress != nil {
+		updateProgress(s.maybeUpdatedProgress)
+	}
+	if s.maybeUpdatedPayload != nil {
+		updatePayload(s.maybeUpdatedPayload)
+	}
 }
 
 type mutationVisitorState struct {

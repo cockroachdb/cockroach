@@ -146,7 +146,7 @@ type TransactionalJobRegistry interface {
 type JobUpdateCallback = func(
 	md jobs.JobMetadata,
 	updateProgress func(*jobspb.Progress),
-	setNonCancelable func(),
+	updatePayload func(*jobspb.Payload),
 ) error
 
 // Backfiller is an abstract index backfiller that performs index backfills

@@ -850,14 +850,14 @@ func (s *TestState) UpdateSchemaChangeJob(
 	if scJob == nil {
 		return errors.AssertionFailedf("schema change job not found")
 	}
-	progress := jobspb.Progress{
+	oldProgress := jobspb.Progress{
 		Progress:       nil,
 		ModifiedMicros: 0,
 		RunningStatus:  "",
 		Details:        jobspb.WrapProgressDetails(scJob.Progress),
 		TraceID:        0,
 	}
-	payload := jobspb.Payload{
+	oldPayload := jobspb.Payload{
 		Description:                  scJob.Description,
 		Statement:                    scJob.Statements,
 		UsernameProto:                scJob.Username.EncodeProto(),
@@ -873,22 +873,24 @@ func (s *TestState) UpdateSchemaChangeJob(
 		PauseReason:                  "",
 		RetriableExecutionFailureLog: nil,
 	}
-	updateProgress := func(progress *jobspb.Progress) {
-		scJob.Progress = *progress.GetNewSchemaChange()
-		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, progress.RunningStatus)
-	}
-	setNonCancelable := func() {
-		scJob.NonCancelable = true
-		s.LogSideEffectf("set schema change job #%d to non-cancellable", scJob.JobID)
-	}
-	md := jobs.JobMetadata{
+	oldJobMetadata := jobs.JobMetadata{
 		ID:       scJob.JobID,
 		Status:   jobs.StatusRunning,
-		Payload:  &payload,
-		Progress: &progress,
+		Payload:  &oldPayload,
+		Progress: &oldProgress,
 		RunStats: nil,
 	}
-	return fn(md, updateProgress, setNonCancelable)
+	updateProgress := func(newProgress *jobspb.Progress) {
+		scJob.Progress = *newProgress.GetNewSchemaChange()
+		s.LogSideEffectf("update progress of schema change job #%d: %q", scJob.JobID, newProgress.RunningStatus)
+	}
+	updatePayload := func(newPayload *jobspb.Payload) {
+		if newPayload.Noncancelable {
+			scJob.NonCancelable = true
+			s.LogSideEffectf("set schema change job #%d to non-cancellable", scJob.JobID)
+		}
+	}
+	return fn(oldJobMetadata, updateProgress, updatePayload)
 }
 
 // MakeJobID implements the scexec.TransactionalJobRegistry interface.
