@@ -11,8 +11,10 @@
 package stats
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -418,6 +420,23 @@ func (h histogram) toHistogramData(colType *types.T) (HistogramData, error) {
 	}
 
 	return histogramData, nil
+}
+
+// String prints a histogram to a string.
+func (h histogram) String() string {
+	var b strings.Builder
+	b.WriteString("{[")
+	for i, bucket := range h.buckets {
+		if i > 0 {
+			b.WriteRune(' ')
+		}
+		fmt.Fprintf(
+			&b, "{%v %v %v %v}",
+			bucket.NumEq, bucket.NumRange, bucket.DistinctRange, bucket.UpperBound.String(),
+		)
+	}
+	b.WriteString("]}")
+	return b.String()
 }
 
 // estimatedDistinctValuesInRange returns the estimated number of distinct
