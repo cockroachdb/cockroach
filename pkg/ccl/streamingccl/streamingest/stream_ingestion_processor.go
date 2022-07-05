@@ -675,12 +675,13 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 		}
 	}
 
-	// Go through buffered checkpoint events, and put them on the channel to be
-	// emitted to the downstream frontier processor.
-	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
+	// Forward only resolved spans for each partition's spans rather than the
+	// entire frontier to avoid blowing up the size of the jobs table entry
+	for _, spec := range sip.spec.PartitionSpecs {
+		for _, span := range spec.Spans {
+			flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: span, Timestamp: sip.frontier.FrontierForSpans(spec.Spans...)})
+		}
+	}
 
 	// Reset the current batch.
 	sip.curBatch = nil
