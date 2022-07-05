@@ -248,7 +248,7 @@ func TestGCSAssumeRole(t *testing.T) {
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
-		fmt.Println("@@@ passed role chaining")
+		fmt.Println("@@@ passed role chaining!")
 	})
 }
 

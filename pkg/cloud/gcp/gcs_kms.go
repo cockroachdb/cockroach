@@ -106,7 +106,9 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	if kmsURIParams.assumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.assumeRole, kms.DefaultAuthScopes(), credentialsOpt...)
+		// TODO: change this to use delegates
+		roles := strings.Split(kmsURIParams.assumeRole, ",")
+		assumeOpt, err := createImpersonateCredentials(ctx, roles[len(roles)-1], roles[:len(roles)-1], kms.DefaultAuthScopes(), credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")
 		}

@@ -158,7 +158,9 @@ func makeGCSStorage(
 	if conf.AssumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		assumeOpt, err := createImpersonateCredentials(ctx, conf.AssumeRole, []string{scope}, credentialsOpt...)
+		// TODO: change this to use delegates
+		roles := strings.Split(conf.AssumeRole, ",")
+		assumeOpt, err := createImpersonateCredentials(ctx, roles[len(roles)-1], roles[:len(roles)-1], []string{scope}, credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")
 		}
@@ -207,13 +209,14 @@ func createAuthOptionFromBearerToken(bearerToken string) option.ClientOption {
 // authentication for the specified scopes by impersonating the target,
 // potentially with authentication options from authOpts.
 func createImpersonateCredentials(
-	ctx context.Context, impersonateTarget string, scopes []string, authOpts ...option.ClientOption,
+	ctx context.Context, impersonateTarget string, impersonateDelegates []string, scopes []string, authOpts ...option.ClientOption,
 ) (option.ClientOption, error) {
+
 	cfg := impersonate.CredentialsConfig{
 		TargetPrincipal: impersonateTarget,
 		Scopes:          scopes,
 		// TODO: fill this
-		Delegates: []string{},
+		Delegates: impersonateDelegates,
 	}
 
 	source, err := impersonate.CredentialsTokenSource(ctx, cfg, authOpts...)
