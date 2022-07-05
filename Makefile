@@ -618,7 +618,13 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/con
 	mkdir -p $(JEMALLOC_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/jemalloc-rebuild. See above for rationale.
-	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(xconfigure-flags) --enable-prof
+	@# NOTE: we disable MADV_FREE; see https://github.com/cockroachdb/cockroach/issues/83790
+	export je_cv_madv_free="no" && cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(xconfigure-flags) --enable-prof
+	JEMALLOC_MADV_FREE_ENABLED=$$(grep -E "^je_cv_madv_free=no$$" $(JEMALLOC_DIR)/config.log | awk -F'=' '{print $$2}'); \
+	if [[ "$$JEMALLOC_MADV_FREE_ENABLED" != "no" ]]; then \
+		echo "NOTE: using MADV_FREE with jemalloc can lead to surprising results; see https://github.com/cockroachdb/cockroach/issues/83790"; \
+		exit 1; \
+	fi
 
 $(KRB5_SRC_DIR)/src/configure.in: | bin/.submodules-initialized
 

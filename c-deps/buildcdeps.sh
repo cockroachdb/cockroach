@@ -19,6 +19,14 @@ for CONFIG in $CONFIGS; do
     bazel build --config ci --config cross$CONFIG --//build/toolchains:prebuild_cdeps_flag $(echo "$TARGETS" | python3 -c 'import sys; input = sys.stdin.read().strip(); print(" ".join("//c-deps:{}_foreign".format(w) for w in input.split(" ")))')
     BAZEL_BIN=$(bazel info bazel-bin --config ci --config cross$CONFIG)
     for TARGET in $TARGETS; do
+        # verify jemalloc was configured without madv_free
+        if [[ $TARGET == libjemalloc ]]; then
+            JEMALLOC_MADV_FREE_ENABLED=$((grep -E "^je_cv_madv_free=no$" $BAZEL_BIN/c-deps/${TARGET}_foreign_foreign_cc/Configure.log | awk -F"=" '{print $2}') || true)
+            if [[ "$JEMALLOC_MADV_FREE_ENABLED" != "no" ]]; then
+                echo "NOTE: using MADV_FREE with jemalloc can lead to surprising results; see https://github.com/cockroachdb/cockroach/issues/83790"
+                exit 1
+            fi
+        fi
         bundle $CONFIG $BAZEL_BIN/c-deps/${TARGET}_foreign
     done
 done
