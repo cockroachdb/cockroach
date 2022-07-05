@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	gcs "cloud.google.com/go/storage"
@@ -212,6 +213,49 @@ func TestGCSAssumeRole(t *testing.T) {
 			),
 			username.RootUserName(), nil, nil, testSettings,
 		)
+	})
+
+	t.Run("role-chaining", func(t *testing.T) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+
+		roleChainStr := os.Getenv("ASSUME_SERVICE_ACCOUNT_CHAIN")
+		if roleChainStr == "" {
+			skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT_CHAIN env var must be set")
+		}
+
+		roleChain := strings.Split(roleChainStr, ",")
+
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(CredentialsParam, encoded)
+
+		// First verify that none of the individual roles in the chain can be used
+		// to access the storage.
+		for _, role := range roleChain {
+			q.Set(AssumeRoleParam, role)
+			roleURI := fmt.Sprintf("gs://%s/%s/%s?%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				"listing-test",
+				q.Encode(),
+			)
+			cloudtestutils.CheckNoPermission(t, roleURI, user, nil, nil, testSettings)
+		}
+
+		// Finally, check that the chain of roles can be used to access the storage.
+		q.Set(AssumeRoleParam, roleChainStr)
+		uri := fmt.Sprintf("gs://%s/%s/%s?%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			"listing-test",
+			q.Encode(),
+		)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
 	})
 }
 
