@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -33,13 +34,12 @@ func BuildStages(
 	c := buildContext{
 		rollback:               init.InRollback,
 		g:                      g,
-		scJobIDSupplier:        scJobIDSupplier,
 		isRevertibilityIgnored: true,
 		targetState:            init.TargetState,
 		startingStatuses:       init.Current,
 		startingPhase:          phase,
+		descIDs:                screl.AllTargetDescIDs(init.TargetState),
 	}
-
 	// Try building stages while ignoring revertibility constraints.
 	// This is fine as long as there are no post-commit stages.
 	stages := buildStages(c)
@@ -47,8 +47,11 @@ func BuildStages(
 		c.isRevertibilityIgnored = false
 		stages = buildStages(c)
 	}
+	if len(stages) == 0 {
+		return nil
+	}
 	// Decorate stages with position in plan.
-	if len(stages) > 0 {
+	{
 		phaseMap := map[scop.Phase][]int{}
 		for i, s := range stages {
 			phaseMap[s.Phase] = append(phaseMap[s.Phase], i)
@@ -61,7 +64,12 @@ func BuildStages(
 			}
 		}
 	}
+	// Exit early if there is no need to create a job.
+	if stages[len(stages)-1].Phase <= scop.PreCommitPhase {
+		return stages
+	}
 	// Add job ops to the stages.
+	c.scJobID = scJobIDSupplier()
 	for i := range stages {
 		var cur, next *Stage
 		if i+1 < len(stages) {
@@ -71,7 +79,6 @@ func BuildStages(
 		jobOps := c.computeExtraJobOps(cur, next)
 		cur.ExtraOps = jobOps
 	}
-
 	return stages
 }
 
@@ -80,11 +87,12 @@ func BuildStages(
 type buildContext struct {
 	rollback               bool
 	g                      *scgraph.Graph
-	scJobIDSupplier        func() jobspb.JobID
+	scJobID                jobspb.JobID
 	isRevertibilityIgnored bool
 	targetState            scpb.TargetState
 	startingStatuses       []scpb.Status
 	startingPhase          scop.Phase
+	descIDs                catalog.DescriptorIDSet
 }
 
 func buildStages(bc buildContext) (stages []Stage) {
@@ -446,7 +454,7 @@ func (sb stageBuilder) build() Stage {
 	return s
 }
 
-// Decorate stage with job-related operations.
+// computeExtraJobOps generates job-related operations to decorate a stage with.
 //
 // TODO(ajwerner): Rather than adding this above the opgen layer, it may be
 // better to do it as part of graph generation. We could treat the job as
@@ -455,74 +463,90 @@ func (sb stageBuilder) build() Stage {
 // may prove to be a somewhat common pattern in other cases: consider the
 // intermediate index needed when adding and dropping columns as part of the
 // same transaction.
-func (bc buildContext) computeExtraJobOps(s, next *Stage) []scop.Op {
-	revertible := next != nil && next.Phase < scop.PostCommitNonRevertiblePhase
-	switch s.Phase {
-	case scop.PreCommitPhase:
-		// If this pre-commit stage is non-terminal, this means there will be at
-		// least one post-commit stage, so we need to create a schema changer job
-		// and update references for the affected descriptors.
-		if next != nil {
-			const initialize = true
-			runningStatus := fmt.Sprintf("%s pending", next)
-			return append(bc.setJobStateOnDescriptorOps(initialize, revertible, s.After),
-				bc.createSchemaChangeJobOp(revertible, runningStatus))
-		}
-		return nil
-	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
-		if s.Type() != scop.MutationType {
-			return nil
-		}
-		var ops []scop.Op
-		if next == nil {
-			// The terminal mutation stage needs to remove references to the schema
-			// changer job in the affected descriptors.
-			ops = bc.removeJobReferenceOps()
-		} else {
-			const initialize = false
-			ops = bc.setJobStateOnDescriptorOps(initialize, revertible, s.After)
-		}
-		// If we just moved to a non-cancelable phase, we need to tell the job
-		// that it cannot be canceled. Ideally we'd do this just once.
-		runningStatus := "all stages completed"
-		if next != nil {
-			runningStatus = fmt.Sprintf("%s pending", next)
-		}
-		ops = append(ops, bc.updateJobProgressOp(revertible, runningStatus))
-		return ops
-	default:
+func (bc buildContext) computeExtraJobOps(cur, next *Stage) []scop.Op {
+	// Schema change job operations only affect mutation stages no sooner
+	// than pre-commit.
+	if cur.Phase < scop.PreCommitPhase || cur.Type() != scop.MutationType {
 		return nil
 	}
+	initialize := cur.Phase == scop.PreCommitPhase
+	ds := bc.makeDescriptorStates(cur, next)
+	var descIDsPresentBefore, descIDsPresentAfter catalog.DescriptorIDSet
+	bc.descIDs.ForEach(func(descID descpb.ID) {
+		if s, hasStateBefore := ds[descID]; hasStateBefore {
+			descIDsPresentBefore.Add(descID)
+			if hasStateAfter := s != nil; hasStateAfter {
+				descIDsPresentAfter.Add(descID)
+			}
+		}
+	})
+	ops := make([]scop.Op, 0, descIDsPresentBefore.Len()+1)
+	addOp := func(op scop.Op) {
+		ops = append(ops, op)
+	}
+	// Build the ops which update or remove the job state on each descriptor.
+	descIDsPresentBefore.ForEach(func(descID descpb.ID) {
+		if next == nil {
+			// Remove job state and reference from descriptor at terminal stage.
+			addOp(bc.removeJobReferenceOp(descID))
+		} else if descIDsPresentAfter.Contains(descID) {
+			// Update job state in descriptor in non-terminal stage, as long as the
+			// descriptor is still present after the execution of the stage.
+			addOp(bc.setJobStateOnDescriptorOp(initialize, descID, *ds[descID]))
+		}
+	})
+	// Build the op which creates or updates the job.
+	if initialize {
+		addOp(bc.createSchemaChangeJobOp(descIDsPresentAfter, next))
+	} else {
+		addOp(bc.updateJobProgressOp(descIDsPresentBefore, descIDsPresentAfter, next))
+	}
+	return ops
 }
 
-func (bc buildContext) createSchemaChangeJobOp(revertible bool, runningStatus string) scop.Op {
+func (bc buildContext) createSchemaChangeJobOp(
+	descIDsPresentAfter catalog.DescriptorIDSet, next *Stage,
+) scop.Op {
 	return &scop.CreateSchemaChangerJob{
-		JobID:         bc.scJobIDSupplier(),
+		JobID:         bc.scJobID,
 		Statements:    bc.targetState.Statements,
 		Authorization: bc.targetState.Authorization,
-		DescriptorIDs: screl.AllTargetDescIDs(bc.targetState).Ordered(),
-		NonCancelable: !revertible,
-		RunningStatus: runningStatus,
+		DescriptorIDs: descIDsPresentAfter.Ordered(),
+		NonCancelable: !isRevertible(next),
+		RunningStatus: runningStatus(next),
 	}
 }
 
-func (bc buildContext) updateJobProgressOp(revertible bool, runningStatus string) scop.Op {
+func (bc buildContext) updateJobProgressOp(
+	descIDsPresentBefore, descIDsPresentAfter catalog.DescriptorIDSet, next *Stage,
+) scop.Op {
+	var toRemove catalog.DescriptorIDSet
+	if next != nil {
+		toRemove = descIDsPresentBefore.Difference(descIDsPresentAfter)
+	}
 	return &scop.UpdateSchemaChangerJob{
-		JobID:           bc.scJobIDSupplier(),
-		IsNonCancelable: !revertible,
-		RunningStatus:   runningStatus,
+		JobID:                 bc.scJobID,
+		IsNonCancelable:       !isRevertible(next),
+		RunningStatus:         runningStatus(next),
+		DescriptorIDsToRemove: toRemove.Ordered(),
 	}
 }
 
-func (bc buildContext) removeJobReferenceOps() (ops []scop.Op) {
-	jobID := bc.scJobIDSupplier()
-	screl.AllTargetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
-		ops = append(ops, &scop.RemoveJobStateFromDescriptor{
-			DescriptorID: descID,
-			JobID:        jobID,
-		})
-	})
-	return ops
+func (bc buildContext) setJobStateOnDescriptorOp(
+	initialize bool, descID descpb.ID, s scpb.DescriptorState,
+) scop.Op {
+	return &scop.SetJobStateOnDescriptor{
+		DescriptorID: descID,
+		Initialize:   initialize,
+		State:        s,
+	}
+}
+
+func (bc buildContext) removeJobReferenceOp(descID descpb.ID) scop.Op {
+	return &scop.RemoveJobStateFromDescriptor{
+		DescriptorID: descID,
+		JobID:        bc.scJobID,
+	}
 }
 
 func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
@@ -539,36 +563,20 @@ func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
 	return nodes
 }
 
-func (bc buildContext) setJobStateOnDescriptorOps(
-	initialize, revertible bool, after []scpb.Status,
-) []scop.Op {
-	descIDs, states := makeDescriptorStates(
-		bc.scJobIDSupplier(), bc.rollback, revertible, bc.targetState, after,
-	)
-	ops := make([]scop.Op, 0, descIDs.Len())
-	descIDs.ForEach(func(descID descpb.ID) {
-		ops = append(ops, &scop.SetJobStateOnDescriptor{
-			DescriptorID: descID,
-			Initialize:   initialize,
-			State:        *states[descID],
-		})
-	})
-	return ops
-}
-
-func makeDescriptorStates(
-	jobID jobspb.JobID, inRollback, revertible bool, ts scpb.TargetState, statuses []scpb.Status,
-) (catalog.DescriptorIDSet, map[descpb.ID]*scpb.DescriptorState) {
-	descIDs := screl.AllTargetDescIDs(ts)
-	states := make(map[descpb.ID]*scpb.DescriptorState, descIDs.Len())
-	descIDs.ForEach(func(id descpb.ID) {
-		states[id] = &scpb.DescriptorState{
-			Authorization: ts.Authorization,
-			JobID:         jobID,
-			InRollback:    inRollback,
-			Revertible:    revertible,
+// makeDescriptorStates builds the state of the schema change job broken down
+// into its affected descriptors.
+func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scpb.DescriptorState {
+	// Initialize the descriptor states.
+	ds := make(map[descpb.ID]*scpb.DescriptorState, bc.descIDs.Len())
+	bc.descIDs.ForEach(func(id descpb.ID) {
+		ds[id] = &scpb.DescriptorState{
+			Authorization: bc.targetState.Authorization,
+			JobID:         bc.scJobID,
+			InRollback:    bc.rollback,
+			Revertible:    isRevertible(next),
 		}
 	})
+	// Populate the descriptor states.
 	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
 		for i := range state.RelevantStatements {
 			stmt := &state.RelevantStatements[i]
@@ -579,18 +587,58 @@ func makeDescriptorStates(
 		}
 		state.RelevantStatements = append(state.RelevantStatements,
 			scpb.DescriptorState_Statement{
-				Statement:     ts.Statements[stmtRank],
+				Statement:     bc.targetState.Statements[stmtRank],
 				StatementRank: stmtRank,
 			})
 	}
-	for i, t := range ts.Targets {
+	for i, t := range bc.targetState.Targets {
 		descID := screl.GetDescID(t.Element())
-		state := states[descID]
+		state := ds[descID]
 		stmtID := t.Metadata.StatementID
 		noteRelevantStatement(state, stmtID)
 		state.Targets = append(state.Targets, t)
 		state.TargetRanks = append(state.TargetRanks, uint32(i))
-		state.CurrentStatuses = append(state.CurrentStatuses, statuses[i])
+		state.CurrentStatuses = append(state.CurrentStatuses, cur.After[i])
 	}
-	return descIDs, states
+	// Remove all mappings for elements of descriptors which no longer exist.
+	// Descriptors are owned by the descriptor-elements; should these be targeting
+	// ABSENT and already have reached that status, we can safely conclude that
+	// the descriptor no longer exists and should therefore not be referenced by
+	// the schema change job.
+	//
+	// Should they be reaching ABSENT as an outcome of executing this stage, we
+	// replace the mapped state with a nil pointer, as a sentinel value indicating
+	// that the state will be removed in all subsequent stages.
+	//
+	// Descriptor removal is non-revertible in nature, so we needn't do anything
+	// if we haven't reached the non-revertible post-commit phase yet.
+	if cur.Phase == scop.PostCommitNonRevertiblePhase {
+		for i, t := range bc.targetState.Targets {
+			if !rules.IsDescriptor(t.Element()) || t.TargetStatus != scpb.Status_ABSENT {
+				continue
+			}
+			descID := screl.GetDescID(t.Element())
+			if cur.Before[i] == scpb.Status_ABSENT {
+				delete(ds, descID)
+			} else if cur.After[i] == scpb.Status_ABSENT {
+				ds[descID] = nil
+			}
+		}
+	}
+	return ds
+}
+
+// isRevertible is a helper function which tells us if the schema change can be
+// reverted once the current stage completes. The result is determined by the
+// properties of the subsequent stage, which is why it, instead of the current
+// stage, is passed as an argument.
+func isRevertible(next *Stage) bool {
+	return next != nil && next.Phase < scop.PostCommitNonRevertiblePhase
+}
+
+func runningStatus(next *Stage) string {
+	if next == nil {
+		return "all stages completed"
+	}
+	return fmt.Sprintf("%s pending", next)
 }

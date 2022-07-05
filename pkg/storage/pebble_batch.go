@@ -368,7 +368,7 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
 	if err := p.batch.DeleteRange(p.buf, EncodeMVCCKey(MVCCKey{Key: end}), nil); err != nil {
 		return err
 	}
-	return p.ExperimentalClearAllRangeKeys(start, end)
+	return p.ClearAllRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Batch interface.
@@ -405,11 +405,11 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 			return err
 		}
 	}
-	return p.ExperimentalClearAllRangeKeys(start, end)
+	return p.ClearAllRangeKeys(start, end)
 }
 
-// ExperimentalClearMVCCRangeKey implements the Engine interface.
-func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+// ClearMVCCRangeKey implements the Engine interface.
+func (p *pebbleBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if !p.SupportsRangeKeys() {
 		return nil // noop
 	}
@@ -423,8 +423,8 @@ func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
 		nil)
 }
 
-// ExperimentalClearAllRangeKeys implements the Engine interface.
-func (p *pebbleBatch) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
+// ClearAllRangeKeys implements the Engine interface.
+func (p *pebbleBatch) ClearAllRangeKeys(start, end roachpb.Key) error {
 	if !p.SupportsRangeKeys() {
 		return nil // noop
 	}
@@ -458,8 +458,8 @@ func (p *pebbleBatch) ExperimentalClearAllRangeKeys(start, end roachpb.Key) erro
 	return p.batch.Experimental().RangeKeyDelete(clearFrom, clearTo, nil)
 }
 
-// ExperimentalPutMVCCRangeKey implements the Batch interface.
-func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+// PutMVCCRangeKey implements the Batch interface.
+func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 	if !p.SupportsRangeKeys() {
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
@@ -483,16 +483,13 @@ func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value M
 		nil); err != nil {
 		return err
 	}
-	// Mark the batch as containing range keys. See
-	// ExperimentalClearAllRangeKeys for why.
+	// Mark the batch as containing range keys. See ClearAllRangeKeys for why.
 	p.containsRangeKeys = true
 	return nil
 }
 
-// ExperimentalPutEngineRangeKey implements the Engine interface.
-func (p *pebbleBatch) ExperimentalPutEngineRangeKey(
-	start, end roachpb.Key, suffix, value []byte,
-) error {
+// PutEngineRangeKey implements the Engine interface.
+func (p *pebbleBatch) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
 	if !p.SupportsRangeKeys() {
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
@@ -510,8 +507,7 @@ func (p *pebbleBatch) ExperimentalPutEngineRangeKey(
 	); err != nil {
 		return err
 	}
-	// Mark the batch as containing range keys. See ExperimentalClearAllRangeKeys
-	// for why.
+	// Mark the batch as containing range keys. See ClearAllRangeKeys for why.
 	p.containsRangeKeys = true
 	return nil
 }

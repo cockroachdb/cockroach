@@ -173,7 +173,6 @@ EXPLAIN (DDL, VERBOSE) ALTER TABLE foo ADD COLUMN j INT
                   JobID: 1
                   RunningStatus: all stages completed
 
-
 statement ok
 ALTER TABLE foo ADD COLUMN j INT
 
@@ -1841,6 +1840,95 @@ DROP SCHEMA sc1;
 
 statement error user testuser does not have DROP privilege on database db1
 DROP DATABASE db1;
+
+subtest sc-job-eager-descriptor-id-removal
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY, v STRING NOT NULL);
+
+statement ok
+CREATE UNIQUE INDEX idx ON parent (v)
+
+statement ok
+CREATE VIEW child AS SELECT count(*) FROM parent@idx
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe'
+
+statement error pgcode 2BP01 cannot drop index "parent@idx" because view "child" depends on it
+DROP INDEX parent@idx
+
+query T
+EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
+----
+Schema change plan for DROP INDEX ‹test›.public.‹parent›@‹idx› CASCADE;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 20 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 265, ColumnID: 2, IndexID: 2}
+ │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 265, ColumnID: 1, IndexID: 2}
+ │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
+ │         │    ├── PUBLIC → ABSENT     IndexName:{DescID: 265, Name: idx, IndexID: 2}
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 266, Name: child, ReferencedDescID: 104}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 266}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 266, Name: admin}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 266, Name: root}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 266, Name: testuser}
+ │         │    ├── PUBLIC → DROPPED    View:{DescID: 266}
+ │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 266, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 266, Name: count, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 266, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 266, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 266, Name: tableoid, ColumnID: 4294967294}
+ │         │    └── PUBLIC → ABSENT     ColumnType:{DescID: 266, ColumnFamilyID: 0, ColumnID: 4294967294}
+ │         └── 8 Mutation operations
+ │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":265}
+ │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":265}
+ │              ├── scop.RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":265}
+ │              ├── scop.RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":265}
+ │              ├── MarkDescriptorAsDropped {"DescID":266}
+ │              ├── RemoveViewBackReferencesInRelations {"BackReferencedViewID":266}
+ │              ├── RemoveAllTableComments {"TableID":266}
+ │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":266,"Name":"child","SchemaID":105}}
+ ├── PreCommitPhase
+ │    └── Stage 1 of 1 in PreCommitPhase
+ │         └── 3 Mutation operations
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":265,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":266,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 5 elements transitioning toward ABSENT
+      │    │    ├── VALIDATED  → DELETE_ONLY SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
+      │    │    ├── DROPPED    → ABSENT      View:{DescID: 266}
+      │    │    ├── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 1}
+      │    │    ├── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 4294967295}
+      │    │    └── WRITE_ONLY → ABSENT      Column:{DescID: 266, ColumnID: 4294967294}
+      │    └── 8 Mutation operations
+      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":265}
+      │         ├── LogEvent {"TargetStatus":1}
+      │         ├── DeleteDescriptor {"DescriptorID":266}
+      │         ├── MakeColumnAbsent {"ColumnID":1,"TableID":266}
+      │         ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":266}
+      │         ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":266}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":265}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 265, IndexID: 2, ConstraintID: 2}
+           └── 5 Mutation operations
+                ├── LogEvent {"TargetStatus":1}
+                ├── CreateGcJobForIndex {"IndexID":2,"TableID":265}
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":265}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":265}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
+
+statement ok
+SET use_declarative_schema_changer = 'on'
 
 subtest drop-database-cascade
 

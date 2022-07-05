@@ -5728,7 +5728,7 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("d"),
 		},
-		UseExperimentalRangeTombstone: true,
+		UseRangeTombstone: true,
 	})
 	require.NoError(t, pErr.GoError())
 
@@ -5740,7 +5740,7 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 			Key:    roachpb.Key("b"),
 			EndKey: roachpb.Key("e"),
 		},
-		UseExperimentalRangeTombstone: true,
+		UseRangeTombstone: true,
 	})
 	require.NoError(t, pErr.GoError())
 
@@ -5833,7 +5833,7 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 	for _, desc := range descs {
 		for _, keyRange := range rditer.MakeReplicatedKeyRanges(&desc) {
 			prefix := append(keyRange.Start.Clone(), ':')
-			require.NoError(t, engine.ExperimentalPutMVCCRangeKey(storage.MVCCRangeKey{
+			require.NoError(t, engine.PutMVCCRangeKey(storage.MVCCRangeKey{
 				StartKey:  append(prefix.Clone(), 'a'),
 				EndKey:    append(prefix.Clone(), 'z'),
 				Timestamp: now,

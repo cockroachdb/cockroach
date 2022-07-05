@@ -1126,11 +1126,11 @@ func TestPebbleBatchReader(t *testing.T) {
 	require.NoError(t, b.PutEngineKey(engineKey("engineKey", 0), []byte("engineValue")))
 	require.NoError(t, b.PutMVCC(pointKey("mvccKey", 1), stringValue("mvccValue")))
 	require.NoError(t, b.PutMVCC(pointKey("mvccTombstone", 1), MVCCValue{}))
-	require.NoError(t, b.ExperimentalPutEngineRangeKey(roachpb.Key("rangeFrom"), roachpb.Key("rangeTo"), []byte{7}, []byte("engineRangeKey")))
+	require.NoError(t, b.PutEngineRangeKey(roachpb.Key("rangeFrom"), roachpb.Key("rangeTo"), []byte{7}, []byte("engineRangeKey")))
 
 	// Clear some already empty keys.
 	require.NoError(t, b.ClearMVCC(pointKey("mvccKey", 9)))
-	require.NoError(t, b.ExperimentalClearMVCCRangeKey(rangeKey("rangeFrom", "rangeTo", 9)))
+	require.NoError(t, b.ClearMVCCRangeKey(rangeKey("rangeFrom", "rangeTo", 9)))
 	require.NoError(t, b.ClearRawRange(roachpb.Key("clearFrom"), roachpb.Key("clearTo"))) // both points and ranges
 
 	// Read it back.

@@ -505,7 +505,7 @@ func WriteRandomDataToRange(
 					Key:    startKey,
 					EndKey: endKey,
 				},
-				UseExperimentalRangeTombstone: true,
+				UseRangeTombstone: true,
 			}
 		} else {
 			// Write regular point keys.

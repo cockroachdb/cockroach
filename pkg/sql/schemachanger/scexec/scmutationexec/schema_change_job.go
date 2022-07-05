@@ -23,14 +23,24 @@ func (m *visitor) CreateSchemaChangerJob(
 	ctx context.Context, job scop.CreateSchemaChangerJob,
 ) error {
 	return m.s.AddNewSchemaChangerJob(
-		job.JobID, job.Statements, job.NonCancelable, job.Authorization, job.DescriptorIDs, job.RunningStatus,
+		job.JobID,
+		job.Statements,
+		job.NonCancelable,
+		job.Authorization,
+		catalog.MakeDescriptorIDSet(job.DescriptorIDs...),
+		job.RunningStatus,
 	)
 }
 
 func (m *visitor) UpdateSchemaChangerJob(
 	ctx context.Context, op scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(op.JobID, op.IsNonCancelable, op.RunningStatus)
+	return m.s.UpdateSchemaChangerJob(
+		op.JobID,
+		op.IsNonCancelable,
+		op.RunningStatus,
+		catalog.MakeDescriptorIDSet(op.DescriptorIDsToRemove...),
+	)
 }
 
 func (m *visitor) SetJobStateOnDescriptor(
@@ -65,24 +75,6 @@ func (m *visitor) SetJobStateOnDescriptor(
 func (m *visitor) RemoveJobStateFromDescriptor(
 	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
-	{
-		_, err := m.s.GetDescriptor(ctx, op.DescriptorID)
-
-		// If we're clearing the status, we might have already deleted the
-		// descriptor. Permit that by detecting the prior deletion and
-		// short-circuiting.
-		//
-		// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
-		// an operation which has to happen before deleting the descriptor. If that
-		// were the case, this error would become unexpected.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-
 	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err

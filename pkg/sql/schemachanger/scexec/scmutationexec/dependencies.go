@@ -90,13 +90,18 @@ type MutationVisitorStateUpdater interface {
 		stmts []scpb.Statement,
 		isNonCancelable bool,
 		auth scpb.Authorization,
-		descriptors descpb.IDs,
+		descriptorIDs catalog.DescriptorIDSet,
 		runningStatus string,
 	) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool, runningStatus string) error
+	UpdateSchemaChangerJob(
+		jobID jobspb.JobID,
+		isNonCancelable bool,
+		runningStatus string,
+		descriptorIDsToRemove catalog.DescriptorIDSet,
+	) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(

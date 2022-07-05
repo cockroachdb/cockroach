@@ -1649,12 +1649,12 @@ func TestEngineClearRange(t *testing.T) {
 		var localTS hlc.ClockTimestamp
 		txn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, wallTS(6), 1, 1)
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("c"), wallTS(1), localTS, stringValue("c1").Value, nil))
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("d", "h", 1), MVCCValue{}))
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 2), MVCCValue{}))
+		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("d", "h", 1), MVCCValue{}))
+		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("a", "f", 2), MVCCValue{}))
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("g"), wallTS(2), localTS, stringValue("g2").Value, nil))
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("e"), wallTS(3), localTS, stringValue("e3").Value, nil))
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 4), MVCCValue{}))
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("g", "h", 4), MVCCValue{}))
+		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("a", "f", 4), MVCCValue{}))
+		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("g", "h", 4), MVCCValue{}))
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("a"), wallTS(5), localTS, stringValue("a2").Value, nil))
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("b"), wallTS(5), localTS, stringValue("b2").Value, nil))
 		require.NoError(t, MVCCPut(ctx, rw, nil, roachpb.Key("c"), wallTS(5), localTS, stringValue("c2").Value, nil))
@@ -1817,7 +1817,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 
 				// Write initial point and range keys.
 				require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))
-				require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 1), MVCCValue{}))
+				require.NoError(t, eng.PutMVCCRangeKey(rangeKey("b", "c", 1), MVCCValue{}))
 
 				// Set up two readers: one regular and one which will be pinned.
 				r := tc.makeReader(eng)
@@ -1847,7 +1847,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 
 				// Write a new key to the engine, and set up the expected results.
 				require.NoError(t, eng.PutMVCC(pointKey("a", 2), stringValue("a2")))
-				require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 2), MVCCValue{}))
+				require.NoError(t, eng.PutMVCCRangeKey(rangeKey("b", "c", 2), MVCCValue{}))
 
 				expectOld := []interface{}{
 					pointKV("a", 1, "a1"),
@@ -1896,7 +1896,7 @@ func TestEngineIteratorVisibility(t *testing.T) {
 					// Write a new point and range key to the writer (not engine), and set
 					// up expected results.
 					require.NoError(t, w.PutMVCC(pointKey("a", 3), stringValue("a3")))
-					require.NoError(t, w.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 3), MVCCValue{}))
+					require.NoError(t, w.PutMVCCRangeKey(rangeKey("b", "c", 3), MVCCValue{}))
 					expectNewAndOwn := []interface{}{
 						pointKV("a", 3, "a3"),
 						pointKV("a", 2, "a2"),
@@ -1973,24 +1973,24 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		invalid := rangeKey("b", "a", 1)
 		zeroLength := rangeKey("a", "a", 1)
 
-		require.Error(t, rw.ExperimentalPutMVCCRangeKey(empty, MVCCValue{}))
-		require.Error(t, rw.ExperimentalPutMVCCRangeKey(invalid, MVCCValue{}))
-		require.Error(t, rw.ExperimentalPutMVCCRangeKey(zeroLength, MVCCValue{}))
+		require.Error(t, rw.PutMVCCRangeKey(empty, MVCCValue{}))
+		require.Error(t, rw.PutMVCCRangeKey(invalid, MVCCValue{}))
+		require.Error(t, rw.PutMVCCRangeKey(zeroLength, MVCCValue{}))
 
-		require.Error(t, rw.ExperimentalPutEngineRangeKey(empty.StartKey, empty.EndKey, nil, nil))
-		require.Error(t, rw.ExperimentalPutEngineRangeKey(invalid.StartKey, invalid.EndKey, nil, nil))
-		require.Error(t, rw.ExperimentalPutEngineRangeKey(zeroLength.StartKey, zeroLength.EndKey, nil, nil))
+		require.Error(t, rw.PutEngineRangeKey(empty.StartKey, empty.EndKey, nil, nil))
+		require.Error(t, rw.PutEngineRangeKey(invalid.StartKey, invalid.EndKey, nil, nil))
+		require.Error(t, rw.PutEngineRangeKey(zeroLength.StartKey, zeroLength.EndKey, nil, nil))
 
-		require.Error(t, rw.ExperimentalClearMVCCRangeKey(empty))
-		require.Error(t, rw.ExperimentalClearMVCCRangeKey(invalid))
-		require.Error(t, rw.ExperimentalClearMVCCRangeKey(zeroLength))
+		require.Error(t, rw.ClearMVCCRangeKey(empty))
+		require.Error(t, rw.ClearMVCCRangeKey(invalid))
+		require.Error(t, rw.ClearMVCCRangeKey(zeroLength))
 
-		require.Error(t, rw.ExperimentalClearAllRangeKeys(empty.StartKey, empty.EndKey))
-		require.Error(t, rw.ExperimentalClearAllRangeKeys(invalid.StartKey, invalid.EndKey))
-		require.Error(t, rw.ExperimentalClearAllRangeKeys(zeroLength.StartKey, zeroLength.EndKey))
+		require.Error(t, rw.ClearAllRangeKeys(empty.StartKey, empty.EndKey))
+		require.Error(t, rw.ClearAllRangeKeys(invalid.StartKey, invalid.EndKey))
+		require.Error(t, rw.ClearAllRangeKeys(zeroLength.StartKey, zeroLength.EndKey))
 
 		// Check that non-tombstone values error.
-		require.Error(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "b", 1), stringValue("foo")))
+		require.Error(t, rw.PutMVCCRangeKey(rangeKey("a", "b", 1), stringValue("foo")))
 
 		// Check that nothing got written during the errors above.
 		require.Empty(t, scanRangeKeys(t, rw))
@@ -2001,7 +2001,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 			rangeKey("f", "h", 1),
 			rangeKey("c", "g", 2),
 		} {
-			require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{}))
+			require.NoError(t, rw.PutMVCCRangeKey(rangeKey, MVCCValue{}))
 		}
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "c", 1, MVCCValue{}),
@@ -2016,8 +2016,8 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		// Clear the f-g portion of [f-h)@1, twice for idempotency. This should not
 		// affect any other range keys, apart from removing the fragment boundary
 		// at f for [d-g)@2.
-		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 1)))
-		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 1)))
+		require.NoError(t, rw.ClearMVCCRangeKey(rangeKey("f", "g", 1)))
+		require.NoError(t, rw.ClearMVCCRangeKey(rangeKey("f", "g", 1)))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "c", 1, MVCCValue{}),
 			rangeKV("c", "d", 2, MVCCValue{}),
@@ -2027,7 +2027,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		}, scanRangeKeys(t, rw))
 
 		// Write [e-f)@2 on top of existing [d-g)@2. This should be a noop.
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("e", "f", 2), MVCCValue{}))
+		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("e", "f", 2), MVCCValue{}))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "c", 1, MVCCValue{}),
 			rangeKV("c", "d", 2, MVCCValue{}),
@@ -2037,8 +2037,8 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		}, scanRangeKeys(t, rw))
 
 		// Clear all range keys in the [c-f) span. Twice for idempotency.
-		require.NoError(t, rw.ExperimentalClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
-		require.NoError(t, rw.ExperimentalClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+		require.NoError(t, rw.ClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+		require.NoError(t, rw.ClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "c", 1, MVCCValue{}),
 			rangeKV("f", "g", 2, MVCCValue{}),
@@ -2049,7 +2049,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 		// a raw engine key rather than an MVCC key, to test that too.
 		valueRaw, err := EncodeMVCCValue(MVCCValue{})
 		require.NoError(t, err)
-		require.NoError(t, rw.ExperimentalPutEngineRangeKey(
+		require.NoError(t, rw.PutEngineRangeKey(
 			roachpb.Key("c"), roachpb.Key("g"), EncodeMVCCTimestampSuffix(wallTS(1)), valueRaw))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "f", 1, MVCCValue{}),
@@ -2060,7 +2060,7 @@ func TestEngineRangeKeyMutations(t *testing.T) {
 
 		// Writing a range key [a-f)@2 which abuts [f-g)@2 should not merge if it
 		// has a different value (local timestamp).
-		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("a", "f", 2), tombstoneLocalTS(7)))
+		require.NoError(t, rw.PutMVCCRangeKey(rangeKey("a", "f", 2), tombstoneLocalTS(7)))
 		require.Equal(t, []MVCCRangeKeyValue{
 			rangeKV("a", "f", 2, tombstoneLocalTS(7)),
 			rangeKV("a", "f", 1, MVCCValue{}),
@@ -2124,16 +2124,16 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 		t.Run(fmt.Sprintf("write/%s", name), func(t *testing.T) {
 			rangeKey := rangeKey("a", "b", 2)
 
-			err := w.ExperimentalPutMVCCRangeKey(rangeKey, MVCCValue{})
+			err := w.PutMVCCRangeKey(rangeKey, MVCCValue{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
 
-			err = w.ExperimentalPutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey, nil, nil)
+			err = w.PutEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey, nil, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "range keys not supported")
 
-			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rangeKey))
-			require.NoError(t, w.ExperimentalClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+			require.NoError(t, w.ClearMVCCRangeKey(rangeKey))
+			require.NoError(t, w.ClearAllRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
 		})
 	}
 
@@ -2234,9 +2234,9 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 
 // TestUnindexedBatchClearAllRangeKeys tests that range keys are properly
 // cleared via an unindexed batch. This tests an optimization in
-// pebbleBatch.ExperimentalClearAllRangeKeys that tightens the span bounds
-// to existing keys to avoid dropping unnecessary Pebble range tombstones, which
-// must handle the range keys in the unindexed batch correctly.
+// pebbleBatch.ClearAllRangeKeys that tightens the span bounds to existing keys
+// to avoid dropping unnecessary Pebble range tombstones, which must handle the
+// range keys in the unindexed batch correctly.
 func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2245,15 +2245,15 @@ func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
 	defer eng.Close()
 
 	// Write a range key [a-d)@1 into the engine.
-	require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("a", "d", 1), MVCCValue{}))
+	require.NoError(t, eng.PutMVCCRangeKey(rangeKey("a", "d", 1), MVCCValue{}))
 
 	// Set up an unindexed batch, and write [e-h)@2 into it. Then clear
 	// all range keys in the [c-f) span via the batch and commit it.
 	batch := eng.NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
 
-	require.NoError(t, batch.ExperimentalPutMVCCRangeKey(rangeKey("e", "h", 2), MVCCValue{}))
-	require.NoError(t, batch.ExperimentalClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+	require.NoError(t, batch.PutMVCCRangeKey(rangeKey("e", "h", 2), MVCCValue{}))
+	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
 	require.NoError(t, batch.Commit(false /* sync */))
 
 	// Read range keys back from engine. We should find [a-c)@1 and [f-h)@2.
@@ -2267,7 +2267,7 @@ func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
 	batch = eng.NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
 
-	require.NoError(t, batch.ExperimentalClearAllRangeKeys(roachpb.Key("b"), roachpb.Key("g")))
+	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("b"), roachpb.Key("g")))
 	require.NoError(t, batch.Commit(false /* sync */))
 
 	// Read range keys back from engine. We should find [a-b)@1 and [g-h)@2.
@@ -2279,12 +2279,12 @@ func TestUnindexedBatchClearAllRangeKeys(t *testing.T) {
 	// Now clear everything. Twice, for idempotency.
 	batch = eng.NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
-	require.NoError(t, batch.ExperimentalClearAllRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
+	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
 	require.NoError(t, batch.Commit(false /* sync */))
 
 	batch = eng.NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
-	require.NoError(t, batch.ExperimentalClearAllRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
+	require.NoError(t, batch.ClearAllRangeKeys(roachpb.Key("a"), roachpb.Key("z")))
 	require.NoError(t, batch.Commit(false /* sync */))
 
 	require.Empty(t, scanRangeKeys(t, eng))
