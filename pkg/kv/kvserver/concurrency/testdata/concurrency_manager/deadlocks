@@ -113,6 +113,7 @@ sequence req=req1r
 [4] sequence req1r: scanning lock table for conflicting locks
 [4] sequence req1r: waiting in lock wait-queues
 [4] sequence req1r: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 0, queuedReaders: 1)
+[4] sequence req1r: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req1r: pushing timestamp of txn 00000002 above 10.000000000,1
 [4] sequence req1r: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -123,6 +124,7 @@ sequence req=req2r
 [5] sequence req2r: scanning lock table for conflicting locks
 [5] sequence req2r: waiting in lock wait-queues
 [5] sequence req2r: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "c" (queuedWriters: 0, queuedReaders: 1)
+[5] sequence req2r: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req2r: pushing timestamp of txn 00000003 above 10.000000000,1
 [5] sequence req2r: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -135,6 +137,7 @@ sequence req=req3r
 [6] sequence req3r: scanning lock table for conflicting locks
 [6] sequence req3r: waiting in lock wait-queues
 [6] sequence req3r: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "a" (queuedWriters: 0, queuedReaders: 1)
+[6] sequence req3r: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [6] sequence req3r: pushing timestamp of txn 00000001 above 10.000000000,1
 [6] sequence req3r: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req3r: dependency cycle detected 00000003->00000001->00000002->00000003
@@ -326,6 +329,7 @@ sequence req=req4w
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: waiting in lock wait-queues
 [4] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req4w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req4w: pushing txn 00000001 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -336,6 +340,7 @@ sequence req=req1w2
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: waiting in lock wait-queues
 [5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req1w2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req1w2: pushing txn 00000002 to abort
 [5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -346,6 +351,7 @@ sequence req=req2w2
 [6] sequence req2w2: scanning lock table for conflicting locks
 [6] sequence req2w2: waiting in lock wait-queues
 [6] sequence req2w2: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 0)
+[6] sequence req2w2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [6] sequence req2w2: pushing txn 00000003 to abort
 [6] sequence req2w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -358,6 +364,7 @@ sequence req=req3w2
 [7] sequence req3w2: scanning lock table for conflicting locks
 [7] sequence req3w2: waiting in lock wait-queues
 [7] sequence req3w2: lock wait-queue event: wait for txn 00000001 holding lock @ key "a" (queuedWriters: 2, queuedReaders: 0)
+[7] sequence req3w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [7] sequence req3w2: pushing txn 00000001 to abort
 [7] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 [7] sequence req3w2: dependency cycle detected 00000003->00000001->00000002->00000003
@@ -399,6 +406,7 @@ on-txn-updated txn=txn1 status=aborted
 [7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
 [7] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 1, queuedReaders: 0)
 [7] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.234s
+[7] sequence req3w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [7] sequence req3w2: pushing txn 00000004 to detect request deadlock
 [7] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -552,6 +560,7 @@ sequence req=req4w
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: waiting in lock wait-queues
 [4] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req4w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req4w: pushing txn 00000002 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -561,6 +570,7 @@ on-txn-updated txn=txn2 status=committed
 [4] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
 [4] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 0)
 [4] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.234s
+[4] sequence req4w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req4w: pushing txn 00000003 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -597,6 +607,7 @@ sequence req=req1w2
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: waiting in lock wait-queues
 [5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req1w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req1w2: pushing txn 00000004 to detect request deadlock
 [5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -609,6 +620,7 @@ sequence req=req3w2
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: waiting in lock wait-queues
 [6] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[6] sequence req3w2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [6] sequence req3w2: pushing txn 00000001 to abort
 [6] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req3w2: dependency cycle detected 00000003->00000001->00000004->00000003
@@ -786,6 +798,7 @@ sequence req=req4w
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: waiting in lock wait-queues
 [4] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req4w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req4w: pushing txn 00000002 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -795,6 +808,7 @@ on-txn-updated txn=txn2 status=committed
 [4] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
 [4] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 0)
 [4] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.234s
+[4] sequence req4w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req4w: pushing txn 00000003 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -831,6 +845,7 @@ sequence req=req1w2
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: waiting in lock wait-queues
 [5] sequence req1w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req1w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req1w2: pushing txn 00000004 to detect request deadlock
 [5] sequence req1w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -843,6 +858,7 @@ sequence req=req3w2
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: waiting in lock wait-queues
 [6] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[6] sequence req3w2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [6] sequence req3w2: pushing txn 00000001 to abort
 [6] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req3w2: dependency cycle detected 00000003->00000001->00000004->00000003
@@ -1032,6 +1048,7 @@ sequence req=req5w
 [4] sequence req5w: scanning lock table for conflicting locks
 [4] sequence req5w: waiting in lock wait-queues
 [4] sequence req5w: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "b" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req5w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req5w: pushing txn 00000002 to abort
 [4] sequence req5w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -1042,6 +1059,7 @@ sequence req=req4w
 [5] sequence req4w: scanning lock table for conflicting locks
 [5] sequence req4w: waiting in lock wait-queues
 [5] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[5] sequence req4w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req4w: pushing txn 00000001 to abort
 [5] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -1051,6 +1069,7 @@ on-txn-updated txn=txn1 status=committed
 [5] sequence req4w: resolving intent "a" for txn 00000001 with COMMITTED status
 [5] sequence req4w: lock wait-queue event: wait for txn 00000002 holding lock @ key "b" (queuedWriters: 2, queuedReaders: 0)
 [5] sequence req4w: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.234s
+[5] sequence req4w: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req4w: pushing txn 00000002 to abort
 [5] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -1060,11 +1079,13 @@ on-txn-updated txn=txn2 status=committed
 [4] sequence req5w: resolving intent "b" for txn 00000002 with COMMITTED status
 [4] sequence req5w: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "c" (queuedWriters: 1, queuedReaders: 0)
 [4] sequence req5w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.234s
+[4] sequence req5w: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [4] sequence req5w: pushing txn 00000003 to abort
 [4] sequence req5w: blocked on select in concurrency_test.(*cluster).PushTransaction
 [5] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
 [5] sequence req4w: lock wait-queue event: wait for (distinguished) txn 00000005 running request @ key "b" (queuedWriters: 1, queuedReaders: 0)
 [5] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.234s
+[5] sequence req4w: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [5] sequence req4w: pushing txn 00000005 to detect request deadlock
 [5] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -1102,6 +1123,7 @@ sequence req=req3w2
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: waiting in lock wait-queues
 [6] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 1, queuedReaders: 0)
+[6] sequence req3w2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [6] sequence req3w2: pushing txn 00000004 to detect request deadlock
 [6] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req3w2: dependency cycle detected 00000003->00000004->00000005->00000003
