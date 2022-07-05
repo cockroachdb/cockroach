@@ -184,6 +184,7 @@ message RangeInfo {
   // The circuit breaker error, if any. This is nonzero if and only if the
   // circuit breaker on the source Replica is tripped.
   string circuit_breaker_error = 20;
+  repeated int32 paused_replicas = 21 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
 }
 
 // RangeSideTransportInfo describes a range's closed timestamp info communicated

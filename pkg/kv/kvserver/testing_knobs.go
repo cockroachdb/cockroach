@@ -416,6 +416,8 @@ type StoreTestingKnobs struct {
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
 
+	StoreGossipIntercept func(descriptor *roachpb.StoreDescriptor)
+
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 }

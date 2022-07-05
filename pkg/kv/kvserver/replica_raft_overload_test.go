@@ -1,0 +1,154 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+
+package kvserver
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3/tracker"
+)
+
+func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.Walk(t, testutils.TestDataPath(t, "replica_raft_overload"), func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var buf strings.Builder
+			tr := tracing.NewTracer()
+			ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, path)
+			defer func() {
+				if t.Failed() {
+					t.Logf("%s", finishAndGet())
+				}
+			}()
+			require.Equal(t, "run", d.Cmd)
+			var seed uint64
+			var replDescs roachpb.ReplicaSet
+			ioOverloadMap := map[roachpb.StoreID]*admissionpb.IOThreshold{}
+			snapshotMap := map[roachpb.ReplicaID]struct{}{}
+			downMap := map[roachpb.ReplicaID]struct{}{}
+			match := map[roachpb.ReplicaID]uint64{}
+			minLiveMatchIndex := uint64(0) // accept all live followers by default
+			for _, arg := range d.CmdArgs {
+				for i := range arg.Vals {
+					sl := strings.SplitN(arg.Vals[i], "@", 2)
+					if len(sl) == 1 {
+						sl = append(sl, "")
+					}
+					idS, matchS := sl[0], sl[1]
+					arg.Vals[i] = idS
+
+					var id uint64
+					arg.Scan(t, i, &id)
+					switch arg.Key {
+					case "min-live-match-index":
+						minLiveMatchIndex = id
+					case "voters", "learners":
+						replicaID := roachpb.ReplicaID(id)
+						if matchS != "" {
+							var err error
+							match[replicaID], err = strconv.ParseUint(matchS, 10, 64)
+							require.NoError(t, err)
+						}
+						typ := roachpb.ReplicaTypeVoterFull()
+						if arg.Key == "learners" {
+							typ = roachpb.ReplicaTypeNonVoter()
+						}
+						replDesc := roachpb.ReplicaDescriptor{
+							NodeID:    roachpb.NodeID(id),
+							StoreID:   roachpb.StoreID(id),
+							ReplicaID: replicaID,
+							Type:      typ,
+						}
+						replDescs.AddReplica(replDesc)
+					case "overloaded":
+						ioOverloadMap[roachpb.StoreID(id)] = &admissionpb.IOThreshold{
+							L0NumSubLevels:          1000,
+							L0NumSubLevelsThreshold: 20,
+							L0NumFiles:              1,
+							L0NumFilesThreshold:     1,
+						}
+					case "snapshot":
+						snapshotMap[roachpb.ReplicaID(id)] = struct{}{}
+					case "down":
+						downMap[roachpb.ReplicaID(id)] = struct{}{}
+					case "seed":
+						d.ScanArgs(t, "seed", &seed)
+					default:
+						t.Fatalf("unknown: %s", arg.Key)
+					}
+				}
+			}
+
+			getProgressMap := func(ctx context.Context) map[uint64]tracker.Progress {
+				log.Eventf(ctx, "getProgressMap was called")
+
+				// First, set up a progress map in which all replicas are tracked and are live.
+				m := map[uint64]tracker.Progress{}
+				for _, replDesc := range replDescs.AsProto() {
+					pr := tracker.Progress{
+						State:        tracker.StateReplicate,
+						Match:        match[replDesc.ReplicaID],
+						RecentActive: true,
+						IsLearner:    replDesc.GetType() == roachpb.LEARNER || replDesc.GetType() == roachpb.NON_VOTER,
+						Inflights:    tracker.NewInflights(1), // avoid NPE
+					}
+					m[uint64(replDesc.ReplicaID)] = pr
+				}
+				// Mark replicas as down or needing snapshot as configured.
+				for replicaID := range downMap {
+					id := uint64(replicaID)
+					pr := m[id]
+					pr.RecentActive = false
+					m[id] = pr
+				}
+				for replicaID := range snapshotMap {
+					id := uint64(replicaID)
+					pr := m[id]
+					pr.State = tracker.StateSnapshot
+					m[id] = pr
+				}
+				return m
+			}
+
+			m, _ := computeExpendableOverloadedFollowers(ctx, computeExpendableOverloadedFollowersInput{
+				replDescs:         replDescs,
+				ioOverloadMap:     ioOverloadMap,
+				getProgressMap:    getProgressMap,
+				seed:              int64(seed),
+				minLiveMatchIndex: minLiveMatchIndex,
+			})
+			{
+				var sl []roachpb.ReplicaID
+				for replID := range m {
+					sl = append(sl, replID)
+				}
+				sort.Slice(sl, func(i, j int) bool { return sl[i] < sl[j] })
+				fmt.Fprintln(&buf, sl)
+			}
+			return buf.String()
+		})
+	})
+}

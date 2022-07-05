@@ -930,6 +930,10 @@ type Store struct {
 	// liveness. It is updated periodically in raftTickLoop()
 	// and reactively in nodeIsLiveCallback() on liveness updates.
 	livenessMap atomic.Value
+	// ioOverloadedStores is analogous to livenessMap, but stores a
+	// map[StoreID]*IOThreshold. It is gossip-backed but is not updated
+	// reactively, i.e. will refresh on each tick loop iteration only.
+	ioOverloadedStores overloadedStoresMap
 
 	// cachedCapacity caches information on store capacity to prevent
 	// expensive recomputations in case leases or replicas are rapidly
@@ -2548,6 +2552,11 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreDescKey(storeDesc.StoreID)
 	// Gossip store descriptor.
+	if fn := s.cfg.TestingKnobs.StoreGossipIntercept; fn != nil {
+		// Give the interceptor a chance to see and/or mutate the descriptor we're about
+		// to gossip.
+		fn(storeDesc)
+	}
 	return s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, gossip.StoreTTL)
 }
 
@@ -3126,6 +3135,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		underreplicatedRangeCount int64
 		overreplicatedRangeCount  int64
 		behindCount               int64
+		pausedFollowerCount       int64
 
 		locks                          int64
 		totalLockHoldDurationNanos     int64
@@ -3184,6 +3194,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				overreplicatedRangeCount++
 			}
 		}
+		pausedFollowerCount += metrics.PausedFollowerCount
 		behindCount += metrics.BehindCount
 		if qps, dur := rep.leaseholderStats.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageQueriesPerSecond += qps
@@ -3244,6 +3255,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
+	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
 
 	var averageLockHoldDurationNanos int64
 	var averageLockWaitDurationNanos int64
