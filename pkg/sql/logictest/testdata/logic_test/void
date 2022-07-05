@@ -33,3 +33,65 @@ query T
 SELECT crdb_internal.void_func()
 ----
 ·
+
+# Regression test for #83754. Do not error out, but match postgres behavior.
+query B
+SELECT ''::VOID IS DISTINCT FROM NULL
+----
+true
+
+# Regression test for #83754. Do not error out, but match postgres behavior.
+query B
+SELECT ''::VOID IS NOT DISTINCT FROM NULL
+----
+false
+
+# Regression test for #83754. Do not error out, but match postgres behavior.
+query B
+SELECT NULL IS DISTINCT FROM ''::VOID
+----
+true
+
+# Regression test for #83754. Do not error out, but match postgres behavior.
+query B
+SELECT NULL IS NOT DISTINCT FROM ''::VOID
+----
+false
+
+statement ok
+SET vectorize=on
+
+# Regression test for #83754. Vectorized execution should not error out.
+query T
+SELECT
+	COALESCE(tab_115318.col_199168, NULL) AS col_199169
+FROM
+	(VALUES (''::VOID), (NULL), (NULL), (''::VOID)) AS tab_115318 (col_199168)
+ORDER BY
+	tab_115318.col_199168
+----
+NULL
+NULL
+·
+·
+
+statement ok
+SET vectorize=off
+
+# Regression test for #83754.
+# Non-vectorized and vectorized results should match.
+query T
+SELECT
+	COALESCE(tab_115318.col_199168, NULL) AS col_199169
+FROM
+	(VALUES (''::VOID), (NULL), (NULL), (''::VOID)) AS tab_115318 (col_199168)
+ORDER BY
+	tab_115318.col_199168
+----
+NULL
+NULL
+·
+·
+
+statement ok
+RESET vectorize
