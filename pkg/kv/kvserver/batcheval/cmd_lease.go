@@ -41,10 +41,6 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 // The new lease might be a lease for a range that didn't previously have an
 // active lease, might be an extension or a lease transfer.
 //
-// isExtension should be set if the lease holder does not change with this
-// lease. If it doesn't change, we don't need the application of this lease to
-// block reads.
-//
 // TODO(tschottdorf): refactoring what's returned from the trigger here makes
 // sense to minimize the amount of code intolerant of rolling updates.
 func evalNewLease(
@@ -55,7 +51,6 @@ func evalNewLease(
 	lease roachpb.Lease,
 	prevLease roachpb.Lease,
 	priorReadSum *rspb.ReadSummary,
-	isExtension bool,
 	isTransfer bool,
 ) (result.Result, error) {
 	// When returning an error from this method, must always return

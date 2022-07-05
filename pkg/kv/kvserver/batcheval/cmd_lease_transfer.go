@@ -130,5 +130,5 @@ func TransferLease(
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		newLease, prevLease, &priorReadSum, false /* isExtension */, true /* isTransfer */)
+		newLease, prevLease, &priorReadSum, true /* isTransfer */)
 }
