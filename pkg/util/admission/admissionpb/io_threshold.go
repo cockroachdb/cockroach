@@ -46,6 +46,7 @@ func (iot IOThreshold) Score() (float64, bool) {
 func (iot IOThreshold) SafeFormat(s interfaces.SafePrinter, _ rune) {
 	if iot == (IOThreshold{}) {
 		s.Printf("N/A")
+		return
 	}
 	sc, overload := iot.Score()
 	s.Printf("%.3f", redact.SafeFloat(sc))

@@ -144,6 +144,12 @@ type RaftMessageHandler interface {
 	) error
 }
 
+// TODO(tbg): remove all of these metrics. The "NodeID" in this struct refers to the remote NodeID, i.e. when we send
+// a message it refers to the recipient and when we receive a message it refers to the sender. This doesn't map to
+// metrics well, where everyone should report on their local decisions. Instead have a *RaftTransportMetrics struct
+// that is per-Store and tracks metrics on behalf of that Store.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/83917
 type raftTransportStats struct {
 	nodeID        roachpb.NodeID
 	queue         int

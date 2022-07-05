@@ -182,7 +182,7 @@ func (r *Replica) canUnquiesceRLocked() bool {
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap,
 ) bool {
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap)
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, now, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
 	}
@@ -267,7 +267,11 @@ func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeI
 //
 // NOTE: The last 3 conditions are fairly, but not completely, overlapping.
 func shouldReplicaQuiesce(
-	ctx context.Context, q quiescer, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap,
+	ctx context.Context,
+	q quiescer,
+	now hlc.ClockTimestamp,
+	livenessMap liveness.IsLiveMap,
+	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raft.Status, laggingReplicaSet, bool) {
 	if testingDisableQuiescence {
 		return nil, nil, false
@@ -350,6 +354,19 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
 				status.Commit, lastIndex)
+		}
+		return nil, nil, false
+	}
+
+	if len(pausedFollowers) > 0 {
+		// TODO(tbg): we should use a mechanism similar to livenessMap below (including a
+		// callback that unquiesces when paused followers unpause, since they will by
+		// definition be lagging). This was a little too much code churn at the time
+		// at which this comment was written.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/84252
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: overloaded followers %v", pausedFollowers)
 		}
 		return nil, nil, false
 	}

@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -566,14 +567,6 @@ type Replica struct {
 		// (making the assumption that all followers are live at that point),
 		// and when the range unquiesces (marking all replicating followers as
 		// live).
-		//
-		// TODO(tschottdorf): keeping a map on each replica seems to be
-		// overdoing it. We should map the replicaID to a NodeID and then use
-		// node liveness (or any sensible measure of the peer being around).
-		// The danger in doing so is that a single stuck replica on an otherwise
-		// functioning node could fill up the quota pool. We are already taking
-		// this kind of risk though: a replica that gets stuck on an otherwise
-		// live node will not lose leaseholdership.
 		lastUpdateTimes lastUpdateTimesMap
 
 		// Computed checksum at a snapshot UUID.
@@ -653,6 +646,12 @@ type Replica struct {
 
 		// Historical information about the command that set the closed timestamp.
 		closedTimestampSetter closedTimestampSetterInfo
+
+		// Followers to which replication traffic is currently dropped.
+		//
+		// Never mutated in place (always replaced wholesale), so can be leaked
+		// outside of the surrounding mutex.
+		pausedFollowers map[roachpb.ReplicaID]struct{}
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
@@ -698,6 +697,11 @@ type Replica struct {
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider
 
+	// TODO(tbg): this is effectively unused, we only use it to call ReportUnreachable
+	// when a heartbeat gets dropped but it's unclear whether a) that ever fires in
+	// practice b) if it provides any benefit.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/84246
 	unreachablesMu struct {
 		syncutil.Mutex
 		remotes map[roachpb.ReplicaID]struct{}
@@ -1288,7 +1292,16 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	if err := r.breaker.Signal().Err(); err != nil {
 		ri.CircuitBreakerError = err.Error()
 	}
-
+	if m := r.mu.pausedFollowers; len(m) > 0 {
+		var sl []roachpb.ReplicaID
+		for id := range m {
+			sl = append(sl, id)
+		}
+		sort.Slice(sl, func(i, j int) bool {
+			return sl[i] < sl[j]
+		})
+		ri.PausedReplicas = sl
+	}
 	return ri
 }
 
