@@ -920,7 +920,7 @@ func (b *Builder) canAutoCommit(rel memo.RelExpr) bool {
 		// Allow Project on top, as long as the expressions are not side-effecting.
 		proj := rel.(*memo.ProjectExpr)
 		for i := 0; i < len(proj.Projections); i++ {
-			if !proj.Projections[i].ScalarProps().VolatilitySet.IsLeakProof() {
+			if !proj.Projections[i].ScalarProps().VolatilitySet.IsLeakproof() {
 				return false
 			}
 		}

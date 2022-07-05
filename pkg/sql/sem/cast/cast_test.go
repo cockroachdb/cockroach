@@ -193,7 +193,7 @@ func TestTupleCastVolatility(t *testing.T) {
 		{
 			from: nil,
 			to:   nil,
-			exp:  "leak-proof",
+			exp:  "leakproof",
 		},
 		{
 			from: nil,
