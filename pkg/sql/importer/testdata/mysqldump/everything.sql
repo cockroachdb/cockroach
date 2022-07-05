@@ -52,6 +52,8 @@ CREATE TABLE `everything` (
   `f47` double DEFAULT NULL,
   `f75` float(7,5) DEFAULT NULL,
   `j` json DEFAULT NULL,
+  `bit0` bit DEFAULT NULL,
+  `bit32` bit(32) DEFAULT NULL,
   PRIMARY KEY (`i`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -62,7 +64,7 @@ CREATE TABLE `everything` (
 
 LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-INSERT INTO `everything` VALUES (1,'c','this is s\'s default value',NULL,'Small',_binary 'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-11-19 20:27:42',NULL,NULL,NULL,-12.345,-2,0000000001,5,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL,'{\"a\": \"b\", \"c\": {\"d\": [\"e\", 11, null]}}'),(2,'c2','this is s\'s default value',NULL,'Large',_binary 'bin2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-11-19 20:27:42',NULL,NULL,NULL,12.345,3,3525343334,5,NULL,NULL,NULL,1.2,NULL,NULL,NULL,NULL,NULL,'{}');
+INSERT INTO `everything` VALUES (1,'c','this is s\'s default value',NULL,'Small',_binary 'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-11-19 20:27:42',NULL,NULL,NULL,-12.345,-2,0000000001,5,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL,'{\"a\": \"b\", \"c\": {\"d\": [\"e\", 11, null]}}'),(2,'c2','this is s\'s default value',NULL,'Large',_binary 'bin2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-11-19 20:27:42',NULL,NULL,NULL,12.345,3,3525343334,5,NULL,NULL,NULL,1.2,NULL,NULL,NULL,NULL,NULL,'{}',_binary '\1\0\0\0\0\0\0',NULL);
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

@@ -37,5 +37,7 @@ CREATE TABLE everything (
   f47   DOUBLE PRECISION,
   f75   FLOAT4,
   j     JSON,
+  bit0  INT8,
+  bit32 INT8,
   CONSTRAINT imported_from_enum_e CHECK (e IN ('Small':::STRING, 'Medium':::STRING, 'Large':::STRING))
 )

@@ -747,9 +747,11 @@ func mysqlColToCockroach(
 	case mysqltypes.Geometry:
 		return nil, unimplemented.NewWithIssue(32559, "cannot import GEOMETRY columns at this time")
 	case mysqltypes.Bit:
-		return nil, errors.WithHint(
-			unimplemented.NewWithIssue(32561, "cannot import BIT columns at this time"),
-			"try converting the column to a 64-bit integer before import")
+		if length > 64 {
+			return nil, errors.Errorf("BIT of length %d is not supported", length)
+		}
+		
+		def.Type = types.Int
 	default:
 		return nil, unimplemented.Newf(fmt.Sprintf("import.mysqlcoltype.%s", typ),
 			"unsupported mysql type %q", col.Type)
