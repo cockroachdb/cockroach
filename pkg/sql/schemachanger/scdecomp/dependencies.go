@@ -13,6 +13,8 @@ package scdecomp
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
@@ -47,3 +49,10 @@ type CommentGetter interface {
 // ElementVisitor is the type of the visitor callback function used by
 // WalkDescriptor.
 type ElementVisitor func(status scpb.Status, element scpb.Element)
+
+// ZoneConfigReader supports reading raw zone config information
+// from storage.
+type ZoneConfigReader interface {
+	// GetZoneConfig reads the raw zone config from storage.
+	GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error)
+}

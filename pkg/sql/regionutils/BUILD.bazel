@@ -5,12 +5,15 @@ go_library(
     srcs = [
         "partition_utils.go",
         "region_utils.go",
+        "zone_config_reader.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/regionutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
@@ -18,6 +21,7 @@ go_library(
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/covering",
         "//pkg/sql/rowenc",
+        "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
     ],
