@@ -1287,6 +1287,12 @@ and the system tenant using the \connect command.`,
 If set, disable enterprise features.`,
 	}
 
+	DemoEnableRangefeeds = FlagInfo{
+		Name: "auto-enable-rangefeeds",
+		Description: `
+If set to false, overrides the default demo behavior of enabling rangefeeds.`,
+	}
+
 	UseEmptyDatabase = FlagInfo{
 		Name:        "empty",
 		Description: `Deprecated in favor of --no-example-database`,
