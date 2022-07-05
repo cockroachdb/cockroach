@@ -2115,22 +2115,21 @@ func planProjectionOperators(
 		op, resultIdx, typs, err = planCastOperator(ctx, acc, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), factory, evalCtx)
 		return op, resultIdx, typs, err
 	case *tree.CoalesceExpr:
-		// We handle CoalesceExpr by planning the equivalent CASE expression,
-		// namely
+		// We handle CoalesceExpr by planning the equivalent CASE expression.
+		// Each WHEN condition is `IS DISTINCT FROM NULL` if the expression in the
+		// Coalesce allows that operation, otherwise, IS NOT NULL is used.
+		// For example,
+		//
 		//   CASE
 		//     WHEN CoalesceExpr.Exprs[0] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[0]
-		//     WHEN CoalesceExpr.Exprs[1] IS DISTINCT FROM NULL THEN CoalesceExpr.Exprs[1]
+		//     WHEN CoalesceExpr.Exprs[1] IS NOT NULL THEN CoalesceExpr.Exprs[1]
 		//     ...
 		//   END
 		whens := make([]*tree.When, len(t.Exprs))
 		for i := range whens {
 			whens[i] = &tree.When{
-				Cond: tree.NewTypedComparisonExpr(
-					treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom),
-					t.Exprs[i].(tree.TypedExpr),
-					tree.DNull,
-				),
-				Val: t.Exprs[i],
+				Cond: t.GetWhenCondition(i),
+				Val:  t.Exprs[i],
 			}
 		}
 		caseExpr, err := tree.NewTypedCaseExpr(

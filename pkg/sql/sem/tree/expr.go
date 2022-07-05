@@ -722,6 +722,28 @@ func (node *CoalesceExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// GetWhenCondition builds the WHEN condition to use for the ith expression
+// inside the Coalesce.
+func (node *CoalesceExpr) GetWhenCondition(i int) (whenCond Expr) {
+	leftExpr := node.Exprs[i].(TypedExpr)
+	rightExpr := DNull
+	// IsDistinctFrom is listed as IsNotDistinctFrom in CmpOps.
+	_, ok :=
+		CmpOps[treecmp.IsNotDistinctFrom].LookupImpl(leftExpr.ResolvedType(), rightExpr.ResolvedType())
+	// If the comparison is legal, use IS NOT DISTINCT FROM NULL.
+	// Otherwise, use IS NOT NULL.
+	if ok {
+		whenCond = NewTypedComparisonExpr(
+			treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom),
+			leftExpr,
+			rightExpr,
+		)
+		return whenCond
+	}
+	whenCond = NewTypedIsNotNullExpr(leftExpr)
+	return whenCond
+}
+
 // DefaultVal represents the DEFAULT expression.
 type DefaultVal struct{}
 
