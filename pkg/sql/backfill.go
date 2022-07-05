@@ -2326,7 +2326,7 @@ func runSchemaChangesInTxn(
 				}
 			} else if idx := m.AsIndex(); idx != nil {
 				if err := indexTruncateInTxn(
-					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, idx, traceKV,
+					ctx, planner.Txn(), planner.ExecCfg(), planner.Descriptors(), planner.EvalContext(), immutDesc, idx, traceKV,
 				); err != nil {
 					return err
 				}
@@ -2698,6 +2698,7 @@ func indexTruncateInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
@@ -2724,7 +2725,7 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc, []uint32{uint32(idx.GetID())})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, descriptors, tableDesc, []uint32{uint32(idx.GetID())})
 }
 
 // We note the time at the start of the merge in order to limit the set of

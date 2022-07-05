@@ -1892,6 +1892,7 @@ func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
@@ -1934,7 +1935,7 @@ func maybeUpdateZoneConfigsForPKChange(
 
 	// Write the zone back. This call regenerates the index spans that apply
 	// to each partition in the index.
-	_, err = writeZoneConfig(ctx, txn, table.ID, table, zone, execCfg, false)
+	_, err = writeZoneConfig(ctx, txn, table.ID, table, zone, execCfg, descriptors, false)
 	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 		return err
 	}
@@ -3030,6 +3031,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				ctx,
 				txn,
 				sc.execCfg,
+				descsCol,
 				regionConfig,
 				tableDesc,
 				opts...,
@@ -3042,7 +3044,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 		// Note this is done even for isDone = true, though not strictly
 		// necessary.
 		return maybeUpdateZoneConfigsForPKChange(
-			ctx, txn, sc.execCfg, tableDesc, pkSwap.PrimaryKeySwapDesc(),
+			ctx, txn, sc.execCfg, descsCol, tableDesc, pkSwap.PrimaryKeySwapDesc(),
 		)
 	}
 	return nil

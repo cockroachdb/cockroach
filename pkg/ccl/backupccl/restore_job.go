@@ -896,6 +896,7 @@ func createImportingDescriptors(
 								regionConfig,
 								txn,
 								p.ExecCfg(),
+								descsCol,
 							); err != nil {
 								return err
 							}
@@ -1045,6 +1046,7 @@ func createImportingDescriptors(
 							ctx,
 							txn,
 							p.ExecCfg(),
+							descsCol,
 							regionConfig,
 							mutTable,
 							sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
