@@ -213,6 +213,43 @@ func TestGCSAssumeRole(t *testing.T) {
 			username.RootUserName(), nil, nil, testSettings,
 		)
 	})
+
+	t.Run("role-chaining", func(t *testing.T) {
+		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+
+		intermediateAccount := os.Getenv("GOOGLE_INTERMEDIATE_SERVICE_ACCOUNT")
+		if intermediateAccount == "" {
+			skip.IgnoreLint(t, "GOOGLE_INTERMEDIATE_SERVICE_ACCOUNT env var must be set")
+		}
+
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(AssumeRoleParam, intermediateAccount)
+		q.Set(CredentialsParam, encoded)
+
+		intermediateURI := fmt.Sprintf("gs://%s/%s/%s?%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			"listing-test",
+			q.Encode(),
+		)
+		cloudtestutils.CheckNoPermission(t, intermediateURI, user, nil, nil, testSettings)
+
+		q.Set(AssumeRoleParam, fmt.Sprintf("%s,%s", intermediateAccount, assumedAccount))
+		uri := fmt.Sprintf("gs://%s/%s/%s?%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			"listing-test",
+			q.Encode(),
+		)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+		fmt.Println("@@@ passed role chaining")
+	})
 }
 
 func TestAntagonisticGCSRead(t *testing.T) {
