@@ -1,5 +1,3 @@
-# gazelle:exclude string_test.go
-
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -80,6 +78,7 @@ go_test(
         "metadata_test.go",
         "replica_unavailable_error_test.go",
         "span_group_test.go",
+        "string_test.go",
         "tenant_test.go",
         "version_test.go",
     ],
@@ -88,8 +87,10 @@ go_test(
     tags = ["no-remote"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
+        "//pkg/testutils/echotest",
         "//pkg/testutils/zerofields",
         "//pkg/util",
         "//pkg/util/bitarray",
@@ -117,27 +118,6 @@ go_test(
         "@io_etcd_go_etcd_raft_v3//tracker",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
-    ],
-)
-
-# keep
-go_test(
-    name = "string_test",
-    size = "small",
-    srcs = ["string_test.go"],
-    data = glob(["testdata/**"]),
-    deps = [
-        ":roachpb",  # keep
-        "//pkg/cli/exit",
-        "//pkg/keys",
-        "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/storage/enginepb",
-        "//pkg/testutils/echotest",
-        "//pkg/util/hlc",
-        "//pkg/util/uuid",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

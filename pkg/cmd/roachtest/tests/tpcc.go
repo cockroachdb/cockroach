@@ -291,6 +291,14 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
 
+// tpccMaxRate calculates the max rate of the workload given a number of warehouses.
+func tpccMaxRate(warehouses int) int {
+	const txnsPerWarehousePerSecond = 12.8 * (23.0 / 10.0) * (1.0 / 60.0) // max_tpmC/warehouse * all_txns/new_order_txns * minutes/seconds
+	rateAtExpected := txnsPerWarehousePerSecond * float64(warehouses)
+	maxRate := int(rateAtExpected / 2)
+	return maxRate
+}
+
 func maxSupportedTPCCWarehouses(
 	buildVersion version.Version, cloud string, nodes spec.ClusterSpec,
 ) int {
@@ -1016,9 +1024,7 @@ func loadTPCCBench(
 	// the desired distribution. This should allow for load-based rebalancing to
 	// help distribute load. Optionally pass some load configuration-specific
 	// flags.
-	const txnsPerWarehousePerSecond = 12.8 * (23.0 / 10.0) * (1.0 / 60.0) // max_tpmC/warehouse * all_txns/new_order_txns * minutes/seconds
-	rateAtExpected := txnsPerWarehousePerSecond * float64(b.EstimatedMax)
-	maxRate := int(rateAtExpected / 2)
+	maxRate := tpccMaxRate(b.EstimatedMax)
 	rampTime := (1 * rebalanceWait) / 4
 	loadTime := (3 * rebalanceWait) / 4
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
