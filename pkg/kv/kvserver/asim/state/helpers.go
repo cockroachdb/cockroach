@@ -196,7 +196,7 @@ func (s storeRangeCounts) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 // replication factor of 3. A best effort distribution is applied in these
 // cases.
 func NewTestStateReplDistribution(
-	ranges int, percentOfReplicas []float64, replicationFactor int,
+	percentOfReplicas []float64, ranges, replicationFactor, keyspace int,
 ) State {
 	targetRangeCount := make(storeRangeCounts, len(percentOfReplicas))
 	for i, percent := range percentOfReplicas {
@@ -204,10 +204,16 @@ func NewTestStateReplDistribution(
 		targetRangeCount[i] = storeRangeCount{requestedReplicas: requiredRanges, storeID: StoreID(i + 1)}
 	}
 
+	// There cannot be less keys than there are ranges.
+	if ranges > keyspace {
+		keyspace = ranges
+	}
+	rangeInterval := keyspace / ranges
+
 	startKeys := make([]Key, ranges)
 	replicas := make(map[Key][]StoreID)
 	for i := 0; i < ranges; i++ {
-		key := Key(i)
+		key := Key(i * rangeInterval)
 		startKeys[i] = key
 		replicas[key] = make([]StoreID, replicationFactor)
 

@@ -83,20 +83,20 @@ func (r *rng) Less(than btree.Item) bool {
 }
 
 // initFirstRange initializes the first range within the rangemap, with
-// [minKey, maxKey) start and end key. All other ranges are split from this.
+// [MinKey, MaxKey) start and end key. All other ranges are split from this.
 func (rm *rmap) initFirstRange() {
 	rm.rangeSeqGen++
 	rangeID := rm.rangeSeqGen
 	desc := roachpb.RangeDescriptor{
 		RangeID:       roachpb.RangeID(rangeID),
-		StartKey:      minKey.ToRKey(),
-		EndKey:        maxKey.ToRKey(),
+		StartKey:      MinKey.ToRKey(),
+		EndKey:        MaxKey.ToRKey(),
 		NextReplicaID: 1,
 	}
 	rng := &rng{
 		rangeID:     rangeID,
-		startKey:    minKey,
-		endKey:      maxKey,
+		startKey:    MinKey,
+		endKey:      MaxKey,
 		desc:        desc,
 		config:      defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
@@ -116,7 +116,7 @@ func (s *state) String() string {
 	s.ranges.rangeTree.Ascend(func(i btree.Item) bool {
 		r := i.(*rng)
 		orderedRanges = append(orderedRanges, r)
-		return !r.desc.EndKey.Equal(maxKey.ToRKey())
+		return !r.desc.EndKey.Equal(MaxKey.ToRKey())
 	})
 
 	nStores := len(s.stores)
