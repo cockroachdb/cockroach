@@ -201,7 +201,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 	firstAttempt := true
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
-	for r := retry.Start(retryOptions); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
 		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
 		instanceID := s.nodeIDContainer.SQLInstanceID()
 		if instanceID == 0 {
