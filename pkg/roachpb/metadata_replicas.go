@@ -393,6 +393,17 @@ func (d ReplicaSet) ConfState() raftpb.ConfState {
 	return cs
 }
 
+// HasReplicaOnNode returns true iff the given nodeID is present in the
+// ReplicaSet.
+func (d ReplicaSet) HasReplicaOnNode(nodeID NodeID) bool {
+	for _, rep := range d.wrapped {
+		if rep.NodeID == nodeID {
+			return true
+		}
+	}
+	return false
+}
+
 // CanMakeProgress reports whether the given descriptors can make progress at
 // the replication layer. This is more complicated than just counting the number
 // of replicas due to the existence of joint quorums.

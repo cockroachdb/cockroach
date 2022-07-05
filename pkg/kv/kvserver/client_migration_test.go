@@ -180,7 +180,7 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 	repl, err := store.GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
-		trace, processErr, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.Enqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */, false /* async */)
 		if err != nil {
 			return err
 		}

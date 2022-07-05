@@ -89,6 +89,9 @@ func (t *testServerShim) Decommission(
 ) error {
 	panic(unsupportedShimMethod)
 }
+func (t *testServerShim) DecommissioningNodeMap() map[roachpb.NodeID]interface{} {
+	panic(unsupportedShimMethod)
+}
 func (t *testServerShim) SplitRange(
 	splitKey roachpb.Key,
 ) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error) {
