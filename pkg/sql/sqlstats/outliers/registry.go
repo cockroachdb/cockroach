@@ -90,7 +90,7 @@ func (r *registry) ObserveTransaction(sessionID clusterunique.ID, transaction *T
 	if hasOutlier {
 		for _, s := range statements {
 			r.mu.outliers.Add(uint128.FromBytes(s.ID), &Outlier{
-				Session:     &Session{ID: sessionID.GetBytes()},
+				Session:     &Session{ID: &sessionID},
 				Transaction: transaction,
 				Statement:   s,
 			})

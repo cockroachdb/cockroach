@@ -15,7 +15,8 @@ option go_package = "outliers";
 import "gogoproto/gogo.proto";
 
 message Session {
-  bytes id = 1 [(gogoproto.customname) = "ID"];
+  bytes id = 1 [(gogoproto.customname) = "ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
 }
 
 message Transaction {
