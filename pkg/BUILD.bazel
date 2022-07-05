@@ -190,7 +190,6 @@ ALL_TESTS = [
     "//pkg/kv:kv_test",
     "//pkg/roachpb:roachpb_disallowed_imports_test",
     "//pkg/roachpb:roachpb_test",
-    "//pkg/roachpb:string_test",
     "//pkg/roachprod/cloud:cloud_test",
     "//pkg/roachprod/config:config_test",
     "//pkg/roachprod/install:install_test",
