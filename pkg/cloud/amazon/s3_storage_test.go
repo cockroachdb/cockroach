@@ -194,9 +194,9 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 	user := username.RootUserName()
 
-	roleArn := os.Getenv(AWSRoleArnParam)
+	roleArn := os.Getenv("AWS_ASSUME_ROLE")
 	if roleArn == "" {
-		skip.IgnoreLintf(t, "%s env var must be set", AWSRoleArnParam)
+		skip.IgnoreLint(t, "AWS_ASSUME_ROLE env var must be set")
 	}
 	t.Run("auth-implicit", func(t *testing.T) {
 		credentialsProvider := credentials.SharedCredentialsProvider{}
@@ -206,7 +206,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 		uri := S3URI(bucket, "backup-test",
-			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamAssume, RoleArn: roleArn, Region: "us-east-1"},
+			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
@@ -214,10 +214,57 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := S3URI(bucket, "backup-test",
-			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamAssume, RoleArn: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			&roachpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
 		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
+	})
+
+	t.Run("role-chaining", func(t *testing.T) {
+		roleChainStr := os.Getenv("AWS_ROLE_ARN_CHAIN")
+		if roleChainStr == "" {
+			skip.IgnoreLint(t, "AWS_ROLE_ARN_CHAIN env var must be set")
+		}
+
+		roleChain := strings.Split(roleChainStr, ",")
+		for _, tc := range []struct {
+			auth      string
+			accessKey string
+			secretKey string
+		}{
+			{cloud.AuthParamSpecified, creds.AccessKeyID, creds.SecretAccessKey},
+			{cloud.AuthParamImplicit, "", ""},
+		} {
+			t.Run(tc.auth, func(t *testing.T) {
+				// First verify that none of the individual roles in the chain can be used to access the storage.
+				for _, role := range roleChain {
+					roleURI := S3URI(bucket, "backup-test",
+						&roachpb.ExternalStorage_S3{
+							Auth:      tc.auth,
+							RoleARN:   role,
+							AccessKey: tc.accessKey,
+							Secret:    tc.secretKey,
+							Region:    "us-east-1",
+						},
+					)
+					cloudtestutils.CheckNoPermission(t, roleURI, user, nil, nil, testSettings)
+				}
+
+				// Finally, check that the chain of roles can be used to access the storage.
+				uri := S3URI(bucket, "backup-test",
+					&roachpb.ExternalStorage_S3{
+						Auth:             tc.auth,
+						RoleARN:          roleChain[len(roleChain)-1],
+						DelegateRoleARNs: roleChain[:len(roleChain)-1],
+						AccessKey:        tc.accessKey,
+						Secret:           tc.secretKey,
+						Region:           "us-east-1",
+					},
+				)
+
+				cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+			})
+		}
 	})
 }
 

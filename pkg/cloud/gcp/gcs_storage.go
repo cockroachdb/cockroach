@@ -44,8 +44,10 @@ const (
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
 	CredentialsParam = "CREDENTIALS"
-	// AssumeRoleParam is the email of the service account to assume.
+	// AssumeRoleParam is the query parameter for the chain of service account
+	// email addresses to assume.
 	AssumeRoleParam = "ASSUME_ROLE"
+
 	// BearerTokenParam is the query parameter for a temporary bearer token. There
 	// is no refresh mechanism associated with this token, so it is up to the user
 	// to ensure that its TTL is longer than the duration of the job or query that
@@ -66,14 +68,16 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_gs
+	assumeRole, delegateRoles := cloud.ParseRoleString(uri.Query().Get(AssumeRoleParam))
 	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
-		Bucket:         uri.Host,
-		Prefix:         uri.Path,
-		Auth:           uri.Query().Get(cloud.AuthParam),
-		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
-		Credentials:    uri.Query().Get(CredentialsParam),
-		AssumeRole:     uri.Query().Get(AssumeRoleParam),
-		BearerToken:    uri.Query().Get(BearerTokenParam),
+		Bucket:              uri.Host,
+		Prefix:              uri.Path,
+		Auth:                uri.Query().Get(cloud.AuthParam),
+		BillingProject:      uri.Query().Get(GoogleBillingProjectParam),
+		Credentials:         uri.Query().Get(CredentialsParam),
+		AssumeRole:          assumeRole,
+		AssumeRoleDelegates: delegateRoles,
+		BearerToken:         uri.Query().Get(BearerTokenParam),
 	}
 	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	return conf, nil
@@ -158,7 +162,7 @@ func makeGCSStorage(
 	if conf.AssumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		assumeOpt, err := createImpersonateCredentials(ctx, conf.AssumeRole, []string{scope}, credentialsOpt...)
+		assumeOpt, err := createImpersonateCredentials(ctx, conf.AssumeRole, conf.AssumeRoleDelegates, []string{scope}, credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")
 		}
@@ -207,11 +211,17 @@ func createAuthOptionFromBearerToken(bearerToken string) option.ClientOption {
 // authentication for the specified scopes by impersonating the target,
 // potentially with authentication options from authOpts.
 func createImpersonateCredentials(
-	ctx context.Context, impersonateTarget string, scopes []string, authOpts ...option.ClientOption,
+	ctx context.Context,
+	impersonateTarget string,
+	impersonateDelegates []string,
+	scopes []string,
+	authOpts ...option.ClientOption,
 ) (option.ClientOption, error) {
+
 	cfg := impersonate.CredentialsConfig{
 		TargetPrincipal: impersonateTarget,
 		Scopes:          scopes,
+		Delegates:       impersonateDelegates,
 	}
 
 	source, err := impersonate.CredentialsTokenSource(ctx, cfg, authOpts...)

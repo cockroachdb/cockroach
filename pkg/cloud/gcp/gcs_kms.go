@@ -38,18 +38,21 @@ func init() {
 }
 
 type kmsURIParams struct {
-	credentials string
-	auth        string
-	assumeRole  string
-	bearerToken string
+	credentials   string
+	auth          string
+	assumeRole    string
+	delegateRoles []string
+	bearerToken   string
 }
 
 func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
+	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.Query().Get(AssumeRoleParam))
 	params := kmsURIParams{
-		credentials: kmsURI.Query().Get(CredentialsParam),
-		auth:        kmsURI.Query().Get(cloud.AuthParam),
-		assumeRole:  kmsURI.Query().Get(AssumeRoleParam),
-		bearerToken: kmsURI.Query().Get(BearerTokenParam),
+		credentials:   kmsURI.Query().Get(CredentialsParam),
+		auth:          kmsURI.Query().Get(cloud.AuthParam),
+		assumeRole:    assumeRole,
+		delegateRoles: delegateRoles,
+		bearerToken:   kmsURI.Query().Get(BearerTokenParam),
 	}
 
 	return params
@@ -106,7 +109,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	if kmsURIParams.assumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.assumeRole, kms.DefaultAuthScopes(), credentialsOpt...)
+		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.assumeRole, kmsURIParams.delegateRoles, kms.DefaultAuthScopes(), credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")
 		}
