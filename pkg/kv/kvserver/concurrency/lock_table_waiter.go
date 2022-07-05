@@ -229,6 +229,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// If the request doesn't want to perform a delayed push for any
 				// reason, continue waiting without a timer.
 				if !(livenessPush || deadlockPush || timeoutPush || priorityPush) {
+					log.Eventf(ctx, "not pushing")
 					continue
 				}
 
@@ -258,6 +259,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 				if priorityPush {
 					delay = 0
 				}
+
+				log.Eventf(ctx, "pushing after %s for: "+
+					"liveness detection = %t, deadlock detection = %t, "+
+					"timeout enforcement = %t, priority enforcement = %t",
+					delay, livenessPush, deadlockPush, timeoutPush, priorityPush)
 
 				if delay > 0 {
 					if timer == nil {
