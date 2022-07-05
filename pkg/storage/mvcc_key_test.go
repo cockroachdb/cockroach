@@ -206,7 +206,7 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 			require.Equal(t, expectPrefix, EncodeMVCCKeyPrefix(roachpb.Key(tc.key)))
 			require.Equal(t, len(expectPrefix), EncodedMVCCKeyPrefixLength(roachpb.Key(tc.key)))
 
-			// Test encode/decodeMVCCTimestampSuffix too, since we can trivially do so.
+			// Test Encode/DecodeMVCCTimestampSuffix too, since we can trivially do so.
 			expectTS, err := hex.DecodeString(tc.encoded[2*len(tc.key)+2:])
 			require.NoError(t, err)
 			if len(expectTS) == 0 {
@@ -217,7 +217,7 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 			require.Equal(t, expectTS, encodedTS)
 			require.Equal(t, len(encodedTS), EncodedMVCCTimestampSuffixLength(tc.ts))
 
-			decodedTS, err := decodeMVCCTimestampSuffix(encodedTS)
+			decodedTS, err := DecodeMVCCTimestampSuffix(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
 
@@ -316,7 +316,7 @@ func TestDecodeMVCCTimestampSuffixErrors(t *testing.T) {
 			encoded, err := hex.DecodeString(tc.encoded)
 			require.NoError(t, err)
 
-			_, err = decodeMVCCTimestampSuffix(encoded)
+			_, err = DecodeMVCCTimestampSuffix(encoded)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.expectErr)
 		})
@@ -610,4 +610,8 @@ func rangeKV(start, end string, ts int, v MVCCValue) MVCCRangeKeyValue {
 
 func wallTS(ts int) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: int64(ts)}
+}
+
+func wallTSRaw(ts int) []byte {
+	return EncodeMVCCTimestampSuffix(wallTS(ts))
 }

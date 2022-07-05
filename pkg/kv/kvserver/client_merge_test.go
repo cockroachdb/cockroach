@@ -3759,13 +3759,20 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Construct SSTs for the the first 4 bullets as numbered above, but only
 		// ultimately keep the last one.
+		sendingEngSnapshot := sendingEng.NewSnapshot()
+		defer sendingEngSnapshot.Close()
 		keyRanges := rditer.MakeReplicatedKeyRanges(inSnap.Desc)
-		it := rditer.NewReplicaEngineDataIterator(inSnap.Desc, sendingEng, true /* replicatedOnly */)
+		it := rditer.NewReplicaEngineDataIterator(
+			inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */)
 		defer it.Close()
+
 		// Write a range deletion tombstone to each of the SSTs then put in the
 		// kv entries from the sender of the snapshot.
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
+
+		ok, err := it.SeekStart()
+		require.NoError(t, err)
 		for _, r := range keyRanges {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
@@ -3775,23 +3782,26 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 			// Keep adding kv data to the SST until the key exceeds the
 			// bounds of the range, then proceed to the next range.
-			for ; ; it.Next() {
-				valid, err := it.Valid()
-				if err != nil {
+			for ; ok && err == nil; ok, err = it.Next() {
+				var key storage.EngineKey
+				if key, err = it.UnsafeKey(); err != nil {
 					return err
 				}
-				if !valid || r.End.Compare(it.UnsafeKey().Key) <= 0 {
-					if err := sst.Finish(); err != nil {
-						return err
-					}
-					sst.Close()
-					expectedSSTs = append(expectedSSTs, sstFile.Data())
+				if r.End.Compare(key.Key) <= 0 {
 					break
 				}
-				if err := sst.PutEngineKey(it.UnsafeKey(), it.Value()); err != nil {
+				if err := sst.PutEngineKey(key, it.UnsafeValue()); err != nil {
 					return err
 				}
 			}
+			if err != nil {
+				return err
+			}
+			if err := sst.Finish(); err != nil {
+				return err
+			}
+			sst.Close()
+			expectedSSTs = append(expectedSSTs, sstFile.Data())
 		}
 		if len(expectedSSTs) != 5 {
 			return errors.Errorf("len of expectedSSTs should expected to be %d, but got %d",
@@ -3837,8 +3847,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, r.Start, r.End); err != nil {
 			return err
 		}
-		err := sst.Finish()
-		if err != nil {
+		if err = sst.Finish(); err != nil {
 			return err
 		}
 		expectedSSTs = append(expectedSSTs, sstFile.Data())

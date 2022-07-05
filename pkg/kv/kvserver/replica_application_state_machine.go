@@ -571,13 +571,13 @@ func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *repl
 }
 
 // stageWriteBatch applies the command's write batch to the application batch's
-// RocksDB batch. This batch is committed to RocksDB in replicaAppBatch.commit.
+// RocksDB batch. This batch is committed to Pebble in replicaAppBatch.commit.
 func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
 	wb := cmd.raftCmd.WriteBatch
 	if wb == nil {
 		return nil
 	}
-	if mutations, err := storage.RocksDBBatchCount(wb.Data); err != nil {
+	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
 		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 	} else {
 		b.mutations += mutations

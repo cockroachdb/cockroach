@@ -248,7 +248,18 @@ func stringValueRaw(s string) []byte {
 	return b
 }
 
-func withLocalTS(v MVCCValue, ts int) MVCCValue {
-	v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: int64(ts)}
-	return v
+func tombstoneLocalTS(localTS int) MVCCValue {
+	return MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{
+			LocalTimestamp: hlc.ClockTimestamp{WallTime: int64(localTS)},
+		},
+	}
+}
+
+func tombstoneLocalTSRaw(localTS int) []byte {
+	b, err := EncodeMVCCValue(tombstoneLocalTS(localTS))
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
