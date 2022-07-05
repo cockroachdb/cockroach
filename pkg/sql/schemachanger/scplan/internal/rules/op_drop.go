@@ -232,6 +232,8 @@ func init() {
 				(*scpb.Owner)(nil),
 				(*scpb.UserPrivileges)(nil),
 				(*scpb.EnumTypeValue)(nil),
+				(*scpb.TableZoneConfig)(nil),
+				(*scpb.TableSubZoneConfig)(nil),
 			),
 			joinOnDescID(desc.el, dep.el, descID),
 			desc.joinTarget(),

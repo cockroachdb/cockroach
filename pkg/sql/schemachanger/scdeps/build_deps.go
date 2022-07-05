@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -67,6 +68,7 @@ func NewBuilderDependencies(
 		astFormatter:     astFormatter,
 		featureChecker:   featureChecker,
 		internalExecutor: internalExecutor,
+		zoneConfigReader: regionutils.NewZoneConfigReader(txn, codec),
 		schemaResolver: schemaResolverFactory(
 			descsCollection, sessiondata.NewStack(sessionData), txn, authAccessor,
 		),
@@ -88,6 +90,7 @@ type buildDeps struct {
 	featureChecker     scbuild.FeatureChecker
 	internalExecutor   sqlutil.InternalExecutor
 	clientNoticeSender eval.ClientNoticeSender
+	zoneConfigReader   scbuild.ZoneConfigReader
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -390,4 +393,9 @@ func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 // ClientNoticeSender implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
+}
+
+// ZoneConfigReader implements the scbuild.Dependencies interface.
+func (d *buildDeps) ZoneConfigReader() scbuild.ZoneConfigReader {
+	return d.zoneConfigReader
 }

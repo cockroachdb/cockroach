@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "regionutils",
+    srcs = ["zone_config_reader.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/regionutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scbuild",
+    ],
+)
