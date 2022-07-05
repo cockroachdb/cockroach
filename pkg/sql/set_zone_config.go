@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -790,7 +792,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// TODO(ajwerner): This is extremely fragile because we accept a nil table
 		// all the way down here.
 		n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-			targetID, table, zoneToWrite, execConfig, hasNewSubzones)
+			targetID, table, zoneToWrite, execConfig, params.p.Descriptors(), hasNewSubzones)
 		if err != nil {
 			return err
 		}
@@ -1054,8 +1056,8 @@ func validateZoneLocalitiesForSecondaryTenants(
 const MultitenancyZoneCfgIssueNo = 49854
 
 type zoneConfigUpdate struct {
-	id    descpb.ID
-	value []byte
+	id         descpb.ID
+	zoneConfig *zonepb.ZoneConfig
 }
 
 func prepareZoneConfigWrites(
@@ -1080,11 +1082,7 @@ func prepareZoneConfigWrites(
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		return &zoneConfigUpdate{id: targetID}, nil
 	}
-	buf, err := protoutil.Marshal(zone)
-	if err != nil {
-		return nil, pgerror.Wrap(err, pgcode.CheckViolation, "could not marshal zone config")
-	}
-	return &zoneConfigUpdate{id: targetID, value: buf}, nil
+	return &zoneConfigUpdate{id: targetID, zoneConfig: zone}, nil
 }
 
 func writeZoneConfig(
@@ -1094,24 +1092,33 @@ func writeZoneConfig(
 	table catalog.TableDescriptor,
 	zone *zonepb.ZoneConfig,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
 	update, err := prepareZoneConfigWrites(ctx, execCfg, targetID, table, zone, hasNewSubzones)
 	if err != nil {
 		return 0, err
 	}
-	return writeZoneConfigUpdate(ctx, txn, execCfg, update)
+	return writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
 }
 
 func writeZoneConfigUpdate(
-	ctx context.Context, txn *kv.Txn, execCfg *ExecutorConfig, update *zoneConfigUpdate,
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
+	update *zoneConfigUpdate,
 ) (numAffected int, _ error) {
-	if update.value == nil {
-		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
-			"DELETE FROM system.zones WHERE id = $1", update.id)
+	metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
+		execCfg.InternalExecutorFactory,
+		descriptors,
+		execCfg.SV(),
+		txn,
+		NewFakeSessionData(execCfg.SV()))
+	if update.zoneConfig == nil {
+		return metaDataUpdater.DeleteZoneConfig(ctx, update.id)
 	}
-	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,
-		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", update.id, update.value)
+	return metaDataUpdater.UpsertZoneConfig(ctx, update.id, update.zoneConfig)
 }
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
@@ -1180,6 +1187,7 @@ func RemoveIndexZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	descriptors *descs.Collection,
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
@@ -1210,11 +1218,10 @@ func RemoveIndexZoneConfigs(
 
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
-		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, false /* hasNewSubzones */)
+		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, descriptors, false /* hasNewSubzones */)
 		if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 			return err
 		}
 	}
-
 	return nil
 }

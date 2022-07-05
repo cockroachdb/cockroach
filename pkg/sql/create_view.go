@@ -333,6 +333,7 @@ func (n *createViewNode) startExec(params runParams) error {
 					params.ctx,
 					params.p.txn,
 					params.p.ExecCfg(),
+					params.p.Descriptors(),
 					regionConfig,
 					newDesc,
 					applyZoneConfigForMultiRegionTableOptionTableNewConfig(
