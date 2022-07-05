@@ -998,11 +998,25 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 // RevokeLease stops the replica from using its current lease, if that lease
 // matches the provided lease sequence. All future calls to leaseStatus on this
 // node with the current lease will now return a PROSCRIBED status.
-func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
+//
+// Returns a function that restores the lease to a valid status. This can be
+// called if the revocation proves to not be necessary.
+func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) func() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.state.Lease.Sequence == seq {
-		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
+	if r.mu.state.Lease.Sequence != seq {
+		return func() {}
+	}
+	now := r.Clock().NowAsClockTimestamp()
+	origMinProposedTS := r.mu.minLeaseProposedTS
+	r.mu.minLeaseProposedTS = now
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		// Make sure that we didn't race with another revocation.
+		if r.mu.state.Lease.Sequence == seq && r.mu.minLeaseProposedTS == now {
+			r.mu.minLeaseProposedTS = origMinProposedTS
+		}
 	}
 }
 

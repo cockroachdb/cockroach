@@ -101,7 +101,7 @@ func TransferLease(
 	// such cases, we could detect that here and fail fast, but it's safe and
 	// easier to just let the TransferLease be proposed under the wrong lease
 	// and be rejected with the correct error below Raft.
-	cArgs.EvalCtx.RevokeLease(ctx, args.PrevLease.Sequence)
+	restoreLease := cArgs.EvalCtx.RevokeLease(ctx, args.PrevLease.Sequence)
 
 	// Forward the lease's start time to a current clock reading. At this
 	// point, we're holding latches across the entire range, we know that
@@ -129,6 +129,10 @@ func TransferLease(
 	priorReadSum.Merge(rspb.FromTimestamp(newLease.Start.ToTimestamp()))
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
-	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
+	res, err := evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
 		newLease, prevLease, &priorReadSum, true /* isTransfer */)
+	if err != nil {
+		restoreLease()
+	}
+	return res, err
 }

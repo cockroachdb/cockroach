@@ -120,7 +120,10 @@ type EvalContext interface {
 	// RevokeLease stops the replica from using its current lease, if that lease
 	// matches the provided lease sequence. All future calls to leaseStatus on
 	// this node with the current lease will now return a PROSCRIBED status.
-	RevokeLease(context.Context, roachpb.LeaseSequence)
+	//
+	// Returns a function that restores the lease to a valid status. This can be
+	// called if the revocation proves to not be necessary.
+	RevokeLease(context.Context, roachpb.LeaseSequence) func()
 
 	// WatchForMerge arranges to block all requests until the in-progress merge
 	// completes. Returns an error if no in-progress merge is detected.
@@ -179,6 +182,7 @@ type MockEvalCtx struct {
 	CurrentReadSummary rspb.ReadSummary
 	ClosedTimestamp    hlc.Timestamp
 	RevokedLeaseSeq    roachpb.LeaseSequence
+	RestoredLeaseSeq   roachpb.LeaseSequence
 	MaxBytes           int64
 	ApproxDiskBytes    uint64
 }
@@ -291,8 +295,11 @@ func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
 ) (cloud.ExternalStorage, error) {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequence) {
+func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequence) func() {
 	m.RevokedLeaseSeq = seq
+	return func() {
+		m.RestoredLeaseSeq = seq
+	}
 }
 func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 	panic("unimplemented")

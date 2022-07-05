@@ -261,6 +261,60 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 	})
 }
 
+// Test that, in case a TransferLease request fails to evaluate, the previous
+// lease that was revoked prior to evaluation is re-instituted.
+func TestLeaseIsReinstitutedOnFailedTransferEval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	replicas := []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
+		{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
+	}
+	desc := roachpb.RangeDescriptor{}
+	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+
+	prevLease := roachpb.Lease{
+		Replica:  replicas[0],
+		Sequence: 1,
+	}
+	nextLease := roachpb.Lease{
+		Replica: replicas[1],
+		Start:   clock.NowAsClockTimestamp(),
+	}
+	// Make the lease invalid by assigning it low expiration time. This will cause
+	// evaluation to fail.
+	exp := nextLease.Start.ToTimestamp().Add(-time.Second.Nanoseconds(), 0)
+	nextLease.Expiration = &exp
+
+	evalCtx := &MockEvalCtx{
+		ClusterSettings: cluster.MakeTestingClusterSettings(),
+		StoreID:         1,
+		Desc:            &desc,
+		Clock:           clock,
+		Lease:           prevLease,
+	}
+	cArgs := CommandArgs{
+		EvalCtx: evalCtx.EvalContext(),
+		Args: &roachpb.TransferLeaseRequest{
+			Lease:     nextLease,
+			PrevLease: prevLease,
+		},
+	}
+
+	_, err := TransferLease(ctx, batch, cArgs, nil /* resp */)
+	require.Error(t, err)
+	require.Equal(t, prevLease.Sequence, evalCtx.RevokedLeaseSeq)
+	require.Equal(t, prevLease.Sequence, evalCtx.RestoredLeaseSeq)
+}
+
 func TestCheckCanReceiveLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
