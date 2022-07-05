@@ -63,6 +63,17 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 	return nil
 }
 
+func requireAdminRole(ctx context.Context, p *planner, op string) error {
+	hasAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	if err != nil {
+		return err
+	}
+	if !hasAdmin {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "admin role required to %s tenant", op)
+	}
+	return nil
+}
+
 // CreateTenantRecord creates a tenant in system.tenants and installs an initial
 // span config (in system.span_configurations) for it. It also initializes the
 // usage data in system.tenant_usage if info.Usage is set.
@@ -223,6 +234,10 @@ func updateTenantRecord(
 
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
+	if err := requireAdminRole(ctx, p, "create"); err != nil {
+		return err
+	}
+
 	info := &descpb.TenantInfoWithUsage{
 		TenantInfo: descpb.TenantInfo{
 			ID: tenID,
@@ -334,6 +349,9 @@ func generateTenantClusterSettingKV(
 }
 
 // ActivateTenant marks a tenant active.
+//
+// The caller is responsible for checking that the user is authorized
+// to take this action.
 func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64) error {
 	const op = "activate"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
@@ -384,6 +402,9 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 // DestroyTenant implements the tree.TenantOperator interface.
 func (p *planner) DestroyTenant(ctx context.Context, tenID uint64, synchronous bool) error {
 	const op = "destroy"
+	if err := requireAdminRole(ctx, p, op); err != nil {
+		return err
+	}
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
 		return err
 	}
@@ -418,6 +439,9 @@ func (p *planner) DestroyTenant(ctx context.Context, tenID uint64, synchronous b
 }
 
 // GCTenantSync clears the tenant's data and removes its record.
+//
+// The caller is responsible for checking that the user is authorized
+// to take this action.
 func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
 	const op = "gc"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
@@ -534,11 +558,15 @@ func gcTenantJob(
 }
 
 // GCTenant implements the tree.TenantOperator interface.
+//
+// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
+// changes are deployed to all Cockroach Cloud serverless hosts.
 func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
-	// TODO(jeffswenson): Delete internal_crdb.gc_tenant after the DestroyTenant
-	// changes are deployed to all Cockroach Cloud serverless hosts.
 	if !p.extendedEvalCtx.TxnIsSingleStmt {
 		return errors.Errorf("gc_tenant cannot be used inside a multi-statement transaction")
+	}
+	if err := requireAdminRole(ctx, p, "gc"); err != nil {
+		return err
 	}
 	var info *descpb.TenantInfo
 	if txnErr := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -571,6 +599,10 @@ func (p *planner) UpdateTenantResourceLimits(
 	asOfConsumedRequestUnits float64,
 ) error {
 	const op = "update-resource-limits"
+	if err := requireAdminRole(ctx, p, op); err != nil {
+		return err
+	}
+
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
 		return err
 	}
