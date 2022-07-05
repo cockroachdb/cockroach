@@ -102,6 +102,7 @@ ALL_TESTS = [
     "//pkg/cmd/reduce/reduce/reducesql:reducesql_test",
     "//pkg/cmd/reduce/reduce:reduce_test",
     "//pkg/cmd/release:release_test",
+    "//pkg/cmd/roachtest/clusterstats:clusterstats_test",
     "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest:roachtest_test",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",

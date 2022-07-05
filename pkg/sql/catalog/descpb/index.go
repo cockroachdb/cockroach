@@ -84,13 +84,21 @@ func (desc *IndexDescriptor) explicitColumnIDsWithoutShardColumn() ColumnIDs {
 	return colIDs
 }
 
+// implicitColumnIDs returns the implicit column ids of the index.
+func (desc *IndexDescriptor) implicitColumnIDs() ColumnIDs {
+	return desc.KeyColumnIDs[:desc.Partitioning.NumImplicitColumns]
+}
+
 // IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
 // It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
+	explicitColumnIDs := desc.explicitColumnIDsWithoutShardColumn()
+	allColumnIDs := append(explicitColumnIDs, desc.implicitColumnIDs()...)
 	return desc.Unique &&
 		!desc.IsPartial() &&
-		desc.explicitColumnIDsWithoutShardColumn().PermutationOf(referencedColIDs)
+		(explicitColumnIDs.PermutationOf(referencedColIDs) ||
+			allColumnIDs.PermutationOf(referencedColIDs))
 }
 
 // GetName is part of the UniqueConstraint interface.
