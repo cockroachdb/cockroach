@@ -168,7 +168,7 @@ func (n *relocateNode) Close(ctx context.Context) {
 
 func lookupStoreDesc(storeID roachpb.StoreID, params runParams) (*roachpb.StoreDescriptor, error) {
 	var storeDesc roachpb.StoreDescriptor
-	gossipStoreKey := gossip.MakeStoreKey(storeID)
+	gossipStoreKey := gossip.MakeStoreDescKey(storeID)
 	g, err := params.extendedEvalCtx.ExecCfg.Gossip.OptionalErr(54250)
 	if err != nil {
 		return nil, err

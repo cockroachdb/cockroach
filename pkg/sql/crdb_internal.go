@@ -3703,7 +3703,7 @@ func getAllNodeDescriptors(p *planner) ([]roachpb.NodeDescriptor, error) {
 		return nil, err
 	}
 	var descriptors []roachpb.NodeDescriptor
-	if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
+	if err := g.IterateInfos(gossip.KeyNodeDescPrefix, func(key string, i gossip.Info) error {
 		bytes, err := i.Value.GetBytes()
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err,
@@ -3783,7 +3783,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		}
 
 		stats := make(map[roachpb.NodeID]nodeStats)
-		if err := g.IterateInfos(gossip.KeyStorePrefix, func(key string, i gossip.Info) error {
+		if err := g.IterateInfos(gossip.KeyStoreDescPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err,
@@ -4027,7 +4027,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse value for key %q", key)
 			}
-			nodeID, err := gossip.NodeIDFromKey(key, gossip.KeyNodeHealthAlertPrefix)
+			nodeID, err := gossip.DecodeNodeDescKey(key, gossip.KeyNodeHealthAlertPrefix)
 			if err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to parse node ID from key %q", key)

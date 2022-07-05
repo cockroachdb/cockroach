@@ -136,7 +136,7 @@ func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscri
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.MakeNodeIDKey(desc.NodeID),
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
-		PatternMatched: gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix),
+		PatternMatched: gossip.MakePrefixPattern(gossip.KeyNodeDescPrefix),
 	}
 }
 

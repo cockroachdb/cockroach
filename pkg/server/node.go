@@ -885,7 +885,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, must
 
 		if result := n.recorder.CheckHealth(ctx, *nodeStatus); len(result.Alerts) != 0 {
 			var numNodes int
-			if err := n.storeCfg.Gossip.IterateInfos(gossip.KeyNodeIDPrefix, func(k string, info gossip.Info) error {
+			if err := n.storeCfg.Gossip.IterateInfos(gossip.KeyNodeDescPrefix, func(k string, info gossip.Info) error {
 				numNodes++
 				return nil
 			}); err != nil {

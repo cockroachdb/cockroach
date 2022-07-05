@@ -218,7 +218,7 @@ func (gossipUtil) hasPeers(expected int) checkGossipFunc {
 	return func(infos map[string]gossip.Info) error {
 		count := 0
 		for k := range infos {
-			if strings.HasPrefix(k, gossip.KeyNodeIDPrefix) {
+			if strings.HasPrefix(k, gossip.KeyNodeDescPrefix) {
 				count++
 			}
 		}
