@@ -92,7 +92,9 @@ func (sc testStreamClient) Subscribe(
 }
 
 // Complete implements the streamclient.Client interface.
-func (sc testStreamClient) Complete(ctx context.Context, streamID streaming.StreamID) error {
+func (sc testStreamClient) Complete(
+	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+) error {
 	return nil
 }
 

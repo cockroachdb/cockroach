@@ -148,8 +148,15 @@ message StreamReplicationProgress {
   // Expiration timestamp of consumer heartbeat
   google.protobuf.Timestamp expiration = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
-  // If the ingestion side has been cut over.
-  bool ingestion_cut_over = 2;
+  enum StreamIngestionStatus {
+    NOT_FINISHED = 0;
+    FINISHED_SUCCESSFULLY = 1;
+    FINISHED_UNSUCCESSFULLY = 2;
+  }
+
+  // Status of the corresponding stream ingestion. The producer job tracks this
+  // to determine its fate.
+  StreamIngestionStatus stream_ingestion_status = 2;
 }
 
 message SchedulePTSChainingRecord {
