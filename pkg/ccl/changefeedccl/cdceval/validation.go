@@ -41,23 +41,23 @@ func NormalizeAndValidateSelectForTarget(
 	target jobspb.ChangefeedTargetSpecification,
 	sc *tree.SelectClause,
 	includeVirtual bool,
-) error {
+) (n NormalizedSelectClause, _ error) {
 	execCtx.SemaCtx()
 	execCfg := execCtx.ExecCfg()
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.EnablePredicateProjectionChangefeed) {
-		return errors.Newf(
+		return n, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
 			clusterversion.EnablePredicateProjectionChangefeed.String())
 	}
 
 	// This really shouldn't happen as it's enforced by sql.y.
 	if len(sc.From.Tables) != 1 {
-		return pgerror.Newf(pgcode.Syntax, "invalid CDC expression: only 1 table supported")
+		return n, pgerror.Newf(pgcode.Syntax, "invalid CDC expression: only 1 table supported")
 	}
 
 	// Sanity check target and descriptor refer to the same table.
 	if target.TableID != desc.GetID() {
-		return errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
+		return n, errors.AssertionFailedf("target table id (%d) does not match descriptor id (%d)",
 			target.TableID, desc.GetID())
 	}
 
@@ -66,19 +66,19 @@ func NormalizeAndValidateSelectForTarget(
 	// associated Txn() -- without which we cannot perform normalization.  Verify
 	// this assumption (txn is needed for type resolution).
 	if execCtx.Txn() == nil {
-		return errors.AssertionFailedf("expected non-nil transaction")
+		return n, errors.AssertionFailedf("expected non-nil transaction")
 	}
 
 	// Perform normalization.
 	var err error
-	sc, err = normalizeSelectClause(ctx, *execCtx.SemaCtx(), sc, desc)
+	normalized, err := normalizeSelectClause(ctx, *execCtx.SemaCtx(), sc, desc)
 	if err != nil {
-		return err
+		return n, err
 	}
 
 	ed, err := newEventDescriptorForTarget(desc, target, schemaTS(execCtx), includeVirtual)
 	if err != nil {
-		return err
+		return n, err
 	}
 
 	evalCtx := &execCtx.ExtendedEvalContext().Context
@@ -88,17 +88,17 @@ func NormalizeAndValidateSelectForTarget(
 	if _, _, err := constrainSpansBySelectClause(
 		ctx, execCtx, evalCtx, execCfg.Codec, sc, ed,
 	); err != nil {
-		return err
+		return n, err
 	}
 
 	// Construct and initialize evaluator.  This performs some static checks,
 	// and (importantly) type checks expressions.
 	evaluator, err := NewEvaluator(evalCtx, sc)
 	if err != nil {
-		return err
+		return n, err
 	}
 
-	return evaluator.initEval(ctx, ed)
+	return normalized, evaluator.initEval(ctx, ed)
 }
 
 func newEventDescriptorForTarget(
@@ -143,6 +143,19 @@ func getTargetFamilyDescriptor(
 	}
 }
 
+// NormalizedSelectClause is a select clause returned by normalizeSelectClause.
+// normalizeSelectClause also modifies the select clause in place, but this
+// marker type is needed so that we can ensure functions that rely on
+// normalized input aren't called out of order.
+type NormalizedSelectClause tree.SelectClause
+
+// Clause returns a pointer to the underlying SelectClause (still in normalized
+// form).
+func (n NormalizedSelectClause) Clause() *tree.SelectClause {
+	sc := tree.SelectClause(n)
+	return &sc
+}
+
 // normalizeSelectClause performs normalization step for select clause.
 // Returns normalized select clause.
 func normalizeSelectClause(
@@ -150,7 +163,7 @@ func normalizeSelectClause(
 	semaCtx tree.SemaContext,
 	sc *tree.SelectClause,
 	desc catalog.TableDescriptor,
-) (normalizedSelectClause *tree.SelectClause, _ error) {
+) (normalizedSelectClause NormalizedSelectClause, _ error) {
 	// Turn FROM clause to table reference.
 	// Note: must specify AliasClause for TableRef expression; otherwise we
 	// won't be able to deserialize string representation (grammar requires
@@ -162,7 +175,7 @@ func normalizeSelectClause(
 	case tree.TablePattern:
 	default:
 		// This is verified by sql.y -- but be safe.
-		return nil, errors.AssertionFailedf("unexpected table expression type %T",
+		return normalizedSelectClause, errors.AssertionFailedf("unexpected table expression type %T",
 			sc.From.Tables[0])
 	}
 
@@ -227,14 +240,14 @@ func normalizeSelectClause(
 	})
 
 	if err != nil {
-		return nil, err
+		return normalizedSelectClause, err
 	}
 	switch t := stmt.(type) {
 	case *tree.SelectClause:
-		normalizedSelectClause = t
+		normalizedSelectClause = NormalizedSelectClause(*t)
 	default:
 		// We walked tree.SelectClause -- getting anything else would be surprising.
-		return nil, errors.AssertionFailedf("unexpected result type %T", stmt)
+		return normalizedSelectClause, errors.AssertionFailedf("unexpected result type %T", stmt)
 	}
 
 	if len(v.OIDs) == 0 {
@@ -250,10 +263,63 @@ func normalizeSelectClause(
 
 	for id := range v.OIDs {
 		if _, isAllowed := allowedOIDs[id]; !isAllowed {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			return normalizedSelectClause, pgerror.Newf(pgcode.FeatureNotSupported,
 				"use of user defined types not referenced by target table is not supported")
 		}
 	}
 
 	return normalizedSelectClause, nil
+}
+
+type checkForPrevVisitor struct {
+	semaCtx   tree.SemaContext
+	foundPrev bool
+}
+
+// VisitPre implements the Visitor interface.
+func (v *checkForPrevVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	if exprRequiresPreviousValue(v.semaCtx, expr) {
+		v.foundPrev = true
+		// no need to keep recursing
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost implements the Visitor interface.
+func (v *checkForPrevVisitor) VisitPost(e tree.Expr) tree.Expr {
+	return e
+}
+
+// exprRequiresPreviousValue returns true if the top-level expression
+// is a function call that cdc implements using the diff from a rangefeed.
+func exprRequiresPreviousValue(semaCtx tree.SemaContext, e tree.Expr) bool {
+	if f, ok := e.(*tree.FuncExpr); ok {
+		var name string
+		switch fn := f.Func.FunctionReference.(type) {
+		case *tree.UnresolvedName:
+			funDef, err := fn.ResolveFunction(semaCtx.SearchPath)
+			if err != nil {
+				return false
+			}
+			name = funDef.Name
+		case *tree.FunctionDefinition:
+			name = fn.Name
+		default:
+			name = f.String()
+		}
+		return name == "cdc_prev"
+	}
+	return false
+}
+
+// SelectClauseRequiresPrev checks whether a changefeed expression will need a row's previous values
+// to be fetched in order to evaluate it.
+func SelectClauseRequiresPrev(semaCtx tree.SemaContext, sc NormalizedSelectClause) (bool, error) {
+	c := checkForPrevVisitor{semaCtx: semaCtx}
+	_, err := tree.SimpleStmtVisit(sc.Clause(), func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		recurse, newExpr = c.VisitPre(expr)
+		return recurse, newExpr, nil
+	})
+	return c.foundPrev, err
 }

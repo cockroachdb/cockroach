@@ -66,7 +66,7 @@ func CreateDeclarativeSchemaChangeJobs(
 			currentState.Statements,
 			!currentState.Revertible, // NonCancelable
 			currentState.Authorization,
-			screl.AllTargetDescIDs(currentState.TargetState).Ordered(),
+			screl.AllTargetDescIDs(currentState.TargetState),
 			runningStatus,
 		))
 	}

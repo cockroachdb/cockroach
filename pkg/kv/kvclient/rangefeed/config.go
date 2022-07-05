@@ -180,9 +180,9 @@ func WithOnSSTable(f OnSSTable) Option {
 }
 
 // OnDeleteRange is called when an MVCC range tombstone is written (e.g. when
-// DeleteRange is called with UseExperimentalRangeTombstone, but not when the
-// range is deleted using point tombstones). If this callback is not provided,
-// an error is emitted when these are encountered.
+// DeleteRange is called with UseRangeTombstone, but not when the range is
+// deleted using point tombstones). If this callback is not provided, an error
+// is emitted when these are encountered.
 //
 // MVCC range tombstones are currently experimental, and requires the
 // MVCCRangeTombstones version gate. They are only expected during certain

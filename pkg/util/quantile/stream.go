@@ -33,6 +33,7 @@ package quantile
 import (
 	"math"
 	"sort"
+	"unsafe"
 )
 
 // Sample holds an observed value and meta information for compression. JSON
@@ -213,6 +214,14 @@ func (s *Stream) Samples() Samples {
 // since initialization.
 func (s *Stream) Count() int {
 	return len(s.b) + s.stream.count()
+}
+
+// ByteSize returns the total amount of memory used by the stream.
+func (s *Stream) ByteSize() int64 {
+	const s1 = int64(unsafe.Sizeof(Stream{}))
+	const s2 = int64(unsafe.Sizeof(stream{}))
+	const s3 = int64(unsafe.Sizeof(Sample{}))
+	return s1 + s2 + s3*int64(len(s.b)+len(s.l))
 }
 
 func (s *Stream) flush() {

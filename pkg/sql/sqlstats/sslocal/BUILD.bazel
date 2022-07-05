@@ -57,6 +57,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/outliers",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/sql/tests",

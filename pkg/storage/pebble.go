@@ -1136,7 +1136,7 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
 	if err := p.db.DeleteRange(startKey, endKey, pebble.Sync); err != nil {
 		return err
 	}
-	return p.ExperimentalClearAllRangeKeys(start, end)
+	return p.ClearAllRangeKeys(start, end)
 }
 
 // ClearMVCCRange implements the Engine interface.
@@ -1162,8 +1162,8 @@ func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	return batch.Commit(true)
 }
 
-// ExperimentalClearMVCCRangeKey implements the Engine interface.
-func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+// ClearMVCCRangeKey implements the Engine interface.
+func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if !p.SupportsRangeKeys() {
 		// These databases cannot contain range keys, so clearing is a noop.
 		return nil
@@ -1178,8 +1178,8 @@ func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		pebble.Sync)
 }
 
-// ExperimentalClearAllRangeKeys implements the Engine interface.
-func (p *Pebble) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
+// ClearAllRangeKeys implements the Engine interface.
+func (p *Pebble) ClearAllRangeKeys(start, end roachpb.Key) error {
 	if !p.SupportsRangeKeys() {
 		return nil // noop
 	}
@@ -1202,8 +1202,8 @@ func (p *Pebble) ExperimentalClearAllRangeKeys(start, end roachpb.Key) error {
 	return p.db.Experimental().RangeKeyDelete(clearFrom, clearTo, pebble.Sync)
 }
 
-// ExperimentalPutMVCCRangeKey implements the Engine interface.
-func (p *Pebble) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+// PutMVCCRangeKey implements the Engine interface.
+func (p *Pebble) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 	if !p.SupportsRangeKeys() {
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
@@ -1283,8 +1283,8 @@ func (p *Pebble) put(key MVCCKey, value []byte) error {
 	return p.db.Set(EncodeMVCCKey(key), value, pebble.Sync)
 }
 
-// ExperimentalPutEngineRangeKey implements the Engine interface.
-func (p *Pebble) ExperimentalPutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
+// PutEngineRangeKey implements the Engine interface.
+func (p *Pebble) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
 	if !p.SupportsRangeKeys() {
 		return errors.Errorf("range keys not supported by Pebble database version %s",
 			p.db.FormatMajorVersion())
@@ -2102,21 +2102,19 @@ func (p *pebbleReadOnly) ClearMVCCIteratorRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
+func (p *pebbleReadOnly) PutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ExperimentalPutEngineRangeKey(
-	roachpb.Key, roachpb.Key, []byte, []byte,
-) error {
+func (p *pebbleReadOnly) PutEngineRangeKey(roachpb.Key, roachpb.Key, []byte, []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ExperimentalClearMVCCRangeKey(MVCCRangeKey) error {
+func (p *pebbleReadOnly) ClearMVCCRangeKey(MVCCRangeKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ExperimentalClearAllRangeKeys(roachpb.Key, roachpb.Key) error {
+func (p *pebbleReadOnly) ClearAllRangeKeys(roachpb.Key, roachpb.Key) error {
 	panic("not implemented")
 }
 

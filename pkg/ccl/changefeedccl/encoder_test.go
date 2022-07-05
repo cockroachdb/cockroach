@@ -76,10 +76,14 @@ func TestEncoders(t *testing.T) {
 			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
 		`format=json,envelope=key_only,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			insert:   `[1]->`,
+			delete:   `[1]->`,
+			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
 		`format=json,envelope=key_only,updated,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			insert:   `[1]->`,
+			delete:   `[1]->`,
+			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
 		`format=json,envelope=row`: {
 			insert:   `[1]->{"a": 1, "b": "bar"}`,
@@ -92,10 +96,14 @@ func TestEncoders(t *testing.T) {
 			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
 		`format=json,envelope=row,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			insert:   `[1]->{"a": 1, "b": "bar"}`,
+			delete:   `[1]->`,
+			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
 		`format=json,envelope=row,updated,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			insert:   `[1]->{"__crdb__": {"updated": "1.0000000002"}, "a": 1, "b": "bar"}`,
+			delete:   `[1]->`,
+			resolved: `{"__crdb__":{"resolved":"1.0000000002"}}`,
 		},
 		`format=json,envelope=wrapped`: {
 			insert:   `[1]->{"after": {"a": 1, "b": "bar"}}`,
@@ -216,6 +224,7 @@ func TestEncoders(t *testing.T) {
 				TableID:           tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
+
 			if len(expected.err) > 0 {
 				require.EqualError(t, o.Validate(), expected.err)
 				return

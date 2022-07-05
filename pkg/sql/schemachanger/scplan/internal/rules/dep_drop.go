@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func isDescriptor(e scpb.Element) bool {
+// IsDescriptor returns true for a descriptor-element, i.e. an element which
+// owns its corresponding descriptor.
+func IsDescriptor(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence, *scpb.AliasType, *scpb.EnumType:
 		return true
@@ -38,7 +40,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 }
 
 func isSimpleDependent(e scpb.Element) bool {
-	return !isDescriptor(e) && !isSubjectTo2VersionInvariant(e)
+	return !IsDescriptor(e) && !isSubjectTo2VersionInvariant(e)
 }
 
 // Assert that elements can be grouped into three categories when transitioning
@@ -53,7 +55,7 @@ func init() {
 		s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)
 		switch s1 {
 		case scpb.Status_DROPPED:
-			if isDescriptor(e) {
+			if IsDescriptor(e) {
 				return nil
 			}
 		case scpb.Status_VALIDATED, scpb.Status_WRITE_ONLY, scpb.Status_DELETE_ONLY:
@@ -67,7 +69,7 @@ func init() {
 		}
 		panic(errors.AssertionFailedf(
 			"unexpected transition %s -> %s in direction ABSENT for %T (descriptor=%v, 2VI=%v)",
-			s0, s1, e, isDescriptor(e), isSubjectTo2VersionInvariant(e),
+			s0, s1, e, IsDescriptor(e), isSubjectTo2VersionInvariant(e),
 		))
 	})
 }
@@ -89,7 +91,7 @@ func init() {
 		"descriptor", "dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, isDescriptor),
+				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSimpleDependent),
 				toAbsent(from.target, to.target),
 				currentStatus(from.node, scpb.Status_DROPPED),
@@ -104,7 +106,7 @@ func init() {
 		"descriptor", "idx-or-col",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, isDescriptor),
+				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSubjectTo2VersionInvariant),
 				toAbsentInAbsent(from.target, from.node, to.target, to.node),
 				joinOnDescID(from.el, to.el, "desc-id"),
@@ -217,7 +219,7 @@ func init() {
 		"referenced-descriptor", "referencing-via-attr",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, isDescriptor),
+				elementTypes(from, IsDescriptor),
 				elementTypes(to, isSimpleDependent),
 				toAbsent(from.target, to.target),
 				currentStatus(from.node, scpb.Status_DROPPED),
@@ -233,7 +235,7 @@ func init() {
 		"referenced-descriptor", "referencing-via-type",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, isDescriptor),
+				elementTypes(from, IsDescriptor),
 				elementTypes(to, func(e scpb.Element) bool {
 					_, err := getTypeT(e)
 					return err == nil && isSimpleDependent(e)
@@ -259,7 +261,7 @@ func init() {
 		"referenced-descriptor", "referencing-via-expr",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				elementTypes(from, isDescriptor),
+				elementTypes(from, IsDescriptor),
 				elementTypes(to, func(e scpb.Element) bool {
 					_, err := getExpression(e)
 					return err == nil && isSimpleDependent(e)

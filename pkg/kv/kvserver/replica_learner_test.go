@@ -1736,7 +1736,7 @@ func getExpectedSnapshotSizeBytes(
 				return 0, err
 			}
 			for _, rkv := range iter.RangeKeys() {
-				err := b.ExperimentalPutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
+				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 				if err != nil {
 					return 0, err
 				}

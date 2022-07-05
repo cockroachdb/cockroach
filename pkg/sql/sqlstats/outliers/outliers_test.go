@@ -36,7 +36,7 @@ func TestOutliers(t *testing.T) {
 	t.Run("detection", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := outliers.New(st)
+		registry := outliers.New(st, outliers.NewMetrics())
 		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
 		registry.ObserveTransaction(sessionID, txnID)
 
@@ -68,7 +68,7 @@ func TestOutliers(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 0)
-		registry := outliers.New(st)
+		registry := outliers.New(st, outliers.NewMetrics())
 		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
 		registry.ObserveTransaction(sessionID, txnID)
 
@@ -85,7 +85,7 @@ func TestOutliers(t *testing.T) {
 	t.Run("too fast", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := outliers.New(st)
+		registry := outliers.New(st, outliers.NewMetrics())
 		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 0.5)
 		registry.ObserveTransaction(sessionID, txnID)
 
@@ -107,7 +107,7 @@ func TestOutliers(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := outliers.New(st)
+		registry := outliers.New(st, outliers.NewMetrics())
 		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
 		registry.ObserveStatement(otherSessionID, otherStmtID, otherStmtFptID, 3)
 		registry.ObserveTransaction(sessionID, txnID)

@@ -48,10 +48,6 @@ func makeJSONEncoder(
 	e.updatedField = opts.UpdatedTimestamps
 	e.mvccTimestampField = opts.MVCCTimestamps
 	e.beforeField = opts.Diff
-	if e.beforeField && !e.wrapped {
-		return nil, errors.Errorf(`%s is only usable with %s=%s`,
-			changefeedbase.OptDiff, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
-	}
 	e.keyInValue = opts.KeyInValue
 	if e.keyInValue && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,

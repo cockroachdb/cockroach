@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -95,6 +96,27 @@ to trust the certificate presented by CockroachDB.`)
 	}
 }
 
+// We define our own copy of this struct that also exists in
+// pkg/server/authentication.go because we don't want to import that
+// package. This struct is used to define a null OIDC configuration for
+// the UI Config. DB Console uses information present here to show
+// different login UI when OIDC is present.
+type noOIDCConfigured struct{}
+
+var _ ui.OIDCUI = &noOIDCConfigured{}
+
+// GetOIDCConf implements the `ui.OIDCUI` interface with a configuration
+// that disables OIDC login options for the UI server.
+func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
+	return ui.OIDCUIConf{
+		Enabled: false,
+	}
+}
+
+// CRDBProxyPaths is the list of path prefixes that are proxied to the
+// underlying CRDB cluster.
+var CRDBProxyPaths = []string{"/_admin/", "/_status/", "/ts/", "/api/v2/"}
+
 // RunAsync runs an HTTP proxy server in a goroutine. The returned channel is
 // closed when the server terminates.
 //
@@ -122,7 +144,21 @@ func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
 		// Create the HTTP mux. Requests will generally be forwarded to p.proxy,
 		// except the /debug/pprof ones which will be served locally.
 		mux := http.NewServeMux()
-		mux.Handle("/", p.proxy)
+		// TODO(davidh): Ideally, the UI handler should probably be
+		// configured in `obsservice` and not hardcoded into `obslib`. This
+		// gives lib users a chance to do whatever they want with the UI.
+		mux.Handle("/", ui.Handler(ui.Config{
+			ExperimentalUseLogin: false,
+			LoginEnabled:         false,
+			GetUser: func(ctx context.Context) *string {
+				u := "Observability Service"
+				return &u
+			},
+			OIDC: &noOIDCConfigured{},
+		}))
+		for _, path := range CRDBProxyPaths {
+			mux.Handle(path, p.proxy)
+		}
 		// This seems to be the minimal set of handlers that we need to register in
 		// order to get all the pprof functionality. The pprof.Index handler handles
 		// some types of profiles itself.

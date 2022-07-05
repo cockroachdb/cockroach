@@ -679,59 +679,46 @@ type Writer interface {
 	// after it returns.
 	ClearMVCCIteratorRange(start, end roachpb.Key) error
 
-	// ExperimentalClearAllRangeKeys deletes all range keys (and all versions)
-	// from start (inclusive) to end (exclusive). This can be used both for MVCC
-	// range keys or the more general engine range keys. For any range key that
-	// straddles the start and end boundaries, only the segments within the
-	// boundaries will be cleared. Clears are idempotent.
+	// ClearAllRangeKeys deletes all range keys (and all versions) from start
+	// (inclusive) to end (exclusive). This can be used both for MVCC range keys
+	// or the more general engine range keys. For any range key that straddles the
+	// start and end boundaries, only the segments within the boundaries will be
+	// cleared. Clears are idempotent.
 	//
 	// This method is primarily intended for MVCC garbage collection and similar
 	// internal use. It will do an internal scan across the span first to check
 	// whether it contains any range keys at all, and clear the smallest single
 	// span that covers all range keys (if any), to avoid dropping Pebble range
 	// tombstones across unnecessary spans.
-	//
-	// This method is EXPERIMENTAL: range keys are under active development, and
-	// have severe limitations including being ignored by all KV and MVCC APIs and
-	// only being stored in memory.
-	ExperimentalClearAllRangeKeys(start, end roachpb.Key) error
+	ClearAllRangeKeys(start, end roachpb.Key) error
 
-	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
-	// (inclusive) to end (exclusive) at the given timestamp. For any range key
-	// that straddles the start and end boundaries, only the segments within the
-	// boundaries will be cleared. Range keys at other timestamps are unaffected.
-	// Clears are idempotent.
+	// ClearMVCCRangeKey deletes an MVCC range key from start (inclusive) to end
+	// (exclusive) at the given timestamp. For any range key that straddles the
+	// start and end boundaries, only the segments within the boundaries will be
+	// cleared. Range keys at other timestamps are unaffected.  Clears are
+	// idempotent.
 	//
 	// This method is primarily intended for MVCC garbage collection and similar
 	// internal use.
-	//
-	// This method is EXPERIMENTAL: range keys are under active development, and
-	// have severe limitations including being ignored by all KV and MVCC APIs and
-	// only being stored in memory.
-	ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
+	ClearMVCCRangeKey(rangeKey MVCCRangeKey) error
 
-	// ExperimentalPutMVCCRangeKey writes an MVCC range key. It will replace any
-	// overlapping range keys at the given timestamp (even partial overlap). Only
-	// MVCC range tombstones, i.e. an empty value, are currently allowed (other
-	// kinds will need additional handling in MVCC APIs and elsewhere, e.g. stats
-	// and GC).
+	// PutMVCCRangeKey writes an MVCC range key. It will replace any overlapping
+	// range keys at the given timestamp (even partial overlap). Only MVCC range
+	// tombstones, i.e. an empty value, are currently allowed (other kinds will
+	// need additional handling in MVCC APIs and elsewhere, e.g. stats and GC).
 	//
 	// Range keys must be accessed using special iterator options and methods,
 	// see SimpleMVCCIterator.RangeKeys() for details.
 	//
 	// TODO(erikgrinaker): Write a tech note on range keys and link it here.
-	//
-	// This method is EXPERIMENTAL: range keys are under active development, and
-	// have severe limitations including being ignored by all KV and MVCC APIs and
-	// only being stored in memory.
-	ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
+	PutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
 
-	// ExperimentalPutEngineRangeKey sets the given range key to the values
-	// provided. This is a general-purpose and low-level method that should be
-	// used sparingly, only when the other Put* methods are not applicable.
+	// PutEngineRangeKey sets the given range key to the values provided. This is
+	// a general-purpose and low-level method that should be used sparingly, only
+	// when the other Put* methods are not applicable.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ExperimentalPutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error
+	PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
@@ -1249,8 +1236,8 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 	}
 
 	// Use a separate iterator to look for any range keys, to avoid dropping
-	// unnecessary range keys. Pebble.ExperimentalClearAllRangeKeys also checks
-	// this, but we may be writing to an SSTWriter here which can't know.
+	// unnecessary range keys. Pebble.ClearAllRangeKeys also checks this, but we
+	// may be writing to an SSTWriter here which can't know.
 	//
 	// TODO(erikgrinaker): Review the engine clear methods and heuristics to come
 	// up with a better scheme for avoiding dropping unnecessary range tombstones
@@ -1267,7 +1254,7 @@ func ClearRangeWithHeuristic(reader Reader, writer Writer, start, end roachpb.Ke
 		return err
 	}
 	if valid {
-		return writer.ExperimentalClearAllRangeKeys(start, end)
+		return writer.ClearAllRangeKeys(start, end)
 	}
 	return nil
 }

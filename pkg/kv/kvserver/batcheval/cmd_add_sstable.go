@@ -424,7 +424,7 @@ func EvalAddSSTable(
 				if err != nil {
 					return result.Result{}, err
 				}
-				if err = readWriter.ExperimentalPutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
+				if err = readWriter.PutMVCCRangeKey(rkv.RangeKey, mvccValue); err != nil {
 					return result.Result{}, err
 				}
 				if sstToReqTS.IsSet() {

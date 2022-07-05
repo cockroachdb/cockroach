@@ -902,8 +902,7 @@ func cmdClearRange(e *evalCtx) error {
 func cmdClearRangeKey(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
-	return e.engine.ExperimentalClearMVCCRangeKey(
-		MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+	return e.engine.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
 }
 
 func cmdCPut(e *evalCtx) error {
@@ -1013,7 +1012,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, 0)
+		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, 0)
 	})
 }
 
@@ -1280,7 +1279,7 @@ func cmdPutRangeKey(e *evalCtx) error {
 	value.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
 	return e.withWriter("put_rangekey", func(rw ReadWriter) error {
-		return rw.ExperimentalPutMVCCRangeKey(rangeKey, value)
+		return rw.PutMVCCRangeKey(rangeKey, value)
 	})
 }
 
@@ -1479,7 +1478,7 @@ func cmdSSTPutRangeKey(e *evalCtx) error {
 	var value MVCCValue
 	value.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp(e.getTsWithName("localTs"))
 
-	return e.sst().ExperimentalPutMVCCRangeKey(rangeKey, value)
+	return e.sst().PutMVCCRangeKey(rangeKey, value)
 }
 
 func cmdSSTClearRange(e *evalCtx) error {
@@ -1492,7 +1491,7 @@ func cmdSSTClearRangeKey(e *evalCtx) error {
 	rangeKey.StartKey, rangeKey.EndKey = e.getKeyRange()
 	rangeKey.Timestamp = e.getTs(nil)
 
-	return e.sst().ExperimentalClearMVCCRangeKey(rangeKey)
+	return e.sst().ClearMVCCRangeKey(rangeKey)
 }
 
 func cmdSSTFinish(e *evalCtx) error {
