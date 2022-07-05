@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -92,6 +92,8 @@ func TestMapToUniqueUnorderedID(t *testing.T) {
 func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
+		"assumes large N")
 	params := base.TestServerArgs{}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -108,10 +110,6 @@ CREATE TABLE t (
 )`)
 
 	numberOfRows := 10000
-	if util.RaceEnabled {
-		// We use a small number of rows because inserting rows under race is slow.
-		numberOfRows = 100
-	}
 
 	// Enforce 3 bits worth of range splits in the high order to collect range
 	// statistics after row insertions.
@@ -136,13 +134,13 @@ INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
 	// chi-square goodness of fit statistic. We'll set our null hypothesis as
 	// 'each range in the distribution should have the same probability of getting
 	// a row inserted' and we'll check if we can reject the null hypothesis if
-	// chi-square is greater than the critical value we currently set as 19.5114,
+	// chi-square is greater than the critical value we currently set as 35.2585,
 	// a deliberate choice that gives us a p-value of 0.00001 according to
 	// https://www.fourmilab.ch/rpkp/experiments/analysis/chiCalc.html. If we are
 	// able to reject the null hypothesis, then the distribution is not uniform,
-	// and we raise an error.
+	// and we raise an error. This test has 7 degrees of freedom (categories - 1).
 	chiSquared := discreteUniformChiSquared(keyCounts)
-	criticalValue := 19.5114
+	criticalValue := 35.2585
 	require.Lessf(t, chiSquared, criticalValue, "chiSquared value of %f must be"+
 		" less than criticalVal %f to guarantee distribution is relatively uniform",
 		chiSquared, criticalValue)
