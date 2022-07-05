@@ -781,6 +781,9 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 func (u *sqlSymUnion) asTenantClause() tree.TenantID {
     return u.val.(tree.TenantID)
 }
+func (u *sqlSymUnion) columnItem() *tree.ColumnItem {
+    return u.val.(*tree.ColumnItem)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1257,6 +1260,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.ObjectNamePrefixList> schema_wildcard
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
+%type <*tree.ColumnItem> comment_on_column_path
 %type <tree.TableExpr> insert_target create_stats_target analyze_target
 
 %type <*tree.TableIndexName> table_index_name
@@ -3724,18 +3728,9 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnTable{Table: $4.unresolvedObjectName(), Comment: $6.strPtr()}
   }
-| COMMENT ON COLUMN column_path IS comment_text
+| COMMENT ON COLUMN comment_on_column_path IS comment_text
   {
-    varName, err := $4.unresolvedName().NormalizeVarName()
-    if err != nil {
-      return setErr(sqllex, err)
-    }
-    columnItem, ok := varName.(*tree.ColumnItem)
-    if !ok {
-      sqllex.Error(fmt.Sprintf("invalid column name: %q", tree.ErrString($4.unresolvedName())))
-            return 1
-    }
-    $$.val = &tree.CommentOnColumn{ColumnItem: columnItem, Comment: $6.strPtr()}
+    $$.val = &tree.CommentOnColumn{ColumnItem: $4.columnItem(), Comment: $6.strPtr()}
   }
 | COMMENT ON INDEX table_index_name IS comment_text
   {
@@ -3748,6 +3743,24 @@ comment_stmt:
   }
 | COMMENT ON EXTENSION error { return unimplementedWithIssueDetail(sqllex, 74777, "comment on extension") }
 | COMMENT ON FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "comment on function") }
+
+comment_on_column_path:
+  column_path
+  {
+    varName, err := $1.unresolvedName().NormalizeVarName()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    columnItem, ok := varName.(*tree.ColumnItem)
+    if !ok {
+      sqllex.Error(fmt.Sprintf("invalid column name: %q", tree.ErrString($1.unresolvedName())))
+            return 1
+    }
+    if columnItem.TableName == nil {
+      return setErr(sqllex, errors.New("column name must be qualified"))
+    }
+    $$.val = columnItem
+  }
 
 comment_text:
   SCONST

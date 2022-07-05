@@ -60,7 +60,7 @@ comment_stmt ::=
 	'COMMENT' 'ON' 'DATABASE' database_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'SCHEMA' qualifiable_schema_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'TABLE' table_name 'IS' comment_text
-	| 'COMMENT' 'ON' 'COLUMN' column_path 'IS' comment_text
+	| 'COMMENT' 'ON' 'COLUMN' comment_on_column_path 'IS' comment_text
 	| 'COMMENT' 'ON' 'INDEX' table_index_name 'IS' comment_text
 	| 'COMMENT' 'ON' 'CONSTRAINT' constraint_name 'ON' table_name 'IS' comment_text
 
@@ -306,9 +306,8 @@ qualifiable_schema_name ::=
 	name
 	| name '.' name
 
-column_path ::=
-	name
-	| prefixed_column_path
+comment_on_column_path ::=
+	column_path
 
 table_index_name ::=
 	table_name '@' index_name
@@ -900,10 +899,9 @@ copy_options_list ::=
 where_clause ::=
 	'WHERE' a_expr
 
-prefixed_column_path ::=
-	db_object_name_component '.' unrestricted_name
-	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
-	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
+column_path ::=
+	name
+	| prefixed_column_path
 
 index_name ::=
 	unrestricted_name
@@ -1868,10 +1866,10 @@ copy_options ::=
 	| 'NULL' string_or_placeholder
 	| 'HEADER'
 
-db_object_name_component ::=
-	name
-	| type_func_name_crdb_extra_keyword
-	| cockroachdb_extra_reserved_keyword
+prefixed_column_path ::=
+	db_object_name_component '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
 
 unrestricted_name ::=
 	'identifier'
@@ -1879,6 +1877,11 @@ unrestricted_name ::=
 	| col_name_keyword
 	| type_func_name_keyword
 	| reserved_keyword
+
+db_object_name_component ::=
+	name
+	| type_func_name_crdb_extra_keyword
+	| cockroachdb_extra_reserved_keyword
 
 type_name ::=
 	db_object_name
@@ -2409,13 +2412,6 @@ table_ref ::=
 	| 'LATERAL' func_table opt_ordinality opt_alias_clause
 	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
 
-type_func_name_crdb_extra_keyword ::=
-	'FAMILY'
-
-cockroachdb_extra_reserved_keyword ::=
-	'INDEX'
-	| 'NOTHING'
-
 type_func_name_keyword ::=
 	type_func_name_no_crdb_extra_keyword
 	| type_func_name_crdb_extra_keyword
@@ -2501,6 +2497,13 @@ reserved_keyword ::=
 	| 'WINDOW'
 	| 'WITH'
 	| cockroachdb_extra_reserved_keyword
+
+type_func_name_crdb_extra_keyword ::=
+	'FAMILY'
+
+cockroachdb_extra_reserved_keyword ::=
+	'INDEX'
+	| 'NOTHING'
 
 simple_typename ::=
 	general_type_name
