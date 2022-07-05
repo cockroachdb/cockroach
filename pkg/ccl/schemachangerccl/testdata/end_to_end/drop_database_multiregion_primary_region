@@ -227,6 +227,9 @@ upsert descriptor #105
   +    - ABSENT
   +    - DROPPED
   +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -241,6 +244,9 @@ upsert descriptor #105
   +    - 19
   +    - 20
   +    - 21
+  +    - 22
+  +    - 23
+  +    - 24
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -291,6 +297,33 @@ upsert descriptor #105
   +        enumType:
   +          arrayTypeId: 107
   +          isMultiRegion: true
+  +          typeId: 105
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        enumTypeValue:
+  +          logicalRepresentation: us-east1
+  +          physicalRepresentation: QA==
+  +          typeId: 105
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        enumTypeValue:
+  +          logicalRepresentation: us-east2
+  +          physicalRepresentation: gA==
+  +          typeId: 105
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        enumTypeValue:
+  +          logicalRepresentation: us-east3
+  +          physicalRepresentation: wA==
   +          typeId: 105
   +      metadata:
   +        sourceElementId: 3
@@ -432,13 +465,13 @@ upsert descriptor #107
   +        statement: DROP DATABASE multi_region_test_db CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 22
-  +    - 23
-  +    - 24
   +    - 25
   +    - 26
   +    - 27
   +    - 28
+  +    - 29
+  +    - 30
+  +    - 31
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -556,9 +589,6 @@ upsert descriptor #108
   +        statement: DROP DATABASE multi_region_test_db CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 29
-  +    - 30
-  +    - 31
   +    - 32
   +    - 33
   +    - 34
@@ -576,6 +606,9 @@ upsert descriptor #108
   +    - 46
   +    - 47
   +    - 48
+  +    - 49
+  +    - 50
+  +    - 51
   +    targets:
   +    - elementProto:
   +        namespace:
@@ -830,9 +863,6 @@ upsert descriptor #108
   -        statement: DROP DATABASE multi_region_test_db CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 29
-  -    - 30
-  -    - 31
   -    - 32
   -    - 33
   -    - 34
@@ -850,6 +880,9 @@ upsert descriptor #108
   -    - 46
   -    - 47
   -    - 48
+  -    - 49
+  -    - 50
+  -    - 51
   -    targets:
   -    - elementProto:
   -        namespace:
