@@ -73,8 +73,10 @@ type ReplicationStreamManager interface {
 	) (*streampb.ReplicationStreamSpec, error)
 
 	// CompleteReplicationStream completes a replication stream job on the producer side.
+	// 'successfulIngestion' indicates whether the stream ingestion finished successfully and
+	// determines the fate of the producer job, succeeded or canceled.
 	CompleteReplicationStream(
-		evalCtx *eval.Context, txn *kv.Txn, streamID StreamID,
+		evalCtx *eval.Context, txn *kv.Txn, streamID StreamID, successfulIngestion bool,
 	) error
 }
 

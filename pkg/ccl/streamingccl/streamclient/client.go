@@ -85,7 +85,7 @@ type Client interface {
 	Close(ctx context.Context) error
 
 	// Complete completes a replication stream consumption.
-	Complete(ctx context.Context, streamID streaming.StreamID) error
+	Complete(ctx context.Context, streamID streaming.StreamID, successfulIngestion bool) error
 }
 
 // Topology is a configuration of stream partitions. These are particular to a
