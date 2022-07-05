@@ -16,6 +16,9 @@ configure_make(
     configure_in_place = True,
     configure_options = [
         "--enable-prof",
+	# use autoconf escape hatch to disable MADV_FREE
+        # (see https://github.com/cockroachdb/cockroach/issues/83790)
+	"-C", "--cache-file=./config.cache",
     ] + select({
         "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
         "@io_bazel_rules_go//go/platform:darwin_amd64": ["--host=x86_64-apple-darwin21.2"],
