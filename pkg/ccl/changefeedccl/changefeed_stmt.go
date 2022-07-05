@@ -754,7 +754,12 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 		}
 
-		if !changefeedbase.IsRetryableError(err) {
+		// Retry changefeed is error is retryable.  In addition, we want to handle
+		// context cancellation as retryable, but only if the resumer context has not been canceled.
+		// (resumer context is canceled by the jobs framework -- so we should respect it).
+		isRetryableErr := changefeedbase.IsRetryableError(err) ||
+			(ctx.Err() == nil && errors.Is(err, context.Canceled))
+		if !isRetryableErr {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
