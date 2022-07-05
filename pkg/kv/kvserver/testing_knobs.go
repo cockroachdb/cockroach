@@ -416,6 +416,10 @@ type StoreTestingKnobs struct {
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
 
+	// This method, if set, gets to see (and mutate, if desired) any local
+	// StoreDescriptor before it is being sent out on the Gossip network.
+	StoreGossipIntercept func(descriptor *roachpb.StoreDescriptor)
+
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -720,6 +721,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return unquiesceAndWakeLeader, nil
 	})
 	r.mu.applyingEntries = len(rd.CommittedEntries) > 0
+	pausedFollowers := r.mu.pausedFollowers
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
@@ -911,7 +913,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
-	r.sendRaftMessagesRaftMuLocked(ctx, msgApps)
+	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
@@ -1032,7 +1034,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
-	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs)
+	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs, nil /* blocked */)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
 	stats.tApplicationBegin = timeutil.Now()
@@ -1154,9 +1156,13 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 	}
 }
 
-// tick the Raft group, returning true if the raft group exists and is
-// unquiesced; false otherwise.
-func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (bool, error) {
+// tick the Raft group, returning true if the raft group exists and should
+// be queued for Ready processing; false otherwise.
+func (r *Replica) tick(
+	ctx context.Context,
+	livenessMap liveness.IsLiveMap,
+	ioOverloadMap map[roachpb.StoreID]*admissionpb.IOThreshold,
+) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -1180,6 +1186,54 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 		return false, nil
 	}
 
+	if r.replicaID == r.mu.leaderID && len(ioOverloadMap) > 0 && quotaPoolEnabledForRange(*r.descRLocked()) {
+		// When multiple followers are overloaded, we may not be able to exclude all
+		// of them from replication traffic due to quorum constraints. We would like
+		// a given Range to deterministically exclude the same store (chosen
+		// randomly), so that across multiple Ranges we have a chance of removing
+		// load from all overloaded Stores in the cluster. (It would be a bad idea
+		// to roll a per-Range dice here on every tick, since that would rapidly
+		// include and exclude individual followers from replication traffic, which
+		// would be akin to a high rate of packet loss. Once we've decided to ignore
+		// a follower, this decision should be somewhat stable for at least a few
+		// seconds).
+		//
+		// Note that we don't enable this mechanism for the liveness range (see
+		// quotaPoolEnabledForRange), simply to play it safe, as we know that the
+		// liveness range is unlikely to be a major contributor to any follower's
+		// I/O and wish to reduce the likelihood of a problem in replication pausing
+		// contributing to an outage of that critical range.
+		seed := int64(r.RangeID)
+		now := r.store.Clock().Now().GoTime()
+		d := computeExpendableOverloadedFollowersInput{
+			replDescs:     r.descRLocked().Replicas(),
+			ioOverloadMap: ioOverloadMap,
+			getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
+				prs := r.mu.internalRaftGroup.Status().Progress
+				updateRaftProgressFromActivity(ctx, prs, r.descRLocked().Replicas().AsProto(), func(id roachpb.ReplicaID) bool {
+					return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, id, now, r.store.cfg.RangeLeaseActiveDuration())
+				})
+				return prs
+			},
+			minLiveMatchIndex: r.mu.proposalQuotaBaseIndex,
+			seed:              seed,
+		}
+		r.mu.pausedFollowers, _ = computeExpendableOverloadedFollowers(ctx, d)
+		for replicaID := range r.mu.pausedFollowers {
+			// We're dropping messages to those followers (see handleRaftReady) but
+			// it's a good idea to tell raft not to even bother sending in the first
+			// place. Raft will react to this by moving the follower to probing state
+			// where it will be contacted only sporadically until it responds to an
+			// MsgApp (which it can only do once we stop dropping messages). Something
+			// similar would result naturally if we didn't report as unreachable, but
+			// with more wasted work.
+			r.mu.internalRaftGroup.ReportUnreachable(uint64(replicaID))
+		}
+	} else if len(r.mu.pausedFollowers) > 0 {
+		// No store in the cluster is overloaded, or this replica is not raft leader.
+		r.mu.pausedFollowers = nil
+	}
+
 	now := r.store.Clock().NowAsClockTimestamp()
 	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, now, livenessMap) {
 		return false, nil
@@ -1191,6 +1245,14 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	// into the local Raft group. The leader won't hit that path, so we update
 	// it whenever it ticks. In effect, this makes sure it always sees itself as
 	// alive.
+	//
+	// Note that in a workload where the leader doesn't have inflight requests
+	// "most of the time" (i.e. occasional writes only on this range), it's quite
+	// likely that we'll never reach this line, since we'll return in the
+	// maybeQuiesceRaftMuLockedReplicaMuLocked branch above.
+	//
+	// This is likely unintentional, and the leader should likely consider itself
+	// live even when quiesced.
 	if r.replicaID == r.mu.leaderID {
 		r.mu.lastUpdateTimes.update(r.replicaID, timeutil.Now())
 	}
@@ -1444,10 +1506,12 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	return true
 }
 
-func (r *Replica) sendRaftMessagesRaftMuLocked(ctx context.Context, messages []raftpb.Message) {
+func (r *Replica) sendRaftMessagesRaftMuLocked(
+	ctx context.Context, messages []raftpb.Message, blocked map[roachpb.ReplicaID]struct{},
+) {
 	var lastAppResp raftpb.Message
 	for _, message := range messages {
-		drop := false
+		_, drop := blocked[roachpb.ReplicaID(message.To)]
 		switch message.Type {
 		case raftpb.MsgApp:
 			if util.RaceEnabled {
@@ -1511,6 +1575,9 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(ctx context.Context, messages []r
 			}
 		}
 
+		// TODO(tbg): record this to metrics.
+		//
+		// See: https://github.com/cockroachdb/cockroach/issues/83917
 		if !drop {
 			r.sendRaftMessageRaftMuLocked(ctx, message)
 		}

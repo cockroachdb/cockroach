@@ -144,6 +144,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// cannot correspond to values beyond the applied index there's no reason
 	// to consider progress beyond it as meaningful.
 	minIndex := status.Applied
+
 	r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, progress tracker.Progress) {
 		rep, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(id))
 		if !ok {
@@ -205,6 +206,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		// index. This prevents a follower from coming back online and
 		// preventing throughput to the range until it has caught up.
 		if progress.Match < r.mu.proposalQuotaBaseIndex {
+			return
+		}
+		if _, paused := r.mu.pausedFollowers[roachpb.ReplicaID(id)]; paused {
+			// We are dropping MsgApp to this store, so we are effectively treating
+			// it as non-live for the purpose of replication and are letting it fall
+			// behind intentionally.
+			//
+			// See #79215.
 			return
 		}
 		if progress.Match > 0 && progress.Match < minIndex {
