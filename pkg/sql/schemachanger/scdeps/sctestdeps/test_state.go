@@ -92,6 +92,7 @@ func NewTestDependencies(options ...Option) *TestState {
 	for _, o := range options {
 		o.apply(&s)
 	}
+	s.zoneConfigs = make(map[descpb.ID]*zonepb.ZoneConfig)
 	return &s
 }
 

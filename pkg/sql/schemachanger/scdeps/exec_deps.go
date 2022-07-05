@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -79,6 +80,7 @@ func NewExecutorDependencies(
 			indexValidator:     indexValidator,
 			eventLogger:        eventLogger,
 			statsRefresher:     statsRefresher,
+			zoneConfigReader:   NewZoneConfigReader(txn, codec),
 			schemaChangerJobID: schemaChangerJobID,
 			kvTrace:            kvTrace,
 		},
@@ -106,6 +108,7 @@ type txnDeps struct {
 	tableStatsToRefresh []descpb.ID
 	eventLogger         scexec.EventLogger
 	deletedDescriptors  catalog.DescriptorIDSet
+	zoneConfigReader    scmutationexec.ZoneConfigReader
 	schemaChangerJobID  jobspb.JobID
 	kvTrace             bool
 }
@@ -465,6 +468,10 @@ func (d *execDeps) IncrementSchemaChangeErrorType(typ string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeErrorCounter(typ))
 }
 
+func (d *execDeps) ZoneConfigReader() scmutationexec.ZoneConfigReader {
+	return d.zoneConfigReader
+}
+
 // NewNoOpBackfillerTracker constructs a backfill tracker which does not do
 // anything. It will always return progress for a given backfill which
 // contains a full set of CompletedSpans corresponding to the source index
@@ -549,4 +556,35 @@ func NewConstantClock(ts time.Time) scmutationexec.Clock {
 
 func (c constantClock) ApproximateTime() time.Time {
 	return c.ts
+}
+
+type zoneConfigReader struct {
+	txn   *kv.Txn
+	codec keys.SQLCodec
+}
+
+// NewZoneConfigReader constructs a new zone config reader for execution.
+func NewZoneConfigReader(txn *kv.Txn, codec keys.SQLCodec) scmutationexec.ZoneConfigReader {
+	return &zoneConfigReader{
+		txn:   txn,
+		codec: codec,
+	}
+}
+
+// GetZoneConfigRaw reads the zone config the system table.
+func (zc *zoneConfigReader) GetZoneConfig(
+	ctx context.Context, id descpb.ID,
+) (*zonepb.ZoneConfig, error) {
+	kv, err := zc.txn.Get(ctx, config.MakeZoneKey(zc.codec, id))
+	if err != nil {
+		return nil, err
+	}
+	if kv.Value == nil {
+		return nil, nil
+	}
+	var zone zonepb.ZoneConfig
+	if err := kv.ValueProto(&zone); err != nil {
+		return nil, err
+	}
+	return &zone, nil
 }

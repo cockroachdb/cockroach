@@ -556,6 +556,13 @@ func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64)
 	return nil
 }
 
+// SetZoneConfig implements scexec.DescriptorMetadataUpdater
+func (noopMetadataUpdater) SetZoneConfig(
+	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
+) error {
+	return nil
+}
+
 // DeleteZoneConfig implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteZoneConfig(
 	ctx context.Context, id descpb.ID,

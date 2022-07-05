@@ -83,7 +83,13 @@ func runDecomposeTest(
 			m[element] = status
 		}
 		testDeps := sctestdeps.NewTestDependencies(sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)))
-		backRefs := scdecomp.WalkDescriptor(ctx, desc, allDescs.LookupDescriptorEntry, visitor, testDeps, testDeps)
+		backRefs := scdecomp.WalkDescriptor(ctx,
+			desc,
+			allDescs.LookupDescriptorEntry,
+			visitor,
+			testDeps, /*commentCache*/
+			testDeps, /*zoneConfigReader*/
+		)
 		return marshalResult(t, m, backRefs)
 
 	default:

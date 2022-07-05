@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -93,13 +94,6 @@ func alterTableAddColumn(
 	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
-	}
-	{
-		tableElts := b.QueryByID(tbl.TableID)
-		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(d,
-				"regional by row partitioning is not supported"))
-		}
 	}
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx())
 	if err != nil {
@@ -213,9 +207,14 @@ func alterTableAddColumn(
 	}
 	// Add secondary indexes for this column.
 	var primaryIdx *scpb.PrimaryIndex
+	var indexIDsForZoneConfig []catid.IndexID
 
 	if newPrimary := addColumn(b, spec); newPrimary != nil {
 		primaryIdx = newPrimary
+		indexIDsForZoneConfig = append(indexIDsForZoneConfig, newPrimary.IndexID)
+		if newPrimary.TemporaryIndexID != 0 {
+			indexIDsForZoneConfig = append(indexIDsForZoneConfig, newPrimary.TemporaryIndexID)
+		}
 	} else {
 		publicTargets := b.QueryByID(tbl.TableID).Filter(
 			func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
@@ -232,8 +231,35 @@ func alterTableAddColumn(
 				idx.KeyColumnIDs = append(idx.KeyColumnIDs, namesToIDs[colName])
 			}
 		}
-		addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
+		secondaryIndexIDs := addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
+		indexIDsForZoneConfig = append(indexIDsForZoneConfig, secondaryIndexIDs...)
 	}
+	{
+		tableElts := b.QueryByID(tbl.TableID)
+		_, _, tblNS := scpb.FindNamespace(tableElts)
+		if _, _, elem := scpb.FindTableLocalityRegionalByRow(tableElts); elem != nil {
+			_, _, currentZoneConfigElem := scpb.FindTableZoneConfig(tableElts)
+			// Create a new zone config element, if one doesn't exist.
+			if currentZoneConfigElem == nil {
+				currentZoneConfigElem = &scpb.TableZoneConfig{
+					TableID:      tbl.TableID,
+					ZoneConfigID: b.NextZoneConfigID(tbl),
+				}
+				b.Add(currentZoneConfigElem)
+			}
+			for _, indexID := range indexIDsForZoneConfig {
+				for _, region := range getRegionNames(b, tblNS.DatabaseID) {
+					b.Add(&scpb.TableSubZoneConfig{
+						TableID:       tbl.TableID,
+						IndexID:       indexID,
+						ZoneConfigID:  currentZoneConfigElem.ZoneConfigID,
+						PartitionName: string(region),
+					})
+				}
+			}
+		}
+	}
+
 	switch spec.colType.Type.Family() {
 	case types.EnumFamily:
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)
@@ -413,6 +439,15 @@ func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
 	if existingName != nil {
 		b.Drop(existingName)
 	}
+	if _, _, elem := scpb.FindTableLocalityRegionalByRow(publicTargets); elem != nil {
+		// Clean up the index zone config.
+		scpb.ForEachTableSubZoneConfig(publicTargets, func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableSubZoneConfig) {
+			if current == scpb.Status_PUBLIC && e.IndexID == existing.IndexID {
+				b.Drop(e)
+			}
+		})
+	}
+
 	// Create the new primary index element and its dependents.
 	replacement := protoutil.Clone(existing).(*scpb.PrimaryIndex)
 	replacement.IndexID = b.NextTableIndexID(spec.tbl)
@@ -581,7 +616,7 @@ func getIndexColumns(
 
 func addSecondaryIndexTargetsForAddColumn(
 	b BuildCtx, tbl *scpb.Table, desc *descpb.IndexDescriptor, newPrimaryIdx *scpb.PrimaryIndex,
-) {
+) []catid.IndexID {
 	var partitioning *catpb.PartitioningDescriptor
 	index := scpb.Index{
 		TableID:       tbl.TableID,
@@ -731,4 +766,5 @@ func addSecondaryIndexTargetsForAddColumn(
 			PartitioningDescriptor: *protoutil.Clone(partitioning).(*catpb.PartitioningDescriptor),
 		})
 	}
+	return []catid.IndexID{temp.IndexID, index.IndexID}
 }

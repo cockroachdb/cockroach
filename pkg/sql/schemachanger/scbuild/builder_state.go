@@ -173,6 +173,18 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)
 
+// NextZoneConfigID implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) NextZoneConfigID(table *scpb.Table) uint32 {
+	tblElts := b.QueryByID(table.TableID)
+	zoneConfigID := uint32(0)
+	scpb.ForEachTableZoneConfig(tblElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableZoneConfig) {
+		if e.ZoneConfigID > zoneConfigID {
+			zoneConfigID = e.ZoneConfigID
+		}
+	})
+	return zoneConfigID + 1
+}
+
 // NextTableColumnID implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID) {
 	{

@@ -55,12 +55,13 @@ func Build(
 		return scpb.CurrentState{}, err
 	}
 	b := buildCtx{
-		Context:              ctx,
-		Dependencies:         dependencies,
-		BuilderState:         bs,
-		EventLogState:        els,
-		TreeAnnotator:        an,
-		SchemaFeatureChecker: dependencies.FeatureChecker(),
+		Context:                  ctx,
+		Dependencies:             dependencies,
+		BuilderState:             bs,
+		EventLogState:            els,
+		TreeAnnotator:            an,
+		EnterpriseFeatureChecker: dependencies.EnterpriseFeatureChecker(),
+		SchemaFeatureChecker:     dependencies.FeatureChecker(),
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -113,6 +114,13 @@ type (
 	// ZoneConfigReader supports reading raw zone config information
 	// from storage.
 	ZoneConfigReader = scdecomp.ZoneConfigReader
+
+	// EnterpriseFeatureChecker checks if an enterprise license is
+	// setup.
+	EnterpriseFeatureChecker = scbuildstmt.EnterpriseFeatureChecker
+
+	// SettingsReader reads cluster settings.
+	SettingsReader = scbuildstmt.SettingsReader
 )
 
 type elementState struct {
@@ -133,7 +141,7 @@ type builderState struct {
 	tr               TableReader
 	auth             AuthorizationAccessor
 	commentCache     CommentCache
-	zoneConfigReader scdecomp.ZoneConfigReader
+	zoneConfigReader ZoneConfigReader
 	createPartCCL    CreatePartitioningCCLCallback
 	hasAdmin         bool
 
@@ -250,6 +258,7 @@ type buildCtx struct {
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
+	scbuildstmt.EnterpriseFeatureChecker
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}

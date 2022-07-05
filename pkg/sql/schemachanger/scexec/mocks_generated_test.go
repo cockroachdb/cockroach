@@ -10,6 +10,7 @@ import (
 
 	username "github.com/cockroachdb/cockroach/pkg/security/username"
 	catalog "github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	scdecomp "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	scexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	scmutationexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	catid "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -348,6 +349,20 @@ func (m *MockDependencies) User() username.SQLUsername {
 func (mr *MockDependenciesMockRecorder) User() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "User", reflect.TypeOf((*MockDependencies)(nil).User))
+}
+
+// ZoneConfigReader mocks base method.
+func (m *MockDependencies) ZoneConfigReader() scdecomp.ZoneConfigReader {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ZoneConfigReader")
+	ret0, _ := ret[0].(scdecomp.ZoneConfigReader)
+	return ret0
+}
+
+// ZoneConfigReader indicates an expected call of ZoneConfigReader.
+func (mr *MockDependenciesMockRecorder) ZoneConfigReader() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ZoneConfigReader", reflect.TypeOf((*MockDependencies)(nil).ZoneConfigReader))
 }
 
 // MockBackfiller is a mock of Backfiller interface.

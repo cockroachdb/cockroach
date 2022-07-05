@@ -1121,3 +1121,13 @@ func (s *TestState) GetTestingKnobs() *scexec.TestingKnobs {
 func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 	s.LogSideEffectf("adding table for stats refresh: %d", id)
 }
+
+// EnterpriseFeatureChecker implements scexec.Dependencies.
+func (s *TestState) EnterpriseFeatureChecker() scbuild.EnterpriseFeatureChecker {
+	return s
+}
+
+// CheckEnterpriseEnabled implements scbuild.EnterpriseFeatureChecker.
+func (s *TestState) CheckEnterpriseEnabled(feature string) error {
+	return nil
+}

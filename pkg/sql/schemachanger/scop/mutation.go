@@ -572,3 +572,19 @@ type RemoveColumnFromIndex struct {
 	Kind     scpb.IndexColumn_Kind
 	Ordinal  uint32
 }
+
+// AddSubZoneConfig adds a sub zone into the zone config.
+type AddSubZoneConfig struct {
+	mutationOp
+	DescriptorID  descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+}
+
+// RemoveSubZoneConfig removes a sub zone from the zone config.
+type RemoveSubZoneConfig struct {
+	mutationOp
+	DescriptorID  descpb.ID
+	IndexID       descpb.IndexID
+	PartitionName string
+}

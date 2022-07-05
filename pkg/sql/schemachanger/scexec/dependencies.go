@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,6 +44,7 @@ type Dependencies interface {
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
 	Telemetry() Telemetry
+	ZoneConfigReader() scdecomp.ZoneConfigReader
 
 	// Statements returns the statements behind this schema change.
 	Statements() []string
