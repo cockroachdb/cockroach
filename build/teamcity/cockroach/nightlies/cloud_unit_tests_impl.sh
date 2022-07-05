@@ -18,7 +18,7 @@ export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
 exit_status=0
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/cloud/gcp:gcp_test -- \
+    test //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test -- \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
@@ -29,6 +29,13 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
     --test_env=GOOGLE_KMS_KEY_NAME="$GOOGLE_KMS_KEY_NAME" \
     --test_env=GOOGLE_LIMITED_KEY_ID="$GOOGLE_LIMITED_KEY_ID" \
     --test_env=ASSUME_SERVICE_ACCOUNT="$ASSUME_SERVICE_ACCOUNT" \
+    --test_env=AWS_S3_BUCKET="$AWS_S3_BUCKET" \
+    --test_env=AWS_ASSUME_ROLE="$AWS_ASSUME_ROLE" \
+    --test_env=AWS_INTERMEDIATE_ROLE_ARN="$AWS_INTERMEDIATE_ROLE_ARN" \
+    --test_env=AWS_KMS_KEY_ARN="$AWS_KMS_KEY_ARN" \
+    --test_env=AWS_KMS_REGION="$AWS_KMS_REGION" \
+    --test_env=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+    --test_env=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
     --test_timeout=60 \
     || exit_status=$?
 
