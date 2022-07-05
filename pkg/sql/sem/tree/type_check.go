@@ -1335,6 +1335,16 @@ func (expr *NullIfExpr) TypeCheck(
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
 	}
+	leftType := typedSubExprs[0].ResolvedType()
+	rightType := typedSubExprs[1].ResolvedType()
+	_, ok := CmpOps[treecmp.EQ].LookupImpl(leftType, rightType)
+	if !ok {
+		op := treecmp.ComparisonOperator{Symbol: treecmp.EQ}
+		err = pgerror.Newf(
+			pgcode.UndefinedFunction, "unsupported comparison operator: <%s> %s <%s>",
+			leftType, op, rightType)
+		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
+	}
 
 	expr.Expr1, expr.Expr2 = typedSubExprs[0], typedSubExprs[1]
 	expr.typ = retType
@@ -1916,15 +1926,6 @@ func typeCheckAndRequire(
 		return nil, err
 	}
 	if typ := typedExpr.ResolvedType(); !(typ.Family() == types.UnknownFamily || typ.Equivalent(required)) {
-		// A void literal is output as an empty string (see DVoid.Format), so type
-		// annotation of an empty string as VOID ('':::VOID) should succeed.
-		if required.Family() == types.VoidFamily && typ.Family() == types.StringFamily {
-			if str, ok := expr.(*StrVal); ok {
-				if str.s == "" {
-					return DVoidDatum, nil
-				}
-			}
-		}
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil

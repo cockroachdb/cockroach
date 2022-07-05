@@ -519,6 +519,7 @@ var (
 		types.VarBitArray,
 		types.AnyTuple,
 		types.AnyTupleArray,
+		types.Void,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
 	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String, types.AnyEnum}
