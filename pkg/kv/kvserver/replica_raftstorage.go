@@ -746,11 +746,11 @@ func clearRangeData(
 	rangeIDLocalOnly bool,
 	mustClearRange bool,
 ) error {
-	var keyRanges []rditer.KeyRange
+	var spans []roachpb.Span
 	if rangeIDLocalOnly {
-		keyRanges = []rditer.KeyRange{rditer.MakeRangeIDLocalKeyRange(desc.RangeID, false)}
+		spans = []roachpb.Span{keys.MakeRangeIDLocalRangeSpan(desc.RangeID, false)}
 	} else {
-		keyRanges = rditer.MakeAllKeyRanges(desc)
+		spans = keys.MakeRangeSpans(desc)
 	}
 	var clearRangeFn func(storage.Reader, storage.Writer, roachpb.Key, roachpb.Key) error
 	if mustClearRange {
@@ -761,8 +761,8 @@ func clearRangeData(
 		clearRangeFn = storage.ClearRangeWithHeuristic
 	}
 
-	for _, keyRange := range keyRanges {
-		if err := clearRangeFn(reader, writer, keyRange.Start, keyRange.End); err != nil {
+	for _, span := range spans {
+		if err := clearRangeFn(reader, writer, span.Key, span.EndKey); err != nil {
 			return err
 		}
 	}
@@ -1092,11 +1092,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
-	// NB: we don't clear RangeID local key ranges here. That happens
-	// via the call to preDestroyRaftMuLocked.
-	getKeyRanges := rditer.MakeReplicatedKeyRangesExceptRangeID
-	keyRanges := getKeyRanges(desc)
-	totalKeyRanges := append([]rditer.KeyRange(nil), keyRanges...)
+	// NB: we don't clear RangeID local key spans here. That happens via the call
+	// to preDestroyRaftMuLocked.
+	getSpans := keys.MakeReplicatedRangeSpansExceptRangeID
+	spans := getSpans(desc)
+	totalSpans := append([]roachpb.Span(nil), spans...)
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -1140,15 +1140,15 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			}
 		}
 
-		srKeyRanges := getKeyRanges(sr.Desc())
+		srSpans := getSpans(sr.Desc())
 		// Compute the total key space covered by the current replica and all
 		// subsumed replicas.
-		for i := range srKeyRanges {
-			if srKeyRanges[i].Start.Compare(totalKeyRanges[i].Start) < 0 {
-				totalKeyRanges[i].Start = srKeyRanges[i].Start
+		for i := range srSpans {
+			if srSpans[i].Key.Compare(totalSpans[i].Key) < 0 {
+				totalSpans[i].Key = srSpans[i].Key
 			}
-			if srKeyRanges[i].End.Compare(totalKeyRanges[i].End) > 0 {
-				totalKeyRanges[i].End = srKeyRanges[i].End
+			if srSpans[i].EndKey.Compare(totalSpans[i].EndKey) > 0 {
+				totalSpans[i].EndKey = srSpans[i].EndKey
 			}
 		}
 	}
@@ -1166,8 +1166,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// Since the merge is the first operation to happen, a follower could be down
 	// before it completes. It is reasonable for a snapshot for r1 from S3 to
 	// subsume both r1 and r2 in S1.
-	for i := range keyRanges {
-		if totalKeyRanges[i].End.Compare(keyRanges[i].End) > 0 {
+	for i := range spans {
+		if totalSpans[i].EndKey.Compare(spans[i].EndKey) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
 				ctx, r.ClusterSettings(), subsumedReplSSTFile,
@@ -1176,8 +1176,8 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
 				&subsumedReplSST,
-				keyRanges[i].End,
-				totalKeyRanges[i].End,
+				spans[i].EndKey,
+				totalSpans[i].EndKey,
 			); err != nil {
 				subsumedReplSST.Close()
 				return err
@@ -1199,9 +1199,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// Extending to the left implies that either we merged "to the left" (we
 		// don't), or that we're applying a snapshot for another range (we don't do
 		// that either). Something is severely wrong for this to happen.
-		if totalKeyRanges[i].Start.Compare(keyRanges[i].Start) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key range: %v; total key range %v",
-				keyRanges[i], totalKeyRanges[i])
+		if totalSpans[i].Key.Compare(spans[i].Key) < 0 {
+			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
+				spans[i], totalSpans[i])
 		}
 	}
 	return nil

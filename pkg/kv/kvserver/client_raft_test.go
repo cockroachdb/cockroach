@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -5831,8 +5830,8 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, desc := range descs {
-		for _, keyRange := range rditer.MakeReplicatedKeyRanges(&desc) {
-			prefix := append(keyRange.Start.Clone(), ':')
+		for _, span := range keys.MakeReplicatedRangeSpans(&desc) {
+			prefix := append(span.Key.Clone(), ':')
 			require.NoError(t, engine.PutMVCCRangeKey(storage.MVCCRangeKey{
 				StartKey:  append(prefix.Clone(), 'a'),
 				EndKey:    append(prefix.Clone(), 'z'),
@@ -5863,17 +5862,17 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 	for _, srvIdx := range []int{1, 2} {
 		e := tc.GetFirstStoreFromServer(t, srvIdx).Engine()
 		for _, desc := range descs {
-			for _, keyRange := range rditer.MakeReplicatedKeyRanges(&desc) {
-				prefix := append(keyRange.Start.Clone(), ':')
+			for _, span := range keys.MakeReplicatedRangeSpans(&desc) {
+				prefix := append(span.Key.Clone(), ':')
 
 				iter := e.NewEngineIterator(storage.IterOptions{
 					KeyTypes:   storage.IterKeyTypeRangesOnly,
-					LowerBound: keyRange.Start,
-					UpperBound: keyRange.End,
+					LowerBound: span.Key,
+					UpperBound: span.EndKey,
 				})
 				defer iter.Close()
 
-				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: keyRange.Start})
+				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
 				require.NoError(t, err)
 				require.True(t, ok)
 				bounds, err := iter.EngineRangeBounds()

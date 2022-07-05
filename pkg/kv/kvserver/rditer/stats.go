@@ -11,6 +11,7 @@
 package rditer
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -24,17 +25,17 @@ func ComputeStatsForRange(
 ) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
 	var err error
-	for _, keyRange := range MakeReplicatedKeyRangesExceptLockTable(d) {
+	for _, span := range keys.MakeReplicatedRangeSpansExceptLockTable(d) {
 		func() {
 			iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: keyRange.Start,
-				UpperBound: keyRange.End,
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
 			})
 			defer iter.Close()
 
 			var msDelta enginepb.MVCCStats
-			if msDelta, err = iter.ComputeStats(keyRange.Start, keyRange.End, nowNanos); err != nil {
+			if msDelta, err = iter.ComputeStats(span.Key, span.EndKey, nowNanos); err != nil {
 				return
 			}
 			ms.Add(msDelta)

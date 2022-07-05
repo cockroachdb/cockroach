@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -142,11 +141,11 @@ type kvBatchSnapshotStrategy struct {
 // multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
 // that handles chunking SSTs and persisting them to disk.
 type multiSSTWriter struct {
-	st        *cluster.Settings
-	scratch   *SSTSnapshotStorageScratch
-	currSST   storage.SSTWriter
-	keyRanges []rditer.KeyRange
-	currRange int
+	st       *cluster.Settings
+	scratch  *SSTSnapshotStorageScratch
+	currSST  storage.SSTWriter
+	spans    []roachpb.Span
+	currSpan int
 	// The approximate size of the SST chunk to buffer in memory on the receiver
 	// before flushing to disk.
 	sstChunkSize int64
@@ -158,13 +157,13 @@ func newMultiSSTWriter(
 	ctx context.Context,
 	st *cluster.Settings,
 	scratch *SSTSnapshotStorageScratch,
-	keyRanges []rditer.KeyRange,
+	spans []roachpb.Span,
 	sstChunkSize int64,
 ) (multiSSTWriter, error) {
 	msstw := multiSSTWriter{
 		st:           st,
 		scratch:      scratch,
-		keyRanges:    keyRanges,
+		spans:        spans,
 		sstChunkSize: sstChunkSize,
 	}
 	if err := msstw.initSST(ctx); err != nil {
@@ -181,7 +180,7 @@ func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
 	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
 	msstw.currSST = newSST
 	if err := msstw.currSST.ClearRawRange(
-		msstw.keyRanges[msstw.currRange].Start, msstw.keyRanges[msstw.currRange].End); err != nil {
+		msstw.spans[msstw.currSpan].Key, msstw.spans[msstw.currSpan].EndKey); err != nil {
 		msstw.currSST.Close()
 		return errors.Wrap(err, "failed to clear range on sst file writer")
 	}
@@ -194,13 +193,13 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 		return errors.Wrap(err, "failed to finish sst")
 	}
 	msstw.dataSize += msstw.currSST.DataSize
-	msstw.currRange++
+	msstw.currSpan++
 	msstw.currSST.Close()
 	return nil
 }
 
 func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
-	for msstw.keyRanges[msstw.currRange].End.Compare(key.Key) <= 0 {
+	for msstw.spans[msstw.currSpan].EndKey.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -210,8 +209,8 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 			return err
 		}
 	}
-	if msstw.keyRanges[msstw.currRange].Start.Compare(key.Key) > 0 {
-		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keyRanges)
+	if msstw.spans[msstw.currSpan].Key.Compare(key.Key) > 0 {
+		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.spans)
 	}
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
@@ -225,7 +224,7 @@ func (msstw *multiSSTWriter) PutRangeKey(
 	if start.Compare(end) >= 0 {
 		return errors.AssertionFailedf("start key %s must be before end key %s", end, start)
 	}
-	for msstw.keyRanges[msstw.currRange].End.Compare(start) <= 0 {
+	for msstw.spans[msstw.currSpan].EndKey.Compare(start) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
 		if err := msstw.finalizeSST(ctx); err != nil {
@@ -235,10 +234,10 @@ func (msstw *multiSSTWriter) PutRangeKey(
 			return err
 		}
 	}
-	if msstw.keyRanges[msstw.currRange].Start.Compare(start) > 0 ||
-		msstw.keyRanges[msstw.currRange].End.Compare(end) < 0 {
+	if msstw.spans[msstw.currSpan].Key.Compare(start) > 0 ||
+		msstw.spans[msstw.currSpan].EndKey.Compare(end) < 0 {
 		return errors.AssertionFailedf("client error: expected %s to fall in one of %s",
-			roachpb.Span{Key: start, EndKey: end}, msstw.keyRanges)
+			roachpb.Span{Key: start, EndKey: end}, msstw.spans)
 	}
 	if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
 		return errors.Wrap(err, "failed to put range key in sst")
@@ -247,12 +246,12 @@ func (msstw *multiSSTWriter) PutRangeKey(
 }
 
 func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
-	if msstw.currRange < len(msstw.keyRanges) {
+	if msstw.currSpan < len(msstw.spans) {
 		for {
 			if err := msstw.finalizeSST(ctx); err != nil {
 				return 0, err
 			}
-			if msstw.currRange >= len(msstw.keyRanges) {
+			if msstw.currSpan >= len(msstw.spans) {
 				break
 			}
 			if err := msstw.initSST(ctx); err != nil {
@@ -294,8 +293,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
-	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
+	spans := keys.MakeReplicatedRangeSpans(header.State.Desc)
+	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, spans, kvSS.sstChunkSize)
 	if err != nil {
 		return noSnap, err
 	}
