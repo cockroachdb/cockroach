@@ -613,7 +613,7 @@ func (tc *TestCluster) WaitForNStores(t testing.TB, n int, g *gossip.Gossip) {
 	stores := map[roachpb.StoreID]struct{}{}
 	storesDone := make(chan error)
 	storesDoneOnce := storesDone
-	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
+	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, content roachpb.Value) {
 			storesMu.Lock()
 			defer storesMu.Unlock()
