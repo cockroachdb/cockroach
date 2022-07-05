@@ -38,6 +38,7 @@ CREATE TABLE everything (
   f75   FLOAT4,
   j     JSON,
   bit0  INT8,
+  bit1  BOOL,
   bit32 INT8,
   CONSTRAINT imported_from_enum_e CHECK (e IN ('Small':::STRING, 'Medium':::STRING, 'Large':::STRING))
 )
