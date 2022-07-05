@@ -72,3 +72,8 @@ func (d DescriptorIDSet) Ordered() []descpb.ID {
 func (d *DescriptorIDSet) Remove(id descpb.ID) {
 	d.set.Remove(int(id))
 }
+
+// Difference returns the elements of d that are not in o as a new set.
+func (d DescriptorIDSet) Difference(o DescriptorIDSet) DescriptorIDSet {
+	return DescriptorIDSet{set: d.set.Difference(o.set)}
+}
