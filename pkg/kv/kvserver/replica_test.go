@@ -7082,27 +7082,24 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	}()
 
-	iter := rditer.NewReplicaEngineDataIterator(tc.repl.Desc(), tc.repl.store.Engine(),
+	engSnapshot := tc.repl.store.Engine().NewSnapshot()
+	defer engSnapshot.Close()
+
+	iter := rditer.NewReplicaEngineDataIterator(tc.repl.Desc(), engSnapshot,
 		false /* replicatedOnly */)
 	defer iter.Close()
-	if ok, err := iter.Valid(); err != nil {
-		t.Fatal(err)
-	} else if ok {
-		// If the range is destroyed, only a tombstone key should be there.
-		k1 := iter.UnsafeKey().Key
-		if tombstoneKey := keys.RangeTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
-			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
-		}
+	ok, err := iter.SeekStart()
+	require.NoError(t, err)
+	require.True(t, ok, "expected a tombstone key, but iterator was empty")
 
-		iter.Next()
-		if ok, err := iter.Valid(); err != nil {
-			t.Fatal(err)
-		} else if ok {
-			t.Errorf("expected a destroyed replica to have only a tombstone key, but found more")
-		}
-	} else {
-		t.Errorf("expected a tombstone key, but got an empty iteration")
-	}
+	// If the range is destroyed, only a tombstone key should be there.
+	k1, err := iter.UnsafeKey()
+	require.NoError(t, err)
+	require.Equal(t, keys.RangeTombstoneKey(tc.repl.RangeID), k1.Key)
+
+	ok, err = iter.Next()
+	require.NoError(t, err)
+	require.False(t, ok, "expected destroyed replica to only have a tombstone key, but found more")
 }
 
 // TestQuotaPoolReleasedOnFailedProposal tests that the quota acquired by

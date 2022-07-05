@@ -213,7 +213,11 @@ func (fw *SSTWriter) ExperimentalClearAllRangeKeys(start roachpb.Key, end roachp
 func (fw *SSTWriter) ExperimentalPutEngineRangeKey(
 	start, end roachpb.Key, suffix, value []byte,
 ) error {
-	panic("not implemented")
+	// MVCC values don't account for the timestamp, so we don't account
+	// for the suffix here.
+	fw.DataSize += int64(len(start)) + int64(len(end)) + int64(len(value))
+	return fw.fw.RangeKeySet(
+		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value)
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble

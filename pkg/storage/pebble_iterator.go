@@ -670,7 +670,7 @@ func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
 	rangeKVs := make([]MVCCRangeKeyValue, 0, len(rangeKeys))
 
 	for _, rangeKey := range rangeKeys {
-		timestamp, err := decodeMVCCTimestampSuffix(rangeKey.Suffix)
+		timestamp, err := DecodeMVCCTimestampSuffix(rangeKey.Suffix)
 		if err != nil {
 			// TODO(erikgrinaker): We should surface this error somehow, but for now
 			// we follow UnsafeKey()'s example and silently skip them.

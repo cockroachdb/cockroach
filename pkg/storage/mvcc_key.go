@@ -344,9 +344,9 @@ func decodeMVCCTimestamp(encodedTS []byte) (hlc.Timestamp, error) {
 	return ts, nil
 }
 
-// decodeMVCCTimestampSuffix decodes an MVCC timestamp from its Pebble representation,
+// DecodeMVCCTimestampSuffix decodes an MVCC timestamp from its Pebble representation,
 // including the length suffix.
-func decodeMVCCTimestampSuffix(encodedTS []byte) (hlc.Timestamp, error) {
+func DecodeMVCCTimestampSuffix(encodedTS []byte) (hlc.Timestamp, error) {
 	if len(encodedTS) == 0 {
 		return hlc.Timestamp{}, nil
 	}
