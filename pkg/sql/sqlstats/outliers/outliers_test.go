@@ -29,29 +29,26 @@ func TestOutliers(t *testing.T) {
 	ctx := context.Background()
 
 	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	session := &outliers.Session{ID: sessionID.GetBytes()}
 	txnID := uuid.FastMakeV4()
-	stmtID := clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
-	stmtFptID := roachpb.StmtFingerprintID(100)
+	transaction := &outliers.Transaction{ID: &txnID}
+	statement := &outliers.Statement{
+		ID:               []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+		FingerprintID:    roachpb.StmtFingerprintID(100),
+		LatencyInSeconds: 2,
+	}
 
 	t.Run("detection", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := outliers.New(st, outliers.NewMetrics())
-		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
-		registry.ObserveTransaction(sessionID, txnID)
+		registry.ObserveStatement(sessionID, statement)
+		registry.ObserveTransaction(sessionID, transaction)
 
 		expected := []*outliers.Outlier{{
-			Session: &outliers.Session{
-				ID: sessionID.GetBytes(),
-			},
-			Transaction: &outliers.Transaction{
-				ID: &txnID,
-			},
-			Statement: &outliers.Statement{
-				ID:               stmtID.GetBytes(),
-				FingerprintID:    stmtFptID,
-				LatencyInSeconds: 2,
-			},
+			Session:     session,
+			Transaction: transaction,
+			Statement:   statement,
 		}}
 		var actual []*outliers.Outlier
 
@@ -69,8 +66,8 @@ func TestOutliers(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 0)
 		registry := outliers.New(st, outliers.NewMetrics())
-		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
-		registry.ObserveTransaction(sessionID, txnID)
+		registry.ObserveStatement(sessionID, statement)
+		registry.ObserveTransaction(sessionID, transaction)
 
 		var actual []*outliers.Outlier
 		registry.IterateOutliers(
@@ -85,9 +82,14 @@ func TestOutliers(t *testing.T) {
 	t.Run("too fast", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
+		statement2 := &outliers.Statement{
+			ID:               []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+			FingerprintID:    roachpb.StmtFingerprintID(100),
+			LatencyInSeconds: 0.5,
+		}
 		registry := outliers.New(st, outliers.NewMetrics())
-		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 0.5)
-		registry.ObserveTransaction(sessionID, txnID)
+		registry.ObserveStatement(sessionID, statement2)
+		registry.ObserveTransaction(sessionID, transaction)
 
 		var actual []*outliers.Outlier
 		registry.IterateOutliers(
@@ -101,42 +103,33 @@ func TestOutliers(t *testing.T) {
 
 	t.Run("buffering statements per session", func(t *testing.T) {
 		otherSessionID := clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))
+		otherSession := &outliers.Session{
+			ID: otherSessionID.GetBytes(),
+		}
 		otherTxnID := uuid.FastMakeV4()
-		otherStmtID := clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd"))
-		otherStmtFptID := roachpb.StmtFingerprintID(101)
+		otherTransaction := &outliers.Transaction{ID: &otherTxnID}
+		otherStatement := &outliers.Statement{
+			ID:               []byte("dddddddddddddddddddddddddddddddd"),
+			FingerprintID:    roachpb.StmtFingerprintID(101),
+			LatencyInSeconds: 3,
+		}
 
 		st := cluster.MakeTestingClusterSettings()
 		outliers.LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
 		registry := outliers.New(st, outliers.NewMetrics())
-		registry.ObserveStatement(sessionID, stmtID, stmtFptID, 2)
-		registry.ObserveStatement(otherSessionID, otherStmtID, otherStmtFptID, 3)
-		registry.ObserveTransaction(sessionID, txnID)
-		registry.ObserveTransaction(otherSessionID, otherTxnID)
+		registry.ObserveStatement(sessionID, statement)
+		registry.ObserveStatement(otherSessionID, otherStatement)
+		registry.ObserveTransaction(sessionID, transaction)
+		registry.ObserveTransaction(otherSessionID, otherTransaction)
 
 		expected := []*outliers.Outlier{{
-			Session: &outliers.Session{
-				ID: sessionID.GetBytes(),
-			},
-			Transaction: &outliers.Transaction{
-				ID: &txnID,
-			},
-			Statement: &outliers.Statement{
-				ID:               stmtID.GetBytes(),
-				FingerprintID:    stmtFptID,
-				LatencyInSeconds: 2,
-			},
+			Session:     session,
+			Transaction: transaction,
+			Statement:   statement,
 		}, {
-			Session: &outliers.Session{
-				ID: otherSessionID.GetBytes(),
-			},
-			Transaction: &outliers.Transaction{
-				ID: &otherTxnID,
-			},
-			Statement: &outliers.Statement{
-				ID:               otherStmtID.GetBytes(),
-				FingerprintID:    otherStmtFptID,
-				LatencyInSeconds: 3,
-			},
+			Session:     otherSession,
+			Transaction: otherTransaction,
+			Statement:   otherStatement,
 		}}
 		var actual []*outliers.Outlier
 		registry.IterateOutliers(

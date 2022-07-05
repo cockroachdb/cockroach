@@ -14,12 +14,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	prometheus "github.com/prometheus/client_model/go"
 )
 
@@ -129,15 +127,10 @@ type Reader interface {
 // exposes the set of currently retained outliers.
 type Registry interface {
 	// ObserveStatement notifies the registry of a statement execution.
-	ObserveStatement(
-		sessionID clusterunique.ID,
-		statementID clusterunique.ID,
-		statementFingerprintID roachpb.StmtFingerprintID,
-		latencyInSeconds float64,
-	)
+	ObserveStatement(sessionID clusterunique.ID, statement *Statement)
 
 	// ObserveTransaction notifies the registry of the end of a transaction.
-	ObserveTransaction(sessionID clusterunique.ID, txnID uuid.UUID)
+	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
 
 	Reader
 }
