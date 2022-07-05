@@ -122,7 +122,7 @@ oprules
   from: dep-node
   query:
     - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
-    - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges']
+    - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.EnumTypeValue']
     - joinOnDescID($desc, $dep, $desc-id)
     - joinTarget($desc, $desc-target)
     - toAbsent($desc-target, $dep-target)

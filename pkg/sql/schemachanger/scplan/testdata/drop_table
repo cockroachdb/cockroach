@@ -38,7 +38,7 @@ StatementPhase stage 1 of 1 with 23 MutationType ops
     [[Table:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109, Comment: shipment is important}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: tracking_number, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -828,7 +828,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT]
+  to:   [ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -1073,7 +1073,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 114}, ABSENT], PUBLIC] -> DROPPED
     [[ObjectParent:{DescID: 114, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnFamily:{DescID: 114, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 114, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 114, Name: x, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT

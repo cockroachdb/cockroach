@@ -210,10 +210,7 @@ func (b *storeReplicaBTree) descendLessOrEqual(
 		err = visitor(ctx, itemToReplicaOrPlaceholder(it))
 		return err == nil // more?
 	})
-	if iterutil.Done(err) {
-		return nil
-	}
-	return err
+	return iterutil.Map(err)
 }
 
 func (b *storeReplicaBTree) ascendRange(
@@ -226,10 +223,7 @@ func (b *storeReplicaBTree) ascendRange(
 		err = visitor(ctx, itemToReplicaOrPlaceholder(it))
 		return err == nil // more
 	})
-	if iterutil.Done(err) {
-		return nil
-	}
-	return err
+	return iterutil.Map(err)
 }
 
 func (b *storeReplicaBTree) bt() *btree.BTree {

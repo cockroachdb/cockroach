@@ -1345,10 +1345,7 @@ func iterateOnReader(
 			break
 		}
 		if err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
