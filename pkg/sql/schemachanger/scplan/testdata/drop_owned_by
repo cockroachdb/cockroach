@@ -42,7 +42,7 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -78,7 +78,7 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnFamily:{DescID: 108, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -123,6 +123,7 @@ StatementPhase stage 1 of 1 with 34 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[EnumType:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
+    [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[ObjectParent:{DescID: 111, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT

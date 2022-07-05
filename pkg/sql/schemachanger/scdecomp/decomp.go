@@ -173,6 +173,13 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 			ArrayTypeID:   typ.GetArrayTypeID(),
 			IsMultiRegion: typ.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM,
 		})
+		for ord := 0; ord < typ.NumEnumMembers(); ord++ {
+			w.ev(descriptorStatus(typ), &scpb.EnumTypeValue{
+				TypeID:                 typ.GetID(),
+				PhysicalRepresentation: typ.GetMemberPhysicalRepresentation(ord),
+				LogicalRepresentation:  typ.GetMemberLogicalRepresentation(ord),
+			})
+		}
 	default:
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}
