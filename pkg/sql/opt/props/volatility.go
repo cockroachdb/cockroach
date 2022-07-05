@@ -28,7 +28,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 // The optimizer makes *only* the following side-effect related guarantees:
 //
 //   1. CASE/IF branches are only evaluated if the branch condition is true or
-//      if all operators are LeakProof. Therefore, the following is guaranteed
+//      if all operators are Leakproof. Therefore, the following is guaranteed
 //      to never raise a divide by zero error, regardless of how cleverly the
 //      optimizer rewrites the expression:
 //
@@ -110,10 +110,10 @@ func (vs *VolatilitySet) UnionWith(other VolatilitySet) {
 	*vs = *vs | other
 }
 
-// IsLeakProof returns true if the set is empty or only contains
-// LeakProof.
-func (vs VolatilitySet) IsLeakProof() bool {
-	return vs == 0 || vs == volatilityBit(volatility.LeakProof)
+// IsLeakproof returns true if the set is empty or only contains
+// Leakproof.
+func (vs VolatilitySet) IsLeakproof() bool {
+	return vs == 0 || vs == volatilityBit(volatility.Leakproof)
 }
 
 // HasStable returns true if the set contains Stable.
@@ -127,12 +127,12 @@ func (vs VolatilitySet) HasVolatile() bool {
 }
 
 func (vs VolatilitySet) String() string {
-	// The only properties we care about are IsLeakProof(), HasStable() and
+	// The only properties we care about are IsLeakproof(), HasStable() and
 	// HasVolatile(). We print one of the strings below:
 	//
-	//    String            | IsLeakProof | HasStable | HasVolatile
+	//    String            | IsLeakproof | HasStable | HasVolatile
 	//   -------------------+-------------+-----------+-------------
-	//    "leak-proof"      | true        | false     | false
+	//    "leakproof"       | true        | false     | false
 	//    "immutable"       | false       | false     | false
 	//    "stable"          | false       | true      | false
 	//    "volatile"        | false       | false     | true
@@ -140,8 +140,8 @@ func (vs VolatilitySet) String() string {
 	//
 	// These are the only valid combinations for these properties.
 	//
-	if vs.IsLeakProof() {
-		return "leak-proof"
+	if vs.IsLeakproof() {
+		return "leakproof"
 	}
 	hasStable := vs.HasStable()
 	hasVolatile := vs.HasVolatile()
