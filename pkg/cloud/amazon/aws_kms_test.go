@@ -66,7 +66,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	// Get AWS Key identifier from env variable.
 	keyID := os.Getenv("AWS_KMS_KEY_ARN")
 	if keyID == "" {
-		skip.IgnoreLint(t, fmt.Sprintf("AWS_KMS_KEY_ARN env var must be set"))
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 	}
 
 	t.Run("auth-empty-no-cred", func(t *testing.T) {

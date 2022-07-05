@@ -164,6 +164,23 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
 	})
+
+	t.Run("auth-assume-role-chaining", func(t *testing.T) {
+		intermediateAccount := os.Getenv("GOOGLE_INTERMEDIATE_SERVICE_ACCOUNT")
+		if intermediateAccount == "" {
+			skip.IgnoreLint(t, "GOOGLE_INTERMEDIATE_SERVICE_ACCOUNT env var must be set")
+		}
+
+		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(CredentialsParam, encodedCredentials)
+		q.Set(AssumeRoleParam, intermediateAccount)
+		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s", keyID, q.Encode()), testEnv)
+
+		q.Set(AssumeRoleParam, fmt.Sprintf("%s,%s", intermediateAccount, assumedAccount))
+		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("gs:///%s?%s", keyID, q.Encode()), testEnv)
+	})
 }
 
 func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
