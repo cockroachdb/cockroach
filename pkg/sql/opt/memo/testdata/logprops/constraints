@@ -1032,6 +1032,29 @@ select
                      ├── const: 1 [type=int]
                      └── const: 2 [type=int]
 
+# Regression test for #77364. Constraints should be built when an IN expression
+# is normalized from = ANY.
+opt
+SELECT * FROM a WHERE (x, y) = ANY(ARRAY[(1, 10), (2, 20)])
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── scan a
+ │    ├── columns: x:1(int) y:2(int)
+ │    └── prune: (1,2)
+ └── filters
+      └── in [type=bool, outer=(1,2), constraints=(/1/2: [/1/10 - /1/10] [/2/20 - /2/20]; /2: [/10 - /10] [/20 - /20]; tight)]
+           ├── tuple [type=tuple{int, int}]
+           │    ├── variable: x:1 [type=int]
+           │    └── variable: y:2 [type=int]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 10 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 2 [type=int]
+                     └── const: 20 [type=int]
+
 # Tests for string operators (LIKE, SIMILAR TO).
 opt
 SELECT * FROM kuv WHERE v LIKE 'ABC%'
@@ -1405,7 +1428,7 @@ select
 # A union constraint set is tight if the right is a contradiction and the left
 # is tight.
 opt
-SELECT * FROM a WHERE (x = 10 AND y = 20) OR (x = 1 AND x = 3) 
+SELECT * FROM a WHERE (x = 10 AND y = 20) OR (x = 1 AND x = 3)
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
