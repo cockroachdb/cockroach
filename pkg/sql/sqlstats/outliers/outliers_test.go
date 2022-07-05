@@ -29,7 +29,7 @@ func TestOutliers(t *testing.T) {
 	ctx := context.Background()
 
 	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
-	session := &outliers.Session{ID: sessionID.GetBytes()}
+	session := &outliers.Session{ID: &sessionID}
 	txnID := uuid.FastMakeV4()
 	transaction := &outliers.Transaction{ID: &txnID}
 	statement := &outliers.Statement{
@@ -103,9 +103,7 @@ func TestOutliers(t *testing.T) {
 
 	t.Run("buffering statements per session", func(t *testing.T) {
 		otherSessionID := clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))
-		otherSession := &outliers.Session{
-			ID: otherSessionID.GetBytes(),
-		}
+		otherSession := &outliers.Session{ID: &otherSessionID}
 		otherTxnID := uuid.FastMakeV4()
 		otherTransaction := &outliers.Transaction{ID: &otherTxnID}
 		otherStatement := &outliers.Statement{
@@ -141,7 +139,7 @@ func TestOutliers(t *testing.T) {
 
 		// IterateOutliers doesn't specify its iteration order, so we sort here for a stable test.
 		sort.Slice(actual, func(i, j int) bool {
-			return bytes.Compare(actual[i].Session.ID, actual[j].Session.ID) < 0
+			return bytes.Compare(actual[i].Session.ID.GetBytes(), actual[j].Session.ID.GetBytes()) < 0
 		})
 
 		require.Equal(t, expected, actual)

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/errors"
 )
 
 // ID represents an identifier that is guaranteed to be unique across
@@ -52,4 +53,23 @@ func IDFromBytes(b []byte) ID {
 // GetNodeID extracts the node ID from a ID.
 func (id ID) GetNodeID() int32 {
 	return int32(0xFFFFFFFF & id.Lo)
+}
+
+// Size returns the marshalled size of id in bytes.
+func (id ID) Size() int {
+	return len(id.GetBytes())
+}
+
+// MarshalTo marshals id to data.
+func (id ID) MarshalTo(data []byte) (int, error) {
+	return copy(data, id.GetBytes()), nil
+}
+
+// Unmarshal unmarshals data to id.
+func (id *ID) Unmarshal(data []byte) error {
+	if len(data) != 16 {
+		return errors.Errorf("input data %s for uint128 must be 16 bytes", data)
+	}
+	id.Uint128 = uint128.FromBytes(data)
+	return nil
 }
