@@ -151,11 +151,11 @@ DROP OWNED BY r
       usesSequenceIds:
       - 106
     tableId: 109
-- [[ColumnFamily:{DescID: 108, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+- [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   details:
     name: primary
     tableId: 108
-- [[ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+- [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   details:
     name: primary
     tableId: 109
@@ -427,6 +427,11 @@ DROP OWNED BY r
 - [[EnumType:{DescID: 111}, ABSENT], PUBLIC]
   details:
     arrayTypeId: 112
+    typeId: 111
+- [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
     typeId: 111
 - [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   details:

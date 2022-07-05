@@ -237,11 +237,11 @@ DROP DATABASE db1 CASCADE
       usesSequenceIds:
       - 107
     tableId: 110
-- [[ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+- [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   details:
     name: primary
     tableId: 109
-- [[ColumnFamily:{DescID: 110, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+- [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   details:
     name: primary
     tableId: 110
@@ -733,6 +733,11 @@ DROP DATABASE db1 CASCADE
 - [[EnumType:{DescID: 115}, ABSENT], PUBLIC]
   details:
     arrayTypeId: 116
+    typeId: 115
+- [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC]
+  details:
+    logicalRepresentation: a
+    physicalRepresentation: gA==
     typeId: 115
 - [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   details:
