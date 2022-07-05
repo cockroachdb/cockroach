@@ -46,6 +46,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// This file contains roach tests that test backup and restore. Be careful about
+// changing the names of existing tests as it risks breaking roachperf or tests
+// that are run on AWS.
+//
 // The following env variable names match those specified in the TeamCity
 // configuration for the nightly roachtests. Any changes must be made to both
 // references of the name.
@@ -1129,10 +1133,10 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 func getAWSKMSAssumeRoleURI() (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		AssumeRoleAWSKeyIDEnvVar:            amazon.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY_ASSUME_ROLE": amazon.AWSSecretParam,
-		"AWS_ROLE_ARN":                      amazon.AWSRoleArnParam,
-		KMSRegionAEnvVar:                    amazon.KMSRegionParam,
+		AssumeRoleAWSKeyIDEnvVar:     amazon.AWSAccessKeyParam,
+		AssumeRoleAWSSecretKeyEnvVar: amazon.AWSSecretParam,
+		AssumeRoleAWSRoleEnvVar:      amazon.AssumeRoleParam,
+		KMSRegionAEnvVar:             amazon.KMSRegionParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -1148,8 +1152,8 @@ func getAWSKMSAssumeRoleURI() (string, error) {
 		return "", errors.Newf("env variable %s must be present to run the KMS test", KMSKeyARNAEnvVar)
 	}
 
-	// Set AUTH to assume role
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+	// Set AUTH to specified.
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 
 	return correctURI, nil
@@ -1243,7 +1247,7 @@ func getAWSBackupPath(dest string) (string, error) {
 	expect := map[string]string{
 		AssumeRoleAWSKeyIDEnvVar:     amazon.AWSAccessKeyParam,
 		AssumeRoleAWSSecretKeyEnvVar: amazon.AWSSecretParam,
-		AssumeRoleAWSRoleEnvVar:      amazon.AWSRoleArnParam,
+		AssumeRoleAWSRoleEnvVar:      amazon.AssumeRoleParam,
 		KMSRegionAEnvVar:             amazon.KMSRegionParam,
 	}
 	for env, param := range expect {
@@ -1253,7 +1257,7 @@ func getAWSBackupPath(dest string) (string, error) {
 		}
 		q.Add(param, v)
 	}
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamAssume)
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 
 	return fmt.Sprintf("s3://cockroachdb-backup-testing/%s?%s", dest, q.Encode()), nil
 }

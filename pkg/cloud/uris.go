@@ -28,9 +28,6 @@ const (
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
 	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
-	// AuthParamAssume is the query parameter for AssumeRole authentication
-	// mode in a URI.
-	AuthParamAssume = roachpb.ExternalStorageAuthAssume
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-
@@ -79,4 +76,21 @@ func JoinPathPreservingTrailingSlash(prefix, suffix string) string {
 		out += "/"
 	}
 	return out
+}
+
+// ParseRoleString parses a comma separated string of roles into a list of
+// intermediate delegate roles and the final assumed role.
+func ParseRoleString(roleString string) (assumeRole string, delegateRoles []string) {
+	if roleString == "" {
+		return assumeRole, delegateRoles
+	}
+
+	roles := strings.Split(roleString, ",")
+	delegateRoles = make([]string, len(roles)-1)
+
+	assumeRole = roles[len(roles)-1]
+	for i := 0; i < len(roles)-1; i++ {
+		delegateRoles[i] = roles[i]
+	}
+	return assumeRole, delegateRoles
 }

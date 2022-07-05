@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	kms "cloud.google.com/go/kms/apiv1"
@@ -163,6 +164,29 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 		q.Set(CredentialsParam, encodedCredentials)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
+	})
+
+	t.Run("auth-assume-role-chaining", func(t *testing.T) {
+		roleChainStr := os.Getenv("ASSUME_SERVICE_ACCOUNT_CHAIN")
+		if roleChainStr == "" {
+			skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT_CHAIN env var must be set")
+		}
+		roleChain := strings.Split(roleChainStr, ",")
+		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
+
+		q := make(url.Values)
+		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(CredentialsParam, encodedCredentials)
+
+		// First verify that none of the individual roles in the chain can be used
+		// to access the KMS.
+		for _, role := range roleChain {
+			q.Set(AssumeRoleParam, role)
+			cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s", keyID, q.Encode()), testEnv)
+		}
+
+		q.Set(AssumeRoleParam, roleChainStr)
+		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("gs:///%s?%s", keyID, q.Encode()), testEnv)
 	})
 }
 
