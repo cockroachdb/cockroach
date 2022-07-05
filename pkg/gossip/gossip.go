@@ -123,7 +123,9 @@ const (
 	NodeDescriptorTTL = 2 * NodeDescriptorInterval
 
 	// StoresInterval is the default interval for gossiping store descriptors.
-	StoresInterval = 60 * time.Second
+	// Note that there are additional conditions that trigger reactive store
+	// gossip.
+	StoresInterval = 10 * time.Second
 
 	// StoreTTL is time-to-live for store-related info.
 	StoreTTL = 2 * StoresInterval
