@@ -305,8 +305,8 @@ INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
 statement error Key \(ref_t_pk\)=\(2\) is not present in table "t"
 INSERT INTO fk_using_implicit_columns_against_t VALUES (2, 2, 4)
 
-# Error if we reference the implicit partitioning in the foreign key.
-statement error there is no unique constraint matching given keys for referenced table t
+# We are allowed to reference the implicit partitioning in the foreign key.
+statement ok
 CREATE TABLE fk_including_implicit_columns_against_t (
   pk INT NOT NULL PRIMARY KEY,
   ref_t_a INT,
