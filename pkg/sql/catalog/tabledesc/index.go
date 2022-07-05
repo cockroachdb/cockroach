@@ -417,15 +417,12 @@ func (p partitioning) FindPartitionByName(name string) (found catalog.Partitioni
 
 // ForEachPartitionName applies fn on each of the partition names in this
 // partition and recursively in its subpartitions.
-// Supports iterutil.Done.
+// Supports iterutil.StopIteration.
 func (p partitioning) ForEachPartitionName(fn func(name string) error) error {
 	err := p.forEachPartitionName(func(_ catalog.Partitioning, name string) error {
 		return fn(name)
 	})
-	if iterutil.Done(err) {
-		return nil
-	}
-	return err
+	return iterutil.Map(err)
 }
 
 func (p partitioning) forEachPartitionName(
@@ -463,7 +460,7 @@ func (p partitioning) NumRanges() int {
 }
 
 // ForEachList applies fn on each list element of the wrapped partitioning.
-// Supports iterutil.Done.
+// Supports iterutil.StopIteration.
 func (p partitioning) ForEachList(
 	fn func(name string, values [][]byte, subPartitioning catalog.Partitioning) error,
 ) error {
@@ -471,25 +468,19 @@ func (p partitioning) ForEachList(
 		subp := partitioning{desc: &l.Subpartitioning}
 		err := fn(l.Name, l.Values, subp)
 		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
 }
 
 // ForEachRange applies fn on each range element of the wrapped partitioning.
-// Supports iterutil.Done.
+// Supports iterutil.StopIteration.
 func (p partitioning) ForEachRange(fn func(name string, from, to []byte) error) error {
 	for _, r := range p.desc.Range {
 		err := fn(r.Name, r.FromInclusive, r.ToExclusive)
 		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

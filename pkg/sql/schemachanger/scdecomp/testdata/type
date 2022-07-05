@@ -52,6 +52,16 @@ ElementState:
     objectId: 104
     parentSchemaId: 101
   Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: hello
+    physicalRepresentation: QA==
+    typeId: 104
+  Status: PUBLIC
+- EnumTypeValue:
+    logicalRepresentation: hi
+    physicalRepresentation: gA==
+    typeId: 104
+  Status: PUBLIC
 
 decompose
 tbl

@@ -136,10 +136,7 @@ func (r Row) forEachDatum(fn DatumFn, colIndexes []int) error {
 		}
 
 		if err := fn(encDatum.Datum, col); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
@@ -149,10 +146,7 @@ func (r Row) forEachDatum(fn DatumFn, colIndexes []int) error {
 func (r Row) forEachColumn(fn ColumnFn, colIndexes []int) error {
 	for _, colIdx := range colIndexes {
 		if err := fn(r.cols[colIdx]); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

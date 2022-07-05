@@ -71,8 +71,5 @@ func ascend(t *btree.BTree, f func(k interface{}) error) (err error) {
 		err = f(i.(item).value())
 		return err == nil
 	})
-	if iterutil.Done(err) {
-		err = nil
-	}
-	return err
+	return iterutil.Map(err)
 }

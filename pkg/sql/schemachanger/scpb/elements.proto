@@ -112,6 +112,9 @@ message ElementProto {
 
   // Object elements.
   ObjectParent object_parent = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
+
+  // Enum type elements
+  EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -482,4 +485,10 @@ message IndexColumn {
 
   // Direction is only populated for KEY columns.
   sql.catalog.catpb.IndexColumn.Direction direction = 6;
+}
+
+message EnumTypeValue {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  bytes physical_representation = 2;
+  string logical_representation = 3;
 }

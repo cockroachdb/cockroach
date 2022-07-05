@@ -260,10 +260,7 @@ func iterateEntries(
 			return errors.Wrap(err, "unable to unmarshal raft Entry")
 		}
 		if err := f(ent); err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 }

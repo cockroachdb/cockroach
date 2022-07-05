@@ -187,7 +187,7 @@ func (c primaryKeySwap) NumOldIndexes() int {
 }
 
 // ForEachOldIndexIDs iterates through each of the old index IDs.
-// iterutil.Done is supported.
+// iterutil.StopIteration is supported.
 func (c primaryKeySwap) ForEachOldIndexIDs(fn func(id descpb.IndexID) error) error {
 	return c.forEachIndexIDs(c.desc.OldPrimaryIndexId, c.desc.OldIndexes, fn)
 }
@@ -198,7 +198,7 @@ func (c primaryKeySwap) NumNewIndexes() int {
 }
 
 // ForEachNewIndexIDs iterates through each of the new index IDs.
-// iterutil.Done is supported.
+// iterutil.StopIteration is supported.
 func (c primaryKeySwap) ForEachNewIndexIDs(fn func(id descpb.IndexID) error) error {
 	return c.forEachIndexIDs(c.desc.NewPrimaryIndexId, c.desc.NewIndexes, fn)
 }
@@ -208,18 +208,12 @@ func (c primaryKeySwap) forEachIndexIDs(
 ) error {
 	err := fn(pkID)
 	if err != nil {
-		if iterutil.Done(err) {
-			return nil
-		}
-		return err
+		return iterutil.Map(err)
 	}
 	for _, id := range secIDs {
 		err = fn(id)
 		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil
@@ -269,22 +263,17 @@ func (c materializedViewRefresh) AsOf() hlc.Timestamp {
 }
 
 // ForEachIndexID iterates through each of the index IDs.
-// iterutil.Done is supported.
+// iterutil.StopIteration is supported.
 func (c materializedViewRefresh) ForEachIndexID(fn func(id descpb.IndexID) error) error {
 	err := fn(c.desc.NewPrimaryIndex.ID)
+
 	if err != nil {
-		if iterutil.Done(err) {
-			return nil
-		}
-		return err
+		return iterutil.Map(err)
 	}
 	for i := range c.desc.NewIndexes {
 		err = fn(c.desc.NewIndexes[i].ID)
 		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
+			return iterutil.Map(err)
 		}
 	}
 	return nil

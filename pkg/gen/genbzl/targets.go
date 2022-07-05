@@ -60,6 +60,10 @@ kind("generated file", //docs/...:*)
   - labels("outs", //docs/generated/sql/bnf:svg)`,
 	},
 	{
+		target: "parser",
+		query:  `labels("outs", kind("genrule rule", //pkg/sql/sem/... + //pkg/sql/parser/... + //pkg/sql/lexbase/...))`,
+	},
+	{
 		target: "excluded",
 		query: `
 let all = kind("generated file", {{ .All }})
@@ -88,6 +92,7 @@ kind("generated file", {{ .All }}) - (
   + {{ template "optgen" $ }}
   + {{ template "docs" $ }}
   + {{ template "excluded" $ }}
+  + {{ template "parser" $ }}
 )`,
 	},
 }

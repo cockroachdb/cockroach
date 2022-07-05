@@ -60,9 +60,7 @@ func walk(wantType reflect.Type, toWalk interface{}, f func(interface{}) error) 
 		default:
 			err = errors.AssertionFailedf("failed to do walk: %v", r)
 		}
-		if iterutil.Done(err) {
-			err = nil
-		}
+		err = iterutil.Map(err)
 	}()
 
 	visit := func(v reflect.Value) {

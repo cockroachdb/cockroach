@@ -117,7 +117,7 @@ DROP TABLE defaultdb.shipments CASCADE;
       usesSequenceIds:
       - 106
     tableId: 109
-- [[ColumnFamily:{DescID: 109, ColumnFamilyID: 0, Name: primary}, ABSENT], PUBLIC]
+- [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   details:
     name: primary
     tableId: 109
