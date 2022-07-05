@@ -69,8 +69,9 @@ var (
 // instructs the process to terminate.
 // This method is part of the serverpb.AdminClient interface.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
-	ctx := stream.Context()
-	ctx = s.server.AnnotateCtx(ctx)
+	// NB: Don't use the client's context since the caller is allowed to bail
+	// after the drain starts.
+	ctx := s.server.AnnotateCtx(context.Background())
 
 	// Which node is this request for?
 	nodeID, local, err := s.server.status.parseNodeID(req.NodeId)
