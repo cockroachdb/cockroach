@@ -1257,6 +1257,68 @@ func FindTableLocalitySecondaryRegion(b ElementStatusIterator) (current Status, 
 	return current, target, element
 }
 
+func (e TableSubZoneConfig) element() {}
+
+// ForEachTableSubZoneConfig iterates over elements of type TableSubZoneConfig.
+func ForEachTableSubZoneConfig(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableSubZoneConfig),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TableSubZoneConfig); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTableSubZoneConfig finds the first element of type TableSubZoneConfig.
+func FindTableSubZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *TableSubZoneConfig) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TableSubZoneConfig); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e TableZoneConfig) element() {}
+
+// ForEachTableZoneConfig iterates over elements of type TableZoneConfig.
+func ForEachTableZoneConfig(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableZoneConfig),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TableZoneConfig); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTableZoneConfig finds the first element of type TableZoneConfig.
+func FindTableZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *TableZoneConfig) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TableZoneConfig); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e TemporaryIndex) element() {}
 
 // ForEachTemporaryIndex iterates over elements of type TemporaryIndex.
