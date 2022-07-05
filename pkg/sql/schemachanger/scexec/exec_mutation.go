@@ -333,17 +333,10 @@ func manageJobs(
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				s.updatedPayload().Noncancelable = true
 			}
-			if !update.descriptorIDsToRemove.Empty() {
-				var filtered catalog.DescriptorIDSet
-				for _, descID := range md.Payload.DescriptorIDs {
-					if update.descriptorIDsToRemove.Contains(descID) {
-						continue
-					}
-					filtered.Add(descID)
-				}
-				if filtered.Len() < len(md.Payload.DescriptorIDs) {
-					s.updatedPayload().DescriptorIDs = filtered.Ordered()
-				}
+			oldIDs := catalog.MakeDescriptorIDSet(md.Payload.DescriptorIDs...)
+			newIDs := oldIDs.Difference(update.descriptorIDsToRemove)
+			if newIDs.Len() < oldIDs.Len() {
+				s.updatedPayload().DescriptorIDs = newIDs.Ordered()
 			}
 			return nil
 		}); err != nil {

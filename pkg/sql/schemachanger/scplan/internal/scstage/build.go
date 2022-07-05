@@ -521,11 +521,9 @@ func (bc buildContext) updateJobProgressOp(
 	descIDsPresentBefore, descIDsPresentAfter catalog.DescriptorIDSet, next *Stage,
 ) scop.Op {
 	var toRemove catalog.DescriptorIDSet
-	descIDsPresentBefore.ForEach(func(descID descpb.ID) {
-		if next != nil && !descIDsPresentAfter.Contains(descID) {
-			toRemove.Add(descID)
-		}
-	})
+	if next != nil {
+		toRemove = descIDsPresentBefore.Difference(descIDsPresentAfter)
+	}
 	return &scop.UpdateSchemaChangerJob{
 		JobID:                 bc.scJobID,
 		IsNonCancelable:       !isRevertible(next),
