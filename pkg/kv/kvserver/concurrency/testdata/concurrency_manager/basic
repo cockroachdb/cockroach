@@ -117,6 +117,7 @@ sequence req=req3
 [2] sequence req3: scanning lock table for conflicting locks
 [2] sequence req3: waiting in lock wait-queues
 [2] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
+[2] sequence req3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
 [2] sequence req3: pushing timestamp of txn 00000002 above 14.000000000,1
 [2] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -204,6 +205,7 @@ sequence req=req5
 [2] sequence req5: scanning lock table for conflicting locks
 [2] sequence req5: waiting in lock wait-queues
 [2] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 1)
+[2] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = false, timeout enforcement = false, priority enforcement = false
 [2] sequence req5: pushing timestamp of txn 00000002 above 14.000000000,1
 [2] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -218,6 +220,7 @@ sequence req=req6
 [3] sequence req6: scanning lock table for conflicting locks
 [3] sequence req6: waiting in lock wait-queues
 [3] sequence req6: lock wait-queue event: wait for txn 00000002 holding lock @ key "k" (queuedWriters: 0, queuedReaders: 2)
+[3] sequence req6: not pushing
 [3] sequence req6: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
 debug-advance-clock ts=123
@@ -261,6 +264,7 @@ finish req=req6
 [4] sequence req7: scanning lock table for conflicting locks
 [4] sequence req7: waiting in lock wait-queues
 [4] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key "k" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req7: pushing after 0s for: liveness detection = true, deadlock detection = false, timeout enforcement = false, priority enforcement = false
 [4] sequence req7: pushing txn 00000002 to abort
 [4] sequence req7: blocked on select in concurrency_test.(*cluster).PushTransaction
 
