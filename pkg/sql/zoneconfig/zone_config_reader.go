@@ -13,40 +13,47 @@ package zoneconfig
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
-// ZoneConfigReader implements the scbuild.ZoneConfigReader interface
-type ZoneConfigReader struct {
-	txn   *kv.Txn
-	codec keys.SQLCodec
+// Reader implements the scbuild.ZoneConfigReader interface
+type Reader struct {
+	ie  sqlutil.InternalExecutor
+	txn *kv.Txn
 }
 
 // NewZoneConfigReader constructs a new zone config reader for execution.
-func NewZoneConfigReader(txn *kv.Txn, codec keys.SQLCodec) *ZoneConfigReader {
-	return &ZoneConfigReader{
-		txn:   txn,
-		codec: codec,
+func NewZoneConfigReader(ie sqlutil.InternalExecutor, txn *kv.Txn) *Reader {
+	return &Reader{
+		ie:  ie,
+		txn: txn,
 	}
 }
 
 // GetZoneConfig reads the zone config the system table.
-func (zc *ZoneConfigReader) GetZoneConfig(
-	ctx context.Context, id descpb.ID,
-) (*zonepb.ZoneConfig, error) {
-	kv, err := zc.txn.Get(ctx, config.MakeZoneKey(zc.codec, id))
+func (zc *Reader) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
+	datums, err := zc.ie.QueryRow(ctx, "read-zone-config", zc.txn,
+		"select config from system.zones where id=$1", id)
 	if err != nil {
 		return nil, err
 	}
-	if kv.Value == nil {
+	if len(datums) == 0 || datums[0] == tree.DNull {
 		return nil, nil
 	}
+	bytes, ok := datums[0].(*tree.DBytes)
+	if !ok {
+		return nil, errors.AssertionFailedf("failed to retrieve zone config, unexpected datum %v",
+			datums)
+	}
 	var zone zonepb.ZoneConfig
-	if err := kv.ValueProto(&zone); err != nil {
+	err = protoutil.Unmarshal([]byte(*bytes), &zone)
+	if err != nil {
 		return nil, err
 	}
 	return &zone, nil

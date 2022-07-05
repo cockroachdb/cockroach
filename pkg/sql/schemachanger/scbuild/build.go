@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -108,6 +109,10 @@ type (
 	// FeatureChecker contains operations for checking if a schema change
 	// feature is allowed by the database administrator.
 	FeatureChecker = scbuildstmt.SchemaFeatureChecker
+
+	// ZoneConfigReader supports reading raw zone config information
+	// from storage.
+	ZoneConfigReader = scdecomp.ZoneConfigReader
 )
 
 type elementState struct {
@@ -120,16 +125,17 @@ type elementState struct {
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
 type builderState struct {
 	// Dependencies
-	ctx             context.Context
-	clusterSettings *cluster.Settings
-	evalCtx         *eval.Context
-	semaCtx         *tree.SemaContext
-	cr              CatalogReader
-	tr              TableReader
-	auth            AuthorizationAccessor
-	commentCache    CommentCache
-	createPartCCL   CreatePartitioningCCLCallback
-	hasAdmin        bool
+	ctx              context.Context
+	clusterSettings  *cluster.Settings
+	evalCtx          *eval.Context
+	semaCtx          *tree.SemaContext
+	cr               CatalogReader
+	tr               TableReader
+	auth             AuthorizationAccessor
+	commentCache     CommentCache
+	zoneConfigReader scdecomp.ZoneConfigReader
+	createPartCCL    CreatePartitioningCCLCallback
+	hasAdmin         bool
 
 	// output contains the schema change targets that have been planned so far.
 	output []elementState
@@ -160,18 +166,19 @@ type cachedDesc struct {
 // newBuilderState constructs a builderState.
 func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentState) *builderState {
 	bs := builderState{
-		ctx:             ctx,
-		clusterSettings: d.ClusterSettings(),
-		evalCtx:         newEvalCtx(ctx, d),
-		semaCtx:         newSemaCtx(d),
-		cr:              d.CatalogReader(),
-		tr:              d.TableReader(),
-		auth:            d.AuthorizationAccessor(),
-		createPartCCL:   d.IndexPartitioningCCLCallback(),
-		output:          make([]elementState, 0, len(initial.Current)),
-		descCache:       make(map[catid.DescID]*cachedDesc),
-		tempSchemas:     make(map[catid.DescID]catalog.SchemaDescriptor),
-		commentCache:    d.DescriptorCommentCache(),
+		ctx:              ctx,
+		clusterSettings:  d.ClusterSettings(),
+		evalCtx:          newEvalCtx(ctx, d),
+		semaCtx:          newSemaCtx(d),
+		cr:               d.CatalogReader(),
+		tr:               d.TableReader(),
+		auth:             d.AuthorizationAccessor(),
+		createPartCCL:    d.IndexPartitioningCCLCallback(),
+		output:           make([]elementState, 0, len(initial.Current)),
+		descCache:        make(map[catid.DescID]*cachedDesc),
+		tempSchemas:      make(map[catid.DescID]catalog.SchemaDescriptor),
+		commentCache:     d.DescriptorCommentCache(),
+		zoneConfigReader: d.ZoneConfigReader(),
 	}
 	var err error
 	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)

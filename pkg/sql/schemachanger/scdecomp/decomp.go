@@ -31,6 +31,7 @@ type walkCtx struct {
 	cachedTypeIDClosures map[catid.DescID]map[catid.DescID]struct{}
 	backRefs             catalog.DescriptorIDSet
 	commentCache         CommentGetter
+	zoneConfigReader     ZoneConfigReader
 }
 
 // WalkDescriptor walks through the elements which are implicitly defined in
@@ -57,6 +58,7 @@ func WalkDescriptor(
 	lookupFn func(id catid.DescID) catalog.Descriptor,
 	ev ElementVisitor,
 	commentCache CommentGetter,
+	zoneConfigReader ZoneConfigReader,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
 		ctx:                  ctx,
@@ -65,6 +67,7 @@ func WalkDescriptor(
 		lookupFn:             lookupFn,
 		cachedTypeIDClosures: make(map[catid.DescID]map[catid.DescID]struct{}),
 		commentCache:         commentCache,
+		zoneConfigReader:     zoneConfigReader,
 	}
 	w.walkRoot()
 	w.backRefs.Remove(catid.InvalidDescID)
@@ -312,6 +315,22 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.backRefs.Add(fk.OriginTableID)
 		return nil
 	})
+	zc, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
+	if err != nil {
+		panic(err)
+	}
+	if zc != nil {
+		w.ev(scpb.Status_PUBLIC, &scpb.TableZoneConfig{
+			TableID: tbl.GetID(),
+		})
+		for _, subZone := range zc.Subzones {
+			w.ev(scpb.Status_PUBLIC, &scpb.TableSubZoneConfig{
+				TableID:       tbl.GetID(),
+				IndexID:       catid.IndexID(subZone.IndexID),
+				PartitionName: subZone.PartitionName,
+			})
+		}
+	}
 }
 
 func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {
