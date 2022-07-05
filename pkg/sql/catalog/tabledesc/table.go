@@ -506,13 +506,6 @@ func FindFKReferencedUniqueConstraint(
 	uniqueWithoutIndexConstraints := referencedTable.GetUniqueWithoutIndexConstraints()
 	for i := range uniqueWithoutIndexConstraints {
 		c := &uniqueWithoutIndexConstraints[i]
-
-		// A partial unique constraint cannot be a reference constraint for a
-		// FK.
-		if c.IsPartial() {
-			continue
-		}
-
 		if c.IsValidReferencedUniqueConstraint(referencedColIDs) {
 			return c, nil
 		}

@@ -347,7 +347,7 @@ var _ UniqueConstraint = &IndexDescriptor{}
 func (u *UniqueWithoutIndexConstraint) IsValidReferencedUniqueConstraint(
 	referencedColIDs ColumnIDs,
 ) bool {
-	return ColumnIDs(u.ColumnIDs).PermutationOf(referencedColIDs)
+	return !u.IsPartial() && ColumnIDs(u.ColumnIDs).PermutationOf(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
