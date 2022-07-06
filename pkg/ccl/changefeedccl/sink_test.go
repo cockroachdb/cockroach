@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -236,47 +235,36 @@ func TestKafkaSink(t *testing.T) {
 	defer cleanup()
 
 	// No inflight
-	if err := sink.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.Flush(ctx))
 
 	// Timeout
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS, zeroTS, zeroAlloc); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t,
+		sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS, zeroTS, zeroAlloc))
+
 	m1 := <-p.inputCh
 	for i := 0; i < 2; i++ {
 		timeoutCtx, cancel := context.WithTimeout(ctx, time.Millisecond)
 		defer cancel()
-		if err := sink.Flush(timeoutCtx); !testutils.IsError(
-			err, `context deadline exceeded`,
-		) {
-			t.Fatalf(`expected "context deadline exceeded" error got: %+v`, err)
-		}
+		require.True(t, errors.Is(context.DeadlineExceeded, sink.Flush(timeoutCtx)))
 	}
 	go func() { p.successesCh <- m1 }()
-	if err := sink.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.Flush(ctx))
 
 	// Check no inflight again now that we've sent something
-	if err := sink.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.Flush(ctx))
 
 	// Mixed success and error.
 	var pool testAllocPool
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`2`), nil, zeroTS, zeroTS, pool.alloc()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.EmitRow(ctx,
+		topic(`t`), []byte(`2`), nil, zeroTS, zeroTS, pool.alloc()))
 	m2 := <-p.inputCh
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`3`), nil, zeroTS, zeroTS, pool.alloc()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.EmitRow(
+		ctx, topic(`t`), []byte(`3`), nil, zeroTS, zeroTS, pool.alloc()))
+
 	m3 := <-p.inputCh
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`4`), nil, zeroTS, zeroTS, pool.alloc()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.EmitRow(
+		ctx, topic(`t`), []byte(`4`), nil, zeroTS, zeroTS, pool.alloc()))
+
 	m4 := <-p.inputCh
 	go func() { p.successesCh <- m2 }()
 	go func() {
@@ -286,19 +274,15 @@ func TestKafkaSink(t *testing.T) {
 		}
 	}()
 	go func() { p.successesCh <- m4 }()
-	if err := sink.Flush(ctx); !testutils.IsError(err, `m3`) {
-		t.Fatalf(`expected "m3" error got: %+v`, err)
-	}
+	require.Regexp(t, "m3", sink.Flush(ctx))
 
 	// Check simple success again after error
-	if err := sink.EmitRow(ctx, topic(`t`), []byte(`5`), nil, zeroTS, zeroTS, pool.alloc()); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.EmitRow(
+		ctx, topic(`t`), []byte(`5`), nil, zeroTS, zeroTS, pool.alloc()))
+
 	m5 := <-p.inputCh
 	go func() { p.successesCh <- m5 }()
-	if err := sink.Flush(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, sink.Flush(ctx))
 	// At the end, all of the resources has been released
 	require.EqualValues(t, 0, pool.used())
 }
