@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -42,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
+	"github.com/cockroachdb/cockroach/pkg/obs"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -129,8 +132,11 @@ type Server struct {
 	migrationServer *migrationServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
-	raftTransport   *kvserver.RaftTransport
-	stopper         *stop.Stopper
+	// The Obserability Server, used by the Observability Service to subscribe to
+	// CRDB data.
+	obsServer     *obs.EventsServer
+	raftTransport *kvserver.RaftTransport
+	stopper       *stop.Stopper
 
 	debug    *debug.Server
 	kvProber *kvprober.Prober
@@ -767,6 +773,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
 
+	obsServer := obs.NewEventServer(
+		cfg.AmbientCtx,
+		timeutil.DefaultTimeSource{},
+		stopper,
+		5*time.Second, // maxStaleness
+		1<<20,         // triggerSizeBytes - 1MB
+		10*1<<20,      // maxBufferSizeBytes - 10MB
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
+	)
+
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -810,6 +826,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
+		eventsExporter:           obsServer,
 	})
 	if err != nil {
 		return nil, err
@@ -863,6 +880,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		authentication:         sAuth,
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
+		obsServer:              obsServer,
 		raftTransport:          raftTransport,
 		stopper:                stopper,
 		debug:                  debugServer,
@@ -1112,6 +1130,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
 
+	// Register the Obserability Server, used by the Observability Service to
+	// subscribe to CRDB data. Note that the server will reject RPCs until
+	// SetResourceInfo is called later.
+	obspb.RegisterObsServer(s.grpc.Server, s.obsServer)
+
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
@@ -1246,6 +1269,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := state.validate(); err != nil {
 		return errors.Wrap(err, "invalid init state")
 	}
+
+	// Enable the Obs Server.
+	s.obsServer.SetResourceInfo(state.clusterID, state.nodeID, build.BinaryVersion())
 
 	// Apply any cached initial settings (and start the gossip listener) as early
 	// as possible, to avoid spending time with stale settings.

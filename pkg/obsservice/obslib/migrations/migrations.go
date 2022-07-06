@@ -11,7 +11,6 @@ package migrations
 import (
 	"context"
 	"embed"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx/v4"
@@ -24,24 +23,10 @@ import (
 //go:embed sqlmigrations/*.sql
 var sqlMigrations embed.FS
 
-// defaultSinkDBName is the name of the database to be used by default
-const defaultSinkDBName = "obsservice"
-
 // RunDBMigrations brings the SQL schema in the sink cluster up to date.
 //
-// sinkPGURL is the connection string for the sink cluster. If it includes a
-// database, that database will be used. If it doesn't, a default one will be
-// used.
-func RunDBMigrations(ctx context.Context, sinkPGURL string) error {
-	connCfg, err := pgx.ParseConfig(sinkPGURL)
-	if err != nil {
-		return err
-	}
-	if connCfg.Database == "" {
-		fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
-		connCfg.Database = defaultSinkDBName
-	}
-
+// connCfg represent the connection info for sink cluster.
+func RunDBMigrations(ctx context.Context, connCfg *pgx.ConnConfig) error {
 	if log.V(2) {
 		goose.SetVerbose(true)
 	}
