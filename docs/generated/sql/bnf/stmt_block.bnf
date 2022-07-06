@@ -3,7 +3,12 @@ stmt_block ::=
 
 stmt ::=
 	'HELPTOKEN'
-	| preparable_stmt
+	| stmt_without_legacy_transaction
+	| legacy_transaction_stmt
+	| 
+
+stmt_without_legacy_transaction ::=
+	preparable_stmt
 	| analyze_stmt
 	| copy_from_stmt
 	| comment_stmt
@@ -24,7 +29,10 @@ stmt ::=
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
 	| move_cursor_stmt
-	| 
+
+legacy_transaction_stmt ::=
+	legacy_begin_stmt
+	| legacy_end_stmt
 
 preparable_stmt ::=
 	alter_stmt
@@ -139,6 +147,12 @@ fetch_cursor_stmt ::=
 
 move_cursor_stmt ::=
 	'MOVE' cursor_movement_specifier
+
+legacy_begin_stmt ::=
+	'BEGIN' opt_transaction begin_transaction
+
+legacy_end_stmt ::=
+	'END' opt_transaction
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -397,12 +411,10 @@ set_transaction_stmt ::=
 	| 'SET' 'SESSION' 'TRANSACTION' transaction_mode_list
 
 begin_stmt ::=
-	'BEGIN' opt_transaction begin_transaction
-	| 'START' 'TRANSACTION' begin_transaction
+	'START' 'TRANSACTION' begin_transaction
 
 commit_stmt ::=
 	'COMMIT' opt_transaction
-	| 'END' opt_transaction
 
 rollback_stmt ::=
 	'ROLLBACK' opt_transaction
@@ -444,6 +456,14 @@ cursor_movement_specifier ::=
 	| 'RELATIVE' signed_iconst64 opt_from_or_in cursor_name
 	| 'FIRST' opt_from_or_in cursor_name
 	| 'LAST' opt_from_or_in cursor_name
+
+opt_transaction ::=
+	'TRANSACTION'
+	| 
+
+begin_transaction ::=
+	transaction_mode_list
+	| 
 
 alter_ddl_stmt ::=
 	alter_table_stmt
@@ -528,6 +548,7 @@ create_ddl_stmt ::=
 	| create_type_stmt
 	| create_view_stmt
 	| create_sequence_stmt
+	| create_func_stmt
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
@@ -927,6 +948,7 @@ unreserved_keyword ::=
 	| 'ALWAYS'
 	| 'ASENSITIVE'
 	| 'AT'
+	| 'ATOMIC'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
 	| 'AVAILABILITY'
@@ -940,6 +962,7 @@ unreserved_keyword ::=
 	| 'BUNDLE'
 	| 'BY'
 	| 'CACHE'
+	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
 	| 'CASCADE'
@@ -965,6 +988,7 @@ unreserved_keyword ::=
 	| 'CONVERSION'
 	| 'CONVERT'
 	| 'COPY'
+	| 'COST'
 	| 'COVERING'
 	| 'CREATEDB'
 	| 'CREATELOGIN'
@@ -984,6 +1008,7 @@ unreserved_keyword ::=
 	| 'DELETE'
 	| 'DEFAULTS'
 	| 'DEFERRED'
+	| 'DEFINER'
 	| 'DELIMITER'
 	| 'DESTINATION'
 	| 'DETACHED'
@@ -1010,6 +1035,7 @@ unreserved_keyword ::=
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
+	| 'EXTERNAL'
 	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
@@ -1042,6 +1068,7 @@ unreserved_keyword ::=
 	| 'HOUR'
 	| 'IDENTITY'
 	| 'IMMEDIATE'
+	| 'IMMUTABLE'
 	| 'IMPORT'
 	| 'INCLUDE'
 	| 'INCLUDING'
@@ -1051,10 +1078,12 @@ unreserved_keyword ::=
 	| 'INDEXES'
 	| 'INHERITS'
 	| 'INJECT'
+	| 'INPUT'
 	| 'INSERT'
 	| 'INTO_DB'
 	| 'INVERTED'
 	| 'ISOLATION'
+	| 'INVOKER'
 	| 'JOB'
 	| 'JOBS'
 	| 'JSON'
@@ -1067,6 +1096,7 @@ unreserved_keyword ::=
 	| 'LATEST'
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
+	| 'LEAKPROOF'
 	| 'LEASE'
 	| 'LESS'
 	| 'LEVEL'
@@ -1144,6 +1174,7 @@ unreserved_keyword ::=
 	| 'OVER'
 	| 'OWNED'
 	| 'OWNER'
+	| 'PARALLEL'
 	| 'PARENT'
 	| 'PARTIAL'
 	| 'PARTITION'
@@ -1199,6 +1230,8 @@ unreserved_keyword ::=
 	| 'RESTRICTED'
 	| 'RESUME'
 	| 'RETRY'
+	| 'RETURN'
+	| 'RETURNS'
 	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'ROLE'
@@ -1223,6 +1256,7 @@ unreserved_keyword ::=
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
+	| 'SECURITY'
 	| 'SERIALIZABLE'
 	| 'SEQUENCE'
 	| 'SEQUENCES'
@@ -1244,6 +1278,7 @@ unreserved_keyword ::=
 	| 'SPLIT'
 	| 'SQL'
 	| 'SQLLOGIN'
+	| 'STABLE'
 	| 'START'
 	| 'STATE'
 	| 'STATEMENTS'
@@ -1257,6 +1292,7 @@ unreserved_keyword ::=
 	| 'STRICT'
 	| 'SUBSCRIPTION'
 	| 'SUPER'
+	| 'SUPPORT'
 	| 'SURVIVE'
 	| 'SURVIVAL'
 	| 'SYNTAX'
@@ -1275,6 +1311,7 @@ unreserved_keyword ::=
 	| 'TRANSACTION'
 	| 'TRANSACTIONS'
 	| 'TRANSFER'
+	| 'TRANSFORM'
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'
@@ -1301,6 +1338,7 @@ unreserved_keyword ::=
 	| 'VIEWACTIVITYREDACTED'
 	| 'VIEWCLUSTERSETTING'
 	| 'VISIBLE'
+	| 'VOLATILE'
 	| 'VOTERS'
 	| 'WITHIN'
 	| 'WITHOUT'
@@ -1332,6 +1370,7 @@ col_name_keyword ::=
 	| 'IF'
 	| 'IFERROR'
 	| 'IFNULL'
+	| 'INOUT'
 	| 'INT'
 	| 'INTEGER'
 	| 'INTERVAL'
@@ -1347,6 +1386,7 @@ col_name_keyword ::=
 	| 'PRECISION'
 	| 'REAL'
 	| 'ROW'
+	| 'SETOF'
 	| 'SMALLINT'
 	| 'STRING'
 	| 'SUBSTRING'
@@ -1396,14 +1436,6 @@ type_list ::=
 
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
-
-opt_transaction ::=
-	'TRANSACTION'
-	| 
-
-begin_transaction ::=
-	transaction_mode_list
-	| 
 
 opt_abort_mod ::=
 	'TRANSACTION'
@@ -1606,6 +1638,9 @@ create_view_stmt ::=
 create_sequence_stmt ::=
 	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list
 	| 'CREATE' opt_temp 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+
+create_func_stmt ::=
+	'CREATE' opt_or_replace 'FUNCTION' func_create_name '(' opt_func_arg_with_default_list ')' 'RETURNS' opt_return_set func_return_type opt_create_func_opt_list opt_routine_body
 
 statistics_name ::=
 	name
@@ -2266,12 +2301,39 @@ opt_sequence_option_list ::=
 	sequence_option_list
 	| 
 
+opt_or_replace ::=
+	'OR' 'REPLACE'
+	| 
+
+func_create_name ::=
+	db_object_name
+
+opt_func_arg_with_default_list ::=
+	func_arg_with_default_list
+	| 
+
+opt_return_set ::=
+	'SETOF'
+	| 
+
+func_return_type ::=
+	func_arg_type
+
+opt_create_func_opt_list ::=
+	create_func_opt_list
+	| 
+
+opt_routine_body ::=
+	routine_return_stmt
+	| 'BEGIN' 'ATOMIC' routine_body_stmt_list 'END'
+	| 
+
 changefeed_target ::=
 	opt_table_prefix table_name opt_changefeed_family
 
 target_elem ::=
 	a_expr 'AS' target_name
-	| a_expr 'identifier'
+	| a_expr bare_col_label
 	| a_expr
 	| '*'
 
@@ -2788,6 +2850,21 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
+func_arg_with_default_list ::=
+	( func_arg_with_default ) ( ( ',' func_arg_with_default ) )*
+
+func_arg_type ::=
+	typename
+
+create_func_opt_list ::=
+	( create_func_opt_item ) ( ( create_func_opt_item ) )*
+
+routine_return_stmt ::=
+	'RETURN' a_expr
+
+routine_body_stmt_list ::=
+	(  ) ( ( routine_body_stmt ';' ) )*
+
 opt_table_prefix ::=
 	'TABLE'
 	| 
@@ -2798,6 +2875,10 @@ opt_changefeed_family ::=
 
 target_name ::=
 	unrestricted_name
+
+bare_col_label ::=
+	'identifier'
+	| bare_label_keywords
 
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
@@ -3157,8 +3238,41 @@ family_def ::=
 create_as_constraint_def ::=
 	create_as_constraint_elem
 
+func_arg_with_default ::=
+	func_arg
+	| func_arg 'DEFAULT' a_expr
+	| func_arg '=' a_expr
+
+create_func_opt_item ::=
+	'AS' func_as
+	| 'LANGUAGE' non_reserved_word_or_sconst
+	| common_func_opt_item
+
+routine_body_stmt ::=
+	stmt_without_legacy_transaction
+	| routine_return_stmt
+
 family_name ::=
 	name
+
+bare_label_keywords ::=
+	'ATOMIC'
+	| 'CALLED'
+	| 'DEFINER'
+	| 'EXTERNAL'
+	| 'IMMUTABLE'
+	| 'INPUT'
+	| 'INVOKER'
+	| 'LEAKPROOF'
+	| 'PARALLEL'
+	| 'RETURN'
+	| 'RETURNS'
+	| 'SECURITY'
+	| 'STABLE'
+	| 'SUPPORT'
+	| 'TRANSFORM'
+	| 'VOLATILE'
+	| 'SETOF'
 
 materialize_clause ::=
 	'MATERIALIZED'
@@ -3424,6 +3538,26 @@ opt_family_name ::=
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')' opt_with_storage_parameter_list
 
+func_arg ::=
+	func_arg_class param_name func_arg_type
+	| param_name func_arg_class func_arg_type
+	| param_name func_arg_type
+	| func_arg_class func_arg_type
+	| func_arg_type
+
+func_as ::=
+	'SCONST'
+
+common_func_opt_item ::=
+	'CALLED' 'ON' 'NULL' 'INPUT'
+	| 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT'
+	| 'STRICT'
+	| 'IMMUTABLE'
+	| 'STABLE'
+	| 'VOLATILE'
+	| 'LEAKPROOF'
+	| 'NOT' 'LEAKPROOF'
+
 group_by_item ::=
 	a_expr
 
@@ -3504,6 +3638,12 @@ create_as_col_qualification_elem ::=
 
 create_as_params ::=
 	( create_as_param ) ( ( ',' create_as_param ) )*
+
+func_arg_class ::=
+	'IN'
+
+param_name ::=
+	type_function_name
 
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
