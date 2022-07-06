@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1344,6 +1345,9 @@ type ExecutorConfig struct {
 
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher eval.RangeStatsFetcher
+
+	// EventsExporter is the client for the Observability Service.
+	EventsExporter obs.EventsExporter
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

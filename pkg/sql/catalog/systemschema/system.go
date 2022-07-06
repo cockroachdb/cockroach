@@ -126,6 +126,11 @@ CREATE TABLE system.lease (
   CONSTRAINT "primary" PRIMARY KEY ("descID", version, expiration, "nodeID")
 );`
 
+	// system.eventlog contains notable events from the cluster.
+	//
+	// This data is also exported to the Observability Service. This table might
+	// go away in the future.
+	//
 	// TODO(knz): targetID and reportingID are deprecated and should
 	// be removed after v21.1 is released. Their content is now
 	// available inside the info payload, which is a JSON blob.
