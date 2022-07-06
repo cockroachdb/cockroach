@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -1437,28 +1436,12 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 
-	// Read the certificates from the embedded assets.
-	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
-	nodePath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert)
-
-	caFile, err := securitytest.EmbeddedAssets.ReadFile(caPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	nodeFile, err := securitytest.EmbeddedAssets.ReadFile(nodePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// The response is ordered: CA cert followed by node cert.
 	cert := response.Certificates[0]
 	if a, e := cert.Type, serverpb.CertificateDetails_CA; a != e {
 		t.Errorf("wrong type %s, expected %s", a, e)
 	} else if cert.ErrorMessage != "" {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
-	} else if a, e := cert.Data, caFile; !bytes.Equal(a, e) {
-		t.Errorf("mismatched contents: %s vs %s", a, e)
 	}
 
 	cert = response.Certificates[1]
@@ -1466,8 +1449,6 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Errorf("wrong type %s, expected %s", a, e)
 	} else if cert.ErrorMessage != "" {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
-	} else if a, e := cert.Data, nodeFile; !bytes.Equal(a, e) {
-		t.Errorf("mismatched contents: %s vs %s", a, e)
 	}
 }
 
