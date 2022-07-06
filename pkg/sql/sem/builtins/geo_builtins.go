@@ -7674,7 +7674,6 @@ func applyGeoindexConfigStorageParams(
 	}
 	semaCtx := tree.MakeSemaContext()
 	if err := storageparam.Set(
-		evalCtx.Context,
 		&semaCtx,
 		evalCtx,
 		stmt.AST.(*tree.CreateIndex).StorageParams,

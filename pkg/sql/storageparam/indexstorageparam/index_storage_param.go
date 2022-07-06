@@ -13,8 +13,6 @@
 package indexstorageparam
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -109,11 +107,7 @@ func (po *Setter) applyGeometryIndexSetting(
 
 // Set implements the Setter interface.
 func (po *Setter) Set(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	key string,
-	expr tree.Datum,
+	semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, expr tree.Datum,
 ) error {
 	switch key {
 	case `fillfactor`:

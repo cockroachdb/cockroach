@@ -153,9 +153,6 @@ func (ex *connExecutor) prepare(
 		createdAt: timeutil.Now(),
 		origin:    origin,
 	}
-	// NB: if we start caching the plan, we'll want to keep around the memory
-	// account used for the plan, rather than clearing it.
-	defer prepared.memAcc.Clear(ctx)
 
 	if stmt.AST == nil {
 		return prepared, nil

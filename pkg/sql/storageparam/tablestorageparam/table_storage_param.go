@@ -13,7 +13,6 @@
 package tablestorageparam
 
 import (
-	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -34,8 +33,7 @@ import (
 
 // Setter observes storage parameters for tables.
 type Setter struct {
-	tableDesc          *tabledesc.Mutable
-	setAutomaticColumn bool
+	tableDesc *tabledesc.Mutable
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
@@ -48,12 +46,6 @@ func NewSetter(tableDesc *tabledesc.Mutable) *Setter {
 // RunPostChecks implements the Setter interface.
 func (po *Setter) RunPostChecks() error {
 	ttl := po.tableDesc.GetRowLevelTTL()
-	if po.setAutomaticColumn && (ttl == nil || !ttl.HasDurationExpr()) {
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			`"ttl_expire_after" must be set if "ttl_automatic_column" is set`,
-		)
-	}
 	if err := tabledesc.ValidateRowLevelTTL(ttl); err != nil {
 		return err
 	}
@@ -108,13 +100,17 @@ func (po *Setter) getOrCreateRowLevelTTL() *catpb.RowLevelTTL {
 }
 
 type tableParam struct {
-	onSet   func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
+	onSet   func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
 	onReset func(po *Setter, evalCtx *eval.Context, key string) error
 }
 
+var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer used. " +
+	"Setting ttl_expire_after automatically creates a TTL column. " +
+	"Resetting ttl_expire_after removes the automatically created column.")
+
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			return storageparam.SetFillFactor(evalCtx, key, datum)
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
@@ -123,7 +119,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`autovacuum_enabled`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			var boolVal bool
 			if stringVal, err := paramparse.DatumAsString(evalCtx, key, datum); err == nil {
 				boolVal, err = paramparse.ParseBoolVar(key, stringVal)
@@ -151,7 +147,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			setTrue, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -176,25 +172,19 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	// todo(wall): remove in 23.1
 	`ttl_automatic_column`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			setTrue, err := boolFromDatum(evalCtx, key, datum)
-			if err != nil {
-				return err
-			}
-			if setTrue {
-				po.setAutomaticColumn = true
-			} else {
-				return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
-			}
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			evalCtx.ClientNoticeSender.BufferClientNotice(evalCtx.Context, ttlAutomaticColumnNotice)
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			return unimplemented.NewWithIssue(76916, "unsetting TTL automatic column not yet implemented")
+			evalCtx.ClientNoticeSender.BufferClientNotice(evalCtx.Context, ttlAutomaticColumnNotice)
+			return nil
 		},
 	},
 	`ttl_expire_after`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			var d *tree.DInterval
 			if stringVal, err := paramparse.DatumAsString(evalCtx, key, datum); err == nil {
 				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
@@ -244,7 +234,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_expiration_expression`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			stringVal, err := paramparse.DatumAsString(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -272,7 +262,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_select_batch_size`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -292,7 +282,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_batch_size`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -312,7 +302,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_range_concurrency`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -332,7 +322,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_rate_limit`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -352,7 +342,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_label_metrics`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -369,7 +359,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_job_cron`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			str, err := paramparse.DatumAsString(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -389,7 +379,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_pause`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			b, err := boolFromDatum(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -406,7 +396,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_row_stats_poll_interval`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			d, err := paramparse.DatumAsDuration(evalCtx, key, datum)
 			if err != nil {
 				return err
@@ -426,7 +416,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`exclude_data_from_backup`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
+		onSet: func(po *Setter, semaCtx *tree.SemaContext,
 			evalCtx *eval.Context, key string, datum tree.Datum) error {
 			if po.tableDesc.Temporary {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -504,7 +494,7 @@ func init() {
 		`user_catalog_table`,
 	} {
 		tableParams[param] = tableParam{
-			onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
 			onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
@@ -515,12 +505,7 @@ func init() {
 }
 
 func autoStatsEnabledSettingFunc(
-	ctx context.Context,
-	po *Setter,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	key string,
-	datum tree.Datum,
+	po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
 ) error {
 	boolVal, err := boolFromDatum(evalCtx, key, datum)
 	if err != nil {
@@ -535,10 +520,8 @@ func autoStatsEnabledSettingFunc(
 
 func autoStatsMinStaleRowsSettingFunc(
 	validateFunc func(v int64) error,
-) func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
-	evalCtx *eval.Context, key string, datum tree.Datum) error {
-	return func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
-		evalCtx *eval.Context, key string, datum tree.Datum) error {
+) func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+	return func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 		intVal, err := intFromDatum(evalCtx, key, datum)
 		if err != nil {
 			return err
@@ -556,9 +539,8 @@ func autoStatsMinStaleRowsSettingFunc(
 
 func autoStatsFractionStaleRowsSettingFunc(
 	validateFunc func(v float64) error,
-) func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
-	evalCtx *eval.Context, key string, datum tree.Datum) error {
-	return func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
+) func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+	return func(po *Setter, semaCtx *tree.SemaContext,
 		evalCtx *eval.Context, key string, datum tree.Datum) error {
 		floatVal, err := floatFromDatum(evalCtx, key, datum)
 		if err != nil {
@@ -596,11 +578,7 @@ func autoStatsTableSettingResetFunc(po *Setter, evalCtx *eval.Context, key strin
 
 // Set implements the Setter interface.
 func (po *Setter) Set(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	key string,
-	datum tree.Datum,
+	semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
 ) error {
 	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
@@ -609,7 +587,7 @@ func (po *Setter) Set(
 		)
 	}
 	if p, ok := tableParams[key]; ok {
-		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
+		return p.onSet(po, semaCtx, evalCtx, key, datum)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
