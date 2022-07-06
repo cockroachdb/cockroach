@@ -64,9 +64,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			s.maxLoadOps = 100_000
 
 			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf("multitenant/fairness/kv/%s/%s", s.name, acStr[s.acEnabled]),
-				// TODO(cucaroach): remove this once #82926 is resolved.
-				Skip:              "#82926",
+				Name:              fmt.Sprintf("multitenant/fairness/kv/%s/%s", s.name, acStr[s.acEnabled]),
 				Cluster:           r.MakeClusterSpec(5),
 				Owner:             registry.OwnerSQLQueries,
 				NonReleaseBlocker: false,
@@ -95,9 +93,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			s.maxLoadOps = 1000
 
 			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf("multitenant/fairness/store/%s/%s", s.name, acStr[s.acEnabled]),
-				// TODO(cucaroach): remove this once #82926 is resolved.
-				Skip:              "#82926",
+				Name:              fmt.Sprintf("multitenant/fairness/store/%s/%s", s.name, acStr[s.acEnabled]),
 				Cluster:           r.MakeClusterSpec(5),
 				Owner:             registry.OwnerSQLQueries,
 				NonReleaseBlocker: false,
@@ -162,7 +158,7 @@ func runMultiTenantFairness(
 	const (
 		tenantBaseID       = 11
 		tenantBaseHTTPPort = 8081
-		tenantBaseSQLPort  = 26257
+		tenantBaseSQLPort  = 26259
 	)
 
 	tenantHTTPPort := func(offset int) int {

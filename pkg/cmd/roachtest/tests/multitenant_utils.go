@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,18 +81,24 @@ func createTenantNode(
 		node:     node,
 		sqlPort:  sqlPort,
 	}
-	n := c.Node(1)
-	versionStr, err := fetchCockroachVersion(ctx, t.L(), c, n[0])
-	v := version.MustParse(versionStr)
-	require.NoError(t, err)
-	// Tenant scoped certificates were introduced in version 22.2.
-	tenantScopeRequiredVersion := version.MustParse("v22.2.0-alpha.00000000-746-gc030b8b6dc")
-	if v.AtLeast(tenantScopeRequiredVersion) {
+	if tn.cockroachBinSupportsTenantScope(ctx, c) {
 		err := tn.recreateClientCertsWithTenantScope(ctx, c, createOptions.otherTenantIDs)
 		require.NoError(t, err)
 	}
 	tn.createTenantCert(ctx, t, c)
 	return tn
+}
+
+// cockroachBinSupportsTenantScope is a hack to figure out if the version of
+// cockroach on the node supports tenant scoped certificates. We can't use a
+// version comparison here because we need to compare alpha build versions which
+// are compared lexicographically. This is a problem because our alpha versions
+// contain an integer count of commits, which does not sort correctly.  Once
+// this feature ships in a release, it will be easier to do a version comparison
+// on whether this command line flag is supported.
+func (tn *tenantNode) cockroachBinSupportsTenantScope(ctx context.Context, c cluster.Cluster) bool {
+	err := c.RunE(ctx, c.Node(tn.node), "./cockroach cert create-client --help | grep '\\--tenant-scope'")
+	return err == nil
 }
 
 func (tn *tenantNode) createTenantCert(ctx context.Context, t test.Test, c cluster.Cluster) {
