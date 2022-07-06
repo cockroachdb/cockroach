@@ -900,8 +900,7 @@ func (s *statusServer) Certificates(
 		}
 
 		if cert.Error == nil {
-			details.Data = cert.FileContents
-			if err := extractCertFields(details.Data, &details); err != nil {
+			if err := extractCertFields(cert.FileContents, &details); err != nil {
 				details.ErrorMessage = err.Error()
 			}
 		} else {
