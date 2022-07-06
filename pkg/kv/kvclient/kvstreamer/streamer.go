@@ -503,35 +503,51 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			s.mu.Unlock()
 		}
 	}()
-	// TODO(yuzefovich): reuse truncation helpers between different Enqueue()
-	// calls.
-	// TODO(yuzefovich): introduce a fast path when all requests are contained
-	// within a single range.
-	// The streamer can process the responses in an arbitrary order, so we don't
-	// require the helper to preserve the order of requests and allow it to
-	// reorder the reqs slice too.
-	const mustPreserveOrder = false
-	const canReorderRequestsSlice = true
-	truncationHelper, err := kvcoord.MakeBatchTruncationHelper(
-		scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
-	)
-	if err != nil {
-		return err
+	allRequestsAreWithinSingleRange := !ri.NeedAnother(rs)
+	var truncationHelper kvcoord.BatchTruncationHelper
+	if !allRequestsAreWithinSingleRange {
+		// We only need the truncation helper if the requests span multiple
+		// ranges.
+		//
+		// The streamer can process the responses in an arbitrary order, so we
+		// don't require the helper to preserve the order of requests and allow
+		// it to reorder the reqs slice too.
+		const mustPreserveOrder = false
+		const canReorderRequestsSlice = true
+		// TODO(yuzefovich): reuse truncation helpers between different
+		// Enqueue() calls.
+		truncationHelper, err = kvcoord.MakeBatchTruncationHelper(
+			scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
+		)
+		if err != nil {
+			return err
+		}
 	}
 	var reqsKeysScratch []roachpb.Key
 	var newNumRangesPerScanRequestMemoryUsage int64
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
-		// Truncate the request span to the current range.
-		singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
-		if err != nil {
-			return err
-		}
 		// Find all requests that touch the current range.
 		var singleRangeReqs []roachpb.RequestUnion
 		var positions []int
-		singleRangeReqs, positions, seekKey, err = truncationHelper.Truncate(singleRangeSpan)
-		if err != nil {
-			return err
+		if allRequestsAreWithinSingleRange {
+			// All requests are within this range, so we can just use the
+			// enqueued requests directly.
+			singleRangeReqs = reqs
+			positions = make([]int, len(reqs))
+			for i := range positions {
+				positions[i] = i
+			}
+			seekKey = roachpb.RKeyMax
+		} else {
+			// Truncate the request span to the current range.
+			singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
+			if err != nil {
+				return err
+			}
+			singleRangeReqs, positions, seekKey, err = truncationHelper.Truncate(singleRangeSpan)
+			if err != nil {
+				return err
+			}
 		}
 		rs.Key = seekKey
 		var subRequestIdx []int32

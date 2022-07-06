@@ -91,20 +91,30 @@ func (f *txnKVStreamer) SetupNextFetch(
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", spans)
 	}
-	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, f.reqsScratch)
+	// Make sure to nil out the requests past the length that will be used in
+	// spansToRequests so that we lose references to the underlying Get and Scan
+	// requests (which could keep large byte slices alive) from the previous
+	// iteration.
+	//
+	// Note that we could not do this nil-ing out after Enqueue() returned on
+	// the previous iteration because in some cases the streamer will hold on to
+	// the slice (which is the case when the requests are contained within a
+	// single range). At the same time we don't want to push the responsibility
+	// of nil-ing the slice out because we (i.e. the txnKVStreamer) are the ones
+	// that keep the slice for reuse, and the streamer doesn't know anything
+	// about the slice reuse.
+	reqsScratch := f.reqsScratch[:cap(f.reqsScratch)]
+	for i := len(spans); i < len(reqsScratch); i++ {
+		reqsScratch[i] = roachpb.RequestUnion{}
+	}
+	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}
 	f.spans = spans
 	f.spanIDs = spanIDs
-	// Keep the reference to the requests slice in order to reuse in the future
-	// after making sure to nil out the requests in order to lose references to
-	// the underlying Get and Scan requests which could keep large byte slices
-	// alive.
+	// Keep the reference to the requests slice in order to reuse in the future.
 	f.reqsScratch = reqs
-	for i := range f.reqsScratch {
-		f.reqsScratch[i] = roachpb.RequestUnion{}
-	}
 	reqsScratchMemUsage := requestUnionOverhead * int64(cap(f.reqsScratch))
 	return f.acc.ResizeTo(ctx, reqsScratchMemUsage)
 }
