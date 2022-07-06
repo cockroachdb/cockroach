@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -117,14 +118,8 @@ func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
 // underlying CRDB cluster.
 var CRDBProxyPaths = []string{"/_admin/", "/_status/", "/ts/", "/api/v2/"}
 
-// RunAsync runs an HTTP proxy server in a goroutine. The returned channel is
-// closed when the server terminates.
-//
-// TODO(andrei): Currently the server never terminates. Figure out a closing
-// signal.
-func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
-	ch := make(chan struct{})
-
+// Start runs an HTTP proxy server in stopper tasks.
+func (p *ReverseHTTPProxy) Start(ctx context.Context, stop *stop.Stopper) {
 	listener, err := net.Listen("tcp", p.listenAddr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to listen for incoming HTTP connections on address %s: %s",
@@ -133,76 +128,82 @@ func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
 	}
 
 	https := p.certs.UICert != nil
-	go func() {
-		defer close(ch)
-		var err error
+	// Create the HTTP mux. Some requests will be forwarded to p.proxy, others
+	// will be served locally.
+	mux := http.NewServeMux()
+	// TODO(davidh): Ideally, the UI handler should probably be
+	// configured in `obsservice` and not hardcoded into `obslib`. This
+	// gives lib users a chance to do whatever they want with the UI.
+	mux.Handle("/", ui.Handler(ui.Config{
+		ExperimentalUseLogin: false,
+		LoginEnabled:         false,
+		GetUser: func(ctx context.Context) *string {
+			u := "Observability Service"
+			return &u
+		},
+		OIDC: &noOIDCConfigured{},
+	}))
+	for _, path := range CRDBProxyPaths {
+		mux.Handle(path, p.proxy)
+	}
+	// This seems to be the minimal set of handlers that we need to register in
+	// order to get all the pprof functionality. The pprof.Index handler handles
+	// some types of profiles itself.
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-		defer func() {
-			_ = listener.Close()
-		}()
+	var servers []*http.Server
 
-		// Create the HTTP mux. Requests will generally be forwarded to p.proxy,
-		// except the /debug/pprof ones which will be served locally.
-		mux := http.NewServeMux()
-		// TODO(davidh): Ideally, the UI handler should probably be
-		// configured in `obsservice` and not hardcoded into `obslib`. This
-		// gives lib users a chance to do whatever they want with the UI.
-		mux.Handle("/", ui.Handler(ui.Config{
-			ExperimentalUseLogin: false,
-			LoginEnabled:         false,
-			GetUser: func(ctx context.Context) *string {
-				u := "Observability Service"
-				return &u
-			},
-			OIDC: &noOIDCConfigured{},
-		}))
-		for _, path := range CRDBProxyPaths {
-			mux.Handle(path, p.proxy)
+	if !https {
+		// The Observability Service is not configured with certs, so it can only
+		// serve HTTP.
+		s := &http.Server{Handler: mux}
+		servers = append(servers, s)
+		if err := stop.RunAsyncTask(ctx, "reverse proxy HTTP server", func(ctx context.Context) {
+			_ = s.Serve(listener)
+		}); err != nil {
+			return
 		}
-		// This seems to be the minimal set of handlers that we need to register in
-		// order to get all the pprof functionality. The pprof.Index handler handles
-		// some types of profiles itself.
-		mux.HandleFunc("/debug/pprof/", pprof.Index)
-		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	} else {
+		// We're configured to serve HTTPS. We'll also listen for HTTP requests, and redirect them
+		// to HTTPS.
 
-		if !https {
-			// The Observability Service is not configured with certs, so it can only
-			// serve HTTP.
-			err = (&http.Server{Handler: mux}).Serve(listener)
-		} else {
-			// We're configured to serve HTTPS. We'll also listen for HTTP requests, and redirect them
-			// to HTTPS.
-
-			// Separate HTTP traffic from HTTPS traffic.
-			protocolMux := cmux.New(listener)
-			clearL := protocolMux.Match(cmux.HTTP1()) // Note that adding this matcher first gives it priority.
-			tlsL := protocolMux.Match(cmux.Any())
-			// Redirect HTTP to HTTPS.
-			redirectHandler := http.NewServeMux()
-			redirectHandler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				// TODO(andrei): Consider dealing with HSTS headers. Probably drop HSTS
-				// headers coming from CRDB, and set our own headers.
-				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
-			})
-			redirectServer := http.Server{Handler: redirectHandler}
-			go func() {
-				_ = redirectServer.Serve(clearL)
-			}()
-
-			// Serve HTTPS traffic by delegating it to the proxy.
-			tlsServer := &http.Server{Handler: mux}
-			go func() {
-				_ = tlsServer.ServeTLS(tlsL, p.certs.UICertPath, p.certs.UICertKeyPath)
-			}()
-			err = protocolMux.Serve()
+		// Separate HTTP traffic from HTTPS traffic.
+		protocolMux := cmux.New(listener)
+		clearL := protocolMux.Match(cmux.HTTP1()) // Note that adding this matcher first gives it priority.
+		tlsL := protocolMux.Match(cmux.Any())
+		// Redirect HTTP to HTTPS.
+		redirectHandler := http.NewServeMux()
+		redirectHandler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// TODO(andrei): Consider dealing with HSTS headers. Probably drop HSTS
+			// headers coming from CRDB, and set our own headers.
+			http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
+		})
+		redirectServer := &http.Server{Handler: redirectHandler}
+		servers = append(servers, redirectServer)
+		if err := stop.RunAsyncTask(ctx, "reverse proxy redirect server", func(ctx context.Context) {
+			_ = redirectServer.Serve(clearL)
+		}); err != nil {
+			return
 		}
-		if !errors.Is(err, http.ErrServerClosed) {
-			fmt.Println(err.Error())
+
+		// Serve HTTPS traffic by delegating it to the proxy.
+		tlsServer := &http.Server{Handler: mux}
+		servers = append(servers, tlsServer)
+		if err := stop.RunAsyncTask(ctx, "reverse proxy TLS server", func(ctx context.Context) {
+			_ = tlsServer.ServeTLS(tlsL, p.certs.UICertPath, p.certs.UICertKeyPath)
+		}); err != nil {
+			return
 		}
-	}()
+		if err := stop.RunAsyncTask(ctx, "reverse proxy protocol muxer", func(ctx context.Context) {
+			_ = protocolMux.Serve()
+		}); err != nil {
+			return
+		}
+	}
 
 	scheme := "http"
 	if https {
@@ -210,7 +211,14 @@ func (p *ReverseHTTPProxy) RunAsync(ctx context.Context) <-chan struct{} {
 	}
 	fmt.Printf("Listening for HTTP requests on %s://%s.\n", scheme, p.listenAddr)
 
-	return ch
+	// Wait for the stopper to signal quiescing and shut down everything.
+	go func() {
+		<-stop.ShouldQuiesce()
+		for _, s := range servers {
+			_ = s.Shutdown(ctx)
+		}
+		_ = listener.Close()
+	}()
 }
 
 // certificates groups together all the certificates relevant to the proxy
