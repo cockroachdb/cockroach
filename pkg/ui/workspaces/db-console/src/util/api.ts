@@ -261,6 +261,12 @@ export type SetTraceRecordingTypeRequestMessage =
 export type SetTraceRecordingTypeResponseMessage =
   protos.cockroach.server.serverpb.SetTraceRecordingTypeResponse;
 
+export type TransactionContentionEventsRequestMessage =
+  protos.cockroach.server.serverpb.TransactionContentionEventsRequest;
+
+export type TransactionContentionEventsResponseMessage =
+  protos.cockroach.server.serverpb.TransactionContentionEventsResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -1056,5 +1062,33 @@ export function setTraceRecordingType(
     `${API_PREFIX}/settracerecordingtype`,
     req as any,
     timeout,
+  );
+}
+
+export function getTransactionContentionEvents(
+  req: TransactionContentionEventsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<TransactionContentionEventsResponseMessage> {
+  const url = `${STATUS_PREFIX}/transactioncontentionevents`;
+  return timeoutFetch(
+    serverpb.TransactionContentionEventsResponse,
+    url,
+    null,
+    timeout,
+  ).then(
+    (response: TransactionContentionEventsResponseMessage) => response,
+    (err: Error) => {
+      if (err instanceof TimeoutError) {
+        console.error(
+          `Insights page time out because attempt to retrieve insights exceeded ${err.timeout.asMilliseconds()}ms.`,
+          `URL: ${url}. Request: ${JSON.stringify(req)}`,
+        );
+        throw new Error(
+          "Unable to retrieve the Insights table. To reduce the amount of data, try filtering the table.",
+        );
+      } else {
+        throw err;
+      }
+    },
   );
 }

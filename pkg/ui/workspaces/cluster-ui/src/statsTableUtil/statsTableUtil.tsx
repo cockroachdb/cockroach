@@ -73,7 +73,7 @@ export type StatisticType =
   | "statement"
   | "session"
   | "transaction"
-  | "transactionDetails";
+  | "transactionDetails"
 export type StatisticTableColumnKeys = keyof typeof statisticsColumnLabels;
 
 type StatisticTableTitleType = {

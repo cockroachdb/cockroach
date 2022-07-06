@@ -374,6 +374,17 @@ const metricMetadataReducerObj = new CachedDataReducer(
 );
 export const refreshMetricMetadata = metricMetadataReducerObj.refresh;
 
+const contentionTransactionsReducerObj = new CachedDataReducer(
+  api.getTransactionContentionEvents,
+  "contentionTransactions",
+  moment.duration(5, "m"),
+  moment.duration(30, "m"),
+);
+export const invalidateContentionTransactions =
+  contentionTransactionsReducerObj.invalidateData;
+export const refreshContentionTransactions =
+  contentionTransactionsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -408,6 +419,7 @@ export interface APIReducersState {
   statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
+  contentionTransactions: CachedDataReducerState<api.TransactionContentionEventsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -448,6 +460,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     statementDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
+  [contentionTransactionsReducerObj.actionNamespace]:
+    contentionTransactionsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

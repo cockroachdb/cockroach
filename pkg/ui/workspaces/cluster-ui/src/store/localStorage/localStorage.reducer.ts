@@ -12,6 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { defaultFilters, Filters } from "../../queryFilter";
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
+import { InsightTypes } from "../../insights";
 
 type SortSetting = {
   ascending: boolean;
@@ -32,11 +33,13 @@ export type LocalStorageState = {
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
   "sortSetting/JobsPage": SortSetting;
+  "sortSetting/InsightsTransactionsPage": SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
   "filters/SessionsPage": Filters;
+  "filters/InsightsTransactionsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
   "typeSetting/JobsPage": number;
@@ -60,6 +63,10 @@ const defaultSortSettingActiveExecutions: SortSetting = {
 };
 
 const defaultFiltersActiveExecutions = {
+  app: defaultFilters.app,
+};
+
+const defaultFiltersInsightsTransactions = {
   app: defaultFilters.app,
 };
 
@@ -120,6 +127,9 @@ const initialState: LocalStorageState = {
   "sortSetting/SessionsPage":
     JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
     defaultSessionsSortSetting,
+  "sortSetting/InsightsTransactionsPage":
+    JSON.parse(localStorage.getItem("sortSetting/InsightsTransactionsPage")) ||
+    defaultSortSettingActiveExecutions,
   "filters/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
     defaultFiltersActiveExecutions,
@@ -134,6 +144,9 @@ const initialState: LocalStorageState = {
     defaultFilters,
   "filters/SessionsPage":
     JSON.parse(localStorage.getItem("filters/SessionsPage")) || defaultFilters,
+  "filters/InsightsTransactionsPage":
+    JSON.parse(localStorage.getItem("filters/InsightsTransactionsPage")) ||
+    defaultFiltersInsightsTransactions,
   "search/StatementsPage":
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":

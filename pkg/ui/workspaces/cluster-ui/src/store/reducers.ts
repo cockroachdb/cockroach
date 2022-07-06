@@ -35,6 +35,10 @@ import {
 } from "./indexStats/indexStats.reducer";
 import { JobsState, reducer as jobs } from "./jobs";
 import { JobState, reducer as job } from "./jobDetails";
+import {
+  TransactionContentionState,
+  reducer as contentionTransactions,
+} from "./contention";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -49,6 +53,7 @@ export type AdminUiState = {
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobState;
+  contentionTransactions: TransactionContentionState;
 };
 
 export type AppState = {
@@ -61,6 +66,7 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
+  contentionTransactions,
   terminateQuery,
   uiConfig,
   sqlStats,
