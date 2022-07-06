@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	bigtestFlag  = "bigtest"
 	filesFlag    = "files"
 	subtestsFlag = "subtests"
 	configFlag   = "config"
@@ -28,9 +29,10 @@ const (
 
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	testLogicCmd := &cobra.Command{
-		Use:   "testlogic {,base,ccl,opt}",
-		Short: "Run logic tests",
-		Long:  "Run logic tests.",
+		Use:     "testlogic {,base,ccl,opt,sqlite,sqliteccl}",
+		Aliases: []string{"logictest"},
+		Short:   "Run logic tests",
+		Long:    "Run logic tests.",
 		Example: `
 	dev testlogic
 	dev testlogic ccl opt
@@ -45,9 +47,11 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().String(filesFlag, "", "run logic tests for files matching this regex")
 	testLogicCmd.Flags().String(subtestsFlag, "", "run logic test subtests matching this regex")
 	testLogicCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
+	testLogicCmd.Flags().Bool(bigtestFlag, false, "run long-running sqlite logic tests")
 	testLogicCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
 	testLogicCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run")
+	testLogicCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
 	testLogicCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
@@ -62,6 +66,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 
 	var (
+		bigtest       = mustGetFlagBool(cmd, bigtestFlag)
 		config        = mustGetFlagString(cmd, configFlag)
 		files         = mustGetFlagString(cmd, filesFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
@@ -71,6 +76,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		subtests      = mustGetFlagString(cmd, subtestsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose       = mustGetFlagBool(cmd, vFlag)
+		noGen         = mustGetFlagBool(cmd, noGenFlag)
 		showSQL       = mustGetFlagBool(cmd, showSQLFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
 		stress        = mustGetFlagBool(cmd, stressFlag)
@@ -81,7 +87,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		ignoreCache = true
 	}
 
-	validChoices := []string{"base", "ccl", "opt"}
+	validChoices := []string{"base", "ccl", "opt", "sqlite", "sqliteccl"}
 	if len(choices) == 0 {
 		// Default to all targets.
 		choices = append(choices, validChoices...)
@@ -98,61 +104,41 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
-	for _, choice := range choices {
-		var testTarget, selectorPrefix string
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !noGen {
+		err := d.generateLogicTest(cmd)
+		if err != nil {
+			return err
+		}
+	}
+
+	targets := make([]string, len(choices))
+	args := []string{"test"}
+	for idx, choice := range choices {
+		var testsDir string
 		switch choice {
 		case "base":
-			testTarget = "//pkg/sql/logictest:logictest_test"
-			selectorPrefix = "TestLogic"
+			testsDir = "//pkg/sql/logictest/tests"
 		case "ccl":
-			testTarget = "//pkg/ccl/logictestccl:logictestccl_test"
-			selectorPrefix = "Test(CCL|Tenant)Logic"
+			testsDir = "//pkg/ccl/logictestccl/tests"
 		case "opt":
-			testTarget = "//pkg/sql/opt/exec/execbuilder:execbuilder_test"
-			selectorPrefix = "TestExecBuild"
+			testsDir = "//pkg/sql/opt/exec/execbuilder/tests"
+		case "sqlite":
+			testsDir = "//pkg/sql/sqlitelogictest/tests"
+		case "sqliteccl":
+			testsDir = "//pkg/ccl/sqlitelogictestccl/tests"
 		}
-
-		var args []string
-		args = append(args, "test")
-		args = append(args, "--test_env=GOTRACEBACK=all")
-		if numCPUs != 0 {
-			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		if config != "" {
+			testsDir = testsDir + "/" + config
 		}
-		if ignoreCache {
-			args = append(args, "--nocache_test_results")
-		}
-		if verbose {
-			args = append(args, "--test_arg", "-test.v")
-		}
-		if showLogs {
-			args = append(args, "--test_arg", "-show-logs")
-		}
-		if showSQL {
-			args = append(args, "--test_arg", "-show-sql")
-		}
-		if count != 1 {
-			args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
-		}
-		if len(files) > 0 {
-			args = append(args, "--test_arg", "-show-sql")
-		}
-		if len(config) > 0 {
-			args = append(args, "--test_arg", "-config", "--test_arg", config)
-		}
+		targets[idx] = testsDir + "/..."
 
 		if rewrite {
-			if stress {
-				return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
-			}
-			workspace, err := d.getWorkspace(ctx)
-			if err != nil {
-				return err
-			}
-
-			args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
-			args = append(args, "--test_arg", "-rewrite")
-
-			dir := getDirectoryFromTarget(testTarget)
+			dir := filepath.Join(filepath.Dir(strings.TrimPrefix(testsDir, "//")), "testdata")
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
 			if choice == "ccl" {
 				// The ccl logictest target shares the testdata directory with the base
@@ -161,46 +147,78 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 					filepath.Join(workspace, "pkg/sql/logictest")))
 			}
 		}
-		if timeout > 0 && !stress {
-			args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
+	}
 
-			// If stress is specified, we'll pad the timeout below.
-		}
+	args = append(args, targets...)
+	args = append(args, "--test_env=GOTRACEBACK=all")
+	if numCPUs != 0 {
+		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	}
+	if ignoreCache {
+		args = append(args, "--nocache_test_results")
+	}
+	if verbose {
+		args = append(args, "--test_arg", "-test.v")
+	}
+	if showLogs {
+		args = append(args, "--test_arg", "-show-logs")
+	}
+	if showSQL {
+		args = append(args, "--test_arg", "-show-sql")
+	}
+	if bigtest {
+		args = append(args, "--test_arg", "-bigtest")
+	}
+	if count != 1 {
+		args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
+	}
+	if len(files) > 0 {
+		args = append(args, "--test_arg", "-show-sql")
+	}
 
+	if rewrite {
 		if stress {
-			args = append(args, "--test_sharding_strategy=disabled")
-			args = append(args, d.getStressArgs(stressCmdArgs, timeout)...)
+			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
 		}
-		if testArgs != "" {
-			goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
-			if err != nil {
-				return err
-			}
-			args = append(args, goTestArgs...)
-		}
+		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
+		args = append(args, "--test_arg", "-rewrite")
+	}
+	if timeout > 0 && !stress {
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 
-		// TODO(irfansharif): Is this right? --config and --files is optional.
-		selector := fmt.Sprintf(
-			"%s/%s/%s/%s",
-			selectorPrefix,
-			maybeAddBeginEndMarkers(config),
-			maybeAddBeginEndMarkers(files),
-			subtests)
-		args = append(args, testTarget)
-		args = append(args, "--test_filter", selector)
-		args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
-		args = append(args, additionalBazelArgs...)
-		logCommand("bazel", args...)
-		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		// If stress is specified, we'll pad the timeout below.
+	}
+
+	if stress {
+		args = append(args, "--test_sharding_strategy=disabled")
+		args = append(args, d.getStressArgs(stressCmdArgs, timeout)...)
+	}
+	if testArgs != "" {
+		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
+		if err != nil {
 			return err
 		}
+		args = append(args, goTestArgs...)
+	}
+
+	if files != "" || subtests != "" {
+		args = append(args, "--test_filter", munge(files)+"/"+subtests)
+	}
+	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
+	args = append(args, additionalBazelArgs...)
+	logCommand("bazel", args...)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		return err
 	}
 	return nil
 }
 
-func maybeAddBeginEndMarkers(s string) string {
-	if len(s) == 0 {
-		return s
+func munge(s string) string {
+	if s == "" {
+		return ".*"
 	}
-	return "^" + s + "$"
+	s = strings.ReplaceAll(s, "-", "_")
+	s = strings.ReplaceAll(s, ".", "_")
+	s = strings.ReplaceAll(s, "/", "")
+	return s
 }
