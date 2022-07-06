@@ -262,7 +262,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 
 	for _, tg := range sp.TagGroups {
 		var prefix string
-		if tg.Name != "" {
+		if tg.Name != AnonymousTagGroupName {
 			prefix = fmt.Sprintf("%s-", tg.Name)
 		}
 		for _, tag := range tg.Tags {
@@ -457,7 +457,7 @@ func (r Recording) ToJaegerJSON(stmt, comment, nodeStr string) (string, error) {
 		for _, tagGroup := range sp.TagGroups {
 			for _, tag := range tagGroup.Tags {
 				var prefix string
-				if tagGroup.Name != "" {
+				if tagGroup.Name != AnonymousTagGroupName {
 					prefix = fmt.Sprintf("%s-", tagGroup.Name)
 				}
 				s.Tags = append(s.Tags, jaegerjson.KeyValue{

@@ -67,7 +67,7 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	outliers *outliers.Registry
+	outliers outliers.Registry
 }
 
 func newSQLStats(
