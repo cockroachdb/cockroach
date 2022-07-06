@@ -32,11 +32,13 @@ export type LocalStorageState = {
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
   "sortSetting/JobsPage": SortSetting;
+  "sortSetting/InsightsPage": SortSetting;
   "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
   "filters/SessionsPage": Filters;
+  "filters/InsightsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
   "typeSetting/JobsPage": number;
@@ -60,6 +62,10 @@ const defaultSortSettingActiveExecutions: SortSetting = {
 };
 
 const defaultFiltersActiveExecutions = {
+  app: defaultFilters.app,
+};
+
+const defaultFiltersInsights = {
   app: defaultFilters.app,
 };
 
@@ -120,6 +126,9 @@ const initialState: LocalStorageState = {
   "sortSetting/SessionsPage":
     JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
     defaultSessionsSortSetting,
+  "sortSetting/InsightsPage":
+    JSON.parse(localStorage.getItem("sortSetting/InsightsPage")) ||
+    defaultSortSettingActiveExecutions,
   "filters/ActiveStatementsPage":
     JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
     defaultFiltersActiveExecutions,
@@ -134,6 +143,9 @@ const initialState: LocalStorageState = {
     defaultFilters,
   "filters/SessionsPage":
     JSON.parse(localStorage.getItem("filters/SessionsPage")) || defaultFilters,
+  "filters/InsightsPage":
+    JSON.parse(localStorage.getItem("filters/InsightsPage")) ||
+    defaultFiltersInsights,
   "search/StatementsPage":
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":
