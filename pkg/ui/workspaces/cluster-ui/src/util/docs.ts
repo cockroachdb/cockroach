@@ -123,3 +123,6 @@ export const transactionsTable = docsURL("ui-transactions-page.html");
 export const performanceTuningRecipes = docsURLNoVersion(
   "performance-recipes.html#fix-slow-writes",
 );
+export const transactionContention = docsURL(
+  "transactions.html#transaction-contention",
+);
