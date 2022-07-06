@@ -1,0 +1,2 @@
+statement error pq: unimplemented: CREATE FUNCTION unimplemented
+CREATE OR REPLACE FUNCTION f(a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL

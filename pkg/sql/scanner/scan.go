@@ -1038,12 +1038,26 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 		}
 	}
 
+	var preValID int32
+	// This is used to track the degree of nested `BEGIN ATOMIC ... END` function
+	// body context. When greater than zero, it means that we're scanning through
+	// the function body of a `CREATE FUNCTION` statement. ';' character is only
+	// a separator of sql statements within the body instead of a finishing line
+	// of the `CREATE FUNCTION` statement.
+	curFuncBodyCnt := 0
 	for {
 		if lval.id == lexbase.ERROR {
 			return true, true, fmt.Errorf("scan error: %s", lval.s)
 		}
+		preValID = lval.id
 		s.Scan(lval)
-		if lval.id == 0 || lval.id == ';' {
+		if preValID == lexbase.BEGIN && lval.id == lexbase.ATOMIC {
+			curFuncBodyCnt++
+		}
+		if curFuncBodyCnt > 0 && lval.id == lexbase.END {
+			curFuncBodyCnt--
+		}
+		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
 			return (lval.id == 0), true, nil
 		}
 	}

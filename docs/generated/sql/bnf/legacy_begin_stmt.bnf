@@ -1,0 +1,2 @@
+legacy_begin_stmt ::=
+	'BEGIN' opt_transaction begin_transaction
