@@ -100,6 +100,15 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	br, _, pErr := r.SendWithWriteBytes(ctx, ba)
+	return br, pErr
+}
+
+// SendWithWriteBytes is the implementation of Send with an additional
+// *StoreWriteBytes return value.
+func (r *Replica) SendWithWriteBytes(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
 	return r.sendWithoutRangeID(ctx, &ba)
 }
 
@@ -125,7 +134,7 @@ func (r *Replica) Send(
 // github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
 func (r *Replica) sendWithoutRangeID(
 	ctx context.Context, ba *roachpb.BatchRequest,
-) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
+) (_ *roachpb.BatchResponse, _ *StoreWriteBytes, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
 
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
@@ -144,41 +153,42 @@ func (r *Replica) sendWithoutRangeID(
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 	if err := r.maybeCommitWaitBeforeCommitTrigger(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	// NB: must be performed before collecting request spans.
 	ba, err := maybeStripInFlightWrites(ba)
 	if err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
 		if pErr := filter(ctx, *ba); pErr != nil {
-			return nil, pErr
+			return nil, nil, pErr
 		}
 	}
 
 	// Differentiate between read-write, read-only, and admin.
 	var pErr *roachpb.Error
+	var writeBytes *StoreWriteBytes
 	if isReadOnly {
 		log.Event(ctx, "read-only path")
 		fn := (*Replica).executeReadOnlyBatch
-		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
+		br, _, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsWrite() {
 		log.Event(ctx, "read-write path")
 		fn := (*Replica).executeWriteBatch
-		br, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
+		br, writeBytes, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
 		br, pErr = r.executeAdminBatch(ctx, ba)
@@ -207,7 +217,7 @@ func (r *Replica) sendWithoutRangeID(
 	}
 
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
-	return br, pErr
+	return br, writeBytes, pErr
 }
 
 // maybeCommitWaitBeforeCommitTrigger detects batches that are attempting to
@@ -374,7 +384,7 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 // concurrency guard back to the caller.
 type batchExecutionFn func(
 	*Replica, context.Context, *roachpb.BatchRequest, *concurrency.Guard,
-) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
+) (*roachpb.BatchResponse, *concurrency.Guard, *StoreWriteBytes, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
 var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
@@ -395,7 +405,7 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 // handles the process of retrying batch execution after addressing the error.
 func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {
 	// Try to execute command; exit retry loop on success.
 	var latchSpans, lockSpans *spanset.SpanSet
 	var requestEvalKind concurrency.RequestEvalKind
@@ -415,7 +425,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	for first := true; ; first = false {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
-			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
+			return nil, nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
 		}
 
 		// Determine the maximal set of key spans that the batch will operate on.
@@ -428,7 +438,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			var err error
 			latchSpans, lockSpans, requestEvalKind, err = r.collectSpans(ba)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, nil, roachpb.NewError(err)
 			}
 		}
 
@@ -470,21 +480,21 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 					r.breaker.Signal().Err(),
 				)))
 			}
-			return nil, pErr
+			return nil, nil, pErr
 		} else if resp != nil {
 			br = new(roachpb.BatchResponse)
 			br.Responses = resp
-			return br, nil
+			return br, nil, nil
 		}
 		latchSpans, lockSpans = nil, nil // ownership released
 
-		br, g, pErr = fn(r, ctx, ba, g)
+		br, g, writeBytes, pErr = fn(r, ctx, ba, g)
 		if pErr == nil {
 			// Success.
-			return br, nil
+			return br, writeBytes, nil
 		} else if !isConcurrencyRetryError(pErr) {
 			// Propagate error.
-			return nil, pErr
+			return nil, nil, pErr
 		}
 
 		// The batch execution func returned a server-side concurrency retry
@@ -506,12 +516,12 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
 			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
-				return nil, pErr
+				return nil, nil, pErr
 			}
 		case *roachpb.TransactionPushError:
 			// Drop latches, but retain lock wait-queues.
 			if g, pErr = r.handleTransactionPushError(ctx, ba, g, pErr, t); pErr != nil {
-				return nil, pErr
+				return nil, nil, pErr
 			}
 		case *roachpb.IndeterminateCommitError:
 			// Drop latches and lock wait-queues.
@@ -522,7 +532,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// is returned if the transaction is recovered successfully to either a
 			// COMMITTED or ABORTED state.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
-				return nil, pErr
+				return nil, nil, pErr
 			}
 		case *roachpb.ReadWithinUncertaintyIntervalError:
 			// Drop latches and lock wait-queues.
@@ -541,7 +551,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// propagate it.
 			ba, pErr = r.handleReadWithinUncertaintyIntervalError(ctx, ba, pErr, t)
 			if pErr != nil {
-				return nil, pErr
+				return nil, nil, pErr
 			}
 		case *roachpb.InvalidLeaseError:
 			// Drop latches and lock wait-queues.
@@ -552,7 +562,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// replica or redirect to the current leaseholder if currently held
 			// by a different replica.
 			if pErr = r.handleInvalidLeaseError(ctx, ba); pErr != nil {
-				return nil, pErr
+				return nil, nil, pErr
 			}
 		case *roachpb.MergeInProgressError:
 			// Drop latches and lock wait-queues.
@@ -561,7 +571,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			g = nil
 			// Then listen for the merge to complete.
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
-				return nil, pErr
+				return nil, nil, pErr
 			}
 		case *roachpb.OptimisticEvalConflictsError:
 			// We are deliberately not dropping latches. Note that the latches are
