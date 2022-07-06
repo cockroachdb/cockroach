@@ -14,6 +14,7 @@ import {
   ActiveStatementFilters,
   ActiveTransactionFilters,
 } from "src/activeExecutions/types";
+import { InsightEventFilters } from "../insights";
 
 // This function returns a Filters object populated with values from the URL, or null
 // if there were no filters set.
@@ -62,6 +63,22 @@ export function getActiveTransactionFiltersFromURL(
   };
 
   // If every entry is null, there were no active stmt filters. Return null.
+  if (Object.values(appFilters).every(val => !val)) return null;
+
+  return appFilters;
+}
+
+export function getInsightEventFiltersFromURL(
+  location: Location,
+): Partial<InsightEventFilters> | null {
+  const filters = getFiltersFromURL(location);
+  if (!filters) return null;
+
+  const appFilters = {
+    app: filters.app,
+  };
+
+  // If every entry is null, there were no active filters. Return null.
   if (Object.values(appFilters).every(val => !val)) return null;
 
   return appFilters;

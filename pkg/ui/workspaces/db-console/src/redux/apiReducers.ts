@@ -27,6 +27,7 @@ import { VersionList } from "src/interfaces/cockroachlabs";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.
@@ -374,6 +375,14 @@ const metricMetadataReducerObj = new CachedDataReducer(
 );
 export const refreshMetricMetadata = metricMetadataReducerObj.refresh;
 
+const insightsReducerObj = new CachedDataReducer(
+  clusterUiApi.getTransactionInsightState,
+  "insights",
+  moment.duration(10, "s"),
+  moment.duration(30, "s"),
+);
+export const refreshInsights = insightsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -408,6 +417,7 @@ export interface APIReducersState {
   statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
+  insights: CachedDataReducerState<clusterUiApi.TransactionInsightsResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -448,6 +458,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     statementDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
+  [insightsReducerObj.actionNamespace]: insightsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
