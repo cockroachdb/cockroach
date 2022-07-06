@@ -344,7 +344,7 @@ func MakeServer(
 		nil, /* curCount */
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
-	server.sqlMemoryPool.Start(context.Background(), parentMemoryMonitor, mon.BoundAccount{})
+	server.sqlMemoryPool.StartNoReserved(context.Background(), parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	// TODO(knz,ben): Use a cluster setting for this.
@@ -355,7 +355,7 @@ func MakeServer(
 		server.metrics.ConnMemMetrics.CurBytesCount,
 		server.metrics.ConnMemMetrics.MaxBytesHist,
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st)
-	server.connMonitor.Start(context.Background(), server.sqlMemoryPool, mon.BoundAccount{})
+	server.connMonitor.StartNoReserved(context.Background(), server.sqlMemoryPool)
 
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
@@ -873,7 +873,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// This includes authentication.
 	s.serveConn(
 		ctx, conn, sArgs,
-		reserved,
+		&reserved,
 		connStart,
 		authOptions{
 			connType:        connType,

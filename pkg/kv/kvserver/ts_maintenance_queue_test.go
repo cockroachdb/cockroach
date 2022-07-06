@@ -292,7 +292,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	memMon.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	memMon.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer memMon.Stop(context.Background())
 	memContext := ts.MakeQueryMemoryContext(
 		memMon,

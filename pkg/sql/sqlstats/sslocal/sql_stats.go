@@ -100,7 +100,7 @@ func newSQLStats(
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
-	s.mu.mon.Start(context.Background(), parentMon, mon.BoundAccount{})
+	s.mu.mon.StartNoReserved(context.Background(), parentMon)
 	return s
 }
 

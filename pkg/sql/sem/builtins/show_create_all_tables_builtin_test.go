@@ -35,7 +35,7 @@ func TestTopologicalSort(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	acc := monitor.MakeBoundAccount()
 
 	testCases := []struct {
