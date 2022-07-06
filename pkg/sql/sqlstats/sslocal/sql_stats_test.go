@@ -458,13 +458,9 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	recordStats := func(testCase *tc) {
 		var txnFingerprintID roachpb.TransactionFingerprintID
 		txnFingerprintIDHash := util.MakeFNV64()
-		if !testCase.implicit {
-			statsCollector.StartExplicitTransaction()
-		}
+		statsCollector.StartTransaction()
 		defer func() {
-			if !testCase.implicit {
-				statsCollector.EndExplicitTransaction(ctx, txnFingerprintID)
-			}
+			statsCollector.EndTransaction(ctx, txnFingerprintID)
 			require.NoError(t,
 				statsCollector.
 					RecordTransaction(ctx, txnFingerprintID, sqlstats.RecordedTxnStats{}))
@@ -571,7 +567,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 		for _, txn := range simulatedTxns {
 			// Collect stats for the simulated transaction.
 			txnFingerprintIDHash := util.MakeFNV64()
-			statsCollector.StartExplicitTransaction()
+			statsCollector.StartTransaction()
 
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID, err := statsCollector.RecordStatement(
@@ -584,7 +580,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			}
 
 			transactionFingerprintID := roachpb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
-			statsCollector.EndExplicitTransaction(ctx, transactionFingerprintID)
+			statsCollector.EndTransaction(ctx, transactionFingerprintID)
 			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{})
 			require.NoError(t, err)
 

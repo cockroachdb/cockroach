@@ -12,9 +12,7 @@ package tenantsettingswatcher
 
 import (
 	"context"
-	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
@@ -78,56 +76,14 @@ func New(
 
 // Start will start the Watcher.
 //
-// If the current cluster version indicates that we have a tenant settings
-// table, this function sets up the rangefeed and waits for the initial scan. An
-// error will be returned if the initial table scan hits an error, the context
-// is canceled or the stopper is stopped prior to the initial data being
-// retrieved.
-//
-// Otherwise, Start sets up a background task that waits for the right version
-// and starts the rangefeed when appropriate. WaitUntilStarted can be used to
-// wait for the rangefeed setup.
+// This function sets up the rangefeed and waits for the initial scan. An error
+// will be returned if the initial table scan hits an error, the context is
+// canceled or the stopper is stopped prior to the initial data being retrieved.
 func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
 	w.startCh = make(chan struct{})
-	if w.st.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
-		// We are not in a mixed-version scenario; start the rangefeed now.
-		w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-		close(w.startCh)
-		return w.startErr
-	}
-	// Set up an on-change callback that closes this channel once the version
-	// supports tenant settings.
-	versionOkCh := make(chan struct{})
-	var once sync.Once
-	w.st.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
-		if newVersion.IsActive(clusterversion.TenantSettingsTable) {
-			once.Do(func() {
-				close(versionOkCh)
-			})
-		}
-	})
-	// Now check the version again, in case the version changed just before
-	// SetOnChange.
-	if w.st.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
-		w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-		close(w.startCh)
-		return w.startErr
-	}
-	return w.stopper.RunAsyncTask(ctx, "tenantsettingswatcher-start", func(ctx context.Context) {
-		log.Infof(ctx, "tenantsettingswatcher waiting for the appropriate version")
-		select {
-		case <-versionOkCh:
-		case <-w.stopper.ShouldQuiesce():
-			return
-		}
-		log.Infof(ctx, "tenantsettingswatcher can now start")
-		w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-		if w.startErr != nil {
-			// We are not equipped to handle this error asynchronously.
-			log.Warningf(ctx, "error starting tenantsettingswatcher rangefeed: %v", w.startErr)
-		}
-		close(w.startCh)
-	})
+	w.startErr = w.startRangeFeed(ctx, sysTableResolver)
+	close(w.startCh)
+	return w.startErr
 }
 
 // startRangeFeed starts the range feed and waits for the initial table scan. An
@@ -237,11 +193,6 @@ func (w *Watcher) startRangeFeed(
 
 // WaitForStart waits until the rangefeed is set up. Returns an error if the
 // rangefeed setup failed.
-//
-// If the cluster version does not support tenant settings, returns immediately
-// with no error. Note that it is still legal to call GetTenantOverrides and
-// GetAllTenantOverrides in this state. When the cluster version is upgraded,
-// the settings will start being updated.
 func (w *Watcher) WaitForStart(ctx context.Context) error {
 	// Fast path check.
 	select {
@@ -251,12 +202,6 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 	}
 	if w.startCh == nil {
 		return errors.AssertionFailedf("Start() was not yet called")
-	}
-	if !w.st.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
-		// If this happens, then we are running new tenant code against a host
-		// cluster that was not fully upgraded.
-		log.Warningf(ctx, "tenant requested settings before host cluster version upgrade")
-		return nil
 	}
 	select {
 	case <-w.startCh:

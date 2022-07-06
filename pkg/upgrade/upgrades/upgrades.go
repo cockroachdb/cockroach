@@ -122,12 +122,6 @@ var upgrades = []upgrade.Upgrade{
 		postRaftAppliedIndexTermMigration,
 	),
 	upgrade.NewTenantUpgrade(
-		"add the system.tenant_settings table",
-		toCV(clusterversion.TenantSettingsTable),
-		NoPrecondition,
-		tenantSettingsTableMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"add the system.span_count table",
 		toCV(clusterversion.SpanCountTable),
 		NoPrecondition,

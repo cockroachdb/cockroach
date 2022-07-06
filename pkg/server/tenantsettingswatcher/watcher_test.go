@@ -18,18 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,88 +111,4 @@ func TestWatcher(t *testing.T) {
 	expectClose(t3Ch)
 	t3Overrides, _ = w.GetTenantOverrides(t3)
 	expect(t3Overrides, "qux=qux-t3")
-}
-
-// TestWatcherWaitForVersion verifies that watcher startup waits for the cluster
-// version to be upgraded.
-func TestWatcherWaitForVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	var oldVersion = clusterversion.ByKey(clusterversion.V21_2)
-
-	disableUpgradeCh := make(chan struct{})
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          oldVersion,
-					DisableAutomaticVersionUpgrade: disableUpgradeCh,
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	s0 := tc.Server(0)
-	w := tenantsettingswatcher.New(
-		s0.Clock(),
-		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		s0.Stopper(),
-		s0.ClusterSettings(),
-	)
-
-	// Start should go in async mode and wait for the version.
-	err := w.Start(ctx, s0.SystemTableIDResolver().(catalog.SystemTableIDResolver))
-	require.NoError(t, err)
-
-	// Allow upgrade, wait for the table to be created.
-	close(disableUpgradeCh)
-	db := tc.ServerConn(0)
-	testutils.SucceedsSoon(t, func() error {
-		row := db.QueryRow("SELECT count(*) FROM [SHOW TABLES FROM system] WHERE table_name = 'tenant_settings'")
-		if row.Err() != nil {
-			return row.Err()
-		}
-		var count int
-		if err := row.Scan(&count); err != nil {
-			return err
-		}
-		if count == 0 {
-			return errors.Errorf("tenant_settings table does not exist")
-		}
-		return nil
-	})
-	// Wait for watcher start.
-	waitForStartCh := make(chan error)
-	go func() {
-		waitForStartCh <- w.WaitForStart(ctx)
-	}()
-	select {
-	case err := <-waitForStartCh:
-		if err != nil {
-			t.Fatalf("WaitForStart error: %v", err)
-		}
-	case <-time.After(45 * time.Second):
-		t.Fatalf("WaitForStart did not return after upgrade was allowed")
-	}
-
-	// Set an override and make sure the watcher is working.
-	_, ch := w.GetAllTenantOverrides()
-	r := sqlutils.MakeSQLRunner(db)
-	r.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (0, 'foo', 'foo', 's')`)
-	// Wait for the update.
-	select {
-	case <-ch:
-		overrides, _ := w.GetAllTenantOverrides()
-		expected := roachpb.TenantSetting{
-			Name:  "foo",
-			Value: settings.EncodedValue{Value: "foo", Type: "s"},
-		}
-		if len(overrides) != 1 || overrides[0] != expected {
-			t.Fatalf("invalid overrides %v", overrides)
-		}
-	case <-time.After(45 * time.Second):
-		t.Fatalf("Did not receive updated tenant overrides")
-	}
 }

@@ -8,10 +8,16 @@ SET CLUSTER SETTING sql.stats.flush.enabled = false;
 # Check that node_statement_statistics report per application
 
 statement ok
-SET application_name = hello; SELECT 1
+SET application_name = hello
 
 statement ok
-SET application_name = world; SELECT 2
+SELECT 1
+
+statement ok
+SET application_name = world
+
+statement ok
+SELECT 2
 
 query B
 SELECT count > 0 FROM crdb_internal.node_statement_statistics WHERE application_name IN ('hello', 'world')
@@ -43,6 +49,25 @@ SELECT key, count >= 1 FROM crdb_internal.node_statement_statistics WHERE applic
 ----
 SELECT _     true
 SELECT _, _  true
+
+# Check that multiple stmts in a simple query are executed as one txn.
+
+statement ok
+SET application_name = multi_stmts_test;
+
+statement ok
+select 1, 2; select 1, 2, 3; select 'ok'
+
+statement ok
+SET application_name = ''
+
+query T
+SELECT txn_fingerprint_id FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY txn_fingerprint_id
+----
+10413021493801724718
+10413021493801724718
+10413021493801724718
+17854018046052698166
 
 statement ok
 CREATE TABLE test(x INT, y INT, z INT); INSERT INTO test(x, y, z) VALUES (0,0,0);
@@ -121,7 +146,10 @@ statement ok
 SHOW CLUSTER SETTING debug.panic_on_failed_assertions
 
 statement ok
-SET application_name = ''; RESET distsql
+SET application_name = '';
+
+statement ok
+RESET distsql
 
 skipif config 3node-tenant-default-configs #52763
 query TT colnames
@@ -142,7 +170,7 @@ SELECT x FROM test WHERE y IN (_, _, __more3__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more3__)               ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
-SET application_name = '_'                                          ·
+SET application_name = '_'                                        ·
 SET distsql = "on"                                                ·
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
 SHOW application_name                                             ·
@@ -204,6 +232,10 @@ SET application_name = 'implicit_txn_test'
 statement ok
 BEGIN; SELECT x FROM test where y=1; COMMIT;
 
+# Upgraded implicit txn.
+statement ok
+select 1; BEGIN; select 1; select 1; COMMIT
+
 statement ok
 BEGIN;
 SELECT x, z FROM test;
@@ -222,6 +254,7 @@ SELECT key, implicit_txn
  WHERE application_name = 'implicit_txn_test' ORDER BY key, implicit_txn;
 ----
 key                             implicit_txn
+SELECT _                        false
 SELECT x FROM test WHERE y = _  false
 SELECT x FROM test WHERE y = _  false
 SELECT x FROM test WHERE y = _  true

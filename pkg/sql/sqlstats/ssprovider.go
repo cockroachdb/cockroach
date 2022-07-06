@@ -148,17 +148,20 @@ type StatsCollector interface {
 	// of the sessionphase.Times.
 	Reset(ApplicationStats, *sessionphase.Times)
 
-	// StartExplicitTransaction informs StatsCollector that all subsequent
-	// statements will be executed in the context an explicit transaction.
-	StartExplicitTransaction()
+	// StartTransaction sets up the StatsCollector for a new transaction.
+	StartTransaction()
 
-	// EndExplicitTransaction informs the StatsCollector that the explicit txn has
+	// EndTransaction informs the StatsCollector that the current txn has
 	// finished execution. (Either COMMITTED or ABORTED). This means the txn's
 	// fingerprint ID is now available. StatsCollector will now go back to update
 	// the transaction fingerprint ID field of all the statement statistics for that
 	// txn.
-	EndExplicitTransaction(ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
-	)
+	EndTransaction(ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID)
+
+	// UpgradeImplicitTxn informs the StatsCollector that the current txn has been
+	// upgraded to an explicit transaction, thus all previously recorded statements
+	// should be updated accordingly.
+	UpgradeImplicitTxn(ctx context.Context) error
 }
 
 // Storage provides clients with interface to perform read and write operations
