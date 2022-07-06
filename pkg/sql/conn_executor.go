@@ -936,8 +936,7 @@ func (s *Server) newConnExecutor(
 		ex.extraTxnState.descCollection = descsCollection
 		ex.extraTxnState.skipLocalRelease = true
 	} else {
-		newDescsCollection := s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
-		ex.extraTxnState.descCollection = &newDescsCollection
+		ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 		ex.extraTxnState.skipLocalRelease = false
 	}
 

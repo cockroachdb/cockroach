@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-
 	"math"
 	"strings"
 	"sync"
@@ -297,9 +296,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		if ie.extraTxnState.jobs != nil {
 			ex.extraTxnState.jobs = *ie.extraTxnState.jobs
 		}
-		if ie.extraTxnState.schemaChangeJobRecords != nil {
-			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
-		}
+		// TODO(janexing): uncomment the following will make schema_change_in_txn hang
+		//if ie.extraTxnState.schemaChangeJobRecords != nil {
+		//	ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+		//}
 	}
 
 	ex.state.resetForNewSQLTxn(
@@ -738,7 +738,7 @@ func (ie *InternalExecutor) MakeDescsCollection(
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
 	descsCollection := ie.s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), nil /* monitor */)
-	return &descsCollection
+	return descsCollection
 }
 
 var rowsAffectedResultColumns = colinfo.ResultColumns{
