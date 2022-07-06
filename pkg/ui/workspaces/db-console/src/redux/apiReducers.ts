@@ -395,6 +395,14 @@ export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
   };
 };
 
+const insightsReducerObj = new CachedDataReducer(
+  clusterUiApi.getInsightEventState,
+  "insights",
+  moment.duration(10, "s"),
+  moment.duration(30, "s"),
+);
+export const refreshInsights = insightsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -430,6 +438,7 @@ export interface APIReducersState {
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
+  insights: CachedDataReducerState<clusterUiApi.InsightEventsResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -471,6 +480,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
+  [insightsReducerObj.actionNamespace]: insightsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

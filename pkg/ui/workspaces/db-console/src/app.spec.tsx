@@ -31,6 +31,10 @@ stubComponentInModule(
   "src/views/transactions/activeTransactionDetailsConnected",
   "default",
 );
+stubComponentInModule(
+  "src/views/insights/workloadInsightsPageConnected",
+  "default",
+);
 
 import React from "react";
 import { Action, Store } from "redux";
@@ -411,6 +415,15 @@ describe("Routing to", () => {
     test("'/execution/transaction/transactionID' routes to <ActiveTransactionDetails>", () => {
       navigateToPath("/execution/transaction/transactionID");
       screen.getByTestId("activeTransactionDetailsConnected");
+    });
+  });
+  {
+    /* insights */
+  }
+  describe("'/insights' path", () => {
+    test("routes to <InsightsOverviewPage> component", () => {
+      navigateToPath("/insights");
+      screen.getByTestId("workloadInsightsPageConnected");
     });
   });
   {
