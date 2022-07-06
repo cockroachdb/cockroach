@@ -3696,6 +3696,8 @@ func AsJSON(
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
 		return json.FromSpatialObject(t.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+	case *DVoid:
+		return json.FromString(AsStringWithFlags(t, fmtRawStrings)), nil
 	default:
 		if d == DNull {
 			return json.NullJSONValue, nil
