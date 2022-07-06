@@ -403,6 +403,19 @@ const insightsReducerObj = new CachedDataReducer(
 );
 export const refreshInsights = insightsReducerObj.refresh;
 
+export const insightRequestKey = (
+  req: clusterUiApi.InsightEventDetailsRequest,
+): string => `${req.id}`;
+
+const insightDetailsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getInsightEventDetailsState,
+  "insightDetails",
+  insightRequestKey,
+  moment.duration(10, "s"),
+  moment.duration(30, "s"),
+);
+export const refreshInsightDetails = insightDetailsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -439,6 +452,7 @@ export interface APIReducersState {
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
   insights: CachedDataReducerState<clusterUiApi.InsightEventsResponse>;
+  insightDetails: KeyedCachedDataReducerState<clusterUiApi.InsightEventDetailsResponse>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -481,6 +495,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
   [insightsReducerObj.actionNamespace]: insightsReducerObj.reducer,
+  [insightDetailsReducerObj.actionNamespace]: insightDetailsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

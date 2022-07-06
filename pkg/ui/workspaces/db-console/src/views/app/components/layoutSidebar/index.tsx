@@ -47,7 +47,7 @@ export class Sidebar extends React.Component<SidebarProps> {
     {
       path: "/insights",
       text: "Insights",
-      activeFor: ["/insights"],
+      activeFor: [],
     },
     {
       path: "/reports/network",

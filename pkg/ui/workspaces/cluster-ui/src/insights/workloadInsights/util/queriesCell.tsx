@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
+import * as crypto from "crypto";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "src/util";
 import classNames from "classnames/bind";
-import styles from "./insightTable.module.scss";
+import styles from "./workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 
@@ -37,9 +38,11 @@ export const QueriesCell = ({
         placement="bottom"
         content={
           <div>
-            {transactionQueries.map(query => (
-              <div key={query.slice(0, 3) + transactionQueries.indexOf(query)}>
+            {transactionQueries.map((query, idx, arr) => (
+              <div key={crypto.randomBytes(16).toString("hex")}>
+                {idx != 0 && <br />}
                 {query}
+                {idx != arr.length - 1 && <br />}
               </div>
             ))}
           </div>

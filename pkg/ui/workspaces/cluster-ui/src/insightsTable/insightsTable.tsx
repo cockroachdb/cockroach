@@ -14,18 +14,24 @@ import { ColumnDescriptor, SortedTable } from "../sortedtable";
 import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
 import { StatementLink } from "../statementsTable";
+import { Duration } from "../util";
 
 const cx = classNames.bind(styles);
 
-export type InsightType = "DROP_INDEX" | "CREATE_INDEX" | "REPLACE_INDEX";
+export type InsightType =
+  | "DROP_INDEX"
+  | "CREATE_INDEX"
+  | "REPLACE_INDEX"
+  | "HIGH_WAIT_TIME";
 
 export interface InsightRecommendation {
   type: InsightType;
-  database: string;
-  table: string;
-  index_id: number;
-  query: string;
-  execution: executionDetails;
+  database?: string;
+  table?: string;
+  index_id?: number;
+  query?: string;
+  execution?: executionDetails;
+  details?: insightDetails;
 }
 
 export interface executionDetails {
@@ -33,6 +39,11 @@ export interface executionDetails {
   summary: string;
   fingerprintID: string;
   implicit: boolean;
+}
+
+export interface insightDetails {
+  duration: number;
+  description: string;
 }
 
 export class InsightsSortedTable extends SortedTable<InsightRecommendation> {}
@@ -80,6 +91,8 @@ function insightType(type: InsightType): string {
       return "Drop Unused Index";
     case "REPLACE_INDEX":
       return "Replace Index";
+    case "HIGH_WAIT_TIME":
+      return "High Wait Time";
     default:
       return "Insight";
   }
@@ -115,6 +128,19 @@ function descriptionCell(
       );
     case "DROP_INDEX":
       return <>{`Index ${insightRec.index_id}`}</>;
+    case "HIGH_WAIT_TIME":
+      return (
+        <>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Time Spent Waiting: </span>{" "}
+            {Duration(insightRec.details.duration * 1e6)}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description}
+          </div>
+        </>
+      );
     default:
       return <>{insightRec.query}</>;
   }

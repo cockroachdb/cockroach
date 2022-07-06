@@ -13,7 +13,7 @@ import { HIGH_WAIT_CONTENTION_THRESHOLD } from "../api";
 import { Filters } from "../queryFilter";
 
 export enum InsightNameEnum {
-  highWaitTime = "highWaitTime",
+  highWaitTime = "HIGH_WAIT_TIME",
 }
 
 export enum InsightExecEnum {
@@ -31,22 +31,52 @@ export type InsightEvent = {
   execType: InsightExecEnum;
 };
 
+export type InsightEventDetails = {
+  executionID: string;
+  queries: string[];
+  insights: Insight[];
+  startTime: Moment;
+  elapsedTime: number;
+  application: string;
+  fingerprintID: string;
+  waitingExecutionID: string;
+  waitingFingerprintID: string;
+  waitingQueries: string[];
+  contendedKey: string;
+  schemaName: string;
+  databaseName: string;
+  tableName: string;
+  indexName: string;
+  execType: InsightExecEnum;
+};
+
 export type Insight = {
   name: InsightNameEnum;
   label: string;
   description: string;
+  tooltipDescription: string;
+};
+
+export type EventExecution = {
+  executionID: string;
+  fingerprintID: string;
+  queries: string[];
+  startTime: Moment;
+  elapsedTime: number;
+  execType: InsightExecEnum;
 };
 
 const highWaitTimeInsight = (
   execType: InsightExecEnum = InsightExecEnum.TRANSACTION,
 ): Insight => {
   const threshold = HIGH_WAIT_CONTENTION_THRESHOLD.asMilliseconds();
+  const description = `This ${execType} has been waiting for more than ${threshold}ms on other ${execType}s to execute.`;
   return {
     name: InsightNameEnum.highWaitTime,
     label: "High Wait Time",
-    description:
-      `This ${execType} has been waiting for more than ${threshold}ms on other ${execType}s to execute. ` +
-      `Click the ${execType} execution ID to see more details.`,
+    description: description,
+    tooltipDescription:
+      description + ` Click the ${execType} execution ID to see more details.`,
   };
 };
 
