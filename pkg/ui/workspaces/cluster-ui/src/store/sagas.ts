@@ -25,6 +25,7 @@ import { sqlDetailsStatsSaga } from "./statementDetails";
 import { indexStatsSaga } from "./indexStats/indexStats.sagas";
 import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
 import { insightsSaga } from "./insights/insights.sagas";
+import { insightDetailsSaga } from "./insightDetails";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -33,6 +34,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(nodesSaga, cacheInvalidationPeriod),
     fork(livenessSaga, cacheInvalidationPeriod),
     fork(insightsSaga),
+    fork(insightDetailsSaga),
     fork(jobsSaga),
     fork(jobSaga),
     fork(sessionsSaga),
