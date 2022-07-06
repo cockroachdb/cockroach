@@ -188,6 +188,7 @@ const TagBadge = ({
         size="small"
         status={badgeStatus}
         icon={icon}
+        allowLowerCase={true}
       />
     </Button>
   );
