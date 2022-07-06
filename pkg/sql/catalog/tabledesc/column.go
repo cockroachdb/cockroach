@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -233,13 +234,33 @@ func (w column) GetGeneratedAsIdentityType() catpb.GeneratedAsIdentityType {
 	return w.desc.GeneratedAsIdentityType
 }
 
-// GetGeneratedAsIdentitySequenceOption returns the column's `GENERATED AS
-// IDENTITY` sequence option if it exists, empty string otherwise.
-func (w column) GetGeneratedAsIdentitySequenceOption() string {
+// GetGeneratedAsIdentitySequenceOptionStr returns the string representation
+// of the column's `GENERATED AS IDENTITY` sequence option if it exists, empty
+// string otherwise.
+func (w column) GetGeneratedAsIdentitySequenceOptionStr() string {
 	if !w.HasGeneratedAsIdentitySequenceOption() {
 		return ""
 	}
 	return strings.TrimSpace(*w.desc.GeneratedAsIdentitySequenceOption)
+}
+
+// GetGeneratedAsIdentitySequenceOption returns the column's `GENERATED AS
+// IDENTITY` sequence option if it exists, and possible error.
+// If the column is not an identity column, return nil for both sequence option
+// and the error.
+// Note it doesn't return the sequence owner info.
+func (w column) GetGeneratedAsIdentitySequenceOption() (
+	*descpb.TableDescriptor_SequenceOpts,
+	error,
+) {
+	if !w.HasGeneratedAsIdentitySequenceOption() {
+		return nil, nil
+	}
+	seqOpts, err := schemaexpr.ParseSequenceOpts(*w.desc.GeneratedAsIdentitySequenceOption)
+	if err != nil {
+		return nil, err
+	}
+	return seqOpts, nil
 }
 
 // HasGeneratedAsIdentitySequenceOption returns true if there is a
