@@ -12,13 +12,39 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+	"os/signal"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 )
+
+// drainSignals are the signals that will cause the server to drain and exit.
+//
+// The signals will initiate a graceful shutdown. If received a second time,
+// SIGINT will be reraised without a signal handler and the default action
+// terminate the process abruptly.
+//
+// Receiving SIGTERM a second time does not do a brutal shutdown, as SIGTERM is
+// named termSignal below.
+var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
+
+// termSignal is the signal that causes an idempotent graceful
+// shutdown (i.e. second occurrence does not incur hard shutdown).
+var termSignal os.Signal = unix.SIGTERM
+
+// defaultSinkDBName is the name of the database to be used by default.
+const defaultSinkDBName = "obsservice"
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -36,12 +62,71 @@ from one or more CockroachDB clusters.`,
 			UICertKeyPath: uiCertKeyPath,
 		}
 
-		if err := migrations.RunDBMigrations(ctx, sinkPGURL); err != nil {
-			panic(err)
+		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
+		if err != nil {
+			panic(fmt.Sprintf("invalid --sink-pgurl (%s): %s", sinkPGURL, err))
+		}
+		if connCfg.ConnConfig.Database == "" {
+			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
+			connCfg.ConnConfig.Database = defaultSinkDBName
 		}
 
-		// Block forever running the proxy.
-		<-httpproxy.NewReverseHTTPProxy(ctx, cfg).RunAsync(ctx)
+		pool, err := pgxpool.ConnectConfig(ctx, connCfg)
+		if err != nil {
+			panic(fmt.Sprintf("failed to connect to sink database (%s): %s", sinkPGURL, err))
+		}
+
+		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
+			panic(fmt.Sprintf("failed to run DB migrations: %s", err))
+		}
+
+		signalCh := make(chan os.Signal, 1)
+		signal.Notify(signalCh, drainSignals...)
+
+		stop := stop.NewStopper()
+
+		// Run the event ingestion in the background.
+		if eventsAddr != "" {
+			ingester := ingest.EventIngester{}
+			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+		}
+		// Run the reverse HTTP proxy in the background.
+		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
+
+		// Block until the process is signaled to terminate.
+		sig := <-signalCh
+		log.Infof(ctx, "received signal %s. Shutting down.", sig)
+		go func() {
+			stop.Stop(ctx)
+		}()
+
+		// Print the shutdown progress every 5 seconds.
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					log.Infof(ctx, "%d running tasks", stop.NumTasks())
+				case <-stop.IsStopped():
+					return
+				}
+			}
+		}()
+
+		// Wait until the shutdown is complete or we receive another signal.
+		select {
+		case <-stop.IsStopped():
+			log.Infof(ctx, "shutdown complete")
+		case sig = <-signalCh:
+			switch sig {
+			case termSignal:
+				log.Infof(ctx, "received SIGTERM while shutting down. Continuing shutdown.")
+			default:
+				// Crash.
+				handleSignalDuringShutdown(sig)
+			}
+		}
 	},
 }
 
@@ -52,6 +137,7 @@ var (
 	caCertPath                string
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
+	eventsAddr                string
 )
 
 func main() {
@@ -93,11 +179,40 @@ func main() {
 	RootCmd.PersistentFlags().StringVar(
 		&sinkPGURL,
 		"sink-pgurl",
-		"postgresql://root@localhost:26257/defaultdb?sslmode=disable",
-		"PGURL for the sink cluster.")
+		"postgresql://root@localhost:26257?sslmode=disable",
+		"PGURL for the sink cluster. If the url does not include a database name, "+
+			"then \"obsservice\" will be used.")
+
+	RootCmd.PersistentFlags().StringVar(
+		&eventsAddr,
+		"crdb-events-addr",
+		"localhost:26257",
+		"Address of a CRDB node that events will be ingested from.")
 
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		exit.WithCode(exit.UnspecifiedError())
 	}
+}
+
+func handleSignalDuringShutdown(sig os.Signal) {
+	// On Unix, a signal that was not handled gracefully by the application
+	// should be reraised so it is visible in the exit code.
+
+	// Reset signal to its original disposition.
+	signal.Reset(sig)
+
+	// Reraise the signal. os.Signal is always sysutil.Signal.
+	if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
+		// Sending a valid signal to ourselves should never fail.
+		//
+		// Unfortunately it appears (#34354) that some users
+		// run CockroachDB in containers that only support
+		// a subset of all syscalls. If this ever happens, we
+		// still need to quit immediately.
+		log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
+	}
+
+	// Block while we wait for the signal to be delivered.
+	select {}
 }
