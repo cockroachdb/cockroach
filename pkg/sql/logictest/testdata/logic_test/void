@@ -6,6 +6,13 @@ SELECT 'this will be ignored'::void
 ----
 ·
 
+# Regression test for #83791. row_to_json on a VOID should produce an
+# empty string, unadorned with single quotes, as in done in postgres.
+query T
+SELECT row_to_json((''::VOID, null))::JSONB AS col_12295
+----
+{"f1": "", "f2": null}
+
 query T
 select row (''::void, 2::int)
 ----
