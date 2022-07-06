@@ -46,6 +46,7 @@ const STATEMENTS_DETAILS_HEADER = "Statement Fingerprint";
 const TRANSACTION_DETAILS_HEADER = "Transaction Details";
 const STATEMENT_EXECUTION_HEADER = /Statement Execution ID:.*/;
 const TRANSACTION_EXECUTION_HEADER = /Transaction Execution ID:.*/;
+const INSIGHTS_HEADER = "Insights";
 const ADVANCED_DEBUG_HEADER = "Advanced Debugging";
 const REDUX_DEBUG_HEADER = "Redux State";
 const CUSTOM_METRICS_CHART_HEADER = "Custom Chart";
@@ -405,6 +406,15 @@ describe("Routing to", () => {
     test("'/execution/transaction/transactionID' routes to <ActiveTransactionDetails>", () => {
       navigateToPath("/execution/transaction/transactionID");
       screen.getByText(TRANSACTION_EXECUTION_HEADER, { selector: "h3" });
+    });
+  });
+  {
+    /* insights */
+  }
+  describe("'/insights' path", () => {
+    test("routes to <InsightsOverviewPage> component", () => {
+      navigateToPath("/insights");
+      screen.getByText(INSIGHTS_HEADER, { selector: "h3" });
     });
   });
   {
