@@ -124,7 +124,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
         style="tableTitle"
         content={<p>User that created the job.</p>}
       >
-        {"User"}
+        {"User Name"}
       </Tooltip>
     ),
     cell: job => job.username,
@@ -166,7 +166,13 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
       <Tooltip
         placement="bottom"
         style="tableTitle"
-        content={<p>Date and time the job was last executed.</p>}
+        content={
+          <p>
+            The high-water mark acts as a checkpoint for the changefeed’s job
+            progress, and guarantees that all changes before (or at) the
+            timestamp have been emitted.
+          </p>
+        }
       >
         {"High-water Timestamp"}
       </Tooltip>
