@@ -34,8 +34,8 @@ import {
   PageHeader,
   Text,
   TextTypes,
-  Badge,
 } from "src/components";
+import { Badge } from "@cockroachlabs/cluster-ui";
 
 import "./layout.styl";
 import "./layoutPanel.styl";

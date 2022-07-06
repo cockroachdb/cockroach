@@ -5,10 +5,13 @@
   display: flex;
   flex-direction: row;
   border-radius: 3px;
-  text-transform: uppercase;
   width: max-content;
   padding: $spacing-xx-small $spacing-x-small;
   cursor: default;
+}
+
+.badge--uppercase {
+  text-transform: uppercase;
 }
 
 .badge--size-small,
