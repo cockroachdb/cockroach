@@ -70,6 +70,7 @@ func (tc *Collection) hydrateTypesInTableDescWithOptions(
 				ctx, txn, desc.ParentSchemaID,
 				tree.SchemaLookupFlags{
 					Required:       true,
+					IncludeDropped: true,
 					IncludeOffline: true,
 					RequireMutable: true,
 				},
