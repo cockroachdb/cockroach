@@ -35,6 +35,7 @@ const (
 	stressArgsFlag   = "stress-args"
 	raceFlag         = "race"
 	ignoreCacheFlag  = "ignore-cache"
+	noGenFlag        = "no-gen"
 	rewriteFlag      = "rewrite"
 	streamOutputFlag = "stream-output"
 	testArgsFlag     = "test-args"
@@ -98,6 +99,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run (only applicable to certain tests)")
+	testCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
 	testCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
@@ -119,16 +121,26 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose       = mustGetFlagBool(cmd, vFlag)
+		noGen         = mustGetFlagBool(cmd, noGenFlag)
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		count         = mustGetFlagInt(cmd, countFlag)
 		vModule       = mustGetFlagString(cmd, vModuleFlag)
 
 		// These are tests that require access to another directory for
-		// --rewrite.
+		// --rewrite. These can either be single directories or
+		// recursive directories ending in /...
 		extraRewritablePaths = []struct{ pkg, path string }{
 			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
 			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
+		}
+
+		logicTestPaths = []string{
+			"pkg/sql/logictest/tests",
+			"pkg/ccl/logictestccl/tests",
+			"pkg/sql/opt/exec/execbuilder/tests",
+			"pkg/sql/sqlitelogictest/tests",
+			"pkg/ccl/sqlitelogictestccl/tests",
 		}
 	)
 
@@ -187,6 +199,28 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--nocache_test_results")
 	}
 	args = append(args, "--test_env=GOTRACEBACK=all")
+
+	// We need to re-generate logictest files if we're testing a
+	// logictest target.
+	if !noGen {
+		var shouldGenerateLogicTestFiles bool
+		for _, testTarget := range testTargets {
+			for _, logicTestPath := range logicTestPaths {
+				if strings.Contains(testTarget, logicTestPath) {
+					shouldGenerateLogicTestFiles = true
+					break
+				}
+			}
+		}
+
+		if shouldGenerateLogicTestFiles {
+			err := d.generateLogicTest(cmd)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	if rewrite {
 		if stress {
 			return fmt.Errorf("cannot combine --%s and --%s", stressFlag, rewriteFlag)
@@ -199,7 +233,18 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-rewrite")
 		for _, testTarget := range testTargets {
 			dir := getDirectoryFromTarget(testTarget)
-			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
+			var logicTestParentDir string
+			for _, logicTestPath := range logicTestPaths {
+				if strings.Contains(testTarget, logicTestPath) {
+					logicTestParentDir = logicTestPath
+					break
+				}
+			}
+			if logicTestParentDir != "" {
+				args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, filepath.Join(filepath.Dir(logicTestParentDir), "testdata"))))
+			} else {
+				args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
+			}
 			for _, extraRewritablePath := range extraRewritablePaths {
 				if strings.Contains(testTarget, extraRewritablePath.pkg) {
 					// Some targets need special handling if they rewrite outside of

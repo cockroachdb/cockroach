@@ -67,18 +67,20 @@ type configuration struct {
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
 		"bazel":         d.generateBazel,
+		"bnf":           d.generateBNF,
 		"cgo":           d.generateCgo,
+		"diagrams":      d.generateDiagrams,
 		"docs":          d.generateDocs,
 		"execgen":       d.generateExecgen,
 		"js":            d.generateJs,
 		"go":            d.generateGo,
 		"go_nocgo":      d.generateGoNoCgo,
+		"logictest":     d.generateLogicTest,
 		"protobuf":      d.generateProtobuf,
 		"parser":        d.generateParser,
 		"optgen":        d.generateOptGen,
 		"schemachanger": d.generateSchemaChanger,
-		"diagrams":      d.generateDiagrams,
-		"bnf":           d.generateBNF,
+		"testlogic":     d.generateLogicTest,
 	}
 
 	if len(targets) == 0 {
@@ -187,6 +189,17 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 
 func (d *dev) generateGoNoCgo(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:code")
+}
+
+func (d *dev) generateLogicTest(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	return d.exec.CommandContextInheritingStdStreams(
+		ctx, "bazel", "run", "pkg/cmd/generate-logictest", "--", fmt.Sprintf("-out-dir=%s", workspace),
+	)
 }
 
 func (d *dev) generateProtobuf(cmd *cobra.Command) error {

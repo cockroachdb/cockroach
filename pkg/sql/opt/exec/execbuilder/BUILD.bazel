@@ -55,26 +55,23 @@ go_library(
 
 go_test(
     name = "execbuilder_test",
-    size = "large",
+    size = "small",
     srcs = [
-        "builder_test.go",
         "main_test.go",
         "mutation_test.go",
     ],
-    data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
+    data = [
+        ":testdata",
+        "//c-deps:libgeos",
+    ],
     embed = [":execbuilder"],
-    shard_count = 16,
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/logictest",
         "//pkg/sql/opt",
         "//pkg/sql/sem/tree",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
@@ -84,7 +81,11 @@ go_test(
 filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
-    visibility = ["//pkg/ccl/logictestccl:__subpackages__"],
+    visibility = [
+        "//pkg/ccl/logictestccl:__subpackages__",
+        "//pkg/cmd/generate-logictest:__pkg__",
+        "//pkg/sql/opt/exec/execbuilder:__subpackages__",
+    ],
 )
 
 get_x_data(name = "get_x_data")
