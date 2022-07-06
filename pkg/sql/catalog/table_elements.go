@@ -367,9 +367,14 @@ type Column interface {
 	// `GENERATED AS IDENTITY` column.
 	HasGeneratedAsIdentitySequenceOption() bool
 
+	// GetGeneratedAsIdentitySequenceOptionStr returns the string representation
+	// of the column's `GENERATED AS IDENTITY` sequence option if it exists, empty
+	// string otherwise.
+	GetGeneratedAsIdentitySequenceOptionStr() string
+
 	// GetGeneratedAsIdentitySequenceOption returns the column's `GENERATED AS
 	// IDENTITY` sequence option if it exists, empty string otherwise.
-	GetGeneratedAsIdentitySequenceOption() string
+	GetGeneratedAsIdentitySequenceOption() (*descpb.TableDescriptor_SequenceOpts, error)
 }
 
 // ConstraintToUpdate is an interface around a constraint mutation.
