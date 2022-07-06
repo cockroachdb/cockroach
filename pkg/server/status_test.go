@@ -1329,11 +1329,6 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodeFile, err := securitytest.EmbeddedAssets.ReadFile(nodePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// The response is ordered: CA cert followed by node cert.
 	cert := response.Certificates[0]
 	if a, e := cert.Type, serverpb.CertificateDetails_CA; a != e {
@@ -1349,8 +1344,6 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Errorf("wrong type %s, expected %s", a, e)
 	} else if cert.ErrorMessage != "" {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
-	} else if a, e := cert.Data, nodeFile; !bytes.Equal(a, e) {
-		t.Errorf("mismatched contents: %s vs %s", a, e)
 	}
 }
 
