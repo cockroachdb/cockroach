@@ -332,11 +332,11 @@ func TestReplicaDataIterator(t *testing.T) {
 	}
 }
 
-func checkOrdering(t *testing.T, ranges []KeyRange) {
-	for i := 1; i < len(ranges); i++ {
-		if ranges[i].Start.Compare(ranges[i-1].End) < 0 {
+func checkOrdering(t *testing.T, spans []roachpb.Span) {
+	for i := 1; i < len(spans); i++ {
+		if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
 			t.Fatalf("ranges need to be ordered and non-overlapping, but %s > %s",
-				ranges[i-1].End, ranges[i].Start)
+				spans[i-1].EndKey, spans[i].Key)
 		}
 	}
 }
@@ -344,7 +344,7 @@ func checkOrdering(t *testing.T, ranges []KeyRange) {
 // TestReplicaDataIteratorGlobalRangeKey creates three ranges {a-b, b-c, c-d}
 // and writes an MVCC range key across the entire keyspace (replicated and
 // unreplicated). It then verifies that the range key is properly truncated and
-// filtered to the iterator's key ranges.
+// filtered to the iterator's key spans.
 func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -379,31 +379,28 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 	}
 	for _, desc := range descs {
 		t.Run(desc.KeySpan().String(), func(t *testing.T) {
-			// An iterator should see range keys spanning all relevant key ranges.
+			// An iterator should see range keys spanning all relevant key spans.
 			testutils.RunTrueAndFalse(t, "replicatedOnly", func(t *testing.T, replicatedOnly bool) {
 				rangeIter := NewReplicaEngineDataIterator(&desc, snapshot, replicatedOnly)
 				defer rangeIter.Close()
 
-				var expectedRanges []KeyRange
+				var expectedSpans []roachpb.Span
 				if replicatedOnly {
-					expectedRanges = MakeReplicatedKeyRanges(&desc)
+					expectedSpans = MakeReplicatedKeySpans(&desc)
 				} else {
-					expectedRanges = MakeAllKeyRanges(&desc)
+					expectedSpans = MakeAllKeySpans(&desc)
 				}
 
-				var actualRanges []KeyRange
+				var actualSpans []roachpb.Span
 				var ok bool
 				var err error
 				for ok, err = rangeIter.SeekStart(); ok && err == nil; ok, err = rangeIter.Next() {
 					bounds, err := rangeIter.RangeBounds()
 					require.NoError(t, err)
-					actualRanges = append(actualRanges, KeyRange{
-						Start: bounds.Key.Clone(),
-						End:   bounds.EndKey.Clone(),
-					})
+					actualSpans = append(actualSpans, bounds.Clone())
 				}
 				require.NoError(t, err)
-				require.Equal(t, expectedRanges, actualRanges)
+				require.Equal(t, expectedSpans, actualSpans)
 			})
 		})
 	}
@@ -417,10 +414,10 @@ func TestReplicaKeyRanges(t *testing.T) {
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 	}
-	checkOrdering(t, MakeAllKeyRanges(&desc))
-	checkOrdering(t, MakeReplicatedKeyRanges(&desc))
-	checkOrdering(t, MakeReplicatedKeyRangesExceptLockTable(&desc))
-	checkOrdering(t, MakeReplicatedKeyRangesExceptRangeID(&desc))
+	checkOrdering(t, MakeAllKeySpans(&desc))
+	checkOrdering(t, MakeReplicatedKeySpans(&desc))
+	checkOrdering(t, MakeReplicatedKeySpansExceptLockTable(&desc))
+	checkOrdering(t, MakeReplicatedKeySpansExceptRangeID(&desc))
 }
 
 func BenchmarkReplicaEngineDataIterator(b *testing.B) {
@@ -472,9 +469,9 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for _, desc := range descs {
 		var keyBuf roachpb.Key
-		keyRanges := MakeAllKeyRanges(&desc)
+		keySpans := MakeAllKeySpans(&desc)
 		for i := 0; i < numKeysPerRange; i++ {
-			keyBuf = append(keyBuf[:0], keyRanges[i%len(keyRanges)].Start...)
+			keyBuf = append(keyBuf[:0], keySpans[i%len(keySpans)].Key...)
 			keyBuf = append(keyBuf, 0, 0, 0, 0)
 			binary.BigEndian.PutUint32(keyBuf[len(keyBuf)-4:], uint32(i))
 			if err := batch.PutEngineKey(storage.EngineKey{Key: keyBuf}, value); err != nil {
