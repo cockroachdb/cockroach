@@ -153,6 +153,7 @@ func addCommonBuildFlags(cmd *cobra.Command) {
 func addCommonTestFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP(filterFlag, "f", "", "run unit tests matching this regex")
 	cmd.Flags().Duration(timeoutFlag, 0*time.Minute, "timeout for test")
+	cmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
 	cmd.Flags().Bool(shortFlag, false, "run only short tests")
 }
 
