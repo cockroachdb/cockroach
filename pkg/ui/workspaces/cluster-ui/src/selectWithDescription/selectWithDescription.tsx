@@ -17,6 +17,7 @@ import type { RadioChangeEvent } from "antd/lib/radio";
 import { Button } from "../button";
 
 import styles from "../statementsPage/statementTypeSelect.module.scss";
+import { Dropdown, DropdownOption } from "../dropdown";
 
 const cx = classNames.bind(styles);
 
@@ -24,24 +25,30 @@ export type Option = {
   value: string;
   label: string;
   description: React.ReactChild;
-  component: React.ReactElement;
+  component?: React.ReactElement;
 };
+
+export const enum SelectMode {
+  RADIO = "radio",
+  DROPDOWN = "dropdown",
+}
 
 type SelectProps = {
   options: Option[];
   value: string;
   onChange: (value: string) => void;
+  selectMode?: SelectMode;
+  label?: string;
 };
 
 export const SelectWithDescription = ({
   options,
   value,
   onChange,
+  selectMode = SelectMode.RADIO,
+  label,
 }: SelectProps): React.ReactElement => {
   const [showDescription, setShowDescription] = useState<boolean>(false);
-  const onSelectChange = (e: RadioChangeEvent) => {
-    onChange(e.target.value);
-  };
 
   const toggleDescription = (): void => {
     setShowDescription(!showDescription);
@@ -53,20 +60,46 @@ export const SelectWithDescription = ({
 
   const description = getDescription();
 
+  const renderOptions = () => {
+    switch (selectMode) {
+      case SelectMode.RADIO: {
+        const onSelectChange = (e: RadioChangeEvent) => {
+          onChange(e.target.value);
+        };
+        return (
+          <Radio.Group
+            className={cx("radio-group")}
+            value={value}
+            onChange={onSelectChange}
+          >
+            {options.map(option => (
+              <Radio key={option.value} value={option.value}>
+                {option.label}
+              </Radio>
+            ))}
+          </Radio.Group>
+        );
+      }
+      case SelectMode.DROPDOWN: {
+        const dropDownOptions = (): DropdownOption[] => {
+          return options.map(option => ({
+            name: option.label,
+            value: option.value,
+          }));
+        };
+        return (
+          <Dropdown items={dropDownOptions()} onChange={onChange}>
+            {label}
+          </Dropdown>
+        );
+      }
+    }
+  };
+
   return (
     <div className={cx("statement-select")}>
       <div className={cx("select-options")}>
-        <Radio.Group
-          className={cx("radio-group")}
-          value={value}
-          onChange={onSelectChange}
-        >
-          {options.map(option => (
-            <Radio key={option.value} value={option.value}>
-              {option.label}
-            </Radio>
-          ))}
-        </Radio.Group>
+        {renderOptions()}
         <Button
           className={cx("description-button")}
           onClick={toggleDescription}

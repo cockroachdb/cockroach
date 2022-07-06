@@ -78,6 +78,7 @@ import ActiveStatementDetails from "./views/statements/activeStatementDetailsCon
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
+import InsightsOverviewPage from "src/views/insights/insightsOverview";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -288,6 +289,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   exact
                   from={`/transaction/:${aggregatedTsAttr}/:${txnFingerprintIdAttr}`}
                   to={`/transaction/:${txnFingerprintIdAttr}`}
+                />
+                {/* Insights */}
+                <Route
+                  exact
+                  path="/insights"
+                  component={InsightsOverviewPage}
                 />
 
                 {/* debug pages */}
