@@ -125,6 +125,13 @@ func WithComments(comments map[descmetadata.CommentKey]string) Option {
 	})
 }
 
+// WithZoneConfigs injects sets zone configs of TestState to the provided value.
+func WithZoneConfigs(zoneConfigs map[catid.DescID]*zonepb.ZoneConfig) Option {
+	return optionFunc(func(state *TestState) {
+		state.zoneConfigs = zoneConfigs
+	})
+}
+
 // WithMerger injects a Merger to be provided by the TestState.
 // The default merger logs the merge event into the test state.
 func WithMerger(merger scexec.Merger) Option {
