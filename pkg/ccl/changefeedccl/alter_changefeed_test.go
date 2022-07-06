@@ -653,6 +653,7 @@ func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 83946)
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
@@ -1273,6 +1274,8 @@ func TestAlterChangefeedUpdateFilter(t *testing.T) {
 func TestAlterChangefeedInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 83946)
 
 	testFn := func(initialScanOption string) cdcTestFn {
 		return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
