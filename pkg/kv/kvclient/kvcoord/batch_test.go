@@ -210,9 +210,9 @@ func TestBatchPrevNext(t *testing.T) {
 			}
 			const mustPreserveOrder = false
 			const canReorderRequestsSlice = false
-			ascHelper, err := MakeBatchTruncationHelper(Ascending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
+			ascHelper, err := NewBatchTruncationHelper(Ascending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
-			descHelper, err := MakeBatchTruncationHelper(Descending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
+			descHelper, err := NewBatchTruncationHelper(Descending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
 			if _, _, next, err := ascHelper.Truncate(
 				roachpb.RSpan{
@@ -396,10 +396,10 @@ func TestTruncate(t *testing.T) {
 						original.Requests[i].MustSetInner(request.GetInner().ShallowCopy())
 					}
 
-					var truncationHelper BatchTruncationHelper
+					var truncationHelper *BatchTruncationHelper
 					if !isLegacy {
 						var err error
-						truncationHelper, err = MakeBatchTruncationHelper(
+						truncationHelper, err = NewBatchTruncationHelper(
 							Ascending, original.Requests, mustPreserveOrder, canReorderRequestsSlice,
 						)
 						if err != nil {
@@ -562,7 +562,7 @@ func TestTruncateLoop(t *testing.T) {
 			for _, mustPreserveOrder := range []bool{false, true} {
 				t.Run(fmt.Sprintf("run=%d/%s/order=%t", numRuns, scanDir, mustPreserveOrder), func(t *testing.T) {
 					const canReorderRequestsSlice = false
-					helper, err := MakeBatchTruncationHelper(
+					helper, err := NewBatchTruncationHelper(
 						scanDir, requests, mustPreserveOrder, canReorderRequestsSlice,
 					)
 					require.NoError(t, err)
@@ -698,7 +698,7 @@ func BenchmarkTruncateLoop(b *testing.B) {
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
 								const canReorderRequestsSlice = false
-								h, err := MakeBatchTruncationHelper(
+								h, err := NewBatchTruncationHelper(
 									scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
 								)
 								require.NoError(b, err)
