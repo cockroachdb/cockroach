@@ -11,7 +11,7 @@
 // All changes made on this file, should also be done on the equivalent
 // file on managed-service repo.
 
-import React from "react";
+import React, { useRef } from "react";
 import Helmet from "react-helmet";
 import { Tabs } from "antd";
 import "antd/lib/tabs/style";
@@ -20,7 +20,7 @@ import TransactionsPageConnected from "src/views/transactions/transactionsPage";
 import StatementsPageConnected from "src/views/statements/statementsPage";
 import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
-import { tabAttr } from "src/util/constants";
+import { tabAttr, viewAttr } from "src/util/constants";
 
 const { TabPane } = Tabs;
 
@@ -36,10 +36,22 @@ export const SQL_ACTIVITY_DEFAULT_TAB: SQLActivityTabType =
 const SQLActivityPage = (props: RouteComponentProps) => {
   const currentTab =
     util.queryByName(props.location, tabAttr) || SQLActivityTabType.Statements;
+  const currentView = util.queryByName(props.location, viewAttr);
+  const restoredStmtsViewType = useRef<string>(currentView);
 
   const onTabChange = (tabId: string): void => {
+    const params = new URLSearchParams({ tab: tabId });
+    if (tabId === SQLActivityTabType.Sessions) {
+      restoredStmtsViewType.current = currentView;
+    } else if (currentView || restoredStmtsViewType.current) {
+      // For stmts and txns pages, we want to keep the currently
+      // selected stmts view (historical fingerprint or active) on
+      // tab switch. If we're coming from the sessions tab, we
+      // restore the view.
+      params.set(viewAttr, currentView || restoredStmtsViewType.current);
+    }
     props.history.push({
-      search: new URLSearchParams({ tab: tabId }).toString(),
+      search: params.toString(),
     });
   };
 
