@@ -1038,12 +1038,21 @@ func (s *Scanner) scanOne(lval *fakeSym) (done, hasToks bool, err error) {
 		}
 	}
 
+	var preValId int32
+	curFuncBodyCnt := 0
 	for {
 		if lval.id == lexbase.ERROR {
 			return true, true, fmt.Errorf("scan error: %s", lval.s)
 		}
+		preValId = lval.id
 		s.Scan(lval)
-		if lval.id == 0 || lval.id == ';' {
+		if preValId == lexbase.BEGIN && lval.id == lexbase.ATOMIC {
+			curFuncBodyCnt += 1
+		}
+		if curFuncBodyCnt > 0 && lval.id == lexbase.END {
+			curFuncBodyCnt -= 1
+		}
+		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
 			return (lval.id == 0), true, nil
 		}
 	}

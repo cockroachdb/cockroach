@@ -152,13 +152,23 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	// We make the resulting token positions match the returned string.
 	lval.pos = 0
 	tokens = append(tokens, lval)
+	var preValId int32
+	curFuncBodyCnt := 0
 	for {
 		if lval.id == ERROR {
 			return p.scanner.In()[startPos:], tokens, true
 		}
+		preValId = lval.id
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
-		if lval.id == 0 || lval.id == ';' {
+
+		if preValId == BEGIN && lval.id == ATOMIC {
+			curFuncBodyCnt += 1
+		}
+		if curFuncBodyCnt > 0 && lval.id == END {
+			curFuncBodyCnt -= 1
+		}
+		if lval.id == 0 || (curFuncBodyCnt == 0 && lval.id == ';') {
 			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
 		}
 		lval.pos -= startPos

@@ -85,6 +85,9 @@ const (
 	TypeTCL
 )
 
+// Statements represent a list of statements.
+type Statements []Statement
+
 // Statement represents a statement.
 type Statement interface {
 	fmt.Stringer
@@ -1779,6 +1782,18 @@ func (*ValuesClause) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
+func (*CreateFunction) StatementReturnType() StatementReturnType { return DDL }
+
+func (*CreateFunction) StatementType() StatementType { return TypeDDL }
+
+func (*CreateFunction) StatementTag() string { return "CREATE FUNCTION" }
+
+func (*RoutineReturn) StatementReturnType() StatementReturnType { return Rows }
+
+func (*RoutineReturn) StatementType() StatementType { return TypeDML }
+
+func (*RoutineReturn) StatementTag() string { return "RETURN" }
+
 func (n *AlterChangefeed) String() string                { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string            { return AsString(n) }
 func (n *AlterBackup) String() string                    { return AsString(n) }
@@ -1836,6 +1851,7 @@ func (n *CopyFrom) String() string                       { return AsString(n) }
 func (n *CreateChangefeed) String() string               { return AsString(n) }
 func (n *CreateDatabase) String() string                 { return AsString(n) }
 func (n *CreateExtension) String() string                { return AsString(n) }
+func (n *CreateFunction) String() string                 { return AsString(n) }
 func (n *CreateIndex) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                     { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
@@ -1878,6 +1894,7 @@ func (n *ReparentDatabase) String() string               { return AsString(n) }
 func (n *RenameIndex) String() string                    { return AsString(n) }
 func (n *RenameTable) String() string                    { return AsString(n) }
 func (n *Restore) String() string                        { return AsString(n) }
+func (n *RoutineReturn) String() string                  { return AsString(n) }
 func (n *Revoke) String() string                         { return AsString(n) }
 func (n *RevokeRole) String() string                     { return AsString(n) }
 func (n *RollbackToSavepoint) String() string            { return AsString(n) }

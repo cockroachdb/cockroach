@@ -3,7 +3,12 @@ stmt_block ::=
 
 stmt ::=
 	'HELPTOKEN'
-	| preparable_stmt
+	| stmt_without_legacy_transaction
+	| legacy_transaction_stmt
+	| 
+
+stmt_without_legacy_transaction ::=
+	preparable_stmt
 	| analyze_stmt
 	| copy_from_stmt
 	| comment_stmt
@@ -24,7 +29,10 @@ stmt ::=
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
 	| move_cursor_stmt
-	| 
+
+legacy_transaction_stmt ::=
+	'BEGIN' opt_transaction begin_transaction
+	| 'END' opt_transaction
 
 preparable_stmt ::=
 	alter_stmt
@@ -139,6 +147,14 @@ fetch_cursor_stmt ::=
 
 move_cursor_stmt ::=
 	'MOVE' cursor_movement_specifier
+
+opt_transaction ::=
+	'TRANSACTION'
+	| 
+
+begin_transaction ::=
+	transaction_mode_list
+	| 
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -397,12 +413,10 @@ set_transaction_stmt ::=
 	| 'SET' 'SESSION' 'TRANSACTION' transaction_mode_list
 
 begin_stmt ::=
-	'BEGIN' opt_transaction begin_transaction
-	| 'START' 'TRANSACTION' begin_transaction
+	'START' 'TRANSACTION' begin_transaction
 
 commit_stmt ::=
 	'COMMIT' opt_transaction
-	| 'END' opt_transaction
 
 rollback_stmt ::=
 	'ROLLBACK' opt_transaction
@@ -444,6 +458,9 @@ cursor_movement_specifier ::=
 	| 'RELATIVE' signed_iconst64 opt_from_or_in cursor_name
 	| 'FIRST' opt_from_or_in cursor_name
 	| 'LAST' opt_from_or_in cursor_name
+
+transaction_mode_list ::=
+	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
 
 alter_ddl_stmt ::=
 	alter_table_stmt
@@ -528,6 +545,7 @@ create_ddl_stmt ::=
 	| create_type_stmt
 	| create_view_stmt
 	| create_sequence_stmt
+	| create_func_stmt
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
@@ -927,6 +945,7 @@ unreserved_keyword ::=
 	| 'ALWAYS'
 	| 'ASENSITIVE'
 	| 'AT'
+	| 'ATOMIC'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
 	| 'AVAILABILITY'
@@ -940,6 +959,7 @@ unreserved_keyword ::=
 	| 'BUNDLE'
 	| 'BY'
 	| 'CACHE'
+	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
 	| 'CASCADE'
@@ -984,6 +1004,7 @@ unreserved_keyword ::=
 	| 'DELETE'
 	| 'DEFAULTS'
 	| 'DEFERRED'
+	| 'DEFINER'
 	| 'DELIMITER'
 	| 'DESTINATION'
 	| 'DETACHED'
@@ -1010,6 +1031,7 @@ unreserved_keyword ::=
 	| 'EXPLAIN'
 	| 'EXPORT'
 	| 'EXTENSION'
+	| 'EXTERNAL'
 	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
@@ -1042,6 +1064,7 @@ unreserved_keyword ::=
 	| 'HOUR'
 	| 'IDENTITY'
 	| 'IMMEDIATE'
+	| 'IMMUTABLE'
 	| 'IMPORT'
 	| 'INCLUDE'
 	| 'INCLUDING'
@@ -1051,10 +1074,12 @@ unreserved_keyword ::=
 	| 'INDEXES'
 	| 'INHERITS'
 	| 'INJECT'
+	| 'INPUT'
 	| 'INSERT'
 	| 'INTO_DB'
 	| 'INVERTED'
 	| 'ISOLATION'
+	| 'INVOKER'
 	| 'JOB'
 	| 'JOBS'
 	| 'JSON'
@@ -1067,6 +1092,7 @@ unreserved_keyword ::=
 	| 'LATEST'
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
+	| 'LEAKPROOF'
 	| 'LEASE'
 	| 'LESS'
 	| 'LEVEL'
@@ -1144,6 +1170,7 @@ unreserved_keyword ::=
 	| 'OVER'
 	| 'OWNED'
 	| 'OWNER'
+	| 'PARALLEL'
 	| 'PARENT'
 	| 'PARTIAL'
 	| 'PARTITION'
@@ -1199,6 +1226,8 @@ unreserved_keyword ::=
 	| 'RESTRICTED'
 	| 'RESUME'
 	| 'RETRY'
+	| 'RETURN'
+	| 'RETURNS'
 	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'ROLE'
@@ -1223,6 +1252,7 @@ unreserved_keyword ::=
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
+	| 'SECURITY'
 	| 'SERIALIZABLE'
 	| 'SEQUENCE'
 	| 'SEQUENCES'
@@ -1244,6 +1274,7 @@ unreserved_keyword ::=
 	| 'SPLIT'
 	| 'SQL'
 	| 'SQLLOGIN'
+	| 'STABLE'
 	| 'START'
 	| 'STATE'
 	| 'STATEMENTS'
@@ -1257,6 +1288,7 @@ unreserved_keyword ::=
 	| 'STRICT'
 	| 'SUBSCRIPTION'
 	| 'SUPER'
+	| 'SUPPORT'
 	| 'SURVIVE'
 	| 'SURVIVAL'
 	| 'SYNTAX'
@@ -1275,6 +1307,7 @@ unreserved_keyword ::=
 	| 'TRANSACTION'
 	| 'TRANSACTIONS'
 	| 'TRANSFER'
+	| 'TRANSFORM'
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'
@@ -1301,6 +1334,7 @@ unreserved_keyword ::=
 	| 'VIEWACTIVITYREDACTED'
 	| 'VIEWCLUSTERSETTING'
 	| 'VISIBLE'
+	| 'VOLATILE'
 	| 'VOTERS'
 	| 'WITHIN'
 	| 'WITHOUT'
@@ -1332,6 +1366,7 @@ col_name_keyword ::=
 	| 'IF'
 	| 'IFERROR'
 	| 'IFNULL'
+	| 'INOUT'
 	| 'INT'
 	| 'INTEGER'
 	| 'INTERVAL'
@@ -1347,6 +1382,7 @@ col_name_keyword ::=
 	| 'PRECISION'
 	| 'REAL'
 	| 'ROW'
+	| 'SETOF'
 	| 'SMALLINT'
 	| 'STRING'
 	| 'SUBSTRING'
@@ -1394,17 +1430,6 @@ type_name_list ::=
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
-transaction_mode_list ::=
-	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
-
-opt_transaction ::=
-	'TRANSACTION'
-	| 
-
-begin_transaction ::=
-	transaction_mode_list
-	| 
-
 opt_abort_mod ::=
 	'TRANSACTION'
 	| 'WORK'
@@ -1432,6 +1457,16 @@ opt_forward_backward ::=
 
 signed_iconst64 ::=
 	signed_iconst
+
+transaction_mode ::=
+	transaction_user_priority
+	| transaction_read_mode
+	| as_of_clause
+	| transaction_deferrable_mode
+
+opt_comma ::=
+	','
+	| 
 
 alter_table_stmt ::=
 	alter_onetable_stmt
@@ -1606,6 +1641,9 @@ create_view_stmt ::=
 create_sequence_stmt ::=
 	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list
 	| 'CREATE' opt_temp 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+
+create_func_stmt ::=
+	'CREATE' opt_or_replace 'FUNCTION' func_create_name '(' opt_func_arg_with_default_list ')' 'RETURNS' opt_return_set func_return_type opt_create_func_opt_list opt_routine_body
 
 statistics_name ::=
 	name
@@ -1887,19 +1925,20 @@ typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
 
-transaction_mode ::=
-	transaction_user_priority
-	| transaction_read_mode
-	| as_of_clause
-	| transaction_deferrable_mode
-
-opt_comma ::=
-	','
-	| 
-
 signed_iconst ::=
 	'ICONST'
 	| only_signed_iconst
+
+transaction_user_priority ::=
+	'PRIORITY' user_priority
+
+transaction_read_mode ::=
+	'READ' 'ONLY'
+	| 'READ' 'WRITE'
+
+transaction_deferrable_mode ::=
+	'DEFERRABLE'
+	| 'NOT' 'DEFERRABLE'
 
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' relation_expr alter_table_cmds
@@ -2266,6 +2305,33 @@ opt_sequence_option_list ::=
 	sequence_option_list
 	| 
 
+opt_or_replace ::=
+	'OR' 'REPLACE'
+	| 
+
+func_create_name ::=
+	db_object_name
+
+opt_func_arg_with_default_list ::=
+	func_arg_with_default_list
+	| 
+
+opt_return_set ::=
+	'SETOF'
+	| 
+
+func_return_type ::=
+	func_arg_type
+
+opt_create_func_opt_list ::=
+	create_func_opt_list
+	| 
+
+opt_routine_body ::=
+	routine_return_stmt
+	| 'BEGIN' 'ATOMIC' routine_body_stmt_list 'END'
+	| 
+
 changefeed_target ::=
 	opt_table_prefix table_name opt_changefeed_family
 
@@ -2515,20 +2581,14 @@ opt_array_bounds ::=
 	'[' ']'
 	| 
 
-transaction_user_priority ::=
-	'PRIORITY' user_priority
-
-transaction_read_mode ::=
-	'READ' 'ONLY'
-	| 'READ' 'WRITE'
-
-transaction_deferrable_mode ::=
-	'DEFERRABLE'
-	| 'NOT' 'DEFERRABLE'
-
 only_signed_iconst ::=
 	'+' 'ICONST'
 	| '-' 'ICONST'
+
+user_priority ::=
+	'LOW'
+	| 'NORMAL'
+	| 'HIGH'
 
 alter_table_cmds ::=
 	( alter_table_cmd ) ( ( ',' alter_table_cmd ) )*
@@ -2788,6 +2848,21 @@ create_as_table_defs ::=
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
+func_arg_with_default_list ::=
+	( func_arg_with_default ) ( ( ',' func_arg_with_default ) )*
+
+func_arg_type ::=
+	typename
+
+create_func_opt_list ::=
+	( create_func_opt_item ) ( ( create_func_opt_item ) )*
+
+routine_return_stmt ::=
+	'RETURN' a_expr
+
+routine_body_stmt_list ::=
+	(  ) ( ( routine_body_stmt ';' ) )*
+
 opt_table_prefix ::=
 	'TABLE'
 	| 
@@ -2933,11 +3008,6 @@ interval_type ::=
 	'INTERVAL'
 	| 'INTERVAL' interval_qualifier
 	| 'INTERVAL' '(' iconst32 ')'
-
-user_priority ::=
-	'LOW'
-	| 'NORMAL'
-	| 'HIGH'
 
 alter_table_cmd ::=
 	'RENAME' opt_column column_name 'TO' column_name
@@ -3156,6 +3226,20 @@ family_def ::=
 
 create_as_constraint_def ::=
 	create_as_constraint_elem
+
+func_arg_with_default ::=
+	func_arg
+	| func_arg 'DEFAULT' a_expr
+	| func_arg '=' a_expr
+
+create_func_opt_item ::=
+	'AS' func_as
+	| 'LANGUAGE' non_reserved_word_or_sconst
+	| common_func_opt_item
+
+routine_body_stmt ::=
+	stmt_without_legacy_transaction
+	| routine_return_stmt
 
 family_name ::=
 	name
@@ -3424,6 +3508,26 @@ opt_family_name ::=
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')' opt_with_storage_parameter_list
 
+func_arg ::=
+	func_arg_class param_name func_arg_type
+	| param_name func_arg_class func_arg_type
+	| param_name func_arg_type
+	| func_arg_class func_arg_type
+	| func_arg_type
+
+func_as ::=
+	'SCONST'
+
+common_func_opt_item ::=
+	'CALLED' 'ON' 'NULL' 'INPUT'
+	| 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT'
+	| 'STRICT'
+	| 'IMMUTABLE'
+	| 'STABLE'
+	| 'VOLATILE'
+	| 'LEAKPROOF'
+	| 'NOT' 'LEAKPROOF'
+
 group_by_item ::=
 	a_expr
 
@@ -3504,6 +3608,12 @@ create_as_col_qualification_elem ::=
 
 create_as_params ::=
 	( create_as_param ) ( ( ',' create_as_param ) )*
+
+func_arg_class ::=
+	'IN'
+
+param_name ::=
+	type_function_name
 
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
