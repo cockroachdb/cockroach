@@ -122,6 +122,15 @@ TableSubZoneConfigOption :  TableID
 TableSubZoneConfigOption :  IndexID
 TableSubZoneConfigOption :  ZoneConfigOption
 
+object DatabaseZoneConfig
+
+DatabaseZoneConfig :  DatabaseID
+
+object DatabaseZoneConfigOption
+
+DatabaseZoneConfigOption :  DatabaseID
+DatabaseZoneConfigOption :  ZoneConfigOption
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -306,6 +315,8 @@ Table <|-- TableSubZoneConfig
 Index <|-- TableSubZoneConfig
 TableZoneConfig <|-- TableZoneConfigOption
 TableSubZoneConfig <|-- TableSubZoneConfigOption
+Database <|-- DatabaseZoneConfig
+DatabaseZoneConfig <|-- DatabaseZoneConfigOption
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion

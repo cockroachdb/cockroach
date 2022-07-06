@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 

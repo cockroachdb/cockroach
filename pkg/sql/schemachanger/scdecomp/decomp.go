@@ -134,6 +134,14 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 			RegionEnumTypeID: db.GetRegionConfig().RegionEnumID,
 		})
 	}
+	// Decompose the database level zone config, if one exists.
+	zc, err := w.zoneConfigReader.GetZoneConfig(w.ctx, db.GetID())
+	if err != nil {
+		panic(err)
+	}
+	if zc != nil {
+		w.walkDatabaseZoneConfig(db.GetID(), *zc)
+	}
 	_ = db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
 		w.backRefs.Add(id)
 		return nil
@@ -688,4 +696,18 @@ func (w *walkCtx) walkTableZoneConfig(id catid.DescID, config zonepb.ZoneConfig)
 			})
 	}
 	w.walkTableSubZoneConfig(id, config.Subzones)
+}
+
+func (w *walkCtx) walkDatabaseZoneConfig(id catid.DescID, config zonepb.ZoneConfig) {
+	w.ev(scpb.Status_PUBLIC, &scpb.DatabaseZoneConfig{
+		DatabaseID: id,
+	})
+	options := w.walkZoneConfigOptions(config)
+	for _, option := range options {
+		w.ev(scpb.Status_PUBLIC,
+			&scpb.DatabaseZoneConfigOption{
+				DatabaseID:       id,
+				ZoneConfigOption: option,
+			})
+	}
 }

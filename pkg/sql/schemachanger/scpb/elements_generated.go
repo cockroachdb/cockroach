@@ -482,6 +482,68 @@ func FindDatabaseRoleSetting(b ElementStatusIterator) (current Status, target Ta
 	return current, target, element
 }
 
+func (e DatabaseZoneConfig) element() {}
+
+// ForEachDatabaseZoneConfig iterates over elements of type DatabaseZoneConfig.
+func ForEachDatabaseZoneConfig(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseZoneConfig),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*DatabaseZoneConfig); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindDatabaseZoneConfig finds the first element of type DatabaseZoneConfig.
+func FindDatabaseZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseZoneConfig) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*DatabaseZoneConfig); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e DatabaseZoneConfigOption) element() {}
+
+// ForEachDatabaseZoneConfigOption iterates over elements of type DatabaseZoneConfigOption.
+func ForEachDatabaseZoneConfigOption(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseZoneConfigOption),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*DatabaseZoneConfigOption); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindDatabaseZoneConfigOption finds the first element of type DatabaseZoneConfigOption.
+func FindDatabaseZoneConfigOption(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseZoneConfigOption) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*DatabaseZoneConfigOption); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e EnumType) element() {}
 
 // ForEachEnumType iterates over elements of type EnumType.
