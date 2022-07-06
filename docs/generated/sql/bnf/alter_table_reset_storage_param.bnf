@@ -1,0 +1,3 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'RESET' '(' storage_parameter_key ( ( ',' storage_parameter_key ) )* ')'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'RESET' '(' storage_parameter_key ( ( ',' storage_parameter_key ) )* ')'
