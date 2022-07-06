@@ -131,7 +131,20 @@ type CreateGcJobForIndex struct {
 	StatementForDropJob
 }
 
-// MarkDescriptorAsDropped marks a descriptor as dropped.
+// MarkDescriptorAsPublic changes the descriptor's state to PUBLIC.
+type MarkDescriptorAsPublic struct {
+	mutationOp
+	DescID descpb.ID
+}
+
+// MarkDescriptorAsOffline changes the descriptor's state to OFFLINE.
+type MarkDescriptorAsOffline struct {
+	mutationOp
+	DescID descpb.ID
+	Reason string
+}
+
+// MarkDescriptorAsDropped changes the descriptor's state to DROPPED.
 type MarkDescriptorAsDropped struct {
 	mutationOp
 	DescID descpb.ID
