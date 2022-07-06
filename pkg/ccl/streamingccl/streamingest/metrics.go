@@ -74,18 +74,39 @@ var (
 		Measurement: "Replication Streams",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaEarliestFrontierSpan = metric.Metadata{
+		Name:        "streaming.earliest_frontier_span",
+		Help:        "The earliest timestamp of the ingestion processor's frontier",
+		Measurement: "Timestamp",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaLatestFrontierSpan = metric.Metadata{
+		Name:        "streaming.latest_frontier_span",
+		Help:        "The latest timestamp of the ingestion processor's frontier",
+		Measurement: "Timestamp",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaFrontierSpanCount = metric.Metadata{
+		Name:        "streaming.frontier_span_count",
+		Help:        "The number of resolved spans in the ingestion processor's frontier",
+		Measurement: "Resolved Spans",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
 type Metrics struct {
-	IngestedEvents *metric.Counter
-	IngestedBytes  *metric.Counter
-	Flushes        *metric.Counter
-	ResolvedEvents *metric.Counter
-	FlushHistNanos *metric.Histogram
-	CommitLatency  *metric.Histogram
-	AdmitLatency   *metric.Histogram
-	RunningCount   *metric.Gauge
+	IngestedEvents       *metric.Counter
+	IngestedBytes        *metric.Counter
+	Flushes              *metric.Counter
+	ResolvedEvents       *metric.Counter
+	FlushHistNanos       *metric.Histogram
+	CommitLatency        *metric.Histogram
+	AdmitLatency         *metric.Histogram
+	RunningCount         *metric.Gauge
+	EarliestFrontierSpan *metric.Gauge
+	LatestFrontierSpan   *metric.Gauge
+	FrontierSpanCount    *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -104,7 +125,10 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			histogramWindow, streamingCommitLatencyMaxValue.Nanoseconds(), 1),
 		AdmitLatency: metric.NewHistogram(metaStreamingAdmitLatency,
 			histogramWindow, streamingAdmitLatencyMaxValue.Nanoseconds(), 1),
-		RunningCount: metric.NewGauge(metaStreamsRunning),
+		RunningCount:         metric.NewGauge(metaStreamsRunning),
+		EarliestFrontierSpan: metric.NewGauge(metaEarliestFrontierSpan),
+		LatestFrontierSpan:   metric.NewGauge(metaLatestFrontierSpan),
+		FrontierSpanCount:    metric.NewGauge(metaFrontierSpanCount),
 	}
 	return m
 }

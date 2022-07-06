@@ -212,7 +212,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				OldID: roachpb.MakeTenantID(tenantID),
 				NewID: roachpb.MakeTenantID(tenantID + 10),
 			}
-			spec.Checkpoint = tc.jobCheckpoint
+			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
@@ -232,7 +232,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
 			frontierSpec.StreamAddress = spec.StreamAddress
 			frontierSpec.TrackedSpans = []roachpb.Span{pa1Span, pa2Span}
-			frontierSpec.Checkpoint = tc.jobCheckpoint
+			frontierSpec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
 
 			if !tc.frontierStartTime.IsEmpty() {
 				frontierSpec.HighWaterAtStart = tc.frontierStartTime
@@ -273,6 +273,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				if minCheckpointTs.IsEmpty() || resolvedSpan.Timestamp.Less(minCheckpointTs) {
 					minCheckpointTs = resolvedSpan.Timestamp
 				}
+
+				// Ensure that the frontier is at least at the checkpoint for this span
+				require.True(t, resolvedSpan.Timestamp.LessEq(frontierForSpans(fp.frontier, resolvedSpan.Span)))
 			}
 
 			var prevTimestamp hlc.Timestamp

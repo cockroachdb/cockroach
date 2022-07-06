@@ -648,7 +648,7 @@ func getStreamIngestionProcessor(
 		}
 	}
 	spec.StartTime = startTime
-	spec.Checkpoint = checkpoint
+	spec.Checkpoint.ResolvedSpans = checkpoint
 	processorID := int32(0)
 	proc, err := newStreamIngestionDataProcessor(&flowCtx, processorID, spec, &post, out)
 	require.NoError(t, err)

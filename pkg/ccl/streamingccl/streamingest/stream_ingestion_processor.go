@@ -188,7 +188,7 @@ func newStreamIngestionDataProcessor(
 	if err != nil {
 		return nil, err
 	}
-	for _, resolvedSpan := range spec.Checkpoint {
+	for _, resolvedSpan := range spec.Checkpoint.ResolvedSpans {
 		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
 			return nil, err
 		}
@@ -279,7 +279,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		startTime := sip.frontier.FrontierForSpans(partitionSpec.Spans...)
+		startTime := frontierForSpans(sip.frontier, partitionSpec.Spans...)
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
@@ -616,7 +616,7 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
-	resolvedSpans := event.GetResolvedSpans()
+	resolvedSpans := *event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
@@ -635,8 +635,9 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-	log.Infof(sip.Ctx, "got checkpoint with %v spans and timestamps within [%v, %v]", len(resolvedSpans), lowestTimestamp, highestTimestamp)
-
+	sip.metrics.EarliestFrontierSpan.Update(lowestTimestamp.GoTime().UnixNano())
+	sip.metrics.LatestFrontierSpan.Update(highestTimestamp.GoTime().UnixNano())
+	sip.metrics.FrontierSpanCount.Update(int64(len(resolvedSpans)))
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }
@@ -721,6 +722,22 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 	}
 
 	return false, nil
+}
+
+// frontierForSpan returns the lowest timestamp in the frontier within the given
+// subspans.  If the subspans are entirely outside the Frontier's tracked span
+// an empty timestamp is returned.
+func frontierForSpans(f *span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
+	minTimestamp := hlc.Timestamp{}
+	for _, spanToCheck := range spans {
+		f.SpanEntries(spanToCheck, func(frontierSpan roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			if minTimestamp.IsEmpty() || ts.Less(minTimestamp) {
+				minTimestamp = ts
+			}
+			return span.ContinueMatch
+		})
+	}
+	return minTimestamp
 }
 
 func init() {

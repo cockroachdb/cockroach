@@ -22,9 +22,11 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -57,6 +59,7 @@ type tenantStreamingClustersArgs struct {
 type tenantStreamingClusters struct {
 	t            *testing.T
 	args         tenantStreamingClustersArgs
+	srcSysServer serverutils.TestServerInterface
 	srcSysSQL    *sqlutils.SQLRunner
 	srcTenantSQL *sqlutils.SQLRunner
 	srcURL       url.URL
@@ -174,7 +177,7 @@ func createTenantStreamingClusters(
 	}
 
 	// Start the source cluster.
-	_, sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
+	srcSysServer, sourceSysSQL, sourceTenantSQL, srcURL, srcCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.srcTenantID, args.srcNumNodes)
 	// Start the destination cluster.
 	destSysServer, destSysSQL, destTenantSQL, _, destCleanup := startTestClusterWithTenant(ctx, t, serverArgs, args.destTenantID, args.destNumNodes)
 
@@ -189,6 +192,7 @@ func createTenantStreamingClusters(
 	return &tenantStreamingClusters{
 			t:             t,
 			args:          args,
+			srcSysServer:  srcSysServer,
 			srcSysSQL:     sourceSysSQL,
 			srcTenantSQL:  sourceTenantSQL,
 			srcURL:        srcURL,
@@ -219,6 +223,7 @@ var srcClusterSetting = map[string]string{
 
 var destClusterSetting = map[string]string{
 	`stream_replication.consumer_heartbeat_frequency`:      `'1s'`,
+	`stream_replication.job_checkpoint_frequency`:          `'100ms'`,
 	`bulkio.stream_ingestion.minimum_flush_interval`:       `'10ms'`,
 	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
 	`jobs.registry.interval.adopt`:                         `'1s'`,
@@ -417,6 +422,9 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 		destNumNodes: 1,
 		destInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 			sysSQL.ExecMultiple(t, configureClusterSettings(destClusterSetting)...)
+			sysSQL.ExecMultiple(t, configureClusterSettings(map[string]string{
+				`stream_replication.min_checkpoint_frequency`: `'100ms'`,
+			})...)
 		},
 		streamingKnobs: sql.StreamingTestingKnobs{
 			BeforeClientSubscribe: func(token string, clientStartTime hlc.Timestamp) {
@@ -444,25 +452,46 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 		tenantSQL.Exec(t, "INSERT INTO d.x VALUES (1, 1)")
 	})
 
+	srcCodec := keys.MakeSQLCodec(c.args.srcTenantID)
+	t1Desc := desctestutils.TestingGetPublicTableDescriptor(
+		c.srcSysServer.DB(), srcCodec, "d", "t1")
+	t2Desc := desctestutils.TestingGetPublicTableDescriptor(
+		c.srcSysServer.DB(), keys.MakeSQLCodec(c.args.srcTenantID), "d", "t2")
+	xDesc := desctestutils.TestingGetPublicTableDescriptor(
+		c.srcSysServer.DB(), keys.MakeSQLCodec(c.args.srcTenantID), "d", "x")
+	t1Span := t1Desc.PrimaryIndexSpan(srcCodec)
+	t2Span := t2Desc.PrimaryIndexSpan(srcCodec)
+	xSpan := xDesc.PrimaryIndexSpan(srcCodec)
+	tableSpans := []roachpb.Span{t1Span, t2Span, xSpan}
+
 	var checkpointMinTime time.Time
 	c.srcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		sysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&checkpointMinTime)
 	})
 	testutils.SucceedsSoon(t, func() error {
 		prog := loadIngestProgress()
-		if len(prog.Checkpoint) == 0 {
+		if len(prog.Checkpoint.ResolvedSpans) == 0 {
 			return errors.New("waiting for checkpoint")
 		}
-		for _, resolvedSpan := range prog.Checkpoint {
+		var checkpointSpanGroup roachpb.SpanGroup
+		for _, resolvedSpan := range prog.Checkpoint.ResolvedSpans {
+			checkpointSpanGroup.Add(resolvedSpan.Span)
 			if checkpointMinTime.After(resolvedSpan.Timestamp.GoTime()) {
 				return errors.New("checkpoint not yet advanced")
 			}
+		}
+		if !checkpointSpanGroup.Encloses(tableSpans...) {
+			return errors.Newf("checkpoint %v is missing spans from table spans (%+v)", checkpointSpanGroup, tableSpans)
 		}
 		return nil
 	})
 
 	c.destSysSQL.Exec(t, `PAUSE JOB $1`, ingestionJobID)
 	require.NoError(t, waitForStatus(c.destSysSQL, jobspb.JobID(ingestionJobID), func(s jobs.Status) bool { return s == jobs.StatusPaused }))
+
+	// Clear out the map to ignore the initial client starts
+	lastClientStart = make(map[string]hlc.Timestamp)
+
 	c.destSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
 
 	var cutoverTime time.Time
@@ -473,7 +502,7 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 
 	// Clients should never be started prior to a checkpointed timestamp
 	for _, clientStartTime := range lastClientStart {
-		require.True(t, !checkpointMinTime.After(clientStartTime.GoTime()))
+		require.Less(t, checkpointMinTime.UnixNano(), clientStartTime.GoTime().UnixNano())
 	}
 
 	c.compareResult("SELECT * FROM d.t1")
