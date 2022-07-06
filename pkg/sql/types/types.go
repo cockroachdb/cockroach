@@ -2784,6 +2784,20 @@ var unreservedTypeTokens = map[string]*T{
 	"uuid":   Uuid,
 }
 
+// ConvertStrToIntType converts a string to an integer type.
+func ConvertStrToIntType(s string) *T {
+	switch strings.ToLower(s) {
+	case "int2", "smallint":
+		return Int2
+	case "int4", "integer":
+		return Int4
+	case "int8", "bigint", "int64":
+		return Int
+	default:
+		panic(fmt.Sprintf("unknown string %s for conversion to integet type", s))
+	}
+}
+
 // The following map must include all types predefined in PostgreSQL
 // that are also not yet defined in CockroachDB and link them to
 // github issues. It is also possible, but not necessary, to include
