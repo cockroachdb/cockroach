@@ -12,7 +12,7 @@ import React from "react";
 import classNames from "classnames/bind";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Insight } from "src/insights";
-import styles from "./insightTable.module.scss";
+import styles from "./workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);
 
@@ -28,7 +28,11 @@ function mapInsightTypesToStatus(insight: Insight): string {
 export function InsightCell(insight: Insight) {
   const status = mapInsightTypesToStatus(insight);
   return (
-    <Tooltip content={insight.description} style="tableTitle">
+    <Tooltip
+      key={Math.random()}
+      content={insight.tooltipDescription}
+      style="tableTitle"
+    >
       <span className={cx("insight-type", `insight-type--${status}`)}>
         {insight.label}
       </span>
