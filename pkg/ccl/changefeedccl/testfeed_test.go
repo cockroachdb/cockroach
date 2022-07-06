@@ -42,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -132,11 +134,22 @@ type sinklessFeed struct {
 
 var _ cdctest.TestFeed = (*sinklessFeed)(nil)
 
+func timeout() time.Duration {
+	if util.RaceEnabled {
+		return 5 * time.Minute
+	}
+	return 30 * time.Second
+}
+
 // Partitions implements the TestFeed interface.
 func (c *sinklessFeed) Partitions() []string { return []string{`sinkless`} }
 
 // Next implements the TestFeed interface.
 func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
+	defer time.AfterFunc(timeout(), func() {
+		_ = c.conn.Close(context.Background())
+	}).Stop()
+
 	m := &cdctest.TestFeedMessage{Partition: `sinkless`}
 	for {
 		if !c.rows.Next() {
@@ -167,10 +180,8 @@ func (c *sinklessFeed) Next() (*cdctest.TestFeedMessage, error) {
 }
 
 // Resume implements the TestFeed interface.
-func (c *sinklessFeed) start() error {
-	ctx := context.Background()
-	var err error
-	c.conn, err = pgx.ConnectConfig(ctx, c.connCfg)
+func (c *sinklessFeed) start() (err error) {
+	c.conn, err = pgx.ConnectConfig(context.Background(), c.connCfg)
 	if err != nil {
 		return err
 	}
@@ -185,7 +196,7 @@ func (c *sinklessFeed) start() error {
 			create += fmt.Sprintf(` WITH cursor='%s'`, c.latestResolved.AsOfSystemTime())
 		}
 	}
-	c.rows, err = c.conn.Query(ctx, create, c.args...)
+	c.rows, err = c.conn.Query(context.Background(), create, c.args...)
 	return err
 }
 
@@ -248,8 +259,12 @@ func newJobFeed(db *gosql.DB, wrapper wrapSinkFn) *jobFeed {
 	}
 }
 
+type jobFailedMarker interface {
+	jobFailed(err error)
+}
+
 // jobFailed marks this job as failed.
-func (f *jobFeed) jobFailed() {
+func (f *jobFeed) jobFailed(err error) {
 	// protect against almost concurrent terminations of the same job.
 	// this could happen if the caller invokes `cancel job` just as we're
 	// trying to close this feed.  Part of jobFailed handling involves
@@ -261,7 +276,7 @@ func (f *jobFeed) jobFailed() {
 		// Already failed/done.
 		return
 	}
-	f.mu.terminalErr = f.FetchTerminalJobErr()
+	f.mu.terminalErr = err
 	close(f.shutdown)
 }
 
@@ -527,7 +542,12 @@ func newDepInjector(srvs ...feedInjectable) *depInjector {
 			map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 				jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
 					f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
-					return &reportErrorResumer{wrapped: raw, jobFailed: f.jobFailed}
+					return &reportErrorResumer{
+						wrapped: raw,
+						jobFailed: func() {
+							f.jobFailed(f.FetchTerminalJobErr())
+						},
+					}
 				},
 			}
 	}
@@ -707,6 +727,8 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-c.ss.eventReady():
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
@@ -960,6 +982,8 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-c.ss.eventReady():
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
@@ -1277,6 +1301,8 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-k.shutdown:
 			return nil, k.terminalJobError()
 		case msg = <-k.source:
@@ -1541,6 +1567,8 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-f.ss.eventReady():
 		case <-f.shutdown:
 			return nil, f.terminalJobError()
@@ -1784,6 +1812,8 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 		select {
+		case <-time.After(timeout()):
+			return nil, &contextutil.TimeoutError{}
 		case <-p.ss.eventReady():
 		case <-p.shutdown:
 			return nil, p.terminalJobError()
@@ -1798,4 +1828,37 @@ func (p *pubsubFeed) Close() error {
 		return err
 	}
 	return nil
+}
+
+// stopFeedWhenDone arranges for feed to stop when passed in context
+// is done. Returns cleanup function.
+func stopFeedWhenDone(ctx context.Context, f cdctest.TestFeed) func() {
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	whenDone := func(fn func()) {
+		defer wg.Done()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			fn()
+		}
+	}
+
+	switch t := f.(type) {
+	case *sinklessFeed:
+		go whenDone(func() {
+			_ = t.conn.Close(context.Background())
+		})
+	case jobFailedMarker:
+		go whenDone(func() {
+			t.jobFailed(context.Canceled)
+		})
+	}
+
+	return func() {
+		close(done)
+		wg.Wait()
+	}
 }
