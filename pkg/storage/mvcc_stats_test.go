@@ -1642,6 +1642,17 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	// good idea of minimally reproducing examples.
 	const count = 200
 
+	rangeKeyGen := func(s *state) (roachpb.Key, roachpb.Key) {
+		keyMin := roachpb.KeyMin
+		keyMax := roachpb.KeyMax
+		if s.isLocalKey {
+			keyMax = keys.LocalMax
+		} else {
+			keyMin = keys.LocalMax
+		}
+		return keyMin, keyMax
+	}
+
 	actions := make(map[string]func(*state) string)
 
 	actions["Put"] = func(s *state) string {
@@ -1668,19 +1679,21 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		returnKeys := (s.rng.Intn(2) == 0)
 		max := s.rng.Int63n(5)
 		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
-		keyMin := roachpb.KeyMin
-		keyMax := roachpb.KeyMax
-		if s.isLocalKey {
-			keyMax = keys.LocalMax
-		} else {
-			keyMin = keys.LocalMax
-		}
+		keyMin, keyMax := rangeKeyGen(s)
 		if _, _, _, err := MVCCDeleteRange(
 			ctx, s.eng, s.MS, keyMin, keyMax, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
 		); err != nil {
 			return desc + ": " + err.Error()
 		}
 		return desc
+	}
+	actions["DelRangeTombstone"] = func(s *state) string {
+		keyMin, keyMax := rangeKeyGen(s)
+		if err := MVCCDeleteRangeUsingTombstone(
+			ctx, s.eng, s.MS, keyMin, keyMax, s.TS, hlc.ClockTimestamp{}, nil, nil, 0); err != nil {
+			return err.Error()
+		}
+		return ""
 	}
 	actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
@@ -1736,6 +1749,27 @@ func TestMVCCStatsRandomized(t *testing.T) {
 				Timestamp: gcTS,
 			}},
 			s.TS,
+		); err != nil {
+			return err.Error()
+		}
+		keyMin, keyMax := rangeKeyGen(s)
+		if err := MVCCGarbageCollectRangeKeys(
+			ctx,
+			s.eng,
+			s.MS,
+			[]CollectableGCRangeKey{
+				{
+					MVCCRangeKey: MVCCRangeKey{
+						StartKey:  keyMin,
+						EndKey:    keyMax,
+						Timestamp: gcTS,
+					},
+					LatchSpan: roachpb.Span{
+						Key:    keyMin,
+						EndKey: keyMax,
+					},
+				},
+			},
 		); err != nil {
 			return err.Error()
 		}
