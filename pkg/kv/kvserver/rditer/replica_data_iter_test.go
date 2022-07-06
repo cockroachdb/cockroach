@@ -13,20 +13,15 @@ package rditer
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -170,52 +165,6 @@ func verifyRDReplicatedOnlyMVCCIter(
 	})
 }
 
-// verifyRDEngineIter verifies that the ReplicaEngineDataIterator returns the
-// expected keys in the expected order. The expected keys can be either MVCCKey
-// or MVCCRangeKey.
-func verifyRDEngineIter(
-	t *testing.T,
-	desc *roachpb.RangeDescriptor,
-	eng storage.Engine,
-	replicatedOnly bool,
-	expectedKeys []interface{},
-) {
-	readWriter := eng.NewReadOnly(storage.StandardDurability)
-	defer readWriter.Close()
-	iter := NewReplicaEngineDataIterator(desc, readWriter, replicatedOnly)
-	defer iter.Close()
-
-	actualKeys := []interface{}{}
-	var ok bool
-	var err error
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		hasPoint, hasRange := iter.HasPointAndRange()
-		if hasPoint {
-			key, err := iter.UnsafeKey()
-			require.NoError(t, err)
-			require.True(t, key.IsMVCCKey())
-			mvccKey, err := key.ToMVCCKey()
-			require.NoError(t, err)
-			actualKeys = append(actualKeys, mvccKey.Clone())
-		}
-		if hasRange {
-			bounds, err := iter.RangeBounds()
-			require.NoError(t, err)
-			for _, rk := range iter.RangeKeys() {
-				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Version)
-				require.NoError(t, err)
-				actualKeys = append(actualKeys, storage.MVCCRangeKey{
-					StartKey:  bounds.Key.Clone(),
-					EndKey:    bounds.EndKey.Clone(),
-					Timestamp: ts,
-				})
-			}
-		}
-	}
-	require.NoError(t, err)
-	require.Equal(t, expectedKeys, actualKeys)
-}
-
 // TestReplicaDataIterator verifies correct operation of iterator if
 // a range contains no data and never has.
 func TestReplicaDataIteratorEmptyRange(t *testing.T) {
@@ -231,8 +180,6 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	}
 
 	verifyRDReplicatedOnlyMVCCIter(t, desc, eng, []storage.MVCCKey{})
-	verifyRDEngineIter(t, desc, eng, false, []interface{}{})
-	verifyRDEngineIter(t, desc, eng, true, []interface{}{})
 }
 
 // TestReplicaDataIterator creates three ranges (a-b, b-c, c-d) and fills each
@@ -277,10 +224,6 @@ func TestReplicaDataIterator(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.desc.RSpan().String(), func(t *testing.T) {
 
-			// Verify the replicated and unreplicated engine contents.
-			verifyRDEngineIter(t, &tc.desc, eng, false, tc.allKeys)
-			verifyRDEngineIter(t, &tc.desc, eng, true, tc.replicatedKeys)
-
 			// Verify the replicated MVCC contents.
 			//
 			// TODO(erikgrinaker): This currently only supports MVCC point keys, so we
@@ -293,155 +236,5 @@ func TestReplicaDataIterator(t *testing.T) {
 			}
 			verifyRDReplicatedOnlyMVCCIter(t, &tc.desc, eng, pointKeys)
 		})
-	}
-}
-
-// TestReplicaDataIteratorGlobalRangeKey creates three ranges {a-b, b-c, c-d}
-// and writes an MVCC range key across the entire keyspace (replicated and
-// unreplicated). It then verifies that the range key is properly truncated and
-// filtered to the iterator's key ranges.
-func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Set up a new engine and write a single range key across the entire span.
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-
-	require.NoError(t, eng.PutEngineRangeKey(keys.MinKey.Next(), keys.MaxKey, []byte{1}, []byte{}))
-
-	// Use a snapshot for the iteration, because we need consistent
-	// iterators.
-	snapshot := eng.NewSnapshot()
-	defer snapshot.Close()
-
-	// Iterate over three range descriptors, both replicated and unreplicated.
-	descs := []roachpb.RangeDescriptor{
-		{
-			RangeID:  1,
-			StartKey: roachpb.RKey("a"),
-			EndKey:   roachpb.RKey("b"),
-		},
-		{
-			RangeID:  2,
-			StartKey: roachpb.RKey("b"),
-			EndKey:   roachpb.RKey("c"),
-		},
-		{
-			RangeID:  3,
-			StartKey: roachpb.RKey("c"),
-			EndKey:   roachpb.RKey("d"),
-		},
-	}
-	for _, desc := range descs {
-		t.Run(desc.KeySpan().String(), func(t *testing.T) {
-			// An iterator should see range keys spanning all relevant key ranges.
-			testutils.RunTrueAndFalse(t, "replicatedOnly", func(t *testing.T, replicatedOnly bool) {
-				rangeIter := NewReplicaEngineDataIterator(&desc, snapshot, replicatedOnly)
-				defer rangeIter.Close()
-
-				var expectedSpans []roachpb.Span
-				if replicatedOnly {
-					expectedSpans = keys.MakeReplicatedRangeSpans(&desc)
-				} else {
-					expectedSpans = keys.MakeRangeSpans(&desc)
-				}
-
-				var actualSpans []roachpb.Span
-				var ok bool
-				var err error
-				for ok, err = rangeIter.SeekStart(); ok && err == nil; ok, err = rangeIter.Next() {
-					bounds, err := rangeIter.RangeBounds()
-					require.NoError(t, err)
-					actualSpans = append(actualSpans, bounds.Clone())
-				}
-				require.NoError(t, err)
-				require.Equal(t, expectedSpans, actualSpans)
-			})
-		})
-	}
-}
-
-func BenchmarkReplicaEngineDataIterator(b *testing.B) {
-	skip.UnderShort(b)
-	for _, numRanges := range []int{1, 10, 100} {
-		b.Run(fmt.Sprintf("ranges=%d", numRanges), func(b *testing.B) {
-			for _, numKeysPerRange := range []int{1, 100, 10000} {
-				b.Run(fmt.Sprintf("keysPerRange=%d", numKeysPerRange), func(b *testing.B) {
-					for _, valueSize := range []int{32} {
-						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							benchReplicaEngineDataIterator(b, numRanges, numKeysPerRange, valueSize)
-						})
-					}
-				})
-			}
-		})
-	}
-}
-
-func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, valueSize int) {
-	ctx := context.Background()
-
-	// Set up ranges.
-	var descs []roachpb.RangeDescriptor
-	for i := 1; i <= numRanges; i++ {
-		desc := roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(i),
-			StartKey: append([]byte{'k'}, 0, 0, 0, 0),
-			EndKey:   append([]byte{'k'}, 0, 0, 0, 0),
-		}
-		binary.BigEndian.PutUint32(desc.StartKey[1:], uint32(i))
-		binary.BigEndian.PutUint32(desc.EndKey[1:], uint32(i+1))
-		descs = append(descs, desc)
-	}
-
-	// Write data for ranges.
-	eng, err := storage.Open(ctx,
-		storage.Filesystem(b.TempDir()),
-		storage.CacheSize(1e9),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
-	require.NoError(b, err)
-	defer eng.Close()
-
-	batch := eng.NewBatch()
-	defer batch.Close()
-
-	rng, _ := randutil.NewTestRand()
-	value := randutil.RandBytes(rng, valueSize)
-
-	for _, desc := range descs {
-		var keyBuf roachpb.Key
-		spans := keys.MakeRangeSpans(&desc)
-		for i := 0; i < numKeysPerRange; i++ {
-			keyBuf = append(keyBuf[:0], spans[i%len(spans)].Key...)
-			keyBuf = append(keyBuf, 0, 0, 0, 0)
-			binary.BigEndian.PutUint32(keyBuf[len(keyBuf)-4:], uint32(i))
-			if err := batch.PutEngineKey(storage.EngineKey{Key: keyBuf}, value); err != nil {
-				require.NoError(b, err) // slow, so check err != nil first
-			}
-		}
-	}
-	require.NoError(b, batch.Commit(true /* sync */))
-	require.NoError(b, eng.Flush())
-	require.NoError(b, eng.Compact())
-
-	snapshot := eng.NewSnapshot()
-	defer snapshot.Close()
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		for _, desc := range descs {
-			iter := NewReplicaEngineDataIterator(&desc, snapshot, false /* replicatedOnly */)
-			defer iter.Close()
-			var ok bool
-			var err error
-			for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-				_, _ = iter.UnsafeKey()
-				_ = iter.UnsafeValue()
-			}
-			if err != nil {
-				require.NoError(b, err)
-			}
-		}
 	}
 }

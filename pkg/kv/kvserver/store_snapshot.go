@@ -404,8 +404,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// CRDB, as of VersionUnreplicatedTruncatedState).
 	bytesSent := int64(0)
 
-	// Iterate over all keys (point keys and range keys) using the provided
-	// iterator and stream out batches of key-values.
+	// Iterate over all keys (point keys and range keys) in the range's key spans
+	// using the provided engine snapshot and stream out batches of data.
 	var kvs, rangeKVs int
 	var b storage.Batch
 	defer func() {
@@ -426,59 +426,83 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		return nil
 	}
 
-	iter := snap.Iter
-	var ok bool
-	var err error
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		// NB: EngineReplicaDataIterator will never expose point/range keys
-		// together: it first iterates over all point keys in a key range, then over
-		// all range keys in a key range, then moves onto the next key range.
-		hasPoint, hasRange := iter.HasPointAndRange()
+	sendPointKeys := func(span roachpb.Span) error {
+		iter := snap.EngineSnap.NewEngineIterator(storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsOnly,
+			LowerBound: span.Key,
+			UpperBound: span.EndKey,
+		})
+		defer iter.Close()
 
-		if hasPoint {
+		var ok bool
+		var err error
+		seekKey := storage.EngineKey{Key: span.Key}
+		for ok, err = iter.SeekEngineKeyGE(seekKey); ok && err == nil; ok, err = iter.NextEngineKey() {
 			kvs++
 			var unsafeKey storage.EngineKey
-			if unsafeKey, err = iter.UnsafeKey(); err != nil {
-				return 0, err
+			if unsafeKey, err = iter.UnsafeEngineKey(); err != nil {
+				return err
 			}
-			unsafeValue := iter.UnsafeValue()
 			if b == nil {
 				b = kvSS.newBatch()
 			}
-			if err := b.PutEngineKey(unsafeKey, unsafeValue); err != nil {
-				return 0, err
+			if err := b.PutEngineKey(unsafeKey, iter.UnsafeValue()); err != nil {
+				return err
 			}
 			if int64(b.Len()) >= kvSS.batchSize {
 				if err = flushBatch(); err != nil {
-					return 0, err
+					return err
 				}
 			}
 		}
+		return err
+	}
 
-		if hasRange {
-			bounds, err := iter.RangeBounds()
+	sendRangeKeys := func(span roachpb.Span) error {
+		iter := snap.EngineSnap.NewEngineIterator(storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypeRangesOnly,
+			LowerBound: span.Key,
+			UpperBound: span.EndKey,
+		})
+		defer iter.Close()
+
+		var ok bool
+		var err error
+		seekKey := storage.EngineKey{Key: span.Key}
+		for ok, err = iter.SeekEngineKeyGE(seekKey); ok && err == nil; ok, err = iter.NextEngineKey() {
+			bounds, err := iter.EngineRangeBounds()
 			if err != nil {
-				return 0, err
+				return err
 			}
-			for _, rkv := range iter.RangeKeys() {
+			for _, rkv := range iter.EngineRangeKeys() {
 				rangeKVs++
+				if b == nil {
+					b = kvSS.newBatch()
+				}
 				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
 				if err != nil {
-					return 0, err
+					return err
 				}
 				if bLen := int64(b.Len()); bLen >= kvSS.batchSize {
 					if err = flushBatch(); err != nil {
-						return 0, err
+						return err
 					}
 				}
 			}
 		}
+		return err
 	}
-	if err != nil {
-		return 0, err
+
+	for _, span := range keys.MakeReplicatedRangeSpans(snap.State.Desc) {
+		if err := sendPointKeys(span); err != nil {
+			return 0, err
+		}
+		if err := sendRangeKeys(span); err != nil {
+			return 0, err
+		}
 	}
 	if b != nil {
-		if err = flushBatch(); err != nil {
+		if err := flushBatch(); err != nil {
 			return 0, err
 		}
 	}

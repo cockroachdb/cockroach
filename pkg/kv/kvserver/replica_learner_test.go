@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1711,44 +1712,59 @@ func getExpectedSnapshotSizeBytes(
 	}
 	defer snap.Close()
 
-	totalBytes := int64(0)
 	var b storage.Batch
 	defer func() {
 		b.Close()
 	}()
-	b = originStore.Engine().NewUnindexedBatch(true)
-	iter := snap.Iter
-	var ok bool
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		hasPoint, hasRange := iter.HasPointAndRange()
-		if hasPoint {
-			var unsafeKey storage.EngineKey
-			if unsafeKey, err = iter.UnsafeKey(); err != nil {
-				return 0, err
-			}
-			if err := b.PutEngineKey(unsafeKey, iter.UnsafeValue()); err != nil {
-				return 0, err
-			}
-		}
-		if hasRange {
-			bounds, err := iter.RangeBounds()
-			if err != nil {
-				return 0, err
-			}
-			for _, rkv := range iter.RangeKeys() {
-				err := b.PutEngineRangeKey(bounds.Key, bounds.EndKey, rkv.Version, rkv.Value)
-				if err != nil {
-					return 0, err
-				}
-			}
-		}
-	}
-	if err != nil {
-		return 0, err
-	}
-	totalBytes += int64(b.Len())
 
-	return totalBytes, nil
+	b = originStore.Engine().NewUnindexedBatch(true)
+
+	for _, span := range keys.MakeReplicatedRangeSpans(snap.State.Desc) {
+		var ok bool
+		var err error
+		seekKey := storage.EngineKey{Key: span.Key}
+
+		pkIter := snap.EngineSnap.NewEngineIterator(storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsOnly,
+			LowerBound: span.Key,
+			UpperBound: span.EndKey,
+		})
+		defer pkIter.Close()
+
+		for ok, err = pkIter.SeekEngineKeyGE(seekKey); ok && err == nil; ok, err = pkIter.NextEngineKey() {
+			var unsafeKey storage.EngineKey
+			if unsafeKey, err = pkIter.UnsafeEngineKey(); err != nil {
+				return 0, err
+			}
+			if err := b.PutEngineKey(unsafeKey, pkIter.UnsafeValue()); err != nil {
+				return 0, err
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
+
+		rkIter := snap.EngineSnap.NewEngineIterator(storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypeRangesOnly,
+			LowerBound: span.Key,
+			UpperBound: span.EndKey,
+		})
+		defer rkIter.Close()
+
+		for ok, err = rkIter.SeekEngineKeyGE(seekKey); ok && err == nil; ok, err = rkIter.NextEngineKey() {
+			var unsafeKey storage.EngineKey
+			if unsafeKey, err = pkIter.UnsafeEngineKey(); err != nil {
+				return 0, err
+			}
+			if err := b.PutEngineKey(unsafeKey, rkIter.UnsafeValue()); err != nil {
+				return 0, err
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+	return int64(b.Len()), nil
 }
 
 // Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and

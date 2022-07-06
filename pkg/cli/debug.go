@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -442,27 +441,40 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	snapshot := db.NewSnapshot()
 	defer snapshot.Close()
 
-	iter := rditer.NewReplicaEngineDataIterator(&desc, snapshot, debugCtx.replicated)
-	defer iter.Close()
-	results := 0
-	var ok bool
-	for ok, err = iter.SeekStart(); ok && err == nil; ok, err = iter.Next() {
-		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
-			// TODO(erikgrinaker): For now, just skip range keys. We should print
-			// them.
-			continue
+	var results int
+	var spans []roachpb.Span
+	if debugCtx.replicated {
+		spans = keys.MakeReplicatedRangeSpans(&desc)
+	} else {
+		spans = keys.MakeRangeSpans(&desc)
+	}
+	for _, span := range spans {
+		iter := db.NewEngineIterator(storage.IterOptions{
+			// TODO(erikgrinaker): Handle range keys too.
+			KeyTypes:   storage.IterKeyTypePointsOnly,
+			LowerBound: span.Key,
+			UpperBound: span.EndKey,
+		})
+		defer iter.Close()
+
+		var ok bool
+		seekKey := storage.EngineKey{Key: span.Key}
+		for ok, err = iter.SeekEngineKeyGE(seekKey); ok && err == nil; ok, err = iter.NextEngineKey() {
+			var unsafeKey storage.EngineKey
+			if unsafeKey, err = iter.UnsafeEngineKey(); err != nil {
+				return err
+			}
+			kvserver.PrintEngineKeyValue(unsafeKey, iter.UnsafeValue())
+			results++
+			if results == debugCtx.maxResults {
+				break
+			}
 		}
-		var key storage.EngineKey
-		if key, err = iter.UnsafeKey(); err != nil {
-			break
-		}
-		kvserver.PrintEngineKeyValue(key, iter.UnsafeValue())
-		results++
-		if results == debugCtx.maxResults {
-			break
+		if err != nil {
+			return err
 		}
 	}
-	return err
+	return nil
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
