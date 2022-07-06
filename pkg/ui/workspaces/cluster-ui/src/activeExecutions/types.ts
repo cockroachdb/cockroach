@@ -17,8 +17,11 @@ export type SessionsResponse =
 export type ActiveStatementResponse =
   protos.cockroach.server.serverpb.ActiveQuery;
 export type ExecutionStatus = "Waiting" | "Executing" | "Preparing";
+
 export const ActiveStatementPhase =
   protos.cockroach.server.serverpb.ActiveQuery.Phase;
+export const SessionStatusType =
+  protos.cockroach.server.serverpb.Session.Status;
 
 export type ActiveStatement = {
   executionID: string;
