@@ -267,3 +267,46 @@ iter_seek_ge: "b"/3.000000000,0=/<empty> {b-d}/[4.000000000,0=/<empty>]
 iter_seek_ge: {b-d}/[4.000000000,0=/<empty>]
 iter_seek_ge: "b"/1.000000000,0=/BYTES/b1 {b-d}/[4.000000000,0=/<empty>]
 iter_seek_ge: {b-d}/[4.000000000,0=/<empty>]
+
+# Clear the span. Write two SSTs:
+#
+# 1. c@3 point key, [a-c\0)@2 range key.
+# 2. c@1 point key, [c-f)@2 range keys.
+#
+# This simulates what would happen in an Export with SplitMidKey that
+# emits a resume span at c@1, where we have to ensure that the "c"
+# point is covered by the range key in both SSTs, so they will
+# overlap at [c-c\0)@2.
+run ok
+sst_reset
+sst_put k=c ts=3 v=c3
+sst_put_rangekey k=a end=+c ts=2
+sst_finish
+sst_put k=c ts=1 v=c3
+sst_put_rangekey k=c end=f ts=2
+----
+>> at end:
+<no data>
+>> sst-0:
+set: "c"/3.000000000,0 -> /BYTES/c3
+rangekeyset: {a-c\x00}/2.000000000,0 -> /<empty>
+>> sst-1:
+set: "c"/1.000000000,0 -> /BYTES/c3
+rangekeyset: {c-f}/2.000000000,0 -> /<empty>
+
+run ok
+sst_iter_new
+iter_seek_ge k=c ts=3
+iter_seek_ge k=c ts=2
+iter_seek_ge k=c ts=1
+iter_seek_ge k=a
+iter_scan
+----
+iter_seek_ge: "c"/3.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_seek_ge: {a-f}/[2.000000000,0=/<empty>]
+iter_seek_ge: "c"/1.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_seek_ge: {a-f}/[2.000000000,0=/<empty>]
+iter_scan: {a-f}/[2.000000000,0=/<empty>]
+iter_scan: "c"/3.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_scan: "c"/1.000000000,0=/BYTES/c3 {a-f}/[2.000000000,0=/<empty>]
+iter_scan: .
