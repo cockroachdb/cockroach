@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
@@ -42,6 +43,31 @@ FROM [SHOW JOBS]
 WHERE job_type = 'SCHEMA CHANGE' 
   AND status NOT IN ('succeeded', 'failed', 'aborted')`,
 		[][]string{{"0"}})
+}
+
+// ReadZoneConfigsFromDB reads the zone configs from the system.zones table.
+func ReadZoneConfigsFromDB(t *testing.T, tdb *sqlutils.SQLRunner) map[descpb.ID]*zonepb.ZoneConfig {
+	hexZoneRows := tdb.Query(t, "SELECT id, encode(config, 'hex') FROM system.zones")
+	zoneCfgMap := make(map[descpb.ID]*zonepb.ZoneConfig)
+	defer hexZoneRows.Close()
+	for hexZoneRows.Next() {
+		var descID descpb.ID
+		var zoneCfg string
+		if err := hexZoneRows.Scan(&descID, &zoneCfg); err != nil {
+			t.Fatal(err)
+		}
+		zoneCfgBytes, err := hex.DecodeString(zoneCfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		zoneProto := zonepb.ZoneConfig{}
+		err = protoutil.Unmarshal(zoneCfgBytes, &zoneProto)
+		if err != nil {
+			t.Fatal(err)
+		}
+		zoneCfgMap[descID] = &zoneProto
+	}
+	return zoneCfgMap
 }
 
 // ReadDescriptorsFromDB reads the set of descriptors from tdb.

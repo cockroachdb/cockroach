@@ -13,12 +13,14 @@ package sctestdeps
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -120,6 +122,13 @@ func WithBackfiller(backfiller scexec.Backfiller) Option {
 func WithComments(comments map[descmetadata.CommentKey]string) Option {
 	return optionFunc(func(state *TestState) {
 		state.comments = comments
+	})
+}
+
+// WithZoneConfigs injects sets zone configs of TestState to the provided value.
+func WithZoneConfigs(zoneConfigs map[catid.DescID]*zonepb.ZoneConfig) Option {
+	return optionFunc(func(state *TestState) {
+		state.zoneConfigs = zoneConfigs
 	})
 }
 

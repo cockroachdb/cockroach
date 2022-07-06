@@ -242,9 +242,6 @@ object DatabaseRegionConfig
 
 DatabaseRegionConfig :  DatabaseID
 DatabaseRegionConfig :  RegionEnumTypeID
-DatabaseRegionConfig :  PrimaryRegion
-DatabaseRegionConfig :  SurvivalGoal
-DatabaseRegionConfig :  Placement
 
 object DatabaseRoleSetting
 
