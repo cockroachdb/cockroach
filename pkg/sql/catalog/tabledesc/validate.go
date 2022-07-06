@@ -1281,8 +1281,16 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.AssertionFailedf("primary index %q has invalid encoding type %d in proto, expected %d",
 					idx.GetName(), idx.IndexDesc().EncodingType, descpb.PrimaryIndexEncoding)
 			}
-			if idx.IsHidden() {
+		}
+		if idx.IsHidden() {
+			// If an index is invisible, it cannot be a primary index or a unique
+			// index.
+			if idx.Primary() {
 				return errors.Newf("a primary index %q cannot be hidden.",
+					idx.GetName())
+			}
+			if idx.IsUnique() {
+				return errors.Newf("a unique index %q cannot be hidden.",
 					idx.GetName())
 			}
 		}
