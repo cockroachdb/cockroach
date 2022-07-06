@@ -111,6 +111,17 @@ TableSubZoneConfig :  TableID
 TableSubZoneConfig :  IndexID
 TableSubZoneConfig :  PartitionName
 
+object TableZoneConfigOption
+
+TableZoneConfigOption :  TableID
+TableZoneConfigOption :  ZoneConfigOption
+
+object TableSubZoneConfigOption
+
+TableSubZoneConfigOption :  TableID
+TableSubZoneConfigOption :  IndexID
+TableSubZoneConfigOption :  ZoneConfigOption
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -293,6 +304,8 @@ View <|-- TableZoneConfig
 Sequence <|-- TableZoneConfig
 Table <|-- TableSubZoneConfig
 Index <|-- TableSubZoneConfig
+TableZoneConfig <|-- TableZoneConfigOption
+TableSubZoneConfig <|-- TableSubZoneConfigOption
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion
