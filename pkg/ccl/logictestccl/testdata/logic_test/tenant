@@ -9,6 +9,15 @@ SELECT version = crdb_internal.node_executable_version()
 ----
 true
 
+# Regression test for issue #83928: check that the lastUpdated value is sane.
+query B
+WITH a AS (
+  SELECT extract(YEAR FROM "lastUpdated") AS year
+  FROM system.settings WHERE name = 'version'
+) SELECT year > 2020 AND year < 2100 FROM a
+----
+true
+
 # This file documents operations that are supported when running a SQL tenant
 # server. It's mostly a dumping ground for tests moved from tenant_unsupported.
 
