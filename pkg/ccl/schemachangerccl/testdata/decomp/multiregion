@@ -131,6 +131,12 @@ ElementState:
 - TableZoneConfig:
     tableId: 110
   Status: PUBLIC
+- TableZoneConfigOption:
+    option:
+      boolValue: true
+      name: global_reads
+    tableId: 110
+  Status: PUBLIC
 - TableLocalityGlobal:
     tableId: 110
   Status: PUBLIC
@@ -384,6 +390,26 @@ ElementState:
       temporaryIndexId: 0
   Status: PUBLIC
 - TableZoneConfig:
+    tableId: 109
+  Status: PUBLIC
+- TableZoneConfigOption:
+    option:
+      intValue: "5"
+      name: num_voters
+    tableId: 109
+  Status: PUBLIC
+- TableZoneConfigOption:
+    option:
+      name: lease_preferences
+      stringValue: |
+        - - +region=us-east2
+    tableId: 109
+  Status: PUBLIC
+- TableZoneConfigOption:
+    option:
+      name: voter_constraints
+      stringValue: |
+        +region=us-east2: 2
     tableId: 109
   Status: PUBLIC
 - TableLocalitySecondaryRegion:
@@ -669,6 +695,90 @@ ElementState:
   Status: PUBLIC
 - TableSubZoneConfig:
     indexId: 1
+    partitionName: us-east3
+    tableId: 108
+  Status: PUBLIC
+- TableZoneConfigOption:
+    option:
+      intValue: "0"
+      name: num_replicas
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      intValue: "5"
+      name: num_voters
+    partitionName: us-east1
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      intValue: "5"
+      name: num_voters
+    partitionName: us-east2
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      intValue: "5"
+      name: num_voters
+    partitionName: us-east3
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      name: lease_preferences
+      stringValue: |
+        - - +region=us-east1
+    partitionName: us-east1
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      name: lease_preferences
+      stringValue: |
+        - - +region=us-east2
+    partitionName: us-east2
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      name: lease_preferences
+      stringValue: |
+        - - +region=us-east3
+    partitionName: us-east3
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      name: voter_constraints
+      stringValue: |
+        +region=us-east1: 2
+    partitionName: us-east1
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      name: voter_constraints
+      stringValue: |
+        +region=us-east2: 2
+    partitionName: us-east2
+    tableId: 108
+  Status: PUBLIC
+- TableSubZoneConfigOption:
+    indexId: 1
+    option:
+      name: voter_constraints
+      stringValue: |
+        +region=us-east3: 2
     partitionName: us-east3
     tableId: 108
   Status: PUBLIC

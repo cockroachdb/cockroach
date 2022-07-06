@@ -72,7 +72,8 @@ message ElementProto {
   RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
   TableZoneConfig table_zone_config = 121 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   TableSubZoneConfig table_subzone_config = 122  [(gogoproto.moretags) = "parent:\"Table, Index\""];
-
+  TableZoneConfigOption table_zone_config_option = 123 [(gogoproto.moretags) = "parent:\"TableZoneConfig\""];
+  TableSubZoneConfigOption table_subzone_config_option = 124 [(gogoproto.moretags) = "parent:\"TableSubZoneConfig\""];
   // Multi-region elements.
   TableLocalityGlobal locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
   TableLocalityPrimaryRegion locality_primary_region = 111 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -504,3 +505,25 @@ message TableSubZoneConfig {
 message TableZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
+
+message ZoneConfigOption {
+  string name = 1;
+  oneof Value {
+    int64 int_value = 2;
+    bool bool_value = 3;
+    string string_value = 4;
+  }
+}
+
+message TableZoneConfigOption {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  ZoneConfigOption option = 2  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message TableSubZoneConfigOption {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  string partition_name = 3;
+  ZoneConfigOption option = 4  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+

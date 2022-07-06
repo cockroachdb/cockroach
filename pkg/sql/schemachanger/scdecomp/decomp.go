@@ -13,12 +13,15 @@ package scdecomp
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -320,16 +323,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		panic(err)
 	}
 	if zc != nil {
-		w.ev(scpb.Status_PUBLIC, &scpb.TableZoneConfig{
-			TableID: tbl.GetID(),
-		})
-		for _, subZone := range zc.Subzones {
-			w.ev(scpb.Status_PUBLIC, &scpb.TableSubZoneConfig{
-				TableID:       tbl.GetID(),
-				IndexID:       catid.IndexID(subZone.IndexID),
-				PartitionName: subZone.PartitionName,
-			})
-		}
+		w.walkTableZoneConfig(tbl.GetID(), *zc)
 	}
 }
 
@@ -626,4 +620,71 @@ func (w *walkCtx) walkForeignKeyConstraint(
 	} else if err != nil {
 		panic(err)
 	}
+}
+
+func (w *walkCtx) walkZoneConfigOptions(config zonepb.ZoneConfig) []scpb.ZoneConfigOption {
+	var options []scpb.ZoneConfigOption
+	for _, optionName := range zoneconfig.GetOptionNames() {
+		optionEntry := zoneconfig.GetOption(tree.Name(optionName))
+		dValue, err := optionEntry.Get(&config)
+		if err != nil {
+			panic(err)
+		}
+		if dValue != tree.DNull {
+			if _, ok := dValue.(*tree.DInt); ok {
+				options = append(options, scpb.ZoneConfigOption{
+					Name:  optionName,
+					Value: &scpb.ZoneConfigOption_IntValue{IntValue: int64(*(dValue.(*tree.DInt)))},
+				})
+			} else if _, ok := dValue.(*tree.DBool); ok {
+				options = append(options, scpb.ZoneConfigOption{
+					Name:  optionName,
+					Value: &scpb.ZoneConfigOption_BoolValue{BoolValue: bool(*(dValue.(*tree.DBool)))},
+				})
+			} else if _, ok := dValue.(*tree.DString); ok {
+				options = append(options, scpb.ZoneConfigOption{
+					Name:  optionName,
+					Value: &scpb.ZoneConfigOption_StringValue{StringValue: string(*(dValue.(*tree.DString)))},
+				})
+			} else {
+				panic("unknown type")
+			}
+		}
+	}
+	return options
+}
+
+func (w *walkCtx) walkTableSubZoneConfig(id catid.DescID, subzones []zonepb.Subzone) {
+	for _, subZone := range subzones {
+		w.ev(scpb.Status_PUBLIC, &scpb.TableSubZoneConfig{
+			TableID:       id,
+			IndexID:       catid.IndexID(subZone.IndexID),
+			PartitionName: subZone.PartitionName,
+		})
+		options := w.walkZoneConfigOptions(subZone.Config)
+		for _, option := range options {
+			w.ev(scpb.Status_PUBLIC,
+				&scpb.TableSubZoneConfigOption{
+					TableID:          id,
+					IndexID:          catid.IndexID(subZone.IndexID),
+					PartitionName:    subZone.PartitionName,
+					ZoneConfigOption: option,
+				})
+		}
+	}
+}
+
+func (w *walkCtx) walkTableZoneConfig(id catid.DescID, config zonepb.ZoneConfig) {
+	w.ev(scpb.Status_PUBLIC, &scpb.TableZoneConfig{
+		TableID: id,
+	})
+	options := w.walkZoneConfigOptions(config)
+	for _, option := range options {
+		w.ev(scpb.Status_PUBLIC,
+			&scpb.TableZoneConfigOption{
+				TableID:          id,
+				ZoneConfigOption: option,
+			})
+	}
+	w.walkTableSubZoneConfig(id, config.Subzones)
 }
