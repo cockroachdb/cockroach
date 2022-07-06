@@ -17,6 +17,7 @@ import {
   ActiveStatementPhase,
   ExecutionStatus,
   ActiveTransactionFilters,
+  SessionStatusType,
 } from "./types";
 import { ActiveStatement, ActiveStatementFilters } from "./types";
 
@@ -54,6 +55,7 @@ export function getActiveStatementsFromSessions(
   const time = lastUpdated || moment.utc();
 
   sessionsResponse.sessions.forEach(session => {
+    if (session.status === SessionStatusType.CLOSED) return;
     session.active_queries.forEach(query => {
       activeQueries.push({
         executionID: query.id,
@@ -140,7 +142,10 @@ export function getActiveTransactionsFromSessions(
   });
 
   return sessionsResponse.sessions
-    .filter(session => session.active_txn)
+    .filter(
+      session =>
+        session.status !== SessionStatusType.CLOSED && session.active_txn,
+    )
     .map(session => {
       const activeTxn = session.active_txn;
 
