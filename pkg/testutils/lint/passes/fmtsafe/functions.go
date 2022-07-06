@@ -134,6 +134,9 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/sql/pgwire.authPipe).Logf": true,
 
+	"(github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase.stdlogger).Fatalf": true,
+	"(github.com/cockroachdb/cockroach/pkg/sql/logictest/logictestbase.stdlogger).Logf":   true,
+
 	// Error things are populated in the init() message.
 }
 
