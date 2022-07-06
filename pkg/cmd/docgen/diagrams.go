@@ -406,6 +406,61 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:   "alter_table_reset_storage_param",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "storage_parameter_key_list"},
+		regreplace: map[string]string{
+			`',' storage_parameter_key.*`: `',' storage_parameter_key ) )* ')'`,
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'RESET")},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name"},
+	},
+	{
+		name:   "alter_table_set_storage_param",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "storage_parameter_list", "storage_parameter"},
+		regreplace: map[string]string{
+			`var_value.*`: `var_value ) ) )* ')'`,
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'SET")},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name"},
+	},
+	{
+		name:   "create_table_with_storage_param",
+		stmt:   "create_table_stmt",
+		inline: []string{"opt_table_elem_list", "opt_table_with", "opt_with_storage_parameter_list", "storage_parameter_list", "storage_parameter"},
+		replace: map[string]string{
+			"opt_partition_by_table":     "",
+			"opt_create_table_on_commit": "",
+			"opt_locality":               "",
+			"opt_persistence_temp_table": "",
+			"table_elem_list":            "table_definition",
+		},
+		nosplit: true,
+		unlink:  []string{"table_definition"},
+	},
+	{
+		name:   "create_index_with_storage_param",
+		stmt:   "create_index_stmt",
+		inline: []string{"opt_with_storage_parameter_list", "storage_parameter_list", "storage_parameter"},
+		replace: map[string]string{
+			"opt_unique":               "",
+			"opt_concurrently":         "",
+			"opt_index_access_method ": "",
+			"opt_hash_sharded ":        "",
+			"opt_storing ":             "",
+			"opt_partition_by_index ":  "",
+			"opt_where_clause":         "",
+		},
+		nosplit: true,
+	},
+	{
 		name:   "alter_primary_key",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_hash_sharded"},
