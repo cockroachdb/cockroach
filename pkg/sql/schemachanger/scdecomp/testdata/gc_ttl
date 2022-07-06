@@ -1,0 +1,70 @@
+setup
+CREATE DATABASE db1;
+ALTER DATABASE db1 configure zone using gc.ttlseconds=165, range_min_bytes=234217728, range_max_bytes=536870912, num_replicas=16
+----
+
+decompose
+db1
+----
+BackReferencedIDs:
+  - 105
+ElementState:
+- Database:
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      intValue: "16"
+      name: num_replicas
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      intValue: "165"
+      name: gc.ttlseconds
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      intValue: "234217728"
+      name: range_min_bytes
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      intValue: "536870912"
+      name: range_max_bytes
+  Status: PUBLIC
+- Namespace:
+    databaseId: 0
+    descriptorId: 104
+    name: db1
+    schemaId: 0
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2048
+    userName: public
+  Status: PUBLIC
+- DatabaseRoleSetting:
+    databaseId: 104
+    roleName: __placeholder_role_name__
+  Status: PUBLIC

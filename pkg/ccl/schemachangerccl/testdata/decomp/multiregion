@@ -23,6 +23,44 @@ ElementState:
 - Database:
     databaseId: 104
   Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      intValue: "5"
+      name: num_replicas
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      intValue: "5"
+      name: num_voters
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      name: constraints
+      stringValue: |
+        +region=us-east1: 1
+        +region=us-east2: 1
+        +region=us-east3: 1
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      name: lease_preferences
+      stringValue: |
+        - - +region=us-east1
+  Status: PUBLIC
+- DatabaseZoneConfigOption:
+    databaseId: 104
+    option:
+      name: voter_constraints
+      stringValue: |
+        +region=us-east1: 2
+  Status: PUBLIC
 - Namespace:
     databaseId: 0
     descriptorId: 104
