@@ -1552,6 +1552,16 @@ func makeWorkQueueMetrics(name string) WorkQueueMetrics {
 // seeking admission from a StoreWorkQueue.
 type StoreWriteWorkInfo struct {
 	WorkInfo
+
+	// TODO: remove these 2 fields. No such info will be provided at admission
+	// time. The token subtraction at admission time is completely based on
+	// estimation. This is partially fixed at the time of AdmittedWorkDone via
+	// StoreWorkDoneInfo. StoreWorkDoneInfo does not specify how many of the
+	// ingested bytes went into L0 (for the leaseholder), since we don't want to
+	// plumb information through the raft replication and state machine
+	// application path. So we will continue to use estimates to decide what
+	// went into L0.
+
 	// WriteBytes should be populated if the caller knows the bytes that will be
 	// written, else this should be set to 0, and the callee will use an
 	// estimate. For large writes, typically generated for index backfills,
@@ -1627,6 +1637,14 @@ func (q *StoreWorkQueue) Admit(
 	}
 	h.admissionEnabled = enabled
 	return h, nil
+}
+
+type StoreWorkDoneInfo struct {
+	// The size of the batch, for normal writes. Zero if there were no normal
+	// writes.
+	WriteBytes int64
+	// The size of the sstables, for ingests. Zero if there were no ingests.
+	SSTableBytes int64
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has

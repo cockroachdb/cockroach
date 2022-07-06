@@ -44,6 +44,13 @@ import (
 func (s *Store) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	br, _, pErr = s.SendWithWriteBytes(ctx, ba)
+	return br, pErr
+}
+
+func (s *Store) SendWithWriteBytes(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
@@ -51,12 +58,12 @@ func (s *Store) Send(
 		arg := union.GetInner()
 		header := arg.Header()
 		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, nil, roachpb.NewError(err)
 		}
 	}
 
 	if res, err := s.maybeThrottleBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	} else if res != nil {
 		defer res.Release()
 	}
@@ -64,13 +71,13 @@ func (s *Store) Send(
 	if ba.BoundedStaleness != nil {
 		newBa, pErr := s.executeServerSideBoundedStalenessNegotiation(ctx, ba)
 		if pErr != nil {
-			return nil, pErr
+			return nil, nil, pErr
 		}
 		ba = newBa
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock()); err != nil {
-		return nil, roachpb.NewError(err)
+		return nil, nil, roachpb.NewError(err)
 	}
 
 	// Update our clock with the incoming request timestamp. This advances the
@@ -83,7 +90,7 @@ func (s *Store) Send(
 			// If the command appears to come from a node with a bad clock,
 			// reject it instead of updating the local clock and proceeding.
 			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, baClockTS); err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, nil, roachpb.NewError(err)
 			}
 		}
 	}
@@ -171,7 +178,7 @@ func (s *Store) Send(
 		// Get range and add command to the range for execution.
 		repl, err := s.GetReplica(ba.RangeID)
 		if err != nil {
-			return nil, roachpb.NewError(err)
+			return nil, nil, roachpb.NewError(err)
 		}
 		if !repl.IsInitialized() {
 			// If we have an uninitialized copy of the range, then we are
@@ -181,7 +188,7 @@ func (s *Store) Send(
 			// but we can be smarter: the replica that caused our
 			// uninitialized replica to be created is most likely the
 			// leader.
-			return nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
+			return nil, nil, roachpb.NewError(&roachpb.NotLeaseHolderError{
 				RangeID:     ba.RangeID,
 				LeaseHolder: repl.creatingReplica,
 				// The replica doesn't have a range descriptor yet, so we have to build
@@ -194,7 +201,7 @@ func (s *Store) Send(
 			})
 		}
 
-		br, pErr = repl.Send(ctx, ba)
+		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
@@ -204,7 +211,7 @@ func (s *Store) Send(
 				br.RangeInfos = append(rangeInfos, br.RangeInfos...)
 			}
 
-			return br, nil
+			return br, writeBytes, nil
 		}
 
 		// Augment error if necessary and return.
@@ -222,7 +229,7 @@ func (s *Store) Send(
 			// Range from this Store.
 			rSpan, err := keys.Range(ba.Requests)
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, nil, roachpb.NewError(err)
 			}
 
 			// The kvclient thought that a particular range id covers rSpans. It was
@@ -233,7 +240,7 @@ func (s *Store) Send(
 			// that the client requested, and all the ranges in between.
 			ri, err := t.MismatchedRange()
 			if err != nil {
-				return nil, roachpb.NewError(err)
+				return nil, nil, roachpb.NewError(err)
 			}
 			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
 			startKey := ri.Desc.StartKey
@@ -310,7 +317,7 @@ func (s *Store) Send(
 		// Unable to retry, exit the retry loop and return an error.
 		break
 	}
-	return nil, pErr
+	return nil, nil, pErr
 }
 
 // maybeThrottleBatch inspects the provided batch and determines whether
