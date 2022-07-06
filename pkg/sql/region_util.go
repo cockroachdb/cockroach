@@ -1053,6 +1053,11 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	if err != nil {
 		return err
 	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return err
+	}
+
 	if !dbDesc.IsMultiRegion() {
 		return nil
 	}
@@ -1085,6 +1090,11 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 	if err != nil {
 		return errors.Wrapf(err, "error resolving referenced table ID %d", id)
 	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, desc); err != nil {
+		return err
+	}
+
 	// If the table is not a multi-region table, there's no work to be done
 	// here.
 	if desc.LocalityConfig == nil {
@@ -1121,6 +1131,11 @@ func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id
 	if err != nil {
 		return err
 	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return err
+	}
+
 	if !dbDesc.IsMultiRegion() {
 		// Nothing to do.
 		return nil
