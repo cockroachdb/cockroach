@@ -10,6 +10,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/ui",
         "//pkg/util/log",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_cmux//:cmux",
         "@com_github_cockroachdb_errors//:errors",
