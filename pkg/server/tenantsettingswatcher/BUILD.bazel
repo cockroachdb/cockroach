@@ -11,7 +11,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
@@ -44,7 +43,6 @@ go_test(
     embed = [":tenantsettingswatcher"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -53,12 +51,10 @@ go_test(
         "//pkg/settings",
         "//pkg/sql",
         "//pkg/sql/catalog",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

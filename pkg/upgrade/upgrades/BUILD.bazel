@@ -20,7 +20,6 @@ go_library(
         "seed_tenant_span_configs.go",
         "span_count_table.go",
         "system_privileges.go",
-        "tenant_settings.go",
         "upgrade_sequence_to_be_referenced_by_ID.go",
         "upgrades.go",
     ],

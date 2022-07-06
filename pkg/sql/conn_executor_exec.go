@@ -2126,12 +2126,11 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 			}
 		}
 
-		if !implicit {
-			ex.statsCollector.EndExplicitTransaction(
-				ctx,
-				transactionFingerprintID,
-			)
-		}
+		ex.statsCollector.EndTransaction(
+			ctx,
+			transactionFingerprintID,
+		)
+
 		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
 			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
 				ex.sessionData(),
@@ -2180,7 +2179,6 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
-	implicit := ex.implicitTxn()
 
 	// Transaction received time is the time at which the statement that prompted
 	// the creation of this transaction was received.
@@ -2209,12 +2207,10 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 
 	ex.extraTxnState.shouldExecuteOnTxnFinish = true
 	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
-	ex.extraTxnState.txnFinishClosure.implicit = implicit
+	ex.extraTxnState.txnFinishClosure.implicit = ex.implicitTxn()
 	ex.extraTxnState.shouldExecuteOnTxnRestart = true
 
-	if !implicit {
-		ex.statsCollector.StartExplicitTransaction()
-	}
+	ex.statsCollector.StartTransaction()
 }
 
 func (ex *connExecutor) recordTransactionFinish(
