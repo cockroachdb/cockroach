@@ -781,6 +781,27 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 func (u *sqlSymUnion) asTenantClause() tree.TenantID {
     return u.val.(tree.TenantID)
 }
+func (u *sqlSymUnion) functionOptions() tree.FunctionOptions {
+    return u.val.(tree.FunctionOptions)
+}
+func (u *sqlSymUnion) functionOption() tree.FunctionOption {
+    return u.val.(tree.FunctionOption)
+}
+func (u *sqlSymUnion) functionArgs() tree.FuncArgs {
+    return u.val.(tree.FuncArgs)
+}
+func (u *sqlSymUnion) functionArg() tree.FuncArg {
+    return u.val.(tree.FuncArg)
+}
+func (u *sqlSymUnion) functionArgClass() tree.FuncArgClass {
+    return u.val.(tree.FuncArgClass)
+}
+func (u *sqlSymUnion) stmts() tree.Statements {
+    return u.val.(tree.Statements)
+}
+func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
+    return u.val.(*tree.RoutineBody)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -802,23 +823,23 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASENSITIVE ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
+%token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
 %token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
-%token <str> CACHE CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
+%token <str> CACHE CALLED CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONNECTION CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
-%token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
+%token <str> CONVERSION CONVERT COPY COST COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DESC DESTINATION DETACHED
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -826,7 +847,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
-%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
+%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
@@ -840,19 +861,19 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
-%token <str> INNER INSENSITIVE INSERT INT INTEGER
-%token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
+%token <str> INNER INOUT INPUT INSENSITIVE INSERT INT INTEGER
+%token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
 %token <str> KEY KEYS KMS KV
 
 %token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
-%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT
+%token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
@@ -869,7 +890,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
+%token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
@@ -879,21 +900,21 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
-%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETRY REVISION_HISTORY
+%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETURNING RETURN RETURNS RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMAS SCRUB SEARCH SECOND SECURITY SELECT SEQUENCE SEQUENCES
+%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
-%token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
+%token <str> STABLE START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
+%token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANTS TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
-%token <str> TRANSACTION TRANSACTIONS TRANSFER TREAT TRIGGER TRIM TRUE
+%token <str> TRANSACTION TRANSACTIONS TRANSFER TRANSFORM TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
@@ -901,7 +922,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED
-%token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE VOTERS
+%token <str> VIEWCLUSTERSETTING VIRTUAL VISIBLE VOLATILE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -939,7 +960,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 }
 
 %type <tree.Statement> stmt_block
-%type <tree.Statement> stmt
+%type <tree.Statement> stmt stmt_without_legacy_transaction
 
 
 %type <tree.Statement> alter_stmt
@@ -1053,6 +1074,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
+%type <tree.Statement> create_func_stmt
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -1163,7 +1185,7 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <str> session_var
 %type <*string> comment_text
 
-%type <tree.Statement> transaction_stmt
+%type <tree.Statement> transaction_stmt legacy_transaction_stmt legacy_begin_stmt legacy_end_stmt
 %type <tree.Statement> truncate_stmt
 %type <tree.Statement> update_stmt
 %type <tree.Statement> upsert_stmt
@@ -1495,6 +1517,19 @@ func (u *sqlSymUnion) asTenantClause() tree.TenantID {
 %type <privilege.TargetObjectType> target_object_type
 %type <tree.TenantID> opt_as_tenant_clause
 
+// User defined function relevant components.
+%type <bool> opt_or_replace opt_return_set
+%type <str> param_name func_as
+%type <tree.FuncArgs> opt_func_arg_with_default_list func_arg_with_default_list
+%type <tree.FuncArg> func_arg_with_default func_arg
+%type <tree.ResolvableTypeReference> func_return_type func_arg_type
+%type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list
+%type <tree.FunctionOption> create_func_opt_item common_func_opt_item
+%type <tree.FuncArgClass> func_arg_class
+%type <*tree.UnresolvedObjectName> func_create_name
+%type <tree.Statement> routine_return_stmt routine_body_stmt
+%type <tree.Statements> routine_body_stmt_list
+%type <*tree.RoutineBody> opt_routine_body
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -1574,7 +1609,15 @@ stmt_block:
 
 stmt:
   HELPTOKEN { return helpWith(sqllex, "") }
-| preparable_stmt           // help texts in sub-rule
+| stmt_without_legacy_transaction
+| legacy_transaction_stmt
+| /* EMPTY */
+  {
+    $$.val = tree.Statement(nil)
+  }
+
+stmt_without_legacy_transaction:
+  preparable_stmt           // help texts in sub-rule
 | analyze_stmt              // EXTEND WITH HELP: ANALYZE
 | copy_from_stmt
 | comment_stmt
@@ -1596,10 +1639,6 @@ stmt:
 | fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
 | move_cursor_stmt          // EXTEND WITH HELP: MOVE
 | reindex_stmt
-| /* EMPTY */
-  {
-    $$.val = tree.Statement(nil)
-  }
 
 // %Help: ALTER
 // %Category: Group
@@ -3797,6 +3836,251 @@ create_extension_stmt:
   }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
+create_func_stmt:
+  CREATE opt_or_replace FUNCTION func_create_name '(' opt_func_arg_with_default_list ')' RETURNS opt_return_set func_return_type
+  opt_create_func_opt_list opt_routine_body
+  {
+    name := $4.unresolvedObjectName().ToFunctionName()
+    $$.val = &tree.CreateFunction{
+      IsProcedure: false,
+      Replace: $2.bool(),
+      FuncName: name,
+      Args: $6.functionArgs(),
+      ReturnType: tree.FuncReturnType{
+        Type: $10.typeReference(),
+        IsSet: $9.bool(),
+      },
+      Options: $11.functionOptions(),
+      RoutineBody: $12.routineBody(),
+    }
+  }
+
+opt_or_replace:
+  OR REPLACE { $$.val = true }
+| /* EMPTY */ { $$.val = false }
+
+opt_return_set:
+  SETOF { $$.val = true}
+| /* EMPTY */ { $$.val = false }
+
+func_create_name:
+  db_object_name
+
+opt_func_arg_with_default_list:
+  func_arg_with_default_list { $$.val = $1.functionArgs() }
+| /* Empty */ { $$.val = tree.FuncArgs{} }
+
+func_arg_with_default_list:
+  func_arg_with_default { $$.val = tree.FuncArgs{$1.functionArg()} }
+| func_arg_with_default_list ',' func_arg_with_default { $$.val = append($1.functionArgs(), $3.functionArg()) }
+
+func_arg_with_default:
+  func_arg
+| func_arg DEFAULT a_expr
+  {
+    arg := $1.functionArg()
+    arg.DefaultVal = $3.expr()
+    $$.val = arg
+  }
+| func_arg '=' a_expr
+  {
+    arg := $1.functionArg()
+    arg.DefaultVal = $3.expr()
+    $$.val = arg
+  }
+
+func_arg:
+  func_arg_class param_name func_arg_type
+  {
+    $$.val = tree.FuncArg{
+      Name: tree.Name($2),
+      Type: $3.typeReference(),
+      Class: $1.functionArgClass(),
+    }
+  }
+| param_name func_arg_class func_arg_type
+  {
+    $$.val = tree.FuncArg{
+      Name: tree.Name($1),
+      Type: $3.typeReference(),
+      Class: $2.functionArgClass(),
+    }
+  }
+| param_name func_arg_type
+  {
+    $$.val = tree.FuncArg{
+      Name: tree.Name($1),
+      Type: $2.typeReference(),
+      Class: tree.FunctionArgIn,
+    }
+  }
+| func_arg_class func_arg_type
+  {
+    $$.val = tree.FuncArg{
+      Type: $2.typeReference(),
+      Class: $1.functionArgClass(),
+    }
+  }
+| func_arg_type
+  {
+    $$.val = tree.FuncArg{
+      Type: $1.typeReference(),
+      Class: tree.FunctionArgIn,
+    }
+  }
+
+func_arg_class:
+  IN { $$.val = tree.FunctionArgIn }
+| OUT { return unimplemented(sqllex, "create function with 'OUT' argument class") }
+| INOUT { return unimplemented(sqllex, "create function with 'INOUT' argument class") }
+| IN OUT { return unimplemented(sqllex, "create function with 'IN OUT' argument class") }
+| VARIADIC { return unimplemented(sqllex, "create function with 'VARIADIC' argument class") }
+
+func_arg_type:
+  typename
+
+func_return_type:
+  func_arg_type
+
+opt_create_func_opt_list:
+  create_func_opt_list { $$.val = $1.functionOptions() }
+| /* EMPTY */ { $$.val = tree.FunctionOptions{} }
+
+create_func_opt_list:
+  create_func_opt_item { $$.val = tree.FunctionOptions{$1.functionOption()} }
+| create_func_opt_list create_func_opt_item { $$.val = append($1.functionOptions(), $2.functionOption())}
+
+create_func_opt_item:
+  AS func_as
+  {
+    $$.val = tree.FunctionBodyStr($2)
+  }
+| LANGUAGE non_reserved_word_or_sconst
+  {
+    lang, err := tree.AsFunctionLanguage($2)
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = lang
+  }
+| TRANSFORM { return unimplemented(sqllex, "create function...transform") }
+| WINDOW { return unimplemented(sqllex, "create function...window") }
+| common_func_opt_item
+  {
+    $$.val = $1.functionOption()
+  }
+
+common_func_opt_item:
+  CALLED ON NULL INPUT
+  {
+    $$.val = tree.FunctionCalledOnNullInput
+  }
+| RETURNS NULL ON NULL INPUT
+  {
+    $$.val = tree.FunctionReturnsNullOnNullInput
+  }
+| STRICT
+  {
+    $$.val = tree.FunctionStrict
+  }
+| IMMUTABLE
+  {
+    $$.val = tree.FunctionImmutable
+  }
+| STABLE
+  {
+    $$.val = tree.FunctionStable
+  }
+| VOLATILE
+  {
+    $$.val = tree.FunctionVolatile
+  }
+| EXTERNAL SECURITY DEFINER
+  {
+    return unimplemented(sqllex, "create function...security")
+  }
+| EXTERNAL SECURITY INVOKER
+  {
+    return unimplemented(sqllex, "create function...security")
+  }
+| SECURITY DEFINER
+  {
+    return unimplemented(sqllex, "create function...security")
+  }
+| SECURITY INVOKER
+  {
+    return unimplemented(sqllex, "create function...security")
+  }
+| LEAKPROOF
+  {
+    $$.val = tree.FunctionLeakProof(true)
+  }
+| NOT LEAKPROOF
+  {
+    $$.val = tree.FunctionLeakProof(false)
+  }
+| COST numeric_only
+  {
+    return unimplemented(sqllex, "create function...cost")
+  }
+| ROWS numeric_only
+  {
+    return unimplemented(sqllex, "create function...rows")
+  }
+| SUPPORT name
+  {
+    return unimplemented(sqllex, "create function...support")
+  }
+// In theory we should parse the a whole set/reset statement here. But it's fine
+// to just return fast on SET/RESET keyword for now since it's not supported
+// yet.
+| SET { return unimplemented(sqllex, "create function...set") }
+| RESET { return unimplemented(sqllex, "create function...reset") }
+| PARALLEL { return unimplemented(sqllex, "create function...parallel") }
+
+func_as:
+  SCONST
+
+routine_return_stmt:
+  RETURN a_expr
+{
+  $$.val = &tree.RoutineReturn{
+    ReturnVal: $2.expr(),
+  }
+}
+
+routine_body_stmt:
+  stmt_without_legacy_transaction
+| routine_return_stmt
+
+routine_body_stmt_list:
+  routine_body_stmt_list routine_body_stmt ';'
+  {
+    $$.val = append($1.stmts(), $2.stmt())
+  }
+| /* Empty */
+  {
+    $$.val = tree.Statements{}
+  }
+
+opt_routine_body:
+  routine_return_stmt
+  {
+    $$.val = &tree.RoutineBody{
+      Stmts: tree.Statements{$1.stmt()},
+    }
+  }
+| BEGIN ATOMIC routine_body_stmt_list END
+  {
+    $$.val = &tree.RoutineBody{
+        Stmts: $3.stmts(),
+    }
+  }
+| /* Empty */
+  {
+    $$.val = (*tree.RoutineBody)(nil)
+  }
+
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
 | CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
@@ -3806,8 +4090,6 @@ create_unsupported:
 | CREATE DEFAULT CONVERSION error { return unimplemented(sqllex, "create def conv") }
 | CREATE FOREIGN TABLE error { return unimplemented(sqllex, "create foreign table") }
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
-| CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
-| CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
 | CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
@@ -3817,10 +4099,6 @@ create_unsupported:
 | CREATE TABLESPACE error { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
 | CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create trigger") }
-
-opt_or_replace:
-  OR REPLACE {}
-| /* EMPTY */ {}
 
 opt_trusted:
   TRUSTED {}
@@ -3862,6 +4140,7 @@ create_ddl_stmt:
 | create_type_stmt     // EXTEND WITH HELP: CREATE TYPE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
+| create_func_stmt
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
@@ -9388,12 +9667,7 @@ transaction_stmt:
 //
 // %SeeAlso: COMMIT, ROLLBACK, WEBDOCS/begin-transaction.html
 begin_stmt:
-  BEGIN opt_transaction begin_transaction
-  {
-    $$.val = $3.stmt()
-  }
-| BEGIN error // SHOW HELP: BEGIN
-| START TRANSACTION begin_transaction
+  START TRANSACTION begin_transaction
   {
     $$.val = $3.stmt()
   }
@@ -9411,11 +9685,6 @@ commit_stmt:
     $$.val = &tree.CommitTransaction{}
   }
 | COMMIT error // SHOW HELP: COMMIT
-| END opt_transaction
-  {
-    $$.val = &tree.CommitTransaction{}
-  }
-| END error // SHOW HELP: COMMIT
 
 abort_stmt:
   ABORT opt_abort_mod
@@ -9444,6 +9713,25 @@ rollback_stmt:
      $$.val = &tree.RollbackToSavepoint{Savepoint: tree.Name($4)}
   }
 | ROLLBACK error // SHOW HELP: ROLLBACK
+
+legacy_transaction_stmt:
+  legacy_begin_stmt // EXTEND WITH HELP: BEGIN
+| legacy_end_stmt // EXTEND WITH HELP: COMMIT
+
+legacy_begin_stmt:
+  BEGIN opt_transaction begin_transaction
+  {
+    $$.val = $3.stmt()
+  }
+| BEGIN error // SHOW HELP: BEGIN
+
+legacy_end_stmt:
+  END opt_transaction
+  {
+    $$.val = &tree.CommitTransaction{}
+  }
+| END error // SHOW HELP: COMMIT
+
 
 opt_transaction:
   TRANSACTION {}
@@ -14056,6 +14344,9 @@ type_function_name_no_crdb_extra:
 | unreserved_keyword
 | type_func_name_no_crdb_extra_keyword
 
+param_name:
+  type_function_name
+
 // Any not-fully-reserved word --- these names can be, eg, variable names.
 non_reserved_word:
   IDENT
@@ -14094,6 +14385,7 @@ unreserved_keyword:
 | ALWAYS
 | ASENSITIVE
 | AT
+| ATOMIC
 | ATTRIBUTE
 | AUTOMATIC
 | AVAILABILITY
@@ -14107,6 +14399,7 @@ unreserved_keyword:
 | BUNDLE
 | BY
 | CACHE
+| CALLED
 | CANCEL
 | CANCELQUERY
 | CASCADE
@@ -14151,6 +14444,7 @@ unreserved_keyword:
 | DELETE
 | DEFAULTS
 | DEFERRED
+| DEFINER
 | DELIMITER
 | DESTINATION
 | DETACHED
@@ -14177,6 +14471,7 @@ unreserved_keyword:
 | EXPLAIN
 | EXPORT
 | EXTENSION
+| EXTERNAL
 | FAILURE
 | FILES
 | FILTER
@@ -14209,6 +14504,7 @@ unreserved_keyword:
 | HOUR
 | IDENTITY
 | IMMEDIATE
+| IMMUTABLE
 | IMPORT
 | INCLUDE
 | INCLUDING
@@ -14218,10 +14514,12 @@ unreserved_keyword:
 | INDEXES
 | INHERITS
 | INJECT
+| INPUT
 | INSERT
 | INTO_DB
 | INVERTED
 | ISOLATION
+| INVOKER
 | JOB
 | JOBS
 | JSON
@@ -14234,6 +14532,7 @@ unreserved_keyword:
 | LATEST
 | LC_COLLATE
 | LC_CTYPE
+| LEAKPROOF
 | LEASE
 | LESS
 | LEVEL
@@ -14311,6 +14610,7 @@ unreserved_keyword:
 | OVER
 | OWNED
 | OWNER
+| PARALLEL
 | PARENT
 | PARTIAL
 | PARTITION
@@ -14366,6 +14666,8 @@ unreserved_keyword:
 | RESTRICTED
 | RESUME
 | RETRY
+| RETURN
+| RETURNS
 | REVISION_HISTORY
 | REVOKE
 | ROLE
@@ -14390,6 +14692,7 @@ unreserved_keyword:
 | SCRUB
 | SEARCH
 | SECOND
+| SECURITY
 | SERIALIZABLE
 | SEQUENCE
 | SEQUENCES
@@ -14411,6 +14714,7 @@ unreserved_keyword:
 | SPLIT
 | SQL
 | SQLLOGIN
+| STABLE
 | START
 | STATE
 | STATEMENTS
@@ -14424,6 +14728,7 @@ unreserved_keyword:
 | STRICT
 | SUBSCRIPTION
 | SUPER
+| SUPPORT
 | SURVIVE
 | SURVIVAL
 | SYNTAX
@@ -14442,6 +14747,7 @@ unreserved_keyword:
 | TRANSACTION
 | TRANSACTIONS
 | TRANSFER
+| TRANSFORM
 | TRIGGER
 | TRUNCATE
 | TRUSTED
@@ -14468,6 +14774,7 @@ unreserved_keyword:
 | VIEWACTIVITYREDACTED
 | VIEWCLUSTERSETTING
 | VISIBLE
+| VOLATILE
 | VOTERS
 | WITHIN
 | WITHOUT
@@ -14508,6 +14815,7 @@ col_name_keyword:
 | IF
 | IFERROR
 | IFNULL
+| INOUT
 | INT
 | INTEGER
 | INTERVAL
@@ -14523,6 +14831,7 @@ col_name_keyword:
 | PRECISION
 | REAL
 | ROW
+| SETOF
 | SMALLINT
 | STRING
 | SUBSTRING
